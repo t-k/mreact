@@ -20,6 +20,7 @@ interface ClientReferenceAliasState {
 export function collectOxcClientBoundaryImportComponents(
   program: unknown,
   inferredBoundaryImports: ReadonlySet<string>,
+  fallbackBoundaryImports: ReadonlySet<string> = new Set(),
 ): Map<string, ClientReferenceIr> {
   const names = new Map<string, ClientReferenceIr>();
 
@@ -45,27 +46,39 @@ export function collectOxcClientBoundaryImportComponents(
       }
 
       if (specifierObject.type === "ImportDefaultSpecifier") {
-        names.set(localName, { moduleId, exportName: "default" });
+        names.set(localName, clientReference(moduleId, "default", fallbackBoundaryImports));
         continue;
       }
 
       if (specifierObject.type === "ImportNamespaceSpecifier") {
-        names.set(localName, { moduleId, exportName: "*" });
+        names.set(localName, clientReference(moduleId, "*", fallbackBoundaryImports));
         continue;
       }
 
       if (specifierObject.type === "ImportSpecifier" && specifierObject.importKind !== "type") {
         const imported = readObject(specifierObject.imported);
-        names.set(localName, {
-          moduleId,
-          exportName: String(imported.name ?? localName),
-        });
+        names.set(
+          localName,
+          clientReference(moduleId, String(imported.name ?? localName), fallbackBoundaryImports),
+        );
       }
     }
   }
 
   collectOxcClientReferenceAliases(program, names);
   return names;
+}
+
+function clientReference(
+  moduleId: string,
+  exportName: string,
+  fallbackBoundaryImports: ReadonlySet<string>,
+): ClientReferenceIr {
+  return {
+    moduleId,
+    exportName,
+    ...(fallbackBoundaryImports.has(moduleId) ? { ssrFallback: true } : {}),
+  };
 }
 
 export function collectOxcCompatRuntimeImportComponents(
@@ -207,7 +220,9 @@ function isOxcClientBoundaryImport(
   inferredBoundaryImports: ReadonlySet<string>,
 ): boolean {
   const moduleId = String(readObject(statement.source).value ?? "");
-  return inferredBoundaryImports.has(moduleId) || /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(moduleId);
+  return (
+    inferredBoundaryImports.has(moduleId) || /\.(?:client|compat)\.[cm]?[jt]sx?$/.test(moduleId)
+  );
 }
 
 function findOxcClientReference(
@@ -295,9 +310,7 @@ function collectOxcCompatReactNodeClassReferences(
   }
 }
 
-function readOxcClassComponentName(
-  node: Record<string, unknown> | undefined,
-): string | undefined {
+function readOxcClassComponentName(node: Record<string, unknown> | undefined): string | undefined {
   if (node?.type === "ClassDeclaration" || node?.type === "ClassExpression") {
     const id = readOptionalObject(node.id);
     const name = typeof id?.name === "string" ? id.name : undefined;
@@ -451,7 +464,11 @@ function collectOxcObjectLiteralClientReferenceAliases(
       continue;
     }
 
-    const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
+    const keyName = propertyName(
+      readOptionalObject(property.key),
+      property.computed === true,
+      state,
+    );
     const value = readOptionalObject(property.value);
     if (keyName !== undefined) {
       addObjectMemberKey(state, objectName, keyName);
@@ -561,9 +578,12 @@ function expressionClientReference(
 
   if (node.type === "MemberExpression") {
     const objectName = expressionObjectName(readOptionalObject(node.object), state);
-    const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
-    const objectReference =
-      objectName === undefined ? undefined : state.references.get(objectName);
+    const memberName = propertyName(
+      readOptionalObject(node.property),
+      node.computed === true,
+      state,
+    );
+    const objectReference = objectName === undefined ? undefined : state.references.get(objectName);
 
     if (objectName !== undefined && memberName !== undefined) {
       const objectMember = state.objectMembers.get(objectName)?.get(memberName);
@@ -587,15 +607,19 @@ function expressionClientReference(
 
     if (objectName !== undefined && memberName === undefined) {
       return selectClientReference(
-        [...objectMemberReferences(state, objectName), ...dynamicObjectMemberReferences(state, objectName)],
+        [
+          ...objectMemberReferences(state, objectName),
+          ...dynamicObjectMemberReferences(state, objectName),
+        ],
         state.allowAmbiguousAliases,
       );
     }
 
     if (objectName === undefined && memberName !== undefined) {
       const references = [
-        ...expressionObjectNameCandidates(readOptionalObject(node.object), state)
-          .map((candidate) => state.objectMembers.get(candidate)?.get(memberName)),
+        ...expressionObjectNameCandidates(readOptionalObject(node.object), state).map((candidate) =>
+          state.objectMembers.get(candidate)?.get(memberName),
+        ),
         ...expressionDynamicObjectNestedMemberReferences(
           readOptionalObject(node.object),
           memberName,
@@ -643,12 +667,17 @@ function objectEntryMemberReference(
     return undefined;
   }
 
-  if (state.allowAmbiguousAliases && state.globModuleMaps.has(sourceName) && memberName === "default") {
+  if (
+    state.allowAmbiguousAliases &&
+    state.globModuleMaps.has(sourceName) &&
+    memberName === "default"
+  ) {
     return unknownCompatReference;
   }
 
-  const references = Array.from(state.objectMemberKeys.get(sourceName) ?? [])
-    .map((key) => state.objectMembers.get(`${sourceName}.${key}`)?.get(memberName));
+  const references = Array.from(state.objectMemberKeys.get(sourceName) ?? []).map((key) =>
+    state.objectMembers.get(`${sourceName}.${key}`)?.get(memberName),
+  );
   return selectClientReference(references, state.allowAmbiguousAliases);
 }
 
@@ -693,7 +722,11 @@ function expressionObjectName(
 
   if (node?.type === "MemberExpression") {
     const objectName = expressionObjectName(readOptionalObject(node.object), state);
-    const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
+    const memberName = propertyName(
+      readOptionalObject(node.property),
+      node.computed === true,
+      state,
+    );
 
     return objectName !== undefined && memberName !== undefined
       ? `${objectName}.${memberName}`
@@ -791,7 +824,11 @@ function collectDynamicObjectNestedMemberReferences(
       continue;
     }
 
-    const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
+    const keyName = propertyName(
+      readOptionalObject(property.key),
+      property.computed === true,
+      state,
+    );
     const reference = expressionClientReference(readOptionalObject(property.value), state);
     if (keyName !== undefined && reference !== undefined) {
       addDynamicObjectNestedMemberReference(state, objectName, keyName, reference);
@@ -805,7 +842,8 @@ function addDynamicObjectNestedMemberReference(
   memberName: string,
   reference: ClientReferenceIr,
 ): void {
-  const members = state.dynamicObjectNestedMembers.get(objectName) ?? new Map<string, ClientReferenceIr[]>();
+  const members =
+    state.dynamicObjectNestedMembers.get(objectName) ?? new Map<string, ClientReferenceIr[]>();
   const references = members.get(memberName) ?? [];
   references.push(reference);
   members.set(memberName, references);
@@ -830,8 +868,12 @@ function isObjectAssignCall(node: Record<string, unknown>): boolean {
 
   const object = readOptionalObject(callee.object);
   const property = readOptionalObject(callee.property);
-  return object?.type === "Identifier" && object.name === "Object" &&
-    property?.type === "Identifier" && property.name === "assign";
+  return (
+    object?.type === "Identifier" &&
+    object.name === "Object" &&
+    property?.type === "Identifier" &&
+    property.name === "assign"
+  );
 }
 
 function isObjectEntriesCall(node: Record<string, unknown> | undefined): boolean {
@@ -842,8 +884,12 @@ function isObjectEntriesCall(node: Record<string, unknown> | undefined): boolean
 
   const object = readOptionalObject(callee.object);
   const property = readOptionalObject(callee.property);
-  return object?.type === "Identifier" && object.name === "Object" &&
-    property?.type === "Identifier" && property.name === "entries";
+  return (
+    object?.type === "Identifier" &&
+    object.name === "Object" &&
+    property?.type === "Identifier" &&
+    property.name === "entries"
+  );
 }
 
 function isImportMetaGlobEagerCall(node: Record<string, unknown> | undefined): boolean {
@@ -861,8 +907,13 @@ function isImportMetaGlobEagerCall(node: Record<string, unknown> | undefined): b
   const meta = readOptionalObject(metaProperty?.meta);
   const metaName = meta?.type === "Identifier" ? meta.name : undefined;
   const propertyName = readOptionalObject(metaProperty?.property);
-  const importMetaPropertyName = propertyName?.type === "Identifier" ? propertyName.name : undefined;
-  if (metaProperty?.type !== "MetaProperty" || metaName !== "import" || importMetaPropertyName !== "meta") {
+  const importMetaPropertyName =
+    propertyName?.type === "Identifier" ? propertyName.name : undefined;
+  if (
+    metaProperty?.type !== "MetaProperty" ||
+    metaName !== "import" ||
+    importMetaPropertyName !== "meta"
+  ) {
     return false;
   }
 
@@ -875,12 +926,14 @@ function isImportMetaGlobEagerCall(node: Record<string, unknown> | undefined): b
     const property = readOptionalObject(propertyValue);
     const key = readOptionalObject(property?.key);
     const value = readOptionalObject(property?.value);
-    return property?.type === "Property" &&
+    return (
+      property?.type === "Property" &&
       property.computed !== true &&
       key?.type === "Identifier" &&
       key.name === "eager" &&
       value?.type === "Literal" &&
-      value.value === true;
+      value.value === true
+    );
   });
 }
 
@@ -972,9 +1025,8 @@ function forOfObjectEntriesValueBindingName(
     node?.type === "VariableDeclaration"
       ? readOptionalObject(readArray(node.declarations)[0])
       : undefined;
-  const pattern = declaration?.type === "VariableDeclarator"
-    ? readOptionalObject(declaration.id)
-    : node;
+  const pattern =
+    declaration?.type === "VariableDeclarator" ? readOptionalObject(declaration.id) : node;
 
   if (pattern?.type !== "ArrayPattern") {
     return undefined;

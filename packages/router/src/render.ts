@@ -303,6 +303,7 @@ async function preloadBuiltPageRouteModules(options: {
     const stringOutput = transformServerModule({
       code: routeCode,
       clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+      clientBoundaryFallbackImports: options.analysis.clientInference.clientBoundaryFallbackImports,
       filename: options.file,
       serverModules: options.serverModules,
       serverOutput: "string",
@@ -321,6 +322,7 @@ async function preloadBuiltPageRouteModules(options: {
     const streamOutput = transformServerModule({
       code: routeCode,
       clientBoundaryImports: options.analysis.clientInference.clientBoundaryImports,
+      clientBoundaryFallbackImports: options.analysis.clientInference.clientBoundaryFallbackImports,
       filename: options.file,
       serverModules: options.serverModules,
       serverOutput: "stream",
@@ -1036,6 +1038,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         const stringOutput = transformServerModule({
           code: routeCode,
           clientBoundaryImports: clientInference.clientBoundaryImports,
+          clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
           filename: matched.route.file,
           serverModules: options.serverModules,
           serverOutput: "string",
@@ -1179,6 +1182,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       const output = transformServerModule({
         code: routeCode,
         clientBoundaryImports: clientInference.clientBoundaryImports,
+        clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
         filename: matched.route.file,
         serverModules: options.serverModules,
         serverOutput: "stream",
@@ -1285,6 +1289,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const output = transformServerModule({
       code: routeCode,
       clientBoundaryImports: clientInference.clientBoundaryImports,
+      clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
       filename: matched.route.file,
       serverModules: options.serverModules,
       serverOutput: "string",
@@ -2396,6 +2401,7 @@ async function loadBundledMiddlewareModule(options: {
 function transformServerModule(options: {
   code: string;
   clientBoundaryImports?: readonly string[];
+  clientBoundaryFallbackImports?: readonly string[];
   filename: string;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
@@ -2428,7 +2434,9 @@ function transformServerModule(options: {
   }
 
   const awaitHydrationKey = options.serverAwaitHydration === true ? "1" : "0";
-  const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}`;
+  const boundaryKey = options.clientBoundaryImports?.join("\0") ?? "";
+  const fallbackKey = options.clientBoundaryFallbackImports?.join("\0") ?? "";
+  const key = `${options.filename}\0${options.serverOutput}\0${sourceHash}\0${awaitHydrationKey}\0${boundaryKey}\0${fallbackKey}`;
   const cached = readRouterRuntimeCacheEntry(
     serverTransformCache,
     key,
@@ -2444,6 +2452,9 @@ function transformServerModule(options: {
     ...(options.clientBoundaryImports === undefined
       ? {}
       : { clientBoundaryImports: options.clientBoundaryImports }),
+    ...(options.clientBoundaryFallbackImports === undefined
+      ? {}
+      : { clientBoundaryFallbackImports: options.clientBoundaryFallbackImports }),
     dev: true,
     filename: options.filename,
     serverEscape: nativeEscapeTransform,
@@ -2523,6 +2534,7 @@ function routeSourceAnalysisFromArtifact(
     clientInference: {
       client: artifact.clientRoute,
       clientBoundaryImports: [...artifact.clientBoundaryImports],
+      clientBoundaryFallbackImports: [...(artifact.clientBoundaryFallbackImports ?? [])],
       diagnostics: [],
     },
     hasLoader: artifact.hasLoader,
@@ -3477,7 +3489,12 @@ async function renderShellPrefixSuffix(
   const artifact = serverModules?.get(shell.file)?.[serverOutput];
   const clientInference =
     artifact !== undefined && artifact.sourceHash === memoizedHashText(code)
-      ? { client: false, clientBoundaryImports: [], diagnostics: [] }
+      ? {
+          client: false,
+          clientBoundaryImports: [],
+          clientBoundaryFallbackImports: [],
+          diagnostics: [],
+        }
       : await inferClientRouteModule({
           cache: clientRouteInferenceCache,
           code: stripRouteClientOnlyExports(code, shell.file),
@@ -3490,6 +3507,7 @@ async function renderShellPrefixSuffix(
   const output = transformServerModule({
     code,
     clientBoundaryImports: clientInference.clientBoundaryImports,
+    clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
     filename: shell.file,
     serverModules,
     serverOutput,

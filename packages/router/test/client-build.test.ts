@@ -925,6 +925,104 @@ export default function Page() {
     expect(document.body.getAttribute("data-pull-hydrated")).toBe("yes");
   });
 
+  test("hydrates conditional client boundary siblings after earlier static children", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-conditional-boundary-order-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "ActivityThumbnailGrid.tsx"),
+      `"use client";
+
+export function ActivityThumbnailGrid() {
+  return <div data-testid="thumbnail-grid">Thumbnail grid</div>;
+}`,
+    );
+    const code = `import { ActivityThumbnailGrid } from "./ActivityThumbnailGrid";
+
+export default function ActivityRow() {
+  const hasThumbnails = true;
+  return (
+    <section data-testid="activity-row">
+      <button type="button">Activity header</button>
+      {hasThumbnails ? <ActivityThumbnailGrid /> : null}
+    </section>
+  );
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("Activity header");
+    expect(html).toContain('data-mreact-client-boundary="ActivityThumbnailGrid"');
+
+    setDocumentBodyFromHtml(html);
+
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#conditional-boundary-order`
+    );
+
+    const row = document.querySelector("[data-testid='activity-row']");
+    expect(
+      Array.from(row?.children ?? []).map(
+        (node) => node.getAttribute("data-testid") ?? node.tagName,
+      ),
+    ).toEqual(["BUTTON", "thumbnail-grid"]);
+  });
+
+  test("renders SSR fallback HTML for inferred client boundaries", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-inferred-boundary-ssr-fallback-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "AppNavigation.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const unreadCount = cell(0);
+
+export function AppNavigation() {
+  const count = unreadCount.get();
+  return (
+    <nav aria-label="Desktop navigation">
+      <a href="/albums">Albums</a>
+      <a href="/favorites">Favorites</a>
+      {count > 0 ? <span>{count}</span> : null}
+    </nav>
+  );
+}`,
+    );
+    const code = `import { AppNavigation } from "./AppNavigation";
+
+export default function AppShell() {
+  return <div><AppNavigation /><main>Page content</main></div>;
+}`;
+    await writeFile(file, code);
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="AppNavigation"');
+    expect(html).toContain("Albums");
+    expect(html).toContain("Favorites");
+    expect(html.indexOf("Albums")).toBeLessThan(html.indexOf("Page content"));
+  });
+
   test("hydrates an AppShell client boundary that initially returns null inside a list", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shell-null-boundary-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -4790,9 +4888,11 @@ export default function Page() {
       await expect(routeModule.__mreactPrefetch(`/server-${index}`)).resolves.toBe(true);
     }
 
-    const cache = (globalThis as {
-      __mreactNavigationState?: { cache?: Map<string, string> };
-    }).__mreactNavigationState?.cache;
+    const cache = (
+      globalThis as {
+        __mreactNavigationState?: { cache?: Map<string, string> };
+      }
+    ).__mreactNavigationState?.cache;
     expect(cache?.size).toBeLessThanOrEqual(64);
     expect(cache?.has(`${location.origin}/server-0`)).toBe(false);
     expect(cache?.has(`${location.origin}/server-69`)).toBe(true);
@@ -4827,9 +4927,9 @@ export default function Page() {
     document.body.insertAdjacentHTML("beforeend", '<a href="/">Current</a>');
 
     await expect(routeModule.__mreactPrefetch("/")).resolves.toBe(false);
-    document.querySelector("a")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, button: 0, cancelable: true }),
-    );
+    document
+      .querySelector("a")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, button: 0, cancelable: true }));
     await Promise.resolve();
 
     expect(requests).toEqual([]);
@@ -4873,10 +4973,10 @@ export default function Page() {
       },
       unobserve(): void {},
     };
-    globalThis.IntersectionObserver = (function(callback: IntersectionObserverCallback) {
+    globalThis.IntersectionObserver = function (callback: IntersectionObserverCallback) {
       intersectionCallback = callback;
       return observer;
-    }) as unknown as typeof IntersectionObserver;
+    } as unknown as typeof IntersectionObserver;
     await importRouteRuntime(
       "prefetch-cross-origin-viewport",
       '<a href="https://example.com/about" data-mreact-prefetch="viewport">External</a>',
@@ -4888,9 +4988,10 @@ export default function Page() {
     };
 
     expect(observed).toHaveLength(1);
-    intersectionCallback?.([
-      { isIntersecting: true, target: observed[0] } as IntersectionObserverEntry,
-    ], observer);
+    intersectionCallback?.(
+      [{ isIntersecting: true, target: observed[0] } as IntersectionObserverEntry],
+      observer,
+    );
     await Promise.resolve();
 
     expect(requests).toEqual([]);
@@ -5329,12 +5430,19 @@ export default function Page(props) {
       fetchCalls += 1;
       return new Response("");
     };
-    document.body.insertAdjacentHTML("beforeend", '<a href="https://example.com/about">External</a>');
+    document.body.insertAdjacentHTML(
+      "beforeend",
+      '<a href="https://example.com/about">External</a>',
+    );
     let defaultPreventedByRuntime: boolean | undefined;
-    document.addEventListener("click", (clickEvent) => {
-      defaultPreventedByRuntime = clickEvent.defaultPrevented;
-      clickEvent.preventDefault();
-    }, { once: true });
+    document.addEventListener(
+      "click",
+      (clickEvent) => {
+        defaultPreventedByRuntime = clickEvent.defaultPrevented;
+        clickEvent.preventDefault();
+      },
+      { once: true },
+    );
     const event = new MouseEvent("click", {
       bubbles: true,
       cancelable: true,
@@ -5603,9 +5711,9 @@ export default function Page(props) {
     const { routeModule } = await importRouteRuntime("stale-nested-layout");
     document.body.innerHTML = [
       '<section data-mreact-layout-boundary="root">',
-      '<header>Root</header>',
+      "<header>Root</header>",
       '<section data-mreact-layout-boundary="register">',
-      '<h1>Registration Wizard</h1>',
+      "<h1>Registration Wizard</h1>",
       '<ol aria-label="Progress"><li>Step 1</li></ol>',
       '<div data-mreact-route-id="register_step_1"><main><button type="button">Cancel</button></main></div>',
       "</section>",
@@ -5753,7 +5861,10 @@ function installRoutePrefetchManifest(routes: Array<{ path: string; script: stri
   );
 }
 
-async function importRouteRuntime(suffix: string, bodyHtml?: string): Promise<{
+async function importRouteRuntime(
+  suffix: string,
+  bodyHtml?: string,
+): Promise<{
   routeModule: {
     __mreactNavigate: (url: string) => Promise<boolean>;
     __mreactNavigateToHtml: (html: string, url: string) => boolean;
@@ -5773,10 +5884,12 @@ async function importRouteRuntime(suffix: string, bodyHtml?: string): Promise<{
   return <main>Home</main>;
 }`;
   await writeFile(file, code);
-  document.body.innerHTML = bodyHtml ?? [
-    '<div data-mreact-route-id="index"><main>Home</main></div>',
-    '<script type="application/json" id="mreact-props-index">{}</script>',
-  ].join("");
+  document.body.innerHTML =
+    bodyHtml ??
+    [
+      '<div data-mreact-route-id="index"><main>Home</main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
   const bundle = await buildClientRouteBundle({
     code,
     filename: file,

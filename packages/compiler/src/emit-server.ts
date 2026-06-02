@@ -1,10 +1,4 @@
-import type {
-  AttributeIr,
-  ComponentPropIr,
-  ComponentIr,
-  JsxNodeIr,
-  ModuleIr,
-} from "./ir.js";
+import type { AttributeIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
 import type { RuntimeImport, ServerEscapeOptions } from "./types.js";
 import { emitEscapeHtmlHelper } from "./emit-escape-helper.js";
 import { createCodeBuilder } from "./emit-code-builder.js";
@@ -41,14 +35,10 @@ let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
 let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
 
-export function emitServer(
-  ir: ModuleIr,
-  options: EmitServerOptions = {},
-): EmitResult {
+export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
   const escapeHelperName = allocateEscapeHelperName(ir);
-  const escapeBatchHelperName = options.escape === undefined
-    ? undefined
-    : allocateHelperName(ir, "_escapeHtmlBatch");
+  const escapeBatchHelperName =
+    options.escape === undefined ? undefined : allocateHelperName(ir, "_escapeHtmlBatch");
   const contextProviderHelperName = usesContextProvider(ir)
     ? allocateHelperName(ir, "_renderContextProviderToString")
     : undefined;
@@ -185,17 +175,11 @@ function collectContextImports(
 ): RuntimeImport[] {
   const specifiers = [
     reactNodeRenderHelperName === undefined ? undefined : "renderToString",
-    contextProviderHelperName === undefined
-      ? undefined
-      : "renderContextProviderToString",
-    contextConsumerHelperName === undefined
-      ? undefined
-      : "renderContextConsumerToString",
+    contextProviderHelperName === undefined ? undefined : "renderContextProviderToString",
+    contextConsumerHelperName === undefined ? undefined : "renderContextConsumerToString",
   ].filter((specifier): specifier is string => specifier !== undefined);
 
-  return specifiers.length === 0
-    ? []
-    : [{ source: "@reckona/mreact-compat", specifiers }];
+  return specifiers.length === 0 ? [] : [{ source: "@reckona/mreact-compat", specifiers }];
 }
 
 function emitUserImports(ir: ModuleIr): string {
@@ -218,8 +202,9 @@ function emitComponent(
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
 ): string {
-  const body = component.bodyStatements.map((statement) =>
-    `  ${replaceOxcServerStringReactNodeRenderHelper(statement, reactNodeRenderHelperName)}`,
+  const body = component.bodyStatements.map(
+    (statement) =>
+      `  ${replaceOxcServerStringReactNodeRenderHelper(statement, reactNodeRenderHelperName)}`,
   );
   const parameters = component.parameters.join(", ");
   const htmlStatements = collectHtmlStatements(
@@ -280,7 +265,7 @@ function emitHtmlExpression(
   );
 
   if (parts.length === 0) {
-    return "\"\"";
+    return '""';
   }
 
   return parts.join(" + ");
@@ -400,10 +385,7 @@ function collectHtmlStatements(
   }
 
   if (node.kind === "list") {
-    const isAsync = containsAsyncServerOperationInChildren(
-      node.children,
-      asyncComponentNames,
-    );
+    const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
 
     if (isAsync) {
       // Parallel async path keeps the existing renderer + Promise.all + join
@@ -427,8 +409,7 @@ function collectHtmlStatements(
     // Sync list — inline for-loop appending to the caller's accumulator.
     // No inner IIFE wrapper and no intermediate string concat per iteration.
     const itemBinding = `const ${node.itemName} = _arr[_i];`;
-    const indexBinding =
-      node.indexName === undefined ? undefined : `const ${node.indexName} = _i;`;
+    const indexBinding = node.indexName === undefined ? undefined : `const ${node.indexName} = _i;`;
     const arrayBinding =
       node.arrayName === undefined ? undefined : `const ${node.arrayName} = _arr;`;
     const bodyStatements = node.bodyStatements ?? [];
@@ -521,18 +502,31 @@ function collectHtmlStatements(
     if (isClientBoundaryPlaceholder(node)) {
       const helperName = currentClientBoundaryHelperName;
       if (helperName !== undefined) {
+        const boundaryProps = emitPropsObject(
+          node.props,
+          [],
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        );
+        const fallbackHtml = shouldRenderClientBoundaryFallback(node)
+          ? emitComponentCallExpression(node.name, boundaryProps, asyncComponentNames)
+          : emitHtmlExpressionFromChildren(
+              node.children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            );
         return [
-          `${outVar} += ${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
-            node.props,
-            [],
-            escapeHelperName,
-            escapeBatchHelperName,
-            asyncComponentNames,
-            dynamicAttributes,
-            contextProviderHelperName,
-            contextConsumerHelperName,
-            reactNodeRenderHelperName,
-          )}, ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)});`,
+          `${outVar} += ${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml});`,
         ];
       }
 
@@ -635,9 +629,8 @@ function collectHtmlStatements(
     node.children,
     escapeBatchHelperName,
   );
-  const childSelectedValueCode = node.tagName === "select"
-    ? attributeScan.formValueAttributeCode
-    : undefined;
+  const childSelectedValueCode =
+    node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
 
   if (childrenExpression !== undefined && childSelectedValueCode === undefined) {
     statements.push(`${outVar} += ${childrenExpression};`);
@@ -693,8 +686,26 @@ function collectHtmlParts(
   }
 
   if (node.kind === "conditional") {
-    const whenTrue = emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName);
-    const whenFalse = emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName);
+    const whenTrue = emitHtmlExpressionFromChildren(
+      node.whenTrue,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    );
+    const whenFalse = emitHtmlExpressionFromChildren(
+      node.whenFalse,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    );
 
     return [
       node.conditionValueName === undefined
@@ -704,10 +715,7 @@ function collectHtmlParts(
   }
 
   if (node.kind === "list") {
-    const isAsync = containsAsyncServerOperationInChildren(
-      node.children,
-      asyncComponentNames,
-    );
+    const isAsync = containsAsyncServerOperationInChildren(node.children, asyncComponentNames);
 
     if (isAsync) {
       // Async lists rely on Promise.all() for parallel resolution; the
@@ -732,16 +740,18 @@ function collectHtmlParts(
     // Synchronous list — imperative accumulator avoids the per-render
     // callback allocation, the intermediate `.map()` result array, and the
     // trailing `.join("")` call.
-    return [emitSyncListIife(
-      node,
-      escapeHelperName,
-      escapeBatchHelperName,
-      asyncComponentNames,
-      dynamicAttributes,
-      contextProviderHelperName,
-      contextConsumerHelperName,
-      reactNodeRenderHelperName,
-    )];
+    return [
+      emitSyncListIife(
+        node,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      ),
+    ];
   }
 
   if (node.kind === "fragment") {
@@ -885,9 +895,8 @@ function collectHtmlParts(
     escapeBatchHelperName,
   );
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
-  const childSelectedValueCode = node.tagName === "select"
-    ? attributeScan.formValueAttributeCode
-    : undefined;
+  const childSelectedValueCode =
+    node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
   const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
   const childrenParts =
@@ -980,7 +989,9 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.name === "style") {
-    return [emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName)];
+    return [
+      emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName),
+    ];
   }
 
   if (isDangerousHtmlAttribute(htmlName)) {
@@ -988,7 +999,7 @@ function collectHtmlAttributeParts(
     // else at runtime so a value computed from a loader cannot inject
     // executable HTML into the iframe document.
     return [
-      `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${htmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral("\"")}; return ""; })()`,
+      `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${htmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral('"')}; return ""; })()`,
     ];
   }
 
@@ -1009,11 +1020,11 @@ function collectElementAttributeParts(
 
   return attrs.flatMap((attr) =>
     attr.kind !== "spread-attr" &&
-      ((tagName === "input" &&
-        ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
-          (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-        ((tagName === "textarea" || tagName === "select") &&
-          (attr.name === "value" || attr.name === "defaultValue")))
+    ((tagName === "input" &&
+      ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
+        (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
+      ((tagName === "textarea" || tagName === "select") &&
+        (attr.name === "value" || attr.name === "defaultValue")))
       ? []
       : collectHtmlAttributeParts(
           tagName,
@@ -1087,10 +1098,7 @@ function scanElementAttributes(
 
     if ((tagName === "textarea" || tagName === "select") && attr.name === "value") {
       valueAttributeCode = readFormValueAttributeCode(attr);
-    } else if (
-      (tagName === "textarea" || tagName === "select") &&
-      attr.name === "defaultValue"
-    ) {
+    } else if ((tagName === "textarea" || tagName === "select") && attr.name === "defaultValue") {
       defaultValueAttributeCode = readFormValueAttributeCode(attr);
     }
   }
@@ -1122,7 +1130,7 @@ function emitDynamicAttributeExpression(
     // returns the value when safe and `undefined` when the attribute
     // should be dropped. Using an IIFE here is necessary because we
     // need to capture the value once and branch on the helper output.
-    return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral("\"")}; })()`;
+    return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral('"')}; })()`;
   }
 
   const inlineExpr = simpleSideEffectFreeExpression(code);
@@ -1132,10 +1140,10 @@ function emitDynamicAttributeExpression(
     // Safe because `simpleSideEffectFreeExpression` only matches expressions
     // whose evaluation has no observable side effects (identifier read,
     // member chain, literal, this).
-    return `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral("\"")})`;
+    return `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral('"')})`;
   }
 
-  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
+  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral('"')}; })()`;
 }
 
 function emitDynamicStyleAttributeExpression(
@@ -1149,11 +1157,12 @@ function emitDynamicStyleAttributeExpression(
     return staticStyleExpression;
   }
 
-  const escapedPair = escapeBatchHelperName === undefined
-    ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
-    : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
+  const escapedPair =
+    escapeBatchHelperName === undefined
+      ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
+      : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
 
-  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function emitStaticStyleObjectAttributeExpression(
@@ -1191,11 +1200,12 @@ function emitStaticStyleObjectAttributeExpression(
 
   // Stage A — needSep tracking with inline string accumulator, no intermediate
   // array allocation and no `.join(";")` per render.
-  const statements = entries.map((entry) =>
-    `{ const _v = (${entry.valueCode}); if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`
+  const statements = entries.map(
+    (entry) =>
+      `{ const _v = (${entry.valueCode}); if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`,
   );
 
-  return `(() => { let _style = ""; ${statements.join(" ")} return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+  return `(() => { let _style = ""; ${statements.join(" ")} return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function collectTextareaValueParts(
@@ -1224,7 +1234,7 @@ function collectTextareaValueParts(
       contextProviderHelperName,
       contextConsumerHelperName,
       reactNodeRenderHelperName,
-    )
+    ),
   );
 }
 
@@ -1245,9 +1255,13 @@ function collectOptionSelectedAttributePart(
 }
 
 function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {
-  const valueAttr = node.attributes.find((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  const valueAttr = node.attributes.find(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "value",
+  );
   if (valueAttr !== undefined && valueAttr.kind !== "event" && valueAttr.kind !== "spread-attr") {
-    return valueAttr.kind === "static-attr" ? stringLiteral(valueAttr.value) : `(${valueAttr.code})`;
+    return valueAttr.kind === "static-attr"
+      ? stringLiteral(valueAttr.value)
+      : `(${valueAttr.code})`;
   }
 
   return node.children.every((child) => child.kind === "text")
@@ -1282,7 +1296,8 @@ function emitBatchedSimpleChildrenExpression(
   }
 
   const dynamicChildren = children.filter(
-    (child) => child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
+    (child) =>
+      child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
   ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
 
   if (dynamicChildren.length < 2) {
@@ -1293,7 +1308,11 @@ function emitBatchedSimpleChildrenExpression(
     children.some(
       (child) =>
         child.kind !== "text" &&
-        !(child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node"),
+        !(
+          child.kind === "expr" &&
+          child.renderMode !== "html" &&
+          child.renderMode !== "react-node"
+        ),
     )
   ) {
     return undefined;
@@ -1326,7 +1345,7 @@ function emitHtmlExpressionFromChildren(
   reactNodeRenderHelperName?: string,
 ): string {
   if (children.length === 0) {
-    return "\"\"";
+    return '""';
   }
 
   return emitHtmlExpression(
@@ -1362,10 +1381,8 @@ function emitSyncListIife(
     reactNodeRenderHelperName,
   );
   const itemBinding = `const ${node.itemName} = _arr[_i];`;
-  const indexBinding =
-    node.indexName === undefined ? "" : ` const ${node.indexName} = _i;`;
-  const arrayBinding =
-    node.arrayName === undefined ? "" : ` const ${node.arrayName} = _arr;`;
+  const indexBinding = node.indexName === undefined ? "" : ` const ${node.indexName} = _i;`;
+  const arrayBinding = node.arrayName === undefined ? "" : ` const ${node.arrayName} = _arr;`;
   const bodyStatements =
     node.bodyStatements === undefined || node.bodyStatements.length === 0
       ? ""
@@ -1395,10 +1412,7 @@ function emitListRenderer(
     contextConsumerHelperName,
     reactNodeRenderHelperName,
   );
-  const asyncKeyword = containsAsyncServerOperationInChildren(
-    node.children,
-    asyncComponentNames,
-  )
+  const asyncKeyword = containsAsyncServerOperationInChildren(node.children, asyncComponentNames)
     ? "async "
     : "";
 
@@ -1483,15 +1497,19 @@ function isClientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component
   return node.clientReference !== undefined;
 }
 
+function shouldRenderClientBoundaryFallback(
+  node: Extract<JsxNodeIr, { kind: "component" }>,
+): boolean {
+  return node.clientReference?.ssrFallback === true;
+}
+
 function clientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): string {
   return `<!--mreact-client-boundary:${escapeHtml(node.name)}-->`;
 }
 
 function collectAsyncServerComponentNames(components: readonly ComponentIr[]): Set<string> {
   const names = new Set(
-    components
-      .filter((component) => component.async === true)
-      .map((component) => component.name),
+    components.filter((component) => component.async === true).map((component) => component.name),
   );
 
   let changed = true;
@@ -1500,10 +1518,7 @@ function collectAsyncServerComponentNames(components: readonly ComponentIr[]): S
     changed = false;
 
     for (const component of components) {
-      if (
-        !names.has(component.name) &&
-        containsAsyncServerOperation(component.root, names)
-      ) {
+      if (!names.has(component.name) && containsAsyncServerOperation(component.root, names)) {
         names.add(component.name);
         changed = true;
       }

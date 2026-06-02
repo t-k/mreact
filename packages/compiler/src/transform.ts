@@ -28,9 +28,7 @@ export function transform(input: TransformInput): TransformOutput {
 export function transformCompilerModuleContext(
   input: TransformInput & { moduleContext: CompilerModuleContext },
 ): TransformOutput {
-  if (
-    (input.moduleContext.code !== input.code || input.moduleContext.filename !== input.filename)
-  ) {
+  if (input.moduleContext.code !== input.code || input.moduleContext.filename !== input.filename) {
     throw new Error("Transform input moduleContext must match the input code and filename.");
   }
 
@@ -44,10 +42,7 @@ export function transformCompilerModuleContext(
 
 function transformWithAnalyzer(
   input: TransformInput,
-  analyze: (
-    target: AnalyzeToIrInput["target"],
-    options: AnalyzeModuleOptions,
-  ) => AnalyzeToIrOutput,
+  analyze: (target: AnalyzeToIrInput["target"], options: AnalyzeModuleOptions) => AnalyzeToIrOutput,
 ): TransformOutput {
   const mode = input.mode ?? "reactive";
   const serverOutput = input.serverOutput ?? "string";
@@ -71,6 +66,7 @@ function transformWithAnalyzer(
     awaitCompatComponents:
       input.target === "server" && serverOutput === "stream" ? "lower" : "diagnostic",
     clientBoundaryImports: input.clientBoundaryImports ?? [],
+    clientBoundaryFallbackImports: input.clientBoundaryFallbackImports ?? [],
     compatReactNodeReturn: mode === "compat",
     ...(mode === "compat" && input.target === "server"
       ? { compatReactNodeReturnRenderMode: "react-node" as const }
@@ -83,36 +79,30 @@ function transformWithAnalyzer(
       ? emitCompat(analyzed.ir, { dev: input.dev })
       : input.target === "server"
         ? serverOutput === "stream"
-          ? emitServerStream(
-              analyzed.ir,
-              {
-                ...createServerOptions(
-                  serverBootstrap,
-                  input.serverBootstrapNonce,
-                  input.serverBootstrapSrc,
-                  input.serverHydration,
-                  input.reactSuspenseRevealScriptSrc,
-                ),
-                ...(input.serverAwaitHydration === true
-                  ? { serverAwaitHydration: true as const }
-                  : {}),
-                dynamicAttributes: mode === "compat" ? "drop" : "emit",
-                escape: input.serverEscape,
-              },
-            )
-          : emitServer(
-              analyzed.ir,
-              {
-                ...createServerOptions(
-                  serverBootstrap,
-                  input.serverBootstrapNonce,
-                  input.serverBootstrapSrc,
-                  input.serverHydration,
-                ),
-                dynamicAttributes: mode === "compat" ? "drop" : "emit",
-                escape: input.serverEscape,
-              },
-            )
+          ? emitServerStream(analyzed.ir, {
+              ...createServerOptions(
+                serverBootstrap,
+                input.serverBootstrapNonce,
+                input.serverBootstrapSrc,
+                input.serverHydration,
+                input.reactSuspenseRevealScriptSrc,
+              ),
+              ...(input.serverAwaitHydration === true
+                ? { serverAwaitHydration: true as const }
+                : {}),
+              dynamicAttributes: mode === "compat" ? "drop" : "emit",
+              escape: input.serverEscape,
+            })
+          : emitServer(analyzed.ir, {
+              ...createServerOptions(
+                serverBootstrap,
+                input.serverBootstrapNonce,
+                input.serverBootstrapSrc,
+                input.serverHydration,
+              ),
+              dynamicAttributes: mode === "compat" ? "drop" : "emit",
+              escape: input.serverEscape,
+            })
         : emitClient(analyzed.ir);
 
   const metadata: ModuleMetadata = {
@@ -321,8 +311,16 @@ function collectSourceMapSegments(
     const sourceLocation =
       bindPropAttribute === undefined
         ? undefined
-        : (findSourceLocation(sourceLines, `${bindPropAttribute}={${dynamicExpression}}`, searchState) ??
-          findSourceLocation(sourceLines, `${bindPropAttribute}="${dynamicExpression}"`, searchState));
+        : (findSourceLocation(
+            sourceLines,
+            `${bindPropAttribute}={${dynamicExpression}}`,
+            searchState,
+          ) ??
+          findSourceLocation(
+            sourceLines,
+            `${bindPropAttribute}="${dynamicExpression}"`,
+            searchState,
+          ));
     const fallbackSourceLocation =
       findSourceLocation(sourceLines, `{${dynamicExpression}}`, searchState) ??
       findJsxExpressionTokenLocation(sourceLines, dynamicExpression) ??
@@ -561,11 +559,14 @@ function collectClientReferenceManifestFromNode(
   references: Map<string, ClientReferenceMetadata>,
 ): void {
   if (node.kind === "component" && node.clientReference !== undefined) {
-    references.set(`${node.name}:${node.clientReference.moduleId}:${node.clientReference.exportName}`, {
-      name: node.name,
-      moduleId: node.clientReference.moduleId,
-      exportName: node.clientReference.exportName,
-    });
+    references.set(
+      `${node.name}:${node.clientReference.moduleId}:${node.clientReference.exportName}`,
+      {
+        name: node.name,
+        moduleId: node.clientReference.moduleId,
+        exportName: node.clientReference.exportName,
+      },
+    );
   }
 
   for (const child of getNodeChildren(node)) {
@@ -583,11 +584,12 @@ function collectClientReferenceManifestFromNode(
   }
 }
 
-function collectClientReferencesFromNode(
-  node: JsxNodeIr,
-  references: Set<string>,
-): void {
-  if (node.kind === "component" && node.runtime === "compat" && node.clientReference !== undefined) {
+function collectClientReferencesFromNode(node: JsxNodeIr, references: Set<string>): void {
+  if (
+    node.kind === "component" &&
+    node.runtime === "compat" &&
+    node.clientReference !== undefined
+  ) {
     references.add(node.name);
   }
 

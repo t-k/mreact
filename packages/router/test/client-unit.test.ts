@@ -389,7 +389,10 @@ export function Counter() {
   return <button type="button" onClick={() => count.set((value) => value + 1)}>{count.get()}</button>;
 }`,
     );
-    await writeFile(join(appDir, "components.ts"), `export { Counter as Widget } from "./Counter";`);
+    await writeFile(
+      join(appDir, "components.ts"),
+      `export { Counter as Widget } from "./Counter";`,
+    );
     const code = `import { Widget } from "./components";
 
 export default function Page() {
@@ -836,6 +839,42 @@ export default function Page() {
         code,
         filename: pageFile,
         routePath: "/unused",
+      }),
+    ).resolves.toMatchObject({
+      client: false,
+      clientBoundaryImports: [],
+      diagnostics: [],
+    });
+  });
+
+  test("inferClientRouteModule does not boundary a rendered server export because a sibling export is interactive", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-client-server-export-sibling-"));
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      join(appDir, "AppNavigation.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const AppNavigation = () => {
+  return <nav><a href="/albums">Albums</a><a href="/favorites">Favorites</a></nav>;
+};
+
+export const AccountMenu = () => {
+  const opened = cell(false);
+  return <button type="button" onClick={() => opened.set(!opened.get())}>Account</button>;
+};`,
+    );
+    const code = `import { AppNavigation } from "./AppNavigation";
+
+export default function AppShell(props: { readonly children: unknown }) {
+  return <div><AppNavigation /><main>{props.children}</main></div>;
+}`;
+    await writeFile(pageFile, code);
+
+    await expect(
+      inferClientRouteModule({
+        code,
+        filename: pageFile,
+        routePath: "/",
       }),
     ).resolves.toMatchObject({
       client: false,

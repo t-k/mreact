@@ -1,9 +1,6 @@
 import { parseSync } from "oxc-parser";
 import { unsupportedTopLevelJsxInitializerDiagnostic } from "./diagnostics.js";
-import {
-  type AnalyzeToIrInput,
-  type AnalyzeToIrOutput,
-} from "./internal.js";
+import { type AnalyzeToIrInput, type AnalyzeToIrOutput } from "./internal.js";
 import {
   createCompilerModuleContextWithOxc,
   type CompilerModuleContext,
@@ -80,10 +77,7 @@ import {
   lowerOxcNestedJsxExpression,
   lowerOxcServerStringExpression,
 } from "./oxc-nested-lowering.js";
-import {
-  isOxcJsxBranch,
-  readOxcReturnExpressionFromStatement,
-} from "./oxc-expression-utils.js";
+import { isOxcJsxBranch, readOxcReturnExpressionFromStatement } from "./oxc-expression-utils.js";
 import {
   collectOxcBodyJsxBindingNames,
   collectOxcReactiveDerivedFunctionNames,
@@ -183,13 +177,10 @@ export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
 }
 
 export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
-  return analyzeCompilerModuleContextWithOxc(
-    createCompilerModuleContextWithOxc(input),
-    {
-      target: input.target,
-      ...(input.options === undefined ? {} : { options: input.options }),
-    },
-  );
+  return analyzeCompilerModuleContextWithOxc(createCompilerModuleContextWithOxc(input), {
+    target: input.target,
+    ...(input.options === undefined ? {} : { options: input.options }),
+  });
 }
 
 export function analyzeCompilerModuleContextWithOxc(
@@ -239,6 +230,7 @@ function analyzeOxcToIr(
   const clientBoundaryImports = collectOxcClientBoundaryImportComponents(
     program,
     new Set(options?.clientBoundaryImports ?? []),
+    new Set(options?.clientBoundaryFallbackImports ?? []),
   );
   const compatRuntimeImports = collectOxcCompatRuntimeImportComponents(program);
   const compatReactNodeReferences =
@@ -376,7 +368,9 @@ function analyzeOxcToIr(
 }
 
 function isCssImportSource(source: unknown): boolean {
-  return typeof source === "string" && /\.(?:css|pcss|postcss|scss|sass|less|styl|stylus)$/u.test(source);
+  return (
+    typeof source === "string" && /\.(?:css|pcss|postcss|scss|sass|less|styl|stylus)$/u.test(source)
+  );
 }
 
 function componentNamesFromProgram(
@@ -451,7 +445,9 @@ function collectLocalJsxHelperHtmlParameters(
   return parameters;
 }
 
-function collectOxcReturnExpressions(statement: Record<string, unknown>): Record<string, unknown>[] {
+function collectOxcReturnExpressions(
+  statement: Record<string, unknown>,
+): Record<string, unknown>[] {
   if (statement.type === "ReturnStatement") {
     return [unwrapOxcParentheses(readObject(statement.argument))];
   }
@@ -745,18 +741,8 @@ function analyzeOxcFunctionLikeComponent(
     bodyLowerers,
   );
   const root =
-    analyzeOxcEarlyIfRootReturn(
-      code,
-      earlyIfRootReturn,
-      childAnalysisContext,
-      bodyStatementJsx,
-    ) ??
-    analyzeOxcSwitchRootReturn(
-      code,
-      rootStatement,
-      childAnalysisContext,
-      bodyStatementJsx,
-    ) ??
+    analyzeOxcEarlyIfRootReturn(code, earlyIfRootReturn, childAnalysisContext, bodyStatementJsx) ??
+    analyzeOxcSwitchRootReturn(code, rootStatement, childAnalysisContext, bodyStatementJsx) ??
     (isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)
@@ -778,30 +764,29 @@ function analyzeOxcFunctionLikeComponent(
               ),
               renderMode: "html" as const,
             }
-        : analyzeOxcDynamicRootReturn(
-            code,
-            returnExpression,
-            childAnalysisContext,
-            bodyStatementJsx,
-          ) ??
-          {
-            kind: "expr" as const,
-            code: normalizeOxcExpressionCode(
-              compatReactNodeReturn
-                ? (lowerOxcCompatReactNodeExpression(
-                    code,
-                    returnExpression,
-                    componentNames,
-                    target,
-                    diagnostics,
-                  ) ??
-                    stripOxcGeneratedImports(
-                      transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
-                    ))
-                : readSource(code, returnExpression),
-            ),
-            ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
-          });
+          : (analyzeOxcDynamicRootReturn(
+              code,
+              returnExpression,
+              childAnalysisContext,
+              bodyStatementJsx,
+            ) ?? {
+              kind: "expr" as const,
+              code: normalizeOxcExpressionCode(
+                compatReactNodeReturn
+                  ? (lowerOxcCompatReactNodeExpression(
+                      code,
+                      returnExpression,
+                      componentNames,
+                      target,
+                      diagnostics,
+                    ) ??
+                      stripOxcGeneratedImports(
+                        transformJsxToCreateElementWithOxc(readSource(code, returnExpression)),
+                      ))
+                  : readSource(code, returnExpression),
+              ),
+              ...(compatReactNodeReturn ? { renderMode: "react-node" as const } : {}),
+            }));
   markOxcRenderValueExpressions(
     [root],
     new Set([
@@ -946,10 +931,7 @@ function isOxcRootReturnExpression(expression: Record<string, unknown>): boolean
 }
 
 function isOxcEmptyRootReturn(expression: Record<string, unknown>): boolean {
-  return (
-    expression.type === "Literal" &&
-    (expression.value === null || expression.value === false)
-  );
+  return expression.type === "Literal" && (expression.value === null || expression.value === false);
 }
 
 function isOxcRenderableRootReturn(expression: Record<string, unknown>): boolean {
@@ -966,10 +948,7 @@ function analyzeOxcDynamicRootReturnShape(expression: Record<string, unknown>): 
     return true;
   }
 
-  return (
-    expression.type === "LogicalExpression" &&
-    isOxcJsxBranch(readObject(expression.right))
-  );
+  return expression.type === "LogicalExpression" && isOxcJsxBranch(readObject(expression.right));
 }
 
 function findOxcRootStatement(body: readonly unknown[]): unknown | undefined {
@@ -1091,12 +1070,7 @@ function analyzeOxcEarlyIfRootReturn(
       {
         kind: "conditional",
         conditionCode: readOxcReactiveRootConditionCode(code, branch.test, context),
-        whenTrue: analyzeOxcDynamicRootBranch(
-          code,
-          branch.consequent,
-          context,
-          bodyStatementJsx,
-        ),
+        whenTrue: analyzeOxcDynamicRootBranch(code, branch.consequent, context, bodyStatementJsx),
         whenFalse: fallback,
       },
     ];

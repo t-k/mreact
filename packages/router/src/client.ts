@@ -31,10 +31,7 @@ import {
   type RouterBundleAssetOutput,
   type RouterBundleChunkOutput,
 } from "./bundle-pipeline.js";
-import {
-  resolveClientConsolePureFunctions,
-  type AppRouterProductionOptions,
-} from "./config.js";
+import { resolveClientConsolePureFunctions, type AppRouterProductionOptions } from "./config.js";
 import type { AppRoute } from "./routes.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import {
@@ -116,6 +113,7 @@ interface ClientRouteSourceTransform {
 export interface ClientRouteInferenceResult {
   client: boolean;
   clientBoundaryImports: string[];
+  clientBoundaryFallbackImports: string[];
   diagnostics: ClientRouteInferenceDiagnostic[];
 }
 
@@ -265,6 +263,7 @@ export async function inferClientRouteModule(options: {
         client:
           mergedRouteInference.client || shellInferences.some((inference) => inference.client),
         clientBoundaryImports: mergedRouteInference.clientBoundaryImports,
+        clientBoundaryFallbackImports: mergedRouteInference.clientBoundaryFallbackImports,
         diagnostics: [
           ...mergedRouteInference.diagnostics,
           ...shellInferences.flatMap((inference) => inference.diagnostics),
@@ -325,6 +324,7 @@ function clientRouteInferenceFromBoundaryGraph(
   return {
     client: clientRoute || clientBoundaryImports.length > 0,
     clientBoundaryImports,
+    clientBoundaryFallbackImports: [],
     diagnostics: [],
   };
 }
@@ -337,6 +337,9 @@ function mergeClientRouteInference(
     client: left.client || right.client,
     clientBoundaryImports: Array.from(
       new Set([...left.clientBoundaryImports, ...right.clientBoundaryImports]),
+    ),
+    clientBoundaryFallbackImports: Array.from(
+      new Set([...left.clientBoundaryFallbackImports, ...right.clientBoundaryFallbackImports]),
     ),
     diagnostics: [...left.diagnostics, ...right.diagnostics],
   };
@@ -466,6 +469,7 @@ export async function collectClientRouteReferences(options: {
     const output = transformCompilerModuleContext({
       code: source.code,
       clientBoundaryImports: source.inference.clientBoundaryImports,
+      clientBoundaryFallbackImports: source.inference.clientBoundaryFallbackImports,
       dev: false,
       filename: source.filename,
       moduleContext: source.moduleContext,
@@ -511,6 +515,7 @@ export async function collectClientRouteReferences(options: {
       routeInference.client ||
       sources.some((source) => source.filename !== options.filename && source.inference.client),
     clientBoundaryImports: routeInference.clientBoundaryImports,
+    clientBoundaryFallbackImports: routeInference.clientBoundaryFallbackImports,
     clientReferenceImports,
     clientReferenceManifest,
     diagnostics: sources
@@ -685,6 +690,7 @@ async function inferClientRouteModuleSource(options: {
 
   try {
     const clientBoundaryImports: string[] = [];
+    const clientBoundaryFallbackImports: string[] = [];
     const clientBoundaryExportNames = new Set<string>();
     const nestedClientExportNames = new Set<string>();
     const clientReferenceSourceFiles: string[] = [];
@@ -779,7 +785,10 @@ async function inferClientRouteModuleSource(options: {
           renderedComponentRoots,
         );
         if (
-          matchesInferredExportNames(importedNavigationExportNames, imported.navigationLinkExportNames)
+          matchesInferredExportNames(
+            importedNavigationExportNames,
+            imported.navigationLinkExportNames,
+          )
         ) {
           usesNavigationLink = true;
           for (const exportName of renderedLocalExportNames(reference, exportInfo)) {
@@ -841,6 +850,9 @@ async function inferClientRouteModuleSource(options: {
         }
 
         clientBoundaryImports.push(reference.source);
+        if (!imported.clientBoundaryModule && isClientBoundaryFallbackEligibleSource(source)) {
+          clientBoundaryFallbackImports.push(reference.source);
+        }
         continue;
       }
 
@@ -933,6 +945,7 @@ async function inferClientRouteModuleSource(options: {
         clientProxy ||
         nestedClient,
       clientBoundaryImports,
+      clientBoundaryFallbackImports,
       clientBoundaryExportNames: Array.from(clientBoundaryExportNames),
       clientBoundaryModule: clientProxy || implicitModuleClient,
       nestedClientExportNames: Array.from(nestedClientExportNames),
@@ -956,6 +969,7 @@ function emptyClientRouteModuleInferenceResult(
     boundaryGraphFallbackRequired: false,
     client: false,
     clientBoundaryImports: [],
+    clientBoundaryFallbackImports: [],
     clientBoundaryExportNames: [],
     clientBoundaryModule: false,
     nestedClientExportNames: [],
@@ -992,7 +1006,12 @@ async function clientRouteModuleAnalysisForSource(options: {
         })),
     ),
   );
-  setLatestModuleCacheEntry(options.cache.moduleAnalysisByFile, options.filename, cacheKey, analysis);
+  setLatestModuleCacheEntry(
+    options.cache.moduleAnalysisByFile,
+    options.filename,
+    cacheKey,
+    analysis,
+  );
   return analysis;
 }
 
@@ -1089,6 +1108,10 @@ function isStyleModuleSpecifier(source: string): boolean {
 }
 
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
+
+function isClientBoundaryFallbackEligibleSource(source: string): boolean {
+  return !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(source) && !/\bglobalThis\b/u.test(source);
+}
 
 function renderedImportedExportNames(
   reference: ClientRouteStaticImportReference,
@@ -1227,14 +1250,14 @@ function startsUppercase(value: string): boolean {
 export function formatClientRouteInferenceDiagnostic(
   diagnostic: ClientRouteInferenceDiagnostic,
 ): string {
-  const route = diagnostic.routePath === undefined ? "" : ` on route ${JSON.stringify(diagnostic.routePath)}`;
+  const route =
+    diagnostic.routePath === undefined ? "" : ` on route ${JSON.stringify(diagnostic.routePath)}`;
   return `${diagnostic.code}: ${diagnostic.message}${route}`;
 }
 
-function withClientRouteDiagnosticPath<T extends ClientRouteInferenceDiagnostic | ClientRouteInferenceResult>(
-  value: T,
-  routePath: string | undefined,
-): T {
+function withClientRouteDiagnosticPath<
+  T extends ClientRouteInferenceDiagnostic | ClientRouteInferenceResult,
+>(value: T, routePath: string | undefined): T {
   if (routePath === undefined) {
     return value;
   }

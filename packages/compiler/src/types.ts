@@ -29,6 +29,7 @@ export interface AnalyzeModuleOptions {
   serverOutput?: ServerOutputMode;
   awaitCompatComponents?: "diagnostic" | "lower";
   clientBoundaryImports?: readonly string[];
+  clientBoundaryFallbackImports?: readonly string[];
   compatReactNodeReturn?: boolean;
   compatReactNodeReturnRenderMode?: "react-node";
 }
@@ -48,6 +49,7 @@ export interface TransformInput {
   serverHydration?: boolean;
   serverAwaitHydration?: boolean;
   clientBoundaryImports?: readonly string[];
+  clientBoundaryFallbackImports?: readonly string[];
   serverEscape?: ServerEscapeOptions;
   reactSuspenseRevealScriptSrc?: string;
 }

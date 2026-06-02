@@ -871,7 +871,9 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe("<section><ul><li>A</li><li>B</li></ul></section>");
+    expect(runServerComponent(output.code)).toBe(
+      "<section><ul><li>A</li><li>B</li></ul></section>",
+    );
   });
 
   test("emits trusted server inner HTML from dangerouslySetInnerHTML", () => {
@@ -1050,7 +1052,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("Link({ href: (\"/next\"), children:");
+    expect(output.code).toContain('Link({ href: ("/next"), children:');
     expect(output.code).toContain('"<span" + " class=\\"dir\\""');
     expect(output.code).toContain("_escapeHtml(label)");
     expect(output.code).not.toContain("_renderReactNodeToString(Link,");
@@ -1355,6 +1357,26 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
         exportName: "Counter",
       },
     ]);
+  });
+
+  test("emitted server component renders SSR fallback for inferred client boundary imports", () => {
+    const output = transform({
+      code: `import { Navigation } from "./Navigation";
+
+      export function App() {
+        return <section><Navigation label="Albums" /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Navigation"],
+      clientBoundaryFallbackImports: ["./Navigation"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, Navigation({ label: ("Albums") }))',
+    );
   });
 
   test("emitted server component leaves compat client references as client boundaries", () => {

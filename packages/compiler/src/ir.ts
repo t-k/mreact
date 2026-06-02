@@ -52,6 +52,7 @@ export interface ComponentRefIr {
 export interface ClientReferenceIr {
   moduleId: string;
   exportName: string;
+  ssrFallback?: boolean;
 }
 
 export type ComponentPropIr = ComponentNamedPropIr | ComponentRenderPropIr | ComponentSpreadPropIr;

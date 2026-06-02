@@ -39,9 +39,7 @@ import {
 } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
-import {
-  appFileConventionForRootFilename,
-} from "./file-conventions.js";
+import { appFileConventionForRootFilename } from "./file-conventions.js";
 import {
   resolveAppRouterProjectOptions,
   resolveBuildTargets,
@@ -210,6 +208,7 @@ export interface BuiltRouteSourceAnalysisSummary {
   authIncludesClaims: boolean;
   cachePolicy?: RouteCachePolicy | undefined;
   clientBoundaryImports: readonly string[];
+  clientBoundaryFallbackImports: readonly string[];
   clientRoute: boolean;
   hasLoader: boolean;
   routeCode: string;
@@ -233,6 +232,7 @@ interface BuildSourceAnalysis {
 
 interface BuildRouteSourceAnalysis extends BuildSourceAnalysis {
   clientBoundaryImports: readonly string[];
+  clientBoundaryFallbackImports: readonly string[];
   clientRoute: boolean;
   file: string;
   route: AppRoute & { kind: "page" };
@@ -428,7 +428,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   }));
   const [serverModuleArtifacts, clientBundle] = await Promise.all([
     timingSink === undefined
-      ? writeServerModuleArtifactFiles(serverDir, serverModules, generatedImportPolicy.runtimePackages)
+      ? writeServerModuleArtifactFiles(
+          serverDir,
+          serverModules,
+          generatedImportPolicy.runtimePackages,
+        )
       : timeBuildPhase(timingSink, "serverModuleArtifacts", () =>
           writeServerModuleArtifactFiles(
             serverDir,
@@ -743,6 +747,7 @@ async function analyzeBuildRouteSources(options: {
         {
           ...analyzeBuildSource(source, route.file),
           clientBoundaryImports: clientInference.clientBoundaryImports,
+          clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
           clientRoute: clientInference.client,
           file,
           route,
@@ -1204,7 +1209,11 @@ async function collectRuntimeOptionalPackages(options: {
     { packageName: options.packageName, optional: false, startDir: options.projectRoot },
   ];
 
-  for (let index = 0; index < queue.length && seenPackageJson.size < maxRuntimePackageManifestReads; index += 1) {
+  for (
+    let index = 0;
+    index < queue.length && seenPackageJson.size < maxRuntimePackageManifestReads;
+    index += 1
+  ) {
     const item = queue[index];
     if (item === undefined || !isValidRuntimePackageName(item.packageName)) {
       continue;
@@ -1300,7 +1309,11 @@ async function findRuntimePackageJson(
 }
 
 function isRuntimePackageSpecifier(specifier: string): boolean {
-  if (specifier.startsWith(".") || specifier.startsWith("/") || /^[A-Za-z][A-Za-z0-9+.-]*:/.test(specifier)) {
+  if (
+    specifier.startsWith(".") ||
+    specifier.startsWith("/") ||
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(specifier)
+  ) {
     return false;
   }
 
@@ -1428,7 +1441,11 @@ function isSourceModuleFile(file: string): boolean {
 }
 
 function isAppRelativeFile(file: string, relativeRoutesDir: string): boolean {
-  return relativeRoutesDir === "" || file === relativeRoutesDir || file.startsWith(`${relativeRoutesDir}/`);
+  return (
+    relativeRoutesDir === "" ||
+    file === relativeRoutesDir ||
+    file.startsWith(`${relativeRoutesDir}/`)
+  );
 }
 
 function moduleIdForBuildFile(file: string, relativeRoutesDir: string): string {
@@ -1468,10 +1485,7 @@ async function collectPublicAssetPaths(publicDir: string): Promise<string[]> {
   return paths.sort();
 }
 
-async function copyAppFileConventionAssets(
-  appDir: string,
-  outDir: string,
-): Promise<string[]> {
+async function copyAppFileConventionAssets(appDir: string, outDir: string): Promise<string[]> {
   let entries: Dirent[];
   try {
     entries = await readdir(appDir, { withFileTypes: true });
@@ -1496,9 +1510,7 @@ async function copyAppFileConventionAssets(
       continue;
     }
 
-    const outputPath = convention.path.startsWith("/")
-      ? convention.path.slice(1)
-      : convention.path;
+    const outputPath = convention.path.startsWith("/") ? convention.path.slice(1) : convention.path;
     await copyFile(join(appDir, entry.name), join(outDir, outputPath));
     paths.push(convention.path);
   }
@@ -1748,205 +1760,219 @@ async function buildServerModuleArtifacts(options: {
     }
   }
 
-  const requestBatchOutputs = requestBatchEntries.length >= 3
-    ? await bundleRouteRequestModuleBatchCode({
-        appDir: options.project.routesDir,
-        bundleCache: options.bundleCache,
-        cacheDir: options.cacheDir,
-        entries: requestBatchEntries,
-        importPolicy: requestModuleImportPolicy,
-        vitePlugins: options.vitePlugins,
-      })
-    : new Map<string, string>();
+  const requestBatchOutputs =
+    requestBatchEntries.length >= 3
+      ? await bundleRouteRequestModuleBatchCode({
+          appDir: options.project.routesDir,
+          bundleCache: options.bundleCache,
+          cacheDir: options.cacheDir,
+          entries: requestBatchEntries,
+          importPolicy: requestModuleImportPolicy,
+          vitePlugins: options.vitePlugins,
+        })
+      : new Map<string, string>();
 
-  const artifactEntries = await mapWithBuildConcurrency(Object.entries(options.files), async ([file, source]) => {
-    const absoluteFile = join(options.projectRoot, file);
-    const route = routeByFile.get(file);
-    const routeAnalysis = options.sourceAnalysis.byRouteFile.get(file);
-    const artifact: BuiltServerModuleArtifact = {};
+  const artifactEntries = await mapWithBuildConcurrency(
+    Object.entries(options.files),
+    async ([file, source]) => {
+      const absoluteFile = join(options.projectRoot, file);
+      const route = routeByFile.get(file);
+      const routeAnalysis = options.sourceAnalysis.byRouteFile.get(file);
+      const artifact: BuiltServerModuleArtifact = {};
 
-    if (
-      requestArtifactFiles.has(file) ||
-      loaderArtifactFiles.has(file) ||
-      metadataArtifactFiles.has(file)
-    ) {
-      if (loaderArtifactFiles.has(file)) {
-        const code = requestBatchOutputs.get(routeRequestArtifactBatchKey(file, "loader")) ??
-          await bundleRouteLoaderModuleCode({
-            appDir: options.project.routesDir,
-            bundleCache: options.bundleCache,
-            cacheDir: options.cacheDir,
-            code: stripRouteLoaderOnlyExports(source, absoluteFile),
-            filename: absoluteFile,
-            importPolicy: requestModuleImportPolicy,
-            vitePlugins: options.vitePlugins,
-          });
-        artifact.loader = {
-          code,
-          sourceHash: hashText(source),
-        };
-      }
-
-      if (metadataArtifactFiles.has(file)) {
-        const code = requestBatchOutputs.get(routeRequestArtifactBatchKey(file, "metadata")) ??
-          await bundleRouteRequestModuleCode({
-            appDir: options.project.routesDir,
-            bundleCache: options.bundleCache,
-            cacheDir: options.cacheDir,
-            code: stripRouteMetadataOnlyExports(source, absoluteFile),
-            filename: absoluteFile,
-            importPolicy: requestModuleImportPolicy,
-            label: "Metadata",
-            vitePlugins: options.vitePlugins,
-          });
-        artifact.routeMetadata = {
-          code,
-          sourceHash: hashText(source),
-        };
-      }
-
-      if (requestArtifactFiles.has(file)) {
-        const batchedRequestCode = requestBatchOutputs.get(
-          routeRequestArtifactBatchKey(file, "request"),
-        );
-        artifact.request = {
-          code: batchedRequestCode ??
-            await buildRequestModuleArtifactCode({
+      if (
+        requestArtifactFiles.has(file) ||
+        loaderArtifactFiles.has(file) ||
+        metadataArtifactFiles.has(file)
+      ) {
+        if (loaderArtifactFiles.has(file)) {
+          const code =
+            requestBatchOutputs.get(routeRequestArtifactBatchKey(file, "loader")) ??
+            (await bundleRouteLoaderModuleCode({
               appDir: options.project.routesDir,
               bundleCache: options.bundleCache,
               cacheDir: options.cacheDir,
+              code: stripRouteLoaderOnlyExports(source, absoluteFile),
               filename: absoluteFile,
               importPolicy: requestModuleImportPolicy,
-              routeKind: route?.kind,
-              source,
               vitePlugins: options.vitePlugins,
-            }),
-          sourceHash: hashText(source),
-        };
+            }));
+          artifact.loader = {
+            code,
+            sourceHash: hashText(source),
+          };
+        }
+
+        if (metadataArtifactFiles.has(file)) {
+          const code =
+            requestBatchOutputs.get(routeRequestArtifactBatchKey(file, "metadata")) ??
+            (await bundleRouteRequestModuleCode({
+              appDir: options.project.routesDir,
+              bundleCache: options.bundleCache,
+              cacheDir: options.cacheDir,
+              code: stripRouteMetadataOnlyExports(source, absoluteFile),
+              filename: absoluteFile,
+              importPolicy: requestModuleImportPolicy,
+              label: "Metadata",
+              vitePlugins: options.vitePlugins,
+            }));
+          artifact.routeMetadata = {
+            code,
+            sourceHash: hashText(source),
+          };
+        }
+
+        if (requestArtifactFiles.has(file)) {
+          const batchedRequestCode = requestBatchOutputs.get(
+            routeRequestArtifactBatchKey(file, "request"),
+          );
+          artifact.request = {
+            code:
+              batchedRequestCode ??
+              (await buildRequestModuleArtifactCode({
+                appDir: options.project.routesDir,
+                bundleCache: options.bundleCache,
+                cacheDir: options.cacheDir,
+                filename: absoluteFile,
+                importPolicy: requestModuleImportPolicy,
+                routeKind: route?.kind,
+                source,
+                vitePlugins: options.vitePlugins,
+              })),
+            sourceHash: hashText(source),
+          };
+        }
       }
-    }
 
-    if (!isServerComponentFile(file)) {
-      return Object.keys(artifact).length > 0 ? ([file, artifact] as const) : undefined;
-    }
+      if (!isServerComponentFile(file)) {
+        return Object.keys(artifact).length > 0 ? ([file, artifact] as const) : undefined;
+      }
 
-    const closureUsesAwait = routeAnalysis?.streamRoute ??
-      shouldBuildRouteAsStream({
-        filename: file,
-        files: options.files,
-        projectRoot: options.projectRoot,
-        source,
-      });
-    const streamRoute = route !== undefined && closureUsesAwait;
-    const serverOutputs =
-      streamRoute || (route === undefined && closureUsesAwait)
-        ? (["stream", "string"] as const)
-        : (["string"] as const);
-    const code = routeAnalysis?.routeCode ??
-      (route === undefined ? source : stripRouteBuildExports(source, absoluteFile));
-    const clientInference = routeAnalysis === undefined
-      ? await inferClientRouteModule({
-          ...(route === undefined ? {} : { appDir: options.project.routesDir }),
-          cache: options.clientRouteInferenceCache,
-          code:
-            route === undefined
-              ? stripRouteClientOnlyExports(source, absoluteFile)
-              : stripRouteClientSource({ code: source, filename: route.file }),
-          filename: join(options.projectRoot, file),
-          ...(route === undefined ? {} : { routePath: route.path }),
-          vitePlugins: options.vitePlugins,
-        })
-      : undefined;
-    const clientBoundaryImports = routeAnalysis?.clientBoundaryImports ??
-      clientInference?.clientBoundaryImports ??
-      [];
-
-    for (const diagnostic of clientInference?.diagnostics ?? []) {
-      console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
-    }
-
-    if (routeAnalysis !== undefined) {
-      artifact.analysis = builtRouteSourceAnalysisSummary({
-        analysis: routeAnalysis,
-      });
-    }
-
-    const serverOutputArtifacts = await mapWithBuildConcurrency(
-      serverOutputs,
-      async (serverOutput) => {
-        const output = await transformServerRouteSource({
-          cache: options.serverTransformCache,
-          code,
-          clientBoundaryImports,
-          filename: join(options.projectRoot, file),
-          moduleContextCache: options.clientRouteInferenceCache,
-          serverOutput,
+      const closureUsesAwait =
+        routeAnalysis?.streamRoute ??
+        shouldBuildRouteAsStream({
+          filename: file,
+          files: options.files,
+          projectRoot: options.projectRoot,
+          source,
         });
-        const fatalDiagnostics = output.diagnostics.filter(
-          (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-        );
+      const streamRoute = route !== undefined && closureUsesAwait;
+      const serverOutputs =
+        streamRoute || (route === undefined && closureUsesAwait)
+          ? (["stream", "string"] as const)
+          : (["string"] as const);
+      const code =
+        routeAnalysis?.routeCode ??
+        (route === undefined ? source : stripRouteBuildExports(source, absoluteFile));
+      const clientInference =
+        routeAnalysis === undefined
+          ? await inferClientRouteModule({
+              ...(route === undefined ? {} : { appDir: options.project.routesDir }),
+              cache: options.clientRouteInferenceCache,
+              code:
+                route === undefined
+                  ? stripRouteClientOnlyExports(source, absoluteFile)
+                  : stripRouteClientSource({ code: source, filename: route.file }),
+              filename: join(options.projectRoot, file),
+              ...(route === undefined ? {} : { routePath: route.path }),
+              vitePlugins: options.vitePlugins,
+            })
+          : undefined;
+      const clientBoundaryImports =
+        routeAnalysis?.clientBoundaryImports ?? clientInference?.clientBoundaryImports ?? [];
+      const clientBoundaryFallbackImports =
+        routeAnalysis?.clientBoundaryFallbackImports ??
+        clientInference?.clientBoundaryFallbackImports ??
+        [];
 
-        if (fatalDiagnostics.length > 0) {
+      for (const diagnostic of clientInference?.diagnostics ?? []) {
+        console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+      }
+
+      if (routeAnalysis !== undefined) {
+        artifact.analysis = builtRouteSourceAnalysisSummary({
+          analysis: routeAnalysis,
+        });
+      }
+
+      const serverOutputArtifacts = await mapWithBuildConcurrency(
+        serverOutputs,
+        async (serverOutput) => {
+          const output = await transformServerRouteSource({
+            cache: options.serverTransformCache,
+            code,
+            clientBoundaryImports,
+            clientBoundaryFallbackImports,
+            filename: join(options.projectRoot, file),
+            moduleContextCache: options.clientRouteInferenceCache,
+            serverOutput,
+          });
+          const fatalDiagnostics = output.diagnostics.filter(
+            (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+          );
+
+          if (fatalDiagnostics.length > 0) {
+            if (
+              serverOutput === "string" &&
+              streamRoute &&
+              route?.kind === "page" &&
+              fatalDiagnostics.every(
+                (diagnostic) => diagnostic.code === "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
+              )
+            ) {
+              return undefined;
+            }
+
+            throw new Error(
+              fatalDiagnostics.map((diagnostic) => formatDiagnostic(file, diagnostic)).join("\n"),
+            );
+          }
+
           if (
             serverOutput === "string" &&
             streamRoute &&
             route?.kind === "page" &&
-            fatalDiagnostics.every(
-              (diagnostic) => diagnostic.code === "MR_UNSUPPORTED_AWAIT_INNER_COMPONENT",
-            )
+            source.includes("<Await") &&
+            /\bLink\b/.test(source)
           ) {
+            // Native Link renders pre-rendered children as HTML. Keep direct
+            // Await renderers on the stream artifact so the string artifact
+            // cannot drop deferred Link content before the boundary resolves.
             return undefined;
           }
 
-          throw new Error(
-            fatalDiagnostics.map((diagnostic) => formatDiagnostic(file, diagnostic)).join("\n"),
-          );
+          return [
+            serverOutput,
+            {
+              ...(options.prebundleServerComponents
+                ? {
+                    bundleCode: await buildServerComponentBundleArtifactCode({
+                      clientRouteInferenceCache: options.clientRouteInferenceCache,
+                      code: output.code,
+                      filename: absoluteFile,
+                      root: options.projectRoot,
+                      serverOutput,
+                      vitePlugins: options.vitePlugins,
+                    }),
+                  }
+                : {}),
+              code: output.code,
+              metadata: output.metadata,
+              sourceHash: hashText(code),
+            },
+          ] as const;
+        },
+      );
+
+      for (const entry of serverOutputArtifacts) {
+        if (entry !== undefined) {
+          artifact[entry[0]] = entry[1];
         }
-
-        if (
-          serverOutput === "string" &&
-          streamRoute &&
-          route?.kind === "page" &&
-          source.includes("<Await") &&
-          /\bLink\b/.test(source)
-        ) {
-          // Native Link renders pre-rendered children as HTML. Keep direct
-          // Await renderers on the stream artifact so the string artifact
-          // cannot drop deferred Link content before the boundary resolves.
-          return undefined;
-        }
-
-        return [
-          serverOutput,
-          {
-            ...(options.prebundleServerComponents
-              ? {
-                  bundleCode: await buildServerComponentBundleArtifactCode({
-                    clientRouteInferenceCache: options.clientRouteInferenceCache,
-                    code: output.code,
-                    filename: absoluteFile,
-                    root: options.projectRoot,
-                    serverOutput,
-                    vitePlugins: options.vitePlugins,
-                  }),
-                }
-              : {}),
-            code: output.code,
-            metadata: output.metadata,
-            sourceHash: hashText(code),
-          },
-        ] as const;
-      },
-    );
-
-    for (const entry of serverOutputArtifacts) {
-      if (entry !== undefined) {
-        artifact[entry[0]] = entry[1];
       }
-    }
 
-    return [file, artifact] as const;
-  });
+      return [file, artifact] as const;
+    },
+  );
 
   for (const entry of artifactEntries) {
     if (entry !== undefined) {
@@ -1984,6 +2010,7 @@ async function buildServerComponentBundleArtifactCode(options: {
 async function transformServerRouteSource(options: {
   cache: ServerTransformCache;
   clientBoundaryImports: readonly string[];
+  clientBoundaryFallbackImports?: readonly string[];
   code: string;
   filename: string;
   moduleContextCache: ClientRouteInferenceCache;
@@ -1991,6 +2018,7 @@ async function transformServerRouteSource(options: {
 }): Promise<ServerTransformOutput> {
   const cacheKey = stableCacheKey({
     clientBoundaryImports: options.clientBoundaryImports,
+    clientBoundaryFallbackImports: options.clientBoundaryFallbackImports ?? [],
     codeHash: hashText(options.code),
     filename: resolve(options.filename),
     serverOutput: options.serverOutput,
@@ -2012,6 +2040,7 @@ async function transformServerRouteSource(options: {
     return transformCompilerModuleContext({
       code: options.code,
       clientBoundaryImports: options.clientBoundaryImports,
+      clientBoundaryFallbackImports: options.clientBoundaryFallbackImports ?? [],
       dev: false,
       filename: options.filename,
       moduleContext,
@@ -2029,8 +2058,11 @@ function builtRouteSourceAnalysisSummary(options: {
 }): BuiltRouteSourceAnalysisSummary {
   return {
     authIncludesClaims: options.analysis.authIncludesClaims,
-    ...(options.analysis.cachePolicy === undefined ? {} : { cachePolicy: options.analysis.cachePolicy }),
+    ...(options.analysis.cachePolicy === undefined
+      ? {}
+      : { cachePolicy: options.analysis.cachePolicy }),
     clientBoundaryImports: options.analysis.clientBoundaryImports,
+    clientBoundaryFallbackImports: options.analysis.clientBoundaryFallbackImports,
     clientRoute: options.analysis.clientRoute,
     hasLoader: options.analysis.hasLoader,
     routeCode: options.analysis.routeCode,
@@ -2089,7 +2121,10 @@ function usesRuntimeCacheControl(code: string): boolean {
   return /\bcacheControl\s*\(/.test(code);
 }
 
-function routeRequestArtifactBatchKey(file: string, kind: "loader" | "metadata" | "request"): string {
+function routeRequestArtifactBatchKey(
+  file: string,
+  kind: "loader" | "metadata" | "request",
+): string {
   return `${kind}:${file}`;
 }
 
@@ -2129,15 +2164,15 @@ async function buildRequestModuleArtifactCode(options: {
     });
   }
 
-    return await bundleRouteLoaderModuleCode({
-      appDir: options.appDir,
-      bundleCache: options.bundleCache,
-      cacheDir: options.cacheDir,
-      code: stripRouteRequestOnlyExports(options.source, options.filename),
-      filename: options.filename,
-      importPolicy: options.importPolicy,
-      vitePlugins: options.vitePlugins,
-    });
+  return await bundleRouteLoaderModuleCode({
+    appDir: options.appDir,
+    bundleCache: options.bundleCache,
+    cacheDir: options.cacheDir,
+    code: stripRouteRequestOnlyExports(options.source, options.filename),
+    filename: options.filename,
+    importPolicy: options.importPolicy,
+    vitePlugins: options.vitePlugins,
+  });
 }
 
 async function bundleRouteLoaderModuleCode(options: {
@@ -2214,24 +2249,29 @@ async function bundleRouteRequestModuleBatchCode(options: {
         label: "Request artifact",
       }),
     ],
-    root: options.importPolicy?.projectRoot ?? dirname(options.entries[0]?.filename ?? options.appDir),
+    root:
+      options.importPolicy?.projectRoot ?? dirname(options.entries[0]?.filename ?? options.appDir),
     vitePlugins: options.vitePlugins,
   });
 
   if (output.chunks.some((chunk) => !chunk.isEntry)) {
-    const fallbackEntries = await mapWithBuildConcurrency(options.entries, async (entry) => [
-      entry.key,
-      await bundleRouteRequestModuleCode({
-        appDir: options.appDir,
-        bundleCache: options.bundleCache,
-        cacheDir: options.cacheDir,
-        code: entry.code,
-        filename: entry.filename,
-        importPolicy: options.importPolicy,
-        label: entry.label,
-        vitePlugins: options.vitePlugins,
-      }),
-    ] as const);
+    const fallbackEntries = await mapWithBuildConcurrency(
+      options.entries,
+      async (entry) =>
+        [
+          entry.key,
+          await bundleRouteRequestModuleCode({
+            appDir: options.appDir,
+            bundleCache: options.bundleCache,
+            cacheDir: options.cacheDir,
+            code: entry.code,
+            filename: entry.filename,
+            importPolicy: options.importPolicy,
+            label: entry.label,
+            vitePlugins: options.vitePlugins,
+          }),
+        ] as const,
+    );
     return new Map(fallbackEntries);
   }
 
@@ -2346,9 +2386,11 @@ function isMiddlewareFile(appDir: string, file: string): boolean {
 }
 
 function hasMetadataExport(code: string): boolean {
-  return /\bexport\s+const\s+metadata\s*=/.test(code) ||
+  return (
+    /\bexport\s+const\s+metadata\s*=/.test(code) ||
     /\bexport\s+(?:async\s+)?function\s+generateMetadata\b/.test(code) ||
-    /\bexport\s*\{[^}]*\bgenerateMetadata\b[^}]*\}/.test(code);
+    /\bexport\s*\{[^}]*\bgenerateMetadata\b[^}]*\}/.test(code)
+  );
 }
 
 async function readDeclaredProjectPackages(projectRoot: string): Promise<string[]> {
@@ -2432,11 +2474,13 @@ async function writeCloudflareRouteModules(options: {
 
         return analysis === undefined
           ? []
-          : [{
-              route,
-              routeFile,
-              routeId: routeIdForPath(route.path),
-            }];
+          : [
+              {
+                route,
+                routeFile,
+                routeId: routeIdForPath(route.path),
+              },
+            ];
       }),
   );
 
@@ -2455,8 +2499,10 @@ async function writeCloudflareRouteModules(options: {
     cacheDir: options.cacheDir,
     define: options.define,
     routes: requiredRoutes
-      .filter(({ route, routeFile }) =>
-        route.kind === "page" && options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true
+      .filter(
+        ({ route, routeFile }) =>
+          route.kind === "page" &&
+          options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true,
       )
       .map(({ route, routeId }) => ({ filename: route.file, routeId })),
     root: options.projectRoot,
@@ -2504,114 +2550,120 @@ async function writeCloudflareRouteModules(options: {
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, stringShellComponentModules),
   ]);
 
-  const registryEntries = await mapWithBuildConcurrency(requiredRoutes, async ({ route, routeFile, routeId }) => {
-    const routeModuleFile = `routes/${routeId}.mjs`;
-    let routeModuleExports: string[];
+  const registryEntries = await mapWithBuildConcurrency(
+    requiredRoutes,
+    async ({ route, routeFile, routeId }) => {
+      const routeModuleFile = `routes/${routeId}.mjs`;
+      let routeModuleExports: string[];
 
-    if (route.kind === "server" || route.kind === "metadata") {
-      try {
-        const serverRouteModule = serverRouteModules.entries.get(routeId);
+      if (route.kind === "server" || route.kind === "metadata") {
+        try {
+          const serverRouteModule = serverRouteModules.entries.get(routeId);
 
-        if (serverRouteModule === undefined) {
-          throw new Error(`Missing bundled Cloudflare ${route.kind} route module.`);
+          if (serverRouteModule === undefined) {
+            throw new Error(`Missing bundled Cloudflare ${route.kind} route module.`);
+          }
+
+          const serverRouteFile = serverRouteModule.fileName;
+          const serverRouteImport = `./${serverRouteFile.split("/").pop() ?? serverRouteFile}`;
+          routeModuleExports = [
+            `export * from ${JSON.stringify(serverRouteImport)};`,
+            ...(route.kind === "metadata"
+              ? [`export { default } from ${JSON.stringify(serverRouteImport)};`]
+              : []),
+          ];
+        } catch (error) {
+          throw new Error(
+            `Failed to build Cloudflare ${route.kind} route module for ${routeFile}: ${errorMessage(error)}`,
+          );
         }
 
-        const serverRouteFile = serverRouteModule.fileName;
-        const serverRouteImport = `./${serverRouteFile.split("/").pop() ?? serverRouteFile}`;
-        routeModuleExports = [
-          `export * from ${JSON.stringify(serverRouteImport)};`,
-          ...(route.kind === "metadata"
-            ? [`export { default } from ${JSON.stringify(serverRouteImport)};`]
-            : []),
-        ];
-      } catch (error) {
-        throw new Error(
-          `Failed to build Cloudflare ${route.kind} route module for ${routeFile}: ${errorMessage(error)}`,
+        await writeFile(
+          join(options.cloudflareDir, routeModuleFile),
+          `${routeModuleExports.join("\n")}\n`,
         );
+        return `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`;
       }
 
-      await writeFile(join(options.cloudflareDir, routeModuleFile), `${routeModuleExports.join("\n")}\n`);
-      return `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`;
-    }
+      const serverOutput =
+        options.serverModules[routeFile]?.analysis?.streamRoute === true ||
+        options.sourceAnalysis.byRouteFile.get(routeFile)?.streamRoute === true
+          ? "stream"
+          : "string";
 
-    const serverOutput =
-      options.serverModules[routeFile]?.analysis?.streamRoute === true ||
-      options.sourceAnalysis.byRouteFile.get(routeFile)?.streamRoute === true
-        ? "stream"
-        : "string";
-
-    try {
-      const batchedComponent =
-        stringShellComponentRouteIds.has(routeId)
+      try {
+        const batchedComponent = stringShellComponentRouteIds.has(routeId)
           ? stringShellComponentModules.entries.get(routeId)
           : directComponentRouteIds.has(routeId)
             ? directComponentModules.entries.get(routeId)
             : undefined;
-      let componentFile = batchedComponent?.fileName;
+        let componentFile = batchedComponent?.fileName;
 
-      if (batchedComponent === undefined) {
-        const componentOutput =
-          serverOutput === "stream"
-            ? await buildCloudflareStreamRouteComponentModule({
-                cacheDir: options.cacheDir,
-                define: options.define,
-                filename: route.file,
-                projectRoot: options.projectRoot,
-                routesDir: options.routesDir,
-                serverModules: options.serverModules,
-                sourceAnalysis: options.sourceAnalysis,
-                vitePlugins: options.vitePlugins,
-              })
-            : await buildCloudflareStringRouteComponentModule({
-                cacheDir: options.cacheDir,
-                define: options.define,
-                filename: route.file,
-                projectRoot: options.projectRoot,
-                routesDir: options.routesDir,
-                serverModules: options.serverModules,
-                sourceAnalysis: options.sourceAnalysis,
-                vitePlugins: options.vitePlugins,
-              });
+        if (batchedComponent === undefined) {
+          const componentOutput =
+            serverOutput === "stream"
+              ? await buildCloudflareStreamRouteComponentModule({
+                  cacheDir: options.cacheDir,
+                  define: options.define,
+                  filename: route.file,
+                  projectRoot: options.projectRoot,
+                  routesDir: options.routesDir,
+                  serverModules: options.serverModules,
+                  sourceAnalysis: options.sourceAnalysis,
+                  vitePlugins: options.vitePlugins,
+                })
+              : await buildCloudflareStringRouteComponentModule({
+                  cacheDir: options.cacheDir,
+                  define: options.define,
+                  filename: route.file,
+                  projectRoot: options.projectRoot,
+                  routesDir: options.routesDir,
+                  serverModules: options.serverModules,
+                  sourceAnalysis: options.sourceAnalysis,
+                  vitePlugins: options.vitePlugins,
+                });
 
-        componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
-        await writeFile(join(options.cloudflareDir, componentFile), componentOutput);
-      }
-
-      if (componentFile === undefined) {
-        throw new Error("Missing bundled Cloudflare component module.");
-      }
-
-      const componentImport = `./${componentFile.split("/").pop() ?? componentFile}`;
-      routeModuleExports = [
-        cloudflarePageRouteFacadeModuleSource(componentImport),
-      ];
-    } catch (error) {
-      throw new Error(
-        `Failed to build Cloudflare route module for ${routeFile}: ${errorMessage(error)}`,
-      );
-    }
-
-    if (options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true) {
-      try {
-        const loaderModule = loaderRouteModules.entries.get(routeId);
-
-        if (loaderModule === undefined) {
-          throw new Error("Missing bundled Cloudflare loader module.");
+          componentFile = `routes/${routeId}.${hashText(componentOutput).slice(0, 8)}.component.mjs`;
+          await writeFile(join(options.cloudflareDir, componentFile), componentOutput);
         }
 
-        const loaderFile = loaderModule.fileName;
-        const loaderImport = `./${loaderFile.split("/").pop() ?? loaderFile}`;
-        routeModuleExports.push(`export { loader } from ${JSON.stringify(loaderImport)};`);
+        if (componentFile === undefined) {
+          throw new Error("Missing bundled Cloudflare component module.");
+        }
+
+        const componentImport = `./${componentFile.split("/").pop() ?? componentFile}`;
+        routeModuleExports = [cloudflarePageRouteFacadeModuleSource(componentImport)];
       } catch (error) {
         throw new Error(
-          `Failed to build Cloudflare loader module for ${routeFile}: ${errorMessage(error)}`,
+          `Failed to build Cloudflare route module for ${routeFile}: ${errorMessage(error)}`,
         );
       }
-    }
 
-    await writeFile(join(options.cloudflareDir, routeModuleFile), `${routeModuleExports.join("\n")}\n`);
-    return `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`;
-  });
+      if (options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true) {
+        try {
+          const loaderModule = loaderRouteModules.entries.get(routeId);
+
+          if (loaderModule === undefined) {
+            throw new Error("Missing bundled Cloudflare loader module.");
+          }
+
+          const loaderFile = loaderModule.fileName;
+          const loaderImport = `./${loaderFile.split("/").pop() ?? loaderFile}`;
+          routeModuleExports.push(`export { loader } from ${JSON.stringify(loaderImport)};`);
+        } catch (error) {
+          throw new Error(
+            `Failed to build Cloudflare loader module for ${routeFile}: ${errorMessage(error)}`,
+          );
+        }
+      }
+
+      await writeFile(
+        join(options.cloudflareDir, routeModuleFile),
+        `${routeModuleExports.join("\n")}\n`,
+      );
+      return `${JSON.stringify(routeFile)}: () => import(${JSON.stringify(`./${routeModuleFile}`)})`;
+    },
+  );
 
   const registrySource = [
     `export const routeModules = {`,
@@ -2893,7 +2945,9 @@ async function buildCloudflareStringRouteComponentModuleBatch(options: {
           contents: pageMetadataModule,
           resolveDir: dirname(route.filename),
         });
-        metadataImports.push(`import * as pageMetadataModule from ${JSON.stringify(pageMetadataId)};`);
+        metadataImports.push(
+          `import * as pageMetadataModule from ${JSON.stringify(pageMetadataId)};`,
+        );
       }
 
       const shellMetadataImports = await Promise.all(
@@ -3084,7 +3138,11 @@ async function buildCloudflareServerComponentModule(options: {
     cacheDir: options.cacheDir,
     define: options.define,
     filename: options.filename,
-    hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
+    hasMetadata: buildSourceAnalysisForFile(
+      options.sourceAnalysis,
+      options.projectRoot,
+      options.filename,
+    )?.hasMetadata,
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
@@ -3098,9 +3156,8 @@ async function buildCloudflareServerComponentModule(options: {
     filename: `${options.filename}.mreact-cloudflare-component.js`,
     cacheDir: options.cacheDir,
     define: options.define,
-    modules: metadataModule === undefined
-      ? new Map()
-      : new Map([["mreact:metadata", metadataModule]]),
+    modules:
+      metadataModule === undefined ? new Map() : new Map([["mreact:metadata", metadataModule]]),
     plugins: [
       cloudflareServerSourceTransformPlugin({
         projectRoot: options.projectRoot,
@@ -3180,7 +3237,9 @@ async function buildCloudflareStringRouteComponentModule(options: {
       }),
     ),
   );
-  const shellImports = shellFiles.map((_, index) => `import * as shell${index} from "mreact:shell-${index}";`);
+  const shellImports = shellFiles.map(
+    (_, index) => `import * as shell${index} from "mreact:shell-${index}";`,
+  );
   const shellDefinitions = shellFiles.map(
     (shell, index) =>
       `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)}, module: shell${index} }`,
@@ -3287,7 +3346,9 @@ async function buildCloudflareStreamRouteComponentModule(options: {
       }),
     ),
   );
-  const shellImports = shellFiles.map((_, index) => `import * as shell${index} from "mreact:shell-${index}";`);
+  const shellImports = shellFiles.map(
+    (_, index) => `import * as shell${index} from "mreact:shell-${index}";`,
+  );
   const shellDefinitions = shellFiles.map(
     (shell, index) =>
       `{ component: selectComponent(shell${index}, ${JSON.stringify(shell.file)}), id: ${JSON.stringify(shell.id)}, kind: ${JSON.stringify(shell.kind)}, module: shell${index} }`,
@@ -3687,7 +3748,11 @@ async function buildCloudflareComponentExportModule(options: {
     cacheDir: options.cacheDir,
     define: options.define,
     filename: options.filename,
-    hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
+    hasMetadata: buildSourceAnalysisForFile(
+      options.sourceAnalysis,
+      options.projectRoot,
+      options.filename,
+    )?.hasMetadata,
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
@@ -3706,9 +3771,8 @@ export const slots = routeModule.slots;`;
     cacheDir: options.cacheDir,
     define: options.define,
     filename: `${options.filename}.mreact-cloudflare-${options.serverOutput}-component.js`,
-    modules: metadataModule === undefined
-      ? new Map()
-      : new Map([["mreact:metadata", metadataModule]]),
+    modules:
+      metadataModule === undefined ? new Map() : new Map([["mreact:metadata", metadataModule]]),
     plugins: [
       cloudflareServerSourceTransformPlugin({
         projectRoot: options.projectRoot,
@@ -4093,6 +4157,7 @@ async function transformCloudflareServerSource(options: {
   const output = transformCompilerModuleContext({
     code: options.source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
+    clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
     dev: false,
     filename: options.filename,
     moduleContext,
@@ -4106,7 +4171,9 @@ async function transformCloudflareServerSource(options: {
 
   if (fatalDiagnostics.length > 0) {
     throw new Error(
-      fatalDiagnostics.map((diagnostic) => formatDiagnostic(options.filename, diagnostic)).join("\n"),
+      fatalDiagnostics
+        .map((diagnostic) => formatDiagnostic(options.filename, diagnostic))
+        .join("\n"),
     );
   }
 
@@ -4147,9 +4214,18 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
       "@reckona/mreact-compat/event-priority",
       packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
     ],
-    ["@reckona/mreact-compat/flight", packageFile("react-compat", "@reckona/mreact-compat", "flight")],
-    ["@reckona/mreact-compat/hooks", packageFile("react-compat", "@reckona/mreact-compat", "hooks-entry")],
-    ["@reckona/mreact-compat/internal", packageFile("react-compat", "@reckona/mreact-compat", "internal")],
+    [
+      "@reckona/mreact-compat/flight",
+      packageFile("react-compat", "@reckona/mreact-compat", "flight"),
+    ],
+    [
+      "@reckona/mreact-compat/hooks",
+      packageFile("react-compat", "@reckona/mreact-compat", "hooks-entry"),
+    ],
+    [
+      "@reckona/mreact-compat/internal",
+      packageFile("react-compat", "@reckona/mreact-compat", "internal"),
+    ],
     [
       "@reckona/mreact-compat/jsx-dev-runtime",
       packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
@@ -4158,9 +4234,15 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
       "@reckona/mreact-compat/jsx-runtime",
       packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime"),
     ],
-    ["@reckona/mreact-compat/scheduler", packageFile("react-compat", "@reckona/mreact-compat", "scheduler")],
+    [
+      "@reckona/mreact-compat/scheduler",
+      packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
+    ],
     ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
-    ["@reckona/mreact-reactive-core", packageFile("reactive-core", "@reckona/mreact-reactive-core", "index")],
+    [
+      "@reckona/mreact-reactive-core",
+      packageFile("reactive-core", "@reckona/mreact-reactive-core", "index"),
+    ],
     [
       "@reckona/mreact-router/adapters/cloudflare",
       packageFile("router", "@reckona/mreact-router", "adapters/cloudflare"),
@@ -4179,10 +4261,13 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
   return {
     name: "mreact-cloudflare-workspace-runtime",
     setup(buildApi) {
-      buildApi.onResolve({ filter: /^@reckona\/mreact-router\/(?:internal\/)?native-escape$/ }, () => ({
-        namespace: "mreact-cloudflare-native-escape",
-        path: "native-escape",
-      }));
+      buildApi.onResolve(
+        { filter: /^@reckona\/mreact-router\/(?:internal\/)?native-escape$/ },
+        () => ({
+          namespace: "mreact-cloudflare-native-escape",
+          path: "native-escape",
+        }),
+      );
       buildApi.onResolve({ filter: /^@reckona\/mreact-router$/ }, () => ({
         namespace: "mreact-cloudflare-router-index",
         path: "index",
@@ -4192,8 +4277,10 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
 
         return path === undefined ? undefined : { path };
       });
-      buildApi.onLoad({ filter: /^native-escape$/, namespace: "mreact-cloudflare-native-escape" }, () => ({
-        contents: `function escapeHtml(value) {
+      buildApi.onLoad(
+        { filter: /^native-escape$/, namespace: "mreact-cloudflare-native-escape" },
+        () => ({
+          contents: `function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) =>
     char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : "&#39;"
   );
@@ -4201,8 +4288,9 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
 export function escapeHtmlBatch(values) {
   return values.map(escapeHtml);
 }`,
-        loader: "js",
-      }));
+          loader: "js",
+        }),
+      );
       buildApi.onLoad({ filter: /^index$/, namespace: "mreact-cloudflare-router-index" }, () => ({
         contents: `export { cacheControl, revalidatePath } from ${JSON.stringify(routerCachePath)};
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from ${JSON.stringify(routerCookiesPath)};
@@ -4216,12 +4304,15 @@ export { getServerRuntimeState } from ${JSON.stringify(routerRuntimeStatePath)};
         loader: "js",
         resolveDir: dirname(routerNavigationPath),
       }));
-      buildApi.onLoad({ filter: /(?:^|[/\\])packages[/\\]server[/\\](?:src|dist)[/\\]native-flight\.[jt]s$/ }, () => ({
-        contents: `export function getNativeFlight() {
+      buildApi.onLoad(
+        { filter: /(?:^|[/\\])packages[/\\]server[/\\](?:src|dist)[/\\]native-flight\.[jt]s$/ },
+        () => ({
+          contents: `export function getNativeFlight() {
   return undefined;
 }`,
-        loader: "js",
-      }));
+          loader: "js",
+        }),
+      );
     },
   };
 }
@@ -4423,18 +4514,23 @@ async function writeClientRouteBundles(options: {
     });
   } catch (error) {
     const routeContexts = clientEntries
-      .map((entry) => `Failed to build client bundle for ${entry.route.path} (${entry.route.file}).`)
+      .map(
+        (entry) => `Failed to build client bundle for ${entry.route.path} (${entry.route.file}).`,
+      )
       .join("\n");
 
-    throw new Error(`${routeContexts}\nFailed to build client route bundles.\n${errorMessage(error)}`, {
-      cause: error,
-    });
+    throw new Error(
+      `${routeContexts}\nFailed to build client route bundles.\n${errorMessage(error)}`,
+      {
+        cause: error,
+      },
+    );
   }
 
   const routeOutputs = new Map(output.routes.map((route) => [route.routePath, route]));
   const mapAssets = new Map(
     output.chunks.flatMap((chunk) =>
-      chunk.map === undefined ? [] : [[`${chunk.fileName}.map`, chunk.map] as const]
+      chunk.map === undefined ? [] : [[`${chunk.fileName}.map`, chunk.map] as const],
     ),
   );
 
@@ -4459,9 +4555,7 @@ async function writeClientRouteBundles(options: {
 
   for (const asset of output.assets ?? []) {
     const source =
-      typeof asset.source === "string"
-        ? asset.source
-        : Buffer.from(asset.source).toString("utf8");
+      typeof asset.source === "string" ? asset.source : Buffer.from(asset.source).toString("utf8");
 
     await mkdir(dirname(join(options.clientDir, asset.fileName)), { recursive: true });
     await writeFile(join(options.clientDir, asset.fileName), source);
@@ -4538,12 +4632,16 @@ async function writeRouteCssAssetBatches(options: {
       appDir: options.appDir,
       pageFile: route.file,
       projectRoot: options.projectRoot,
-      readSource: (file) => buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, file)?.source,
+      readSource: (file) =>
+        buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, file)?.source,
     });
 
     return { cssFiles, route };
   });
-  const groups = new Map<string, { cssFiles: string[]; routeIds: string[]; routeFiles: string[] }>();
+  const groups = new Map<
+    string,
+    { cssFiles: string[]; routeIds: string[]; routeFiles: string[] }
+  >();
 
   for (const { cssFiles, route } of cssInputs) {
     if (cssFiles.length === 0) {
@@ -4557,18 +4655,22 @@ async function writeRouteCssAssetBatches(options: {
     groups.set(key, group);
   }
 
-  const writtenGroups = await mapWithBuildConcurrency([...groups.entries()], async ([key, group]) => [
-    key,
-    await writeRouteCssAssetsForFiles({
-      cacheDir: options.cacheDir,
-      clientDir: options.clientDir,
-      cssFiles: group.cssFiles,
-      pageFile: group.routeFiles[0] ?? options.appDir,
-      projectRoot: options.projectRoot,
-      routeIds: group.routeIds,
-      vitePlugins: options.vitePlugins,
-    }),
-  ] as const);
+  const writtenGroups = await mapWithBuildConcurrency(
+    [...groups.entries()],
+    async ([key, group]) =>
+      [
+        key,
+        await writeRouteCssAssetsForFiles({
+          cacheDir: options.cacheDir,
+          clientDir: options.clientDir,
+          cssFiles: group.cssFiles,
+          pageFile: group.routeFiles[0] ?? options.appDir,
+          projectRoot: options.projectRoot,
+          routeIds: group.routeIds,
+          vitePlugins: options.vitePlugins,
+        }),
+      ] as const,
+  );
   const cssByGroup = new Map(writtenGroups);
   const cssByRoute = new Map<string, string[]>();
 
@@ -4612,15 +4714,14 @@ async function writeRouteCssAssetsForFiles(options: {
   });
   const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));
   const written: string[] = [];
-  const routeStem = options.routeIds.length === 1
-    ? (options.routeIds[0] ?? "index")
-    : `shared.${hashText(cssFiles.join("\0")).slice(0, 8)}`;
+  const routeStem =
+    options.routeIds.length === 1
+      ? (options.routeIds[0] ?? "index")
+      : `shared.${hashText(cssFiles.join("\0")).slice(0, 8)}`;
 
   for (const [index, asset] of cssAssets.entries()) {
     const source =
-      typeof asset.source === "string"
-        ? asset.source
-        : Buffer.from(asset.source).toString("utf8");
+      typeof asset.source === "string" ? asset.source : Buffer.from(asset.source).toString("utf8");
     const hash = createHash("sha256").update(source).digest("hex").slice(0, 8);
     const cssFile = `assets/routes/${routeStem}${cssAssets.length === 1 ? "" : `.${index}`}.${hash}.css`;
 
@@ -4798,7 +4899,9 @@ function isBarePackageImport(specifier: string): boolean {
 
 async function assertAwsLambdaRuntimeDependencies(outDir: string): Promise<void> {
   try {
-    const info = await stat(join(outDir, "node_modules", "@reckona", "mreact-router", "package.json"));
+    const info = await stat(
+      join(outDir, "node_modules", "@reckona", "mreact-router", "package.json"),
+    );
     if (info.isFile()) {
       return;
     }
@@ -4891,7 +4994,9 @@ function assertPackageOutputDoesNotReplaceBuildOutput(options: {
   outDir: string;
 }): void {
   if (resolve(options.fromDir) === resolve(options.outDir)) {
-    throw new Error("Package output directory must be different from the mreact build output directory.");
+    throw new Error(
+      "Package output directory must be different from the mreact build output directory.",
+    );
   }
 }
 
@@ -4955,7 +5060,9 @@ async function collectArtifactFiles(
     }
   }
 
-  return files.sort((left, right) => right.bytes - left.bytes || left.path.localeCompare(right.path));
+  return files.sort(
+    (left, right) => right.bytes - left.bytes || left.path.localeCompare(right.path),
+  );
 }
 
 function awsLambdaHandlerSource(outDirRelativeToHandler: string): string {
@@ -5000,6 +5107,7 @@ async function validateProductionRoutes(options: {
       cache: options.serverTransformCache,
       code: analysis.routeCode,
       clientBoundaryImports: analysis.clientBoundaryImports,
+      clientBoundaryFallbackImports: analysis.clientBoundaryFallbackImports,
       filename: route.file,
       moduleContextCache: options.clientRouteInferenceCache,
       serverOutput: analysis.streamRoute ? "stream" : "string",
@@ -5039,10 +5147,10 @@ async function collectBuildFiles(
 
       return [{ file, relativeFile }];
     });
-    const fileContents = await mapWithBuildConcurrency(sourceFiles, async ({ file, relativeFile }) => [
-      relativeFile,
-      await readFile(file, "utf8"),
-    ] as const);
+    const fileContents = await mapWithBuildConcurrency(
+      sourceFiles,
+      async ({ file, relativeFile }) => [relativeFile, await readFile(file, "utf8")] as const,
+    );
 
     for (const [relativeFile, source] of fileContents) {
       files[relativeFile] = source;

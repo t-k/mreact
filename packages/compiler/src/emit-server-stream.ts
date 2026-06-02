@@ -64,9 +64,8 @@ export function emitServerStream(
 ): EmitServerStreamResult {
   const serverBootstrap = options.serverBootstrap ?? "none";
   const escapeHelperName = allocateHelperName(ir, "_escapeHtml");
-  const escapeBatchHelperName = options.escape === undefined
-    ? undefined
-    : allocateHelperName(ir, "_escapeHtmlBatch");
+  const escapeBatchHelperName =
+    options.escape === undefined ? undefined : allocateHelperName(ir, "_escapeHtmlBatch");
   const asyncBoundaryHelperName = allocateHelperName(ir, "_renderAsyncBoundary");
   const outOfOrderBoundaryHelperName = allocateHelperName(ir, "_renderOutOfOrderBoundary");
   const reorderScriptHelperName = allocateHelperName(ir, "_renderOutOfOrderReorderScript");
@@ -167,7 +166,9 @@ export function emitServerStream(
     .join("\n");
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
-  const importsBlock = [importLine, escapeImport, userImports, moduleStatements].filter(Boolean).join("\n");
+  const importsBlock = [importLine, escapeImport, userImports, moduleStatements]
+    .filter(Boolean)
+    .join("\n");
   const needsSpreadAttributesHelper = components.includes(spreadAttributesHelperName);
   const urlSafeBlock =
     components.includes(urlSafeHelperName) || needsSpreadAttributesHelper ? urlSafeHelper : "";
@@ -412,11 +413,12 @@ function emitComponent(
   const { serverBootstrap, serverBootstrapNonce, serverBootstrapSrc } = options;
   const sinkName = allocateComponentSinkName(component);
   const parameters = [sinkName, ...component.parameters].join(", ");
-  const body = component.bodyStatements.map((statement) =>
-    `  ${statement.replaceAll(
-      oxcServerStringReactNodeRenderHelperPlaceholder,
-      compatRenderToStringHelperName,
-    )}`,
+  const body = component.bodyStatements.map(
+    (statement) =>
+      `  ${statement.replaceAll(
+        oxcServerStringReactNodeRenderHelperPlaceholder,
+        compatRenderToStringHelperName,
+      )}`,
   );
   const markerId = encodeURIComponent(component.name);
   const hydrationStartStatements =
@@ -450,8 +452,13 @@ function emitComponent(
       ? [`  ${sinkName}.append(${stringLiteral(`<!--mreact-h:end:${markerId}-->`)});`]
       : [];
   const exportPrefix =
-    component.exportDefault === true ? "export default " : component.exported === false ? "" : "export ";
-  const asyncPrefix = component.async === true || containsAnyAsyncBoundary(component.root) ? "async " : "";
+    component.exportDefault === true
+      ? "export default "
+      : component.exported === false
+        ? ""
+        : "export ";
+  const asyncPrefix =
+    component.async === true || containsAnyAsyncBoundary(component.root) ? "async " : "";
   const functionKeyword = `${exportPrefix}${asyncPrefix}function`;
 
   return [
@@ -750,9 +757,7 @@ function emitListPart(
     part.indexName === undefined ? undefined : `${innerIndent}const ${part.indexName} = _i;`;
   const arrayBinding =
     part.arrayName === undefined ? undefined : `${innerIndent}const ${part.arrayName} = _arr;`;
-  const bodyLines = part.bodyStatements.map(
-    (statement) => `${innerIndent}${statement}`,
-  );
+  const bodyLines = part.bodyStatements.map((statement) => `${innerIndent}${statement}`);
   const coalescedParts = coalesceAdjacentStaticParts(part.parts);
 
   // Issue 085 follow-up: if every child part can be expressed as a
@@ -794,13 +799,7 @@ function emitListPart(
 
   const childLines =
     syncCoalescedParts === undefined
-      ? [
-          emitNestedStreamAppendStatements(
-            coalescedParts,
-            sinkName,
-            compatRenderToStringHelperName,
-          ),
-        ]
+      ? [emitNestedStreamAppendStatements(coalescedParts, sinkName, compatRenderToStringHelperName)]
       : syncCoalescedParts.map((child) =>
           emitSyncPartAsAppendStatement(
             child,
@@ -891,7 +890,9 @@ function emitNestedAppendStatements(
   compatRenderToStringHelperName: string,
 ): string {
   return coalesceAdjacentStaticParts([...parts])
-    .map((part) => emitSyncPartAsAppendStatement(part, sinkName, compatRenderToStringHelperName, "    "))
+    .map((part) =>
+      emitSyncPartAsAppendStatement(part, sinkName, compatRenderToStringHelperName, "    "),
+    )
     .join("\n");
 }
 
@@ -933,17 +934,13 @@ function emitNestedStreamAppendStatements(
         return emitLoweredReactSuspenseOutOfOrderBoundary(part, {
           compatRenderToStringHelperName,
           emitNestedAppendStatements,
-          reactSuspenseOutOfOrderBoundaryHelperName: currentReactSuspenseOutOfOrderBoundaryHelperName,
+          reactSuspenseOutOfOrderBoundaryHelperName:
+            currentReactSuspenseOutOfOrderBoundaryHelperName,
           sinkName,
         }).replace(/^/gm, "    ");
       }
 
-      return emitSyncPartAsAppendStatement(
-        part,
-        sinkName,
-        compatRenderToStringHelperName,
-        "    ",
-      );
+      return emitSyncPartAsAppendStatement(part, sinkName, compatRenderToStringHelperName, "    ");
     })
     .join("\n");
 }
@@ -1196,9 +1193,7 @@ function collectHtmlParts(
           ...(node.placeholderTagCode === undefined
             ? {}
             : { placeholderTagCode: node.placeholderTagCode }),
-          ...(state.awaitHydration && node.awaitId !== undefined
-            ? { awaitId: node.awaitId }
-            : {}),
+          ...(state.awaitHydration && node.awaitId !== undefined ? { awaitId: node.awaitId } : {}),
           ...(node.catchName === undefined || node.catchChildren === undefined
             ? {}
             : {
@@ -1235,9 +1230,7 @@ function collectHtmlParts(
             state,
           ),
         ) as HtmlSyncPart[],
-        ...(state.awaitHydration && node.awaitId !== undefined
-          ? { awaitId: node.awaitId }
-          : {}),
+        ...(state.awaitHydration && node.awaitId !== undefined ? { awaitId: node.awaitId } : {}),
         ...(node.catchName === undefined || node.catchChildren === undefined
           ? {}
           : {
@@ -1403,14 +1396,14 @@ function collectHtmlParts(
     if (isClientBoundaryPlaceholder(node, state.hydration)) {
       const helperName = currentClientBoundaryHelperName;
       if (helperName !== undefined) {
+        const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
+        const fallbackHtml = shouldRenderClientBoundaryFallback(node)
+          ? `${node.name}(${boundaryProps})`
+          : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         return [
           {
             kind: "raw-dynamic",
-            code: `${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
-              node.props,
-              [],
-              escapeHelperName,
-            )}, ${emitHtmlExpressionFromChildren(node.children, escapeHelperName)})`,
+            code: `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml})`,
           },
         ];
       }
@@ -1461,18 +1454,18 @@ function collectHtmlParts(
     ];
   }
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
-  const childSelectedValueCode = node.tagName === "select"
-    ? attributeScan.formValueAttributeCode
-    : undefined;
-  const childState = childSelectedValueCode === undefined
-    ? state
-    : { ...state, selectedValueCode: childSelectedValueCode };
+  const childSelectedValueCode =
+    node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
+  const childState =
+    childSelectedValueCode === undefined
+      ? state
+      : { ...state, selectedValueCode: childSelectedValueCode };
   const selectedAttributePart = collectOptionSelectedAttributePart(node, state.selectedValueCode);
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(node.attributes);
   const childrenParts =
     dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
-      : (childState.selectedValueCode === undefined
+      : ((childState.selectedValueCode === undefined
           ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
           : undefined) ??
         node.children.flatMap((child) =>
@@ -1485,7 +1478,7 @@ function collectHtmlParts(
             reactSuspenseOutOfOrderBoundaryHelperName,
             childState,
           ),
-        );
+        ));
 
   return [
     { kind: "static", value: `<${node.tagName}` },
@@ -1585,7 +1578,16 @@ function collectHtmlAttributeParts(
   }
 
   if (attr.name === "style") {
-    return [{ kind: "raw-dynamic", code: emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName) }];
+    return [
+      {
+        kind: "raw-dynamic",
+        code: emitDynamicStyleAttributeExpression(
+          attr.code,
+          escapeHelperName,
+          escapeBatchHelperName,
+        ),
+      },
+    ];
   }
 
   const dynamicHtmlName = htmlAttributeNameForElement(tagName, attr.name);
@@ -1593,7 +1595,7 @@ function collectHtmlAttributeParts(
     return [
       {
         kind: "raw-dynamic",
-        code: `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral("\"")}; return ""; })()`,
+        code: `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral('"')}; return ""; })()`,
       },
     ];
   }
@@ -1626,11 +1628,11 @@ function collectElementAttributeParts(
 
   return attrs.flatMap((attr) =>
     attr.kind !== "spread-attr" &&
-      ((tagName === "input" &&
-        ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
-          (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
-        ((tagName === "textarea" || tagName === "select") &&
-          (attr.name === "value" || attr.name === "defaultValue")))
+    ((tagName === "input" &&
+      ((attr.name === "defaultValue" && attributeScan.hasExplicitInputValue) ||
+        (attr.name === "defaultChecked" && attributeScan.hasExplicitInputChecked))) ||
+      ((tagName === "textarea" || tagName === "select") &&
+        (attr.name === "value" || attr.name === "defaultValue")))
       ? []
       : collectHtmlAttributeParts(
           tagName,
@@ -1704,10 +1706,7 @@ function scanElementAttributes(
 
     if ((tagName === "textarea" || tagName === "select") && attr.name === "value") {
       valueAttributeCode = readFormValueAttributeCode(attr);
-    } else if (
-      (tagName === "textarea" || tagName === "select") &&
-      attr.name === "defaultValue"
-    ) {
+    } else if ((tagName === "textarea" || tagName === "select") && attr.name === "defaultValue") {
       defaultValueAttributeCode = readFormValueAttributeCode(attr);
     }
   }
@@ -1735,17 +1734,17 @@ function emitDynamicAttributeExpression(
   escapeHelperName: string,
 ): string {
   if (isUrlAttribute(name)) {
-    return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral("\"")}; })()`;
+    return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral('"')}; })()`;
   }
 
   const inlineExpr = simpleSideEffectFreeExpression(code);
 
   if (inlineExpr !== undefined) {
     // Inline 3 evaluations to avoid per-attribute IIFE closure allocation.
-    return `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral("\"")})`;
+    return `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral('"')})`;
   }
 
-  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral("\"")}; })()`;
+  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral('"')}; })()`;
 }
 
 function emitDynamicStyleAttributeExpression(
@@ -1759,11 +1758,12 @@ function emitDynamicStyleAttributeExpression(
     return staticStyleExpression;
   }
 
-  const escapedPair = escapeBatchHelperName === undefined
-    ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
-    : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
+  const escapedPair =
+    escapeBatchHelperName === undefined
+      ? `${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_styleValue === true ? "" : _styleValue)`
+      : `(() => { const _escaped = ${escapeBatchHelperName}([_cssName, _styleValue === true ? "" : _styleValue]); return _escaped[0] + ":" + _escaped[1]; })()`;
 
-  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+  return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; if (typeof _value === "string") { const _style = ${escapeHelperName}(_value); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; } const _style = Object.entries(_value).filter(([, _styleValue]) => _styleValue != null && _styleValue !== false).map(([_styleName, _styleValue]) => { const _cssName = String(_styleName).startsWith("--") ? String(_styleName) : String(_styleName).replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); return ${escapedPair}; }).join(";"); return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function emitStaticStyleObjectAttributeExpression(
@@ -1797,11 +1797,12 @@ function emitStaticStyleObjectAttributeExpression(
     return stringLiteral(` style="${parts.join(";")}"`);
   }
 
-  const statements = entries.map((entry) =>
-    `{ const _v = (${entry.valueCode}); if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`
+  const statements = entries.map(
+    (entry) =>
+      `{ const _v = (${entry.valueCode}); if (_v != null && _v !== false) _style += (_style === "" ? "" : ";") + ${stringLiteral(`${entry.cssName}:`)} + ${escapeHelperName}(_v === true ? "" : _v); }`,
   );
 
-  return `(() => { let _style = ""; ${statements.join(" ")} return _style === "" ? "" : ${stringLiteral(" style=\"")} + _style + ${stringLiteral("\"")}; })()`;
+  return `(() => { let _style = ""; ${statements.join(" ")} return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function collectTextareaValueParts(
@@ -1828,7 +1829,7 @@ function collectTextareaValueParts(
       reactSuspenseBoundaryHelperName,
       reactSuspenseOutOfOrderBoundaryHelperName,
       state,
-    )
+    ),
   );
 }
 
@@ -1852,9 +1853,13 @@ function collectOptionSelectedAttributePart(
 }
 
 function findOptionValueCode(node: Extract<JsxNodeIr, { kind: "element" }>): string | undefined {
-  const valueAttr = node.attributes.find((attr) => attr.kind !== "spread-attr" && attr.name === "value");
+  const valueAttr = node.attributes.find(
+    (attr) => attr.kind !== "spread-attr" && attr.name === "value",
+  );
   if (valueAttr !== undefined && valueAttr.kind !== "event" && valueAttr.kind !== "spread-attr") {
-    return valueAttr.kind === "static-attr" ? stringLiteral(valueAttr.value) : `(${valueAttr.code})`;
+    return valueAttr.kind === "static-attr"
+      ? stringLiteral(valueAttr.value)
+      : `(${valueAttr.code})`;
   }
 
   return node.children.every((child) => child.kind === "text")
@@ -2045,7 +2050,8 @@ function collectBatchedSimpleChildrenParts(
   }
 
   const dynamicChildren = children.filter(
-    (child) => child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
+    (child) =>
+      child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
   ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
 
   if (dynamicChildren.length < 2) {
@@ -2056,7 +2062,11 @@ function collectBatchedSimpleChildrenParts(
     children.some(
       (child) =>
         child.kind !== "text" &&
-        !(child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node"),
+        !(
+          child.kind === "expr" &&
+          child.renderMode !== "html" &&
+          child.renderMode !== "react-node"
+        ),
     )
   ) {
     return undefined;
@@ -2106,8 +2116,8 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
   );
   const expressions = parts.map((part) =>
     isHtmlSyncPart(part)
-      ? tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName) ?? '""'
-      : '""'
+      ? (tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName) ?? '""')
+      : '""',
   );
 
   return expressions.length === 0 ? '""' : expressions.join(" + ");
@@ -2275,8 +2285,7 @@ function containsAsyncComponent(children: readonly JsxNodeIr[]): boolean {
         child.async === true ||
         containsAsyncComponent(child.children) ||
         child.props.some(
-          (prop) =>
-            prop.kind === "render-prop" && containsAsyncComponent(prop.children),
+          (prop) => prop.kind === "render-prop" && containsAsyncComponent(prop.children),
         )
       );
     }
@@ -2522,7 +2531,16 @@ function isClientBoundaryPlaceholder(
 }
 
 function isCompatClientReference(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
-  return node.clientReference !== undefined && /\.(?:compat)\.[cm]?[jt]sx?$/.test(node.clientReference.moduleId);
+  return (
+    node.clientReference !== undefined &&
+    /\.(?:compat)\.[cm]?[jt]sx?$/.test(node.clientReference.moduleId)
+  );
+}
+
+function shouldRenderClientBoundaryFallback(
+  node: Extract<JsxNodeIr, { kind: "component" }>,
+): boolean {
+  return node.clientReference?.ssrFallback === true;
 }
 
 function clientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): string {

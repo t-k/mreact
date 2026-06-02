@@ -411,7 +411,7 @@ async function transformServerSourceFile(
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${clientInference.clientBoundaryFallbackImports.join("\0")}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,
@@ -425,6 +425,7 @@ async function transformServerSourceFile(
   const output = transformCompilerModuleContext({
     code: source,
     clientBoundaryImports: clientInference.clientBoundaryImports,
+    clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
     dev: options.dev,
     filename: options.filename,
     moduleContext,
@@ -488,12 +489,20 @@ function withNodeRequireShimForEsmBundle(options: {
     return code;
   }
 
-  return `${rewritten.needsNativeImport ? 'const __mreactNativeImport = Function("specifier", "return import(specifier)");\n' : ""}${needsFilenameGlobalShim ? `const __filename = ${JSON.stringify(options.filename)};
+  return `${rewritten.needsNativeImport ? 'const __mreactNativeImport = Function("specifier", "return import(specifier)");\n' : ""}${
+    needsFilenameGlobalShim
+      ? `const __filename = ${JSON.stringify(options.filename)};
 const __dirname = ${JSON.stringify(dirname(options.filename))};
-` : ""}${rewritten.needsRequire || needsRequireShim ? `import { createRequire as __mreactCreateRequire } from "node:module";
+`
+      : ""
+  }${
+    rewritten.needsRequire || needsRequireShim
+      ? `import { createRequire as __mreactCreateRequire } from "node:module";
 const __mreactRequire = __mreactCreateRequire(${JSON.stringify(requireBaseUrl)});
 const require = __mreactRequire;
-` : ""}${code}`;
+`
+      : ""
+  }${code}`;
 }
 
 function needsCommonJsFilenameGlobalShim(code: string): boolean {
@@ -535,7 +544,11 @@ function rewriteNodeModulesExternalImports(code: string): {
       }
 
       needsNativeImport = true;
-      const rewritten = esmImportClauseToNativeImportStatements(clause.trim(), specifier, importIndex++);
+      const rewritten = esmImportClauseToNativeImportStatements(
+        clause.trim(),
+        specifier,
+        importIndex++,
+      );
       for (const [name, replacement] of rewritten.bindings) {
         nativeImportBindings.set(name, replacement);
       }
@@ -601,7 +614,9 @@ function isNodeModulesPath(file: string): boolean {
 function isNodeImportableModuleFile(file: string): boolean {
   const extension = extname(file);
 
-  return extension === ".cjs" || extension === ".mjs" || extension === ".js" || extension === ".node";
+  return (
+    extension === ".cjs" || extension === ".mjs" || extension === ".js" || extension === ".node"
+  );
 }
 
 function isNodeCommonJsModuleFile(file: string): boolean {
@@ -676,7 +691,10 @@ function commonJsImportClauseToRequireStatements(
   const defaultName = clause.slice(0, commaIndex).trim();
   const namedOrNamespace = clause.slice(commaIndex + 1).trim();
   const temporaryName = `__mreactExternalCommonJs${importIndex}`;
-  const statements = [`const ${temporaryName} = ${requireExpression};`, `const ${defaultName} = ${temporaryName};`];
+  const statements = [
+    `const ${temporaryName} = ${requireExpression};`,
+    `const ${defaultName} = ${temporaryName};`,
+  ];
 
   if (namedOrNamespace.startsWith("* as ")) {
     statements.push(`const ${namedOrNamespace.slice(5).trim()} = ${temporaryName};`);
@@ -737,10 +755,7 @@ function collectNamedEsmImportBindings(
   }
 }
 
-function namedCommonJsImportsToRequireStatements(
-  clause: string,
-  sourceExpression: string,
-): string {
+function namedCommonJsImportsToRequireStatements(clause: string, sourceExpression: string): string {
   const objectBindings: string[] = [];
   const statements: string[] = [];
 
