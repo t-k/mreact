@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.121 - 2026-06-02
+
+### Fixed
+
+- Fixed inferred client boundaries that are safe to server-render so their SSR fallback HTML remains visible before hydration, preserving route shell and navigation content while explicit client islands still render as placeholders.
+- Fixed server JSX component children that return `null`, `undefined`, or boolean values so they are omitted instead of rendering literal text such as `null`.
+
 ## 0.0.120 - 2026-06-02
 
 ### Fixed
