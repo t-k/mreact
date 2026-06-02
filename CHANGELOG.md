@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.120 - 2026-06-02
+
+### Fixed
+
+- Fixed Cloudflare Pages server bundles so Vite `define` values, including `import.meta.env.*` aliases and plain define identifiers, are applied to generated loader and server route modules before `_worker.js` is packaged.
+
 ## 0.0.119 - 2026-06-02
 
 ### Fixed

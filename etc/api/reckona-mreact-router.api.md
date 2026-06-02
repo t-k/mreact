@@ -346,7 +346,7 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
     // (undocumented)
     targets?: readonly AppRouterBuildTarget[] | undefined;
     // (undocumented)
-    viteConfig?: Pick<UserConfig, "plugins"> | undefined;
+    viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
 }
 
 // @public (undocumented)
