@@ -856,7 +856,9 @@ function tryEmitPartAsStringExpression(
     return `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(part.hydrationId)}-->`)} + ${rendered} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(part.hydrationId)}-->`)}`;
   }
   if (part.kind === "component" && part.hydrationId === undefined) {
-    return `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName)})`;
+    return emitRenderableHtmlExpression(
+      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName)})`,
+    );
   }
   // Non-compat component parts require `await sink-write`; lists with
   // sink-needing children also can't collapse. Signal fallback.
@@ -2535,6 +2537,10 @@ function isCompatClientReference(node: Extract<JsxNodeIr, { kind: "component" }>
     node.clientReference !== undefined &&
     /\.(?:compat)\.[cm]?[jt]sx?$/.test(node.clientReference.moduleId)
   );
+}
+
+function emitRenderableHtmlExpression(code: string): string {
+  return `((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(${code})`;
 }
 
 function shouldRenderClientBoundaryFallback(

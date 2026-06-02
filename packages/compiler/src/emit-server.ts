@@ -1490,7 +1490,11 @@ function emitComponentCallExpression(
   asyncComponentNames: ReadonlySet<string>,
 ): string {
   const call = `${name}(${propsCode})`;
-  return asyncComponentNames.has(name) ? `(await ${call})` : call;
+  return emitRenderableHtmlExpression(asyncComponentNames.has(name) ? `(await ${call})` : call);
+}
+
+function emitRenderableHtmlExpression(code: string): string {
+  return `((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(${code})`;
 }
 
 function isClientBoundaryPlaceholder(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {

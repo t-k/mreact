@@ -620,6 +620,24 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("Before<span>After</span>");
   });
 
+  test("emitted server component omits null returned by child components", () => {
+    const output = transform({
+      code: `function ActivityUnreadBadge() {
+  return null;
+}
+
+export function App() {
+  return <nav><a href="/activity">Activity</a><ActivityUnreadBadge /></nav>;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe('<nav><a href="/activity">Activity</a></nav>');
+  });
+
   test("emitted server component preserves top-level const", () => {
     const output = transform({
       code: `const greeting = "Hello";
@@ -1375,7 +1393,7 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      '_renderClientBoundary("Navigation", { label: ("Albums") }, Navigation({ label: ("Albums") }))',
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })))',
     );
   });
 
