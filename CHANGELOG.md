@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.117 - 2026-06-02
+
+### Fixed
+
+- Fixed the client JSX transform so array expression children that contain typed block-body `.map()` renderers can lower nested anchor JSX without leaving TypeScript annotations or malformed arrow callbacks in the emitted browser code.
+
 ## 0.0.116 - 2026-06-02
 
 ### Fixed
