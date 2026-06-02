@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.119 - 2026-06-02
+
+### Fixed
+
+- Fixed `renderAppRequest({ env })` so page route loaders receive the same adapter `env` object as server route handlers, matching Cloudflare Pages loader behavior and allowing Node-side SSR tests to exercise binding-dependent loaders.
+
 ## 0.0.118 - 2026-06-02
 
 ### Fixed
