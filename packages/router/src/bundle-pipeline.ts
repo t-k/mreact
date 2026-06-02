@@ -16,7 +16,7 @@ export interface RouterBundleOptions {
   cacheDir?: string | undefined;
   cacheKey?: string | undefined;
   code: string;
-  define?: Record<string, string> | undefined;
+  define?: InlineConfig["define"] | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   filename: string;
@@ -37,7 +37,7 @@ export interface RouterBundleModulesOptions {
   base?: string | undefined;
   cacheDir?: string | undefined;
   chunkFileNames?: string | undefined;
-  define?: Record<string, string> | undefined;
+  define?: InlineConfig["define"] | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   entries: readonly RouterBundleEntryOptions[];
   entryFileNames?: string | undefined;

@@ -1034,6 +1034,79 @@ export default function Login(props: { data: { intent: string } }) {
     expect(html).toContain(`<script type="module" src="/_mreact/client/${loginScript}"></script>`);
   });
 
+  test("packaged Cloudflare Pages worker applies Vite define values used by server modules", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-vite-define-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(join(appDir, "api", "config"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `declare const __MREACT_TEST_DEFINE__: string;
+
+export function loader() {
+  return {
+    apiBase: import.meta.env.SSR_API_BASE_URL,
+    plain: __MREACT_TEST_DEFINE__,
+  };
+}
+
+export default function Page(props: { data: { apiBase: string; plain: string } }) {
+  return <main>{props.data.apiBase}::{props.data.plain}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "api", "config", "route.ts"),
+      `declare const __MREACT_TEST_ROUTE_DEFINE__: string;
+
+export function GET() {
+  return Response.json({ value: __MREACT_TEST_ROUTE_DEFINE__ });
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+      viteConfig: {
+        define: {
+          "import.meta.env.SSR_API_BASE_URL": JSON.stringify("https://api.example.invalid"),
+          __MREACT_TEST_DEFINE__: JSON.stringify("plain-define-value"),
+          __MREACT_TEST_ROUTE_DEFINE__: JSON.stringify("route-define-value"),
+        },
+      },
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const workerSource = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
+    const worker = await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    const page = await worker.default.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const route = await worker.default.fetch(
+      new Request("https://app.example/api/config"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(workerSource).toContain("https://api.example.invalid");
+    expect(workerSource).toContain("plain-define-value");
+    expect(workerSource).toContain("route-define-value");
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("https://api.example.invalid::plain-define-value");
+    expect(route.status).toBe(200);
+    await expect(route.json()).resolves.toEqual({ value: "route-define-value" });
+  });
+
   test("writes generated client assets for Cloudflare Pages asset allowlists", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-recursive-imports-"));
     const appDir = join(rootDir, "app");

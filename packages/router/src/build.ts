@@ -98,7 +98,7 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
   onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
   outDir: string;
   targets?: readonly AppRouterBuildTarget[] | undefined;
-  viteConfig?: Pick<UserConfig, "plugins"> | undefined;
+  viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
 }
 
 export type BuildAppPhase =
@@ -273,6 +273,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       : await timeBuildPhase(timingSink, "scan", () =>
           scanAppRoutes({ appDir: project.routesDir }),
         );
+  const viteDefine = options.viteConfig?.define;
   const vitePlugins = options.viteConfig?.plugins;
   const files =
     timingSink === undefined
@@ -519,6 +520,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       timingSink === undefined
         ? await writeCloudflareRouteModules({
             cloudflareDir,
+            define: viteDefine,
             files,
             prerenderedRoutes,
             projectRoot: project.projectRoot,
@@ -531,6 +533,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         : await timeBuildPhase(timingSink, "cloudflare", () =>
             writeCloudflareRouteModules({
               cloudflareDir,
+              define: viteDefine,
               files,
               prerenderedRoutes,
               projectRoot: project.projectRoot,
@@ -2409,6 +2412,7 @@ interface RouteRequestModuleBatchEntry {
 async function writeCloudflareRouteModules(options: {
   cacheDir?: string | undefined;
   cloudflareDir: string;
+  define?: UserConfig["define"] | undefined;
   files: Record<string, string>;
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute>;
   projectRoot: string;
@@ -2440,6 +2444,7 @@ async function writeCloudflareRouteModules(options: {
 
   const serverRouteModules = await buildCloudflareServerRouteModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     routes: requiredRoutes
       .filter(({ route }) => route.kind === "server" || route.kind === "metadata")
       .map(({ route, routeId }) => ({ filename: route.file, routeId })),
@@ -2448,6 +2453,7 @@ async function writeCloudflareRouteModules(options: {
   });
   const loaderRouteModules = await buildCloudflareRouteLoaderModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     routes: requiredRoutes
       .filter(({ route, routeFile }) =>
         route.kind === "page" && options.sourceAnalysis.byRouteFile.get(routeFile)?.hasLoader === true
@@ -2474,6 +2480,7 @@ async function writeCloudflareRouteModules(options: {
   );
   const directComponentModules = await buildCloudflareServerComponentModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     projectRoot: options.projectRoot,
     routes: directComponentRoutes,
     serverModules: options.serverModules,
@@ -2482,6 +2489,7 @@ async function writeCloudflareRouteModules(options: {
   });
   const stringShellComponentModules = await buildCloudflareStringRouteComponentModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     projectRoot: options.projectRoot,
     routes: stringShellComponentRoutes,
     serverModules: options.serverModules,
@@ -2546,6 +2554,7 @@ async function writeCloudflareRouteModules(options: {
           serverOutput === "stream"
             ? await buildCloudflareStreamRouteComponentModule({
                 cacheDir: options.cacheDir,
+                define: options.define,
                 filename: route.file,
                 projectRoot: options.projectRoot,
                 routesDir: options.routesDir,
@@ -2555,6 +2564,7 @@ async function writeCloudflareRouteModules(options: {
               })
             : await buildCloudflareStringRouteComponentModule({
                 cacheDir: options.cacheDir,
+                define: options.define,
                 filename: route.file,
                 projectRoot: options.projectRoot,
                 routesDir: options.routesDir,
@@ -2754,6 +2764,7 @@ interface CloudflareShellFile {
 
 async function buildCloudflareServerComponentModuleBatch(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   projectRoot: string;
   routes: readonly CloudflareBatchedComponentRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
@@ -2769,6 +2780,7 @@ async function buildCloudflareServerComponentModuleBatch(options: {
     options.routes.map(async (route) => {
       const metadataModule = await buildCloudflareRouteMetadataExportModule({
         cacheDir: options.cacheDir,
+        define: options.define,
         filename: route.filename,
         hasMetadata: buildSourceAnalysisForFile(
           options.sourceAnalysis,
@@ -2801,6 +2813,7 @@ async function buildCloudflareServerComponentModuleBatch(options: {
   const output = await bundleRouterModules({
     cacheDir: options.cacheDir,
     chunkFileNames: "routes/chunks/[name].[hash].mjs",
+    define: options.define,
     entries: bundleEntries,
     entryFileNames: "routes/[name].[hash].mjs",
     minify: true,
@@ -2844,6 +2857,7 @@ async function buildCloudflareServerComponentModuleBatch(options: {
 
 async function buildCloudflareStringRouteComponentModuleBatch(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   projectRoot: string;
   routes: readonly CloudflareBatchedStringRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
@@ -2861,6 +2875,7 @@ async function buildCloudflareStringRouteComponentModuleBatch(options: {
       const pageMetadataId = `mreact:metadata:${route.routeId}:page`;
       const pageMetadataModule = await buildCloudflareRouteMetadataExportModule({
         cacheDir: options.cacheDir,
+        define: options.define,
         filename: route.filename,
         hasMetadata: buildSourceAnalysisForFile(
           options.sourceAnalysis,
@@ -2886,6 +2901,7 @@ async function buildCloudflareStringRouteComponentModuleBatch(options: {
           const shellMetadataId = `mreact:metadata:${route.routeId}:shell:${index}`;
           const shellMetadataModule = await buildCloudflareRouteMetadataExportModule({
             cacheDir: options.cacheDir,
+            define: options.define,
             filename: shell.file,
             hasMetadata: buildSourceAnalysisForFile(
               options.sourceAnalysis,
@@ -2926,6 +2942,7 @@ async function buildCloudflareStringRouteComponentModuleBatch(options: {
   const output = await bundleRouterModules({
     cacheDir: options.cacheDir,
     chunkFileNames: "routes/chunks/[name].[hash].mjs",
+    define: options.define,
     entries: bundleEntries,
     entryFileNames: "routes/[name].[hash].mjs",
     minify: true,
@@ -3055,6 +3072,7 @@ ${cloudflareShellRuntimeSource()}`;
 
 async function buildCloudflareServerComponentModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   projectRoot: string;
   serverOutput: ServerOutputMode;
@@ -3064,6 +3082,7 @@ async function buildCloudflareServerComponentModule(options: {
 }): Promise<string> {
   const metadataModule = await buildCloudflareRouteMetadataExportModule({
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: options.filename,
     hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
     root: options.projectRoot,
@@ -3078,6 +3097,7 @@ async function buildCloudflareServerComponentModule(options: {
     entry,
     filename: `${options.filename}.mreact-cloudflare-component.js`,
     cacheDir: options.cacheDir,
+    define: options.define,
     modules: metadataModule === undefined
       ? new Map()
       : new Map([["mreact:metadata", metadataModule]]),
@@ -3113,6 +3133,7 @@ export const slots = routeModule.slots;`;
 
 async function buildCloudflareStringRouteComponentModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   projectRoot: string;
   routesDir: string;
@@ -3125,6 +3146,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
   if (shellFiles.length === 0) {
     return buildCloudflareServerComponentModule({
       cacheDir: options.cacheDir,
+      define: options.define,
       filename: options.filename,
       projectRoot: options.projectRoot,
       serverModules: options.serverModules,
@@ -3136,6 +3158,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
 
   const pageModule = await buildCloudflareComponentExportModule({
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: options.filename,
     projectRoot: options.projectRoot,
     serverModules: options.serverModules,
@@ -3147,6 +3170,7 @@ async function buildCloudflareStringRouteComponentModule(options: {
     shellFiles.map((shell) =>
       buildCloudflareComponentExportModule({
         cacheDir: options.cacheDir,
+        define: options.define,
         filename: shell.file,
         projectRoot: options.projectRoot,
         serverModules: options.serverModules,
@@ -3215,6 +3239,7 @@ ${cloudflareShellRuntimeSource()}`;
   return bundleCloudflareVirtualModule({
     entry,
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: `${options.filename}.mreact-cloudflare-string-route.js`,
     modules: new Map([
       ["mreact:page", pageModule],
@@ -3229,6 +3254,7 @@ ${cloudflareShellRuntimeSource()}`;
 
 async function buildCloudflareStreamRouteComponentModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   projectRoot: string;
   routesDir: string;
@@ -3238,6 +3264,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
 }): Promise<string> {
   const pageModule = await buildCloudflareComponentExportModule({
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: options.filename,
     projectRoot: options.projectRoot,
     serverModules: options.serverModules,
@@ -3250,6 +3277,7 @@ async function buildCloudflareStreamRouteComponentModule(options: {
     shellFiles.map((shell) =>
       buildCloudflareComponentExportModule({
         cacheDir: options.cacheDir,
+        define: options.define,
         filename: shell.file,
         projectRoot: options.projectRoot,
         serverModules: options.serverModules,
@@ -3336,6 +3364,7 @@ ${cloudflareShellRuntimeSource()}`;
   return bundleCloudflareVirtualModule({
     entry,
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: `${options.filename}.mreact-cloudflare-stream-route.js`,
     modules: new Map([
       ["mreact:page", pageModule],
@@ -3646,6 +3675,7 @@ function escapeHtml(value) {
 
 async function buildCloudflareComponentExportModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   projectRoot: string;
   serverModules: Record<string, BuiltServerModuleArtifact>;
@@ -3655,6 +3685,7 @@ async function buildCloudflareComponentExportModule(options: {
 }): Promise<string> {
   const metadataModule = await buildCloudflareRouteMetadataExportModule({
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: options.filename,
     hasMetadata: buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, options.filename)?.hasMetadata,
     root: options.projectRoot,
@@ -3673,6 +3704,7 @@ export const slots = routeModule.slots;`;
   return bundleCloudflareVirtualModule({
     entry,
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: `${options.filename}.mreact-cloudflare-${options.serverOutput}-component.js`,
     modules: metadataModule === undefined
       ? new Map()
@@ -3707,12 +3739,14 @@ async function writeCloudflareBatchedRouteModuleChunks(
 
 async function buildCloudflareRouteLoaderModuleBatch(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   routes: readonly { filename: string; routeId: string }[];
   root: string;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<CloudflareBatchedRouteModules> {
   return await bundleCloudflareModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     entries: options.routes.map((route) => ({
       code: cloudflareRouteLoaderModuleEntry(route.filename),
       filename: `${route.filename}.mreact-cloudflare-loader.js`,
@@ -3726,12 +3760,14 @@ async function buildCloudflareRouteLoaderModuleBatch(options: {
 
 export async function __buildCloudflareRouteLoaderModuleBatchForTests(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   projectRoot: string;
   routes: readonly { filename: string; routeId: string }[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, string>> {
   const output = await buildCloudflareRouteLoaderModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     root: options.projectRoot,
     routes: options.routes,
     vitePlugins: options.vitePlugins,
@@ -3744,12 +3780,14 @@ export async function __buildCloudflareRouteLoaderModuleBatchForTests(options: {
 
 async function buildCloudflareServerRouteModuleBatch(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   routes: readonly { filename: string; routeId: string }[];
   root: string;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<CloudflareBatchedRouteModules> {
   return await bundleCloudflareModuleBatch({
     cacheDir: options.cacheDir,
+    define: options.define,
     entries: options.routes.map((route) => ({
       code: cloudflareServerRouteModuleEntry(route.filename),
       filename: `${route.filename}.mreact-cloudflare-server-route.js`,
@@ -3763,6 +3801,7 @@ async function buildCloudflareServerRouteModuleBatch(options: {
 
 async function bundleCloudflareModuleBatch(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   entries: readonly {
     code: string;
     filename: string;
@@ -3779,6 +3818,7 @@ async function bundleCloudflareModuleBatch(options: {
   const output = await bundleRouterModules({
     cacheDir: options.cacheDir,
     chunkFileNames: "routes/chunks/[name].[hash].mjs",
+    define: options.define,
     entries: options.entries,
     entryFileNames: "routes/[name].[hash].mjs",
     minify: true,
@@ -3817,6 +3857,7 @@ function cloudflareRouteLoaderModuleEntry(filename: string): string {
 
 async function buildCloudflareRouteMetadataExportModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   hasMetadata?: boolean | undefined;
   root?: string | undefined;
@@ -3833,6 +3874,7 @@ export const metadata = routeMetadataModule.metadata;`;
   return bundleCloudflareModule({
     entry,
     cacheDir: options.cacheDir,
+    define: options.define,
     filename: `${options.filename}.mreact-cloudflare-metadata.js`,
     plugins: [cloudflareWorkspaceRuntimePlugin()],
     resolveDir: dirname(options.filename),
@@ -3858,6 +3900,7 @@ export default defaultHandler;`;
 
 async function bundleCloudflareModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   entry: string;
   filename: string;
   plugins: RouterCompatPlugin[];
@@ -3868,6 +3911,7 @@ async function bundleCloudflareModule(options: {
   const output = await bundleRouterModule({
     cacheDir: options.cacheDir,
     code: options.entry,
+    define: options.define,
     filename: options.filename,
     minify: true,
     platform: "node",
@@ -3888,6 +3932,7 @@ async function bundleCloudflareModule(options: {
 
 async function bundleCloudflareVirtualModule(options: {
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   entry: string;
   filename: string;
   modules: ReadonlyMap<string, string>;
@@ -3898,6 +3943,7 @@ async function bundleCloudflareVirtualModule(options: {
 }): Promise<string> {
   return bundleCloudflareModule({
     cacheDir: options.cacheDir,
+    define: options.define,
     entry: options.entry,
     filename: options.filename,
     plugins: [
