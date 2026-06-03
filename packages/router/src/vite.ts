@@ -38,7 +38,7 @@ import {
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
-import { collectRouteCssHrefs } from "./route-styles.js";
+import { collectRouteCssHrefs, collectSpecialBoundaryFiles } from "./route-styles.js";
 import { scanAppRoutes } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
 import { hasJsxSyntax } from "./source-jsx.js";
@@ -504,6 +504,7 @@ async function handleAppRouterViteRequest(
           projectRoot: project.projectRoot,
         },
         clientStyles: await devRouteStyles(project),
+        clientStylesByFile: await devSpecialRouteStyles(project),
         navigationScripts: await devNavigationScripts(
           project.routesDir,
           options.clientRouteInferenceCache,
@@ -781,6 +782,28 @@ async function devRouteStyles(
       });
 
       return hrefs.length === 0 ? undefined : ([route.path, hrefs as readonly string[]] as const);
+    }),
+  );
+  const routeStyles = entries.filter(
+    (entry): entry is readonly [string, readonly string[]] => entry !== undefined,
+  );
+
+  return new Map<string, readonly string[]>(routeStyles);
+}
+
+async function devSpecialRouteStyles(
+  project: ResolvedAppRouterProject,
+): Promise<ReadonlyMap<string, readonly string[]>> {
+  const entries = await Promise.all(
+    (await collectSpecialBoundaryFiles(project.routesDir)).map(async (file) => {
+      const hrefs = await collectRouteCssHrefs({
+        appDir: project.routesDir,
+        hrefPrefix: devCssPrefix,
+        pageFile: file,
+        projectRoot: project.projectRoot,
+      });
+
+      return hrefs.length === 0 ? undefined : ([file, hrefs as readonly string[]] as const);
     }),
   );
   const routeStyles = entries.filter(

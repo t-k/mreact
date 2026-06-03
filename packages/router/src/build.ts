@@ -73,7 +73,7 @@ import {
   type RouterBundleChunkOutput,
   type RouterBundleOutput,
 } from "./bundle-pipeline.js";
-import { collectRouteCssFilesFromSources } from "./route-styles.js";
+import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./route-styles.js";
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
@@ -491,6 +491,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const clientManifestAssets = Array.from(
     new Set([
       ...clientBundle.assets,
+      ...clientBundle.styles.flatMap((style) => style.css),
       ...(navigationRuntimeScript === undefined ? [] : [navigationRuntimeScript]),
     ]),
   ).sort();
@@ -588,6 +589,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...(clientManifestAssets.length === 0 ? {} : { assets: clientManifestAssets }),
     ...(publicAssets.length === 0 ? {} : { publicAssets }),
     routes: clientManifestRoutes,
+    ...(clientBundle.styles.length === 0 ? {} : { styles: clientBundle.styles }),
   };
   const writeManifestFiles = async () => {
     await Promise.all([
@@ -4377,6 +4379,12 @@ function viteManifestFromClientRoutes(routes: ClientRouteManifestEntry[]): Recor
 interface ClientRouteBundleManifest {
   assets: string[];
   routes: ClientRouteManifestEntry[];
+  styles: ClientStyleManifestEntry[];
+}
+
+interface ClientStyleManifestEntry {
+  css: string[];
+  file: string;
 }
 
 async function writeClientRouteBundles(options: {
@@ -4409,6 +4417,14 @@ async function writeClientRouteBundles(options: {
     cacheDir: options.cacheDir,
     clientDir: options.clientDir,
     pageRoutes,
+    projectRoot: options.projectRoot,
+    sourceAnalysis: options.sourceAnalysis,
+    vitePlugins: options.vitePlugins,
+  });
+  const specialCssAssets = await writeSpecialRouteCssAssetBatches({
+    appDir: options.appDir,
+    cacheDir: options.cacheDir,
+    clientDir: options.clientDir,
     projectRoot: options.projectRoot,
     sourceAnalysis: options.sourceAnalysis,
     vitePlugins: options.vitePlugins,
@@ -4496,6 +4512,7 @@ async function writeClientRouteBundles(options: {
     return {
       assets: [],
       routes: entries.flatMap((entry) => ("manifest" in entry ? [entry.manifest] : [])),
+      styles: specialCssAssets,
     };
   }
 
@@ -4615,7 +4632,63 @@ async function writeClientRouteBundles(options: {
   return {
     assets: Array.from(generatedAssets).sort(),
     routes,
+    styles: specialCssAssets,
   };
+}
+
+async function writeSpecialRouteCssAssetBatches(options: {
+  appDir: string;
+  cacheDir?: string | undefined;
+  clientDir: string;
+  projectRoot: string;
+  sourceAnalysis: BuildSourceAnalysisScope;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<ClientStyleManifestEntry[]> {
+  const boundaryFiles = await collectSpecialBoundaryFiles(options.appDir);
+  const entries = await mapWithBuildConcurrency(boundaryFiles, async (file) => {
+    const cssFiles = await collectRouteCssFilesFromSources({
+      appDir: options.appDir,
+      pageFile: file,
+      projectRoot: options.projectRoot,
+      readSource: (sourceFile) =>
+        buildSourceAnalysisForFile(options.sourceAnalysis, options.projectRoot, sourceFile)?.source,
+    });
+
+    if (cssFiles.length === 0) {
+      return undefined;
+    }
+
+    const css = await writeRouteCssAssetsForFiles({
+      cacheDir: options.cacheDir,
+      clientDir: options.clientDir,
+      cssFiles,
+      pageFile: file,
+      projectRoot: options.projectRoot,
+      routeIds: [specialBoundaryRouteId(options.appDir, file)],
+      vitePlugins: options.vitePlugins,
+    });
+
+    return css.length === 0
+      ? undefined
+      : ({
+          css,
+          file: relative(options.appDir, file).split(sep).join("/"),
+        } satisfies ClientStyleManifestEntry);
+  });
+
+  return entries
+    .filter((entry): entry is ClientStyleManifestEntry => entry !== undefined)
+    .sort((left, right) => left.file.localeCompare(right.file));
+}
+
+function specialBoundaryRouteId(appDir: string, file: string): string {
+  const relativeFile = relative(appDir, file).split(sep);
+  const filename = relativeFile.pop() ?? "boundary.tsx";
+  const boundaryName = filename.replace(/(?:\.mreact)?\.tsx$/u, "");
+  const routeParts = relativeFile.filter((part) => !part.startsWith("(") || !part.endsWith(")"));
+  const path = `/${[...routeParts, boundaryName].join("/")}`;
+
+  return routeIdForPath(path);
 }
 
 async function writeRouteCssAssetBatches(options: {

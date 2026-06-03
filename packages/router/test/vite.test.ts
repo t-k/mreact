@@ -309,6 +309,40 @@ export default function Layout(props) {
     expect(html).not.toContain("/_mreact/client/src/global.css");
   });
 
+  test("links layout CSS imports for dev special not-found routes", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-not-found-css-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(projectRoot, "src", "global.css"), ".missing { color: rgb(1 2 3); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "../global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "not-found.tsx"),
+      `export default function NotFound() {
+  return <main className="missing">Missing</main>;
+}`,
+    );
+    const server = await listenWithMiddleware(
+      createAppRouterViteMiddleware({
+        projectRoot,
+        routesDir: appDir,
+      }),
+    );
+
+    const page = await fetch(`${server.url}/missing`);
+    const html = await page.text();
+
+    expect(page.status).toBe(404);
+    expect(html).toContain("<main class=\"missing\">Missing</main>");
+    expect(html).toContain('<link rel="stylesheet" href="/_mreact/dev-css/src/global.css">');
+  });
+
   test("serves linked layout CSS through the Vite dev server", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-server-"));
     const appDir = join(projectRoot, "src", "app");

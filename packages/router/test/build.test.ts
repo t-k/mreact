@@ -3933,6 +3933,50 @@ export default function Layout(props) {
     expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
   });
 
+  test("links layout CSS for built special not-found routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-not-found-css-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "global.css"), ".missing { color: rgb(1 2 3); }");
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "./global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "not-found.tsx"),
+      `export default function NotFound() {
+  return <main className="missing">Missing</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { styles?: Array<{ css?: string[]; file: string }> };
+    const notFoundStyles = clientManifest.styles?.find((entry) => entry.file === "not-found.tsx");
+    const css = notFoundStyles?.css?.[0];
+
+    expect(css).toMatch(/^assets\/routes\/not-found\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      ".missing",
+    );
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/missing"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(html).toContain("<main class=\"missing\">Missing</main>");
+    expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
+  });
+
   test("reuses one CSS asset for routes with the same layout CSS set", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-shared-css-batch-"));
     const appDir = join(rootDir, "app");

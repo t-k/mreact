@@ -1,5 +1,5 @@
-import { access, readFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { access, readdir, readFile } from "node:fs/promises";
+import { dirname, join, isAbsolute, relative, resolve, sep } from "node:path";
 import { collectStaticImportReferences } from "@reckona/mreact-compiler";
 import { existingRouteShellCandidates } from "./route-shells.js";
 
@@ -63,6 +63,34 @@ export async function collectRouteCssHrefs(options: {
 
     return options.hrefPrefix === undefined ? href : `${options.hrefPrefix}${href.slice(1)}`;
   });
+}
+
+export async function collectSpecialBoundaryFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+
+    if (entry.isDirectory()) {
+      if (entry.name === ".vite" || entry.name === "node_modules") {
+        continue;
+      }
+
+      files.push(...(await collectSpecialBoundaryFiles(path)));
+      continue;
+    }
+
+    if (entry.isFile() && isSpecialBoundaryFilename(entry.name)) {
+      files.push(path);
+    }
+  }
+
+  return files.sort();
+}
+
+function isSpecialBoundaryFilename(filename: string): boolean {
+  return /^(?:error|not-found)(?:\.mreact)?\.tsx$/u.test(filename);
 }
 
 function resolveCssImport(options: {

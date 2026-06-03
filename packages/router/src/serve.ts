@@ -41,6 +41,7 @@ interface BuiltRuntime {
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
   clientScripts: ReadonlyMap<string, string>;
+  clientStylesByFile: ReadonlyMap<string, readonly string[]>;
   clientStyles: ReadonlyMap<string, readonly string[]>;
   hasMiddleware: boolean;
   navigationScripts: ReadonlyMap<string, string>;
@@ -763,6 +764,7 @@ async function materializeBuiltRuntime(options: {
   const serverManifest = JSON.parse(options.serverManifestText) as BuiltServerManifest;
   const clientManifest = JSON.parse(options.clientManifestText) as {
     routes: ClientRouteManifestEntry[];
+    styles?: Array<{ css?: readonly string[]; file: string }>;
   };
   const appDir = await materializeBuiltServerApp(options.runtimeDir, serverManifest);
   const projectRoot = appDir;
@@ -818,6 +820,13 @@ async function materializeBuiltRuntime(options: {
       route.css !== undefined && route.css.length > 0 ? [[route.path, route.css]] : [],
     ),
   );
+  const clientStylesByFile = new Map(
+    (clientManifest.styles ?? []).flatMap((style) =>
+      style.css !== undefined && style.css.length > 0
+        ? [[join(routesDir, style.file), style.css] as const]
+        : [],
+    ),
+  );
   const navigationScripts = new Map(
     clientManifest.routes.flatMap((route) =>
       route.navigation === true && route.navigationScript !== undefined
@@ -846,6 +855,7 @@ async function materializeBuiltRuntime(options: {
       ? {}
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
     clientScripts,
+    clientStylesByFile,
     clientStyles,
     hasMiddleware,
     navigationScripts,
@@ -1156,6 +1166,7 @@ function builtRenderAppRequestOptions(
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
+    clientStylesByFile: options.runtime.clientStylesByFile,
     clientStyles: options.runtime.clientStyles,
     importPolicy: {
       ...options.importPolicy,

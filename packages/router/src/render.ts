@@ -159,6 +159,7 @@ export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientScripts?: ReadonlyMap<string, string>;
+  clientStylesByFile?: ReadonlyMap<string, readonly string[]>;
   clientStyles?: ReadonlyMap<string, readonly string[]>;
   env?: unknown;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -802,6 +803,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const response = await renderSpecialRoute({
       appDir: options.appDir,
       assetBaseUrl: options.assetBaseUrl,
+      currentStyleSheets: options.clientStylesByFile?.get(notFoundFile),
       error: undefined,
       request: options.request,
       routePath: url.pathname,
@@ -1454,6 +1456,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       const response = await renderSpecialRoute({
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
+        currentStyleSheets: options.clientStylesByFile?.get(notFoundFile),
         error: undefined,
         request: options.request,
         routePath: matched.route.path,
@@ -1480,6 +1483,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const response = await renderSpecialRoute({
       appDir: options.appDir,
       assetBaseUrl: options.assetBaseUrl,
+      currentStyleSheets: options.clientStylesByFile?.get(errorFile),
       error,
       request: options.request,
       routePath: matched.route.path,
@@ -1742,6 +1746,7 @@ function boundaryFilenameCandidates(filename: string): string[] {
 async function renderSpecialRoute(options: {
   appDir: string;
   assetBaseUrl?: string | undefined;
+  currentStyleSheets?: readonly string[] | undefined;
   error: unknown;
   navigation?:
     | {
@@ -1812,6 +1817,7 @@ async function renderSpecialRoute(options: {
   return new Response(
     `<!DOCTYPE html>${clientNavigationHeadTags({
       assetBaseUrl: options.assetBaseUrl,
+      currentStyleSheets: options.currentStyleSheets,
       currentScript:
         options.navigation?.clientRoute === true ? options.navigation.script : undefined,
       routeScripts: options.routeScripts,
