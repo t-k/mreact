@@ -4,6 +4,7 @@ import {
   bindProp,
   bindSpreadProps,
   bindText,
+  createList,
   createTemplate,
   insertDynamic,
 } from "@reckona/mreact-reactive-dom";
@@ -330,7 +331,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -389,6 +390,10 @@ function getReactiveCoreRuntimeValue(importedName: string): unknown {
 function getClientRuntimeValue(importedName: string): unknown {
   if (importedName === "createTemplate") {
     return createTemplate;
+  }
+
+  if (importedName === "createList") {
+    return createList;
   }
 
   if (importedName === "bindText") {

@@ -1310,6 +1310,61 @@ export function App() {
     );
   });
 
+  test("client keyed list render values preserve DOM across unrelated parent state updates", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+      const selected = cell(false);
+      const items = cell([{ id: "a" }, { id: "b" }]);
+      const mediaIds = ["a", "b"];
+
+      function MediaCard(props) {
+        return <article data-id={props.mediaId} data-priority={props.priority}>
+          <img alt={props.mediaId} />
+        </article>;
+      }
+
+      export function App() {
+        return <main>
+          {selected.get()
+            ? items.get().map((item) => (
+              <MediaCard
+                mediaId={item.id}
+                priority={mediaIds.indexOf(item.id) === 0 ? "high" : "auto"}
+                key={item.id}
+              />
+            ))
+            : items.get().map((item) => (
+              <MediaCard
+                mediaId={item.id}
+                priority={mediaIds.indexOf(item.id) === 0 ? "high" : "auto"}
+                key={item.id}
+              />
+            ))}
+          <button type="button" onClick={() => selected.set(!selected.get())}>Toggle</button>
+        </main>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = await runClientComponent(output.code);
+    const firstCard = (node as HTMLElement).querySelector('[data-id="a"]');
+    const firstImage = firstCard?.querySelector("img");
+
+    expect(firstCard).toBeInstanceOf(HTMLElement);
+    expect(firstImage).toBeInstanceOf(HTMLImageElement);
+
+    (node as HTMLElement).querySelector("button")?.click();
+    await flushEffects();
+
+    expect((node as HTMLElement).querySelector('[data-id="a"]')).toBe(firstCard);
+    expect((node as HTMLElement).querySelector('[data-id="a"] img')).toBe(firstImage);
+  });
+
   test("client dynamic fragments tolerate validation errors toggling into success", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

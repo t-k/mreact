@@ -3,7 +3,7 @@
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { insertDynamic } from "../src/index.js";
+import { createList, insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
@@ -70,6 +70,43 @@ describe("insertDynamic", () => {
 
     expect(parent.firstChild).toBe(node);
     expect(parent.innerHTML).toBe("<strong>stable</strong><!--marker-->");
+
+    dispose();
+  });
+
+  test("keeps keyed list render value nodes across unrelated dynamic updates", async () => {
+    const selected = cell(false);
+    const items = cell([{ id: "a" }, { id: "b" }]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => {
+      selected.get();
+      return createList(
+        () => items.get(),
+        (item) => {
+          const article = document.createElement("article");
+          article.dataset.id = item.id;
+          const image = document.createElement("img");
+          image.alt = item.id;
+          article.append(image);
+          return article;
+        },
+        { key: (item) => item.id },
+      );
+    });
+    const firstCard = parent.querySelector('[data-id="a"]');
+    const firstImage = firstCard?.querySelector("img");
+
+    expect(firstCard).toBeInstanceOf(HTMLElement);
+    expect(firstImage).toBeInstanceOf(HTMLImageElement);
+
+    selected.set(true);
+    await flushEffects();
+
+    expect(parent.querySelector('[data-id="a"]')).toBe(firstCard);
+    expect(parent.querySelector('[data-id="a"] img')).toBe(firstImage);
 
     dispose();
   });

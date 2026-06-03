@@ -33,6 +33,9 @@ export function bindText(node: Text, value: () => unknown): Dispose;
 export function bindTextBatch(nodes: readonly Text[], value: () => unknown, options?: BindTextBatchOptions): Dispose;
 
 // @public (undocumented)
+export function createList<T>(items: () => readonly T[], renderItem: (item: T, index: number, items: readonly T[]) => RenderValue, options?: ListRenderValue<T>["options"]): ListRenderValue<T>;
+
+// @public (undocumented)
 export function createRoot(container: ParentNode, render: () => RenderValue): Dispose;
 
 // @public (undocumented)
@@ -45,7 +48,25 @@ export type Dispose = () => void;
 export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () => RenderValue): Dispose;
 
 // @public (undocumented)
-export type RenderValue = Node | string | number | boolean | null | undefined | readonly RenderValue[];
+export const LIST_RENDER_VALUE: unique symbol;
+
+// @public (undocumented)
+export interface ListRenderValue<T = unknown> {
+    // (undocumented)
+    readonly [LIST_RENDER_VALUE]: true;
+    // (undocumented)
+    readonly items: () => readonly T[];
+    // (undocumented)
+    readonly options?: {
+        readonly key?: (item: T, index: number, items: readonly T[]) => unknown;
+        readonly nestedObjectFallback?: boolean;
+    };
+    // (undocumented)
+    readonly renderItem: (item: T, index: number, items: readonly T[]) => RenderValue;
+}
+
+// @public (undocumented)
+export type RenderValue = Node | string | number | boolean | null | undefined | ListRenderValue | readonly RenderValue[];
 
 // (No @packageDocumentation comment for this package)
 

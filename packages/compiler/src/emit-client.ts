@@ -43,6 +43,7 @@ type RuntimeHelperName =
   | "bindProp"
   | "bindSpreadProps"
   | "bindText"
+  | "createList"
   | "createTemplate"
   | "insertDynamic";
 
@@ -66,6 +67,7 @@ function allocateRuntimeHelperNames(
     bindProp: "bindProp",
     bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
+    createList: "createList",
     createTemplate: "createTemplate",
     insertDynamic: "insertDynamic",
   };
@@ -143,6 +145,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         }
       }
     });
+
+    if (componentUsesCreateList(component.root)) {
+      specifiers.add("createList");
+    }
   }
 
   return [
@@ -151,6 +157,87 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       specifiers: Array.from(specifiers).sort(),
     },
   ];
+}
+
+function componentUsesCreateList(node: JsxNodeIr): boolean {
+  if (node.kind === "conditional" || node.kind === "list") {
+    return renderValueNodeUsesCreateList(node);
+  }
+
+  if (node.kind === "component") {
+    return componentCallUsesCreateList(node);
+  }
+
+  return setupUsesCreateList(node);
+}
+
+function setupUsesCreateList(node: JsxNodeIr): boolean {
+  if (node.kind === "component") {
+    return componentCallUsesCreateList(node);
+  }
+
+  if (node.kind === "list") {
+    return renderValueChildrenUseCreateList(node.children);
+  }
+
+  if (node.kind === "conditional") {
+    return renderValueNodeUsesCreateList(node);
+  }
+
+  if (node.kind === "async-boundary") {
+    return (
+      renderValueChildrenUseCreateList(node.children) ||
+      renderValueChildrenUseCreateList(node.placeholderChildren ?? []) ||
+      renderValueChildrenUseCreateList(node.catchChildren ?? [])
+    );
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(setupUsesCreateList);
+  }
+
+  return false;
+}
+
+function renderValueChildrenUseCreateList(children: readonly JsxNodeIr[]): boolean {
+  return children.some(renderValueNodeUsesCreateList);
+}
+
+function renderValueNodeUsesCreateList(node: JsxNodeIr): boolean {
+  if (node.kind === "list") {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return (
+      renderValueChildrenUseCreateList(node.whenTrue) ||
+      renderValueChildrenUseCreateList(node.whenFalse)
+    );
+  }
+
+  if (node.kind === "fragment") {
+    return renderValueChildrenUseCreateList(node.children);
+  }
+
+  if (node.kind === "component") {
+    return componentCallUsesCreateList(node);
+  }
+
+  if (node.kind === "element") {
+    return setupUsesCreateList(node);
+  }
+
+  return false;
+}
+
+function componentCallUsesCreateList(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
+  return (
+    node.props.some((prop) =>
+      prop.kind === "render-prop" &&
+      renderValueChildrenUseCreateList(prop.children),
+    ) ||
+    renderValueChildrenUseCreateList(node.children)
+  );
 }
 
 function hasClientReferenceNodes(ir: ModuleIr): boolean {
@@ -657,7 +744,9 @@ function emitNodeRenderValueExpression(
 
   if (node.kind === "list") {
     const parameters = emitListParameters(node);
-    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, state)})`;
+    const options = emitListOptions(node, parameters);
+
+    return `${state.helperNames.createList}(() => (${node.itemsCode}), ${emitListRenderer(node, parameters, state)}${options})`;
   }
 
   if (node.kind === "async-boundary") {
@@ -708,6 +797,26 @@ function emitListRenderer(
   }
 
   return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+}
+
+function emitListOptions(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+): string {
+  const optionEntries: string[] = [];
+
+  if (node.keyCode !== undefined) {
+    optionEntries.push(`key: (${parameters}) => (${node.keyCode})`);
+  }
+
+  if (
+    node.keyCode !== undefined &&
+    listReadsNestedItemObject(node, node.itemName)
+  ) {
+    optionEntries.push("nestedObjectFallback: true");
+  }
+
+  return optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
 }
 
 function emitListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
