@@ -35,11 +35,19 @@ export interface VisibleRange {
   startRow: number;
 }
 
+export interface VirtualItemSpan {
+  colSpan?: number;
+  rowSpan?: number;
+}
+
 export interface VirtualEntry<TItem> {
+  colSpan?: number;
+  column?: number;
   index: number;
   item: TItem;
   key: VirtualKey;
   row: number;
+  rowSpan?: number;
 }
 
 export interface VirtualListOptions<TItem> {
@@ -53,6 +61,7 @@ export interface VirtualListOptions<TItem> {
 
 export interface VirtualGridOptions<TItem> extends VirtualListOptions<TItem> {
   getColumnCount: () => number;
+  getItemSpan?: (item: TItem, index: number) => VirtualItemSpan;
 }
 
 export interface Virtualizer<TItem> {
@@ -70,6 +79,7 @@ export interface Virtualizer<TItem> {
 
 interface VirtualSnapshot<TItem> {
   entries: readonly VirtualEntry<TItem>[];
+  offsetForIndex: (index: number) => number;
   offsetForRow: (row: number) => number;
   range: VirtualRange;
   rowOffsets: readonly number[];
@@ -182,9 +192,7 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     if (itemCount === 0) {
       return 0;
     }
-    const columnCount = snapshot.range.columnCount;
-    const row = Math.floor(clampInteger(index, 0, itemCount - 1) / columnCount);
-    return snapshot.offsetForRow(row);
+    return snapshot.offsetForIndex(clampInteger(index, 0, itemCount - 1));
   };
 
   return {
@@ -296,6 +304,14 @@ function createSnapshot<TItem>(
   const overscan = clampInteger(options.overscan ?? 0, 0);
   const rowCount = Math.ceil(itemCount / columnCount);
 
+  if (options.getItemSpan !== undefined) {
+    if (snapshotOptions?.pruneStaleMeasuredSizes === true) {
+      pruneMeasuredSizes(items, options.getKey, measuredSizes);
+    }
+
+    return createSpanAwareSnapshot(options, items, itemCount, columnCount, overscan, measuredSizes);
+  }
+
   if (measuredSizes.size === 0) {
     return createFixedSnapshot(options, items, itemCount, columnCount, rowCount, overscan);
   }
@@ -316,6 +332,7 @@ function createSnapshot<TItem>(
     const range = emptyRange(columnCount);
     return {
       entries: [],
+      offsetForIndex: () => 0,
       offsetForRow: () => 0,
       range,
       rowOffsets,
@@ -345,6 +362,7 @@ function createSnapshot<TItem>(
 
   return {
     entries: createEntries(items, options.getKey, range.startIndex, range.endIndex, columnCount),
+    offsetForIndex: (index) => rowOffsets[Math.floor(index / columnCount)] ?? totalSizePx,
     offsetForRow: (row) => rowOffsets[row] ?? totalSizePx,
     range,
     rowOffsets,
@@ -373,12 +391,214 @@ function createFixedSnapshot<TItem>(
 
   return {
     entries: createEntries(items, options.getKey, range.startIndex, range.endIndex, columnCount),
+    offsetForIndex: (index) => Math.floor(index / columnCount) * itemSize,
     offsetForRow: (row) => row * itemSize,
     range,
     rowOffsets: [],
     rowSizes: [],
     visibleRange: rangeToVisibleRange(range),
   };
+}
+
+interface SpanPlacement {
+  colSpan: number;
+  column: number;
+  index: number;
+  row: number;
+  rowSpan: number;
+}
+
+function createSpanAwareSnapshot<TItem>(
+  options: VirtualGridOptions<TItem>,
+  items: readonly TItem[],
+  itemCount: number,
+  columnCount: number,
+  overscan: number,
+  measuredSizes: ReadonlyMap<VirtualKey, number>,
+): VirtualSnapshot<TItem> {
+  const placements = computeSpanPlacements(items, columnCount, options.getItemSpan);
+  const rowCount = placements.rowCount;
+
+  if (itemCount === 0 || rowCount === 0) {
+    const range = emptyRange(columnCount);
+    return {
+      entries: [],
+      offsetForIndex: () => 0,
+      offsetForRow: () => 0,
+      range,
+      rowOffsets: [],
+      rowSizes: [],
+      visibleRange: rangeToVisibleRange(range),
+    };
+  }
+
+  const rowSizes = computeSpanRowSizes(items, placements.entries, options, measuredSizes, rowCount);
+  const rowOffsets = computeRowOffsets(rowSizes);
+  const totalSizePx = rowSizes.reduce((total, size) => total + size, 0);
+  const scrollOffset = clampSize(options.scrollOffset());
+  const viewportEnd = scrollOffset + clampSize(options.viewportSize());
+  const visibleStartRow = findVisibleStartRow(rowOffsets, rowSizes, scrollOffset);
+  const visibleEndRow = findVisibleEndRow(rowOffsets, rowSizes, viewportEnd);
+  const startRow = Math.max(0, visibleStartRow - overscan);
+  const endRow = Math.min(rowCount, visibleEndRow + overscan);
+  const range = createSpanRange({
+    columnCount,
+    endRow,
+    itemCount,
+    placements: placements.entries,
+    rowCount,
+    rowOffsets,
+    startRow,
+    totalSizePx,
+    visibleEndRow,
+    visibleStartRow,
+  });
+
+  return {
+    entries: createSpanEntries(items, options.getKey, placements.entries, startRow, endRow),
+    offsetForIndex: (index) => {
+      const placement = placements.entries[index];
+      if (placement === undefined) {
+        return totalSizePx;
+      }
+      return rowOffsets[placement.row] ?? totalSizePx;
+    },
+    offsetForRow: (row) => rowOffsets[row] ?? totalSizePx,
+    range,
+    rowOffsets,
+    rowSizes,
+    visibleRange: rangeToVisibleRange(range),
+  };
+}
+
+function computeSpanPlacements<TItem>(
+  items: readonly TItem[],
+  columnCount: number,
+  getItemSpan: VirtualGridOptions<TItem>["getItemSpan"],
+): { entries: SpanPlacement[]; rowCount: number } {
+  const occupied: boolean[][] = [];
+  const entries: SpanPlacement[] = [];
+  let cursorRow = 0;
+  let cursorColumn = 0;
+  let rowCount = 0;
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (item === undefined) {
+      continue;
+    }
+
+    const span = normalizeItemSpan(getItemSpan?.(item, index), columnCount);
+    let row = cursorRow;
+    let column = cursorColumn;
+
+    while (!canPlaceSpan(occupied, row, column, span, columnCount)) {
+      column += 1;
+      if (column >= columnCount) {
+        row += 1;
+        column = 0;
+      }
+    }
+
+    markSpanOccupied(occupied, row, column, span);
+    entries[index] = {
+      colSpan: span.colSpan,
+      column,
+      index,
+      row,
+      rowSpan: span.rowSpan,
+    };
+    rowCount = Math.max(rowCount, row + span.rowSpan);
+    cursorRow = row;
+    cursorColumn = column + span.colSpan;
+    if (cursorColumn >= columnCount) {
+      cursorRow += 1;
+      cursorColumn = 0;
+    }
+  }
+
+  return { entries, rowCount };
+}
+
+function normalizeItemSpan(
+  span: VirtualItemSpan | undefined,
+  columnCount: number,
+): Required<VirtualItemSpan> {
+  return {
+    colSpan: clampInteger(span?.colSpan ?? 1, 1, columnCount),
+    rowSpan: clampInteger(span?.rowSpan ?? 1, 1),
+  };
+}
+
+function canPlaceSpan(
+  occupied: readonly (readonly boolean[])[],
+  row: number,
+  column: number,
+  span: Required<VirtualItemSpan>,
+  columnCount: number,
+): boolean {
+  if (column + span.colSpan > columnCount) {
+    return false;
+  }
+
+  for (let rowOffset = 0; rowOffset < span.rowSpan; rowOffset += 1) {
+    const occupiedRow = occupied[row + rowOffset];
+    for (let columnOffset = 0; columnOffset < span.colSpan; columnOffset += 1) {
+      if (occupiedRow?.[column + columnOffset] === true) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+function markSpanOccupied(
+  occupied: boolean[][],
+  row: number,
+  column: number,
+  span: Required<VirtualItemSpan>,
+): void {
+  for (let rowOffset = 0; rowOffset < span.rowSpan; rowOffset += 1) {
+    const occupiedRow = occupied[row + rowOffset] ?? [];
+    occupied[row + rowOffset] = occupiedRow;
+    for (let columnOffset = 0; columnOffset < span.colSpan; columnOffset += 1) {
+      occupiedRow[column + columnOffset] = true;
+    }
+  }
+}
+
+function computeSpanRowSizes<TItem>(
+  items: readonly TItem[],
+  placements: readonly (SpanPlacement | undefined)[],
+  options: VirtualGridOptions<TItem>,
+  measuredSizes: ReadonlyMap<VirtualKey, number>,
+  rowCount: number,
+): number[] {
+  const baseItemSize = clampPositiveSize(options.estimateItemSize(0, items[0]));
+  const rowSizes = Array.from({ length: rowCount }, () => baseItemSize);
+
+  for (const placement of placements) {
+    if (placement === undefined) {
+      continue;
+    }
+
+    const item = items[placement.index];
+    if (item === undefined) {
+      continue;
+    }
+
+    const measuredSize = measuredSizes.get(options.getKey(item, placement.index));
+    const itemSize =
+      measuredSize ?? clampPositiveSize(options.estimateItemSize(placement.index, item));
+    const trackSize = itemSize / placement.rowSpan;
+    for (let rowOffset = 0; rowOffset < placement.rowSpan; rowOffset += 1) {
+      const row = placement.row + rowOffset;
+      rowSizes[row] = Math.max(rowSizes[row] ?? baseItemSize, trackSize);
+    }
+  }
+
+  return rowSizes;
 }
 
 function computeRowSizes<TItem>(
@@ -447,6 +667,119 @@ function createEntries<TItem>(
   }
 
   return entries;
+}
+
+function createSpanEntries<TItem>(
+  items: readonly TItem[],
+  getKey: (item: TItem, index: number) => VirtualKey,
+  placements: readonly (SpanPlacement | undefined)[],
+  startRow: number,
+  endRow: number,
+): VirtualEntry<TItem>[] {
+  const entries: VirtualEntry<TItem>[] = [];
+
+  for (const placement of placements) {
+    if (
+      placement === undefined ||
+      placement.row >= endRow ||
+      placement.row + placement.rowSpan <= startRow
+    ) {
+      continue;
+    }
+
+    const item = items[placement.index];
+    if (item === undefined) {
+      continue;
+    }
+
+    entries.push({
+      colSpan: placement.colSpan,
+      column: placement.column,
+      index: placement.index,
+      item,
+      key: getKey(item, placement.index),
+      row: placement.row,
+      rowSpan: placement.rowSpan,
+    });
+  }
+
+  return entries;
+}
+
+function createSpanRange(options: {
+  columnCount: number;
+  endRow: number;
+  itemCount: number;
+  placements: readonly (SpanPlacement | undefined)[];
+  rowCount: number;
+  rowOffsets: readonly number[];
+  startRow: number;
+  totalSizePx: number;
+  visibleEndRow: number;
+  visibleStartRow: number;
+}): VirtualRange {
+  const renderedIndexes = findIntersectingPlacementIndexes(
+    options.placements,
+    options.startRow,
+    options.endRow,
+  );
+  const visibleIndexes = findIntersectingPlacementIndexes(
+    options.placements,
+    options.visibleStartRow,
+    options.visibleEndRow,
+  );
+  const endOffset =
+    options.endRow >= options.rowCount
+      ? options.totalSizePx
+      : (options.rowOffsets[options.endRow] ?? options.totalSizePx);
+  const startOffset =
+    options.startRow >= options.rowCount
+      ? options.totalSizePx
+      : (options.rowOffsets[options.startRow] ?? 0);
+
+  return {
+    bottomSpacerPx: Math.max(0, options.totalSizePx - endOffset),
+    columnCount: options.columnCount,
+    endIndex: renderedIndexes.endIndex,
+    endRow: options.endRow,
+    itemCount: options.itemCount,
+    rowCount: options.rowCount,
+    startIndex: renderedIndexes.startIndex,
+    startRow: options.startRow,
+    topSpacerPx: startOffset,
+    totalSizePx: options.totalSizePx,
+    visibleEndIndex: visibleIndexes.endIndex,
+    visibleEndRow: options.visibleEndRow,
+    visibleStartIndex: visibleIndexes.startIndex,
+    visibleStartRow: options.visibleStartRow,
+  };
+}
+
+function findIntersectingPlacementIndexes(
+  placements: readonly (SpanPlacement | undefined)[],
+  startRow: number,
+  endRow: number,
+): { endIndex: number; startIndex: number } {
+  let startIndex: number | undefined;
+  let endIndex: number | undefined;
+
+  for (const placement of placements) {
+    if (
+      placement === undefined ||
+      placement.row >= endRow ||
+      placement.row + placement.rowSpan <= startRow
+    ) {
+      continue;
+    }
+
+    startIndex = Math.min(startIndex ?? placement.index, placement.index);
+    endIndex = Math.max(endIndex ?? placement.index + 1, placement.index + 1);
+  }
+
+  return {
+    endIndex: endIndex ?? placements.length,
+    startIndex: startIndex ?? placements.length,
+  };
 }
 
 function createRange(options: {

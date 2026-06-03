@@ -41,6 +41,22 @@ const virtual = createVirtualGrid({
 
 `getColumnCount()` is read when `refresh()` runs, so apps can recompute the virtual range after container or breakpoint changes. `visibleRange` can drive thumbnail prefetching for visible and near-visible media.
 
+Pass `getItemSpan()` for quilt-style grids where selected items occupy multiple grid tracks. Span-aware grids place items with deterministic row-major auto-placement, expose `column`, `colSpan`, and `rowSpan` on rendered entries, and compute spacer sizes from the resulting row projection so the first SSR response can render without browser layout reads.
+
+```ts
+const quilt = createVirtualGrid({
+  items: () => media.get(),
+  getKey: (item) => item.id,
+  estimateItemSize: () => 220,
+  getColumnCount: () => columnCount.get(),
+  getItemSpan: (item) => item.featured ? { colSpan: 2, rowSpan: 2 } : { colSpan: 1, rowSpan: 1 },
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+});
+```
+
+The supported span model intentionally covers row-major CSS grid placement for bounded `1x1`, `2x1`, `1x2`, and `2x2` style media cards. It does not emulate `grid-auto-flow: dense`, masonry packing, manually positioned CSS grid lines, or browser layout collision rules; use a layout-specific virtualizer for those cases.
+
 ## Infinite Append And Scroll Restoration
 
 Keep fetched pages in application or query state, append new pages there, and call `refresh()` after the item list changes. The virtualizer keeps stable keys for the rendered entries and exposes `scrollToIndex()` and `scrollToKey()` for restoration.

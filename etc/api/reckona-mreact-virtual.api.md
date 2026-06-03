@@ -18,6 +18,10 @@ export function createVirtualList<TItem>(options: VirtualListOptions<TItem>): Vi
 // @public (undocumented)
 export interface VirtualEntry<TItem> {
     // (undocumented)
+    colSpan?: number;
+    // (undocumented)
+    column?: number;
+    // (undocumented)
     index: number;
     // (undocumented)
     item: TItem;
@@ -25,12 +29,24 @@ export interface VirtualEntry<TItem> {
     key: VirtualKey;
     // (undocumented)
     row: number;
+    // (undocumented)
+    rowSpan?: number;
 }
 
 // @public (undocumented)
 export interface VirtualGridOptions<TItem> extends VirtualListOptions<TItem> {
     // (undocumented)
     getColumnCount: () => number;
+    // (undocumented)
+    getItemSpan?: (item: TItem, index: number) => VirtualItemSpan;
+}
+
+// @public (undocumented)
+export interface VirtualItemSpan {
+    // (undocumented)
+    colSpan?: number;
+    // (undocumented)
+    rowSpan?: number;
 }
 
 // @public (undocumented)

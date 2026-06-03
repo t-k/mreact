@@ -824,6 +824,8 @@ const virtual = createVirtualGrid({
 });
 ```
 
+For quilt timelines, pass `getItemSpan()` to virtualize deterministic row-major layouts with `1x1` and `2x2` cards while keeping SSR entries and hydrated entries aligned. Span-aware entries include `column`, `colSpan`, and `rowSpan`; dense packing and masonry placement remain out of scope for this primitive.
+
 ### Forms
 
 `@reckona/mreact-forms` keeps form state in reactive cells and can map server validation errors back to fields.

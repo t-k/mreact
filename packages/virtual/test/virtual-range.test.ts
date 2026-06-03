@@ -255,6 +255,123 @@ describe("createVirtualList", () => {
 });
 
 describe("createVirtualGrid", () => {
+  it("computes span-aware ranges for mixed one-by-one and two-by-two grid items", () => {
+    const items = Array.from({ length: 12 }, (_unused, index) => ({ id: `item-${index}` }));
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 100,
+      getColumnCount: () => 3,
+      getItemSpan: (_item, index) =>
+        index === 0 || index === 7 ? { colSpan: 2, rowSpan: 2 } : { colSpan: 1, rowSpan: 1 },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 100,
+      viewportSize: () => 200,
+    });
+
+    expect(virtual.range.get()).toMatchObject({
+      startIndex: 0,
+      endIndex: 6,
+      visibleStartIndex: 0,
+      visibleEndIndex: 6,
+      startRow: 1,
+      endRow: 3,
+      rowCount: 6,
+      topSpacerPx: 100,
+      bottomSpacerPx: 300,
+      totalSizePx: 600,
+    });
+    expect(
+      virtual.entries.get().map((entry) => ({
+        key: entry.key,
+        row: entry.row,
+        column: entry.column,
+        colSpan: entry.colSpan,
+        rowSpan: entry.rowSpan,
+      })),
+    ).toEqual([
+      { key: "item-0", row: 0, column: 0, colSpan: 2, rowSpan: 2 },
+      { key: "item-2", row: 1, column: 2, colSpan: 1, rowSpan: 1 },
+      { key: "item-3", row: 2, column: 0, colSpan: 1, rowSpan: 1 },
+      { key: "item-4", row: 2, column: 1, colSpan: 1, rowSpan: 1 },
+      { key: "item-5", row: 2, column: 2, colSpan: 1, rowSpan: 1 },
+    ]);
+    expect(virtual.scrollToKey("item-7")).toBe(300);
+  });
+
+  it("recomputes span-aware placement when column count changes", () => {
+    const items = Array.from({ length: 6 }, (_unused, index) => ({ id: `photo-${index}` }));
+    let columnCount = 3;
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 100,
+      getColumnCount: () => columnCount,
+      getItemSpan: (_item, index) =>
+        index === 0 ? { colSpan: 2, rowSpan: 2 } : { colSpan: 1, rowSpan: 1 },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 250,
+    });
+
+    expect(virtual.entries.get().map((entry) => [entry.key, entry.row, entry.column])).toEqual([
+      ["photo-0", 0, 0],
+      ["photo-1", 0, 2],
+      ["photo-2", 1, 2],
+      ["photo-3", 2, 0],
+      ["photo-4", 2, 1],
+      ["photo-5", 2, 2],
+    ]);
+
+    columnCount = 2;
+    virtual.refresh();
+
+    expect(virtual.entries.get().map((entry) => [entry.key, entry.row, entry.column])).toEqual([
+      ["photo-0", 0, 0],
+      ["photo-1", 2, 0],
+      ["photo-2", 2, 1],
+    ]);
+    expect(virtual.scrollToKey("photo-3")).toBe(300);
+    expect(virtual.totalSizePx.get()).toBe(500);
+  });
+
+  it("keeps quilt timeline first-page entries stable after scrolling away and back", () => {
+    const items = [
+      ...Array.from({ length: 6 }, (_unused, index) => ({
+        day: "2026-06-03",
+        id: `today-${index}`,
+        positionInDay: index,
+      })),
+      ...Array.from({ length: 6 }, (_unused, index) => ({
+        day: "2026-06-02",
+        id: `yesterday-${index}`,
+        positionInDay: index,
+      })),
+    ];
+    let scrollOffset = 0;
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 120,
+      getColumnCount: () => 3,
+      getItemSpan: (item) =>
+        item.positionInDay === 0 ? { colSpan: 2, rowSpan: 2 } : { colSpan: 1, rowSpan: 1 },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 1,
+      scrollOffset: () => scrollOffset,
+      viewportSize: () => 240,
+    });
+    const firstPageKeys = virtual.entries.get().map((entry) => entry.key);
+
+    scrollOffset = 600;
+    virtual.refresh();
+    expect(virtual.entries.get().map((entry) => entry.key)).not.toEqual(firstPageKeys);
+
+    scrollOffset = 0;
+    virtual.refresh();
+
+    expect(virtual.entries.get().map((entry) => entry.key)).toEqual(firstPageKeys);
+  });
+
   it("resets ranges when items and column count change", () => {
     const allItems = Array.from({ length: 60 }, (_unused, index) => ({ id: `a-${index}` }));
     const filteredItems = Array.from({ length: 6 }, (_unused, index) => ({ id: `b-${index}` }));
