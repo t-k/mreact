@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.125 - 2026-06-03
+
+### Fixed
+
+- Added router hydration regression coverage for route-level client pages that render mapped fragments followed by siblings and nested same-module component text, keeping SSR DOM order and paragraph text stable across browser hydration and client-side locale updates.
+
 ## 0.0.124 - 2026-06-03
 
 ### Fixed
