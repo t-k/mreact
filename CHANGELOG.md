@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.123 - 2026-06-03
+
+### Fixed
+
+- Added router SSR regression coverage for imported server components that render TypeScript discriminated unions with `switch (props.block.kind)`, keeping normal document-renderer helpers compatible with `renderAppRequest`, `mreact-router dev`, and build-time route transforms.
+
 ## 0.0.122 - 2026-06-03
 
 ### Fixed
