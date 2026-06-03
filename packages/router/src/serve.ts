@@ -43,6 +43,7 @@ interface BuiltRuntime {
   clientScripts: ReadonlyMap<string, string>;
   clientStylesByFile: ReadonlyMap<string, readonly string[]>;
   clientStyles: ReadonlyMap<string, readonly string[]>;
+  generatedImportPolicy?: AppRouterImportPolicy | undefined;
   hasMiddleware: boolean;
   navigationScripts: ReadonlyMap<string, string>;
   projectRoot: string;
@@ -78,6 +79,7 @@ interface BuiltRuntime {
 
 interface BuiltRuntimeCacheEntry {
   clientManifestText: string;
+  importPolicyText: string | undefined;
   runtime: Promise<BuiltRuntime>;
   serverManifestText: string;
 }
@@ -232,11 +234,12 @@ export async function createBuiltRequestRuntime(
     outDir: options.outDir,
     runtimeDir: options.runtimeDir,
   });
+  const defaultImportPolicy = mergeBuiltRuntimeImportPolicy(runtime, options.importPolicy);
 
   return {
     preload(preload) {
       return preloadBuiltAppRuntimeWithRuntime({
-        importPolicy: options.importPolicy,
+        importPolicy: defaultImportPolicy,
         preload,
         runtime,
       });
@@ -244,7 +247,10 @@ export async function createBuiltRequestRuntime(
     async render(request, renderOptions = {}) {
       const response = await renderBuiltAppRequestWithRuntime({
         ...renderOptions,
-        importPolicy: renderOptions.importPolicy ?? options.importPolicy,
+        importPolicy:
+          renderOptions.importPolicy === undefined
+            ? defaultImportPolicy
+            : mergeBuiltRuntimeImportPolicy(runtime, renderOptions.importPolicy),
         outDir: options.outDir,
         request,
         runtime,
@@ -269,7 +275,7 @@ export async function preloadBuiltAppRuntime(options: {
     runtimeDir: options.runtimeDir,
   });
   await preloadBuiltAppRuntimeWithRuntime({
-    importPolicy: options.importPolicy,
+    importPolicy: mergeBuiltRuntimeImportPolicy(runtime, options.importPolicy),
     preload: options.preload,
     runtime,
   });
@@ -347,13 +353,15 @@ function builtRuntimePreloadRoutes(
 export async function renderBuiltAppRequest(
   options: RenderBuiltAppRequestOptions,
 ): Promise<Response> {
+  const runtime = await readBuiltRuntime({
+    outDir: options.outDir,
+    immutable: options.immutableRuntime,
+    runtimeDir: options.runtimeDir,
+  });
   const response = await renderBuiltAppRequestWithRuntime({
     ...options,
-    runtime: await readBuiltRuntime({
-      outDir: options.outDir,
-      immutable: options.immutableRuntime,
-      runtimeDir: options.runtimeDir,
-    }),
+    importPolicy: mergeBuiltRuntimeImportPolicy(runtime, options.importPolicy),
+    runtime,
   });
 
   return applyBuiltAppResponseHook(response, options);
@@ -726,21 +734,24 @@ async function readBuiltRuntime(options: {
     return cached.runtime;
   }
 
-  const [serverManifestText, clientManifestText] = await Promise.all([
+  const [serverManifestText, clientManifestText, importPolicyText] = await Promise.all([
     readFile(join(outDir, "server", "manifest.json"), "utf8"),
     readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    readBuiltImportPolicyText(outDir),
   ]);
 
   if (
     cached !== undefined &&
     cached.serverManifestText === serverManifestText &&
-    cached.clientManifestText === clientManifestText
+    cached.clientManifestText === clientManifestText &&
+    cached.importPolicyText === importPolicyText
   ) {
     return cached.runtime;
   }
 
   const runtime = materializeBuiltRuntime({
     clientManifestText,
+    importPolicyText,
     outDir,
     runtimeDir,
     serverManifestText,
@@ -748,6 +759,7 @@ async function readBuiltRuntime(options: {
 
   builtRuntimeCache.set(cacheKey, {
     clientManifestText,
+    importPolicyText,
     runtime,
     serverManifestText,
   });
@@ -757,6 +769,7 @@ async function readBuiltRuntime(options: {
 
 async function materializeBuiltRuntime(options: {
   clientManifestText: string;
+  importPolicyText: string | undefined;
   outDir: string;
   runtimeDir: string;
   serverManifestText: string;
@@ -847,6 +860,7 @@ async function materializeBuiltRuntime(options: {
   const allowedSourceDirs = (serverManifest.allowedSourceDirs ?? [""]).map((directory) =>
     join(projectRoot, directory),
   );
+  const generatedImportPolicy = builtGeneratedImportPolicy(options.importPolicyText);
 
   return {
     appDir: routesDir,
@@ -857,6 +871,7 @@ async function materializeBuiltRuntime(options: {
     clientScripts,
     clientStylesByFile,
     clientStyles,
+    ...(generatedImportPolicy === undefined ? {} : { generatedImportPolicy }),
     hasMiddleware,
     navigationScripts,
     projectRoot,
@@ -880,6 +895,70 @@ async function materializeBuiltRuntime(options: {
     serverModuleCacheVersion,
     serverSourceFiles,
   };
+}
+
+async function readBuiltImportPolicyText(outDir: string): Promise<string | undefined> {
+  try {
+    return await readFile(join(outDir, "server", "import-policy.json"), "utf8");
+  } catch (error) {
+    if (isMissingFileError(error)) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function builtGeneratedImportPolicy(
+  importPolicyText: string | undefined,
+): AppRouterImportPolicy | undefined {
+  if (importPolicyText === undefined) {
+    return undefined;
+  }
+
+  const artifact = JSON.parse(importPolicyText) as {
+    runtimePackages?: unknown;
+  };
+  const runtimePackages = Array.isArray(artifact.runtimePackages)
+    ? artifact.runtimePackages.filter((name): name is string => typeof name === "string")
+    : [];
+
+  return runtimePackages.length === 0 ? undefined : { allowedPackages: runtimePackages };
+}
+
+function mergeBuiltRuntimeImportPolicy(
+  runtime: BuiltRuntime,
+  importPolicy: AppRouterImportPolicy | undefined,
+): AppRouterImportPolicy | undefined {
+  const generatedImportPolicy = runtime.generatedImportPolicy;
+
+  if (generatedImportPolicy === undefined) {
+    return importPolicy;
+  }
+
+  const allowedPackages = [
+    ...new Set([
+      ...(generatedImportPolicy.allowedPackages ?? []),
+      ...(importPolicy?.allowedPackages ?? []),
+    ]),
+  ];
+
+  return {
+    ...(allowedPackages.length === 0 ? {} : { allowedPackages }),
+    ...(importPolicy?.allowedSourceDirs === undefined
+      ? {}
+      : { allowedSourceDirs: importPolicy.allowedSourceDirs }),
+    ...(importPolicy?.projectRoot === undefined ? {} : { projectRoot: importPolicy.projectRoot }),
+  };
+}
+
+function isMissingFileError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "ENOENT"
+  );
 }
 
 async function loadBuiltServerModuleArtifacts(
