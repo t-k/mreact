@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.127 - 2026-06-03
+
+### Added
+
+- Added span-aware `createVirtualGrid()` support with `getItemSpan()` for deterministic row-major quilt grids, including `column`, `colSpan`, and `rowSpan` entry metadata, SSR-safe spacer projection, scroll restoration, API reports, and documentation for supported and unsupported layout models.
+
 ## 0.0.126 - 2026-06-03
 
 ### Fixed
