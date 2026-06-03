@@ -7,6 +7,7 @@ import {
 } from "@reckona/mreact-compat";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import { escapeHtmlText as escapeHtml } from "@reckona/mreact-shared/html-escape";
+import { isVoidHtmlElement } from "@reckona/mreact-shared";
 import {
   renderReactSuspenseBoundary,
   renderReactSuspenseOutOfOrderBoundary,
@@ -228,7 +229,11 @@ function appendHostElement(
   const tagName = element.type as string;
   const innerHtml = (element.props as { dangerouslySetInnerHTML?: { __html?: unknown } })
     .dangerouslySetInnerHTML;
-  sink.append(`<${tagName}${renderHtmlAttributes(element.props)}>`); 
+  sink.append(`<${tagName}${renderHtmlAttributes(element.props)}>`);
+
+  if (isVoidHtmlElement(tagName)) {
+    return;
+  }
 
   if (innerHtml !== undefined) {
     sink.append(String(innerHtml.__html ?? ""));

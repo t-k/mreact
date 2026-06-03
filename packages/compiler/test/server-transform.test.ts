@@ -450,7 +450,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code)).toBe(
-      '<form><input name="user" value="Ada &amp; Grace"></input><input type="checkbox" checked=""></input></form>',
+      '<form><input name="user" value="Ada &amp; Grace"><input type="checkbox" checked=""></form>',
     );
   });
 
@@ -465,7 +465,23 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe('<input value="controlled"></input>');
+    expect(runServerComponent(output.code)).toBe('<input value="controlled">');
+  });
+
+  test("emitted server component serializes br without closing tags", () => {
+    const output = transform({
+      code: `export function App() {
+        return <p><strong>Company</strong><br />Address<br />Email</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe(
+      "<p><strong>Company</strong><br>Address<br>Email</p>",
+    );
   });
 
   test("emitted server component maps textarea defaultValue to text content", () => {
@@ -515,7 +531,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code)).toBe(
-      '<meta http-equiv="refresh" content="0;url=/next" charset="utf-8"></meta><iframe></iframe><a crossorigin="anonymous" tabindex="1">link</a>',
+      '<meta http-equiv="refresh" content="0;url=/next" charset="utf-8"><iframe></iframe><a crossorigin="anonymous" tabindex="1">link</a>',
     );
   });
 

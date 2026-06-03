@@ -58,6 +58,24 @@ describe("server HTML helpers module", () => {
     await expect(response.text()).resolves.toBe(`<main class="page">Hello</main>`);
   });
 
+  test("html serializes HTML void elements without closing tags", async () => {
+    const response = html(
+      createElement(
+        "p",
+        null,
+        createElement("strong", null, "Company"),
+        createElement("br"),
+        "Address",
+        createElement("br"),
+        "Email",
+      ),
+    );
+
+    await expect(response.text()).resolves.toBe(
+      "<p><strong>Company</strong><br>Address<br>Email</p>",
+    );
+  });
+
   test("html preserves raw text inside script and style elements", async () => {
     const script = html(createElement("script", null, "if (a < b && c > d) {}"));
     const style = html(createElement("style", null, "a > b { color: red; }"));

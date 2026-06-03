@@ -21,6 +21,7 @@ import {
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
+  isVoidHtmlElement,
   parseStaticStyleObjectLiteral,
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
@@ -1464,8 +1465,9 @@ function collectHtmlParts(
       : { ...state, selectedValueCode: childSelectedValueCode };
   const selectedAttributePart = collectOptionSelectedAttributePart(node, state.selectedValueCode);
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(node.attributes);
-  const childrenParts =
-    dangerousInnerHtml !== undefined
+  const childrenParts: HtmlPart[] = isVoidHtmlElement(node.tagName)
+    ? []
+    : dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
       : ((childState.selectedValueCode === undefined
           ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
@@ -1494,7 +1496,7 @@ function collectHtmlParts(
     ...(selectedAttributePart === undefined ? [] : [selectedAttributePart]),
     { kind: "static", value: ">" },
     ...childrenParts,
-    { kind: "static", value: closeTag },
+    ...(isVoidHtmlElement(node.tagName) ? [] : [{ kind: "static" as const, value: closeTag }]),
   ];
 }
 

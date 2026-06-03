@@ -198,7 +198,24 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<form><input name="user" value="Ada &amp; Grace"></input><input type="checkbox" checked=""></input></form>',
+      '<form><input name="user" value="Ada &amp; Grace"><input type="checkbox" checked=""></form>',
+    );
+  });
+
+  test("emitted server stream component serializes br without closing tags", async () => {
+    const output = transform({
+      code: `export function App() {
+        return <p><strong>Company</strong><br />Address<br />Email</p>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(
+      "<p><strong>Company</strong><br>Address<br>Email</p>",
     );
   });
 
@@ -237,7 +254,7 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<meta http-equiv="refresh" content="0;url=/next" charset="utf-8"></meta><iframe></iframe><a crossorigin="anonymous" tabindex="1">link</a>',
+      '<meta http-equiv="refresh" content="0;url=/next" charset="utf-8"><iframe></iframe><a crossorigin="anonymous" tabindex="1">link</a>',
     );
   });
 

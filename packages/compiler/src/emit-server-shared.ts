@@ -20,6 +20,23 @@ const URL_ATTRIBUTE_NAMES = new Set([
 
 const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
 
+const VOID_HTML_ELEMENT_NAMES = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr",
+]);
+
 const SIMPLE_IDENT_CHAIN_RE = /^(this|[A-Za-z_$][\w$]*)(\.[A-Za-z_$][\w$]*)*$/;
 const NUMERIC_LITERAL_RE = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const SIMPLE_STRING_LITERAL_RE = /^"(?:[^"\\]|\\.)*"$/;
@@ -58,6 +75,10 @@ export function isUrlAttribute(name: string): boolean {
 
 export function isDangerousHtmlAttribute(name: string): boolean {
   return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+}
+
+export function isVoidHtmlElement(tagName: string): boolean {
+  return VOID_HTML_ELEMENT_NAMES.has(tagName);
 }
 
 export function isStaticUrlValueUnsafe(name: string, value: string): boolean {

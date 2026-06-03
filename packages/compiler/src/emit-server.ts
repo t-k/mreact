@@ -8,6 +8,7 @@ import {
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
+  isVoidHtmlElement,
   parseStaticStyleObjectLiteral,
   parseStyleLiteralValue,
   simpleSideEffectFreeExpression,
@@ -618,6 +619,10 @@ function collectHtmlStatements(
 
   statements.push(`${outVar} += ">";`);
 
+  if (isVoidHtmlElement(node.tagName)) {
+    return statements;
+  }
+
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
   if (dangerousInnerHtml !== undefined) {
     statements.push(`${outVar} += ${dangerousInnerHtml};`);
@@ -899,8 +904,9 @@ function collectHtmlParts(
     node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
   const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
-  const childrenParts =
-    dangerousInnerHtml !== undefined
+  const childrenParts = isVoidHtmlElement(node.tagName)
+    ? []
+    : dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
       : childrenExpression === undefined || childSelectedValueCode !== undefined
         ? node.children.flatMap((child) =>
@@ -931,7 +937,7 @@ function collectHtmlParts(
     ...(selectedAttributePart === undefined ? [] : [selectedAttributePart]),
     stringLiteral(">"),
     ...childrenParts,
-    stringLiteral(closeTag),
+    ...(isVoidHtmlElement(node.tagName) ? [] : [stringLiteral(closeTag)]),
   ];
 }
 

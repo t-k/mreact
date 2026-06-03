@@ -27,6 +27,7 @@ import {
 } from "./hooks.js";
 import { isDangerousHtmlAttribute, isDangerousHtmlOptIn } from "./url-safety.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
+import { isVoidHtmlElement } from "@reckona/mreact-shared";
 
 export function renderToString<TProps>(
   component:
@@ -105,8 +106,8 @@ function renderElementToString(
       element.type === "input"
         ? renderInputAttributesToString(element.props)
         : renderAttributesToString(element.props);
-    if (voidHtmlElements.has(element.type)) {
-      return `<${element.type}${attributes}/>`;
+    if (isVoidHtmlElement(element.type)) {
+      return `<${element.type}${attributes}>`;
     }
 
     return `<${element.type}${attributes}>${renderNodeToString(element.props.children, runtime, `${path}.children`)}</${element.type}>`;
@@ -443,23 +444,6 @@ function isUnitlessCssProperty(name: string): boolean {
     name === "zoom"
   );
 }
-
-const voidHtmlElements = new Set([
-  "area",
-  "base",
-  "br",
-  "col",
-  "embed",
-  "hr",
-  "img",
-  "input",
-  "link",
-  "meta",
-  "param",
-  "source",
-  "track",
-  "wbr",
-]);
 
 function isForwardRefType(value: unknown): value is ForwardRefType {
   return (

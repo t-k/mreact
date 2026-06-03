@@ -1,4 +1,5 @@
 import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
+import { isVoidHtmlElement } from "./emit-server-shared.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
 export const oxcServerStringReactNodeRenderHelperPlaceholder =
@@ -56,6 +57,10 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
     attrs === ""
       ? JSON.stringify(`<${node.tagName}>`)
       : `${JSON.stringify(`<${node.tagName}`)} + ${attrs} + ">"`;
+  if (isVoidHtmlElement(node.tagName)) {
+    return open;
+  }
+
   return `${open} + ${emitOxcServerStringChildren(node.children)} + ${JSON.stringify(`</${node.tagName}>`)}`;
 }
 
