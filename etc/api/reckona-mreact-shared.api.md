@@ -123,6 +123,9 @@ export function isUnsafeUrlAttribute(name: string, value: string): boolean;
 export function isUrlAttribute(name: string): boolean;
 
 // @public (undocumented)
+export function isVoidHtmlElement(tagName: string): boolean;
+
+// @public (undocumented)
 export interface ModuleMetadata {
     // (undocumented)
     clientReferenceManifest?: ClientReferenceMetadata[];

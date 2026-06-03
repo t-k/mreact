@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.124 - 2026-06-03
+
+### Fixed
+
+- Fixed server-rendered HTML void elements such as `<br>`, `<input>`, and `<meta>` in the app-router compiler and `@reckona/mreact-server` HTML helper so SSR output no longer emits explicit closing tags that browsers can parse as extra elements before hydration.
+
 ## 0.0.123 - 2026-06-03
 
 ### Fixed
