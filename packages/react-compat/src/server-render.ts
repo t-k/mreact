@@ -107,7 +107,7 @@ function renderElementToString(
         ? renderInputAttributesToString(element.props)
         : renderAttributesToString(element.props);
     if (isVoidHtmlElement(element.type)) {
-      return `<${element.type}${attributes}>`;
+      return `<${element.type}${attributes}/>`;
     }
 
     return `<${element.type}${attributes}>${renderNodeToString(element.props.children, runtime, `${path}.children`)}</${element.type}>`;

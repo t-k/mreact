@@ -92,7 +92,7 @@ describe("react-compat server render", () => {
     }
 
     expect(renderToString(App)).toBe(
-      '<form><input name="user" value="Ada"><input type="checkbox" checked=""></form>',
+      '<form><input name="user" value="Ada"/><input type="checkbox" checked=""/></form>',
     );
   });
 
@@ -110,7 +110,7 @@ describe("react-compat server render", () => {
     }
 
     expect(renderToString(App)).toBe(
-      "<p><strong>Company</strong><br>Address<br>Email</p>",
+      "<p><strong>Company</strong><br/>Address<br/>Email</p>",
     );
   });
 
@@ -129,7 +129,7 @@ describe("react-compat server render", () => {
     }
 
     expect(renderToString(App)).toBe(
-      '<main><meta http-equiv="refresh" content="0;url=/next" charset="utf-8"><a crossorigin="anonymous" tabindex="1">link</a></main>',
+      '<main><meta http-equiv="refresh" content="0;url=/next" charset="utf-8"/><a crossorigin="anonymous" tabindex="1">link</a></main>',
     );
   });
 

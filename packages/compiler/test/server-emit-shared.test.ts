@@ -49,7 +49,7 @@ describe("server emit shared behavior", () => {
   );
 }`;
     const compiled = compileServerPair(source);
-    const expected = '<main><a>link</a><img alt="bad"></img><img src="data:image/png;base64,abc" alt="ok"></img></main>';
+    const expected = '<main><a>link</a><img alt="bad"><img src="data:image/png;base64,abc" alt="ok"></main>';
 
     expect(runServerComponent(compiled.string)).toBe(expected);
     await expect(runServerStreamComponent(compiled.stream)).resolves.toBe(expected);
