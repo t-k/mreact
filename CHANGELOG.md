@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.122 - 2026-06-03
+
+### Fixed
+
+- Fixed App Router special 404 and error boundary responses so CSS imported by the rendered boundary and its layouts is linked in both production builds and the Vite development server, preventing unstyled first paint for `not-found.tsx` pages.
+- Added regression coverage for standard `not-found.tsx` boundary files so unmatched routes and loader `notFound()` calls keep resolving the same supported file convention as route discovery.
+
 ## 0.0.121 - 2026-06-02
 
 ### Fixed
