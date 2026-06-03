@@ -3506,6 +3506,142 @@ export default function Page() {
     ]);
   });
 
+  test("hydrates mapped route fragments before later siblings and nested component text", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-fragment-text-"));
+    const routeDir = join(appDir, "legal", "privacy");
+    const file = join(routeDir, "page.tsx");
+    await mkdir(routeDir, { recursive: true });
+    const code = `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+interface Block {
+  readonly textEn: string;
+  readonly textJa: string;
+}
+
+interface Section {
+  readonly blocks: readonly Block[];
+  readonly heading: string;
+}
+
+const page: { readonly sections: readonly Section[] } = {
+  sections: [
+    {
+      heading: "Introduction",
+      blocks: [{
+        textEn: "Service terms remain visible after hydration.",
+        textJa: "利用規約本文はhydration後も表示されます。",
+      }],
+    },
+    {
+      heading: "Contact",
+      blocks: [{
+        textEn: "Personal information manager: CEO",
+        textJa: "株式会社レコナ 個人情報保護管理者: 代表取締役",
+      }],
+    },
+  ],
+};
+
+const activeLocale = cell<"ja" | "en">("ja");
+
+function InlineText(props: { readonly textEn: string; readonly textJa: string }) {
+  return <span>{activeLocale.get() === "ja" ? props.textJa : props.textEn}</span>;
+}
+
+function LegalParagraphText(props: { readonly textEn: string; readonly textJa: string }) {
+  return <InlineText textEn={props.textEn} textJa={props.textJa} />;
+}
+
+function LegalDocumentBlockView(props: { readonly block: Block }) {
+  return (
+    <p>
+      <LegalParagraphText textEn={props.block.textEn} textJa={props.block.textJa} />
+    </p>
+  );
+}
+
+function LegalSectionView(props: { readonly section: Section }) {
+  return (
+    <>
+      <h2>{props.section.heading}</h2>
+      {props.section.blocks.map((block) => (
+        <LegalDocumentBlockView block={block} key={block.textJa} />
+      ))}
+    </>
+  );
+}
+
+export default function LegalPage() {
+  return (
+    <article>
+      <button type="button" onClick={() => activeLocale.set("en")}>English</button>
+      {page.sections.map((section) => (
+        <LegalSectionView section={section} key={section.heading} />
+      ))}
+      <footer>Company contact</footer>
+    </article>
+  );
+}`;
+    await writeFile(file, code);
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/legal/privacy"),
+    });
+    const html = await response.text();
+    const routeScriptUrl = /<script type="module" src="([^"]+)"><\/script>/.exec(html)?.[1];
+    expect(routeScriptUrl).toBeDefined();
+    const routeAsset = await renderAppRouterClientAsset(appDir, routeScriptUrl ?? "");
+    const routeScript = await routeAsset.text();
+
+    expect(routeAsset.status).toBe(200);
+    setDocumentBodyFromHtml(html);
+    expect([...document.querySelectorAll("article > *")].map((node) => node.tagName)).toEqual([
+      "BUTTON",
+      "H2",
+      "P",
+      "H2",
+      "P",
+      "FOOTER",
+    ]);
+
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#route-fragment-text`
+    );
+    await Promise.resolve();
+
+    expect([...document.querySelectorAll("article > *")].map((node) => node.tagName)).toEqual([
+      "BUTTON",
+      "H2",
+      "P",
+      "H2",
+      "P",
+      "FOOTER",
+    ]);
+    expect([...document.querySelectorAll("p")].map((node) => node.textContent)).toEqual([
+      "利用規約本文はhydration後も表示されます。",
+      "株式会社レコナ 個人情報保護管理者: 代表取締役",
+    ]);
+    expect(document.querySelector("article > :last-child")?.textContent).toBe("Company contact");
+
+    document.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    expect([...document.querySelectorAll("article > *")].map((node) => node.tagName)).toEqual([
+      "BUTTON",
+      "H2",
+      "P",
+      "H2",
+      "P",
+      "FOOTER",
+    ]);
+    expect([...document.querySelectorAll("p")].map((node) => node.textContent)).toEqual([
+      "Service terms remain visible after hydration.",
+      "Personal information manager: CEO",
+    ]);
+  });
+
   test("preserves array map callback array parameters in client route bindings", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-map-callback-array-param-"));
     const file = join(appDir, "page.mreact.tsx");

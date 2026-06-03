@@ -1009,6 +1009,106 @@ export default function Page() {
   }
 });
 
+test("hydrated legal route preserves mapped fragment order and nested paragraph text", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "legal/privacy/page.tsx": `"use client";
+
+import { cell } from "@reckona/mreact-reactive-core";
+
+interface Block {
+  readonly textEn: string;
+  readonly textJa: string;
+}
+
+interface Section {
+  readonly blocks: readonly Block[];
+  readonly heading: string;
+}
+
+const activeLocale = cell<"ja" | "en">("ja");
+const legalPage: { readonly sections: readonly Section[] } = {
+  sections: [
+    {
+      heading: "Introduction",
+      blocks: [{
+        textEn: "Service terms remain visible after hydration.",
+        textJa: "利用規約本文はhydration後も表示されます。",
+      }],
+    },
+    {
+      heading: "Contact",
+      blocks: [{
+        textEn: "Personal information manager: CEO",
+        textJa: "株式会社レコナ 個人情報保護管理者: 代表取締役",
+      }],
+    },
+  ],
+};
+
+function InlineText(props: { readonly textEn: string; readonly textJa: string }) {
+  return <span>{activeLocale.get() === "ja" ? props.textJa : props.textEn}</span>;
+}
+
+function LegalParagraphText(props: { readonly textEn: string; readonly textJa: string }) {
+  return <InlineText textEn={props.textEn} textJa={props.textJa} />;
+}
+
+function LegalDocumentBlockView(props: { readonly block: Block }) {
+  return (
+    <p>
+      <LegalParagraphText textEn={props.block.textEn} textJa={props.block.textJa} />
+    </p>
+  );
+}
+
+function LegalSectionView(props: { readonly section: Section }) {
+  return (
+    <>
+      <h2>{props.section.heading}</h2>
+      {props.section.blocks.map((block) => (
+        <LegalDocumentBlockView block={block} key={block.textJa} />
+      ))}
+    </>
+  );
+}
+
+export default function LegalPage() {
+  return (
+    <article>
+      <button type="button" onClick={() => activeLocale.set("en")}>English</button>
+      {legalPage.sections.map((section) => (
+        <LegalSectionView section={section} key={section.heading} />
+      ))}
+      <footer>Company contact</footer>
+    </article>
+  );
+}`,
+  });
+
+  try {
+    await page.goto(`${url}/legal/privacy`);
+    await expect(page.getByText("利用規約本文はhydration後も表示されます。")).toBeVisible();
+    await expect(page.getByText("株式会社レコナ 個人情報保護管理者: 代表取締役")).toBeVisible();
+    await expect(
+      page.locator("article > *").evaluateAll((nodes) => nodes.map((node) => node.tagName)),
+    ).resolves.toEqual(["BUTTON", "H2", "P", "H2", "P", "FOOTER"]);
+    await expect(page.locator("article > :last-child")).toHaveText("Company contact");
+
+    await page.getByRole("button", { name: "English" }).click();
+
+    await expect(page.getByText("Service terms remain visible after hydration.")).toBeVisible();
+    await expect(page.getByText("Personal information manager: CEO")).toBeVisible();
+    await expect(
+      page.locator("article > *").evaluateAll((nodes) => nodes.map((node) => node.tagName)),
+    ).resolves.toEqual(["BUTTON", "H2", "P", "H2", "P", "FOOTER"]);
+    await expect(page.locator("article > :last-child")).toHaveText("Company contact");
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
