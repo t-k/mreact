@@ -2726,6 +2726,78 @@ export default function Page() {
     expect(html).not.toContain("[object Object]");
   });
 
+  test("renders imported discriminated union helper components with switch returns", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-route-switch-helper-"));
+    const appDir = join(rootDir, "src", "app");
+    await mkdir(join(rootDir, "src", "components", "legal"), { recursive: true });
+    await mkdir(join(appDir, "legal", "terms"), { recursive: true });
+    await writeFile(
+      join(rootDir, "src", "components", "legal", "LegalPage.tsx"),
+      `type LegalBlock =
+  | { readonly kind: "paragraph"; readonly text: string }
+  | { readonly kind: "orderedList"; readonly start?: number; readonly items: readonly string[] }
+  | { readonly kind: "table"; readonly headers: readonly string[]; readonly rows: readonly (readonly string[])[] };
+
+function LegalDocumentBlockView(props: { readonly block: LegalBlock }) {
+  switch (props.block.kind) {
+    case "paragraph":
+      return <p>{props.block.text}</p>;
+    case "orderedList":
+      return (
+        <ol start={props.block.start}>
+          {props.block.items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ol>
+      );
+    case "table":
+      return (
+        <table>
+          <tbody>
+            {props.block.rows.map((row) => (
+              <tr key={row.join("|")}>
+                {row.map((cell) => (
+                  <td key={cell}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+  }
+}
+
+const blocks: readonly LegalBlock[] = [
+  { kind: "paragraph", text: "Intro" },
+  { kind: "orderedList", start: 3, items: ["One", "Two"] },
+  { kind: "table", headers: ["Name"], rows: [["Ada"], ["Linus"]] },
+];
+
+export function LegalPage() {
+  return <main>{blocks.map((block) => <LegalDocumentBlockView key={block.kind} block={block} />)}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "legal", "terms", "page.tsx"),
+      `import { LegalPage } from "../../../components/legal/LegalPage";
+
+export default function Page() {
+  return <LegalPage />;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/legal/terms"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(
+      '<main><p>Intro</p><ol start="3"><li>One</li><li>Two</li></ol><table><tbody><tr><td>Ada</td></tr><tr><td>Linus</td></tr></tbody></table></main>',
+    );
+  });
+
   test("renders router Link inside imported shared server components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-server-link-"));
     const appDir = join(rootDir, "src", "app");
