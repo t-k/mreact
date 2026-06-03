@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.126 - 2026-06-03
+
+### Fixed
+
+- Fixed built Node serving so `mreact-router start .mreact`, `renderBuiltAppRequest()`, and `createBuiltRequestRuntime()` automatically read `.mreact/server/import-policy.json` and allow generated runtime packages when bundling built server modules for production-like smoke checks.
+
 ## 0.0.125 - 2026-06-03
 
 ### Fixed

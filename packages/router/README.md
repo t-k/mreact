@@ -341,7 +341,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 ```
 
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports, and Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports. The built Node server used by `mreact-router start .mreact`, `renderBuiltAppRequest()`, and `createBuiltRequestRuntime()` reads that generated policy automatically and merges its runtime packages with any explicit policy options. Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
 
 For Lambda deployments, build with `mreact-router build --target=aws-lambda` or `buildApp({ targets: ["aws-lambda"] })`. The target writes Node-compatible server/client output, `.mreact/server/import-policy.json`, and `.mreact/aws-lambda/mreact-handler.mjs` while skipping `.mreact/cloudflare` route modules, so loaders and server helpers may import Node-only dependencies such as database drivers without being bundled for the Workers runtime.
 
