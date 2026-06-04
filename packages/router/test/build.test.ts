@@ -2790,6 +2790,53 @@ export default function Page() {
       .toBeUndefined();
   });
 
+  test("static export preserves prerendered dynamic route CSS and public asset closure", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-export-css-closure-"));
+    const appDir = join(rootDir, "app", "users", "$id");
+    const outDir = join(rootDir, ".mreact");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "public"), { recursive: true });
+    await writeFile(join(appDir, "page.css"), ".profile { color: rgb(12 34 56); }");
+    await writeFile(join(rootDir, "public", "avatar.txt"), "static avatar");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import "./page.css";
+
+export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ id: "ada" }];
+}
+
+export default function Page(props) {
+  return <main className="profile">User {props.params.id}</main>;
+}`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+      targets: ["node"],
+    });
+    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({
+      routes: ["/users/ada"],
+    });
+    const html = await readFile(join(exportDir, "users", "ada", "index.html"), "utf8");
+    const cssPath = html.match(/href="\/_mreact\/client\/(?<asset>[^"]+\.css)"/u)?.groups
+      ?.asset;
+
+    expect(html).toContain("<main class=\"profile\">User ada</main>");
+    expect(cssPath).toMatch(/^assets\/routes\/users__id\.[a-f0-9]{8}\.css$/);
+    await expect(readFile(join(exportDir, "_mreact", "client", cssPath ?? ""), "utf8"))
+      .resolves.toContain(".profile");
+    await expect(readFile(join(exportDir, "avatar.txt"), "utf8")).resolves.toBe(
+      "static avatar",
+    );
+  });
+
   test("prerendered loaders honor user Vite plugins during render", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-prerender-loader-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");

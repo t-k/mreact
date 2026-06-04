@@ -1560,6 +1560,11 @@ async function prerenderStaticRoutes(options: {
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],
     ),
   );
+  const clientStyles = new Map(
+    options.clientRoutes.flatMap((route) =>
+      route.css !== undefined && route.css.length > 0 ? [[route.path, route.css]] : [],
+    ),
+  );
   const prerendered: Record<string, BuiltPrerenderedRoute> = {};
   const importPolicy = {
     allowedPackages: await readDeclaredProjectPackages(options.project.projectRoot),
@@ -1589,6 +1594,7 @@ async function prerenderStaticRoutes(options: {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientScripts,
+          clientStyles,
           importPolicy,
           request: new Request(`http://mreact.local${pathname}`),
           serverModules: serverModuleMap,
