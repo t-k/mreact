@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.130 - 2026-06-04
+
+### Fixed
+
+- Fixed App Router inferred client boundary fallback detection for imported JSX components whose nested DOM event handlers guard destructured optional callback props, preserving concrete SSR timeline card, image, and transitive presentational markup before hydration when the callback is `undefined` during server rendering.
+
 ## 0.0.129 - 2026-06-04
 
 ### Fixed

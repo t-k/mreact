@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router",
-  "version": "0.0.129",
+  "version": "0.0.130",
   "description": "File-system app router, SSR, actions, and deployment adapters for mreact.",
   "keywords": [
     "jsx",
