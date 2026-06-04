@@ -123,4 +123,25 @@ describe("server HTML helpers module", () => {
     await expect(style.text()).resolves.toBe("<style>a > b { color: red; }</style>");
     await expect(escaped.text()).resolves.toBe("<div>&lt;img&gt;</div>");
   });
+
+  test("html preserves raw script and style opt-in content with CSP nonces", async () => {
+    const response = html(
+      createElement(
+        "main",
+        null,
+        createElement("script", {
+          nonce: "nonce-1",
+          dangerouslySetInnerHTML: { __html: "if (a < b) globalThis.ready = true;" },
+        }),
+        createElement("style", {
+          nonce: "nonce-2",
+          dangerouslySetInnerHTML: { __html: "main > p { color: red; }" },
+        }),
+      ),
+    );
+
+    await expect(response.text()).resolves.toBe(
+      '<main><script nonce="nonce-1">if (a < b) globalThis.ready = true;</script><style nonce="nonce-2">main > p { color: red; }</style></main>',
+    );
+  });
 });
