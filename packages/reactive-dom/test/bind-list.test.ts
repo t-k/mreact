@@ -101,6 +101,43 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("keeps numeric and string keys as distinct keyed rows", async () => {
+    const items = cell([
+      { id: 1 as number | string, label: "number" },
+      { id: "1" as number | string, label: "string" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const numberRow = parent.childNodes[0];
+    const stringRow = parent.childNodes[1];
+
+    items.set([
+      { id: "1", label: "string" },
+      { id: 1, label: "number" },
+    ]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<li>string</li><li>number</li><!--list-->");
+    expect(parent.childNodes[0]).toBe(stringRow);
+    expect(parent.childNodes[1]).toBe(numberRow);
+
+    dispose();
+  });
+
   test("reorders keyed list items with one whole-parent replacement", async () => {
     const values = Array.from({ length: 1000 }, (_, index) => index);
     const items = cell(values);
