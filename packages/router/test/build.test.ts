@@ -87,6 +87,24 @@ async function assertBuiltClientAssetClosure(
   return assets;
 }
 
+function collectBareRuntimeImports(code: string): string[] {
+  const imports = new Set<string>();
+  const importPattern =
+    /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']([^"'./][^"']*)["']|import\(\s*["']([^"'./][^"']*)["']\s*\)/g;
+
+  for (const match of code.matchAll(importPattern)) {
+    const specifier = match[1] ?? match[2];
+
+    if (specifier === undefined || specifier.startsWith("node:")) {
+      continue;
+    }
+
+    imports.add(specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0] ?? specifier);
+  }
+
+  return [...imports].sort();
+}
+
 function localNameForMinifiedExport(source: string, exportName: string): string | undefined {
   const exportClause = /export\{([^}]+)\};?\s*$/.exec(source)?.[1];
   if (exportClause === undefined) {
@@ -625,6 +643,15 @@ export default function Login() {
     expect(moduleCode).toMatch(/(?:from|import) "pg"/u);
     expect(moduleCode).not.toContain("file://");
     expect(moduleCode).not.toContain("node_modules/pg");
+
+    const generatedRuntimePackages = new Set(policy.runtimePackages ?? []);
+    const nonFrameworkImports = collectBareRuntimeImports(moduleCode).filter(
+      (specifier) => !specifier.startsWith("@reckona/"),
+    );
+    expect(nonFrameworkImports).toEqual(["cookie", "jose", "pg"]);
+    expect(nonFrameworkImports.every((specifier) => generatedRuntimePackages.has(specifier))).toBe(
+      true,
+    );
   });
 
   test("tracks optional runtime packages declared by transitive server dependencies", async () => {
