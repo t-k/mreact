@@ -19,6 +19,19 @@ describe("server boundary module", () => {
     );
   });
 
+  test("renderHydrationBoundary encodes marker ids that could close comments", async () => {
+    const sink = createStringSink();
+
+    await renderHydrationBoundary(sink, `route:日本語"--><script>`, async (boundarySink) => {
+      boundarySink.append("<section>Safe</section>");
+    });
+
+    expect(sink.toString()).toBe(
+      "<!--mreact-h:start:route%3A%E6%97%A5%E6%9C%AC%E8%AA%9E%22--%3E%3Cscript%3E--><section>Safe</section><!--mreact-h:end:route%3A%E6%97%A5%E6%9C%AC%E8%AA%9E%22--%3E%3Cscript%3E-->",
+    );
+    expect(sink.toString()).not.toContain("--><script>");
+  });
+
   test("renderOutOfOrderReorderScript escapes external script metadata", () => {
     const sink = createStringSink();
 
