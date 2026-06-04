@@ -4774,6 +4774,197 @@ export default function Page(props: { data: Array<{ commentCount: number; day: s
     }
   });
 
+  test("server renders imported static checklist components without callback props", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-imported-static-checklist-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components", "onboarding");
+    const libDir = join(rootDir, "lib");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(libDir, "locale-state.ts"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export const activeLocale = cell("en");`,
+    );
+    await writeFile(
+      join(libDir, "i18n.ts"),
+      `export function t(key: string, _locale: string, values?: Record<string, number>) {
+  if (values) {
+    return key + ":" + Object.entries(values).map(([name, value]) => name + "=" + value).join(",");
+  }
+  return key;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "HomeOnboardingChecklist.tsx"),
+      `import { t } from "../../lib/i18n";
+import { activeLocale } from "../../lib/locale-state";
+
+type OnboardingAction =
+  | { href: string; kind: "link" }
+  | { kind: "modal"; name: string };
+
+type ChecklistItem = {
+  action: OnboardingAction;
+  completed: boolean;
+  disabled: boolean;
+  id: string;
+};
+
+type HomeOnboardingChecklist = {
+  items: ChecklistItem[];
+  optionalItems: ChecklistItem[];
+  requiredCompleted: number;
+  requiredTotal: number;
+  showStandalone: boolean;
+  visible: boolean;
+};
+
+function stepActionLabel(stepId: string): string {
+  return t("homeSetup.steps." + stepId + ".cta", activeLocale.get());
+}
+
+function ChecklistStepItem(props: { item: ChecklistItem; onAction?: ((action: OnboardingAction) => void) | undefined; optional?: boolean }) {
+  const locale = activeLocale.get();
+  const item = props.item;
+  const title = t("homeSetup.steps." + item.id + ".title", locale);
+  const description = t("homeSetup.steps." + item.id + ".description", locale);
+  const disabled = !props.optional && item.disabled;
+  const actionLabel = stepActionLabel(item.id);
+  const onAction = props.onAction;
+
+  return (
+    <li data-step-id={item.id}>
+      <h3>{title}</h3>
+      <p>{description}</p>
+      {!item.completed &&
+        (item.action.kind === "link" && !disabled ? (
+          <a href={item.action.href}>{actionLabel}</a>
+        ) : disabled || !onAction ? (
+          <button type="button" disabled>{actionLabel}</button>
+        ) : (
+          <button type="button" onClick={() => onAction(item.action)}>{actionLabel}</button>
+        ))}
+    </li>
+  );
+}
+
+export function HomeOnboardingChecklistCard(props: {
+  checklist: HomeOnboardingChecklist;
+  onAction?: ((action: OnboardingAction) => void) | undefined;
+}) {
+  const locale = activeLocale.get();
+  const checklist = props.checklist;
+  if (!checklist.visible) return null;
+
+  return (
+    <div data-testid="home-onboarding-checklist-card">
+      <h2>{checklist.showStandalone ? t("home.onboardingTitle", locale) : t("homeSetup.title", locale)}</h2>
+      <p>
+        {t("homeSetup.description", locale, {
+          completed: checklist.requiredCompleted,
+          total: checklist.requiredTotal,
+        })}
+      </p>
+      <ol>
+        {checklist.items.map((item) => (
+          <ChecklistStepItem item={item} key={item.id} onAction={props.onAction} />
+        ))}
+      </ol>
+      {checklist.optionalItems.length > 0 && (
+        <ol data-testid="optional-steps">
+          {checklist.optionalItems.map((item) => (
+            <ChecklistStepItem item={item} key={item.id} onAction={props.onAction} optional />
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { HomeOnboardingChecklistCard } from "../components/onboarding/HomeOnboardingChecklist";
+
+export function loader() {
+  return {
+    checklist: {
+      visible: true,
+      showStandalone: false,
+      requiredCompleted: 1,
+      requiredTotal: 3,
+      items: [
+        {
+          id: "profile",
+          completed: true,
+          disabled: false,
+          action: { kind: "link", href: "/settings/profile" },
+        },
+        {
+          id: "avatar",
+          completed: false,
+          disabled: false,
+          action: { kind: "link", href: "/settings/avatar" },
+        },
+        {
+          id: "invite",
+          completed: false,
+          disabled: true,
+          action: { kind: "modal", name: "invite-family" },
+        },
+      ],
+      optionalItems: [
+        {
+          id: "theme",
+          completed: false,
+          disabled: false,
+          action: { kind: "modal", name: "theme" },
+        },
+      ],
+    },
+  };
+}
+
+export default function Page(props: { data: { checklist: Parameters<typeof HomeOnboardingChecklistCard>[0]["checklist"] } }) {
+  const homeChecklist = props.data.checklist;
+
+  return (
+    <main>
+      {homeChecklist.visible &&
+        !homeChecklist.showStandalone &&
+        homeChecklist.requiredCompleted < homeChecklist.requiredTotal && (
+          <div class="mt-6">
+            <HomeOnboardingChecklistCard checklist={homeChecklist} />
+          </div>
+        )}
+      <section data-testid="timeline-grid">Timeline</section>
+    </main>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-testid="home-onboarding-checklist-card"');
+    expect(html).toContain('data-step-id="profile"');
+    expect(html).toContain('href="/settings/avatar"');
+    expect(html).toContain('<button type="button" disabled="">');
+    expect(html).toContain('data-testid="optional-steps"');
+    expect(html).toContain('data-testid="timeline-grid"');
+    expect(html).not.toContain(
+      '<template data-mreact-client-boundary="HomeOnboardingChecklistCard"></template><script',
+    );
+  });
+
   test("emits a client route bundle for client boundaries rendered by layouts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-layout-boundary-"));
     const appDir = join(rootDir, "app");

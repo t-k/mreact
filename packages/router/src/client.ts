@@ -1111,6 +1111,10 @@ const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl
 
 function isClientBoundaryFallbackEligibleSource(source: string): boolean {
   const destructuredCallbackPropNames = destructuredPropsCallbackNames(source);
+  const callbackPropNames = new Set([
+    ...destructuredCallbackPropNames,
+    ...propsCallbackAliasNames(source),
+  ]);
   const sourceWithoutComponentCallbackProps = source.replaceAll(
     /<[A-Z][A-Za-z0-9_$.]*(?:\s[\s\S]*?)?>/gu,
     (tag) => tag.replaceAll(/\s+on[A-Z][A-Za-z0-9_$]*\s*=\s*\{[^{}]*\}/gu, ""),
@@ -1125,7 +1129,16 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
       "",
     );
 
-  for (const callbackName of destructuredCallbackPropNames) {
+  for (const callbackName of callbackPropNames) {
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\b(?:const|let|var)\s+${escapeRegExp(
+          callbackName,
+        )}\s*=\s*props\.[A-Za-z_$][\w$]*\s*;?`,
+        "gu",
+      ),
+      "",
+    );
     sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
       new RegExp(
         String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapeRegExp(
@@ -1135,12 +1148,53 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
       ),
       "",
     );
+
+    if (hasCallbackAbsenceGuard(source, callbackName)) {
+      sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+        new RegExp(
+          String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*[^{}]*\b${escapeRegExp(
+            callbackName,
+          )}\b[^{}]*\}`,
+          "gu",
+        ),
+        "",
+      );
+    }
   }
 
   return (
     !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
     !/\bglobalThis\b/u.test(source)
   );
+}
+
+function propsCallbackAliasNames(source: string): Set<string> {
+  const names = new Set<string>();
+
+  for (const match of source.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*props\.([A-Za-z_$][\w$]*)\b/gu,
+  )) {
+    const localName = match[1];
+    const propName = match[2];
+
+    if (
+      localName !== undefined &&
+      (isCallbackPropName(propName) || isCallbackPropName(localName))
+    ) {
+      names.add(localName);
+    }
+  }
+
+  return names;
+}
+
+function hasCallbackAbsenceGuard(source: string, name: string): boolean {
+  const escapedName = escapeRegExp(name);
+
+  return new RegExp(
+    String.raw`(?:!\s*${escapedName}\b|${escapedName}\s*(?:===|==)\s*(?:undefined|null)|(?:undefined|null)\s*(?:===|==)\s*${escapedName}\b)`,
+    "u",
+  ).test(source);
 }
 
 function destructuredPropsCallbackNames(source: string): Set<string> {
