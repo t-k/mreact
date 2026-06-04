@@ -1449,6 +1449,68 @@ export default function Page() {
     expect(plainHtml).toContain("<title>Image Vault</title>");
   });
 
+  test("built string route modules emit metadata head void elements without closing tags", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-head-void-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><head></head><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  head: [
+    { tag: "meta", attrs: { name: "viewport", content: "width=device-width" }, content: "ignored" },
+    { tag: "link", attrs: { rel: "preload", href: "/font.woff2", as: "font" }, content: "ignored" },
+    { tag: "base", attrs: { href: "https://example.com/" }, content: "ignored" },
+  ],
+};
+
+export default function Page() {
+  return <main>head void</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('<meta name="viewport" content="width=device-width">');
+    expect(html).toContain('<link rel="preload" href="/font.woff2" as="font">');
+    expect(html).toContain('<base href="https://example.com/">');
+    expect(html).not.toContain("</meta>");
+    expect(html).not.toContain("</link>");
+    expect(html).not.toContain("</base>");
+    expect(html).not.toContain("ignored");
+  });
+
   test("built string route modules preserve server wrappers around nested client boundaries", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-wrapper-boundary-"));
     const appDir = join(rootDir, "app");

@@ -74,6 +74,24 @@ describe("router metadata contract", () => {
     expect(html).toContain("<body>Body</body>");
   });
 
+  test("injects metadata head void descriptors without closing tags", () => {
+    const html = injectHeadMetadata("<html><head></head><body>Body</body></html>", {
+      head: [
+        { attrs: { name: "viewport", content: "width=device-width" }, content: "ignored", tag: "meta" },
+        { attrs: { rel: "preload", href: "/font.woff2", as: "font" }, content: "ignored", tag: "link" },
+        { attrs: { href: "https://example.com/" }, content: "ignored", tag: "base" },
+      ],
+    });
+
+    expect(html).toContain('<meta name="viewport" content="width=device-width">');
+    expect(html).toContain('<link rel="preload" href="/font.woff2" as="font">');
+    expect(html).toContain('<base href="https://example.com/">');
+    expect(html).not.toContain("</meta>");
+    expect(html).not.toContain("</link>");
+    expect(html).not.toContain("</base>");
+    expect(html).not.toContain("ignored");
+  });
+
   test("adds file convention metadata only when page metadata leaves a slot empty", () => {
     const routes: AppRoute[] = [
       { file: "/app/blog/[slug]/page.tsx", kind: "page", path: "/blog/:slug", segments: [] },
