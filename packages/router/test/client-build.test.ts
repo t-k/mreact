@@ -1021,6 +1021,71 @@ export default function Page() {
     expect(document.querySelectorAll("[data-testid='static-action-card']")).toHaveLength(1);
   });
 
+  test("hydrates inferred boundary fallback then switches to interactive branch when a callback arrives", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-late-callback-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "ActionCard.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function ActionCard(props) {
+  const label = cell("Static fallback").get();
+  if (props.onConfirm === undefined) {
+    return <article data-testid="action-card"><span>{label}</span></article>;
+  }
+  return <button type="button" data-testid="action-card" onClick={() => props.onConfirm()}>Interactive</button>;
+}`,
+    );
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+import { ActionCard } from "./ActionCard";
+
+const enabled = cell(false);
+
+export default function Page() {
+  return (
+    <main>
+      <button type="button" data-testid="enable-action" onClick={() => enabled.set(true)}>Enable</button>
+      <ActionCard onConfirm={enabled.get() ? () => document.body.setAttribute("data-action-confirmed", "yes") : undefined} />
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><button type="button" data-testid="enable-action">Enable</button><template data-mreact-client-boundary="ActionCard"></template><article data-testid="action-card"><span>Static fallback</span></article><script type="application/json" data-mreact-client-boundary-props="ActionCard">{}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"ActionCard","moduleId":"./ActionCard","exportName":"ActionCard"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-late-callback`
+    );
+
+    const staticCard = document.querySelector("[data-testid='action-card']");
+
+    expect(staticCard?.tagName).toBe("ARTICLE");
+    expect(staticCard?.textContent).toBe("Static fallback");
+    expect(document.querySelectorAll("[data-testid='action-card']")).toHaveLength(1);
+
+    document
+      .querySelector("[data-testid='enable-action']")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+
+    const interactiveCard = document.querySelector("[data-testid='action-card']");
+
+    expect(interactiveCard?.tagName).toBe("BUTTON");
+    expect(interactiveCard?.textContent).toBe("Interactive");
+    expect(document.querySelectorAll("[data-testid='action-card']")).toHaveLength(1);
+
+    interactiveCard?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(document.body.getAttribute("data-action-confirmed")).toBe("yes");
+  });
+
   test("hydrates boundary children containing a keyed map and a second boundary", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-keyed-second-"));
     const file = join(appDir, "page.mreact.tsx");
