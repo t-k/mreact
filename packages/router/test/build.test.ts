@@ -1,4 +1,15 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -178,6 +189,29 @@ async function stopChildProcess(child: ChildProcessWithoutNullStreams): Promise<
     });
     child.kill("SIGTERM");
   });
+}
+
+async function runNodeModuleScript(script: string, cwd: string): Promise<string> {
+  const child = spawn(process.execPath, ["--input-type=module", "--eval", script], {
+    cwd,
+    env: {
+      ...process.env,
+      NO_COLOR: "1",
+    },
+  });
+  const output: string[] = [];
+  child.stdout.on("data", (chunk: Buffer) => output.push(chunk.toString()));
+  child.stderr.on("data", (chunk: Buffer) => output.push(chunk.toString()));
+
+  const exitCode = await new Promise<number | null>((resolve) => {
+    child.once("exit", (code) => resolve(code));
+  });
+
+  if (exitCode !== 0) {
+    throw new Error(`Node script failed with exit code ${exitCode}.\n${output.join("")}`);
+  }
+
+  return output.join("");
 }
 
 async function waitForHttpServer(url: string, processOutput: () => string): Promise<void> {
@@ -1997,6 +2031,61 @@ export default function Page() {
         skipRuntimeDependencyCheck: true,
       }),
     ).resolves.toMatchObject({ runtime: "aws-lambda" });
+  });
+
+  test("runs the packaged AWS Lambda handler without the source build tree", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-packaged-smoke-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const lambdaOutDir = join(rootDir, ".lambda");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>packaged lambda</main>; }",
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+    await packageAwsLambdaArtifact({
+      fromDir: outDir,
+      outDir: lambdaOutDir,
+      skipRuntimeDependencyCheck: true,
+    });
+    await rename(appDir, join(rootDir, "app.moved"));
+    await rename(outDir, join(rootDir, ".mreact.moved"));
+    await mkdir(join(lambdaOutDir, "node_modules", "@reckona"), { recursive: true });
+    await symlink(
+      join(process.cwd(), "packages", "router"),
+      join(lambdaOutDir, "node_modules", "@reckona", "mreact-router"),
+    );
+
+    const smokeOutput = await runNodeModuleScript(
+      [
+        `const mod = await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, "mreact-handler.mjs")).href)});`,
+        `const result = await mod.handler({`,
+        `  headers: { host: "lambda.test", "x-forwarded-proto": "https" },`,
+        `  rawPath: "/",`,
+        `  rawQueryString: "",`,
+        `  requestContext: { http: { method: "GET" } },`,
+        `  version: "2.0",`,
+        `});`,
+        `console.log(JSON.stringify(result));`,
+      ].join("\n"),
+      lambdaOutDir,
+    );
+    const result = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "{}") as {
+      body: string;
+      statusCode: number;
+    };
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>packaged lambda</main>");
   });
 
   test("packages a bundled AWS Lambda custom handler with app-local server imports", async () => {
