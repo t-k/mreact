@@ -4549,6 +4549,73 @@ export default function MfaChallenge() {
     expect(routeCode).toContain("`/_mreact/client/`+");
   });
 
+  test("keeps transitive dynamic import chunks in the built client asset closure", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-transitive-chunks-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "lib"), { recursive: true });
+    await writeFile(
+      join(appDir, "lib", "second.ts"),
+      `export function secondMarker() {
+  return "__second_dynamic_chunk_marker__";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "lib", "first.ts"),
+      `export async function firstMarker() {
+  const mod = await import("./second");
+  return mod.secondMarker();
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return (
+    <main>
+      <button type="button" onClick={async () => {
+        const mod = await import("./lib/first");
+        document.body.setAttribute("data-marker", await mod.firstMarker());
+      }}>Load transitive</button>
+    </main>
+  );
+}
+`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      assets?: string[];
+      routes: Array<{ imports?: string[]; path: string; script?: string }>;
+    };
+    const html = await (
+      await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      })
+    ).text();
+    const closure = await assertBuiltClientAssetClosure(outDir, html);
+    const assetSources = await Promise.all(
+      [...closure].map(async (asset) => ({
+        asset,
+        source: await readFile(join(outDir, "client", asset), "utf8"),
+      })),
+    );
+    const first = assetSources.find((entry) => entry.asset.startsWith("assets/chunks/first."));
+    const second = assetSources.find((entry) => entry.asset.startsWith("assets/chunks/second."));
+
+    expect(first?.asset).toMatch(/^assets\/chunks\/first\.[a-f0-9]{8}\.js$/);
+    expect(first?.source).toContain("second");
+    expect(second?.asset).toMatch(/^assets\/chunks\/second\.[a-f0-9]{8}\.js$/);
+    expect(second?.source).toContain("__second_dynamic_chunk_marker__");
+    expect(clientManifest.assets).toEqual(expect.arrayContaining([first?.asset, second?.asset]));
+    expect(closure.has(first?.asset ?? "")).toBe(true);
+    expect(closure.has(second?.asset ?? "")).toBe(true);
+  });
+
   test("emits and links CSS imported from route layouts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-css-"));
     const appDir = join(rootDir, "app");
