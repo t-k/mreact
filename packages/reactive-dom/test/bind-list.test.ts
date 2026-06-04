@@ -343,6 +343,72 @@ describe("bindList", () => {
     parent.remove();
   });
 
+  test("preserves inner keyed list nodes when only outer keyed rows reorder", async () => {
+    const groups = cell([
+      {
+        id: "a",
+        items: [
+          { id: "a1", label: "A1" },
+          { id: "a2", label: "A2" },
+        ],
+      },
+      {
+        id: "b",
+        items: [
+          { id: "b1", label: "B1" },
+          { id: "b2", label: "B2" },
+        ],
+      },
+    ]);
+    const parent = document.createElement("section");
+    const marker = document.createComment("groups");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => groups.get(),
+      (group) => {
+        const article = document.createElement("article");
+        const heading = document.createElement("h2");
+        const list = document.createElement("ul");
+        const listMarker = document.createComment("items");
+        heading.textContent = group.id;
+        list.append(listMarker);
+        article.append(heading, list);
+        bindList(
+          list,
+          listMarker,
+          () => group.items,
+          (item) => {
+            const li = document.createElement("li");
+            li.textContent = item.label;
+            return li;
+          },
+          { key: (item) => item.id },
+        );
+        return article;
+      },
+      { key: (group) => group.id },
+    );
+
+    const groupA = parent.querySelector("article:nth-of-type(1)");
+    const groupB = parent.querySelector("article:nth-of-type(2)");
+    const innerA1 = groupA?.querySelector("li:nth-child(1)");
+    const innerB1 = groupB?.querySelector("li:nth-child(1)");
+
+    groups.set([groups.get()[1]!, groups.get()[0]!]);
+    await flushEffects();
+
+    expect(parent.querySelector("article:nth-of-type(1)")).toBe(groupB);
+    expect(parent.querySelector("article:nth-of-type(2)")).toBe(groupA);
+    expect(groupA?.querySelector("li:nth-child(1)")).toBe(innerA1);
+    expect(groupB?.querySelector("li:nth-child(1)")).toBe(innerB1);
+    expect(parent.textContent).toBe("bB1B2aA1A2");
+
+    dispose();
+  });
+
   test("updates keyed row closures when an item object is replaced with the same key", async () => {
     const items = cell([{ id: "book", quantity: 1 }]);
     const parent = document.createElement("ul");
