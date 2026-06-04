@@ -1413,6 +1413,31 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     );
   });
 
+  test("emitted server component renders SSR fallback for inferred client boundaries inside component children", () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+      import { Navigation } from "./Navigation";
+
+      export function App() {
+        return (
+          <AppShell>
+            <section><Navigation label="Albums" /></section>
+          </AppShell>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./Navigation"],
+      clientBoundaryFallbackImports: ["./Navigation"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })))',
+    );
+  });
+
   test("emitted server component leaves compat client references as client boundaries", () => {
     const output = transform({
       code: `import Chart from "./Chart.compat.tsx";

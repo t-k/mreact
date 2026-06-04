@@ -195,6 +195,15 @@ const mreactJsxRuntimeAliasPaths = new Map([
     }),
   ],
   [
+    "@reckona/mreact",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "index",
+      monorepoDir: "react",
+      packageName: "@reckona/mreact",
+    }),
+  ],
+  [
     "@reckona/mreact/jsx-dev-runtime",
     workspacePackageFile({
       currentFileUrl: import.meta.url,

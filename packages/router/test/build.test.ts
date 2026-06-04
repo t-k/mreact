@@ -4680,12 +4680,13 @@ function TimelineDayGrid(props: { cardTestId: string; day: string; items: MediaI
   );
 }
 
-function TimelineMediaCard({ cardTestId, item, onOpenMedia }: { cardTestId: string; item: MediaItem; onOpenMedia?: ((id: string) => void) | undefined }) {
+function TimelineMediaCard(props: { cardTestId: string; item: MediaItem; onOpenMedia?: ((id: string) => void) | undefined }) {
+  const item = props.item;
   return (
-    <article data-testid={cardTestId}>
+    <article data-testid={props.cardTestId}>
       <button
         type="button"
-        onClick={onOpenMedia ? () => onOpenMedia(item.id) : undefined}
+        onClick={props.onOpenMedia ? () => props.onOpenMedia?.(item.id) : undefined}
       >
         <img src={item.thumbnailUrl} alt={item.fileName} />
       </button>

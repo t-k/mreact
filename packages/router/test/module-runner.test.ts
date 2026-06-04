@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -57,6 +57,79 @@ export function render() {
     });
 
     expect(module.render()).toBe("runner");
+  });
+
+  test("imports unbundled source modules with the mreact root runtime from an app cwd", async () => {
+    const originalCwd = process.cwd();
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-app-cwd-"));
+    const scopeDir = join(appDir, "node_modules", "@reckona");
+    await mkdir(scopeDir, { recursive: true });
+    await symlink(join(originalCwd, "packages", "react"), join(scopeDir, "mreact"), "dir");
+
+    try {
+      process.chdir(appDir);
+      const module = await importAppRouterSourceModule<{
+        memoType: () => string;
+      }>({
+        code: `import { memo } from "@reckona/mreact";
+
+export function memoType() {
+  return typeof memo;
+}`,
+        label: "module-runner-app-cwd-mreact-root",
+        sourcefile: join(appDir, "src", "app", "page.tsx"),
+      });
+
+      expect(module.memoType()).toBe("function");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  test("bundles loader modules with the mreact root runtime as ESM", async () => {
+    const originalCwd = process.cwd();
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-loader-bundle-app-cwd-"));
+    const scopeDir = join(appDir, "node_modules", "@reckona");
+    await mkdir(join(appDir, "src", "app"), { recursive: true });
+    await mkdir(scopeDir, { recursive: true });
+    await symlink(join(originalCwd, "packages", "react"), join(scopeDir, "mreact"), "dir");
+    await symlink(
+      join(originalCwd, "packages", "react-compat"),
+      join(scopeDir, "mreact-compat"),
+      "dir",
+    );
+    const filename = join(appDir, "src", "app", "page.tsx");
+
+    try {
+      process.chdir(appDir);
+      const bundled = await bundleRouteLoaderModuleCode({
+        appDir: join(appDir, "src", "app"),
+        code: `import { memo } from "@reckona/mreact";
+
+const Component = memo(function Component() {
+  return <span />;
+});
+
+export function loader() {
+  return { ok: true };
+}
+
+export default function Page() {
+  return <main />;
+}`,
+        filename,
+        importPolicy: {
+          allowedPackages: ["@reckona/mreact"],
+          allowedSourceDirs: [join(appDir, "src")],
+          projectRoot: appDir,
+        },
+      });
+
+      expect(bundled).not.toContain("packages/react/index.cjs");
+      expect(bundled).toContain("function memo(");
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   test("bundles TypeScript source modules with type annotations", async () => {

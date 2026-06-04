@@ -112,6 +112,26 @@ describe("router Vite middleware", () => {
     ).resolves.toBe("\0mreact-router-reactive-core");
   });
 
+  test("resolves the mreact root runtime to ESM in dev SSR", async () => {
+    const projectRoot = process.cwd();
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["packages/router/test"],
+      projectRoot,
+      publicDir: "packages/router/test",
+      routesDir: "packages/router/test",
+    });
+    const resolveId = typeof plugin.resolveId === "function"
+      ? plugin.resolveId
+      : plugin.resolveId?.handler;
+    expect(resolveId).toBeDefined();
+
+    const appImporter = join(projectRoot, "packages", "router", "test", "page.tsx");
+
+    await expect(
+      resolveId?.call({} as never, "@reckona/mreact", appImporter, {}),
+    ).resolves.toContain(join("packages", "react", "src", "index.ts"));
+  });
+
   test("matches Vite v8 middleware contract and peer range", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-contract-"));
     const middleware: Connect.NextHandleFunction = createAppRouterViteMiddleware({ appDir });
@@ -215,6 +235,39 @@ export default function Page(props: { data: { slug: string } }) {
     expect(html).toContain("<h1>Why MDX</h1>");
     expect(html).not.toContain("[PARSE_ERROR]");
     expect(html).not.toContain("Cannot assign to this expression");
+  });
+
+  test("dev SSR resolves the mreact root runtime through the router plugin", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-root-runtime-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { memo } from "@reckona/mreact";
+
+const Timeline = memo(function Timeline(props: { readonly title: string }) {
+  return <section data-testid="timeline-root-runtime">{props.title}</section>;
+});
+
+export default function Page() {
+  return <main><Timeline title="Timeline" /></main>;
+}
+`,
+    );
+    const devServer = await startDevServer({
+      port: 0,
+      projectRoot,
+      routesDir: appDir,
+    });
+    devServers.push(devServer);
+
+    const response = await fetch(devServer.url);
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain('data-testid="timeline-root-runtime"');
+    expect(html).toContain("Timeline");
+    expect(html).not.toContain("exports is not defined");
   });
 
   test("serves client assets for interactive routes with function loader exports", async () => {

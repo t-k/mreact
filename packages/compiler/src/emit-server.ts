@@ -815,18 +815,31 @@ function collectHtmlParts(
     if (isClientBoundaryPlaceholder(node)) {
       const helperName = currentClientBoundaryHelperName;
       if (helperName !== undefined) {
+        const boundaryProps = emitPropsObject(
+          node.props,
+          [],
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        );
+        const fallbackHtml = shouldRenderClientBoundaryFallback(node)
+          ? emitComponentCallExpression(node.name, boundaryProps, asyncComponentNames)
+          : emitHtmlExpressionFromChildren(
+              node.children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            );
         return [
-          `${helperName}(${stringLiteral(node.name)}, ${emitPropsObject(
-            node.props,
-            [],
-            escapeHelperName,
-            escapeBatchHelperName,
-            asyncComponentNames,
-            dynamicAttributes,
-            contextProviderHelperName,
-            contextConsumerHelperName,
-            reactNodeRenderHelperName,
-          )}, ${emitHtmlExpressionFromChildren(node.children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)})`,
+          `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml})`,
         ];
       }
 

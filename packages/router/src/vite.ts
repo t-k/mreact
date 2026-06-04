@@ -100,10 +100,13 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   const reactiveCoreDir = normalizePath(dirname(reactiveCorePath));
   const reactiveDomPath = packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "index");
   const reactiveDomDir = normalizePath(dirname(reactiveDomPath));
+  const reactPath = packageFile("react", "@reckona/mreact", "index");
+  const reactDir = normalizePath(dirname(reactPath));
   const reactCompatPath = packageFile("react-compat", "@reckona/mreact-compat", "index");
   const reactCompatDir = normalizePath(dirname(reactCompatPath));
-  const runtimePackageDirs = [reactiveCoreDir, reactiveDomDir, reactCompatDir];
+  const runtimePackageDirs = [reactiveCoreDir, reactiveDomDir, reactDir, reactCompatDir];
   const runtimePackageNames = [
+    "@reckona/mreact",
     "@reckona/mreact-reactive-core",
     "@reckona/mreact-reactive-dom",
     "@reckona/mreact-compat",
@@ -118,6 +121,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       packageFile("react-compat", "@reckona/mreact-compat", "jsx-dev-runtime"),
     ],
     ["react/jsx-runtime", packageFile("react-compat", "@reckona/mreact-compat", "jsx-runtime")],
+    ["@reckona/mreact", reactPath],
     [
       "@reckona/mreact-reactive-core/internal",
       packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
@@ -188,6 +192,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
             "react-dom/server",
             "react/jsx-dev-runtime",
             "react/jsx-runtime",
+            "@reckona/mreact",
           ],
         },
       };
