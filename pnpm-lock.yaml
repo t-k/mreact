@@ -56,6 +56,9 @@ importers:
       marko:
         specifier: ^5.38.39
         version: 5.38.39
+      miniflare:
+        specifier: 4.20260515.0
+        version: 4.20260515.0
       next:
         specifier: ^16.2.6
         version: 16.2.6(@playwright/test@1.60.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
