@@ -182,6 +182,25 @@ export function SunIcon(props: { class?: string }) {
     );
   });
 
+  test("string and stream emitters keep siblings after mapped null children", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  const items = [
+    { id: "a", show: true },
+    { id: "b", show: false },
+    { id: "c", show: true },
+  ];
+  return (
+    <ul>
+      {items.map((item) => item.show ? <li key={item.id}>{item.id}</li> : null)}
+      <li>tail</li>
+    </ul>
+  );
+}`,
+      "<ul><li>a</li><li>c</li><li>tail</li></ul>",
+    );
+  });
+
   test("string and stream emitters preserve empty and astral-plane text children", async () => {
     await expectServerPairHtml(
       `export function App() {
