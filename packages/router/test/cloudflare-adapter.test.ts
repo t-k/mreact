@@ -1697,6 +1697,64 @@ export default function Page() {
     }
   });
 
+  test("built Cloudflare route modules render route components re-exported from another route", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-route-reexport-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "source"), { recursive: true });
+    await mkdir(join(appDir, "alias"), { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "source", "page.tsx"),
+      `export default function SourcePage() {
+  return <main>source route</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "alias", "page.tsx"),
+      `export { default } from "../source/page";`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const source = await handler.fetch(
+      new Request("https://app.example/source"),
+      {},
+      createExecutionContext(),
+    );
+    const alias = await handler.fetch(
+      new Request("https://app.example/alias"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(source.status).toBe(200);
+    await expect(source.text()).resolves.toContain("<main>source route</main>");
+    expect(alias.status).toBe(200);
+    await expect(alias.text()).resolves.toContain("<main>source route</main>");
+  });
+
   test("build emits a Workers-safe route module for stream pages", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-stream-route-module-"));
     const appDir = join(rootDir, "app");
