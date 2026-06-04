@@ -1177,6 +1177,13 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
       ),
       "",
     );
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapedCallbackName}\s*\?\?\s*undefined\s*\}`,
+        "gu",
+      ),
+      "",
+    );
 
     if (
       hasCallbackAbsenceGuard(
@@ -1189,6 +1196,16 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
         "",
       );
     }
+    sourceWithoutGuardedUndefinedCallbacks = removeSafeCallbackHandlerAttributes(
+      sourceWithoutGuardedUndefinedCallbacks,
+      callbackName,
+      {
+        externalAbsenceGuard: hasCallbackAbsenceGuard(
+          sourceWithoutComponentCallbackProps.replaceAll(callbackHandlerAttributePattern, ""),
+          callbackName,
+        ),
+      },
+    );
 
     if (
       new RegExp(String.raw`\b${escapedCallbackName}\s*\(`, "u").test(
@@ -1222,6 +1239,23 @@ function propsCallbackAliasNames(source: string): Set<string> {
     }
   }
 
+  let added = true;
+  while (added) {
+    added = false;
+    for (const match of source.matchAll(
+      /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\b/gu,
+    )) {
+      const localName = match[1];
+      const sourceName = match[2];
+
+      if (localName !== undefined && sourceName !== undefined && names.has(sourceName)) {
+        const previousSize = names.size;
+        names.add(localName);
+        added ||= names.size !== previousSize;
+      }
+    }
+  }
+
   return names;
 }
 
@@ -1232,6 +1266,95 @@ function hasCallbackAbsenceGuard(source: string, name: string): boolean {
     String.raw`(?:!\s*${escapedName}\b|${escapedName}\s*(?:===|==)\s*(?:undefined|null)|(?:undefined|null)\s*(?:===|==)\s*${escapedName}\b)`,
     "u",
   ).test(source);
+}
+
+function removeSafeCallbackHandlerAttributes(
+  source: string,
+  callbackName: string,
+  options: { externalAbsenceGuard: boolean },
+): string {
+  const attributePattern = /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{/gu;
+  let result = "";
+  let cursor = 0;
+
+  for (const match of source.matchAll(attributePattern)) {
+    const start = match.index;
+    const expressionStart = start + match[0].length;
+    const end = matchingBraceEnd(source, expressionStart - 1);
+
+    if (end === undefined) {
+      continue;
+    }
+
+    const expression = source.slice(expressionStart, end);
+    if (isSafeCallbackHandlerExpression(expression, callbackName, options)) {
+      result += source.slice(cursor, start);
+      cursor = end + 1;
+    }
+  }
+
+  return cursor === 0 ? source : result + source.slice(cursor);
+}
+
+function matchingBraceEnd(source: string, openBraceIndex: number): number | undefined {
+  let depth = 0;
+  let quote: "\"" | "'" | "`" | undefined;
+  let escaped = false;
+
+  for (let index = openBraceIndex; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (quote !== undefined) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (char === "\"" || char === "'" || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function isSafeCallbackHandlerExpression(
+  expression: string,
+  callbackName: string,
+  options: { externalAbsenceGuard: boolean },
+): boolean {
+  const escapedName = escapeRegExp(callbackName);
+  if (!new RegExp(String.raw`\b${escapedName}\b`, "u").test(expression)) {
+    return false;
+  }
+
+  if (new RegExp(String.raw`\b${escapedName}\s*\(`, "u").test(expression)) {
+    return false;
+  }
+
+  return (
+    new RegExp(String.raw`\b${escapedName}\s*\?\.\s*\(`, "u").test(expression) ||
+    new RegExp(String.raw`^\s*${escapedName}\s*\?\?\s*undefined\s*$`, "u").test(expression) ||
+    options.externalAbsenceGuard
+  );
 }
 
 function destructuredPropsCallbackNames(source: string): Set<string> {

@@ -729,6 +729,181 @@ export default function Page() {
     ]);
   });
 
+  test("handles nullish and logical-or callback handler expressions", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-nullish-logical-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nullish-handler-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type NullishHandlerCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function NullishHandlerCard({ onConfirm }: NullishHandlerCardProps) {
+  const label = cell("Nullish handler").get();
+  return <button type="button" onClick={onConfirm ?? undefined}>{label}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "logical-or-handler-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const noop = () => undefined;
+
+type LogicalOrHandlerCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function LogicalOrHandlerCard({ onConfirm }: LogicalOrHandlerCardProps) {
+  const label = cell("Logical or handler").get();
+  return <button type="button" onClick={onConfirm || noop}>{label}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { NullishHandlerCard } from "./components/nullish-handler-card";
+import { LogicalOrHandlerCard } from "./components/logical-or-handler-card";
+
+export default function Page() {
+  return <main><NullishHandlerCard /><LogicalOrHandlerCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual([
+      "./components/nullish-handler-card",
+      "./components/logical-or-handler-card",
+    ]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/nullish-handler-card"]);
+  });
+
+  test("marks block-body optional callback calls as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-block-optional-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "tracked-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const track = () => undefined;
+
+type TrackedCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function TrackedCard({ onConfirm }: TrackedCardProps) {
+  const label = cell("Tracked").get();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        track();
+        try {
+          onConfirm?.();
+        } catch {
+          track();
+        }
+      }}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { TrackedCard } from "./components/tracked-card";
+
+export default function Page() {
+  return <main><TrackedCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/tracked-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/tracked-card"]);
+  });
+
+  test("marks inverted early-return callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-early-return-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "early-return-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type EarlyReturnCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function EarlyReturnCard({ onConfirm }: EarlyReturnCardProps) {
+  const label = cell("Early").get();
+  if (!onConfirm) {
+    return <article data-state="static">{label}</article>;
+  }
+  return <button type="button" onClick={() => onConfirm()}>{label}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { EarlyReturnCard } from "./components/early-return-card";
+
+export default function Page() {
+  return <main><EarlyReturnCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/early-return-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/early-return-card"]);
+  });
+
+  test("tracks callback aliases through multiple consts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-callback-alias-chain-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "alias-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type AliasCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function AliasCard(props: AliasCardProps) {
+  const label = cell("Alias").get();
+  const first = props.onConfirm;
+  const second = first;
+  return (
+    <button
+      type="button"
+      onClick={second === undefined ? undefined : () => second()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { AliasCard } from "./components/alias-card";
+
+export default function Page() {
+  return <main><AliasCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/alias-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/alias-card"]);
+  });
+
   test("does not mark mixed guarded and unguarded callbacks as SSR fallback eligible", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-callbacks-"));
     const appDir = join(dir, "app");
