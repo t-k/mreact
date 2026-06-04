@@ -1463,6 +1463,21 @@ export function App() {
     );
   });
 
+  test("emitted server stream component omits dangerouslySetInnerHTML body for void elements", async () => {
+    const output = transform({
+      code: `export function App() {
+  return <img alt="avatar" dangerouslySetInnerHTML={{ __html: "<span>bad</span>" }} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(runServerStreamComponent(output.code)).resolves.toBe('<img alt="avatar">');
+  });
+
   test("aliases server stream runtime helper away from top-level bindings", async () => {
     const output = transform({
       code: `const _renderOutOfOrderBoundary = "user";

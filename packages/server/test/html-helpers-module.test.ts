@@ -92,6 +92,17 @@ describe("server HTML helpers module", () => {
     );
   });
 
+  test("html omits dangerouslySetInnerHTML bodies on void elements", async () => {
+    const response = html(
+      createElement("img", {
+        alt: "avatar",
+        dangerouslySetInnerHTML: { __html: "<span>bad</span>" },
+      }),
+    );
+
+    await expect(response.text()).resolves.toBe('<img alt="avatar">');
+  });
+
   test("html preserves raw text inside script and style elements", async () => {
     const script = html(createElement("script", null, "if (a < b && c > d) {}"));
     const style = html(createElement("style", null, "a > b { color: red; }"));

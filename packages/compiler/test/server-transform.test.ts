@@ -931,6 +931,20 @@ export function App() {
     );
   });
 
+  test("omits dangerouslySetInnerHTML body for void elements", () => {
+    const output = transform({
+      code: `export function App() {
+  return <img alt="avatar" dangerouslySetInnerHTML={{ __html: "<span>bad</span>" }} />;
+}`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(runServerComponent(output.code)).toBe('<img alt="avatar">');
+  });
+
   test("aliases server escape helper away from top-level bindings", () => {
     const output = transform({
       code: `const _escapeHtml = "user";
