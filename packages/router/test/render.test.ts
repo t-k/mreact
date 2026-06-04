@@ -2681,6 +2681,37 @@ export default function Page(props) {
     expect(await allowed.text()).toContain("<main>fixture-ok</main>");
   });
 
+  test("rejects loader dynamic package imports unless explicitly allowed", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-dynamic-package-import-"));
+    await writePackageFixture(appDir);
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export async function loader() {
+  const mod = await import("fixture-lib");
+  return { version: mod.version };
+}
+
+export default function Page(props) {
+  return <main>{props.data.version}</main>;
+}`,
+    );
+
+    const blocked = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const allowed = await renderAppRequest({
+      appDir,
+      importPolicy: { allowedPackages: ["fixture-lib"] },
+      request: new Request("http://local.test/"),
+    });
+
+    expect(blocked.status).toBe(500);
+    await expect(blocked.text()).resolves.toContain('"fixture-lib" is imported by a loader');
+    expect(allowed.status).toBe(200);
+    expect(await allowed.text()).toContain("<main>fixture-ok</main>");
+  });
+
   test("wraps pages with root and nested layouts", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-layout-"));
     await writeFile(
