@@ -34,6 +34,59 @@ function createExecutionContext(): ExecutionContext {
   };
 }
 
+async function assertBuiltClientAssetClosure(
+  outDir: string,
+  html = "",
+): Promise<ReadonlySet<string>> {
+  const clientManifest = JSON.parse(
+    await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+  ) as {
+    assets?: string[];
+    routes: Array<{
+      css?: string[];
+      imports?: string[];
+      navigationScript?: string;
+      script?: string;
+      sourceMap?: string;
+    }>;
+  };
+  const assets = new Set<string>(["manifest.json"]);
+
+  for (const route of clientManifest.routes) {
+    for (const asset of [
+      route.script,
+      route.sourceMap,
+      route.navigationScript,
+      ...(route.css ?? []),
+      ...(route.imports ?? []),
+    ]) {
+      if (asset !== undefined) assets.add(asset);
+    }
+  }
+
+  for (const asset of clientManifest.assets ?? []) {
+    assets.add(asset);
+  }
+
+  for (const asset of assets) {
+    await expect(access(join(outDir, "client", asset))).resolves.toBeUndefined();
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request(`http://local.test/_mreact/client/${asset}`),
+    });
+    expect(response.status, asset).toBe(200);
+  }
+
+  for (const match of html.matchAll(/["']\/_mreact\/client\/([^"']+)/g)) {
+    const asset = match[1];
+
+    expect(asset).toBeDefined();
+    expect(assets.has(asset as string), asset).toBe(true);
+  }
+
+  return assets;
+}
+
 function localNameForMinifiedExport(source: string, exportName: string): string | undefined {
   const exportClause = /export\{([^}]+)\};?\s*$/.exec(source)?.[1];
   if (exportClause === undefined) {
@@ -3782,6 +3835,7 @@ export default function Page() {
     expect(assetResponse.status).toBe(200);
     expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    await assertBuiltClientAssetClosure(outDir, html);
   });
 
   test("shares imported app modules between production client route chunks", async () => {
