@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.131 - 2026-06-04
+
+### Fixed
+
+- Fixed App Router loader and Vite development SSR bundles so `@reckona/mreact` root runtime imports resolve to ESM workspace source instead of leaving the CommonJS package entry in SSR output, preventing `exports is not defined` failures for routes that combine loaders with top-level runtime imports such as `memo`.
+- Fixed synchronous server JSX emission so inferred client boundary fallbacks inside component children render the same SSR fallback output as streaming server JSX emission.
+
 ## 0.0.130 - 2026-06-04
 
 ### Fixed
