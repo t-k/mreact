@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.132 - 2026-06-04
+
+### Fixed
+
+- Fixed App Router inferred client boundary SSR fallback eligibility for imported static components that alias optional callback props and guard the interactive branch, preserving real initial HTML for serializable checklist-style props with links and disabled buttons before hydration.
+
 ## 0.0.131 - 2026-06-04
 
 ### Fixed
