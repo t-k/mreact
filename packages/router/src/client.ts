@@ -920,9 +920,15 @@ async function inferClientRouteModuleSource(options: {
         if (exported.clientBoundaryModule) {
           clientProxy = true;
         } else if (exported.clientBoundaryExportNames.length > 0) {
-          for (const exportName of reference.exportedNames) {
-            if (exported.clientBoundaryExportNames.includes(exportName)) {
+          if (reference.exportAll) {
+            for (const exportName of exported.clientBoundaryExportNames) {
               clientBoundaryExportNames.add(exportName);
+            }
+          } else {
+            for (const specifier of reference.specifiers) {
+              if (exported.clientBoundaryExportNames.includes(specifier.localName)) {
+                clientBoundaryExportNames.add(specifier.exportedName);
+              }
             }
           }
         } else if (exported.client) {

@@ -1234,6 +1234,173 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/row-list"]);
   });
 
+  test("marks memo-wrapped optional callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-memo-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "memo-card.tsx"),
+      `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+type MemoCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export const MemoCard = memo(function MemoCard({ onConfirm }: MemoCardProps) {
+  const label = cell("Memo").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+});`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { MemoCard } from "./components/memo-card";
+
+export default function Page() {
+  return <main><MemoCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/memo-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/memo-card"]);
+  });
+
+  test("classifies deep renamed barrel chains as client boundaries", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-deep-barrel-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Card() {
+  const label = cell("Card").get();
+  return <button type="button" onClick={() => undefined}>{label}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "middle.ts"),
+      `export { Card as MiddleCard } from "./card";`,
+    );
+    await writeFile(
+      join(appDir, "components", "index.ts"),
+      `export { MiddleCard as RenamedCard } from "./middle";`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { RenamedCard } from "./components";
+
+export default function Page() {
+  return <main><RenamedCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components"]);
+    expect(result.clientReferenceManifest).toEqual([
+      {
+        name: "RenamedCard",
+        moduleId: "./components",
+        exportName: "RenamedCard",
+      },
+    ]);
+  });
+
+  test("keeps inferred and explicit client-boundary route classification independent", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-route-independent-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "inferred-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function InferredCard() {
+  const label = cell("Inferred").get();
+  return <button type="button" onClick={() => undefined}>{label}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "explicit-card.tsx"),
+      `"use client";
+
+export function ExplicitCard() {
+  return <button type="button">Explicit</button>;
+}`,
+    );
+    const inferredPageFile = join(appDir, "page.tsx");
+    const inferredCode = `import { InferredCard } from "./components/inferred-card";
+
+export default function Page() {
+  return <main><InferredCard /></main>;
+}`;
+    await writeFile(inferredPageFile, inferredCode);
+    const explicitPageFile = join(appDir, "settings.tsx");
+    const explicitCode = `import { ExplicitCard } from "./components/explicit-card";
+
+export default function Settings() {
+  return <main><ExplicitCard /></main>;
+}`;
+    await writeFile(explicitPageFile, explicitCode);
+
+    const inferred = await collectClientRouteReferences({
+      appDir,
+      code: inferredCode,
+      filename: inferredPageFile,
+    });
+    const explicit = await collectClientRouteReferences({
+      appDir,
+      code: explicitCode,
+      filename: explicitPageFile,
+    });
+
+    expect(inferred.clientBoundaryImports).toEqual(["./components/inferred-card"]);
+    expect(inferred.clientBoundaryFallbackImports).toEqual([]);
+    expect(explicit.clientBoundaryImports).toEqual(["./components/explicit-card"]);
+    expect(explicit.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test("does not let unused interactive sibling exports poison rendered server exports", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-unused-sibling-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "navigation.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function StaticNav() {
+  return <nav><a href="/albums">Albums</a></nav>;
+}
+
+export function AccountMenu() {
+  const opened = cell(false);
+  return <button type="button" onClick={() => opened.set(!opened.get())}>Account</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { StaticNav } from "./components/navigation";
+
+export default function Page() {
+  return <main><StaticNav /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(false);
+    expect(result.clientBoundaryImports).toEqual([]);
+    expect(result.clientReferenceManifest).toEqual([]);
+  });
+
   test("does not mark mixed guarded and unguarded callbacks as SSR fallback eligible", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-callbacks-"));
     const appDir = join(dir, "app");
