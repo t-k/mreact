@@ -1110,7 +1110,15 @@ function isStyleModuleSpecifier(source: string): boolean {
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
 function isClientBoundaryFallbackEligibleSource(source: string): boolean {
-  return !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(source) && !/\bglobalThis\b/u.test(source);
+  const sourceWithoutGuardedUndefinedCallbacks = source.replaceAll(
+    /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*props\.[A-Za-z_$][\w$]*\s*===\s*undefined\s*\?\s*undefined\s*:/gu,
+    "",
+  );
+
+  return (
+    !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
+    !/\bglobalThis\b/u.test(source)
+  );
 }
 
 function renderedImportedExportNames(

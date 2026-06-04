@@ -4607,6 +4607,68 @@ export default function Page() {
     ]);
   });
 
+  test("server renders imported presentational components when callback props are undefined", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-imported-pure-component-"));
+    const appDir = join(rootDir, "app");
+    const componentsDir = join(rootDir, "components");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(componentsDir, { recursive: true });
+    await writeFile(
+      join(componentsDir, "TimelineGrid.tsx"),
+      `export function TimelineGrid(props: { cardTestId: string; items: Array<{ id: string; thumbnailUrl: string }>; onOpenMedia?: ((id: string) => void) | undefined }) {
+  return (
+    <section>
+      {props.items.map((item) => (
+        <article data-testid={props.cardTestId} key={item.id}>
+          <button
+            type="button"
+            onClick={props.onOpenMedia === undefined ? undefined : () => props.onOpenMedia?.(item.id)}
+          >
+            <img src={item.thumbnailUrl} alt="" />
+          </button>
+        </article>
+      ))}
+    </section>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { TimelineGrid } from "../components/TimelineGrid";
+
+export default function Page() {
+  const openViewer = (id: string) => {
+    document.body.setAttribute("data-open-media", id);
+  };
+
+  return (
+    <main>
+      <TimelineGrid
+        cardTestId="media-card"
+        items={[{ id: "media-1", thumbnailUrl: "/media/thumb.jpg" }]}
+        onOpenMedia={typeof window === "undefined" ? undefined : openViewer}
+      />
+    </main>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-testid="media-card"');
+    expect(html).toContain('src="/media/thumb.jpg"');
+    expect(html).not.toContain(
+      '<template data-mreact-client-boundary="TimelineGrid"></template><script',
+    );
+  });
+
   test("emits a client route bundle for client boundaries rendered by layouts", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-layout-boundary-"));
     const appDir = join(rootDir, "app");

@@ -1,6 +1,14 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
 import type { AppRouterResponseHook } from "../render.js";
+import {
+  __MREACT_QUERY_STATE_SCRIPT_ID,
+  createQueryClient,
+  dehydrate,
+  runWithQueryClient,
+  type DehydratedQueryClient,
+  type QueryClient,
+} from "@reckona/mreact-query";
 import type {
   GenerateMetadataContext,
   ManifestDescriptor,
@@ -80,6 +88,7 @@ export interface CloudflareBuiltRouteRenderContext<
 export interface CloudflareRouteModuleLoaderContext<
   Env = unknown,
 > extends CloudflareBuiltRouteRenderContext<Env> {
+  queryClient: QueryClient;
   request: Request;
 }
 
@@ -94,6 +103,7 @@ export interface CloudflareRouteModuleComponentProps<
   Env = unknown,
 > extends CloudflareBuiltRouteRenderContext<Env> {
   data: Data;
+  queryClient: QueryClient;
   request: Request;
 }
 
@@ -328,6 +338,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
 
     const pageModule = module as CloudflareRouteModule<unknown, Env>;
     const component = selectCloudflarePageComponent(pageModule);
+    const queryClient = createQueryClient();
 
     if (component === undefined) {
       return new Response(
@@ -341,12 +352,16 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
 
     const loaderContext = {
       ...context,
+      queryClient,
       request,
     };
     let data: unknown;
 
     try {
-      data = pageModule.loader === undefined ? undefined : await pageModule.loader(loaderContext);
+      data =
+        pageModule.loader === undefined
+          ? undefined
+          : await runWithQueryClient(queryClient, () => pageModule.loader!(loaderContext));
     } catch (error) {
       if (error instanceof Response) {
         return error;
@@ -361,12 +376,13 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     const props = {
       ...context,
       data,
+      queryClient,
       request,
     };
     let rendered: Awaited<ReturnType<typeof component>>;
 
     try {
-      rendered = await component(props);
+      rendered = await runWithQueryClient(queryClient, () => component(props));
     } catch (error) {
       if (isNotFoundError(error)) {
         return cloudflareNotFoundResponse(request);
@@ -380,7 +396,9 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
 
     const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
-    const metadata = await resolveCloudflareRouteMetadata([pageModule], props);
+    const metadata = await runWithQueryClient(queryClient, () =>
+      resolveCloudflareRouteMetadata([pageModule], props),
+    );
     const body = withCloudflareHydrationMarkers({
       data,
       html: rendered,
@@ -392,21 +410,63 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     const documented =
       options.document === undefined
         ? defaultCloudflareDocument(body, modulePreload, metadata)
-        : await options.document({
-            ...props,
-            body,
-            modulePreload,
-          });
+        : await runWithQueryClient(queryClient, () =>
+            options.document!({
+              ...props,
+              body,
+              modulePreload,
+            }),
+          );
+    const documentedWithQueryState = await injectCloudflareQueryState(
+      documented,
+      dehydrate(queryClient),
+    );
 
     return withDefaultSecurityHeaders(
-      documented instanceof Response
-        ? documented
-        : new Response(documented, {
+      documentedWithQueryState instanceof Response
+        ? documentedWithQueryState
+        : new Response(documentedWithQueryState, {
             headers: { "content-type": "text/html; charset=utf-8" },
           }),
       request,
     );
   };
+}
+
+async function injectCloudflareQueryState<T extends Response | string>(
+  document: T,
+  state: DehydratedQueryClient,
+): Promise<T | Response | string> {
+  if (state.queries.length === 0) {
+    return document;
+  }
+
+  if (typeof document === "string") {
+    return injectCloudflareQueryStateScript(document, state);
+  }
+
+  const contentType = document.headers.get("content-type") ?? "";
+  if (!/^text\/html\b/i.test(contentType)) {
+    return document;
+  }
+
+  const headers = new Headers(document.headers);
+  headers.delete("content-length");
+  return new Response(injectCloudflareQueryStateScript(await document.text(), state), {
+    headers,
+    status: document.status,
+    statusText: document.statusText,
+  });
+}
+
+function injectCloudflareQueryStateScript(html: string, state: DehydratedQueryClient): string {
+  const script = `<script type="application/json" id="${__MREACT_QUERY_STATE_SCRIPT_ID}">${escapeJsonForHtml(
+    JSON.stringify(state),
+  )}</script>`;
+
+  return /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, () => `${script}</body>`)
+    : `${html}${script}`;
 }
 
 async function dispatchCloudflareServerRoute<Env>(
@@ -1223,6 +1283,15 @@ function cloudflareHydrationMarkerParts(options: {
 
 function escapeScriptJson(json: string): string {
   return json.replaceAll("<", "\\u003c");
+}
+
+function escapeJsonForHtml(value: string): string {
+  return value
+    .replaceAll("&", "\\u0026")
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e")
+    .replaceAll("\u2028", "\\u2028")
+    .replaceAll("\u2029", "\\u2029");
 }
 
 function cloudflareRouteIdForPath(path: string): string {

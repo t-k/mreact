@@ -527,6 +527,65 @@ export async function POST(request: Request) {
     expect(html).toContain("<main>ada:ada:cloudflare:true:true</main>");
   });
 
+  test("provides a request-scoped query client to Cloudflare page loaders and serializes its state", async () => {
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest: {
+        routes: [
+          {
+            bytes: 128,
+            client: true,
+            kind: "page",
+            path: "/",
+            script: "assets/routes/index.abc123.js",
+          },
+        ],
+      },
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: {
+          "page.tsx": {
+            async loader({ queryClient }) {
+              const profile = await queryClient.fetchQuery({
+                queryKey: ["profile"],
+                queryFn: async () => ({ name: "Ada" }),
+              });
+
+              return { profile };
+            },
+            default({ data }) {
+              const loaderData = data as { profile: { name: string } };
+              return `<main>${loaderData.profile.name}</main>`;
+            },
+          },
+        },
+      }),
+      serverManifest: {
+        files: {},
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+    const queryStateJson = /<script type="application\/json" id="__mreact_query_state">([\s\S]*?)<\/script>/.exec(html)?.[1];
+
+    expect(response.status).toBe(200);
+    expect(html).toContain("<main>Ada</main>");
+    expect(JSON.parse(queryStateJson ?? "{}")).toMatchObject({
+      queries: [
+        {
+          data: { name: "Ada" },
+          queryKey: ["profile"],
+        },
+      ],
+    });
+  });
+
   test("passes through Response values thrown from Cloudflare page loaders", async () => {
     const handler = createCloudflareBuiltRequestHandler({
       assets: {},
