@@ -1174,6 +1174,69 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>User <strong>ADA</strong></main>");
   });
 
+  test("build emits Workers-safe route modules for import.meta.glob registries", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-built-glob-registry-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "content"), { recursive: true });
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await writeFile(
+      join(appDir, "content", "ada.tsx"),
+      `export default function Ada() {
+  return <strong>Glob ADA</strong>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "users", "$id", "page.tsx"),
+      `const modules = import.meta.glob("../../content/*.tsx", { eager: true });
+
+function contentFor(slug) {
+  return modules[\`../../content/\${slug}.tsx\`]?.default;
+}
+
+export function loader({ params }) {
+  return { slug: params.id };
+}
+
+export default function Page(props) {
+  const Content = contentFor(props.data.slug);
+  return <main>User <Content /></main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
+    const registrySource = await readFile(registryPath, "utf8");
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const registry = await import(pathToFileURL(registryPath).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+
+    expect(registrySource).not.toContain("import.meta.glob");
+    expect(Object.keys(registry.routeModules)).toEqual(["users/$id/page.tsx"]);
+
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+    const response = await handler.fetch(
+      new Request("https://app.example/users/ada"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>User <strong>Glob ADA</strong></main>");
+  });
+
   test("build emits Workers-safe route modules for server routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-server-route-modules-"));
     const appDir = join(rootDir, "app");
