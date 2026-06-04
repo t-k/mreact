@@ -1110,10 +1110,19 @@ function isStyleModuleSpecifier(source: string): boolean {
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
 function isClientBoundaryFallbackEligibleSource(source: string): boolean {
-  const sourceWithoutGuardedUndefinedCallbacks = source.replaceAll(
-    /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*props\.[A-Za-z_$][\w$]*\s*===\s*undefined\s*\?\s*undefined\s*:/gu,
-    "",
+  const sourceWithoutComponentCallbackProps = source.replaceAll(
+    /<[A-Z][A-Za-z0-9_$.]*(?:\s[\s\S]*?)?>/gu,
+    (tag) => tag.replaceAll(/\s+on[A-Z][A-Za-z0-9_$]*\s*=\s*\{[^{}]*\}/gu, ""),
   );
+  const sourceWithoutGuardedUndefinedCallbacks = sourceWithoutComponentCallbackProps
+    .replaceAll(
+      /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*props\.[A-Za-z_$][\w$]*\s*===\s*undefined\s*\?\s*undefined\s*:/gu,
+      "",
+    )
+    .replaceAll(
+      /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*props\.[A-Za-z_$][\w$]*\s*\?\s*[^{}]*:\s*undefined\s*\}/gu,
+      "",
+    );
 
   return (
     !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
