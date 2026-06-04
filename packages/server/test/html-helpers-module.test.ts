@@ -47,6 +47,22 @@ describe("server HTML helpers module", () => {
     );
   });
 
+  test("SSR state serialization defuses hostile JSON payloads and remains parseable", () => {
+    const payload = {
+      comment: "<!--open comment",
+      script: "</script><script>alert(1)</script>",
+      lines: "\u2028\u2029",
+      lone: "\uD800",
+    };
+    const serialized = serializeSsrState(payload);
+
+    expect(serialized).not.toContain("</script>");
+    expect(serialized).not.toContain("<!--");
+    expect(serialized).toContain("\\u003c!--open comment");
+    expect(serialized).toContain("\\u2028\\u2029");
+    expect(JSON.parse(serialized)).toEqual(payload);
+  });
+
   test("renderToString and html render compat nodes through the helper module", async () => {
     const rendered = await renderToString((sink) => {
       sink.append("<p>stream</p>");
