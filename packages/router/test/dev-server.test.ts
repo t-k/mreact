@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, test } from "vitest";
+import { buildApp } from "../src/build.js";
 import { startDevServer, type StartDevServerOptions } from "../src/dev-server.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../src/logger.js";
+import { renderBuiltAppRequest } from "../src/serve.js";
 import { loadMreactRouterViteConfig } from "../src/vite-config.js";
 
 const servers: Array<{ close(): Promise<void> }> = [];
@@ -807,6 +809,84 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(html).toContain(join(packageLibDir, "database.js"));
+  });
+
+  test("applies Vite define values consistently in dev and built Node SSR", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-dev-built-define-"));
+    const appDir = join(projectRoot, "app");
+    const outDir = join(projectRoot, ".mreact");
+    const hostileValue = `quoted "</script><script>nope</script>" value`;
+    const viteModule = pathToFileURL(
+      join(process.cwd(), "packages", "router", "src", "vite.ts"),
+    ).href;
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(projectRoot, "package.json"), JSON.stringify({ type: "module" }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `declare const __MREACT_DEFINE_VALUE__: string;
+
+export function loader() {
+  return {
+    defineValue: __MREACT_DEFINE_VALUE__,
+    ssr: import.meta.env.SSR,
+  };
+}
+
+export default function Page(props) {
+  return <main>{props.data.defineValue}::{String(props.data.ssr)}</main>;
+}
+`,
+    );
+    await writeFile(
+      join(projectRoot, "vite.config.ts"),
+      `import { mreactRouter } from ${JSON.stringify(viteModule)};
+
+export default {
+  define: {
+    __MREACT_DEFINE_VALUE__: ${JSON.stringify(JSON.stringify(hostileValue))},
+  },
+  plugins: [
+    mreactRouter({
+      projectRoot: __dirname,
+      publicDir: "public",
+      routesDir: "app",
+    }),
+  ],
+};
+`,
+    );
+
+    const server = await startTrackedDevServer({
+      projectRoot,
+      port: 0,
+    });
+    const devResponse = await fetch(server.url);
+    await buildApp({
+      outDir,
+      projectRoot,
+      routesDir: "app",
+      targets: ["node"],
+      viteConfig: {
+        define: {
+          __MREACT_DEFINE_VALUE__: JSON.stringify(hostileValue),
+        },
+      },
+    });
+    const builtResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const devHtml = await devResponse.text();
+    const builtHtml = await builtResponse.text();
+    const expected =
+      "quoted &quot;&lt;/script&gt;&lt;script&gt;nope&lt;/script&gt;&quot; value::true";
+
+    expect(devResponse.status, devHtml).toBe(200);
+    expect(builtResponse.status, builtHtml).toBe(200);
+    expect(devHtml).toContain(expected);
+    expect(builtHtml).toContain(expected);
+    expect(devHtml).not.toContain("</script><script>nope</script>");
+    expect(builtHtml).not.toContain("</script><script>nope</script>");
   });
 
   test("emits request lifecycle events when a logger is configured", async () => {

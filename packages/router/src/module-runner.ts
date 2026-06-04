@@ -13,6 +13,7 @@ import {
   type InlineConfig,
   type PluginOption,
   type RunnableDevEnvironment,
+  type UserConfig,
 } from "vite";
 import { resolveWorkspacePackageFile } from "./workspace-packages.js";
 import {
@@ -36,7 +37,7 @@ import {
   inferClientRouteModule,
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
-import { vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
+import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 
 const runnerConfig = {
   configFile: false,
@@ -81,6 +82,7 @@ export function routerModuleRunnerRuntimeCacheStats(): RouterRuntimeCacheStat[] 
 export async function importAppRouterSourceModule<T>(options: {
   cacheKey?: string | undefined;
   code: string;
+  define?: UserConfig["define"] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
@@ -122,6 +124,7 @@ export async function importAppRouterSourceModule<T>(options: {
 
 async function importAppRouterSourceModuleWithoutCache<T>(options: {
   code: string;
+  define?: UserConfig["define"] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
@@ -273,6 +276,7 @@ export async function importAppRouterBuiltFileModule<T>(options: {
 
 export async function bundleAppRouterSourceModule(options: {
   code: string;
+  define?: UserConfig["define"] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
@@ -284,6 +288,7 @@ export async function bundleAppRouterSourceModule(options: {
 }): Promise<string> {
   const output = await bundleRouterModule({
     code: options.code,
+    define: options.define,
     externalizeAppSourceModuleDirs: options.externalizeAppSourceModuleDirs,
     filename: options.sourcefile ?? join(options.resolveDir ?? process.cwd(), "module.js"),
     platform: "node",
@@ -334,6 +339,7 @@ export function fileImportMetaUrlPlugin(): RouterCompatPlugin {
 
 interface ServerSourceTransformOptions {
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
+  define?: UserConfig["define"] | undefined;
   dev: boolean;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverOutput: ServerOutputMode;
@@ -411,7 +417,7 @@ async function transformServerSourceFile(
     console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
   }
 
-  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${clientInference.clientBoundaryFallbackImports.join("\0")}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+  const cacheKey = `${options.serverOutput}\0${options.dev ? "dev" : "prod"}\0${options.filename}\0${transformedSourceHash}\0${clientInference.clientBoundaryImports.join("\0")}\0${clientInference.clientBoundaryFallbackImports.join("\0")}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   const cached = readRouterRuntimeCacheEntry(
     serverSourceTransformCache,
     cacheKey,

@@ -77,7 +77,7 @@ import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
-import { vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
+import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 import type { PluginOption, UserConfig } from "vite";
 
@@ -380,10 +380,11 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         ),
     timingSink === undefined
-      ? buildServerModuleArtifacts({
-          bundleCache: new Map(),
-          clientRouteInferenceCache: serverClientRouteInferenceCache,
-          files,
+        ? buildServerModuleArtifacts({
+            bundleCache: new Map(),
+            clientRouteInferenceCache: serverClientRouteInferenceCache,
+            define: viteDefine,
+            files,
           prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
           project,
           projectRoot: project.projectRoot,
@@ -396,6 +397,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           buildServerModuleArtifacts({
             bundleCache: new Map(),
             clientRouteInferenceCache: serverClientRouteInferenceCache,
+            define: viteDefine,
             files,
             prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
             project,
@@ -501,6 +503,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           appDir: project.routesDir,
           assetBaseUrl: project.assetBaseUrl,
           clientRoutes: clientManifestRoutes,
+          define: viteDefine,
           project,
           routes,
           serverModules,
@@ -512,6 +515,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             appDir: project.routesDir,
             assetBaseUrl: project.assetBaseUrl,
             clientRoutes: clientManifestRoutes,
+            define: viteDefine,
             project,
             routes,
             serverModules,
@@ -1562,6 +1566,7 @@ async function prerenderStaticRoutes(options: {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientRoutes: readonly ClientRouteManifestEntry[];
+  define?: UserConfig["define"] | undefined;
   project: ResolvedAppRouterProject;
   routes: readonly AppRoute[];
   serverModules: Record<string, BuiltServerModuleArtifact>;
@@ -1608,6 +1613,7 @@ async function prerenderStaticRoutes(options: {
           assetBaseUrl: options.assetBaseUrl,
           clientScripts,
           clientStyles,
+          define: options.define,
           importPolicy,
           request: new Request(`http://mreact.local${pathname}`),
           serverModules: serverModuleMap,
@@ -1699,6 +1705,7 @@ async function buildServerModuleArtifacts(options: {
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
   clientRouteInferenceCache: ClientRouteInferenceCache;
+  define?: UserConfig["define"] | undefined;
   files: Record<string, string>;
   prebundleServerComponents: boolean;
   project: ResolvedAppRouterProject;
@@ -1789,6 +1796,7 @@ async function buildServerModuleArtifacts(options: {
           cacheDir: options.cacheDir,
           entries: requestBatchEntries,
           importPolicy: requestModuleImportPolicy,
+          define: options.define,
           vitePlugins: options.vitePlugins,
         })
       : new Map<string, string>();
@@ -1816,6 +1824,7 @@ async function buildServerModuleArtifacts(options: {
               code: stripRouteLoaderOnlyExports(source, absoluteFile),
               filename: absoluteFile,
               importPolicy: requestModuleImportPolicy,
+              define: options.define,
               vitePlugins: options.vitePlugins,
             }));
           artifact.loader = {
@@ -1835,6 +1844,7 @@ async function buildServerModuleArtifacts(options: {
               filename: absoluteFile,
               importPolicy: requestModuleImportPolicy,
               label: "Metadata",
+              define: options.define,
               vitePlugins: options.vitePlugins,
             }));
           artifact.routeMetadata = {
@@ -1856,6 +1866,7 @@ async function buildServerModuleArtifacts(options: {
                 cacheDir: options.cacheDir,
                 filename: absoluteFile,
                 importPolicy: requestModuleImportPolicy,
+                define: options.define,
                 routeKind: route?.kind,
                 source,
                 vitePlugins: options.vitePlugins,
@@ -1971,6 +1982,7 @@ async function buildServerModuleArtifacts(options: {
                       clientRouteInferenceCache: options.clientRouteInferenceCache,
                       code: output.code,
                       filename: absoluteFile,
+                      define: options.define,
                       root: options.projectRoot,
                       serverOutput,
                       vitePlugins: options.vitePlugins,
@@ -2007,6 +2019,7 @@ async function buildServerModuleArtifacts(options: {
 async function buildServerComponentBundleArtifactCode(options: {
   clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   root?: string | undefined;
   serverOutput: ServerOutputMode;
@@ -2014,11 +2027,13 @@ async function buildServerComponentBundleArtifactCode(options: {
 }): Promise<string> {
   return await bundleAppRouterSourceModule({
     code: options.code,
+    define: options.define,
     label: `server-component:${options.filename}`,
     resolveDir: dirname(options.filename),
     root: options.root,
     serverSourceTransform: {
       clientRouteInferenceCache: options.clientRouteInferenceCache,
+      define: options.define,
       dev: false,
       serverOutput: options.serverOutput,
       vitePlugins: options.vitePlugins,
@@ -2157,6 +2172,7 @@ async function buildRequestModuleArtifactCode(options: {
   appDir: string;
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   importPolicy: AppRouterImportPolicy;
   routeKind?: AppRoute["kind"] | undefined;
@@ -2167,6 +2183,7 @@ async function buildRequestModuleArtifactCode(options: {
     return await bundleMiddlewareModuleCode({
       appDir: options.appDir,
       code: options.source,
+      define: options.define,
       file: options.filename,
       importPolicy: options.importPolicy,
       vitePlugins: options.vitePlugins,
@@ -2176,6 +2193,7 @@ async function buildRequestModuleArtifactCode(options: {
   if (options.routeKind === "server" || options.routeKind === "metadata") {
     return await bundleAppRouterSourceModule({
       code: options.source,
+      define: options.define,
       label: `server-route:${options.filename}`,
       plugins: [fileImportMetaUrlPlugin()],
       resolveDir: dirname(options.filename),
@@ -2190,6 +2208,7 @@ async function buildRequestModuleArtifactCode(options: {
     bundleCache: options.bundleCache,
     cacheDir: options.cacheDir,
     code: stripRouteRequestOnlyExports(options.source, options.filename),
+    define: options.define,
     filename: options.filename,
     importPolicy: options.importPolicy,
     vitePlugins: options.vitePlugins,
@@ -2201,6 +2220,7 @@ async function bundleRouteLoaderModuleCode(options: {
   bundleCache?: Map<string, Promise<RouterBundleOutput>> | undefined;
   cacheDir?: string | undefined;
   code: string;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2215,6 +2235,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
   appDir: string;
   bundleCache?: Map<string, Promise<RouterBundleOutput>> | undefined;
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   entries: readonly RouteRequestModuleBatchEntry[];
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2237,6 +2258,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
           bundleCache: options.bundleCache,
           cacheDir: options.cacheDir,
           code: entry.code,
+          define: options.define,
           filename: entry.filename,
           importPolicy: options.importPolicy,
           label: entry.label,
@@ -2261,6 +2283,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
       name: namesByKey.get(entry.key) ?? hashText(entry.key).slice(0, 8),
     })),
     entryFileNames: "request/[name].js",
+    define: options.define,
     platform: "node",
     plugins: [
       fileImportMetaUrlPlugin(),
@@ -2286,6 +2309,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
             bundleCache: options.bundleCache,
             cacheDir: options.cacheDir,
             code: entry.code,
+            define: options.define,
             filename: entry.filename,
             importPolicy: options.importPolicy,
             label: entry.label,
@@ -2314,6 +2338,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
 export async function __bundleRouteRequestModuleBatchForTests(options: {
   appDir: string;
   cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
   entries: readonly RouteRequestModuleBatchEntry[];
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2322,6 +2347,7 @@ export async function __bundleRouteRequestModuleBatchForTests(options: {
     await bundleRouteRequestModuleBatchCode({
       appDir: options.appDir,
       cacheDir: options.cacheDir,
+      define: options.define,
       entries: options.entries,
       importPolicy: options.importPolicy,
       vitePlugins: options.vitePlugins,
@@ -2334,6 +2360,7 @@ async function bundleRouteRequestModuleCode(options: {
   bundleCache?: Map<string, Promise<RouterBundleOutput>> | undefined;
   cacheDir?: string | undefined;
   code: string;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: "Loader" | "Metadata";
@@ -2344,6 +2371,7 @@ async function bundleRouteRequestModuleCode(options: {
     cacheDir: options.cacheDir,
     cacheKey: routeRequestBundleCacheKey(options),
     code: options.code,
+    define: options.define,
     filename: options.filename,
     platform: "node",
     root: options.importPolicy?.projectRoot,
@@ -2369,6 +2397,7 @@ async function bundleRouteRequestModuleCode(options: {
 function routeRequestBundleCacheKey(options: {
   appDir: string;
   code: string;
+  define?: UserConfig["define"] | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: "Loader" | "Metadata";
@@ -2394,6 +2423,7 @@ function routeRequestBundleCacheKey(options: {
     label: options.label,
     platform: "node",
     target: "es2022",
+    viteDefine: viteDefineCacheKey(options.define),
     vitePlugins: vitePluginsCacheKey(options.vitePlugins),
   });
 }

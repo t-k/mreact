@@ -11,6 +11,7 @@ import {
   type Connect,
   type Plugin,
   type PluginOption,
+  type UserConfig,
   type ViteDevServer,
 } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
@@ -46,6 +47,7 @@ import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
   allowedHosts?: readonly string[] | undefined;
+  define?: UserConfig["define"] | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   routeCache?: AppRouterCache | undefined;
@@ -203,6 +205,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       return () => {
         const middlewareOptions: AppRouterViteRuntimeMiddlewareOptions = {
           ...options,
+          define: server.config.define,
           navigationScanVitePlugins: userVitePlugins ?? [],
           viteDevServer: server,
           vitePlugins: server.config.plugins,
@@ -503,6 +506,7 @@ async function handleAppRouterViteRequest(
       outgoing,
       await renderAppRequest({
         appDir: project.routesDir,
+        define: options.define,
         importPolicy: {
           ...options.importPolicy,
           allowedSourceDirs: project.allowedSourceDirs,

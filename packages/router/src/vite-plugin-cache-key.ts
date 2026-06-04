@@ -1,4 +1,4 @@
-import type { PluginOption } from "vite";
+import type { PluginOption, UserConfig } from "vite";
 
 const pluginObjectIds = new WeakMap<object, number>();
 let nextPluginObjectId = 1;
@@ -10,6 +10,17 @@ export function vitePluginsCacheKey(plugins: readonly PluginOption[] | undefined
 
   return flattenVitePluginOptions(plugins)
     .map((plugin, index) => `${index}:${plugin.name ?? "<anonymous>"}:${plugin.objectId}`)
+    .join("\0");
+}
+
+export function viteDefineCacheKey(define: UserConfig["define"] | undefined): string {
+  if (define === undefined) {
+    return "";
+  }
+
+  return Object.entries(define)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, value]) => `${key}:${String(value)}`)
     .join("\0");
 }
 
