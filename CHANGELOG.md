@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.129 - 2026-06-04
+
+### Fixed
+
+- Fixed App Router inferred client boundary fallback detection so imported JSX components that forward optional callback props through nested same-module components can still server-render concrete SSR fallback DOM when the final DOM event handler is guarded to be `undefined` during SSR. This keeps timeline cards, image markup, and transitive presentational children in the initial HTML before hydration.
+
 ## 0.0.128 - 2026-06-04
 
 ### Fixed
