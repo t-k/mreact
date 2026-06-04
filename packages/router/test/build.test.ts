@@ -759,6 +759,58 @@ export default function manifest() {
     expect(policy.byRoute?.["/manifest.webmanifest"]).toEqual(["metadata-title"]);
   });
 
+  test("excludes use-client-only package imports from generated runtime policy and Cloudflare routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-policy-exclusion-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "server-only-sdk": "1.0.0" } }),
+    );
+    await writeFakePackage(
+      rootDir,
+      "server-only-sdk",
+      'export const marker = "__SERVER_ONLY_SDK_MARKER__";\n',
+    );
+    await writeFile(
+      join(appDir, "components", "Widget.client.tsx"),
+      `"use client";
+import { marker } from "server-only-sdk";
+
+export function Widget() {
+  return <button type="button">{marker}</button>;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Widget } from "./components/Widget.client";
+
+export default function Page() {
+  void Widget;
+  return <main>static page</main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+      runtimePackages?: string[];
+    };
+    const routeModules = await readFile(join(outDir, "cloudflare", "route-modules.mjs"), "utf8");
+
+    expect(policy.runtimePackages ?? []).not.toContain("server-only-sdk");
+    expect(routeModules).not.toContain("server-only-sdk");
+    expect(routeModules).not.toContain("__SERVER_ONLY_SDK_MARKER__");
+  });
+
   test("tracks optional runtime packages declared by transitive server dependencies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-optional-"));
     const appDir = join(rootDir, "app");
