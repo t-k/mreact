@@ -18,6 +18,7 @@ import {
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import {
   htmlAttributeName,
+  isBooleanishStringAttribute,
   isDangerousHtmlAttribute,
   isStaticUrlValueUnsafe,
   isUrlAttribute,
@@ -357,11 +358,13 @@ function emitSpreadAttributesHelper(
     `  let _out = "";`,
     `  for (const _rawName of Object.keys(props)) {`,
     `    let _value = props[_rawName];`,
-    `    if (_value == null || _value === false) continue;`,
+    `    if (_value == null) continue;`,
     `    if (_rawName === "key" || _rawName === "ref" || _rawName === "children") continue;`,
     `    if (/^on[A-Za-z]/.test(_rawName)) continue;`,
     `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (${name}$aliases[_rawName] ?? _rawName);`,
     `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
+    `    const _booleanish = _name.startsWith("aria-") || _name.startsWith("data-") || _name === "contenteditable" || _name === "draggable" || _name === "spellcheck";`,
+    `    if (_value === false && !_booleanish) continue;`,
     `    if (_name === "style") {`,
     `      const _style = ${name}$style(_value);`,
     `      if (_style !== "") _out += " style=\\"" + ${escapeHelperName}(_style) + "\\"";`,
@@ -377,7 +380,7 @@ function emitSpreadAttributesHelper(
     `      _value = ${urlSafeHelperName}(_name, _value === true ? "" : _value);`,
     `      if (_value === undefined) continue;`,
     `    }`,
-    `    _out += " " + _name + "=\\"" + ${escapeHelperName}(_value === true ? "" : _value) + "\\"";`,
+    `    _out += " " + _name + "=\\"" + ${escapeHelperName}(_value === true && !_booleanish ? "" : _value) + "\\"";`,
     `  }`,
     `  return _out;`,
     `}`,
@@ -1737,6 +1740,8 @@ function emitDynamicAttributeExpression(
   code: string,
   escapeHelperName: string,
 ): string {
+  const booleanishString = isBooleanishStringAttribute(name);
+
   if (isUrlAttribute(name)) {
     return `(() => { const _value = (${code}); if (_value == null || _value === false) return ""; const _checked = ${currentUrlSafeHelperName}(${stringLiteral(name)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_checked) + ${stringLiteral('"')}; })()`;
   }
@@ -1745,10 +1750,14 @@ function emitDynamicAttributeExpression(
 
   if (inlineExpr !== undefined) {
     // Inline 3 evaluations to avoid per-attribute IIFE closure allocation.
-    return `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral('"')})`;
+    return booleanishString
+      ? `(${inlineExpr} == null ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr}) + ${stringLiteral('"')})`
+      : `(${inlineExpr} == null || ${inlineExpr} === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(${inlineExpr} === true ? "" : ${inlineExpr}) + ${stringLiteral('"')})`;
   }
 
-  return `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral('"')}; })()`;
+  return booleanishString
+    ? `(() => { const _value = (${code}); return _value == null ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value) + ${stringLiteral('"')}; })()`
+    : `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral('"')}; })()`;
 }
 
 function emitDynamicStyleAttributeExpression(

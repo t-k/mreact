@@ -65,7 +65,7 @@ describe("compiler server stream JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="" data-label="&lt;icon&gt;"><path d="M4 6h16v12H4z"></path></svg>',
+      '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true" data-label="&lt;icon&gt;"><path d="M4 6h16v12H4z"></path></svg>',
     );
   });
 

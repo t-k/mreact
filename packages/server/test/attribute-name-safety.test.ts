@@ -69,6 +69,22 @@ describe("SSR attribute name safety (Issue 060)", () => {
     expect(out).toContain('aria-label="navigation"');
   });
 
+  test("serializes aria, data, and booleanish string attributes with boolean values", async () => {
+    const out = await jsxToString(
+      createElement("div", {
+        "aria-hidden": false,
+        "data-ready": false,
+        contentEditable: true,
+        draggable: false,
+        hidden: false,
+      }),
+    );
+
+    expect(out).toBe(
+      '<div aria-hidden="false" data-ready="false" contenteditable="true" draggable="false"></div>',
+    );
+  });
+
   test("allows xlink:href style names with a colon", async () => {
     const out = await jsxToString(
       createElement("use", { "xlink:href": "#icon" }),

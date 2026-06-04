@@ -291,6 +291,21 @@ export function htmlAttributeName(name: string): string {
   return HTML_ATTRIBUTE_ALIASES[name] ?? name;
 }
 
+export function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = htmlAttributeName(name).toLowerCase();
+  return (
+    attributeName.startsWith("aria-") ||
+    attributeName.startsWith("data-") ||
+    BOOLEANISH_STRING_ATTRIBUTES.has(attributeName)
+  );
+}
+
+const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "contenteditable",
+  "draggable",
+  "spellcheck",
+]);
+
 function unwrapParenthesized(code: string): string {
   let current = code;
 

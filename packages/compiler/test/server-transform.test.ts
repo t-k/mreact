@@ -137,7 +137,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code)).toBe(
-      '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="" data-label="&lt;icon&gt;"><path d="M4 6h16v12H4z"></path></svg>',
+      '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" aria-hidden="true" data-label="&lt;icon&gt;"><path d="M4 6h16v12H4z"></path></svg>',
     );
   });
 
@@ -220,7 +220,7 @@ export function App() {
     // issue 048's dead-import elimination, the helper import is dropped.
     expect(output.code).not.toContain("escapeHtmlBatch");
     expect(output.code).toContain('_escapeHtml(id === true ? "" : id)');
-    expect(output.code).toContain('_escapeHtml(label === true ? "" : label)');
+    expect(output.code).toContain("_escapeHtml(label)");
   });
 
   test("static-key style object expands without _styleParts array allocation", () => {
@@ -583,11 +583,14 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    // Inline path must still suppress null/false
+    // Inline path must still suppress null, while data-* boolean values
+    // serialize as booleanish strings.
     expect(output.code).not.toMatch(/\(\(\)\s*=>\s*\{[\s\S]*?\(a\)/);
-    expect(runServerComponent(output.code, "App", { a: null, b: false })).toBe("<div>x</div>");
+    expect(runServerComponent(output.code, "App", { a: null, b: false })).toBe(
+      '<div data-b="false">x</div>',
+    );
     expect(runServerComponent(output.code, "App", { a: "1", b: true })).toBe(
-      '<div data-a="1" data-b="">x</div>',
+      '<div data-a="1" data-b="true">x</div>',
     );
   });
 

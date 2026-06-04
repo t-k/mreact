@@ -22,6 +22,17 @@ function compileServerPair(source: string): { stream: string; string: string } {
   };
 }
 
+async function expectServerPairHtml(
+  source: string,
+  expected: string,
+  props?: Record<string, unknown>,
+): Promise<void> {
+  const compiled = compileServerPair(source);
+
+  expect(runServerComponent(compiled.string, "App", props)).toBe(expected);
+  await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
+}
+
 describe("server emit shared behavior", () => {
   test("string and stream emitters normalize aliases and static style literals the same way", async () => {
     const source = `export function App() {
@@ -138,6 +149,78 @@ export function SunIcon(props: { class?: string }) {
     expect(runServerComponent(spreadThenStatic.string)).toBe('<div class="base" id="x">x</div>');
     await expect(runServerStreamComponent(spreadThenStatic.stream)).resolves.toBe(
       '<div class="base" id="x">x</div>',
+    );
+  });
+
+  test("string and stream emitters render numeric edge children the same way", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  const negativeZero = -0;
+  const large = 1e21;
+  return <p>{0}:{NaN}:{negativeZero}:{large}</p>;
+}`,
+      "<p>0:NaN:0:1e+21</p>",
+    );
+  });
+
+  test("string and stream emitters render bigint and whitespace text children the same way", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  const id = 9007199254740993n;
+  return <p><span>a</span>{" "}<span>{id}</span>{"\\n\\t"}<span>z</span></p>;
+}`,
+      "<p><span>a</span> <span>9007199254740993</span>\n\t<span>z</span></p>",
+    );
+  });
+
+  test("string and stream emitters preserve empty and astral-plane text children", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  const empty = "";
+  const label = "route 🚀 & <next>";
+  return <p>{empty}<span>{label}</span></p>;
+}`,
+      "<p><span>route 🚀 &amp; &lt;next&gt;</span></p>",
+    );
+  });
+
+  test("string and stream emitters serialize boolean and booleanish attributes like React", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return (
+    <main>
+      <button disabled={false}>off</button>
+      <button disabled={true}>on</button>
+      <a download={true}>download</a>
+      <div aria-hidden={false} data-ready={false} contentEditable={true} draggable={false} />
+    </main>
+  );
+}`,
+      '<main><button>off</button><button disabled="">on</button><a download="">download</a><div aria-hidden="false" data-ready="false" contenteditable="true" draggable="false"></div></main>',
+    );
+  });
+
+  test("string and stream emitters serialize attribute escaping and form values the same way", async () => {
+    await expectServerPairHtml(
+      `export function App(props) {
+  return (
+    <form>
+      <textarea name="bio" value={props.bio}>ignored</textarea>
+      <select name="theme" value={props.theme}>
+        <option value="system">system</option>
+        <option value="dark">dark</option>
+      </select>
+      <input title={props.title} data-note={props.note} />
+    </form>
+  );
+}`,
+      '<form><textarea name="bio">Ada &amp; Grace</textarea><select name="theme"><option value="system">system</option><option value="dark" selected="">dark</option></select><input title="&quot;&lt;&amp;&gt;\n\t" data-note="line\rnext"></form>',
+      {
+        bio: "Ada & Grace",
+        note: "line\rnext",
+        theme: "dark",
+        title: "\"<&>\n\t",
+      },
     );
   });
 
