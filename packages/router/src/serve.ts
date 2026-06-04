@@ -21,7 +21,13 @@ import {
   type RenderAppRequestOptions,
 } from "./render.js";
 import type { RouterInstrumentation } from "./trace.js";
-import { bytesResponse, htmlResponse, nodeRequestToWebRequest, sendResponse } from "./http.js";
+import {
+  bytesResponse,
+  htmlResponse,
+  nodeRequestToWebRequest,
+  rawNodeRequestUrl,
+  sendResponse,
+} from "./http.js";
 import {
   emitRouterLog,
   logDurationMs,
@@ -40,6 +46,7 @@ interface BuiltRuntime {
   appDir: string;
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
+  clientAssetPaths: ReadonlySet<string>;
   clientScripts: ReadonlyMap<string, string>;
   clientStylesByFile: ReadonlyMap<string, readonly string[]>;
   clientStyles: ReadonlyMap<string, readonly string[]>;
@@ -373,8 +380,14 @@ async function renderBuiltAppRequestWithRuntime(
   const url = new URL(options.request.url);
   const timing = createBuiltRenderTiming(options.logger);
 
-  if (url.pathname.startsWith("/_mreact/client/")) {
-    return readBuiltClientAsset(options.outDir, url.pathname);
+  const clientAssetPathname = builtClientAssetPathname(options.request, url);
+
+  if (clientAssetPathname !== undefined) {
+    return readBuiltClientAsset(
+      options.outDir,
+      clientAssetPathname,
+      options.runtime.clientAssetPaths,
+    );
   }
 
   if (options.request.method === "GET" || options.request.method === "HEAD") {
@@ -650,12 +663,15 @@ export async function startServer(
   };
 }
 
-async function readBuiltClientAsset(outDir: string, pathname: string): Promise<Response> {
+async function readBuiltClientAsset(
+  outDir: string,
+  pathname: string,
+  allowedPaths: ReadonlySet<string>,
+): Promise<Response> {
   const clientPrefix = "/_mreact/client/";
-  const relativePath = pathname.slice(clientPrefix.length);
-  const normalized = normalize(relativePath);
+  const normalized = safeBuiltClientAssetPath(pathname.slice(clientPrefix.length));
 
-  if (normalized.startsWith("..")) {
+  if (normalized === undefined || !allowedPaths.has(normalized)) {
     return new Response("Not Found", { status: 404 });
   }
 
@@ -668,6 +684,86 @@ async function readBuiltClientAsset(outDir: string, pathname: string): Promise<R
   } catch {
     return new Response("Not Found", { status: 404 });
   }
+}
+
+function builtClientAssetPathname(request: Request, url: URL): string | undefined {
+  const rawUrl = rawNodeRequestUrl(request);
+  const rawPathname = rawUrl?.split(/[?#]/, 1)[0];
+  const pathname = rawPathname === undefined || rawPathname === "" ? url.pathname : rawPathname;
+  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
+
+  return normalizedPathname.startsWith("/_mreact/client/") ? normalizedPathname : undefined;
+}
+
+function safeBuiltClientAssetPath(relativePath: string): string | undefined {
+  let decoded: string;
+
+  try {
+    decoded = decodeURIComponent(relativePath);
+  } catch {
+    return undefined;
+  }
+
+  if (decoded.includes("\\") || decoded.includes("\0")) {
+    return undefined;
+  }
+
+  if (decoded.split("/").some((segment) => segment === "..")) {
+    return undefined;
+  }
+
+  const normalized = normalize(decoded);
+
+  if (isAbsolute(normalized) || normalized === ".." || normalized.startsWith(`..${sep}`)) {
+    return undefined;
+  }
+
+  return normalized;
+}
+
+function builtClientAssetPaths(manifest: {
+  assets?: readonly string[] | undefined;
+  routes: readonly ClientRouteManifestEntry[];
+}): ReadonlySet<string> {
+  const paths = new Set<string>(["manifest.json"]);
+
+  for (const route of manifest.routes) {
+    for (const asset of [
+      route.script,
+      route.sourceMap,
+      route.navigationScript,
+      ...(route.css ?? []),
+      ...(route.imports ?? []),
+    ]) {
+      const path = safeClientManifestAssetPath(asset);
+
+      if (path !== undefined) {
+        paths.add(path);
+      }
+    }
+  }
+
+  for (const asset of manifest.assets ?? []) {
+    const path = safeClientManifestAssetPath(asset);
+
+    if (path !== undefined) {
+      paths.add(path);
+    }
+  }
+
+  return paths;
+}
+
+function safeClientManifestAssetPath(asset: string | undefined): string | undefined {
+  if (asset === undefined || asset === "" || asset.startsWith("/") || asset.includes("\\")) {
+    return undefined;
+  }
+
+  const segments = asset.split("/");
+
+  return segments.some((segment) => segment === "" || segment === "." || segment === "..")
+    ? undefined
+    : segments.join("/");
 }
 
 async function readBuiltPublicAsset(
@@ -776,6 +872,7 @@ async function materializeBuiltRuntime(options: {
 }): Promise<BuiltRuntime> {
   const serverManifest = JSON.parse(options.serverManifestText) as BuiltServerManifest;
   const clientManifest = JSON.parse(options.clientManifestText) as {
+    assets?: readonly string[];
     routes: ClientRouteManifestEntry[];
     styles?: Array<{ css?: readonly string[]; file: string }>;
   };
@@ -868,6 +965,7 @@ async function materializeBuiltRuntime(options: {
     ...(serverManifest.assetBaseUrl === undefined
       ? {}
       : { assetBaseUrl: serverManifest.assetBaseUrl }),
+    clientAssetPaths: builtClientAssetPaths(clientManifest),
     clientScripts,
     clientStylesByFile,
     clientStyles,

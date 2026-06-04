@@ -2,6 +2,8 @@ import type { ServerResponse } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { Readable } from "node:stream";
 
+const rawUrlByRequest = new WeakMap<Request, string>();
+
 export function nodeRequestToWebRequest(
   incoming: IncomingMessage,
   origin: string,
@@ -32,7 +34,13 @@ export function nodeRequestToWebRequest(
     init.duplex = "half";
   }
 
-  return new Request(new URL(incoming.url ?? "/", origin), init);
+  const request = new Request(new URL(incoming.url ?? "/", origin), init);
+  rawUrlByRequest.set(request, incoming.url ?? "/");
+  return request;
+}
+
+export function rawNodeRequestUrl(request: Request): string | undefined {
+  return rawUrlByRequest.get(request);
 }
 
 /**
