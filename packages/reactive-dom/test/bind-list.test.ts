@@ -255,6 +255,57 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("keeps keyed input focus and value across unrelated parent updates", async () => {
+    const tick = cell(0);
+    const items = cell([
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => {
+        tick.get();
+        return items.get();
+      },
+      (item) => {
+        const li = document.createElement("li");
+        const input = document.createElement("input");
+        input.defaultValue = item.label;
+        li.append(input);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+    const focusedInput = parent.querySelector<HTMLInputElement>("li:nth-child(2) input");
+
+    expect(focusedInput).toBeInstanceOf(HTMLInputElement);
+    focusedInput?.focus();
+    if (focusedInput !== null) {
+      focusedInput.value = "typed";
+    }
+
+    tick.set(1);
+    await flushEffects();
+
+    const retainedInput = parent.querySelector<HTMLInputElement>("li:nth-child(2) input");
+    expect(retainedInput).toBe(focusedInput);
+    expect(retainedInput?.isSameNode(focusedInput)).toBe(true);
+    expect(document.activeElement).toBe(focusedInput);
+    expect(retainedInput?.value).toBe("typed");
+    expect(parent.innerHTML).toBe(
+      '<li><input value="A"></li><li><input value="B"></li><!--list-->',
+    );
+
+    dispose();
+    parent.remove();
+  });
+
   test("updates keyed row closures when an item object is replaced with the same key", async () => {
     const items = cell([{ id: "book", quantity: 1 }]);
     const parent = document.createElement("ul");
