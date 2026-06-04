@@ -963,11 +963,17 @@ export default function Page() {
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
     const pagesOutDir = join(rootDir, ".pages");
-    await mkdir(appDir, { recursive: true });
+    await mkdir(join(appDir, "__tests__"), { recursive: true });
     await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
     await writeFile(
+      join(appDir, "test-utils.ts"),
+      `export const productionMessage = "test-utils production helper";`,
+    );
+    await writeFile(
       join(appDir, "page.tsx"),
-      "export default function Page() { return <main>Cloudflare production</main>; }",
+      `import { productionMessage } from "./test-utils";
+
+export default function Page() { return <main>{productionMessage}</main>; }`,
     );
     await writeFile(
       join(appDir, "page.test.ts"),
@@ -980,6 +986,12 @@ describe("route unit test", () => {
 });
 `,
     );
+    await writeFile(
+      join(appDir, "__tests__", "page.tsx"),
+      `export default function TestPage() {
+  return <main>__tests__ route should not ship</main>;
+}`,
+    );
 
     await buildApp({
       allowedSourceDirs: ["app"],
@@ -989,13 +1001,20 @@ describe("route unit test", () => {
       targets: ["cloudflare"],
     });
     const worker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
+    const routeModules = await readFile(join(outDir, "cloudflare", "route-modules.mjs"), "utf8");
     const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const pagesWorker = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
 
     expect(worker).not.toContain("page.test.ts");
     expect(worker).not.toContain("vitest");
     expect(worker).not.toContain("expect(");
+    expect(routeModules).not.toContain("page.test.ts");
+    expect(routeModules).not.toContain("__tests__ route should not ship");
     expect(pagesPackaged.worker).toBe("_worker.js");
     await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
+    expect(pagesWorker).not.toContain("page.test.ts");
+    expect(pagesWorker).not.toContain("__tests__ route should not ship");
+    expect(pagesWorker).toContain("test-utils production helper");
   });
 
   test("packages Cloudflare Pages workers whose runtime dependencies import util", async () => {

@@ -262,7 +262,7 @@ async function collectRouteFiles(directory: string, rootDirectory = directory): 
 }
 
 function shouldSkipRouteScanDirectory(name: string): boolean {
-  return name === ".vite" || name === "node_modules";
+  return name === ".vite" || name === "__tests__" || name === "node_modules";
 }
 
 function appFileConventionForRelativeFile(

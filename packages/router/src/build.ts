@@ -5240,7 +5240,10 @@ async function collectBuildFiles(
 }
 
 function isProductionBuildIgnoredSourceFile(relativeFile: string): boolean {
-  return /(?:^|[/\\])[^/\\]+\.(?:spec|test)\.[cm]?[jt]sx?$/u.test(relativeFile);
+  return (
+    /(?:^|[/\\])__tests__(?:[/\\]|$)/u.test(relativeFile) ||
+    /(?:^|[/\\])[^/\\]+\.(?:spec|test)\.[cm]?[jt]sx?$/u.test(relativeFile)
+  );
 }
 
 function isAppFileConventionAsset(file: string, appDir: string): boolean {
