@@ -1114,6 +1114,7 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
   const callbackPropNames = new Set([
     ...destructuredCallbackPropNames,
     ...propsCallbackAliasNames(source),
+    ...memberCallbackNames(source),
   ]);
   const sourceWithoutComponentCallbackProps = source.replaceAll(
     /<[A-Z][A-Za-z0-9_$.]*(?:\s[\s\S]*?)?>/gu,
@@ -1315,6 +1316,20 @@ function hasCallbackAbsenceGuard(source: string, name: string): boolean {
     String.raw`(?:!\s*${escapedName}\b|${escapedName}\s*(?:===|==)\s*(?:undefined|null)|(?:undefined|null)\s*(?:===|==)\s*${escapedName}\b)`,
     "u",
   ).test(source);
+}
+
+function memberCallbackNames(source: string): Set<string> {
+  const names = new Set<string>();
+
+  for (const match of source.matchAll(/\.([A-Za-z_$][\w$]*)\b/gu)) {
+    const memberName = match[1];
+
+    if (memberName !== undefined && isCallbackPropName(memberName)) {
+      names.add(memberName);
+    }
+  }
+
+  return names;
 }
 
 function removeSafeCallbackHandlerAttributes(

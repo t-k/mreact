@@ -1031,6 +1031,209 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/generic-list"]);
   });
 
+  test("preserves SSR fallback eligibility through rest-spread forwarding", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-rest-forward-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "inner-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type InnerCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function InnerCard({ onConfirm }: InnerCardProps) {
+  const label = cell("Inner").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "wrapper-card.tsx"),
+      `import { InnerCard } from "./inner-card";
+
+type WrapperCardProps = {
+  readonly title: string;
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function WrapperCard(props: WrapperCardProps) {
+  const { title, ...rest } = props;
+  return <section aria-label={title}><InnerCard {...rest} /></section>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { WrapperCard } from "./components/wrapper-card";
+
+export default function Page() {
+  return <main><WrapperCard title="Rest" /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual([]);
+    expect(result.clientReferenceManifest).toEqual([
+      {
+        name: "InnerCard",
+        moduleId: "./inner-card",
+        exportName: "InnerCard",
+      },
+    ]);
+  });
+
+  test("preserves SSR fallback eligibility through whole-props forwarding", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-whole-props-forward-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "inner-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type InnerCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function InnerCard({ onConfirm }: InnerCardProps) {
+  const label = cell("Whole").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "wrapper-card.tsx"),
+      `import { InnerCard } from "./inner-card";
+
+type WrapperCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function WrapperCard(props: WrapperCardProps) {
+  return <section><InnerCard {...props} /></section>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { WrapperCard } from "./components/wrapper-card";
+
+export default function Page() {
+  return <main><WrapperCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual([]);
+    expect(result.clientReferenceManifest).toEqual([
+      {
+        name: "InnerCard",
+        moduleId: "./inner-card",
+        exportName: "InnerCard",
+      },
+    ]);
+  });
+
+  test("tracks guarded callbacks inside object props", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-object-prop-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "action-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type ActionCardProps = {
+  readonly actions: {
+    readonly onSave?: (() => void) | undefined;
+  };
+};
+
+export function ActionCard({ actions }: ActionCardProps) {
+  const label = cell("Action").get();
+  return (
+    <button
+      type="button"
+      onClick={actions.onSave === undefined ? undefined : () => actions.onSave?.()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { ActionCard } from "./components/action-card";
+
+export default function Page() {
+  return <main><ActionCard actions={{}} /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/action-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/action-card"]);
+  });
+
+  test("tracks guarded callbacks forwarded into map items", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-map-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "row-list.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type RowListProps = {
+  readonly items: readonly { readonly id: string }[];
+  readonly onSelect?: ((id: string) => void) | undefined;
+};
+
+export function RowList({ items, onSelect }: RowListProps) {
+  const label = cell("Rows").get();
+  return (
+    <ul aria-label={label}>
+      {items.map((item) => (
+        <li key={item.id}>
+          <button
+            type="button"
+            onClick={onSelect === undefined ? undefined : () => onSelect(item.id)}
+          >
+            {item.id}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { RowList } from "./components/row-list";
+
+export default function Page() {
+  return <main><RowList items={[{ id: "a" }]} /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/row-list"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/row-list"]);
+  });
+
   test("does not mark mixed guarded and unguarded callbacks as SSR fallback eligible", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-callbacks-"));
     const appDir = join(dir, "app");
