@@ -707,6 +707,58 @@ export default function Login() {
     );
   });
 
+  test("includes route handlers and metadata convention routes in generated runtime import policies", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-conventions-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "status"), { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({
+        dependencies: {
+          "metadata-title": "1.0.0",
+          "route-status": "1.0.0",
+        },
+      }),
+    );
+    await writeFakePackage(rootDir, "metadata-title", 'export const title = "Policy Manifest";\n');
+    await writeFakePackage(rootDir, "route-status", 'export const status = "ok";\n');
+    await writeFile(
+      join(appDir, "api", "status", "route.ts"),
+      `import { status } from "route-status";
+
+export function GET() {
+  return Response.json({ status });
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "manifest.ts"),
+      `import { title } from "metadata-title";
+
+export default function manifest() {
+  return { name: title, start_url: "/", display: "standalone" };
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+      byRoute?: Record<string, string[]>;
+      runtimePackages?: string[];
+    };
+
+    expect(policy.runtimePackages).toEqual(["metadata-title", "route-status"]);
+    expect(policy.byRoute?.["/api/status"]).toEqual(["route-status"]);
+    expect(policy.byRoute?.["/manifest.webmanifest"]).toEqual(["metadata-title"]);
+  });
+
   test("tracks optional runtime packages declared by transitive server dependencies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-optional-"));
     const appDir = join(rootDir, "app");
