@@ -1144,6 +1144,13 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
     );
     sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
       new RegExp(
+        String.raw`\b(?:const|let|var)\s+${escapedCallbackName}\s*=\s*[^;\n]+\.${escapedCallbackName}\s*;?`,
+        "gu",
+      ),
+      "",
+    );
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
         String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapedCallbackName}\s*\?\s*[^{}]*:\s*undefined\s*\}`,
         "gu",
       ),
@@ -1227,6 +1234,48 @@ function propsCallbackAliasNames(source: string): Set<string> {
 
   for (const match of source.matchAll(
     /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*props\.([A-Za-z_$][\w$]*)\b/gu,
+  )) {
+    const localName = match[1];
+    const propName = match[2];
+
+    if (
+      localName !== undefined &&
+      (isCallbackPropName(propName) || isCallbackPropName(localName))
+    ) {
+      names.add(localName);
+    }
+  }
+
+  for (const match of source.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*props\s+as\s+[^)]+\)\.([A-Za-z_$][\w$]*)\b/gu,
+  )) {
+    const localName = match[1];
+    const propName = match[2];
+
+    if (
+      localName !== undefined &&
+      (isCallbackPropName(propName) || isCallbackPropName(localName))
+    ) {
+      names.add(localName);
+    }
+  }
+
+  for (const match of source.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\(\s*props\s*\)\.([A-Za-z_$][\w$]*)\b/gu,
+  )) {
+    const localName = match[1];
+    const propName = match[2];
+
+    if (
+      localName !== undefined &&
+      (isCallbackPropName(propName) || isCallbackPropName(localName))
+    ) {
+      names.add(localName);
+    }
+  }
+
+  for (const match of source.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*[^;\n]+\.([A-Za-z_$][\w$]*)\s*;?/gu,
   )) {
     const localName = match[1];
     const propName = match[2];
@@ -1364,7 +1413,15 @@ function destructuredPropsCallbackNames(source: string): Set<string> {
     addDestructuredCallbackNames(names, match[1] ?? "");
   }
 
-  for (const match of source.matchAll(/\bfunction(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\{([^}]+)\}/gu)) {
+  for (const match of source.matchAll(
+    /\{[^{}]*:\s*\{([^{}]+)\}\s*(?:=\s*\{\})?[^{}]*\}/gu,
+  )) {
+    addDestructuredCallbackNames(names, match[1] ?? "");
+  }
+
+  for (const match of source.matchAll(
+    /\bfunction(?:\s+[A-Za-z_$][\w$]*(?:<[^>()]+>)?)?\s*\(\s*\{([^}]+)\}/gu,
+  )) {
     addDestructuredCallbackNames(names, match[1] ?? "");
   }
 

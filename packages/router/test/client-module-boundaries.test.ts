@@ -904,6 +904,133 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/alias-card"]);
   });
 
+  test("tracks nested destructured callback containers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-nested-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "nested-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type NestedCardProps = {
+  readonly handlers?: {
+    readonly onConfirm?: (() => void) | undefined;
+  } | undefined;
+};
+
+export function NestedCard({ handlers: { onConfirm } = {} }: NestedCardProps) {
+  const label = cell("Nested").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { NestedCard } from "./components/nested-card";
+
+export default function Page() {
+  return <main><NestedCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/nested-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/nested-card"]);
+  });
+
+  test("tracks callback aliases through TypeScript as-casts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-callback-as-cast-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "cast-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type CastCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function CastCard(props: unknown) {
+  const label = cell("Cast").get();
+  const onConfirm = (props as CastCardProps).onConfirm;
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { CastCard } from "./components/cast-card";
+
+export default function Page() {
+  return <main><CastCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/cast-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/cast-card"]);
+  });
+
+  test("tracks generic components with optional callback props", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-generic-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "generic-list.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type GenericListProps<T> = {
+  readonly items: readonly T[];
+  readonly onPick?: ((item: T) => void) | undefined;
+};
+
+export function GenericList<T>({ items, onPick }: GenericListProps<T>) {
+  const label = cell("Generic").get();
+  return (
+    <ul aria-label={label}>
+      {items.map((item) => (
+        <li>
+          <button
+            type="button"
+            onClick={onPick === undefined ? undefined : () => onPick(item)}
+          >
+            {String(item)}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { GenericList } from "./components/generic-list";
+
+export default function Page() {
+  return <main><GenericList items={["one"]} /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/generic-list"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/generic-list"]);
+  });
+
   test("does not mark mixed guarded and unguarded callbacks as SSR fallback eligible", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-callbacks-"));
     const appDir = join(dir, "app");
