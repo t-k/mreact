@@ -1130,35 +1130,72 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
     );
 
   for (const callbackName of callbackPropNames) {
+    const escapedCallbackName = escapeRegExp(callbackName);
+    const callbackHandlerAttributePattern = new RegExp(
+      String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*[^{}]*\b${escapedCallbackName}\b[^{}]*\}`,
+      "gu",
+    );
     sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
       new RegExp(
-        String.raw`\b(?:const|let|var)\s+${escapeRegExp(
-          callbackName,
-        )}\s*=\s*props\.[A-Za-z_$][\w$]*\s*;?`,
+        String.raw`\b(?:const|let|var)\s+${escapedCallbackName}\s*=\s*props\.[A-Za-z_$][\w$]*\s*;?`,
         "gu",
       ),
       "",
     );
     sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
       new RegExp(
-        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapeRegExp(
-          callbackName,
-        )}\s*\?\s*[^{}]*:\s*undefined\s*\}`,
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapedCallbackName}\s*\?\s*[^{}]*:\s*undefined\s*\}`,
+        "gu",
+      ),
+      "",
+    );
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapedCallbackName}\s*(?:===|==)\s*(?:undefined|null)\s*\?\s*undefined\s*:\s*[^{}]*\}`,
+        "gu",
+      ),
+      "",
+    );
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*(?:undefined|null)\s*(?:===|==)\s*${escapedCallbackName}\s*\?\s*undefined\s*:\s*[^{}]*\}`,
+        "gu",
+      ),
+      "",
+    );
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapedCallbackName}\s*(?:!==|!=)\s*(?:undefined|null)\s*\?\s*[^{}]*:\s*undefined\s*\}`,
+        "gu",
+      ),
+      "",
+    );
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*typeof\s+${escapedCallbackName}\s*===\s*["']function["']\s*\?\s*[^{}]*:\s*undefined\s*\}`,
         "gu",
       ),
       "",
     );
 
-    if (hasCallbackAbsenceGuard(source, callbackName)) {
+    if (
+      hasCallbackAbsenceGuard(
+        sourceWithoutComponentCallbackProps.replaceAll(callbackHandlerAttributePattern, ""),
+        callbackName,
+      )
+    ) {
       sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
-        new RegExp(
-          String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*[^{}]*\b${escapeRegExp(
-            callbackName,
-          )}\b[^{}]*\}`,
-          "gu",
-        ),
+        callbackHandlerAttributePattern,
         "",
       );
+    }
+
+    if (
+      new RegExp(String.raw`\b${escapedCallbackName}\s*\(`, "u").test(
+        sourceWithoutGuardedUndefinedCallbacks,
+      )
+    ) {
+      return false;
     }
   }
 

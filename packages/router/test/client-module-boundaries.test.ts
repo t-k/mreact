@@ -624,6 +624,186 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/timeline-card"]);
   });
 
+  test("does not mark default-parameter callbacks as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-default-param-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "confirm-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type ConfirmCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function ConfirmCard({ onConfirm = () => undefined }: ConfirmCardProps) {
+  const label = cell("Confirm").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { ConfirmCard } from "./components/confirm-card";
+
+export default function Page() {
+  return <main><ConfirmCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/confirm-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test("marks typeof and nullish optional callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-typeof-nullish-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "typeof-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type TypeofCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function TypeofCard({ onConfirm }: TypeofCardProps) {
+  const label = cell("Typeof").get();
+  return (
+    <button
+      type="button"
+      onClick={typeof onConfirm === "function" ? () => onConfirm() : undefined}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "components", "nullish-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type NullishCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function NullishCard({ onConfirm }: NullishCardProps) {
+  const label = cell("Nullish").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm != null ? () => onConfirm() : undefined}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { TypeofCard } from "./components/typeof-card";
+import { NullishCard } from "./components/nullish-card";
+
+export default function Page() {
+  return <main><TypeofCard /><NullishCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual([
+      "./components/typeof-card",
+      "./components/nullish-card",
+    ]);
+    expect(result.clientBoundaryFallbackImports).toEqual([
+      "./components/typeof-card",
+      "./components/nullish-card",
+    ]);
+  });
+
+  test("does not mark mixed guarded and unguarded callbacks as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-callbacks-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "confirm-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type ConfirmCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function ConfirmCard({ onConfirm }: ConfirmCardProps) {
+  const label = cell("Confirm").get();
+  return (
+    <article>
+      <button
+        type="button"
+        onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+        onMouseEnter={() => onConfirm()}
+      >
+        {label}
+      </button>
+    </article>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { ConfirmCard } from "./components/confirm-card";
+
+export default function Page() {
+  return <main><ConfirmCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/confirm-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test("does not mark render-time unconditional callback invocation as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-unconditional-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "danger-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type DangerCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function DangerCard({ onConfirm }: DangerCardProps) {
+  const label = cell("Danger").get();
+  onConfirm();
+  return <button type="button">{label}</button>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { DangerCard } from "./components/danger-card";
+
+export default function Page() {
+  return <main><DangerCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/danger-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
   test("flags a Link rendered through a wrapper component imported from another file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-wrapper-"));
     const appDir = join(dir, "app");
