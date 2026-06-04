@@ -265,7 +265,12 @@ function emitClientBoundaryHelper(name: string): string {
   propsElement.type = "application/json";
   propsElement.setAttribute("data-mreact-client-boundary-props", name);
   try {
-    propsElement.textContent = JSON.stringify(props ?? {}).replaceAll("<", "\\\\u003c");
+    propsElement.textContent = JSON.stringify(props ?? {})
+      .replaceAll("&", "\\\\u0026")
+      .replaceAll("<", "\\\\u003c")
+      .replaceAll(">", "\\\\u003e")
+      .replaceAll("\\u2028", "\\\\u2028")
+      .replaceAll("\\u2029", "\\\\u2029");
   } catch {
     placeholder.setAttribute("data-mreact-client-boundary-nonserializable", "true");
     propsElement.textContent = "{}";

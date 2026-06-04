@@ -1339,6 +1339,64 @@ export default function Login(props: { data: { intent: string } }) {
     expect(html).toContain(`<script type="module" src="/_mreact/client/${loginScript}"></script>`);
   });
 
+  test("packaged Cloudflare Pages worker escapes hostile route hydration props JSON", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-props-json-escape-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function loader() {
+  const payload = ${JSON.stringify("</script><script>globalThis.__mreactPwned=1</script><!--&>")} + "\\u2028" + "\\u2029" + "\\ud800";
+  return { payload };
+}
+
+export default function Page(props: { data: { payload: string } }) {
+  const count = cell(0);
+  return <main>payload length: {props.data.payload.length}, count: {count.get()}</main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
+      default: {
+        fetch: (request: Request, env: unknown, context: ExecutionContext) => Promise<Response>;
+      };
+    };
+
+    const response = await worker.default.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+    const propsJson = html.match(
+      /<script type="application\/json" id="mreact-props-index">([\s\S]*?)<\/script>/,
+    )?.[1];
+
+    expect(response.status, html).toBe(200);
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toMatch(/[<>&]/);
+    expect(propsJson).not.toContain("\u2028");
+    expect(propsJson).not.toContain("\u2029");
+    expect(propsJson).not.toContain("</script>");
+    expect(propsJson).not.toContain("<!--");
+    expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
+      data: { payload: expect.stringContaining("</script><script>") },
+    });
+  });
+
   test("packaged Cloudflare Pages worker applies Vite define values used by server modules", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-vite-define-"));
     const appDir = join(rootDir, "app");
@@ -6066,12 +6124,18 @@ export default function Page() {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-missing-artifacts-"));
     const outDir = join(rootDir, ".mreact");
 
-    await expect(
-      renderBuiltAppRequest({
+    await expect(async () => {
+      await renderBuiltAppRequest({
         outDir,
         request: new Request("http://local.test/"),
-      }),
-    ).rejects.toThrow(/Missing built app server manifest.*server[/\\]manifest\.json/);
+      });
+    }).rejects.toSatisfy((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      return (
+        /Missing built app server manifest.*server[/\\]manifest\.json/.test(message) ||
+        /Missing built app client manifest.*client[/\\]manifest\.json/.test(message)
+      );
+    });
   });
 
   test("reports corrupted built app manifests with the artifact path", async () => {

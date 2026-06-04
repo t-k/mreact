@@ -1261,6 +1261,35 @@ export function App() {
     );
   });
 
+  test("emitted server stream component escapes hostile client boundary props JSON", async () => {
+    const payload = "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
+    const output = transform({
+      code: `import Chart from "./Chart.compat.tsx";
+
+      export function App() {
+        return <section><Chart marker=${JSON.stringify(payload)} /></section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./Chart.compat.tsx"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const html = await runServerStreamComponent(output.code);
+    const propsJson = /<script type="application\/json" data-mreact-client-boundary-props="Chart">([\s\S]*?)<\/script>/.exec(
+      html,
+    )?.[1];
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toMatch(/[<>&]/);
+    expect(propsJson).not.toContain("\u2028");
+    expect(propsJson).not.toContain("\u2029");
+    expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
+      marker: expect.stringContaining("</script><script>"),
+    });
+  });
+
   test("emitted server stream component can bootstrap out-of-order reorder", async () => {
     const output = transform({
       code: 'export function App() { const name = Promise.resolve("Ada"); return <section>Before<Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await><p>After</p></section>; }',

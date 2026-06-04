@@ -3589,7 +3589,12 @@ function cloudflareHydrationMarkerParts(props) {
 }
 
 function escapeScriptJson(json) {
-  return json.replaceAll("<", "\\\\u003c");
+  return json
+    .replaceAll("&", "\\\\u0026")
+    .replaceAll("<", "\\\\u003c")
+    .replaceAll(">", "\\\\u003e")
+    .replaceAll("\\u2028", "\\\\u2028")
+    .replaceAll("\\u2029", "\\\\u2029");
 }
 
 function cloudflareRouteIdForPath(path) {

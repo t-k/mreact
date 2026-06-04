@@ -59,6 +59,34 @@ export function App() {
     );
   });
 
+  test("client transform escapes hostile client boundary props JSON", async () => {
+    const payload = "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
+    const output = transform({
+      code: `import Chart from "./Chart.compat.tsx";
+
+      export function App() {
+        return <Chart marker=${JSON.stringify(payload)} />;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      clientBoundaryImports: ["./Chart.compat.tsx"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = await runClientComponent(output.code);
+    const propsJson = (node as DocumentFragment).querySelector(
+      'script[type="application/json"][data-mreact-client-boundary-props="Chart"]',
+    )?.textContent;
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toMatch(/[<>&]/);
+    expect(propsJson).not.toContain("\u2028");
+    expect(propsJson).not.toContain("\u2029");
+    expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
+      marker: expect.stringContaining("</script><script>"),
+    });
+  });
+
   test("client transform preserves top-level const used by component body", async () => {
     const output = transform({
       code: `const greeting = "Hello";

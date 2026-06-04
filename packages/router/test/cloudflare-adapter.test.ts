@@ -2611,8 +2611,13 @@ export default function Page() {
     );
     expect(propsJson).toBeDefined();
     expect(propsJson).not.toContain("<");
-    expect(propsJson).toContain("\\u003c/script>");
-    expect(propsJson).toContain("\\u003cscript>alert(1)");
+    expect(propsJson).not.toContain(">");
+    expect(propsJson).toContain("\\u003c/script\\u003e");
+    expect(propsJson).toContain("\\u003cscript\\u003ealert(1)");
+    expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
+      data: { marker: "</script><script>alert(1)</script>" },
+      params: { slug: "</script><script>alert(1)</script>" },
+    });
   });
 
   test("stores prerendered entries through the Cloudflare Cache API shape", async () => {

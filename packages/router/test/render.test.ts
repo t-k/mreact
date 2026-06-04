@@ -742,6 +742,44 @@ export default function Page() {
     expect(html).toContain("<main>count: 0</main>");
   });
 
+  test("escapes hostile route hydration props JSON for HTML script transport", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-props-json-escape-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function loader() {
+  const payload = ${JSON.stringify("</script><script>globalThis.__mreactPwned=1</script><!--&>")} + "\\u2028" + "\\u2029" + "\\ud800";
+  return { payload };
+}
+
+export default function Page(props) {
+  const count = cell(0);
+  return <main>payload length: {props.data.payload.length}, count: {count.get()}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    const propsJson = html.match(
+      /<script type="application\/json" id="mreact-props-index">([\s\S]*?)<\/script>/,
+    )?.[1];
+    expect(response.status, html).toBe(200);
+    expect(propsJson).toBeDefined();
+    expect(propsJson).not.toMatch(/[<>&]/);
+    expect(propsJson).not.toContain("\u2028");
+    expect(propsJson).not.toContain("\u2029");
+    expect(propsJson).not.toContain("</script>");
+    expect(propsJson).not.toContain("<!--");
+    expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
+      data: { payload: expect.stringContaining("</script><script>") },
+    });
+  });
+
   test("serializes inferred client reference manifest into route hydration transport", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-reference-transport-"));
     await writeFile(

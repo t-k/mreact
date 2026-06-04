@@ -1282,7 +1282,7 @@ function cloudflareHydrationMarkerParts(options: {
 }
 
 function escapeScriptJson(json: string): string {
-  return json.replaceAll("<", "\\u003c");
+  return escapeJsonForHtml(json);
 }
 
 function escapeJsonForHtml(value: string): string {

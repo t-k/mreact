@@ -1683,7 +1683,12 @@ function emitClientBoundaryHelper(name: string): string {
     `  const _props = props ?? {};`,
     `  const _nonSerializable = ${propsHelperName}(_props);`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
-    `  const _json = (JSON.stringify(_props) ?? "{}").replaceAll("<", "\\\\u003c");`,
+    `  const _json = (JSON.stringify(_props) ?? "{}")`,
+    `    .replaceAll("&", "\\\\u0026")`,
+    `    .replaceAll("<", "\\\\u003c")`,
+    `    .replaceAll(">", "\\\\u003e")`,
+    `    .replaceAll("\\u2028", "\\\\u2028")`,
+    `    .replaceAll("\\u2029", "\\\\u2029");`,
     `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template>\${childrenHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `}`,
   ].join("\n");
