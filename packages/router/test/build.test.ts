@@ -4635,9 +4635,15 @@ export default function Page() {
     );
     await writeFile(
       join(appDir, "page.tsx"),
-      `import { TimelineGrid } from "../components/TimelineGrid";
+      `import { cell } from "@reckona/mreact-reactive-core";
+import { TimelineGrid } from "../components/TimelineGrid";
 
-export default function Page() {
+export function loader() {
+  return [{ id: "media-1", thumbnailUrl: "/media/thumb.jpg" }];
+}
+
+export default function Page(props: { data: Array<{ id: string; thumbnailUrl: string }> }) {
+  const mediaItems = cell(props.data);
   const openViewer = (id: string) => {
     document.body.setAttribute("data-open-media", id);
   };
@@ -4646,7 +4652,7 @@ export default function Page() {
     <main>
       <TimelineGrid
         cardTestId="media-card"
-        items={[{ id: "media-1", thumbnailUrl: "/media/thumb.jpg" }]}
+        items={mediaItems.get()}
         onOpenMedia={typeof window === "undefined" ? undefined : openViewer}
       />
     </main>
@@ -4667,6 +4673,20 @@ export default function Page() {
     expect(html).not.toContain(
       '<template data-mreact-client-boundary="TimelineGrid"></template><script',
     );
+
+    const server = await startServer({ outDir, port: 0 });
+    try {
+      const serverResponse = await fetch(server.url);
+      const serverHtml = await serverResponse.text();
+      expect(serverResponse.status).toBe(200);
+      expect(serverHtml).toContain('data-testid="media-card"');
+      expect(serverHtml).toContain('src="/media/thumb.jpg"');
+      expect(serverHtml).not.toContain(
+        '<template data-mreact-client-boundary="TimelineGrid"></template><script',
+      );
+    } finally {
+      await server.close();
+    }
   });
 
   test("emits a client route bundle for client boundaries rendered by layouts", async () => {
