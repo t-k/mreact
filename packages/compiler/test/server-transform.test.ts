@@ -1363,6 +1363,21 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     );
   });
 
+  test("server hydration marker ids percent-encode non-ASCII component names", () => {
+    const output = transform({
+      code: "export function 設定画面() { return <main>Hello</main>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverHydration: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.serverHydration).toBe(true);
+    expect(output.code).toContain("mreact-h:start:%E8%A8%AD%E5%AE%9A%E7%94%BB%E9%9D%A2");
+    expect(output.code).toContain("mreact-h:end:%E8%A8%AD%E5%AE%9A%E7%94%BB%E9%9D%A2");
+  });
+
   test("server transform reports client module imports as Flight client references", () => {
     const output = transform({
       code: `import { Button } from "./Button.client.tsx";

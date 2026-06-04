@@ -408,6 +408,22 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("server stream hydration marker ids percent-encode non-ASCII component names", () => {
+    const output = transform({
+      code: "export function 設定画面() { return <main>Hello</main>; }",
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      serverHydration: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.serverHydration).toBe(true);
+    expect(output.code).toContain("mreact-h:start:%E8%A8%AD%E5%AE%9A%E7%94%BB%E9%9D%A2");
+    expect(output.code).toContain("mreact-h:end:%E8%A8%AD%E5%AE%9A%E7%94%BB%E9%9D%A2");
+  });
+
   test("emitted server stream component lowers Suspense to React boundary helper", async () => {
     const output = transform({
       code: `import { Suspense } from "@reckona/mreact-compat";
