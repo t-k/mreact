@@ -4538,6 +4538,54 @@ export default function Layout(props) {
     expect(html).toContain(`<link rel="stylesheet" href="/_mreact/client/${css}">`);
   });
 
+  test("keeps CSS url reference assets in the built client asset closure", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-css-url-closure-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const logoSource = `<svg><title>logo</title><desc>${"x".repeat(5000)}</desc></svg>`;
+    await mkdir(join(appDir, "assets"), { recursive: true });
+    await writeFile(join(appDir, "assets", "logo.svg"), logoSource);
+    await writeFile(
+      join(appDir, "global.css"),
+      `.title { background-image: url("./assets/logo.svg"); color: rgb(1 2 3); }`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import "./global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main className="title">Logo</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { assets?: string[]; routes: Array<{ css?: string[]; path: string }> };
+    const css = clientManifest.routes[0]?.css?.[0];
+    const logo = clientManifest.assets?.find((asset) => asset.endsWith(".svg"));
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+    const closure = await assertBuiltClientAssetClosure(outDir, html);
+
+    expect(css).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.css$/);
+    expect(logo).toMatch(/^assets\/logo-[A-Za-z0-9_-]{8}\.svg$/);
+    await expect(readFile(join(outDir, "client", css ?? ""), "utf8")).resolves.toContain(
+      `/_mreact/client/${logo}`,
+    );
+    await expect(readFile(join(outDir, "client", logo ?? ""), "utf8")).resolves.toBe(logoSource);
+    expect(closure.has(logo ?? "")).toBe(true);
+  });
+
   test("links layout CSS for built special not-found routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-not-found-css-"));
     const appDir = join(rootDir, "app");
