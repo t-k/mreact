@@ -4642,11 +4642,19 @@ type MediaItem = {
   thumbnailUrl: string;
 };
 
-export function TimelineGrid(props: { cardTestId: string; items: MediaItem[]; onOpenMedia?: ((id: string) => void) | undefined; showMonthChevron?: boolean }) {
+type TaggedChild = {
+  id: string;
+  name: string;
+};
+
+export function TimelineGrid(props: { cardTestId: string; children: TaggedChild[]; items: MediaItem[]; onOpenMedia?: ((id: string) => void) | undefined; showMonthChevron?: boolean }) {
   const locale = activeLocale.get();
   const label = locale === "ja" ? "お気に入り済み" : "Favorites";
   return (
     <section aria-label={label} data-chevron={props.showMonthChevron ? "visible" : "hidden"}>
+      {props.children.map((child) => (
+        <span data-testid="tagged-child" data-child-id={child.id} key={child.id}>{child.name}</span>
+      ))}
       <TimelineDayGrid
         cardTestId={props.cardTestId}
         day={props.items[0]?.day ?? "unknown"}
@@ -4672,18 +4680,18 @@ function TimelineDayGrid(props: { cardTestId: string; day: string; items: MediaI
   );
 }
 
-function TimelineMediaCard(props: { cardTestId: string; item: MediaItem; onOpenMedia?: ((id: string) => void) | undefined }) {
+function TimelineMediaCard({ cardTestId, item, onOpenMedia }: { cardTestId: string; item: MediaItem; onOpenMedia?: ((id: string) => void) | undefined }) {
   return (
-    <article data-testid={props.cardTestId}>
+    <article data-testid={cardTestId}>
       <button
         type="button"
-        onClick={props.onOpenMedia ? () => props.onOpenMedia?.(props.item.id) : undefined}
+        onClick={onOpenMedia ? () => onOpenMedia(item.id) : undefined}
       >
-        <img src={props.item.thumbnailUrl} alt={props.item.fileName} />
+        <img src={item.thumbnailUrl} alt={item.fileName} />
       </button>
       <EngagementBadges
-        commentCount={props.item.commentCount}
-        reactionCount={props.item.reactionCount}
+        commentCount={item.commentCount}
+        reactionCount={item.reactionCount}
       />
     </article>
   );
@@ -4707,6 +4715,7 @@ export function loader() {
 
 export default function Page(props: { data: Array<{ commentCount: number; day: string; fileName: string; id: string; reactionCount: number; thumbnailUrl: string }> }) {
   const mediaItems = cell(props.data);
+  const children = cell([{ id: "child-1", name: "Aoi" }]);
   const openViewer = (id: string) => {
     document.body.setAttribute("data-open-media", id);
   };
@@ -4715,6 +4724,7 @@ export default function Page(props: { data: Array<{ commentCount: number; day: s
     <main>
       <TimelineGrid
         cardTestId="media-card"
+        children={children.get()}
         items={mediaItems.get()}
         onOpenMedia={typeof window === "undefined" ? undefined : openViewer}
         showMonthChevron={true}
@@ -4736,6 +4746,8 @@ export default function Page(props: { data: Array<{ commentCount: number; day: s
     expect(html).toContain("media-1");
     expect(html).toContain("ssr-html-favorites.jpg");
     expect(html).toContain('src="/media/thumb.jpg"');
+    expect(html).toContain('data-testid="tagged-child"');
+    expect(html).toContain('data-child-id="child-1"');
     expect(html).toContain('data-testid="engagement-badges"');
     expect(html).not.toContain(
       '<template data-mreact-client-boundary="TimelineGrid"></template><script',
@@ -4750,6 +4762,8 @@ export default function Page(props: { data: Array<{ commentCount: number; day: s
       expect(serverHtml).toContain("media-1");
       expect(serverHtml).toContain("ssr-html-favorites.jpg");
       expect(serverHtml).toContain('src="/media/thumb.jpg"');
+      expect(serverHtml).toContain('data-testid="tagged-child"');
+      expect(serverHtml).toContain('data-child-id="child-1"');
       expect(serverHtml).toContain('data-testid="engagement-badges"');
       expect(serverHtml).not.toContain(
         '<template data-mreact-client-boundary="TimelineGrid"></template><script',

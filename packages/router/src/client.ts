@@ -1110,11 +1110,12 @@ function isStyleModuleSpecifier(source: string): boolean {
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
 function isClientBoundaryFallbackEligibleSource(source: string): boolean {
+  const destructuredCallbackPropNames = destructuredPropsCallbackNames(source);
   const sourceWithoutComponentCallbackProps = source.replaceAll(
     /<[A-Z][A-Za-z0-9_$.]*(?:\s[\s\S]*?)?>/gu,
     (tag) => tag.replaceAll(/\s+on[A-Z][A-Za-z0-9_$]*\s*=\s*\{[^{}]*\}/gu, ""),
   );
-  const sourceWithoutGuardedUndefinedCallbacks = sourceWithoutComponentCallbackProps
+  let sourceWithoutGuardedUndefinedCallbacks = sourceWithoutComponentCallbackProps
     .replaceAll(
       /\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*props\.[A-Za-z_$][\w$]*\s*===\s*undefined\s*\?\s*undefined\s*:/gu,
       "",
@@ -1124,10 +1125,63 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
       "",
     );
 
+  for (const callbackName of destructuredCallbackPropNames) {
+    sourceWithoutGuardedUndefinedCallbacks = sourceWithoutGuardedUndefinedCallbacks.replaceAll(
+      new RegExp(
+        String.raw`\bon[A-Z][A-Za-z0-9_$]*\s*=\s*\{\s*${escapeRegExp(
+          callbackName,
+        )}\s*\?\s*[^{}]*:\s*undefined\s*\}`,
+        "gu",
+      ),
+      "",
+    );
+  }
+
   return (
     !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
     !/\bglobalThis\b/u.test(source)
   );
+}
+
+function destructuredPropsCallbackNames(source: string): Set<string> {
+  const names = new Set<string>();
+
+  for (const match of source.matchAll(/\b(?:const|let|var)\s*\{([^}]+)\}\s*=\s*props\b/gu)) {
+    addDestructuredCallbackNames(names, match[1] ?? "");
+  }
+
+  for (const match of source.matchAll(
+    /\bfunction\s+[A-Za-z_$][\w$]*\s*\(\s*\{([^}]+)\}/gu,
+  )) {
+    addDestructuredCallbackNames(names, match[1] ?? "");
+  }
+
+  return names;
+}
+
+function addDestructuredCallbackNames(names: Set<string>, destructured: string): void {
+  for (const part of destructured.split(",")) {
+    const [rawProperty, rawAlias] = part.trim().split(/\s*:\s*/u);
+    const property = destructuredBindingName(rawProperty);
+    const alias = destructuredBindingName(rawAlias);
+    const name = alias ?? property;
+
+    if (
+      name !== undefined &&
+      (isCallbackPropName(property) || isCallbackPropName(name))
+    ) {
+      names.add(name);
+    }
+  }
+}
+
+function destructuredBindingName(value: string | undefined): string | undefined {
+  const name = value?.trim().split(/\s*=/u, 1)[0]?.trim();
+  return name === "" ? undefined : name;
+}
+
+function isCallbackPropName(name: string | undefined): boolean {
+  return name !== undefined && /^on[A-Z][A-Za-z0-9_$]*$/u.test(name);
 }
 
 function renderedImportedExportNames(
