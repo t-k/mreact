@@ -1263,6 +1263,40 @@ describe("react-compat render", () => {
     expect(nextItems[1]?.textContent).toBe("A2");
   });
 
+  test("render reorders keyed fragments returned from maps without recreating fragment children", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const sections = [
+      { id: "intro", title: "Intro" },
+      { id: "api", title: "API" },
+    ];
+    const renderSections = (items: typeof sections) =>
+      createElement(
+        "dl",
+        null,
+        items.map((section) =>
+          createElement(Fragment, { key: section.id }, [
+            createElement("dt", { key: "term" }, section.id),
+            createElement("dd", { key: "desc" }, section.title),
+          ]),
+        ),
+      );
+
+    root.render(renderSections(sections));
+    const introTerm = container.querySelector("dt");
+    const introDescription = container.querySelector("dd");
+    const apiTerm = container.querySelectorAll("dt")[1];
+    const apiDescription = container.querySelectorAll("dd")[1];
+
+    root.render(renderSections(sections.toReversed()));
+
+    expect(container.innerHTML).toBe("<dl><dt>api</dt><dd>API</dd><dt>intro</dt><dd>Intro</dd></dl>");
+    expect(container.querySelectorAll("dt")[0]).toBe(apiTerm);
+    expect(container.querySelectorAll("dd")[0]).toBe(apiDescription);
+    expect(container.querySelectorAll("dt")[1]).toBe(introTerm);
+    expect(container.querySelectorAll("dd")[1]).toBe(introDescription);
+  });
+
   test("append-only keyed rows reuse the unchanged prefix fibers", () => {
     vi.stubEnv("NODE_ENV", "production");
     const container = document.createElement("div");
