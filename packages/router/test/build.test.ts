@@ -1170,6 +1170,38 @@ describe("route unit test", () => {
     expect(pagesWorker).toContain("test-utils production helper");
   });
 
+  test("Cloudflare Pages packaging does not let public assets overwrite framework client artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-public-collision-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "public", "_mreact", "client"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Cloudflare public collision</main>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "public", "_mreact", "client", "manifest.json"),
+      "public collision",
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    const builtManifest = await readFile(join(outDir, "client", "manifest.json"), "utf8");
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+
+    await expect(readFile(join(pagesOutDir, "_mreact", "client", "manifest.json"), "utf8"))
+      .resolves.toBe(builtManifest);
+  });
+
   test("packages Cloudflare Pages workers whose runtime dependencies import util", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-node-util-"));
     const appDir = join(rootDir, "app");
@@ -2379,6 +2411,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
     await mkdir(join(publicDir, "icons"), { recursive: true });
+    await mkdir(join(publicDir, "_mreact", "client"), { recursive: true });
     await writeFile(
       join(appDir, "page.mreact.tsx"),
       "export default function Page() { return <main>Hello</main>; }",
@@ -2386,6 +2419,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
     await writeFile(join(publicDir, "styles.css"), "body { color: black; }");
     await writeFile(join(publicDir, "robots.txt"), "User-agent: *");
     await writeFile(join(publicDir, "icons", "logo.svg"), "<svg></svg>");
+    await writeFile(join(publicDir, "_mreact", "client", "manifest.json"), "public collision");
 
     await buildApp({
       allowedSourceDirs: ["app"],
@@ -2406,6 +2440,40 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
     await expect(readFile(join(outDir, "client", "styles.css"), "utf8")).resolves.toContain(
       "color: black",
     );
+    await expect(access(join(outDir, "client", "_mreact", "client", "manifest.json"))).rejects
+      .toThrow();
+    await expect(
+      access(join(outDir, "client", "public", "_mreact", "client", "manifest.json")),
+    ).rejects.toThrow();
+  });
+
+  test("does not follow a public directory symlink outside the project root", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-public-symlink-"));
+    const appDir = join(rootDir, "app");
+    const outsideDir = await mkdtemp(join(tmpdir(), "mreact-public-outside-"));
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>Public symlink</main>; }",
+    );
+    await writeFile(join(outsideDir, "secret.txt"), "outside secret");
+    await symlink(outsideDir, join(rootDir, "public"), "dir");
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { publicAssets?: string[] };
+
+    expect(clientManifest.publicAssets ?? []).toEqual([]);
+    await expect(access(join(outDir, "client", "secret.txt"))).rejects.toThrow();
+    await expect(access(join(outDir, "client", "public", "secret.txt"))).rejects.toThrow();
   });
 
   test("copies root file convention assets into built public assets", async () => {
@@ -3065,6 +3133,40 @@ export default function Page(props) {
     await expect(readFile(join(exportDir, "avatar.txt"), "utf8")).resolves.toBe(
       "static avatar",
     );
+  });
+
+  test("static export does not let public assets overwrite framework client artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-export-public-collision-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(join(rootDir, "public", "_mreact", "client"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export default function Page() {
+  return <main>Public collision</main>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "public", "_mreact", "client", "manifest.json"),
+      "public collision",
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const builtManifest = await readFile(join(outDir, "client", "manifest.json"), "utf8");
+    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
+
+    await expect(readFile(join(exportDir, "_mreact", "client", "manifest.json"), "utf8"))
+      .resolves.toBe(builtManifest);
   });
 
   test("prerendered loaders honor user Vite plugins during render", async () => {

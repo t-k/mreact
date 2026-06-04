@@ -1,6 +1,16 @@
 import { createHash } from "node:crypto";
 import type { Dirent } from "node:fs";
-import { copyFile, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -1472,36 +1482,36 @@ function moduleIdForBuildFile(file: string, relativeRoutesDir: string): string {
 }
 
 async function copyPublicAssets(publicDir: string, outDir: string): Promise<void> {
-  try {
-    await cp(publicDir, outDir, { force: true, recursive: true });
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return;
-    }
-
-    throw error;
+  if (!(await isPublicAssetDirectory(publicDir))) {
+    return;
   }
+
+  await copyPublicAssetsInner(publicDir, "", outDir);
 }
 
 async function collectPublicAssetPaths(publicDir: string): Promise<string[]> {
-  try {
-    const info = await stat(publicDir);
-
-    if (!info.isDirectory()) {
-      return [];
-    }
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ENOENT") {
-      return [];
-    }
-
-    throw error;
+  if (!(await isPublicAssetDirectory(publicDir))) {
+    return [];
   }
 
   const paths: string[] = [];
   await collectPublicAssetPathsInner(publicDir, "", paths);
 
   return paths.sort();
+}
+
+async function isPublicAssetDirectory(publicDir: string): Promise<boolean> {
+  try {
+    const info = await lstat(publicDir);
+
+    return info.isDirectory();
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
 }
 
 async function copyAppFileConventionAssets(appDir: string, outDir: string): Promise<string[]> {
@@ -1546,6 +1556,11 @@ async function collectPublicAssetPathsInner(
 
   for (const entry of entries) {
     const relativePath = relativeDir === "" ? entry.name : `${relativeDir}/${entry.name}`;
+    const publicPath = `/${relativePath}`;
+
+    if (isReservedPublicAssetPath(publicPath)) {
+      continue;
+    }
 
     if (entry.isDirectory()) {
       await collectPublicAssetPathsInner(publicDir, relativePath, paths);
@@ -1553,9 +1568,40 @@ async function collectPublicAssetPathsInner(
     }
 
     if (entry.isFile()) {
-      paths.push(`/${relativePath}`);
+      paths.push(publicPath);
     }
   }
+}
+
+async function copyPublicAssetsInner(
+  publicDir: string,
+  relativeDir: string,
+  outDir: string,
+): Promise<void> {
+  const entries = await readdir(join(publicDir, relativeDir), { withFileTypes: true });
+
+  for (const entry of entries) {
+    const relativePath = relativeDir === "" ? entry.name : `${relativeDir}/${entry.name}`;
+
+    if (isReservedPublicAssetPath(`/${relativePath}`)) {
+      continue;
+    }
+
+    if (entry.isDirectory()) {
+      await copyPublicAssetsInner(publicDir, relativePath, outDir);
+      continue;
+    }
+
+    if (entry.isFile()) {
+      const destination = join(outDir, relativePath);
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(join(publicDir, relativePath), destination);
+    }
+  }
+}
+
+function isReservedPublicAssetPath(pathname: string): boolean {
+  return pathname === "/_mreact" || pathname.startsWith("/_mreact/");
 }
 
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
@@ -5172,7 +5218,13 @@ async function copyCloudflarePagesPublicAssets(options: {
   publicAssets: readonly string[];
 }): Promise<void> {
   for (const asset of options.publicAssets) {
-    if (!asset.startsWith("/") || asset.startsWith("//") || asset.includes("..")) {
+    if (
+      !asset.startsWith("/") ||
+      asset.startsWith("//") ||
+      asset.includes("..") ||
+      asset === "/_mreact" ||
+      asset.startsWith("/_mreact/")
+    ) {
       continue;
     }
 

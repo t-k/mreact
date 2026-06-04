@@ -53,7 +53,13 @@ async function copyPublicAssetsToExportRoot(
   publicAssets: readonly string[],
 ): Promise<void> {
   for (const asset of publicAssets) {
-    if (!asset.startsWith("/") || asset.startsWith("//") || asset.includes("..")) {
+    if (
+      !asset.startsWith("/") ||
+      asset.startsWith("//") ||
+      asset.includes("..") ||
+      asset === "/_mreact" ||
+      asset.startsWith("/_mreact/")
+    ) {
       continue;
     }
 
