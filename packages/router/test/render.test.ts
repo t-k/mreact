@@ -1011,6 +1011,66 @@ export default function Page() {
     expect(html).toContain('src="/media/thumb.jpg"');
   });
 
+  test("keeps inferred boundary fallback HTML visible with query client handoff", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-query-boundary-fallback-"));
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "ProfilePanel.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type ProfilePanelProps = {
+  readonly name: string;
+  readonly onOpenProfile?: ((name: string) => void) | undefined;
+};
+
+export function ProfilePanel(props: ProfilePanelProps) {
+  const label = cell(props.name).get();
+  return (
+    <article data-testid="profile-panel">
+      <button
+        type="button"
+        onClick={props.onOpenProfile === undefined ? undefined : () => props.onOpenProfile?.(props.name)}
+      >
+        {label}
+      </button>
+    </article>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { ProfilePanel } from "./components/ProfilePanel";
+
+export async function loader({ queryClient }) {
+  await queryClient.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: async () => ({ name: "Ada" }),
+  });
+}
+
+export default function Page(props) {
+  const profile = props.queryClient.getQueryData(["profile"]);
+  return <main><ProfilePanel name={profile.name} /></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+    const queryState = readQueryState(html);
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain('data-mreact-client-boundary="ProfilePanel"');
+    expect(html).toContain('data-testid="profile-panel"');
+    expect(html).toContain("<button type=\"button\">Ada</button>");
+    expect(queryState.queries[0]).toMatchObject({
+      data: { name: "Ada" },
+      queryKey: ["profile"],
+    });
+  });
+
   test("serializes inferred client reference manifest into stream hydration transport", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-client-reference-transport-"));
     await writeFile(

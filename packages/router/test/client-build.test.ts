@@ -925,6 +925,60 @@ export default function Page() {
     expect(document.body.getAttribute("data-pull-hydrated")).toBe("yes");
   });
 
+  test("hydrates inferred client boundary wrappers with multiple SSR fallback siblings", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-multiple-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "BoundaryPanel.tsx"),
+      `export function BoundaryPanel(props) {
+  return (
+    <section data-testid="boundary-panel" onClick={() => document.body.setAttribute("data-panel-hydrated", "yes")}>
+      {props.children}
+    </section>
+  );
+}`,
+    );
+    const code = `import { BoundaryPanel } from "./BoundaryPanel";
+
+export default function Page() {
+  return (
+    <main>
+      <BoundaryPanel onRefresh={() => {}}>
+        Intro <span data-testid="server-a">A</span> <span data-testid="server-b">B</span>
+      </BoundaryPanel>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><template data-mreact-client-boundary="BoundaryPanel" data-mreact-client-boundary-nonserializable="true"></template>Intro <span data-testid="server-a">A</span> <span data-testid="server-b">B</span><script type="application/json" data-mreact-client-boundary-props="BoundaryPanel">{}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"BoundaryPanel","moduleId":"./BoundaryPanel","exportName":"BoundaryPanel"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-multiple-children`
+    );
+
+    const wrapper = document.querySelector("[data-testid='boundary-panel']");
+    const first = document.querySelector("[data-testid='server-a']");
+    const second = document.querySelector("[data-testid='server-b']");
+
+    expect(wrapper?.textContent?.replace(/\s+/g, " ").trim()).toBe("Intro A B");
+    expect(wrapper?.contains(first)).toBe(true);
+    expect(wrapper?.contains(second)).toBe(true);
+    expect(document.querySelectorAll("[data-testid='server-a']")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-testid='server-b']")).toHaveLength(1);
+
+    wrapper?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(document.body.getAttribute("data-panel-hydrated")).toBe("yes");
+  });
+
   test("hydrates conditional client boundary siblings after earlier static children", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-conditional-boundary-order-"));
     const file = join(appDir, "page.mreact.tsx");
