@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.0.128 - 2026-06-04
+
+### Fixed
+
+- Fixed Cloudflare route module rendering so page loaders receive the same request-scoped `queryClient` used by page rendering and serialized query-state handoff, matching the Node renderer behavior for `context.queryClient.fetchQuery()`.
+- Fixed imported client boundary fallback inference for presentational components whose callback props are explicitly `undefined` during SSR, keeping media cards and images visible in the initial HTML before hydration attaches the interactive boundary.
+
 ## 0.0.127 - 2026-06-03
 
 ### Added

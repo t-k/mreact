@@ -6,6 +6,7 @@
 
 import type { ClientReferenceMetadata } from '@reckona/mreact-shared/compiler-contract';
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
+import { QueryClient } from '@reckona/mreact-query';
 
 // @public (undocumented)
 export interface CloudflareAssetBinding {
@@ -168,6 +169,8 @@ export interface CloudflareRouteModuleComponentProps<Data = unknown, Env = unkno
     // (undocumented)
     data: Data;
     // (undocumented)
+    queryClient: QueryClient;
+    // (undocumented)
     request: Request;
 }
 
@@ -176,6 +179,8 @@ export type CloudflareRouteModuleGlob<Env = unknown> = Record<string, Cloudflare
 
 // @public (undocumented)
 export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
+    // (undocumented)
+    queryClient: QueryClient;
     // (undocumented)
     request: Request;
 }
