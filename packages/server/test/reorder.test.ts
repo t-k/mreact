@@ -39,4 +39,16 @@ describe("out-of-order fragment reorder helper", () => {
       '<template data-mreact-oob-fragment="missing"><span>Ada</span></template>',
     );
   });
+
+  test("reorders fragments next to user comment nodes without consuming the comments", () => {
+    const root = document.createElement("main");
+    root.innerHTML =
+      '<section><!--user:before--><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><!--user:after--></section><!--user:fragment--><template data-mreact-oob-fragment="mreact-0"><strong>Ada</strong></template>';
+
+    applyOutOfOrderFragments(root);
+
+    expect(root.innerHTML).toBe(
+      "<section><!--user:before--><strong>Ada</strong><!--user:after--></section><!--user:fragment-->",
+    );
+  });
 });
