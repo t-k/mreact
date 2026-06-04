@@ -59,31 +59,24 @@ export function render() {
     expect(module.render()).toBe("runner");
   });
 
-  test("imports unbundled source modules with the mreact root runtime from an app cwd", async () => {
-    const originalCwd = process.cwd();
+  test("bundles source modules with the mreact root runtime from an app cwd", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-module-runner-app-cwd-"));
-    const scopeDir = join(appDir, "node_modules", "@reckona");
-    await mkdir(scopeDir, { recursive: true });
-    await symlink(join(originalCwd, "packages", "react"), join(scopeDir, "mreact"), "dir");
+    const sourcefile = join(appDir, "src", "app", "page.tsx");
 
-    try {
-      process.chdir(appDir);
-      const module = await importAppRouterSourceModule<{
-        memoType: () => string;
-      }>({
-        code: `import { memo } from "@reckona/mreact";
+    const module = await importAppRouterSourceModule<{
+      memoType: () => string;
+    }>({
+      code: `import { memo } from "@reckona/mreact";
 
 export function memoType() {
   return typeof memo;
 }`,
-        label: "module-runner-app-cwd-mreact-root",
-        sourcefile: join(appDir, "src", "app", "page.tsx"),
-      });
+      label: "module-runner-app-cwd-mreact-root",
+      resolveDir: appDir,
+      sourcefile,
+    });
 
-      expect(module.memoType()).toBe("function");
-    } finally {
-      process.chdir(originalCwd);
-    }
+    expect(module.memoType()).toBe("function");
   });
 
   test("bundles loader modules with the mreact root runtime as ESM", async () => {
