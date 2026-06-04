@@ -87,6 +87,25 @@ async function assertBuiltClientAssetClosure(
   return assets;
 }
 
+async function readTextFileTree(dir: string, prefix = ""): Promise<Record<string, string>> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files: Record<string, string> = {};
+
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    const relativePath = prefix === "" ? entry.name : `${prefix}/${entry.name}`;
+    const absolutePath = join(dir, entry.name);
+
+    if (entry.isDirectory()) {
+      Object.assign(files, await readTextFileTree(absolutePath, relativePath));
+      continue;
+    }
+
+    files[relativePath] = await readFile(absolutePath, "utf8");
+  }
+
+  return files;
+}
+
 function collectBareRuntimeImports(code: string): string[] {
   const imports = new Set<string>();
   const importPattern =
@@ -3863,6 +3882,49 @@ export default function Page() {
     expect(assetResponse.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(assetResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
     await assertBuiltClientAssetClosure(outDir, html);
+  });
+
+  test("produces deterministic build manifests and client assets", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-determinism-"));
+    const appDir = join(rootDir, "app");
+    const firstOutDir = join(rootDir, ".mreact-a");
+    const secondOutDir = join(rootDir, ".mreact-b");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "global.css"), ".title { color: rgb(1 2 3); }");
+    await writeFile(
+      join(appDir, "lazy.ts"),
+      `export const marker = "__deterministic_lazy_chunk__";\n`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import "./global.css";
+import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <button className="title" onClick={async () => {
+    count.set((value) => value + 1);
+    await import("./lazy");
+  }}>Count {count}</button>;
+}
+`,
+    );
+
+    await buildApp({ appDir, clientSourceMaps: "none", outDir: firstOutDir });
+    await buildApp({ appDir, clientSourceMaps: "none", outDir: secondOutDir });
+
+    await expect(readFile(join(firstOutDir, "client", "manifest.json"), "utf8")).resolves.toBe(
+      await readFile(join(secondOutDir, "client", "manifest.json"), "utf8"),
+    );
+    await expect(readFile(join(firstOutDir, "server", "manifest.json"), "utf8")).resolves.toBe(
+      await readFile(join(secondOutDir, "server", "manifest.json"), "utf8"),
+    );
+    await expect(readFile(join(firstOutDir, "server", "import-policy.json"), "utf8")).resolves.toBe(
+      await readFile(join(secondOutDir, "server", "import-policy.json"), "utf8"),
+    );
+    await expect(readTextFileTree(join(firstOutDir, "client"))).resolves.toEqual(
+      await readTextFileTree(join(secondOutDir, "client")),
+    );
   });
 
   test("shares imported app modules between production client route chunks", async () => {
