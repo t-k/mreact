@@ -1210,12 +1210,14 @@ async function collectRuntimeOptionalPackages(options: {
   const queue: Array<{ packageName: string; optional: boolean; startDir: string }> = [
     { packageName: options.packageName, optional: false, startDir: options.projectRoot },
   ];
+  let stoppedAtManifestReadCap = false;
 
-  for (
-    let index = 0;
-    index < queue.length && seenPackageJson.size < maxRuntimePackageManifestReads;
-    index += 1
-  ) {
+  for (let index = 0; index < queue.length; index += 1) {
+    if (seenPackageJson.size >= maxRuntimePackageManifestReads) {
+      stoppedAtManifestReadCap = true;
+      break;
+    }
+
     const item = queue[index];
     if (item === undefined || !isValidRuntimePackageName(item.packageName)) {
       continue;
@@ -1248,6 +1250,17 @@ async function collectRuntimeOptionalPackages(options: {
         queue.push({ packageName: optionalDependencyName, optional: true, startDir: packageDir });
       }
     }
+  }
+
+  if (stoppedAtManifestReadCap) {
+    console.warn(
+      [
+        "MR_RUNTIME_PACKAGE_MANIFEST_SCAN_LIMIT:",
+        `stopped scanning optional runtime package manifests after ${maxRuntimePackageManifestReads} files`,
+        `while collecting transitive optional dependencies for ${options.packageName}.`,
+        "Generated import-policy.json may omit deeper optional runtime packages.",
+      ].join(" "),
+    );
   }
 
   return [...optionalPackages].sort();

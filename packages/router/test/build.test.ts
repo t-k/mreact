@@ -825,6 +825,55 @@ export default function Page() {
     expect(policy.byRoute?.["/"]).toEqual(["db-client"]);
   });
 
+  test("warns when optional runtime package manifest scanning reaches the cap", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-optional-cap-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const optionalDependencies = Object.fromEntries(
+      Array.from({ length: 1_001 }, (_, index) => [`optional-runtime-${index}`, "1.0.0"]),
+    );
+    await mkdir(appDir, { recursive: true });
+    await writeFakePackageWithJson(rootDir, "db-client", {
+      exports: "./index.js",
+      name: "db-client",
+      optionalDependencies,
+      type: "module",
+    }, `export default "db";`);
+    for (const packageName of Object.keys(optionalDependencies)) {
+      await writeFakePackageWithJson(rootDir, packageName, {
+        exports: "./index.js",
+        name: packageName,
+        type: "module",
+      }, `export default ${JSON.stringify(packageName)};`);
+    }
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import db from "db-client";
+
+export default function Page() {
+  return <main>{db}</main>;
+}`,
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await buildApp({
+        allowedSourceDirs: ["app"],
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "app",
+        targets: ["node"],
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("MR_RUNTIME_PACKAGE_MANIFEST_SCAN_LIMIT"),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("1000"));
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("db-client"));
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
   test("accepts valid TypeScript async generic arrows while collecting import policies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-ts-generic-arrow-"));
     const appDir = join(rootDir, "src");
