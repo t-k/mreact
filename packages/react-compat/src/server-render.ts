@@ -324,6 +324,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return ` ${attributeName}="${value ? "true" : "false"}"`;
   }
 
+  if (typeof value === "boolean" && isDataAttribute(attributeName)) {
+    return ` ${attributeName}="${value ? "true" : "false"}"`;
+  }
+
   if (value === false) {
     return "";
   }
@@ -348,6 +352,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 function isBooleanishStringAttribute(name: string): boolean {
   const attributeName = toHtmlAttributeName(name).toLowerCase();
   return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+}
+
+function isDataAttribute(name: string): boolean {
+  return toHtmlAttributeName(name).toLowerCase().startsWith("data-");
 }
 
 const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([

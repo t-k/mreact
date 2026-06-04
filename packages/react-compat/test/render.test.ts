@@ -102,6 +102,8 @@ describe("react-compat render", () => {
         "aria-expanded": true,
         "aria-invalid": false,
         "aria-required": false,
+        "data-enabled": true,
+        "data-ready": false,
         contentEditable: true,
         disabled: true,
         spellCheck: true,
@@ -115,6 +117,8 @@ describe("react-compat render", () => {
     expect(element.getAttribute("aria-expanded")).toBe("true");
     expect(element.getAttribute("aria-invalid")).toBe("false");
     expect(element.getAttribute("aria-required")).toBe("false");
+    expect(element.getAttribute("data-enabled")).toBe("true");
+    expect(element.getAttribute("data-ready")).toBe("false");
     expect(element.getAttribute("disabled")).toBe("");
   });
 

@@ -124,6 +124,11 @@ export function applyProps(
       continue;
     }
 
+    if (typeof value === "boolean" && isDataAttribute(attributeName)) {
+      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      continue;
+    }
+
     if (typeof value === "boolean") {
       if (element.hasAttribute(attributeName) !== value) {
         if (!preserveHydrationAttributes) {
@@ -218,6 +223,11 @@ function applyInitialProps(
     const attributeName = toDomAttributeName(name);
 
     if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
+      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      continue;
+    }
+
+    if (typeof value === "boolean" && isDataAttribute(attributeName)) {
       applyAttribute(element, attributeName, value ? "true" : "false", path, options);
       continue;
     }
@@ -537,7 +547,11 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
 
     const attributeName = toDomAttributeName(name);
 
-    if (value === false && !isBooleanishStringAttribute(attributeName)) {
+    if (
+      value === false &&
+      !isBooleanishStringAttribute(attributeName) &&
+      !isDataAttribute(attributeName)
+    ) {
       continue;
     }
 
@@ -560,6 +574,10 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
 function isBooleanishStringAttribute(name: string): boolean {
   const attributeName = toDomAttributeName(name).toLowerCase();
   return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+}
+
+function isDataAttribute(name: string): boolean {
+  return toDomAttributeName(name).toLowerCase().startsWith("data-");
 }
 
 const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([

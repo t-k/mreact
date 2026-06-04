@@ -149,6 +149,19 @@ describe("react-compat server render", () => {
     );
   });
 
+  test("serializes data boolean attributes as strings in HTML", () => {
+    function App() {
+      return createElement("div", {
+        "data-enabled": true,
+        "data-ready": false,
+      });
+    }
+
+    expect(renderToString(App)).toBe(
+      '<div data-enabled="true" data-ready="false"></div>',
+    );
+  });
+
   test("treats srcDoc as the dangerous srcdoc attribute alias", () => {
     function Dropped() {
       return createElement("iframe", { srcDoc: "<script>1</script>" });
