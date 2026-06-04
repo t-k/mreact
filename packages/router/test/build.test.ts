@@ -4237,6 +4237,63 @@ export default function Page() {
     );
   });
 
+  test("dev and built SSR load CJS-only dependencies imported by route loaders", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-cjs-parity-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "fixture-cjs-label": "1.0.0" } }),
+    );
+    await writeFakePackageWithJson(
+      rootDir,
+      "fixture-cjs-label",
+      { main: "index.js", name: "fixture-cjs-label", type: "commonjs", version: "1.0.0" },
+      `module.exports = function label() {
+  return "CJS loader OK";
+};
+`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import label from "fixture-cjs-label";
+
+export function loader() {
+  return { label: label() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.label}</main>;
+}`,
+    );
+
+    const devResponse = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedPackages: ["fixture-cjs-label"],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/"),
+    });
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const builtResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(devResponse.status).toBe(200);
+    await expect(devResponse.text()).resolves.toContain("<main>CJS loader OK</main>");
+    expect(builtResponse.status).toBe(200);
+    await expect(builtResponse.text()).resolves.toContain("<main>CJS loader OK</main>");
+  });
+
   test("produces deterministic build manifests and client assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-determinism-"));
     const appDir = join(rootDir, "app");
