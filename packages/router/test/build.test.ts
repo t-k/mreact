@@ -4201,6 +4201,42 @@ export default function Page() {
     await expect(builtResponse.text()).resolves.toContain("<main>alias ok</main>");
   });
 
+  test("dev and built SSR resolve root and subpath router imports mixed in one route", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-router-entrypoint-mix-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link as RootLink } from "@reckona/mreact-router";
+import { Link as SubpathLink } from "@reckona/mreact-router/link";
+
+export default function Page() {
+  return <main><RootLink href="/root">Root</RootLink><SubpathLink href="/sub">Sub</SubpathLink></main>;
+}`,
+    );
+
+    const devResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    await buildApp({ appDir, outDir });
+    const builtResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(devResponse.status).toBe(200);
+    await expect(devResponse.text()).resolves.toContain(
+      '<main><a href="/root">Root</a><a href="/sub">Sub</a></main>',
+    );
+    expect(builtResponse.status).toBe(200);
+    await expect(builtResponse.text()).resolves.toContain(
+      '<main><a href="/root">Root</a><a href="/sub">Sub</a></main>',
+    );
+  });
+
   test("produces deterministic build manifests and client assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-determinism-"));
     const appDir = join(rootDir, "app");
