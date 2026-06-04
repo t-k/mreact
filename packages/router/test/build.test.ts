@@ -4140,6 +4140,67 @@ export default function Page() { cell(0); return null; }`,
     }
   });
 
+  test("dev and built SSR resolve tsconfig-style path aliases inside allowed source dirs", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-path-alias-parity-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    const libDir = join(rootDir, "src", "lib");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(libDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: {} }),
+    );
+    await writeFile(
+      join(libDir, "message.ts"),
+      `export const message = "alias ok";`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { message } from "@lib/message";
+
+export default function Page() {
+  return <main>{message}</main>;
+}`,
+    );
+    const aliasPlugin = {
+      name: "mreact-test-tsconfig-style-paths",
+      enforce: "pre" as const,
+      resolveId(source: string) {
+        if (!source.startsWith("@lib/")) {
+          return;
+        }
+        return join(libDir, `${source.slice("@lib/".length)}.ts`);
+      },
+    };
+
+    const devResponse = await renderAppRequest({
+      appDir,
+      importPolicy: {
+        allowedSourceDirs: ["src"],
+        projectRoot: rootDir,
+      },
+      request: new Request("http://local.test/"),
+      vitePlugins: [aliasPlugin],
+    });
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      appDir,
+      outDir,
+      projectRoot: rootDir,
+      viteConfig: { plugins: [aliasPlugin] },
+    });
+    const builtResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(devResponse.status).toBe(200);
+    await expect(devResponse.text()).resolves.toContain("<main>alias ok</main>");
+    expect(builtResponse.status).toBe(200);
+    await expect(builtResponse.text()).resolves.toContain("<main>alias ok</main>");
+  });
+
   test("produces deterministic build manifests and client assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-determinism-"));
     const appDir = join(rootDir, "app");
