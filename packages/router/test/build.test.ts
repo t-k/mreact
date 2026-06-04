@@ -5433,6 +5433,87 @@ export default function Page() {
     await expect(access(join(outDir, "server", "runtime", "escape.mreact.tsx"))).rejects.toThrow();
   });
 
+  test("reports missing built app manifests with the artifact path", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-missing-artifacts-"));
+    const outDir = join(rootDir, ".mreact");
+
+    await expect(
+      renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      }),
+    ).rejects.toThrow(/Missing built app server manifest.*server[/\\]manifest\.json/);
+  });
+
+  test("reports corrupted built app manifests with the artifact path", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-corrupt-manifest-"));
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(outDir, "server"), { recursive: true });
+    await mkdir(join(outDir, "client"), { recursive: true });
+    await writeFile(join(outDir, "server", "manifest.json"), "{not-json");
+    await writeFile(join(outDir, "client", "manifest.json"), JSON.stringify({ routes: [] }));
+
+    await expect(
+      renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      }),
+    ).rejects.toThrow(/Invalid built app server manifest.*server[/\\]manifest\.json/);
+  });
+
+  test("reports corrupted generated import policies with the artifact path", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-corrupt-import-policy-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>policy</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    await writeFile(join(outDir, "server", "import-policy.json"), "{not-json");
+
+    await expect(
+      renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      }),
+    ).rejects.toThrow(/Invalid built app import policy.*server[/\\]import-policy\.json/);
+  });
+
+  test("reports missing server module artifacts with the artifact path", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-missing-server-module-artifact-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Artifact missing</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      serverModuleFiles?: Record<string, string>;
+      serverModuleRenderFiles?: Record<string, string>;
+    };
+    const artifactFile =
+      serverManifest.serverModuleRenderFiles?.["page.mreact.tsx"] ??
+      serverManifest.serverModuleFiles?.["page.mreact.tsx"];
+    expect(artifactFile).toBeDefined();
+    await rm(join(outDir, "server", artifactFile as string));
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.text()).toMatch(/Missing built server module artifact.*page\.mreact\.tsx/);
+  });
+
   test("reuses materialized built server runtime while manifests are unchanged", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-cache-"));
     const appDir = join(rootDir, "app");

@@ -830,9 +830,12 @@ async function readBuiltRuntime(options: {
     return cached.runtime;
   }
 
+  const serverManifestPath = join(outDir, "server", "manifest.json");
+  const clientManifestPath = join(outDir, "client", "manifest.json");
+  const importPolicyPath = join(outDir, "server", "import-policy.json");
   const [serverManifestText, clientManifestText, importPolicyText] = await Promise.all([
-    readFile(join(outDir, "server", "manifest.json"), "utf8"),
-    readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    readRequiredBuiltArtifactText(serverManifestPath, "built app server manifest"),
+    readRequiredBuiltArtifactText(clientManifestPath, "built app client manifest"),
     readBuiltImportPolicyText(outDir),
   ]);
 
@@ -847,10 +850,13 @@ async function readBuiltRuntime(options: {
 
   const runtime = materializeBuiltRuntime({
     clientManifestText,
+    clientManifestPath,
     importPolicyText,
+    importPolicyPath,
     outDir,
     runtimeDir,
     serverManifestText,
+    serverManifestPath,
   });
 
   builtRuntimeCache.set(cacheKey, {
@@ -865,17 +871,24 @@ async function readBuiltRuntime(options: {
 
 async function materializeBuiltRuntime(options: {
   clientManifestText: string;
+  clientManifestPath: string;
+  importPolicyPath: string;
   importPolicyText: string | undefined;
   outDir: string;
   runtimeDir: string;
   serverManifestText: string;
+  serverManifestPath: string;
 }): Promise<BuiltRuntime> {
-  const serverManifest = JSON.parse(options.serverManifestText) as BuiltServerManifest;
-  const clientManifest = JSON.parse(options.clientManifestText) as {
+  const serverManifest = parseBuiltJsonArtifact<BuiltServerManifest>(
+    options.serverManifestText,
+    options.serverManifestPath,
+    "built app server manifest",
+  );
+  const clientManifest = parseBuiltJsonArtifact<{
     assets?: readonly string[];
     routes: ClientRouteManifestEntry[];
     styles?: Array<{ css?: readonly string[]; file: string }>;
-  };
+  }>(options.clientManifestText, options.clientManifestPath, "built app client manifest");
   const appDir = await materializeBuiltServerApp(options.runtimeDir, serverManifest);
   const projectRoot = appDir;
   const routesDir = join(projectRoot, serverManifest.routesDir ?? "");
@@ -957,7 +970,10 @@ async function materializeBuiltRuntime(options: {
   const allowedSourceDirs = (serverManifest.allowedSourceDirs ?? [""]).map((directory) =>
     join(projectRoot, directory),
   );
-  const generatedImportPolicy = builtGeneratedImportPolicy(options.importPolicyText);
+  const generatedImportPolicy = builtGeneratedImportPolicy(
+    options.importPolicyText,
+    options.importPolicyPath,
+  );
 
   return {
     appDir: routesDir,
@@ -996,27 +1012,30 @@ async function materializeBuiltRuntime(options: {
 }
 
 async function readBuiltImportPolicyText(outDir: string): Promise<string | undefined> {
+  const policyPath = join(outDir, "server", "import-policy.json");
+
   try {
-    return await readFile(join(outDir, "server", "import-policy.json"), "utf8");
+    return await readFile(policyPath, "utf8");
   } catch (error) {
     if (isMissingFileError(error)) {
       return undefined;
     }
 
-    throw error;
+    throw builtArtifactReadError("built app import policy", policyPath, error);
   }
 }
 
 function builtGeneratedImportPolicy(
   importPolicyText: string | undefined,
+  importPolicyPath: string,
 ): AppRouterImportPolicy | undefined {
   if (importPolicyText === undefined) {
     return undefined;
   }
 
-  const artifact = JSON.parse(importPolicyText) as {
+  const artifact = parseBuiltJsonArtifact<{
     runtimePackages?: unknown;
-  };
+  }>(importPolicyText, importPolicyPath, "built app import policy");
   const runtimePackages = Array.isArray(artifact.runtimePackages)
     ? artifact.runtimePackages.filter((name): name is string => typeof name === "string")
     : [];
@@ -1057,6 +1076,31 @@ function isMissingFileError(error: unknown): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === "ENOENT"
   );
+}
+
+async function readRequiredBuiltArtifactText(labelPath: string, label: string): Promise<string> {
+  try {
+    return await readFile(labelPath, "utf8");
+  } catch (error) {
+    throw builtArtifactReadError(label, labelPath, error);
+  }
+}
+
+function builtArtifactReadError(label: string, artifactPath: string, error: unknown): Error {
+  const prefix = isMissingFileError(error) ? "Missing" : "Unable to read";
+  const detail = error instanceof Error && error.message !== "" ? `: ${error.message}` : "";
+
+  return new Error(`${prefix} ${label}: ${artifactPath}${detail}`, { cause: error });
+}
+
+function parseBuiltJsonArtifact<T>(text: string, artifactPath: string, label: string): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch (error) {
+    const detail = error instanceof Error && error.message !== "" ? `: ${error.message}` : "";
+
+    throw new Error(`Invalid ${label}: ${artifactPath}${detail}`, { cause: error });
+  }
 }
 
 async function loadBuiltServerModuleArtifacts(
@@ -1106,7 +1150,11 @@ async function loadBuiltServerModuleArtifact(
         mergeBuiltServerModuleArtifacts(
           existing,
           hydrateBuiltServerModuleArtifact(
-            JSON.parse(text) as BuiltServerModuleArtifact,
+            parseBuiltJsonArtifact<BuiltServerModuleArtifact>(
+              text,
+              artifactPath,
+              `built server module artifact for ${file}`,
+            ),
             builtServerDirForArtifactPath(artifactPath),
           ),
         ),
@@ -1114,6 +1162,9 @@ async function loadBuiltServerModuleArtifact(
     })
     .catch((error) => {
       runtime.serverModuleArtifactLoads.delete(`${kind}\0${file}`);
+      if (isMissingFileError(error)) {
+        throw builtArtifactReadError(`built server module artifact for ${file}`, artifactPath, error);
+      }
       throw error;
     });
   runtime.serverModuleArtifactLoads.set(`${kind}\0${file}`, loaded);
