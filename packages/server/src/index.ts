@@ -96,6 +96,7 @@ export {
   createEventHydrationManifest,
   html,
   renderEventHydrationManifest,
+  renderReactNodeToString,
   renderScriptAsset,
   renderSsrState,
   renderToString,

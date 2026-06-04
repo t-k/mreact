@@ -5,6 +5,7 @@ import {
   createEventHydrationManifest,
   html,
   renderEventHydrationManifest,
+  renderReactNodeToString,
   renderScriptAsset,
   renderSsrState,
   renderToString,
@@ -72,6 +73,16 @@ describe("server HTML helpers module", () => {
     expect(rendered).toBe("<p>stream</p>");
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     await expect(response.text()).resolves.toBe(`<main class="page">Hello</main>`);
+  });
+
+  test("renderReactNodeToString serializes root arrays and empty nodes", async () => {
+    await expect(
+      renderReactNodeToString([
+        createElement("span", { key: "a" }, "array"),
+        createElement("strong", { key: "b" }, "root"),
+      ]),
+    ).resolves.toBe("<span>array</span><strong>root</strong>");
+    await expect(renderReactNodeToString(null)).resolves.toBe("");
   });
 
   test("html serializes HTML void elements without closing tags", async () => {

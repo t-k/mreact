@@ -4088,6 +4088,58 @@ export default function Page() {
     await assertBuiltClientAssetClosure(outDir, html);
   });
 
+  test("built routes render fragment, array, string, and null root returns consistently", async () => {
+    const cases = [
+      {
+        expected: '<div data-mreact-route-id="index"><span>fragment</span><strong>root</strong></div>',
+        file: "page.mreact.tsx",
+        name: "fragment",
+        source: `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() { cell(0); return <><span>fragment</span><strong>root</strong></>; }`,
+      },
+      {
+        expected: "<!DOCTYPE html><span>array</span><strong>root</strong>",
+        file: "page.tsx",
+        name: "array",
+        source: `export default function Page() { return [<span key="a">array</span>, <strong key="b">root</strong>]; }`,
+      },
+      {
+        expected: '<div data-mreact-route-id="index">text root</div>',
+        file: "page.mreact.tsx",
+        name: "string",
+        source: `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() { cell(0); return "text root"; }`,
+      },
+      {
+        expected: '<div data-mreact-route-id="index"></div>',
+        file: "page.mreact.tsx",
+        name: "null",
+        source: `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() { cell(0); return null; }`,
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const rootDir = await mkdtemp(join(tmpdir(), `mreact-app-root-${testCase.name}-`));
+      const appDir = join(rootDir, "app");
+      const outDir = join(rootDir, ".mreact");
+      await mkdir(appDir, { recursive: true });
+      await writeFile(join(appDir, testCase.file), testCase.source);
+      await buildApp({ appDir, outDir });
+
+      const response = await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      });
+
+      expect(response.status, testCase.name).toBe(200);
+      expect(await response.text(), testCase.name).toContain(testCase.expected);
+    }
+  });
+
   test("produces deterministic build manifests and client assets", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-determinism-"));
     const appDir = join(rootDir, "app");

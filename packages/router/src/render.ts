@@ -21,6 +21,7 @@ import {
   type HtmlSink,
   renderAsyncBoundary,
   renderOutOfOrderReorderScript,
+  renderReactNodeToString,
   renderToReadableStream,
 } from "@reckona/mreact-server";
 import {
@@ -2613,7 +2614,11 @@ async function runServerModule(
     vitePlugins,
   );
 
-  return component(props);
+  return renderServerComponentResult(await component(props));
+}
+
+async function renderServerComponentResult(value: unknown): Promise<string> {
+  return typeof value === "string" ? value : renderReactNodeToString(value);
 }
 
 async function runServerModuleWithSlots(
@@ -2638,7 +2643,7 @@ async function runServerModuleWithSlots(
   finishRenderTimingPhase(timing, moduleLoadStartedAt, "pageModuleLoadMs");
   const component = selectServerComponent(module);
   const componentStartedAt = renderTimingPhaseStartedAt(timing);
-  const html = await component(props);
+  const html = await renderServerComponentResult(await component(props));
   finishRenderTimingPhase(timing, componentStartedAt, "pageComponentRenderMs");
   const slotsStartedAt = renderTimingPhaseStartedAt(timing);
   const slots = await renderRouteSlots(module.slots, props);
@@ -2764,7 +2769,10 @@ async function renderRouteSlots(
   const rendered: Record<string, string> = {};
 
   for (const [name, value] of Object.entries(slots)) {
-    rendered[name] = typeof value === "function" ? await value(props) : value;
+    rendered[name] =
+      typeof value === "function"
+        ? await renderServerComponentResult(await value(props))
+        : await renderServerComponentResult(value);
   }
 
   return rendered;

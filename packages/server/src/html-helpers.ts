@@ -132,6 +132,16 @@ export async function renderToString(render: StreamRender): Promise<string> {
   return sink.toString();
 }
 
+export async function renderReactNodeToString(node: unknown): Promise<string> {
+  const sink = createStringSink();
+  const state: HtmlRenderState = { suspenseId: 0 };
+
+  await appendReactNode(sink, node, state);
+  await sink.drain();
+
+  return sink.toString();
+}
+
 interface HtmlRenderState {
   suspenseId: number;
 }
@@ -303,7 +313,7 @@ function appendSuspenseElement(
   element: ReactCompatElement,
   state: HtmlRenderState,
 ): void {
-  const rendered = renderReactNodeToString(element.props.children, state);
+  const rendered = renderReactNodeChildrenToString(element.props.children, state);
 
   if (!isPromiseLikeString(rendered)) {
     renderReactSuspenseBoundary(sink, (boundarySink) => {
@@ -324,7 +334,7 @@ function appendSuspenseElement(
     },
     {
       fallback(boundarySink) {
-        const fallback = renderReactNodeToString(
+        const fallback = renderReactNodeChildrenToString(
           (element.props as { fallback?: ReactCompatNode }).fallback,
           state,
         );
@@ -341,7 +351,7 @@ function appendSuspenseElement(
   );
 }
 
-function renderReactNodeToString(
+function renderReactNodeChildrenToString(
   node: unknown,
   state: HtmlRenderState,
 ): string | PromiseLike<string> {
