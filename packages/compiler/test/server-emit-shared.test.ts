@@ -78,6 +78,15 @@ describe("server emit shared behavior", () => {
     await expect(runServerStreamComponent(compiled.stream, "App", props)).resolves.toBe(expected);
   });
 
+  test("string and stream emitters serialize unitless and custom style entries the same way", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <div style={{ zIndex: 10, opacity: 0.25, lineHeight: 1.5, "--accent": "red", marginTop: null, color: false }}>x</div>;
+}`,
+      '<div style="z-index:10;opacity:0.25;line-height:1.5;--accent:red">x</div>',
+    );
+  });
+
   test("string and stream emitters evaluate logical-or left JSX children once", async () => {
     const source = `let calls = 0;
 export function App() {
