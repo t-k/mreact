@@ -1401,6 +1401,45 @@ export default function Page() {
     expect(result.clientReferenceManifest).toEqual([]);
   });
 
+  test("marks anonymous default arrow optional callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-anonymous-default-arrow-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "anonymous-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type AnonymousCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export default ({ onConfirm }: AnonymousCardProps) => {
+  const label = cell("Anonymous").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+};`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import AnonymousCard from "./components/anonymous-card";
+
+export default function Page() {
+  return <main><AnonymousCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/anonymous-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/anonymous-card"]);
+  });
+
   test("does not mark mixed guarded and unguarded callbacks as SSR fallback eligible", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-mixed-callbacks-"));
     const appDir = join(dir, "app");

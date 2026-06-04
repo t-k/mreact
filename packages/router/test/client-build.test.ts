@@ -979,6 +979,122 @@ export default function Page() {
     expect(document.body.getAttribute("data-panel-hydrated")).toBe("yes");
   });
 
+  test("keeps inferred boundary fallback static when no client callback is provided", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-static-runtime-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "StaticActionCard.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function StaticActionCard(props) {
+  const label = cell("Static fallback").get();
+  if (props.onConfirm === undefined) {
+    return <article data-testid="static-action-card"><span>{label}</span></article>;
+  }
+  return <button type="button" data-testid="static-action-card" onClick={() => props.onConfirm()}>Interactive</button>;
+}`,
+    );
+    const code = `import { StaticActionCard } from "./StaticActionCard";
+
+export default function Page() {
+  return <main><StaticActionCard /></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><template data-mreact-client-boundary="StaticActionCard"></template><article data-testid="static-action-card"><span>Static fallback</span></article><script type="application/json" data-mreact-client-boundary-props="StaticActionCard">{}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"StaticActionCard","moduleId":"./StaticActionCard","exportName":"StaticActionCard"}]</script>',
+    ].join("");
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-static-no-callback`
+    );
+
+    const hydratedCard = document.querySelector("[data-testid='static-action-card']");
+
+    expect(hydratedCard?.tagName).toBe("ARTICLE");
+    expect(hydratedCard?.textContent).toBe("Static fallback");
+    expect(document.querySelectorAll("[data-testid='static-action-card']")).toHaveLength(1);
+  });
+
+  test("hydrates boundary children containing a keyed map and a second boundary", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-keyed-second-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "BoundaryPanel.tsx"),
+      `export function BoundaryPanel(props) {
+  return (
+    <section data-testid="keyed-boundary-panel" onClick={() => document.body.setAttribute("data-keyed-panel-hydrated", "yes")}>
+      {props.children}
+    </section>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "StatusBadge.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function StatusBadge() {
+  const active = cell(false);
+  return <button type="button" data-testid="status-badge" onClick={() => active.set(true)}>{active.get() ? "Ready" : "Pending"}</button>;
+}`,
+    );
+    const code = `import { BoundaryPanel } from "./BoundaryPanel";
+import { StatusBadge } from "./StatusBadge";
+
+const items = [{ id: "a" }, { id: "b" }];
+
+export default function Page() {
+  return (
+    <main>
+      <BoundaryPanel onRefresh={() => {}}>
+        <ul data-testid="keyed-list">
+          {items.map((item) => <li key={item.id} data-item-id={item.id}>{item.id}</li>)}
+        </ul>
+        <StatusBadge />
+      </BoundaryPanel>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><template data-mreact-client-boundary="BoundaryPanel" data-mreact-client-boundary-nonserializable="true"></template><ul data-testid="keyed-list"><li data-item-id="a">a</li><li data-item-id="b">b</li></ul><template data-mreact-client-boundary="StatusBadge"></template><script type="application/json" data-mreact-client-boundary-props="StatusBadge">{}</script><script type="application/json" data-mreact-client-boundary-props="BoundaryPanel">{}</script></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"BoundaryPanel","moduleId":"./BoundaryPanel","exportName":"BoundaryPanel"},{"name":"StatusBadge","moduleId":"./StatusBadge","exportName":"StatusBadge"}]</script>',
+    ].join("");
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#boundary-keyed-second`
+    );
+
+    const wrapper = document.querySelector("[data-testid='keyed-boundary-panel']");
+    const list = document.querySelector("[data-testid='keyed-list']");
+    const badge = document.querySelector<HTMLButtonElement>("[data-testid='status-badge']");
+
+    expect(wrapper?.contains(list)).toBe(true);
+    expect(wrapper?.contains(badge)).toBe(true);
+    expect(document.querySelector("[data-item-id='a']")?.textContent).toBe("a");
+    expect(document.querySelector("[data-item-id='b']")?.textContent).toBe("b");
+    expect(document.querySelectorAll("[data-testid='keyed-list']")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-testid='status-badge']")).toHaveLength(1);
+
+    wrapper?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(document.body.getAttribute("data-keyed-panel-hydrated")).toBe("yes");
+
+    expect(badge?.textContent).toBe("Pending");
+    badge?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    expect(badge?.textContent).toBe("Ready");
+  });
+
   test("hydrates conditional client boundary siblings after earlier static children", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-conditional-boundary-order-"));
     const file = join(appDir, "page.mreact.tsx");
