@@ -111,7 +111,7 @@ const Component = memo(function Component() {
 });
 
 export function loader() {
-  return { ok: true };
+  return { memoType: typeof Component };
 }
 
 export default function Page() {
@@ -127,6 +127,7 @@ export default function Page() {
 
       expect(bundled).not.toContain("packages/react/index.cjs");
       expect(bundled).toContain("function memo(");
+      expect(bundled).toContain("memoType");
     } finally {
       process.chdir(originalCwd);
     }
