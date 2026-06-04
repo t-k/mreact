@@ -270,6 +270,63 @@ export default function Page() {
     expect(html).not.toContain("exports is not defined");
   });
 
+  test("dev SSR keeps inferred boundary fallback HTML with root runtime imports", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-root-boundary-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "TimelineCard.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type TimelineCardProps = {
+  readonly onOpenMedia?: ((id: string) => void) | undefined;
+};
+
+export function TimelineCard(props: TimelineCardProps) {
+  const title = cell("Dev SSR fallback").get();
+  return (
+    <article data-testid="timeline-card">
+      <button
+        type="button"
+        onClick={props.onOpenMedia === undefined ? undefined : () => props.onOpenMedia?.("media-1")}
+      >
+        {title}
+      </button>
+    </article>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { memo } from "@reckona/mreact";
+import { TimelineCard } from "./components/TimelineCard";
+
+const Shell = memo(function Shell(props: { readonly children: unknown }) {
+  return <main>{props.children}</main>;
+});
+
+export default function Page() {
+  return <Shell><TimelineCard /></Shell>;
+}
+`,
+    );
+    const devServer = await startDevServer({
+      port: 0,
+      projectRoot,
+      routesDir: appDir,
+    });
+    devServers.push(devServer);
+
+    const response = await fetch(devServer.url);
+    const html = await response.text();
+
+    expect(response.status, html).toBe(200);
+    expect(html).toContain('data-mreact-client-boundary="TimelineCard"');
+    expect(html).toContain('data-testid="timeline-card"');
+    expect(html).toContain("Dev SSR fallback");
+    expect(html).not.toContain("exports is not defined");
+  });
+
   test("serves client assets for interactive routes with function loader exports", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-loader-client-"));
     await mkdir(join(appDir, "settings", "appearance"), { recursive: true });

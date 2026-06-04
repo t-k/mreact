@@ -501,6 +501,129 @@ export default Page;`;
     expect(result.client).toBe(true);
   });
 
+  test("marks arrow-parameter destructured optional callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-arrow-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "timeline-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type TimelineCardProps = {
+  readonly onOpenMedia?: ((id: string) => void) | undefined;
+};
+
+export const TimelineCard = ({ onOpenMedia }: TimelineCardProps) => {
+  const title = cell("Timeline fallback").get();
+  return (
+    <article data-testid="timeline-card">
+      <button
+        type="button"
+        onClick={onOpenMedia === undefined ? undefined : () => onOpenMedia("media-1")}
+      >
+        {title}
+      </button>
+    </article>
+  );
+};`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { TimelineCard } from "./components/timeline-card";
+
+export default function Page() {
+  return <main><TimelineCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/timeline-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/timeline-card"]);
+  });
+
+  test("marks default arrow destructured optional callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-default-arrow-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "timeline-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type TimelineCardProps = {
+  readonly onOpenMedia?: ((id: string) => void) | undefined;
+};
+
+export default ({ onOpenMedia }: TimelineCardProps) => {
+  const title = cell("Default arrow fallback").get();
+  return (
+    <article data-testid="timeline-card">
+      <button
+        type="button"
+        onClick={onOpenMedia === undefined ? undefined : () => onOpenMedia("media-1")}
+      >
+        {title}
+      </button>
+    </article>
+  );
+};`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import TimelineCard from "./components/timeline-card";
+
+export default function Page() {
+  return <main><TimelineCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/timeline-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/timeline-card"]);
+  });
+
+  test("marks function-expression destructured optional callback guards as SSR fallback eligible", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-function-expression-callback-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "timeline-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type TimelineCardProps = {
+  readonly onOpenMedia?: ((id: string) => void) | undefined;
+};
+
+export const TimelineCard = function ({ onOpenMedia }: TimelineCardProps) {
+  const title = cell("Function expression fallback").get();
+  return (
+    <article data-testid="timeline-card">
+      <button
+        type="button"
+        onClick={onOpenMedia === undefined ? undefined : () => onOpenMedia("media-1")}
+      >
+        {title}
+      </button>
+    </article>
+  );
+};`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { TimelineCard } from "./components/timeline-card";
+
+export default function Page() {
+  return <main><TimelineCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/timeline-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/timeline-card"]);
+  });
+
   test("flags a Link rendered through a wrapper component imported from another file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-nav-link-wrapper-"));
     const appDir = join(dir, "app");

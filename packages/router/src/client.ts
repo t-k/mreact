@@ -1204,8 +1204,24 @@ function destructuredPropsCallbackNames(source: string): Set<string> {
     addDestructuredCallbackNames(names, match[1] ?? "");
   }
 
+  for (const match of source.matchAll(/\bfunction(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\{([^}]+)\}/gu)) {
+    addDestructuredCallbackNames(names, match[1] ?? "");
+  }
+
   for (const match of source.matchAll(
-    /\bfunction\s+[A-Za-z_$][\w$]*\s*\(\s*\{([^}]+)\}/gu,
+    /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*(?:async\s*)?\(?\s*\{([^}]+)\}\s*(?::\s*[^)=]+)?\)?\s*=>/gu,
+  )) {
+    addDestructuredCallbackNames(names, match[1] ?? "");
+  }
+
+  for (const match of source.matchAll(
+    /\bexport\s+default\s+(?:async\s*)?\(?\s*\{([^}]+)\}\s*(?::\s*[^)=]+)?\)?\s*=>/gu,
+  )) {
+    addDestructuredCallbackNames(names, match[1] ?? "");
+  }
+
+  for (const match of source.matchAll(
+    /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*=\s*function(?:\s+[A-Za-z_$][\w$]*)?\s*\(\s*\{([^}]+)\}/gu,
   )) {
     addDestructuredCallbackNames(names, match[1] ?? "");
   }
