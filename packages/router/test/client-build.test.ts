@@ -1086,6 +1086,122 @@ export default function Page() {
     expect(document.body.getAttribute("data-action-confirmed")).toBe("yes");
   });
 
+  test("hydrates parser-sensitive table fallback without duplicating rows", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-table-fallback-hydrate-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "InteractiveRows.tsx"),
+      `export function InteractiveRows(props) {
+  if (props.onSelect === undefined) {
+    return <tbody>{props.children}</tbody>;
+  }
+
+  return <tbody onClick={() => props.onSelect()}>{props.children}</tbody>;
+}`,
+    );
+    const code = `import { InteractiveRows } from "./InteractiveRows";
+
+export default function Page() {
+  return (
+    <main>
+      <table>
+        <InteractiveRows onSelect={() => document.body.setAttribute("data-row-selected", "yes")}>
+          <tr data-testid="user-row"><td>Ada</td></tr>
+        </InteractiveRows>
+      </table>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain('data-mreact-client-boundary="InteractiveRows"');
+    setDocumentBodyFromHtml(html);
+    const serverRow = document.querySelector("[data-testid='user-row']");
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#table-fallback-hydrate`
+    );
+
+    const tbody = document.querySelector("tbody");
+    const row = document.querySelector("[data-testid='user-row']");
+
+    expect(document.querySelectorAll("[data-testid='user-row']")).toHaveLength(1);
+    expect(row).toBe(serverRow);
+    expect(tbody?.contains(row)).toBe(true);
+  });
+
+  test("hydrates route picture media without duplicating sources", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-picture-media-hydrate-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const ready = cell(false);
+
+export default function Page() {
+  return (
+    <main>
+      <picture data-testid="hero-picture">
+        <source media="(min-width: 640px)" srcSet="/hero-wide.avif" />
+        <img data-testid="hero-image" src="/hero.jpg" alt="Hero" />
+      </picture>
+      <button type="button" onClick={() => ready.set(true)}>{ready.get() ? "Ready" : "Idle"}</button>
+    </main>
+  );
+}`;
+    await writeFile(file, code);
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<source");
+    setDocumentBodyFromHtml(html);
+    const serverPicture = document.querySelector("[data-testid='hero-picture']");
+    const serverSource = document.querySelector("source");
+    const serverImage = document.querySelector("[data-testid='hero-image']");
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#picture-media-hydrate`
+    );
+
+    const picture = document.querySelector("[data-testid='hero-picture']");
+    const source = document.querySelector("source");
+    const image = document.querySelector("[data-testid='hero-image']");
+    const button = document.querySelector("button");
+
+    expect(document.querySelectorAll("[data-testid='hero-picture']")).toHaveLength(1);
+    expect(document.querySelectorAll("source")).toHaveLength(1);
+    expect(document.querySelectorAll("[data-testid='hero-image']")).toHaveLength(1);
+    expect(picture).toBe(serverPicture);
+    expect(source).toBe(serverSource);
+    expect(image).toBe(serverImage);
+
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    expect(button?.textContent).toBe("Ready");
+  });
+
   test("hydrates boundary children containing a keyed map and a second boundary", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-keyed-second-"));
     const file = join(appDir, "page.mreact.tsx");
