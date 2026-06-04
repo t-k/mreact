@@ -2440,6 +2440,48 @@ export default function Page() {
     ).toThrow(/Extra Cloudflare route module.*extra\/page/);
   });
 
+  test("matches relocated Cloudflare route module glob entries with absolute and Windows-style keys", () => {
+    const pageModule = {};
+    const routeModule = {};
+    const manifest = {
+      files: {},
+      routes: [
+        {
+          file: "users/$id/page.tsx",
+          kind: "page" as const,
+          path: "/users/:id",
+          segments: [
+            { kind: "static" as const, value: "users" },
+            { kind: "dynamic" as const, name: "id" },
+          ],
+        },
+        {
+          file: "api/status/route.ts",
+          kind: "server" as const,
+          path: "/api/status",
+          segments: [
+            { kind: "static" as const, value: "api" },
+            { kind: "static" as const, value: "status" },
+          ],
+        },
+      ],
+      version: 1 as const,
+    };
+
+    expect(
+      collectCloudflareRouteModules(
+        {
+          "C:\\tmp\\mreact\\cloudflare-routes\\users\\$id\\page.js": pageModule,
+          "/tmp/mreact/cloudflare-routes/api/status/route.mjs": routeModule,
+        },
+        { manifest },
+      ),
+    ).toEqual({
+      "api/status/route.ts": routeModule,
+      "users/$id/page.tsx": pageModule,
+    });
+  });
+
   test("serves only allow-listed client assets from a Cloudflare asset binding", async () => {
     const requested: string[] = [];
     const loader = createCloudflareStaticAssetLoader({
