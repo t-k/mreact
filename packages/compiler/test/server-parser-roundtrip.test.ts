@@ -78,4 +78,16 @@ describe("server HTML parser round-trip invariants", () => {
     expect(html).toBe("start&lt;!--not a marker--&gt;<span>after</span>");
     expectBrowserParserRoundTrip(html);
   });
+
+  test("script-closing and comment-opening text stays escaped and parser-stable", async () => {
+    const html = await renderServerPair(
+      `export function App() {
+  const text = "</script><!--marker-->";
+  return <main>{text}<span>after</span></main>;
+}`,
+    );
+
+    expect(html).toBe("<main>&lt;/script&gt;&lt;!--marker--&gt;<span>after</span></main>");
+    expectBrowserParserRoundTrip(html);
+  });
 });
