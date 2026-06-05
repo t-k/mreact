@@ -17,6 +17,7 @@ import type { ClientReferenceMetadata } from "@reckona/mreact-shared/compiler-co
 import {
   collectClientRouteModuleAnalysisFromContext,
   createCompilerModuleContext,
+  hasUnguardedBrowserGlobalReference,
   readTopLevelBooleanExport,
   readTopLevelBooleanExportFromContext,
   stripTypeScriptWithOxc,
@@ -850,7 +851,10 @@ async function inferClientRouteModuleSource(options: {
         }
 
         clientBoundaryImports.push(reference.source);
-        if (!imported.clientBoundaryModule && isClientBoundaryFallbackEligibleSource(source)) {
+        if (
+          !imported.clientBoundaryModule &&
+          isClientBoundaryFallbackEligibleSource(source, resolved)
+        ) {
           clientBoundaryFallbackImports.push(reference.source);
         }
         continue;
@@ -1115,8 +1119,8 @@ function isStyleModuleSpecifier(source: string): boolean {
 
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
-function isClientBoundaryFallbackEligibleSource(source: string): boolean {
-  if (hasClientBoundaryFallbackUnsafeBrowserGlobal(source)) {
+function isClientBoundaryFallbackEligibleSource(source: string, filename?: string): boolean {
+  if (hasClientBoundaryFallbackUnsafeBrowserGlobal(source, filename)) {
     return false;
   }
 
@@ -1240,12 +1244,24 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
   );
 }
 
-function hasClientBoundaryFallbackUnsafeBrowserGlobal(source: string): boolean {
+function hasClientBoundaryFallbackUnsafeBrowserGlobal(source: string, filename?: string): boolean {
   const sourceWithoutTypeofGuards = source.replaceAll(
     /\btypeof\s+(?:window|document|localStorage)\s*(?:(?:={2,3}|!={1,2})\s*["']undefined["'])?/gu,
     "",
   );
-  return /\b(?:window|document|localStorage)\b/u.test(sourceWithoutTypeofGuards);
+  if (!/\b(?:window|document|localStorage)\b/u.test(sourceWithoutTypeofGuards)) {
+    return false;
+  }
+
+  // Remaining browser-global tokens may still be typeof-guarded uses such as
+  // `if (typeof window !== "undefined") return window.location.pathname;`.
+  // Those never execute on the server, so the AST guard analysis decides;
+  // an unparsable module stays conservatively ineligible.
+  try {
+    return hasUnguardedBrowserGlobalReference({ code: source, filename });
+  } catch {
+    return true;
+  }
 }
 
 function propsCallbackAliasNames(source: string): Set<string> {

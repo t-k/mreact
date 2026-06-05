@@ -863,7 +863,7 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/early-return-card"]);
   });
 
-  test("keeps typeof-window guarded browser access out of SSR fallback eligibility", async () => {
+  test("keeps SSR fallback eligibility for typeof-window guarded ternary reads", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-window-guard-"));
     const appDir = join(dir, "app");
     await mkdir(join(appDir, "components"), { recursive: true });
@@ -886,7 +886,85 @@ export default function Page() {
 
     expect(result.client).toBe(true);
     expect(result.clientBoundaryImports).toEqual(["./components/browser-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/browser-card"]);
+  });
+
+  test("keeps unguarded browser access out of SSR fallback eligibility", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-window-unguarded-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "browser-card.tsx"),
+      `export function BrowserCard() {
+  return <p>{window.location.pathname}</p>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { BrowserCard } from "./components/browser-card";
+
+export default function Page() {
+  return <main><BrowserCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/browser-card"]);
     expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test("keeps SSR fallback eligibility for guarded current-path navigation components", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-window-current-path-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "app-navigation.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+let ssrCurrentPath = "/";
+const unreadActivityCount = cell(0);
+const unreadLoadStarted = cell(false);
+
+export function setAppNavigationCurrentPath(path: string | undefined): void {
+  if (typeof window !== "undefined") return;
+  ssrCurrentPath = path || "/";
+}
+
+function currentPath(): string {
+  if (typeof window !== "undefined") return window.location.pathname;
+  return ssrCurrentPath;
+}
+
+function startUnreadCountLoad(): void {
+  if (typeof window === "undefined" || unreadLoadStarted.get()) return;
+  unreadLoadStarted.set(true);
+  queueMicrotask(() => unreadActivityCount.set(3));
+}
+
+export function AppNavigation() {
+  startUnreadCountLoad();
+  return (
+    <nav>
+      <a href="/albums" class={currentPath().startsWith("/albums") ? "active" : ""}>Albums</a>
+      <span>{unreadActivityCount.get()}</span>
+    </nav>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { AppNavigation } from "./components/app-navigation";
+
+export default function Page() {
+  return <main><AppNavigation /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/app-navigation"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/app-navigation"]);
   });
 
   test("keeps SSR fallback eligibility for typeof-window guarded side-effect helpers", async () => {

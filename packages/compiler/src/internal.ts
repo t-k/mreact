@@ -316,6 +316,24 @@ export function collectIdentifierReferenceNames(input: {
   return Array.from(names).sort();
 }
 
+// Returns true when the module references a browser global (`window`,
+// `document`, `localStorage`) in a position that may execute during server
+// rendering. A reference is considered guarded -- and therefore server-safe --
+// when it can only evaluate behind a `typeof window !== "undefined"` style
+// check: the guarded branch of an if/ternary, the short-circuited side of a
+// logical expression, or statements following a guarded early exit. A guard on
+// any one browser global covers the others, matching how isomorphic modules
+// are written in practice. Alias-tracked guards (`const isBrowser = ...`) are
+// not followed; they conservatively report an unguarded reference.
+export function hasUnguardedBrowserGlobalReference(input: {
+  code: string;
+  filename?: string | undefined;
+}): boolean {
+  const parsed = parseModule(input.code, input.filename);
+
+  return hasUnguardedBrowserGlobalReferenceInNode(parsed.program, false);
+}
+
 export function collectFormActionReferenceNames(input: {
   code: string;
   filename?: string | undefined;
@@ -1997,6 +2015,223 @@ function collectIdentifierReferenceNamesFromNode(
 
     collectIdentifierReferenceNamesFromNode(value, names);
   }
+}
+
+const browserGlobalNames = new Set(["window", "document", "localStorage"]);
+
+function hasUnguardedBrowserGlobalReferenceInNode(node: unknown, browserOnly: boolean): boolean {
+  if (Array.isArray(node)) {
+    return node.some((child) => hasUnguardedBrowserGlobalReferenceInNode(child, browserOnly));
+  }
+
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return false;
+  }
+
+  if (typeof object.type === "string" && object.type.startsWith("TS")) {
+    return false;
+  }
+
+  if (object.type === "ImportDeclaration") {
+    return false;
+  }
+
+  if (object.type === "Identifier") {
+    return !browserOnly && typeof object.name === "string" && browserGlobalNames.has(object.name);
+  }
+
+  // `typeof window` itself never throws on the server; a bare identifier
+  // operand is the guard syntax rather than a real use.
+  if (
+    object.type === "UnaryExpression" &&
+    object.operator === "typeof" &&
+    readOptionalObject(object.argument)?.type === "Identifier"
+  ) {
+    return false;
+  }
+
+  // `settings.window` reads a property name, not the global.
+  if (object.type === "MemberExpression" && object.computed !== true) {
+    return hasUnguardedBrowserGlobalReferenceInNode(object.object, browserOnly);
+  }
+
+  // `{ window: value }` declares a key, not a global reference; shorthand
+  // (`{ window }`) keeps its value identifier and is still walked.
+  if (object.type === "Property" && object.computed !== true) {
+    return hasUnguardedBrowserGlobalReferenceInNode(object.value, browserOnly);
+  }
+
+  if (object.type === "IfStatement" || object.type === "ConditionalExpression") {
+    const consequentBrowserOnly = browserOnly || guardImpliesBrowser(object.test, true);
+    const alternateBrowserOnly = browserOnly || guardImpliesBrowser(object.test, false);
+
+    return (
+      hasUnguardedBrowserGlobalReferenceInNode(object.test, browserOnly) ||
+      hasUnguardedBrowserGlobalReferenceInNode(object.consequent, consequentBrowserOnly) ||
+      hasUnguardedBrowserGlobalReferenceInNode(object.alternate, alternateBrowserOnly)
+    );
+  }
+
+  if (object.type === "LogicalExpression") {
+    const rightBrowserOnly =
+      browserOnly ||
+      (object.operator === "&&" && guardImpliesBrowser(object.left, true)) ||
+      (object.operator === "||" && guardImpliesBrowser(object.left, false));
+
+    return (
+      hasUnguardedBrowserGlobalReferenceInNode(object.left, browserOnly) ||
+      hasUnguardedBrowserGlobalReferenceInNode(object.right, rightBrowserOnly)
+    );
+  }
+
+  // Statement lists track guarded early exits: past an
+  // `if (typeof window === "undefined") return;` statement the rest of the
+  // block only executes in the browser.
+  if (object.type === "Program" || object.type === "BlockStatement") {
+    let scopedBrowserOnly = browserOnly;
+
+    for (const statement of readArray(object.body)) {
+      if (hasUnguardedBrowserGlobalReferenceInNode(statement, scopedBrowserOnly)) {
+        return true;
+      }
+      if (!scopedBrowserOnly && isBrowserOnlyEarlyExitGuard(statement)) {
+        scopedBrowserOnly = true;
+      }
+    }
+
+    return false;
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key === "type" || key === "start" || key === "end" || key === "loc") {
+      continue;
+    }
+
+    if (hasUnguardedBrowserGlobalReferenceInNode(value, browserOnly)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Does `test === whenTruthy` imply the code runs in a browser? Recognizes
+// `typeof <browser global> !== "undefined"` comparisons in either operand
+// order, `!` negation, and the logical compositions whose overall value pins
+// every operand: a truthy `&&` pins both sides truthy, a falsy `||` pins both
+// sides falsy.
+function guardImpliesBrowser(test: unknown, whenTruthy: boolean): boolean {
+  const object = readOptionalObject(test);
+  if (object === undefined) {
+    return false;
+  }
+
+  if (
+    object.type === "ParenthesizedExpression" ||
+    object.type === "TSAsExpression" ||
+    object.type === "TSSatisfiesExpression" ||
+    object.type === "TSNonNullExpression"
+  ) {
+    return guardImpliesBrowser(object.expression, whenTruthy);
+  }
+
+  if (object.type === "UnaryExpression" && object.operator === "!") {
+    return guardImpliesBrowser(object.argument, !whenTruthy);
+  }
+
+  if (object.type === "LogicalExpression") {
+    if (object.operator === "&&" && whenTruthy) {
+      return guardImpliesBrowser(object.left, true) || guardImpliesBrowser(object.right, true);
+    }
+    if (object.operator === "||" && !whenTruthy) {
+      return guardImpliesBrowser(object.left, false) || guardImpliesBrowser(object.right, false);
+    }
+    return false;
+  }
+
+  if (object.type !== "BinaryExpression" || typeof object.operator !== "string") {
+    return false;
+  }
+
+  const comparesTypeofToUndefined =
+    (isTypeofBrowserGlobal(object.left) && isUndefinedStringLiteral(object.right)) ||
+    (isTypeofBrowserGlobal(object.right) && isUndefinedStringLiteral(object.left));
+
+  if (!comparesTypeofToUndefined) {
+    return false;
+  }
+
+  if (object.operator === "!==" || object.operator === "!=") {
+    return whenTruthy;
+  }
+  if (object.operator === "===" || object.operator === "==") {
+    return !whenTruthy;
+  }
+
+  return false;
+}
+
+function isTypeofBrowserGlobal(node: unknown): boolean {
+  const object = readOptionalObject(node);
+  if (object?.type !== "UnaryExpression" || object.operator !== "typeof") {
+    return false;
+  }
+
+  const argument = readOptionalObject(object.argument);
+
+  return (
+    argument?.type === "Identifier" &&
+    typeof argument.name === "string" &&
+    browserGlobalNames.has(argument.name)
+  );
+}
+
+function isUndefinedStringLiteral(node: unknown): boolean {
+  const object = readOptionalObject(node);
+
+  return (
+    (object?.type === "Literal" || object?.type === "StringLiteral") &&
+    object.value === "undefined"
+  );
+}
+
+// A statement after which the enclosing block only executes in the browser:
+// an alternate-free `if` whose test pins the server case and whose consequent
+// always exits (`return`, `throw`, `break`, `continue`, or a block ending in
+// one of those).
+function isBrowserOnlyEarlyExitGuard(statement: unknown): boolean {
+  const object = readOptionalObject(statement);
+
+  if (object?.type !== "IfStatement" || readOptionalObject(object.alternate) !== undefined) {
+    return false;
+  }
+
+  return guardImpliesBrowser(object.test, false) && consequentAlwaysExits(object.consequent);
+}
+
+function consequentAlwaysExits(node: unknown): boolean {
+  const object = readOptionalObject(node);
+  if (object === undefined) {
+    return false;
+  }
+
+  if (
+    object.type === "ReturnStatement" ||
+    object.type === "ThrowStatement" ||
+    object.type === "BreakStatement" ||
+    object.type === "ContinueStatement"
+  ) {
+    return true;
+  }
+
+  if (object.type === "BlockStatement") {
+    const body = readArray(object.body);
+
+    return body.length > 0 && consequentAlwaysExits(body[body.length - 1]);
+  }
+
+  return false;
 }
 
 function collectFormActionReferencesFromNode(
