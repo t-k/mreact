@@ -1,3 +1,7 @@
+import {
+  flushPendingComputed,
+  flushQueuedComputations,
+} from "@reckona/mreact-reactive-core/internal";
 import { scheduleCallback } from "./fiber-scheduler.js";
 import { removeChildIfPresent } from "./dom-children.js";
 import {
@@ -1374,6 +1378,11 @@ export function flushSyncUpdates<T>(callback: () => T): T {
 
   try {
     const value = callback();
+    // Reactive-core cell/computed updates flush in a scheduled microtask by
+    // default; drain them here so flushSync guarantees committed DOM on return
+    // for compiled (cell-driven) components as well as compat hook state.
+    flushPendingComputed();
+    flushQueuedComputations();
     flushQueuedEventRerenders();
     return value;
   } finally {

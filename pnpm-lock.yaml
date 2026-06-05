@@ -424,6 +424,9 @@ importers:
 
   packages/react-compat:
     dependencies:
+      '@reckona/mreact-reactive-core':
+        specifier: workspace:*
+        version: link:../reactive-core
       '@reckona/mreact-shared':
         specifier: workspace:*
         version: link:../shared

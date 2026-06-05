@@ -69,6 +69,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@reckona/mreact-reactive-core": "workspace:*",
     "@reckona/mreact-shared": "workspace:*"
   }
 }
