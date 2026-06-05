@@ -1,11 +1,6 @@
 # Changelog
 
-## Unreleased
-
-### Fixed
-
-- Fixed `flushSync` to drain pending reactive-core computed propagation and queued effect computations before returning, so cell-driven DOM bindings in compiled components commit synchronously instead of waiting for the scheduled microtask. This makes the React `flushSync` guidance for `document.startViewTransition` update callbacks work verbatim with cells, although mreact's default microtask flush already lands before the new-state snapshot capture.
-- Fixed `@reckona/mreact-virtual` so cell reads inside the `items`, `scrollOffset`, `viewportSize`, and `getColumnCount` thunks are tracked reactively: updating a cell-backed source now recomputes `entries`, `range`, `visibleRange`, and the spacer cells without an explicit `refresh()` call, eliminating silently stale virtual windows when realtime updates merge into the items cell. Outputs are equality-deduplicated so unchanged windows no longer notify subscribers, snapshots compute lazily, `refresh()` remains for non-reactive sources, and the imperative scroll helpers keep observing the latest items without subscribing their caller.
+## 0.0.137 - 2026-06-05
 
 ### Added
 
@@ -14,6 +9,11 @@
 ### Changed
 
 - Replaced the load-sensitive wall-clock assertion in the AWS Lambda hot-route preload redirect test with a deterministic gate the test controls, so the redirect-never-waits-for-preload property fails by timeout on regression instead of flaking under parallel test load.
+
+### Fixed
+
+- Fixed `flushSync` to drain pending reactive-core computed propagation and queued effect computations before returning, so cell-driven DOM bindings in compiled components commit synchronously instead of waiting for the scheduled microtask. This makes the React `flushSync` guidance for `document.startViewTransition` update callbacks work verbatim with cells, although mreact's default microtask flush already lands before the new-state snapshot capture.
+- Fixed `@reckona/mreact-virtual` so cell reads inside the `items`, `scrollOffset`, `viewportSize`, and `getColumnCount` thunks are tracked reactively: updating a cell-backed source now recomputes `entries`, `range`, `visibleRange`, and the spacer cells without an explicit `refresh()` call, eliminating silently stale virtual windows when realtime updates merge into the items cell. Outputs are equality-deduplicated so unchanged windows no longer notify subscribers, snapshots compute lazily, `refresh()` remains for non-reactive sources, and the imperative scroll helpers keep observing the latest items without subscribing their caller.
 
 ## 0.0.136 - 2026-06-05
 
