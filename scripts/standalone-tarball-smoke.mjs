@@ -17,7 +17,7 @@ try {
   await run("pnpm", ["build"], { cwd: rootDir });
   const tarballs = await packWorkspacePackages();
   await createStandaloneApp(tarballs);
-  await run("pnpm", ["--dir", appDir, "install", "--offline", "--ignore-scripts=false"], {
+  await run("pnpm", ["--dir", appDir, "install", "--ignore-scripts=false"], {
     cwd: rootDir,
   });
   await smokeDevServer();
