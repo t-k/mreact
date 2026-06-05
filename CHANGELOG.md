@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.134 - 2026-06-05
+
+### Fixed
+
+- Fixed the standalone tarball smoke release gate so packed mreact tarballs remain pinned to local file URLs while external registry dependencies can resolve with fresh package metadata in CI. This release carries the 0.0.133 changes after the previous publish workflow stopped before npm publishing.
+
 ## 0.0.133 - 2026-06-05
 
 ### Added
