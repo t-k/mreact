@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.136 - 2026-06-05
+
+### Fixed
+
+- Fixed App Router inferred client boundary SSR fallback eligibility for guarded browser-global reads such as `if (typeof window !== "undefined") return window.location.pathname;`. Eligibility is now decided by an AST guard analysis covering guarded if/ternary branches, short-circuited logical expressions, and statements after guarded early exits, so plain imported `cell()` components using the standard isomorphic current-path idiom keep their navigation HTML in the initial SSR response instead of rendering a placeholder-only boundary. Unguarded browser-global reads and aliased guard conditions the analyzer cannot follow remain ineligible.
+
 ## 0.0.135 - 2026-06-05
 
 ### Fixed
