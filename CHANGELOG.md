@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.0.135 - 2026-06-05
+
+### Fixed
+
+- Fixed App Router inferred client boundary SSR fallback eligibility for plain imported components that call `cell()` state and start browser-only work behind a `typeof window === "undefined"` guard, preserving navigation and app-shell HTML in production SSR while keeping direct browser-global render reads out of fallback eligibility.
+
 ## 0.0.134 - 2026-06-05
 
 ### Fixed
