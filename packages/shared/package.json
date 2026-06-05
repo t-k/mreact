@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-shared",
-  "version": "0.0.137",
+  "version": "0.0.138",
   "description": "Shared runtime utilities used by mreact packages.",
   "keywords": [
     "jsx",

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.138 - 2026-06-05
+
+### Added
+
+- Added a one-time browser console warning from `@reckona/mreact-reactive-core` when a second copy of its runtime evaluates in the same page, naming both module paths and pointing at `optimizeDeps.exclude`, so duplicate-copy setups that silently break cross-package cell tracking are diagnosed instead of failing quietly. Server, module runner, and test realms stay silent.
+
+### Fixed
+
+- Fixed the router Vite plugin to exclude every client-importable `@reckona/mreact*` runtime package from dev `optimizeDeps` prebundling instead of only `@reckona/mreact`, so apps importing family packages such as `@reckona/mreact-query` or `@reckona/mreact-virtual` from the published registry no longer get a second inlined reactive-core copy that breaks cell tracking and bypasses the plugin's react/react-dom alias resolution in dev. User-level `optimizeDeps.exclude` entries compose with the plugin list.
+
 ## 0.0.137 - 2026-06-05
 
 ### Added
