@@ -863,6 +863,74 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual(["./components/early-return-card"]);
   });
 
+  test("keeps typeof-window guarded browser access out of SSR fallback eligibility", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-window-guard-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "browser-card.tsx"),
+      `export function BrowserCard() {
+  const title = typeof window !== "undefined" ? window.location.pathname : "server";
+  return <p>{title}</p>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { BrowserCard } from "./components/browser-card";
+
+export default function Page() {
+  return <main><BrowserCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/browser-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual([]);
+  });
+
+  test("preserves SSR fallback eligibility through a static object registry alias", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-static-registry-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "confirm-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+type ConfirmCardProps = {
+  readonly onConfirm?: (() => void) | undefined;
+};
+
+export function ConfirmCard({ onConfirm }: ConfirmCardProps) {
+  const label = cell("Confirm").get();
+  return (
+    <button
+      type="button"
+      onClick={onConfirm === undefined ? undefined : () => onConfirm()}
+    >
+      {label}
+    </button>
+  );
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { ConfirmCard } from "./components/confirm-card";
+
+const registry = { ConfirmCard };
+const SelectedCard = registry.ConfirmCard;
+
+export default function Page() {
+  return <main><SelectedCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/confirm-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/confirm-card"]);
+  });
+
   test("tracks callback aliases through multiple consts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-callback-alias-chain-"));
     const appDir = join(dir, "app");

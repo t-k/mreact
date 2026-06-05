@@ -236,11 +236,13 @@ For TypeScript apps that type-check route files directly, include the app-router
 
 Server-side route code that runs through loaders, middleware, route handlers, metadata, or server actions should use relative imports for app-local modules. The production server bundler applies the import policy before Vite-only or tsconfig path alias plugins can rewrite aliases such as `~/*`, so an alias like `~/lib/csrf` is treated as a package name by the import policy. Prefer `../lib/csrf.js` or another relative specifier in server-side modules.
 
+Built-output serving and deployment adapters treat `.mreact/server/import-policy.json` as the runtime package floor generated from the built server graph. When an explicit `importPolicy.allowedPackages` is also supplied, the generated package list and user package list are unioned so required runtime dependencies are not silently removed; explicit `allowedSourceDirs` and `projectRoot` still come from the user policy.
+
 ### Client Interactivity
 
 `cell()` values are tracked by the compiled client output. A route using `cell()` and an event handler gets a client route bundle.
 
-Route-owned client data loading is inferred when the page render path reaches `cell()` state or a same-module browser-only helper, even if the initial server HTML has no event handler. Add a route-level `"use client";` directive as an escape hatch when the client work is hidden behind dynamic dispatch, a registry, or another pattern the static analyzer cannot follow.
+Route-owned client data loading is inferred when the page render path reaches `cell()` state or a same-module browser-only helper, even if the initial server HTML has no event handler. Browser globals such as `window`, `document`, and `localStorage` are treated conservatively as client runtime syntax even when guarded with `typeof window !== "undefined"`; move that code behind an explicit client boundary when you need a server-rendered fallback. Add a route-level `"use client";` directive as an escape hatch when the client work is hidden behind dynamic dispatch, a registry, or another pattern the static analyzer cannot follow.
 
 ```tsx
 import { cell } from "@reckona/mreact-reactive-core";
@@ -269,21 +271,13 @@ export default function Page() {
 }
 ```
 
-For component boundaries, use the file conventions intentionally: `.client.tsx`
-marks a component as a client boundary and `.compat.tsx` marks React-compatible
-component code. The router can infer some route-level client runtime needs from
-supported syntax and app-local static imports, but it is not a general semantic
-or TypeScript type-flow analyzer. When a server route imports a client component,
-render that imported binding as JSX so the analyzer can include it in the client
-reference manifest, or call an uppercase imported component directly from the
-route return when the route should hydrate as one client route instead of as a
-separate client boundary.
+For component boundaries, use the file conventions intentionally: `.client.tsx` marks a component as a client boundary and `.compat.tsx` marks React-compatible component code. The router can infer some route-level client runtime needs from supported syntax and app-local static imports, but it is not a general semantic or TypeScript type-flow analyzer. When a server route imports a client component, render that imported binding as JSX so the analyzer can include it in the client reference manifest, or call an uppercase imported component directly from the route return when the route should hydrate as one client route instead of as a separate client boundary.
 
 Client boundary markers have the same SSR behavior. Mark a component boundary with either `Foo.client.tsx` or a top-level `"use client";` directive when it should hydrate on the client; SSR emits a `<template data-mreact-client-boundary="...">` placeholder plus serialized props, and the component JSX appears after hydration. When a client boundary wrapper receives server-renderable JSX children, those children remain visible as SSR DOM between the boundary marker and its props payload so the initial response stays paintable and indexable before hydration. Combining `.client.tsx` with `"use client";` is redundant and does not change the boundary behavior. Plain `Foo.tsx` remains server-rendered and non-hydrated unless the route itself becomes a client route, and route-level `"use client";` in a page, layout, or template is still the escape hatch for a whole hydrated client route. In development, app-local client boundary dependencies are transformed through the mreact client compiler before Vite serves them, so AppShell controls and other imported boundaries do not require a React JSX runtime dependency.
 
 Hydrated route scripts set `data-mreact-hydrated="true"` on both the route marker and `document.documentElement`, then dispatch a `mreact:hydrated` event with `{ routeId }` in `event.detail`. Tests and app chrome can wait for that document-level signal instead of relying on unrelated UI side effects.
 
-Automatic client inference currently follows direct JSX, JSX member roots, simple component aliases, app-local barrel re-exports including renamed specifiers, uppercase component function calls used as route-level render returns, and route-local uppercase helper components reached from those supported render shapes:
+Automatic client inference currently follows direct JSX, JSX member roots, simple component aliases, app-local barrel re-exports including renamed specifiers, static object registry aliases, uppercase component function calls used as route-level render returns, and route-local uppercase helper components reached from those supported render shapes:
 
 ```tsx
 import { Counter } from "./Counter.client";
@@ -326,11 +320,7 @@ export default function Page() {
 }
 ```
 
-The analyzer cannot prove dynamic registries, computed component selection, or
-arbitrary non-render uses are safe client boundaries. In those cases the build emits
-`MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE`; render the imported
-binding through one of the supported JSX or function-call shapes or configure
-`clientBoundaryImports` explicitly.
+The analyzer cannot prove dynamic registries, computed component selection, or arbitrary non-render uses are safe client boundaries. In those cases the build emits `MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE`; render the imported binding through one of the supported JSX or function-call shapes or configure `clientBoundaryImports` explicitly.
 
 The App Router server target supports JSX spread attributes on HTML and SVG elements, including common aliases such as `className`, `htmlFor`, `srcDoc`, `tabIndex`, `defaultValue`, and `defaultChecked`. Server rendering drops `key`, `ref`, `children`, event handlers, invalid attribute names, unsafe URL values such as `javascript:`, and raw `srcDoc` strings; use `{ __html: value }` for `srcDoc` when you intentionally need to emit iframe document HTML. Explicit `dangerouslySetInnerHTML={{ __html: value }}` emits trusted raw element children during server rendering for application-owned inline bootstraps such as root-level scripts.
 
@@ -1247,6 +1237,8 @@ pnpm test:e2e:smoke
 ```
 
 Use `pnpm test:coverage` for a full fresh Vitest coverage run, or a package-scoped command such as `pnpm test:coverage:router` when reviewing high-risk areas. Treat ignored files under `coverage/` as local artifacts, not as planning evidence; source-aware coverage-ledger review should still decide which obligations need tests. CI runs `pnpm test:e2e:smoke` against the focused router navigation and hydration browser smoke case, while `pnpm test:e2e` remains the full browser suite for release and broad runtime changes.
+
+Use `pnpm publish:standalone-smoke` or `pnpm publish:verify` before publishing or when changing package layout, workspace resolution, generated import policy, or standalone install behavior. Full browser route sweeps and Cloudflare workerd all-route checks are intentionally release or pre-release verification rather than normal PR CI because they are heavier and more environment-sensitive than the focused smoke jobs.
 
 Run the app-router example:
 

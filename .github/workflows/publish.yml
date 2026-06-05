@@ -67,6 +67,9 @@ jobs:
       - name: API reference
         run: pnpm docs:api:check
 
+      - name: Standalone tarball smoke
+        run: pnpm publish:standalone-smoke
+
   native-artifacts:
     name: Native artifacts (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

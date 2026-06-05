@@ -425,6 +425,48 @@ export default function Page() {
     expect(result.body).toContain("<main>Generated import policy</main>");
   });
 
+  test("unions generated import policy runtime packages with user allowed packages", async () => {
+    const { outDir, appDir, rootDir } = await createBuiltApp(
+      "mreact-lambda-generated-policy-union-",
+    );
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "lambda-title": "1.0.0" } }),
+    );
+    await mkdir(join(rootDir, "node_modules", "lambda-title"), { recursive: true });
+    await writeFile(
+      join(rootDir, "node_modules", "lambda-title", "package.json"),
+      JSON.stringify({ name: "lambda-title", type: "module", exports: "./index.js" }),
+    );
+    await writeFile(
+      join(rootDir, "node_modules", "lambda-title", "index.js"),
+      'export const title = "Generated policy union";\n',
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { title } from "lambda-title";
+
+export default function Page() {
+  return <main>{title}</main>;
+}`,
+    );
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["node"],
+    });
+    const handler = createAwsLambdaRequestHandler({
+      importPolicy: { allowedPackages: ["user-audit-package"] },
+      outDir,
+    });
+
+    const result = await handler(lambdaEvent("/"));
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>Generated policy union</main>");
+  });
 
   test("does not block the first request on unused route preload work", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-background-");

@@ -1116,6 +1116,10 @@ function isStyleModuleSpecifier(source: string): boolean {
 const styleModuleExtensions = new Set([".css", ".less", ".sass", ".scss", ".styl", ".stylus"]);
 
 function isClientBoundaryFallbackEligibleSource(source: string): boolean {
+  if (hasClientBoundaryFallbackUnsafeBrowserGlobal(source)) {
+    return false;
+  }
+
   const destructuredCallbackPropNames = destructuredPropsCallbackNames(source);
   const callbackPropNames = new Set([
     ...destructuredCallbackPropNames,
@@ -1234,6 +1238,10 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
     !/\bon[A-Z][A-Za-z0-9_$]*\s*=/u.test(sourceWithoutGuardedUndefinedCallbacks) &&
     !/\bglobalThis\b/u.test(source)
   );
+}
+
+function hasClientBoundaryFallbackUnsafeBrowserGlobal(source: string): boolean {
+  return /\b(?:window|document|localStorage)\b/u.test(source);
 }
 
 function propsCallbackAliasNames(source: string): Set<string> {
