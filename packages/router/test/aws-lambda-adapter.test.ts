@@ -822,6 +822,11 @@ export default function Hot({ data }) {
         throw new Error("expected redirect render timing event");
       }
       expect(redirectTiming.phases.preloadWaitMs).toBeUndefined();
+      // The redirect fast path must not touch render work either: page module
+      // execution and render artifact loading only happen on rendered routes.
+      expect(redirectTiming.phases).not.toHaveProperty("pageModuleLoadMs");
+      expect(redirectTiming.phases).not.toHaveProperty("renderArtifactLoadMs");
+      expect(redirectTiming.phases).not.toHaveProperty("pageComponentRenderMs");
 
       // The redirect resolved while the hot preload is still parked on the
       // gate; the preload has started but cannot have finished.
