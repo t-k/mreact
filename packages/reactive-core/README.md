@@ -38,6 +38,20 @@ dispose();
 - `batchAsync()` groups updates across `await` points into one flush. Use it only around intentionally scoped async work because reactive flushes are deferred until the callback settles.
 - `untrack()` reads values without subscribing.
 
+## Update Scheduling
+
+`cell.set()` updates the stored value immediately and propagates `computed` invalidation synchronously, but effects (including the DOM bindings emitted by the compiler) run in a single microtask scheduled at the first update. Reads through `.get()` always observe the latest value even before that flush runs.
+
+Because browsers drain the microtask queue before any rendering steps, this scheduling is compatible with `document.startViewTransition()`: a `cell.set()` made inside the update callback is committed to the DOM before the browser captures the new-state snapshot, so no `flushSync` wrapper is required.
+
+```ts
+document.startViewTransition(() => {
+  selectedMediaId.set(mediaId);
+});
+```
+
+If you need the DOM committed synchronously before the current task continues, for example to measure layout right after an update, wrap the update in `flushSync` from the React DOM-compatible entrypoint (`react-dom` in mreact apps, `@reckona/mreact-dom` standalone), which drains pending reactive computations before returning. Updates deferred through `startTransition` or `useDeferredValue` run on a macrotask scheduler and are not guaranteed to land inside a view transition capture.
+
 ## Testing
 
 `@reckona/mreact-reactive-core/testing` exports `flushMicrotasks()` and

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed
+
+- Fixed `flushSync` to drain pending reactive-core computed propagation and queued effect computations before returning, so cell-driven DOM bindings in compiled components commit synchronously instead of waiting for the scheduled microtask. This makes the React `flushSync` guidance for `document.startViewTransition` update callbacks work verbatim with cells, although mreact's default microtask flush already lands before the new-state snapshot capture.
+
+### Added
+
+- Added a view transition page to the reactive-primitives example plus a real-browser Playwright test and reactive-dom unit tests pinning the update scheduling contract: cell updates made inside a `document.startViewTransition` update callback are committed before the callback promise settles, so the browser captures the post-update DOM. Documented the scheduling guarantee in the reactive-core and mreact-dom READMEs.
+
 ## 0.0.136 - 2026-06-05
 
 ### Fixed
