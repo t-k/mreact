@@ -1,3 +1,10 @@
+import { warnOnDuplicateReactiveCoreCopy } from "./duplicate-guard.js";
+
+// This module holds the per-copy reactive runtime identity, so a second
+// evaluation in the same browser page is exactly the duplication that breaks
+// cross-package cell tracking.
+warnOnDuplicateReactiveCoreCopy(import.meta.url);
+
 export interface Source {
   singleSubscriber?: ReactiveComputation | undefined;
   subscribers: Set<ReactiveComputation>;

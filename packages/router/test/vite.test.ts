@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 import mdx from "@mdx-js/rollup";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
-import type { Connect } from "vite";
+import { resolveConfig, type Connect } from "vite";
 import { afterEach, describe, expect, test } from "vitest";
 import {
   createAppRouterViteMiddleware,
@@ -72,6 +72,82 @@ describe("router Vite middleware", () => {
         routesDir: "src/app",
       }),
     ).toThrow(/publicDir.*projectRoot/);
+  });
+
+  test("excludes every mreact client runtime package from dev dependency optimization", async () => {
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["src"],
+      projectRoot: join(process.cwd(), "fixture-project"),
+      routesDir: "src/app",
+    });
+    const configHook = typeof plugin.config === "function" ? plugin.config : plugin.config?.handler;
+    expect(configHook).toBeDefined();
+
+    const partialConfig = await configHook?.call({} as never, {}, {
+      command: "serve",
+      mode: "development",
+    });
+
+    // Prebundling any package that links against reactive-core duplicates the
+    // reactive runtime in dev and silently breaks cross-package cell tracking,
+    // so the whole client-importable mreact family must stay excluded.
+    expect(partialConfig?.optimizeDeps?.exclude).toEqual([
+      "react",
+      "react-dom",
+      "react-dom/client",
+      "react-dom/server",
+      "react/jsx-dev-runtime",
+      "react/jsx-runtime",
+      "@reckona/mreact",
+      "@reckona/mreact-auth",
+      "@reckona/mreact-compat",
+      "@reckona/mreact-devtools",
+      "@reckona/mreact-dom",
+      "@reckona/mreact-forms",
+      "@reckona/mreact-next",
+      "@reckona/mreact-query",
+      "@reckona/mreact-reactive-core",
+      "@reckona/mreact-reactive-dom",
+      "@reckona/mreact-router",
+      "@reckona/mreact-scheduler",
+      "@reckona/mreact-shared",
+      "@reckona/mreact-store",
+      "@reckona/mreact-test-utils",
+      "@reckona/mreact-virtual",
+    ]);
+  });
+
+  test("keeps the mreact runtime excludes after Vite resolves and merges the dev config", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-optimize-deps-"));
+    const resolved = await resolveConfig(
+      {
+        configFile: false,
+        logLevel: "silent",
+        optimizeDeps: { exclude: ["app-local-package"] },
+        plugins: [
+          mreactRouter({
+            allowedSourceDirs: ["src"],
+            projectRoot,
+            routesDir: "src/app",
+          }),
+        ],
+        root: projectRoot,
+      },
+      "serve",
+    );
+
+    // User-level excludes must compose with the plugin list instead of
+    // replacing it, mirroring how apps append their own excludes today.
+    expect(resolved.optimizeDeps.exclude).toEqual(
+      expect.arrayContaining([
+        "app-local-package",
+        "@reckona/mreact",
+        "@reckona/mreact-devtools",
+        "@reckona/mreact-query",
+        "@reckona/mreact-reactive-core",
+        "@reckona/mreact-virtual",
+      ]),
+    );
   });
 
   test("resolves runtime reactive-dom internals to native reactive core in dev", async () => {

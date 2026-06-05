@@ -187,6 +187,11 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
 
       return {
         optimizeDeps: {
+          // Every client-importable mreact package must resolve through the
+          // same dev module graph. Prebundling any of them inlines a second
+          // reactive-core (and devtools) copy into the deps chunk, which
+          // silently breaks cross-package cell tracking, and also bypasses the
+          // react/react-dom alias resolution this plugin provides.
           exclude: [
             "react",
             "react-dom",
@@ -195,6 +200,21 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
             "react/jsx-dev-runtime",
             "react/jsx-runtime",
             "@reckona/mreact",
+            "@reckona/mreact-auth",
+            "@reckona/mreact-compat",
+            "@reckona/mreact-devtools",
+            "@reckona/mreact-dom",
+            "@reckona/mreact-forms",
+            "@reckona/mreact-next",
+            "@reckona/mreact-query",
+            "@reckona/mreact-reactive-core",
+            "@reckona/mreact-reactive-dom",
+            "@reckona/mreact-router",
+            "@reckona/mreact-scheduler",
+            "@reckona/mreact-shared",
+            "@reckona/mreact-store",
+            "@reckona/mreact-test-utils",
+            "@reckona/mreact-virtual",
           ],
         },
       };
