@@ -889,6 +889,43 @@ export default function Page() {
     expect(result.clientBoundaryFallbackImports).toEqual([]);
   });
 
+  test("keeps SSR fallback eligibility for typeof-window guarded side-effect helpers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-window-side-effect-"));
+    const appDir = join(dir, "app");
+    await mkdir(join(appDir, "components"), { recursive: true });
+    await writeFile(
+      join(appDir, "components", "navigation-card.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const unreadCount = cell(2);
+const started = cell(false);
+
+function startUnreadLoad() {
+  if (typeof window === "undefined" || started.get()) return;
+  started.set(true);
+  queueMicrotask(() => unreadCount.set(3));
+}
+
+export function NavigationCard() {
+  startUnreadLoad();
+  return <nav><a href="/albums">Albums</a><span>{unreadCount.get()}</span></nav>;
+}`,
+    );
+    const pageFile = join(appDir, "page.tsx");
+    const code = `import { NavigationCard } from "./components/navigation-card";
+
+export default function Page() {
+  return <main><NavigationCard /></main>;
+}`;
+    await writeFile(pageFile, code);
+
+    const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+
+    expect(result.client).toBe(true);
+    expect(result.clientBoundaryImports).toEqual(["./components/navigation-card"]);
+    expect(result.clientBoundaryFallbackImports).toEqual(["./components/navigation-card"]);
+  });
+
   test("preserves SSR fallback eligibility through a static object registry alias", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-static-registry-"));
     const appDir = join(dir, "app");

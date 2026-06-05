@@ -1241,7 +1241,11 @@ function isClientBoundaryFallbackEligibleSource(source: string): boolean {
 }
 
 function hasClientBoundaryFallbackUnsafeBrowserGlobal(source: string): boolean {
-  return /\b(?:window|document|localStorage)\b/u.test(source);
+  const sourceWithoutTypeofGuards = source.replaceAll(
+    /\btypeof\s+(?:window|document|localStorage)\s*(?:(?:={2,3}|!={1,2})\s*["']undefined["'])?/gu,
+    "",
+  );
+  return /\b(?:window|document|localStorage)\b/u.test(sourceWithoutTypeofGuards);
 }
 
 function propsCallbackAliasNames(source: string): Set<string> {

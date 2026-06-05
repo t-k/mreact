@@ -5539,6 +5539,91 @@ export default function Page() {
     ]);
   });
 
+  test("preserves SSR fallback HTML for production imported cell boundary components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-imported-cell-boundary-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "AppNavigation.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const unreadActivityCount = cell(2);
+const unreadLoadStarted = cell(false);
+
+function startUnreadCountLoad() {
+  if (typeof window === "undefined" || unreadLoadStarted.get()) return;
+  unreadLoadStarted.set(true);
+  queueMicrotask(() => unreadActivityCount.set(3));
+}
+
+export function AppNavigation() {
+  startUnreadCountLoad();
+  const count = unreadActivityCount.get();
+  unreadLoadStarted.get();
+  return (
+    <>
+      <aside class="hidden lg:flex" aria-label="Desktop navigation">
+        <a href="/albums">Albums</a>
+        <a href="/favorites">Favorites</a>
+        {count > 0 ? <span class="badge">{count}</span> : null}
+      </aside>
+      <nav class="lg:hidden" aria-label="Mobile navigation">
+        <a href="/upload">Upload</a>
+      </nav>
+    </>
+  );
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { AppNavigation } from "./AppNavigation";
+
+export default function Page() {
+  return (
+    <div>
+      <AppNavigation />
+      <main>Page content</main>
+    </div>
+  );
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain('data-mreact-client-boundary="AppNavigation"');
+    expect(html).toContain("Albums");
+    expect(html).toContain("Favorites");
+    expect(html).toContain("Upload");
+    expect(html).toContain('<span class="badge">2</span>');
+    expect(html.indexOf("Albums")).toBeLessThan(html.indexOf("Page content"));
+    expect(html).not.toContain(
+      '<template data-mreact-client-boundary="AppNavigation"></template><script',
+    );
+
+    const server = await startServer({ outDir, port: 0 });
+    try {
+      const serverResponse = await fetch(server.url);
+      const serverHtml = await serverResponse.text();
+      expect(serverResponse.status).toBe(200);
+      expect(serverHtml).toContain("Albums");
+      expect(serverHtml).toContain("Favorites");
+      expect(serverHtml).toContain("Upload");
+      expect(serverHtml).toContain('<span class="badge">2</span>');
+      expect(serverHtml).not.toContain(
+        '<template data-mreact-client-boundary="AppNavigation"></template><script',
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
   test("server renders imported presentational components when callback props are undefined", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-imported-pure-component-"));
     const appDir = join(rootDir, "app");
