@@ -1225,7 +1225,7 @@ export default function Page() {
     });
     expect(prefix).toContain('data-mreact-route-id="users__id"');
     expect(suffix).toContain('<script type="application/json" id="mreact-props-users__id">');
-    expect(suffix).toContain("\\u003cx>");
+    expect(suffix).toContain("\\u003cx\\u003e");
     expect(suffix).toContain("/_mreact/client/routes/users__id.js");
   });
 

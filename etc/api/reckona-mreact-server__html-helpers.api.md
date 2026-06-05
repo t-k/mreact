@@ -46,6 +46,9 @@ export interface HtmlResponseOptions {
 export function renderEventHydrationManifest(sink: HtmlSink, manifest: EventHydrationManifest, options?: HydrationScriptOptions): void;
 
 // @public (undocumented)
+export function renderReactNodeToString(node: unknown): Promise<string>;
+
+// @public (undocumented)
 export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): void;
 
 // @public (undocumented)

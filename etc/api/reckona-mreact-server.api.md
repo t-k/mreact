@@ -331,6 +331,9 @@ export function renderOutOfOrderBoundary<T>(sink: HtmlSink, id: string, value: T
 export function renderOutOfOrderReorderScript(sink: HtmlSink, options?: OutOfOrderReorderScriptOptions): void;
 
 // @public (undocumented)
+export function renderReactNodeToString(node: unknown): Promise<string>;
+
+// @public (undocumented)
 export function renderReactSuspenseBoundary(sink: HtmlSink, render: (sink: HtmlSink) => void | PromiseLike<void>): void | PromiseLike<void>;
 
 // @public (undocumented)

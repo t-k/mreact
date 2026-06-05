@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 0.0.133 - 2026-06-05
+
+### Added
+
+- Added `pnpm publish:standalone-smoke` and wired `pnpm publish:verify` plus the npm publish workflow to smoke-test packed tarballs in a standalone app before release publishing.
+
+### Changed
+
+- Documented the App Router client inference contract for guarded browser globals, static object registry aliases, dynamic registry diagnostics, generated import policy union semantics, and release-scoped browser/workerd verification.
+
+### Fixed
+
+- Hardened inferred client boundary SSR fallback detection for additional optional callback guard, destructuring, forwarding, alias, generic, barrel, and hydration handoff patterns while keeping guarded browser-global access out of SSR fallback eligibility.
+- Fixed and covered server HTML emission parity across sync, streaming, and React-compatible server rendering for parser-sensitive text, style objects, raw HTML opt-ins, void elements, comment-adjacent markers, hostile JSON payloads, and edge child values.
+- Fixed build and deployment closure hazards for generated client assets, CSS `url()` references, static export assets, Cloudflare route registries and route re-exports, relocated `import.meta.glob()` output, Vite define parity, CJS loader dependencies, root/subpath runtime imports, generated import policy runtime packages, and public asset path traversal.
+- Added runtime smoke coverage for packaged AWS Lambda artifacts and standalone npm-style installs, and improved built artifact error quality for missing or corrupted production outputs.
+- Strengthened keyed hydration/reconciliation behavior for duplicate/coerced keys, nested keyed lists, keyed fragments, mapped null items followed by siblings, and input focus/state preservation across unrelated parent updates.
+
 ## 0.0.132 - 2026-06-04
 
 ### Fixed

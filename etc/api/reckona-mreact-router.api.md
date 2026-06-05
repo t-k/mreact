@@ -933,6 +933,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     clientStylesByFile?: ReadonlyMap<string, readonly string[]>;
     // (undocumented)
+    define?: UserConfig["define"] | undefined;
+    // (undocumented)
     env?: unknown;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
