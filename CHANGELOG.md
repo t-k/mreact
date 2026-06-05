@@ -11,6 +11,10 @@
 
 - Added a view transition page to the reactive-primitives example plus a real-browser Playwright test and reactive-dom unit tests pinning the update scheduling contract: cell updates made inside a `document.startViewTransition` update callback are committed before the callback promise settles, so the browser captures the post-update DOM. Documented the scheduling guarantee in the reactive-core and mreact-dom READMEs.
 
+### Changed
+
+- Replaced the load-sensitive wall-clock assertion in the AWS Lambda hot-route preload redirect test with a deterministic gate the test controls, so the redirect-never-waits-for-preload property fails by timeout on regression instead of flaking under parallel test load.
+
 ## 0.0.136 - 2026-06-05
 
 ### Fixed

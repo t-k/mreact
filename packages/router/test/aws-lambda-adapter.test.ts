@@ -757,6 +757,10 @@ export default function Hot({ data }) {
 
   test("can wait for AWS Lambda hot route preload before page render only", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-before-render-");
+    const globalGate = globalThis as typeof globalThis & {
+      __mreactLambdaPreloadGate?: { open: boolean; waiters: Array<() => void> } | undefined;
+    };
+    delete globalGate.__mreactLambdaPreloadGate;
     await mkdir(join(appDir, "hot"), { recursive: true });
     await writeFile(
       join(appDir, "page.tsx"),
@@ -770,9 +774,18 @@ export default function Page() {
   return <main>root</main>;
 }`,
     );
+    // The hot page blocks on a gate the test controls, so the preload can
+    // only complete after the test opens it. A redirect that waited for the
+    // preload would never resolve, making the no-wait property deterministic
+    // instead of a load-sensitive wall-clock bound.
     await writeFile(
       join(appDir, "hot", "page.tsx"),
-      `await new Promise((resolve) => setTimeout(resolve, 80));
+      `const gate = (globalThis.__mreactLambdaPreloadGate ??= { open: false, waiters: [] });
+if (!gate.open) {
+  await new Promise((resolve) => {
+    gate.waiters.push(resolve);
+  });
+}
 
 export function loader() {
   return { message: "hot" };
@@ -789,43 +802,53 @@ export default function Hot({ data }) {
       },
     };
 
-    await buildApp({ appDir, outDir, targets: ["node"] });
-    const handler = createAwsLambdaRequestHandler({
-      logger,
-      outDir,
-      preload: { mode: "hot-routes", routes: ["/hot"], wait: "before-render" },
-      timings: true,
-    });
+    try {
+      await buildApp({ appDir, outDir, targets: ["node"] });
+      const handler = createAwsLambdaRequestHandler({
+        logger,
+        outDir,
+        preload: { mode: "hot-routes", routes: ["/hot"], wait: "before-render" },
+        timings: true,
+      });
 
-    const redirectStartedAt = performance.now();
-    const redirectResult = await handler(lambdaEvent("/"));
-    const redirectDurationMs = performance.now() - redirectStartedAt;
+      const redirectResult = await handler(lambdaEvent("/"));
 
-    expect(redirectResult.statusCode).toBe(303);
-    expect(redirectDurationMs).toBeLessThan(70);
-    await eventually(() => {
-      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
-    });
-    const redirectTiming = events.find((event) => event.type === "router:render:timing");
-    if (redirectTiming?.type !== "router:render:timing") {
-      throw new Error("expected redirect render timing event");
+      expect(redirectResult.statusCode).toBe(303);
+      await eventually(() => {
+        expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+      });
+      const redirectTiming = events.find((event) => event.type === "router:render:timing");
+      if (redirectTiming?.type !== "router:render:timing") {
+        throw new Error("expected redirect render timing event");
+      }
+      expect(redirectTiming.phases.preloadWaitMs).toBeUndefined();
+
+      // The redirect resolved while the hot preload is still parked on the
+      // gate; the preload has started but cannot have finished.
+      await eventually(() => {
+        expect(globalGate.__mreactLambdaPreloadGate?.waiters.length ?? 0).toBeGreaterThan(0);
+      });
+      expect(globalGate.__mreactLambdaPreloadGate?.open).toBe(false);
+      openPreloadGate(globalGate.__mreactLambdaPreloadGate);
+
+      events.length = 0;
+      const hotResult = await handler(lambdaEvent("/hot"));
+
+      expect(hotResult.statusCode).toBe(200);
+      expect(hotResult.body).toContain("<main>hot</main>");
+      await eventually(() => {
+        expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+      });
+      const hotTiming = events.find((event) => event.type === "router:render:timing");
+      if (hotTiming?.type !== "router:render:timing") {
+        throw new Error("expected hot render timing event");
+      }
+      expect(hotTiming.phases.preloadWaitMs ?? 0).toBeGreaterThanOrEqual(0);
+      expect(hotTiming.phases.pageModuleLoadMs).toBeLessThan(40);
+    } finally {
+      openPreloadGate(globalGate.__mreactLambdaPreloadGate);
+      delete globalGate.__mreactLambdaPreloadGate;
     }
-    expect(redirectTiming.phases.preloadWaitMs).toBeUndefined();
-
-    events.length = 0;
-    const hotResult = await handler(lambdaEvent("/hot"));
-
-    expect(hotResult.statusCode).toBe(200);
-    expect(hotResult.body).toContain("<main>hot</main>");
-    await eventually(() => {
-      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
-    });
-    const hotTiming = events.find((event) => event.type === "router:render:timing");
-    if (hotTiming?.type !== "router:render:timing") {
-      throw new Error("expected hot render timing event");
-    }
-    expect(hotTiming.phases.preloadWaitMs ?? 0).toBeGreaterThanOrEqual(0);
-    expect(hotTiming.phases.pageModuleLoadMs).toBeLessThan(40);
   });
 
   test("forwards method, body, headers, cookies, and query string to route handlers", async () => {
@@ -1208,6 +1231,20 @@ function installAwsLambdaStreamingMock(): void {
       return handler;
     },
   };
+}
+
+function openPreloadGate(
+  gate: { open: boolean; waiters: Array<() => void> } | undefined,
+): void {
+  if (gate === undefined) {
+    return;
+  }
+
+  gate.open = true;
+  const waiters = gate.waiters.splice(0);
+  for (const waiter of waiters) {
+    waiter();
+  }
 }
 
 async function eventually(assertion: () => void): Promise<void> {
