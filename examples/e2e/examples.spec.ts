@@ -321,6 +321,58 @@ test.describe.serial("reactive-primitives example", () => {
     await page.getByRole("button", { name: "bump" }).click();
     await expect(page.getByText(/tick=1 at/)).toBeVisible();
   });
+
+  test("captures cell updates flushed inside document.startViewTransition", async ({ page }) => {
+    await page.goto(`${server.url}/view-transition.html`);
+    await expect(page.getByRole("heading", { name: "view transition" })).toBeVisible();
+
+    const supported = await page.evaluate(
+      () => typeof (document as { startViewTransition?: unknown }).startViewTransition === "function",
+    );
+    test.skip(!supported, "document.startViewTransition is unavailable in this browser");
+
+    await page.getByRole("button", { name: "Open Photo B" }).click();
+    await expect(page.getByTestId("vt-detail")).toContainText("Photo B");
+
+    interface ViewTransitionCapture {
+      supported: boolean;
+      domCommittedAtCallbackDone?: boolean;
+      detailNewImageCaptured?: boolean;
+      pseudoElements?: string[];
+      readyError?: string;
+    }
+
+    const captureHandle = await page.waitForFunction(() => {
+      const capture = (
+        window as {
+          __vtCapture?: {
+            supported: boolean;
+            domCommittedAtCallbackDone?: boolean;
+            detailNewImageCaptured?: boolean;
+            pseudoElements?: string[];
+            readyError?: string;
+          };
+        }
+      ).__vtCapture;
+
+      if (capture === undefined) {
+        return null;
+      }
+
+      const settled =
+        capture.domCommittedAtCallbackDone !== undefined &&
+        (capture.detailNewImageCaptured !== undefined || capture.readyError !== undefined);
+      return settled ? capture : null;
+    });
+    const capture = (await captureHandle.jsonValue()) as ViewTransitionCapture;
+
+    // The cell update must be committed to the DOM by the time the update
+    // callback promise settles, so the new-state snapshot sees the panel.
+    expect(capture.readyError).toBeUndefined();
+    expect(capture.domCommittedAtCallbackDone).toBe(true);
+    expect(capture.detailNewImageCaptured).toBe(true);
+    expect(capture.pseudoElements ?? []).toContain("::view-transition-new(vt-detail)");
+  });
 });
 
 test.describe.serial("store example", () => {

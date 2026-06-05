@@ -1,6 +1,6 @@
 # reactive-primitives
 
-Three minimal demos of `@reckona/mreact-reactive-core`, the fine-grained
+Four minimal demos of `@reckona/mreact-reactive-core`, the fine-grained
 reactivity layer that the router and SSR pipeline build on top of.
 Each demo is a single component plus its HTML page — no routing, no
 SSR, no compat shim.
@@ -19,6 +19,7 @@ pnpm dev    # http://localhost:5173/index.html
 | `/counter.html` | `cell<T>(initial)`, `.get()`, `.set(updater)` | `src/Counter.tsx` |
 | `/derived.html` | `computed(() => …)` returning a `ReadonlyCell` | `src/Derived.tsx` |
 | `/effect.html` | `effect(() => …)` running on dependency change | `src/Effect.tsx` |
+| `/view-transition.html` | `cell.set()` inside `document.startViewTransition()` | `src/ViewTransition.tsx` |
 
 ## Anatomy
 
@@ -27,9 +28,11 @@ src/
 ├── Counter.tsx          # cell + onClick
 ├── Derived.tsx          # computed of two cells
 ├── Effect.tsx           # effect with dependency tracking
+├── ViewTransition.tsx   # cell update inside a view transition
 ├── counter-entry.ts
 ├── derived-entry.ts
-└── effect-entry.ts
+├── effect-entry.ts
+└── view-transition-entry.ts
 ```
 
 Each `*-entry.ts` mounts its component into `#root` via

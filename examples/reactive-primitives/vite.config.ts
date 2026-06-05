@@ -15,6 +15,7 @@ export default defineConfig({
         counter: resolve(__dirname, "counter.html"),
         derived: resolve(__dirname, "derived.html"),
         effect: resolve(__dirname, "effect.html"),
+        viewTransition: resolve(__dirname, "view-transition.html"),
       },
     },
   },
