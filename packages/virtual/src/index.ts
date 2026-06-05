@@ -1,4 +1,4 @@
-import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { cell, computed, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 
 export type VirtualKey = string | number;
 
@@ -141,58 +141,68 @@ export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Vi
 
 function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem> {
   const measuredSizes = new Map<VirtualKey, number>();
-  let lastItems = options.items();
+  const refreshVersion = cell(0);
+  let lastItems: readonly TItem[] | undefined;
   let keyIndex: Map<VirtualKey, number> | undefined;
   let keyIndexItems: readonly TItem[] | undefined;
   let keyIndexLength = -1;
-  let snapshot = createSnapshot(options, measuredSizes, {
-    items: lastItems,
-    pruneStaleMeasuredSizes: false,
-  });
-  const range = cell(snapshot.range);
-  const visibleRange = cell(snapshot.visibleRange);
-  const entries = cell(snapshot.entries);
-  const topSpacerPx = cell(snapshot.range.topSpacerPx);
-  const bottomSpacerPx = cell(snapshot.range.bottomSpacerPx);
-  const totalSizePx = cell(snapshot.range.totalSizePx);
 
-  const refresh = () => {
+  // The snapshot recomputes when refresh()/measureItem() bump the version or
+  // when any cell read inside the items/scrollOffset/viewportSize/
+  // getColumnCount thunks (or the per-item callbacks) changes, so cell-backed
+  // sources stay reactive without explicit refresh() calls.
+  const snapshot = computed(() => {
+    refreshVersion.get();
     const items = options.items();
-    keyIndex = undefined;
-    keyIndexItems = undefined;
-    keyIndexLength = -1;
-    snapshot = createSnapshot(options, measuredSizes, {
+    const next = createSnapshot(options, measuredSizes, {
       items,
       pruneStaleMeasuredSizes: items !== lastItems,
     });
     lastItems = items;
-    range.set(snapshot.range);
-    visibleRange.set(snapshot.visibleRange);
-    entries.set(snapshot.entries);
-    topSpacerPx.set(snapshot.range.topSpacerPx);
-    bottomSpacerPx.set(snapshot.range.bottomSpacerPx);
-    totalSizePx.set(snapshot.range.totalSizePx);
-  };
-  const ensureSnapshotCurrentForScroll = () => {
-    const items = options.items();
-    const columnCount = clampInteger(options.getColumnCount(), 1);
+    return next;
+  });
+  const range = computed(() => snapshot.get().range, { equals: virtualRangeEquals });
+  const visibleRange = computed(() => snapshot.get().visibleRange, {
+    equals: visibleRangeEquals,
+  });
+  const entries = computed(() => snapshot.get().entries, { equals: virtualEntriesEqual });
+  const topSpacerPx = computed(() => snapshot.get().range.topSpacerPx);
+  const bottomSpacerPx = computed(() => snapshot.get().range.bottomSpacerPx);
+  const totalSizePx = computed(() => snapshot.get().range.totalSizePx);
 
-    if (
-      items !== lastItems ||
-      items.length !== snapshot.range.itemCount ||
-      columnCount !== snapshot.range.columnCount
-    ) {
-      refresh();
-    }
+  const refresh = () => {
+    keyIndex = undefined;
+    keyIndexItems = undefined;
+    keyIndexLength = -1;
+    refreshVersion.set((version) => version + 1);
   };
+  // Scroll helpers are imperative reads: they must observe the latest inputs
+  // even for plain non-reactive thunks, but never subscribe their caller.
+  const ensureSnapshotCurrentForScroll = (): VirtualSnapshot<TItem> =>
+    untrack(() => {
+      let current = snapshot.get();
+      const items = options.items();
+      const columnCount = clampInteger(options.getColumnCount(), 1);
+
+      if (
+        items !== lastItems ||
+        items.length !== current.range.itemCount ||
+        columnCount !== current.range.columnCount
+      ) {
+        refreshVersion.set((version) => version + 1);
+        current = snapshot.get();
+      }
+
+      return current;
+    });
   const scrollToIndex = (index: number) => {
-    ensureSnapshotCurrentForScroll();
+    const current = ensureSnapshotCurrentForScroll();
 
-    const itemCount = snapshot.range.itemCount;
+    const itemCount = current.range.itemCount;
     if (itemCount === 0) {
       return 0;
     }
-    return snapshot.offsetForIndex(clampInteger(index, 0, itemCount - 1));
+    return current.offsetForIndex(clampInteger(index, 0, itemCount - 1));
   };
 
   return {
@@ -209,27 +219,89 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
       }
 
       measuredSizes.set(key, measuredSize);
-      refresh();
+      refreshVersion.set((version) => version + 1);
     },
     refresh,
     scrollToIndex,
     scrollToKey(key) {
-      const index = resolveKeyIndex(key, options, {
-        keyIndex,
-        keyIndexItems,
-        keyIndexLength,
-        update(nextKeyIndex, nextKeyIndexItems) {
-          keyIndex = nextKeyIndex;
-          keyIndexItems = nextKeyIndexItems;
-          keyIndexLength = nextKeyIndexItems.length;
-        },
+      return untrack(() => {
+        const index = resolveKeyIndex(key, options, {
+          keyIndex,
+          keyIndexItems,
+          keyIndexLength,
+          update(nextKeyIndex, nextKeyIndexItems) {
+            keyIndex = nextKeyIndex;
+            keyIndexItems = nextKeyIndexItems;
+            keyIndexLength = nextKeyIndexItems.length;
+          },
+        });
+        if (index === undefined) {
+          return undefined;
+        }
+        return scrollToIndex(index);
       });
-      if (index === undefined) {
-        return undefined;
-      }
-      return scrollToIndex(index);
     },
   };
+}
+
+function virtualRangeEquals(previous: VirtualRange, next: VirtualRange): boolean {
+  return (
+    previous.bottomSpacerPx === next.bottomSpacerPx &&
+    previous.columnCount === next.columnCount &&
+    previous.endIndex === next.endIndex &&
+    previous.endRow === next.endRow &&
+    previous.itemCount === next.itemCount &&
+    previous.rowCount === next.rowCount &&
+    previous.startIndex === next.startIndex &&
+    previous.startRow === next.startRow &&
+    previous.topSpacerPx === next.topSpacerPx &&
+    previous.totalSizePx === next.totalSizePx &&
+    previous.visibleEndIndex === next.visibleEndIndex &&
+    previous.visibleEndRow === next.visibleEndRow &&
+    previous.visibleStartIndex === next.visibleStartIndex &&
+    previous.visibleStartRow === next.visibleStartRow
+  );
+}
+
+function visibleRangeEquals(previous: VisibleRange, next: VisibleRange): boolean {
+  return (
+    previous.endIndex === next.endIndex &&
+    previous.endRow === next.endRow &&
+    previous.startIndex === next.startIndex &&
+    previous.startRow === next.startRow
+  );
+}
+
+function virtualEntriesEqual<TItem>(
+  previous: readonly VirtualEntry<TItem>[],
+  next: readonly VirtualEntry<TItem>[],
+): boolean {
+  if (previous === next) {
+    return true;
+  }
+
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const previousEntry = previous[index] as VirtualEntry<TItem>;
+    const nextEntry = next[index] as VirtualEntry<TItem>;
+
+    if (
+      previousEntry.index !== nextEntry.index ||
+      previousEntry.key !== nextEntry.key ||
+      !Object.is(previousEntry.item, nextEntry.item) ||
+      previousEntry.row !== nextEntry.row ||
+      previousEntry.column !== nextEntry.column ||
+      previousEntry.colSpan !== nextEntry.colSpan ||
+      previousEntry.rowSpan !== nextEntry.rowSpan
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function resolveKeyIndex<TItem>(

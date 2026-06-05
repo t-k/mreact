@@ -23,6 +23,12 @@ virtual.bottomSpacerPx.get();
 
 Render `topSpacerPx`, the keyed `entries`, and `bottomSpacerPx` in order. The entries include overscan rows while `visibleRange` reports only the viewport rows.
 
+## Reactivity Contract
+
+Cell reads inside the `items`, `scrollOffset`, `viewportSize`, and `getColumnCount` thunks (and the per-item callbacks) are tracked: when any of them changes, `entries`, `range`, `visibleRange`, and the spacer cells recompute automatically, so `items: () => messages.get()` behaves exactly like other cell reads in mreact. Outputs only notify subscribers when their value actually changed, so scroll updates that keep the rendered window identical do not re-render the list.
+
+`refresh()` is only needed when the inputs are not cell-backed, for example a plain array captured by the thunk that you replace or mutate in place. The imperative helpers `scrollToIndex()` and `scrollToKey()` always observe the latest items, including non-reactive sources, and never subscribe their caller.
+
 ## Responsive Media Grid
 
 ```ts
@@ -39,7 +45,7 @@ const virtual = createVirtualGrid({
 });
 ```
 
-`getColumnCount()` is read when `refresh()` runs, so apps can recompute the virtual range after container or breakpoint changes. `visibleRange` can drive thumbnail prefetching for visible and near-visible media.
+`getColumnCount()` is tracked like the other thunks, so a cell-backed column count recomputes the virtual range after container or breakpoint changes; call `refresh()` only when it reads non-reactive state. `visibleRange` can drive thumbnail prefetching for visible and near-visible media.
 
 Pass `getItemSpan()` for quilt-style grids where selected items occupy multiple grid tracks. Span-aware grids place items with deterministic row-major auto-placement, expose `column`, `colSpan`, and `rowSpan` on rendered entries, and compute spacer sizes from the resulting row projection so the first SSR response can render without browser layout reads.
 
@@ -59,7 +65,7 @@ The supported span model intentionally covers row-major CSS grid placement for b
 
 ## Infinite Append And Scroll Restoration
 
-Keep fetched pages in application or query state, append new pages there, and call `refresh()` after the item list changes. The virtualizer keeps stable keys for the rendered entries and exposes `scrollToIndex()` and `scrollToKey()` for restoration.
+Keep fetched pages in application or query state and append new pages there. When the item list lives in a cell, appended pages flow into the virtual window automatically; call `refresh()` after changing a non-reactive item source. The virtualizer keeps stable keys for the rendered entries and exposes `scrollToIndex()` and `scrollToKey()` for restoration.
 
 ```ts
 const nextOffset = virtual.scrollToKey(selectedId);
@@ -70,7 +76,7 @@ if (nextOffset !== undefined) {
 
 ## Measured Items
 
-Use `measureItem()` when item height becomes known after images or metadata load. Measuring an item refreshes the range immediately.
+Use `measureItem()` when item height becomes known after images or metadata load. Measuring an item recomputes the range and notifies subscribers whose values changed.
 
 ```ts
 virtual.measureItem(photo.id, element.offsetHeight);

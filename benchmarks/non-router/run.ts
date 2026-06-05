@@ -47,6 +47,7 @@ function packageSource(packageName: string, fileName: string): string {
   return new URL(`../../packages/${packageName}/src/${fileName}`, import.meta.url).href;
 }
 
+const { effect } = await import("@reckona/mreact-reactive-core");
 const { withCleanupScope } = await import("@reckona/mreact-reactive-core/internal");
 const { createMemorySessionStore, createSession, getCurrentSession } =
   await import("../../packages/auth/src/index.js");
@@ -124,6 +125,31 @@ measure("virtual measured tail refresh", () => {
     offset += 24;
     virtual.refresh();
   }
+});
+
+measure("virtual subscribed measured tail refresh", () => {
+  const items = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `row-${index}` }));
+  let offset = 2_300_000;
+  const virtual = createVirtualList({
+    estimateItemSize: () => 24,
+    getKey: (item) => item.id,
+    items: () => items,
+    overscan: 2,
+    scrollOffset: () => offset,
+    viewportSize: () => 240,
+  });
+  const disposeEntriesSubscriber = effect(() => {
+    virtual.entries.get();
+  });
+
+  virtual.measureItem("row-0", 32);
+
+  for (let index = 0; index < 100; index += 1) {
+    offset += 24;
+    virtual.refresh();
+  }
+
+  disposeEntriesSubscriber();
 });
 
 measure("virtual stale measured refresh", () => {

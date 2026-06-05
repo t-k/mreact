@@ -202,6 +202,7 @@ describe("createVirtualList", () => {
       scrollOffset: () => 0,
       viewportSize: () => 240,
     });
+    virtual.entries.get();
     keyCalls = 0;
 
     expect(virtual.scrollToKey("row-50000")).toBe(1_200_000);
@@ -517,6 +518,7 @@ describe("createVirtualGrid", () => {
     estimateCalls = 0;
 
     virtual.refresh();
+    virtual.entries.get();
 
     expect(estimateCalls).toBe(1);
   });

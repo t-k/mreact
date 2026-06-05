@@ -70,8 +70,9 @@ export function createVirtualGallery(): VirtualGallery {
   });
 
   const scrollToOffset = (offset: number) => {
+    // scrollOffset is a cell read by the virtualizer's scrollOffset thunk, so
+    // setting it recomputes the virtual window without an explicit refresh().
     scrollOffset.set(clampScrollOffset(offset, virtual));
-    virtual.refresh();
   };
 
   return {
