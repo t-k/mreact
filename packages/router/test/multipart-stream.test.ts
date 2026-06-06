@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { parseMultipartStream } from "../src/index.js";
+import {
+  defaultMultipartMaxBytes,
+  sanitizeMultipartFilename,
+} from "../src/multipart.js";
 
 describe("parseMultipartStream", () => {
   test("streams multipart text and file parts without request.formData", async () => {
@@ -132,6 +136,59 @@ describe("parseMultipartStream", () => {
     }
 
     expect(cancelled).toBe(true);
+  });
+
+  test("applies a default total byte cap when maxBytes is omitted", async () => {
+    const boundary = "mreact-boundary";
+    const request = multipartRequest(boundary, [
+      `--${boundary}\r\n`,
+      `Content-Disposition: form-data; name="file"; filename="large.txt"\r\n\r\n`,
+      "x".repeat(defaultMultipartMaxBytes + 1),
+      `\r\n--${boundary}--\r\n`,
+    ]);
+
+    await expect(async () => {
+      for await (const part of parseMultipartStream(request)) {
+        await streamText(part.body);
+      }
+    }).rejects.toThrow(`multipart request exceeded ${defaultMultipartMaxBytes} bytes`);
+  });
+
+  test("rejects multipart requests that exceed maxParts", async () => {
+    const boundary = "mreact-boundary";
+    const request = multipartRequest(boundary, [
+      `--${boundary}\r\n`,
+      `Content-Disposition: form-data; name="a"\r\n\r\n`,
+      `1\r\n`,
+      `--${boundary}\r\n`,
+      `Content-Disposition: form-data; name="b"\r\n\r\n`,
+      `2\r\n`,
+      `--${boundary}--\r\n`,
+    ]);
+
+    await expect(async () => {
+      for await (const part of parseMultipartStream(request, { maxParts: 1 })) {
+        await part.text();
+      }
+    }).rejects.toThrow("multipart request exceeded 1 parts");
+  });
+
+  test("exposes a sanitized filename helper while preserving the raw filename", async () => {
+    const boundary = "mreact-boundary";
+    const request = multipartRequest(boundary, [
+      `--${boundary}\r\n`,
+      `Content-Disposition: form-data; name="file"; filename="../../secret.txt"\r\n\r\n`,
+      `payload`,
+      `\r\n--${boundary}--\r\n`,
+    ]);
+    const iterator = parseMultipartStream(request)[Symbol.asyncIterator]();
+    const first = await iterator.next();
+
+    expect(first.done).toBe(false);
+    expect(first.value.filename).toBe("../../secret.txt");
+    expect(first.value.safeFilename).toBe("secret.txt");
+    expect(sanitizeMultipartFilename("../../secret\u0000.txt")).toBe("secret_.txt");
+    expect(sanitizeMultipartFilename("..\\..\\avatar.png")).toBe("avatar.png");
   });
 });
 

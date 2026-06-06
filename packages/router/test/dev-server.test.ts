@@ -1175,6 +1175,26 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("<main>Explicit route</main>");
   });
+
+  test("hides dev server error stacks from the HTTP response body by default", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-server-error-body-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { throw new Error("secret absolute path ${appDir}"); }`,
+    );
+    const server = await startTrackedDevServer({
+      appDir,
+      port: 0,
+    });
+
+    const response = await fetch(server.url);
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(body).toBe("Internal Server Error");
+    expect(body).not.toContain(appDir);
+    expect(body).not.toContain(" at ");
+  });
 });
 
 async function startTrackedDevServer(options: StartDevServerOptions) {

@@ -206,6 +206,10 @@ function mergePatch<T extends object>(previous: T, patch: StorePatch<T> | T): T 
   const next = { ...previous };
 
   for (const key of Object.keys(patch) as Array<keyof T>) {
+    if (isDangerousObjectKey(key)) {
+      continue;
+    }
+
     const value = patch[key];
 
     if (!Object.is(next[key], value)) {
@@ -215,6 +219,10 @@ function mergePatch<T extends object>(previous: T, patch: StorePatch<T> | T): T 
   }
 
   return changed ? (next as T) : previous;
+}
+
+function isDangerousObjectKey(key: PropertyKey): boolean {
+  return key === "__proto__" || key === "constructor" || key === "prototype";
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

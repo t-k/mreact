@@ -1,5 +1,6 @@
 export interface MultipartStreamParseOptions {
   fields?: Readonly<Record<string, MultipartStreamFieldOptions>>;
+  maxParts?: number;
   maxBytes?: number;
 }
 
@@ -11,6 +12,7 @@ export interface MultipartStreamFieldOptions {
 export interface MultipartStreamPart {
   name: string;
   filename?: string;
+  safeFilename?: string;
   contentType?: string;
   headers: Headers;
   body: ReadableStream<Uint8Array<ArrayBufferLike>>;
@@ -34,6 +36,8 @@ interface PartWriter {
 const crlf = "\r\n";
 const headerSeparator = "\r\n\r\n";
 const maxHeaderBytes = 64 * 1024;
+export const defaultMultipartMaxBytes = 10 * 1024 * 1024;
+export const defaultMultipartMaxParts = 1_000;
 
 export function parseMultipartStream(
   request: Request,
@@ -73,6 +77,7 @@ async function parseMultipartRequest(
   const keepTailBytes = delimiter.length + 4;
   let buffer: Uint8Array<ArrayBufferLike> = new Uint8Array();
   let totalBytes = 0;
+  let totalParts = 0;
   let started = false;
   let currentPart: PartWriter | undefined;
 
@@ -87,7 +92,7 @@ async function parseMultipartRequest(
 
       if (!next.done) {
         totalBytes += next.value.byteLength;
-        enforceByteLimit("multipart request", totalBytes, options.maxBytes);
+        enforceByteLimit("multipart request", totalBytes, options.maxBytes ?? defaultMultipartMaxBytes);
         buffer = concatBytes(buffer, next.value);
       }
 
@@ -136,6 +141,8 @@ async function parseMultipartRequest(
             break;
           }
 
+          totalParts += 1;
+          enforcePartLimit(totalParts, options.maxParts ?? defaultMultipartMaxParts);
           currentPart = createPartWriter(
             decodeAscii(buffer.slice(0, headerEnd)),
             options,
@@ -266,6 +273,7 @@ function createPart(options: {
 
   if (options.filename !== undefined) {
     part.filename = options.filename;
+    part.safeFilename = sanitizeMultipartFilename(options.filename);
   }
 
   const contentType = options.headers.get("content-type");
@@ -328,6 +336,29 @@ function enforceByteLimit(label: string, bytes: number, maxBytes: number | undef
   if (maxBytes !== undefined && bytes > maxBytes) {
     throw new Error(`${label} exceeded ${maxBytes} bytes.`);
   }
+}
+
+function enforcePartLimit(parts: number, maxParts: number | undefined): void {
+  if (maxParts !== undefined && parts > maxParts) {
+    throw new Error(`multipart request exceeded ${maxParts} parts.`);
+  }
+}
+
+export function sanitizeMultipartFilename(filename: string): string {
+  const leaf = filename.split(/[\\/]/u).at(-1) ?? "";
+  let sanitized = "";
+
+  for (const char of leaf) {
+    sanitized += isControlCharacter(char) ? "_" : char;
+  }
+
+  return sanitized === "" || sanitized === "." || sanitized === ".." ? "upload.bin" : sanitized;
+}
+
+function isControlCharacter(char: string): boolean {
+  const code = char.charCodeAt(0);
+
+  return code < 0x20 || code === 0x7f;
 }
 
 function parseMultipartBoundary(contentType: string | null): string | undefined {

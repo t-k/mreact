@@ -7,11 +7,20 @@ describe("escapeHtmlBatch (JS fallback)", () => {
   test("escapes the four core HTML characters in each entry", async () => {
     const { escapeHtmlBatch } = await importNativeEscape();
 
-    expect(escapeHtmlBatch(['a & b', '"q"', "<x>"])).toEqual([
+    expect(escapeHtmlBatch(['a & b', '"q"', "<x>", "it's ok"])).toEqual([
       "a &amp; b",
       "&quot;q&quot;",
       "&lt;x&gt;",
+      "it's ok",
     ]);
+  });
+
+  test("Cloudflare emitted native-escape shim leaves single quotes unchanged", async () => {
+    const buildSource = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("../src/build.ts", import.meta.url), "utf8")
+    );
+
+    expect(buildSource).not.toContain("&#39;");
   });
 
   test("coerces null/undefined entries into an empty string before escaping", async () => {

@@ -74,4 +74,29 @@ describe("mreact devtools event bus", () => {
     ]);
     devtools.dispose();
   });
+
+  test("production install is a no-op unless explicitly forced", () => {
+    const previous = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    try {
+      const devtools = installDevtools();
+      emitMreactDevtoolsEvent("@reckona/mreact-test", {
+        secret: "pii",
+        type: "test:prod",
+      });
+
+      expect(globalThis.__mreactDevtools).toBeUndefined();
+      expect(devtools.events()).toEqual([]);
+
+      const forced = installDevtools(createDevtools(), { force: true });
+      emitMreactDevtoolsEvent("@reckona/mreact-test", { type: "test:forced" });
+      expect(forced.events().map((event) => event.type)).toEqual(["test:forced"]);
+      forced.dispose();
+    } finally {
+      process.env.NODE_ENV = previous;
+      globalThis.__mreactDevtools?.dispose();
+      globalThis.__mreactDevtools = undefined;
+    }
+  });
 });

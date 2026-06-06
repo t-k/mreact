@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 
 export interface StaticExportOptions {
@@ -79,14 +79,21 @@ async function writePrerenderedRoute(
     throw new Error(`Cannot export route ${route} with status ${entry.status}.`);
   }
 
-  const file = join(exportDir, routeToHtmlFile(route));
+  const file = routeToHtmlFile(exportDir, route);
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, entry.html);
 }
 
-function routeToHtmlFile(route: string): string {
+function routeToHtmlFile(exportDir: string, route: string): string {
   const pathname = route.split("?")[0] ?? "/";
   const normalized = pathname.startsWith("/") ? pathname.slice(1) : pathname;
+  const relativeFile = normalized === "" ? "index.html" : join(normalized, "index.html");
+  const root = resolve(exportDir);
+  const file = resolve(root, relativeFile);
 
-  return normalized === "" ? "index.html" : join(normalized, "index.html");
+  if (file !== root && !file.startsWith(`${root}${sep}`)) {
+    throw new Error(`unsafe static export route: ${route}`);
+  }
+
+  return file;
 }

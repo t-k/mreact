@@ -1526,7 +1526,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       vitePlugins: options.vitePlugins,
       navigation: recoveryRoute,
       status: 500,
-      textFallback: error instanceof Error ? error.message : String(error),
+      textFallback: "Internal Server Error",
     });
     emitRenderTiming(options, timing, response.status);
     return response;

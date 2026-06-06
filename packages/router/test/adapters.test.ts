@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -50,6 +50,35 @@ export default function Page() { return <main>Static adapter</main>; }`,
     expect(await readFile(join(exportDir, "_mreact", "client", "manifest.json"), "utf8")).toContain(
       '"routes"',
     );
+  });
+
+  test("rejects static export routes that would write outside the export directory", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-adapter-traversal-"));
+    const outDir = join(rootDir, "out");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(join(outDir, "server"), { recursive: true });
+    await mkdir(join(outDir, "client"), { recursive: true });
+    await writeFile(
+      join(outDir, "server", "manifest.json"),
+      JSON.stringify({
+        prerenderedRoutes: {
+          "../escape": {
+            headers: {},
+            html: "<main>escape</main>",
+            status: 200,
+          },
+        },
+      }),
+    );
+    await writeFile(
+      join(outDir, "client", "manifest.json"),
+      JSON.stringify({ publicAssets: [] }),
+    );
+
+    await expect(exportStaticApp({ exportDir, outDir, paths: ["../escape"] })).rejects.toThrow(
+      /unsafe static export route/,
+    );
+    await expect(stat(join(rootDir, "escape", "index.html"))).rejects.toThrow();
   });
 
   test("creates an edge-safe Request/Response handler", async () => {

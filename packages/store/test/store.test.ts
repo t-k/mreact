@@ -32,6 +32,18 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ count: 1, name: "Ada" });
   });
 
+  it("ignores prototype-pollution keys in set patches", () => {
+    const store = createStore<Record<string, unknown>>({ safe: true });
+    const patch = JSON.parse(
+      '{"__proto__":{"polluted":true},"constructor":{"polluted":true},"prototype":{"polluted":true},"name":"Ada"}',
+    ) as Record<string, unknown>;
+
+    store.set(patch);
+
+    expect(store.get()).toEqual({ safe: true, name: "Ada" });
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
+  });
+
   it("exposes selected slices as reactive cells", async () => {
     const store = createStore({ count: 0, name: "Ada" });
     const count = store.select((state) => state.count);

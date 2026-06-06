@@ -453,6 +453,22 @@ describe("createForm", () => {
     });
     expect(form.field("email").state.get().errors).toEqual(["Already registered"]);
   });
+
+  it("ignores prototype-pollution keys in server action errors", () => {
+    const form = createForm({
+      initialValues: { email: "" },
+    });
+    const fieldErrors = JSON.parse(
+      '{"__proto__":["polluted"],"constructor":["polluted"],"prototype":["polluted"],"email":["Invalid"]}',
+    ) as Record<string, readonly string[]>;
+
+    form.setServerErrors({
+      fieldErrors: fieldErrors as never,
+    });
+
+    expect(form.state.get().errors).toEqual({ email: ["Invalid"] });
+    expect(({} as { polluted?: boolean }).polluted).toBeUndefined();
+  });
 });
 
 function standardSchema<Input, Output = Input>(

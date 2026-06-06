@@ -20,6 +20,10 @@ export interface Devtools {
   subscribe(listener: DevtoolsListener): () => void;
 }
 
+export interface InstallDevtoolsOptions {
+  force?: boolean | undefined;
+}
+
 declare global {
   // eslint-disable-next-line no-var
   var __mreactDevtools: Devtools | undefined;
@@ -71,10 +75,23 @@ function normalizeMaxEvents(maxEvents: number | undefined): number {
   return Math.max(0, Math.floor(maxEvents));
 }
 
-export function installDevtools(devtools: Devtools = createDevtools()): Devtools {
+export function installDevtools(
+  devtools: Devtools = createDevtools(),
+  options: InstallDevtoolsOptions = {},
+): Devtools {
+  if (options.force !== true && currentNodeEnv() === "production") {
+    return devtools;
+  }
+
   globalThis.__mreactDevtools = devtools;
 
   return devtools;
+}
+
+function currentNodeEnv(): string | undefined {
+  return (globalThis as {
+    process?: { env?: { NODE_ENV?: string | undefined } | undefined } | undefined;
+  }).process?.env?.NODE_ENV;
 }
 
 export function getInstalledDevtools(): Devtools | undefined {

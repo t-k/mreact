@@ -341,6 +341,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       const next: FormErrors<TValues> = {};
 
       for (const [name, messages] of Object.entries(errors.fieldErrors ?? {})) {
+        if (isDangerousObjectKey(name)) {
+          continue;
+        }
+
         if (messages !== undefined && messages.length > 0) {
           next[name as FieldName<TValues>] = [...messages];
         }
@@ -465,6 +469,10 @@ function normalizeErrors<TValues extends FormValues>(
       messages === undefined || messages.length === 0 ? [] : [[name, [...messages]]],
     ),
   ) as FormErrors<TValues>;
+}
+
+function isDangerousObjectKey(key: PropertyKey): boolean {
+  return key === "__proto__" || key === "constructor" || key === "prototype";
 }
 
 function hasNoErrors<TValues extends FormValues>(errors: FormErrors<TValues>): boolean {

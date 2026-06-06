@@ -28,6 +28,7 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
   logger?: AppRouterLogger | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
+  verboseErrors?: boolean | undefined;
   viteConfig?: UserConfig | undefined;
   onUpgrade?: HttpUpgradeHandler | undefined;
 }
@@ -87,7 +88,7 @@ export async function startDevServer(
     }
 
     if (vite === undefined) {
-      sendDevServerError(outgoing, new Error("Vite dev server is not initialized."));
+      sendDevServerError(outgoing, new Error("Vite dev server is not initialized."), options);
       return;
     }
 
@@ -96,7 +97,7 @@ export async function startDevServer(
         if (error instanceof Error) {
           vite?.ssrFixStacktrace(error);
         }
-        sendDevServerError(outgoing, error);
+        sendDevServerError(outgoing, error, options);
         return;
       }
 
@@ -263,8 +264,14 @@ function definedProjectOptions(options: StartDevServerOptions): AppRouterProject
   };
 }
 
-function sendDevServerError(outgoing: ServerResponse, error: unknown): void {
+function sendDevServerError(
+  outgoing: ServerResponse,
+  error: unknown,
+  options: Pick<StartDevServerOptions, "verboseErrors">,
+): void {
   outgoing.statusCode = 500;
   outgoing.setHeader("content-type", "text/plain; charset=utf-8");
-  outgoing.end(error instanceof Error ? error.stack : String(error));
+  outgoing.end(options.verboseErrors === true
+    ? error instanceof Error ? error.stack : String(error)
+    : "Internal Server Error");
 }

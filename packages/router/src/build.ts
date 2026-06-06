@@ -4383,8 +4383,8 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
         { filter: /^native-escape$/, namespace: "mreact-cloudflare-native-escape" },
         () => ({
           contents: `function escapeHtml(value) {
-  return String(value ?? "").replace(/[&<>"']/g, (char) =>
-    char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : char === '"' ? "&quot;" : "&#39;"
+  return String(value ?? "").replace(/[&<>"]/g, (char) =>
+    char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : "&quot;"
   );
 }
 export function escapeHtmlBatch(values) {

@@ -47,4 +47,23 @@ describe("router Link", () => {
 
     expect(html).toBe('<a href="https://example.com/about">External</a>');
   });
+
+  test("escapes string children in the sink/server form", () => {
+    let html = "";
+    Link(
+      {
+        append(value) {
+          html += value;
+        },
+      },
+      {
+        children: "<script>alert(1)</script>",
+        href: "/profile",
+      },
+    );
+
+    expect(html).toBe(
+      '<a href="/profile">&lt;script&gt;alert(1)&lt;/script&gt;</a>',
+    );
+  });
 });

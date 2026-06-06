@@ -1,4 +1,4 @@
-import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
+import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
@@ -87,7 +87,14 @@ function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement 
       continue;
     }
 
-    anchor.setAttribute(attributeName(name), String(value));
+    const attrName = attributeName(name);
+    const safeValue = safeUrlAttributeValue(attrName, String(value));
+
+    if (safeValue === undefined) {
+      continue;
+    }
+
+    anchor.setAttribute(attrName, safeValue);
   }
 
   return anchor;
@@ -164,5 +171,5 @@ function renderChildren(child: LinkChild): string {
     return child.map(renderChildren).join("");
   }
 
-  return String(child);
+  return escapeHtmlText(child);
 }
