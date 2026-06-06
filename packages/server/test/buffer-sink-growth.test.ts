@@ -1,5 +1,11 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { createBufferSink } from "../src/buffer-sink.js";
+
+const originalAllocUnsafe = Buffer.allocUnsafe;
+
+afterEach(() => {
+  Buffer.allocUnsafe = originalAllocUnsafe;
+});
 
 describe("server buffer-sink growth and edge branches", () => {
   test("grows the backing buffer geometrically when the initial size is exceeded", () => {
@@ -22,5 +28,19 @@ describe("server buffer-sink growth and edge branches", () => {
     const slice = sink.toBuffer();
     expect(slice.length).toBe(2);
     expect(slice.toString("utf8")).toBe("ab");
+  });
+
+  test("ASCII appends that fit the backing buffer do not grow for worst-case UTF-8 headroom", () => {
+    let allocations = 0;
+    Buffer.allocUnsafe = ((size: number) => {
+      allocations += 1;
+      return originalAllocUnsafe(size);
+    }) as typeof Buffer.allocUnsafe;
+    const sink = createBufferSink({ initialSize: 8 });
+
+    sink.append("abcdef");
+
+    expect(sink.toString()).toBe("abcdef");
+    expect(allocations).toBe(1);
   });
 });

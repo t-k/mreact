@@ -103,6 +103,46 @@ describe("server HTML helpers module", () => {
     );
   });
 
+  test("booleanish attributes use canonical names without lowercasing already-lowercase names", async () => {
+    const originalToLowerCase = String.prototype.toLowerCase;
+    let baselineLowerCaseCalls = 0;
+    let lowerCaseCalls = 0;
+
+    try {
+      String.prototype.toLowerCase = function countedToLowerCase(this: string): string {
+        lowerCaseCalls += 1;
+        return originalToLowerCase.call(this);
+      };
+
+      const baseline = html(
+        createElement("div", {
+          "aria-label": "label",
+          contentEditable: "false",
+          "data-open": "false",
+        }),
+      );
+      await baseline.text();
+      baselineLowerCaseCalls = lowerCaseCalls;
+      lowerCaseCalls = 0;
+
+      const response = html(
+        createElement("div", {
+          contentEditable: false,
+          "data-open": false,
+          "aria-hidden": false,
+        }),
+      );
+
+      await expect(response.text()).resolves.toBe(
+        '<div contenteditable="false" data-open="false" aria-hidden="false"></div>',
+      );
+    } finally {
+      String.prototype.toLowerCase = originalToLowerCase;
+    }
+
+    expect(lowerCaseCalls).toBeLessThanOrEqual(baselineLowerCaseCalls);
+  });
+
   test("html omits dangerouslySetInnerHTML bodies on void elements", async () => {
     const response = html(
       createElement("img", {

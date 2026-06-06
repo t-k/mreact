@@ -234,6 +234,46 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("keyed reorder computes previous positions without an extra Map allocation", async () => {
+    const values = [0, 1, 2, 3, 4];
+    const items = cell(values);
+    const parent = document.createElement("section");
+    parent.append(document.createElement("h1"));
+    const marker = document.createComment("list");
+    parent.append(marker);
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const row = document.createElement("p");
+        row.textContent = String(item);
+        return row;
+      },
+      { key: (item) => item },
+    );
+    const OriginalMap = globalThis.Map;
+    let mapCreations = 0;
+
+    try {
+      globalThis.Map = class CountingMap<K, V> extends OriginalMap<K, V> {
+        constructor(entries?: Iterable<readonly [K, V]> | null) {
+          mapCreations += 1;
+          super(entries);
+        }
+      } as MapConstructor;
+
+      items.set([0, 1, 3, 2, 4]);
+      await flushEffects();
+    } finally {
+      globalThis.Map = OriginalMap;
+    }
+
+    expect(parent.innerHTML).toBe("<h1></h1><p>0</p><p>1</p><p>3</p><p>2</p><p>4</p><!--list-->");
+    expect(mapCreations).toBe(1);
+    dispose();
+  });
+
   test("keeps keyed list DOM in place when keys stay in the same order", async () => {
     const labels = new Map([
       ["a", cell("A")],

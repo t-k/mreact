@@ -103,19 +103,20 @@ class BoundedReplayStore {
 
   add(value: string): void {
     const now = Date.now();
-    // Cheap opportunistic sweep: drop the oldest expired entries first,
-    // then enforce the hard cap with FIFO eviction.
     if (this.entries.size >= this.maxEntries) {
-      for (const [key, expiresAt] of this.entries) {
+      const oldest = this.entries.entries().next().value;
+      if (oldest !== undefined) {
+        const [key, expiresAt] = oldest;
+        this.entries.delete(key);
         if (expiresAt < now) {
-          this.entries.delete(key);
+          while (this.entries.size >= this.maxEntries) {
+            const nextOldest = this.entries.entries().next().value;
+            if (nextOldest === undefined || nextOldest[1] >= now) {
+              break;
+            }
+            this.entries.delete(nextOldest[0]);
+          }
         }
-        if (this.entries.size < this.maxEntries) break;
-      }
-      while (this.entries.size >= this.maxEntries) {
-        const oldest = this.entries.keys().next().value;
-        if (oldest === undefined) break;
-        this.entries.delete(oldest);
       }
     }
     this.entries.set(value, now + this.ttlMs);

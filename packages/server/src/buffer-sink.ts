@@ -213,11 +213,7 @@ export function createBufferSink(options: BufferSinkOptions = {}): BufferSink {
   return {
     append(chunk) {
       if (typeof chunk === "string") {
-        // Reserve worst-case byte length (4 bytes/char) up front so we
-        // can encode in a single `write()` call without a measurement
-        // pass; the actual encoded length is returned by `write()`.
-        const upperBound = chunk.length * 4;
-        ensure(upperBound);
+        ensure(Buffer.byteLength(chunk, "utf8"));
         offset += buffer.write(chunk, offset, "utf8");
         return;
       }

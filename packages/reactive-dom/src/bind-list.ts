@@ -102,6 +102,7 @@ function bindUnkeyedList<T>(
 
 interface KeyedRecord {
   nodes: Node[];
+  prevIndex?: number | undefined;
   dispose: Dispose;
   update(item: unknown): void;
 }
@@ -212,12 +213,11 @@ function bindKeyedList<T>(
     const nextRecords = new Map<unknown, KeyedRecord>();
     const orderedRecords: KeyedRecord[] = [];
     const orderedNodes: Node[] = [];
-    const previousPositions = new Map<KeyedRecord, number>();
     let reusedAllRecords = true;
     let previousIndex = 0;
 
     for (const record of records.values()) {
-      previousPositions.set(record, previousIndex);
+      record.prevIndex = previousIndex;
       previousIndex += 1;
     }
 
@@ -259,7 +259,7 @@ function bindKeyedList<T>(
         removeStaleRecords(records, nextRecords);
       }
 
-      reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords, previousPositions);
+      reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords);
       ownsParent =
         marker.nextSibling === null &&
         insertionParent.childNodes.length === orderedNodes.length + 1;
@@ -367,9 +367,11 @@ function reconcileKeyedRecordOrder(
   parent: ParentNode,
   marker: ChildNode,
   orderedRecords: readonly KeyedRecord[],
-  previousPositions: ReadonlyMap<KeyedRecord, number>,
 ): void {
-  const previousOrder = orderedRecords.map((record) => previousPositions.get(record) ?? -1);
+  const previousOrder: number[] = [];
+  for (let index = 0; index < orderedRecords.length; index += 1) {
+    previousOrder.push(orderedRecords[index]?.prevIndex ?? -1);
+  }
   const stableIndexes = new Set(longestIncreasingSubsequenceIndexes(previousOrder));
   let anchor: ChildNode = marker;
 

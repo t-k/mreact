@@ -114,6 +114,36 @@ describe("reactive-core scheduler / tracking behavior", () => {
     dispose();
   });
 
+  test("stable effect dependencies are not removed and re-added on rerun", () => {
+    const testRuntime = useRuntime();
+    const count = cell(0);
+    const observed: number[] = [];
+    const dispose = effect(() => {
+      observed.push(count.get());
+    });
+    const originalDelete = Set.prototype.delete;
+    let deleteCalls = 0;
+
+    try {
+      Set.prototype.delete = function countedDelete<T>(
+        this: Set<T>,
+        value: T,
+      ): boolean {
+        deleteCalls += 1;
+        return originalDelete.call(this, value);
+      };
+
+      count.set(1);
+      testRuntime.flushAll();
+    } finally {
+      Set.prototype.delete = originalDelete;
+    }
+
+    expect(observed).toEqual([0, 1]);
+    expect(deleteCalls).toBe(0);
+    dispose();
+  });
+
   test("computed dependencies flush before downstream effects observe them", () => {
     const testRuntime = useRuntime();
     const source = cell(1);

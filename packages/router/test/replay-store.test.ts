@@ -47,4 +47,36 @@ describe("BoundedReplayStore (Issue 069)", () => {
     const sized = store as unknown as { size: () => number };
     expect(sized.size()).toBeLessThanOrEqual(50_000);
   });
+
+  test("evicts from a saturated store without scanning every entry", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-06T00:00:00Z"));
+    const store = __readDefaultReplayStore();
+
+    for (let i = 0; i < 50_000; i += 1) {
+      store.add(`steady-${i}`);
+    }
+
+    const entries = (store as unknown as { entries: Map<string, number> }).entries;
+    const originalEntries = entries.entries.bind(entries);
+    let iteratedEntries = 0;
+    entries.entries = function countedEntries() {
+      const iterator = originalEntries();
+      return {
+        [Symbol.iterator]() {
+          return this;
+        },
+        next() {
+          iteratedEntries += 1;
+          return iterator.next();
+        },
+      };
+    } as typeof entries.entries;
+
+    store.add("steady-next");
+
+    expect(store.has("steady-0")).toBe(false);
+    expect(store.has("steady-next")).toBe(true);
+    expect(iteratedEntries).toBeLessThanOrEqual(2);
+  });
 });

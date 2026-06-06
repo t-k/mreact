@@ -31,4 +31,23 @@ describe("query devtools instrumentation", () => {
       ]),
     );
   });
+
+  test("does not construct query devtools events when no devtools is installed", () => {
+    const client = createQueryClient();
+    const originalDateNow = Date.now;
+    let dateNowCalls = 0;
+
+    try {
+      Date.now = () => {
+        dateNowCalls += 1;
+        return originalDateNow();
+      };
+
+      client.setQueryData(["profile"], { name: "Ada" });
+    } finally {
+      Date.now = originalDateNow;
+    }
+
+    expect(dateNowCalls).toBe(1);
+  });
 });

@@ -309,6 +309,27 @@ describe("createQueryClient", () => {
       hashQueryKey(["search", { q: "mreact", page: 1 }]),
     );
   });
+
+  it("memoizes query-key hashes for repeated reads of the same key array", () => {
+    const queryKey = ["search", { page: 1, q: "mreact" }] as const;
+    const originalStringify = JSON.stringify;
+    let stringifyCalls = 0;
+
+    hashQueryKey(queryKey);
+
+    try {
+      JSON.stringify = ((...args: Parameters<typeof JSON.stringify>) => {
+        stringifyCalls += 1;
+        return originalStringify(...args);
+      }) as typeof JSON.stringify;
+
+      expect(hashQueryKey(queryKey)).toBe(hashQueryKey(queryKey));
+    } finally {
+      JSON.stringify = originalStringify;
+    }
+
+    expect(stringifyCalls).toBe(0);
+  });
 });
 
 function createDeferred<T>() {

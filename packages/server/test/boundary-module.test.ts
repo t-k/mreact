@@ -1,10 +1,18 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { createStringSink } from "../src/index.js";
 import {
+  renderAsyncBoundary,
   renderHydrationBoundary,
+  renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
   renderReactSuspenseClientRenderBoundary,
 } from "../src/boundary.js";
+
+const originalTextEncoder = globalThis.TextEncoder;
+
+afterEach(() => {
+  globalThis.TextEncoder = originalTextEncoder;
+});
 
 describe("server boundary module", () => {
   test("renderHydrationBoundary wraps async content with encoded markers", async () => {
@@ -43,6 +51,30 @@ describe("server boundary module", () => {
     expect(sink.toString()).toBe(
       `<script data-mreact-oob-reorder nonce="nonce&quot;1" src="/assets/reorder.js?chunk=&quot;main&quot;"></script>`,
     );
+  });
+
+  test("small Await hydration payloads skip UTF-8 measurement", async () => {
+    let encodeCalls = 0;
+    class CountingTextEncoder extends originalTextEncoder {
+      encode(input?: string): Uint8Array {
+        encodeCalls += 1;
+        return super.encode(input);
+      }
+    }
+    globalThis.TextEncoder = CountingTextEncoder;
+    const sink = createStringSink();
+
+    await renderAsyncBoundary(
+      sink,
+      Promise.resolve({ message: "small" }),
+      (boundarySink, value) => {
+        boundarySink.append(String((value as { message: string }).message));
+      },
+      { hydrationAwaitId: "await-small" },
+    );
+
+    expect(sink.toString()).toContain("small");
+    expect(encodeCalls).toBe(0);
   });
 
   test("renderReactSuspenseClientRenderBoundary escapes client-render error metadata", () => {

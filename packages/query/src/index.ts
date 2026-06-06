@@ -50,6 +50,7 @@ export interface FetchQueryOptions<TData> {
 }
 
 export interface QuerySubscriptionOptions {
+  exact?: boolean | undefined;
   gcTime?: false | number | undefined;
 }
 
@@ -255,7 +256,7 @@ export function createQuery<TData>(
     if (entry.queryHash === queryHash) {
       result.set(resultFromQueryEntry(entry));
     }
-  }, { gcTime: options.gcTime });
+  }, { exact: true, gcTime: options.gcTime });
   const autoFetch = options.autoFetch ?? typeof document !== "undefined";
 
   if (autoFetch) {
@@ -307,6 +308,7 @@ export function createInfiniteQuery<TPage, TPageParam>(
     () => {
       updateResult();
     },
+    { exact: true },
   );
 
   const firstPageOptions = (): FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>> =>
@@ -552,7 +554,12 @@ function includesPageParam<TPageParam>(
   pageParams: readonly TPageParam[],
   pageParam: TPageParam,
 ): boolean {
-  return pageParams.some((existing) => hashQueryKey([existing]) === hashQueryKey([pageParam]));
+  if (pageParams.some((existing) => Object.is(existing, pageParam))) {
+    return true;
+  }
+
+  const pageParamHash = hashQueryKey([pageParam]);
+  return pageParams.some((existing) => hashQueryKey([existing]) === pageParamHash);
 }
 
 function withInfiniteQueryFetchOptions<TData, TPage, TPageParam>(

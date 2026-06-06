@@ -37,4 +37,27 @@ describe("query entry lifecycle", () => {
     expect(lifecycle.getQueryData(["profile"])).toBeUndefined();
     expect(statuses).toEqual(["pending:empty"]);
   });
+
+  it("notifies exact-key subscribers without snapshotting the full subscription set", () => {
+    const lifecycle = createQueryLifecycle();
+    const originalFrom = Array.from;
+    let arrayFromCalls = 0;
+
+    for (let index = 0; index < 25; index += 1) {
+      lifecycle.subscribe(["item", index], () => {});
+    }
+
+    try {
+      Array.from = ((...args: Parameters<typeof Array.from>) => {
+        arrayFromCalls += 1;
+        return originalFrom(...args);
+      }) as typeof Array.from;
+
+      lifecycle.setQueryData(["item", 10], "updated");
+    } finally {
+      Array.from = originalFrom;
+    }
+
+    expect(arrayFromCalls).toBe(0);
+  });
 });

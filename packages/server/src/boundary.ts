@@ -77,6 +77,7 @@ export async function renderAsyncBoundary<T>(
 // "you're sending a lot of data" hint pattern used by other frameworks.
 const AWAIT_PAYLOAD_WARN_BYTES = 100 * 1024;
 const AWAIT_PAYLOAD_ERROR_BYTES = 1024 * 1024;
+const textEncoder = typeof TextEncoder !== "undefined" ? new TextEncoder() : undefined;
 
 function isProductionMode(): boolean {
   // `process` may not exist in cross-runtime environments (Cloudflare/Deno).
@@ -160,8 +161,11 @@ function containsNonSerializableSurface(value: unknown): boolean {
 }
 
 function reportAwaitPayloadSize(json: string, awaitId: string): void {
-  const byteLength =
-    typeof TextEncoder !== "undefined" ? new TextEncoder().encode(json).length : json.length;
+  if (json.length * 3 < AWAIT_PAYLOAD_WARN_BYTES) {
+    return;
+  }
+
+  const byteLength = textEncoder?.encode(json).length ?? json.length;
 
   if (byteLength > AWAIT_PAYLOAD_ERROR_BYTES) {
     console.error(

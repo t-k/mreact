@@ -51,6 +51,96 @@ export function cleanupDeps(computation: ReactiveComputation): void {
   computation.deps.clear();
 }
 
+export function trackIncrementalSource(
+  source: Source,
+  computation: ReactiveComputation,
+): void {
+  const trackingVersion = computation.trackingVersion;
+
+  if (trackingVersion === undefined) {
+    trackSource(source);
+    return;
+  }
+
+  if (source.trackedBy === computation && source.trackedVersion === trackingVersion) {
+    return;
+  }
+
+  source.trackedBy = computation;
+  source.trackedVersion = trackingVersion;
+  computation.trackingCount = (computation.trackingCount ?? 0) + 1;
+
+  if (computation.deps.has(source)) {
+    return;
+  }
+
+  const previousSize = source.subscribers.size;
+  source.subscribers.add(computation);
+  computation.deps.add(source);
+  computation.trackingAddedDeps?.push(source);
+
+  if (previousSize === 0) {
+    source.singleSubscriber = computation;
+  } else if (source.subscribers.size > 1) {
+    source.singleSubscriber = undefined;
+  }
+}
+
+export function cleanupUntrackedDeps(
+  computation: ReactiveComputation,
+  trackingVersion: number,
+): void {
+  for (const dep of computation.deps) {
+    if (dep.trackedBy === computation && dep.trackedVersion === trackingVersion) {
+      continue;
+    }
+
+    if (!dep.subscribers.delete(computation)) {
+      continue;
+    }
+
+    if (dep.trackedBy === computation) {
+      dep.trackedBy = undefined;
+      dep.trackedVersion = undefined;
+    }
+
+    computation.deps.delete(dep);
+
+    if (dep.subscribers.size === 0) {
+      dep.singleSubscriber = undefined;
+    } else if (dep.subscribers.size === 1) {
+      dep.singleSubscriber = dep.subscribers.values().next().value;
+    }
+  }
+}
+
+export function cleanupAddedDeps(computation: ReactiveComputation): void {
+  const addedDeps = computation.trackingAddedDeps;
+
+  if (addedDeps === undefined) {
+    return;
+  }
+
+  for (const dep of addedDeps) {
+    if (!dep.subscribers.delete(computation)) {
+      continue;
+    }
+
+    if (dep.trackedBy === computation) {
+      dep.trackedBy = undefined;
+      dep.trackedVersion = undefined;
+    }
+
+    computation.deps.delete(dep);
+
+    if (dep.subscribers.size === 0) {
+      dep.singleSubscriber = undefined;
+    } else if (dep.subscribers.size === 1) {
+      dep.singleSubscriber = dep.subscribers.values().next().value;
+    }
+  }
+}
+
 export function notifySubscribers(source: Source): void {
   if (source.subscribers.size === 0) {
     return;

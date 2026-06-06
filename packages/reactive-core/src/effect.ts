@@ -2,7 +2,11 @@ import { queueComputation } from "./scheduler.js";
 import { currentDevtoolsEmitter } from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
-import { cleanupDeps } from "./tracking.js";
+import {
+  cleanupDeps,
+  cleanupUntrackedDeps,
+  trackIncrementalSource,
+} from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
@@ -34,7 +38,12 @@ export function effect(fn: () => void | (() => void)): () => void {
         cleanup = undefined;
       }
 
-      cleanupDeps(computation);
+      const previousDepsSize = computation.deps.size;
+      const nextTrackingVersion = (computation.trackingVersion ?? 0) + 1;
+
+      computation.trackingAddedDeps = [];
+      computation.trackingCount = 0;
+      computation.trackingVersion = nextTrackingVersion;
       runtimeState.activeTracker = computation;
 
       if (clientDevtoolsDisabled) {
@@ -42,6 +51,7 @@ export function effect(fn: () => void | (() => void)): () => void {
           const result = fn();
           cleanup = typeof result === "function" ? result : undefined;
         } finally {
+          finishIncrementalTracking(computation, previousDepsSize, nextTrackingVersion);
           runtimeState.activeTracker = previousTracker;
         }
         return;
@@ -54,6 +64,7 @@ export function effect(fn: () => void | (() => void)): () => void {
         const result = fn();
         cleanup = typeof result === "function" ? result : undefined;
       } finally {
+        finishIncrementalTracking(computation, previousDepsSize, nextTrackingVersion);
         runtimeState.activeTracker = previousTracker;
         if (emit !== undefined) {
           emit({
@@ -65,6 +76,9 @@ export function effect(fn: () => void | (() => void)): () => void {
           });
         }
       }
+    },
+    trackSource(source) {
+      trackIncrementalSource(source, computation);
     },
     dispose() {
       if (computation.disposed) {
@@ -101,6 +115,22 @@ export function effect(fn: () => void | (() => void)): () => void {
 
   registerCleanup(computation.dispose);
   return computation.dispose;
+}
+
+function finishIncrementalTracking(
+  computation: ReactiveComputation,
+  previousDepsSize: number,
+  trackingVersion: number,
+): void {
+  const addedDeps = computation.trackingAddedDeps;
+  const trackedCount = computation.trackingCount ?? 0;
+
+  if (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0) {
+    cleanupUntrackedDeps(computation, trackingVersion);
+  }
+
+  computation.trackingAddedDeps = undefined;
+  computation.trackingCount = undefined;
 }
 
 function performanceNow(): number {

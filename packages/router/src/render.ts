@@ -1146,6 +1146,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
+          define: options.define,
           vitePlugins: options.vitePlugins,
         });
         html = injectHeadMetadata(html, metadata);

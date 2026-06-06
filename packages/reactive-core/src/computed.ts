@@ -1,7 +1,14 @@
 import type { ReactiveComputation, Source } from "./state.js";
 import { schedulePendingFlush } from "./scheduler.js";
 import { runtimeState } from "./state.js";
-import { cleanupDeps, notifySubscribers, trackSource } from "./tracking.js";
+import {
+  cleanupAddedDeps,
+  cleanupDeps,
+  cleanupUntrackedDeps,
+  notifySubscribers,
+  trackIncrementalSource,
+  trackSource,
+} from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
 
 export type ComputedEquality<T> = (previous: T, next: T) => boolean;
@@ -51,7 +58,7 @@ export function computed<T>(
       publishIfChanged();
     },
     trackSource(source) {
-      trackComputedSource(source, computation);
+      trackIncrementalSource(source, computation);
     },
     dispose() {
       if (computation.disposed) {
@@ -128,7 +135,6 @@ export function computed<T>(
     } finally {
       computation.trackingAddedDeps = undefined;
       computation.trackingCount = undefined;
-      computation.trackingVersion = undefined;
       runtimeState.activeTracker = previousTracker;
     }
   }
@@ -139,94 +145,4 @@ export function computed<T>(
       return recompute();
     },
   };
-}
-
-function trackComputedSource(
-  source: Source,
-  computation: ReactiveComputation,
-): void {
-  const trackingVersion = computation.trackingVersion;
-
-  if (trackingVersion === undefined) {
-    trackSource(source);
-    return;
-  }
-
-  if (source.trackedBy === computation && source.trackedVersion === trackingVersion) {
-    return;
-  }
-
-  source.trackedBy = computation;
-  source.trackedVersion = trackingVersion;
-  computation.trackingCount = (computation.trackingCount ?? 0) + 1;
-
-  if (computation.deps.has(source)) {
-    return;
-  }
-
-  const previousSize = source.subscribers.size;
-  source.subscribers.add(computation);
-  computation.deps.add(source);
-  computation.trackingAddedDeps?.push(source);
-
-  if (previousSize === 0) {
-    source.singleSubscriber = computation;
-  } else if (source.subscribers.size > 1) {
-    source.singleSubscriber = undefined;
-  }
-}
-
-function cleanupUntrackedDeps(
-  computation: ReactiveComputation,
-  trackingVersion: number,
-): void {
-  for (const dep of computation.deps) {
-    if (dep.trackedBy === computation && dep.trackedVersion === trackingVersion) {
-      continue;
-    }
-
-    if (!dep.subscribers.delete(computation)) {
-      continue;
-    }
-
-    if (dep.trackedBy === computation) {
-      dep.trackedBy = undefined;
-      dep.trackedVersion = undefined;
-    }
-
-    computation.deps.delete(dep);
-
-    if (dep.subscribers.size === 0) {
-      dep.singleSubscriber = undefined;
-    } else if (dep.subscribers.size === 1) {
-      dep.singleSubscriber = dep.subscribers.values().next().value;
-    }
-  }
-}
-
-function cleanupAddedDeps(computation: ReactiveComputation): void {
-  const addedDeps = computation.trackingAddedDeps;
-
-  if (addedDeps === undefined) {
-    return;
-  }
-
-  for (const dep of addedDeps) {
-    if (!dep.subscribers.delete(computation)) {
-      continue;
-    }
-
-    if (dep.trackedBy === computation) {
-      dep.trackedBy = undefined;
-      dep.trackedVersion = undefined;
-    }
-
-    computation.deps.delete(dep);
-
-    if (dep.subscribers.size === 0) {
-      dep.singleSubscriber = undefined;
-    } else if (dep.subscribers.size === 1) {
-      dep.singleSubscriber = dep.subscribers.values().next().value;
-    }
-  }
 }

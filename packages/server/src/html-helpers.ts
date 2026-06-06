@@ -488,11 +488,25 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
 };
 
 function isBooleanishStringAttribute(name: string): boolean {
-  const attributeName = toHtmlAttributeName(name).toLowerCase();
-  return (
+  const attributeName = name;
+
+  if (
     attributeName.startsWith("aria-") ||
     attributeName.startsWith("data-") ||
     BOOLEANISH_STRING_ATTRIBUTES.has(attributeName)
+  ) {
+    return true;
+  }
+
+  if (!hasAsciiUppercase(attributeName)) {
+    return false;
+  }
+
+  const lowerAttributeName = attributeName.toLowerCase();
+  return (
+    lowerAttributeName.startsWith("aria-") ||
+    lowerAttributeName.startsWith("data-") ||
+    BOOLEANISH_STRING_ATTRIBUTES.has(lowerAttributeName)
   );
 }
 
@@ -501,6 +515,17 @@ const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
   "draggable",
   "spellcheck",
 ]);
+
+function hasAsciiUppercase(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code >= 65 && code <= 90) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function isPromiseLikeNode(value: unknown): value is PromiseLike<unknown> {
   return isPromiseLikeUnknown(value);

@@ -19,6 +19,8 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
 }
 
 interface QuerySubscription<TData = unknown> {
+  exact: boolean;
+  queryHash: string;
   queryKey: QueryKey;
   queryKeySegments: readonly string[];
   listener: (entry: QueryEntry<TData>) => void;
@@ -26,7 +28,8 @@ interface QuerySubscription<TData = unknown> {
 
 export function createQueryLifecycle(): QueryClient {
   const cache = new Map<string, InternalQueryEntry>();
-  const subscriptions = new Set<QuerySubscription>();
+  const exactSubscriptions = new Map<string, Set<QuerySubscription>>();
+  const prefixSubscriptions = new Set<QuerySubscription>();
   const subscriberCounts = new Map<string, number>();
   const gcTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
@@ -97,7 +100,14 @@ export function createQueryLifecycle(): QueryClient {
       type: "query:update",
     });
 
-    for (const subscription of Array.from(subscriptions)) {
+    const exact = exactSubscriptions.get(publicEntry.queryHash);
+    if (exact !== undefined) {
+      for (const subscription of exact) {
+        subscription.listener(publicEntry);
+      }
+    }
+
+    for (const subscription of prefixSubscriptions) {
       if (queryKeyStartsWith(queryKeySegments, subscription.queryKeySegments)) {
         subscription.listener(publicEntry);
       }
@@ -289,11 +299,16 @@ export function createQueryLifecycle(): QueryClient {
     removeQueries(options: InvalidateQueriesOptions = {}): void {
       const prefixSegments =
         options.queryKey === undefined ? undefined : hashQueryKeySegments(options.queryKey);
-      const removedEntries = Array.from(cache.values()).filter(
-        (entry) =>
+      const removedEntries: InternalQueryEntry[] = [];
+
+      for (const entry of cache.values()) {
+        if (
           prefixSegments === undefined ||
-          queryKeyStartsWith(entry.queryKeySegments, prefixSegments),
-      );
+          queryKeyStartsWith(entry.queryKeySegments, prefixSegments)
+        ) {
+          removedEntries.push(entry);
+        }
+      }
 
       for (const entry of removedEntries) {
         removeEntry(entry);
@@ -305,15 +320,35 @@ export function createQueryLifecycle(): QueryClient {
       options: QuerySubscriptionOptions = {},
     ): () => void {
       retainSubscription(queryKey);
+      const queryHash = hashQueryKey(queryKey);
       const subscription: QuerySubscription<TData> = {
+        exact: options.exact === true,
         listener,
         queryKey,
+        queryHash,
         queryKeySegments: hashQueryKeySegments(queryKey),
       };
-      subscriptions.add(subscription as QuerySubscription);
+      if (subscription.exact) {
+        let subscriptions = exactSubscriptions.get(queryHash);
+        if (subscriptions === undefined) {
+          subscriptions = new Set();
+          exactSubscriptions.set(queryHash, subscriptions);
+        }
+        subscriptions.add(subscription as QuerySubscription);
+      } else {
+        prefixSubscriptions.add(subscription as QuerySubscription);
+      }
 
       return () => {
-        subscriptions.delete(subscription as QuerySubscription);
+        if (subscription.exact) {
+          const subscriptions = exactSubscriptions.get(queryHash);
+          subscriptions?.delete(subscription as QuerySubscription);
+          if (subscriptions?.size === 0) {
+            exactSubscriptions.delete(queryHash);
+          }
+        } else {
+          prefixSubscriptions.delete(subscription as QuerySubscription);
+        }
         releaseSubscription(queryKey, options.gcTime);
       };
     },
@@ -429,8 +464,17 @@ function createQueryAbortReason(queryKey: QueryKey): Error {
 }
 
 export function hashQueryKey(queryKey: QueryKey): string {
-  return stableStringify(queryKey);
+  const cached = queryHashCache.get(queryKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const hash = stableStringify(queryKey);
+  queryHashCache.set(queryKey, hash);
+  return hash;
 }
+
+const queryHashCache = new WeakMap<QueryKey, string>();
 
 export function resultFromQueryEntry<TData>(
   entry: QueryEntry<TData> | undefined,
@@ -495,7 +539,7 @@ function stableStringify(value: unknown): string {
 
   const entries = Object.entries(value as Record<string, unknown>)
     .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => left.localeCompare(right));
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
   return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`).join(",")}}`;
 }
