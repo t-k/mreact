@@ -3175,10 +3175,27 @@ function __mreactRouteDataScriptSelector() {
 function __mreactCurrentHistoryState(url) {
   return {
     __mreact: true,
+    html: __mreactCurrentDocumentRouteHtml(),
     scrollX: Number(globalThis.scrollX ?? 0),
     scrollY: Number(globalThis.scrollY ?? 0),
     url,
   };
+}
+
+function __mreactCurrentDocumentRouteHtml() {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+
+  const marker = document.querySelector("[" + __mreactRouteMarkerAttribute + "]");
+  if (marker === null) {
+    return undefined;
+  }
+
+  const routeDataScripts = Array.from(document.querySelectorAll(__mreactRouteDataScriptSelector()))
+    .map((script) => script.outerHTML)
+    .join("");
+  return marker.outerHTML + routeDataScripts;
 }
 
 function __mreactPushHistoryState(url) {

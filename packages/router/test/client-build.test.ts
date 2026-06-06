@@ -6023,7 +6023,38 @@ export default function Page(props) {
       scrollY: 200,
       url: expect.stringContaining("/about"),
     });
-    expect(replacedStates[0]).not.toHaveProperty("html");
+    expect((replacedStates[0] as { html?: string }).html).toContain("About");
+    expect((replacedStates[0] as { html?: string }).html).toContain("mreact-props-about");
+  });
+
+  test("saves the current route HTML before pushing a navigation entry", async () => {
+    const { routeModule } = await importRouteRuntime("pushstate-current-html");
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><h1>Home</h1><button type="button">count: 1</button></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+    const originalReplaceState = history.replaceState.bind(history);
+    const replacedStates: unknown[] = [];
+    history.replaceState = (state, title, url) => {
+      replacedStates.push(state);
+      return originalReplaceState(state, title, url);
+    };
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="about"><main>About</main></div>',
+        '<script type="application/json" id="mreact-props-about">{}</script>',
+      ].join(""),
+      "/about",
+    );
+
+    expect(replacedStates[0]).toMatchObject({
+      __mreact: true,
+      url: expect.stringContaining("/"),
+    });
+    expect((replacedStates[0] as { html?: string }).html).toContain("count: 1");
+    expect((replacedStates[0] as { html?: string }).html).toContain("mreact-props-index");
   });
 
   test("does not intercept reload links", async () => {
