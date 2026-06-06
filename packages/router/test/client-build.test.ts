@@ -5360,6 +5360,41 @@ export default function Page() {
     ]);
   });
 
+  test("preloads matching client route scripts while navigation HTML is still loading", async () => {
+    const { routeModule } = await importRouteRuntime("navigation-preloads-script-before-html");
+    let resolveFetch: ((response: Response) => void) | undefined;
+    globalThis.fetch = async () =>
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+
+    const navigation = routeModule.__mreactNavigate("/about");
+    await Promise.resolve();
+
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/routes/about.12345678.js"]',
+      ),
+    ).not.toBeNull();
+
+    resolveFetch?.(
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      ),
+    );
+    await expect(navigation).resolves.toBe(true);
+  });
+
   test("bounds prefetched navigation HTML cache entries", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-html-cache-bound");
     globalThis.fetch = async (url) =>
@@ -5988,6 +6023,7 @@ export default function Page(props) {
       scrollY: 200,
       url: expect.stringContaining("/about"),
     });
+    expect(replacedStates[0]).not.toHaveProperty("html");
   });
 
   test("does not intercept reload links", async () => {

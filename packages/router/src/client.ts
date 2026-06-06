@@ -2240,6 +2240,7 @@ export async function buildClientRouteEntrySource(
   },
   fetchRevalidationInstalled: false,
   installed: false,
+  prefetchedUrls: new Set(),
   prefetchedScripts: new Set(),
   reloadNextNavigationFetch: false,
   routePrefetchManifest: undefined,
@@ -2593,6 +2594,12 @@ export async function __mreactPrefetch(url) {
     return false;
   }
 
+  if (__mreactNavigationState.prefetchedUrls.has(href)) {
+    return true;
+  }
+
+  __mreactNavigationState.prefetchedUrls.add(href);
+
   const script = __mreactRouteScriptForNavigationUrl(href);
 
   if (script === undefined) {
@@ -2690,6 +2697,10 @@ export async function __mreactNavigate(url, options = {}) {
 
   try {
     const cachedHtml = __mreactCachedNavigationHtml(href);
+    const script = __mreactRouteScriptForNavigationUrl(href);
+    if (script !== undefined) {
+      void __mreactPrefetchRouteScript(script);
+    }
     const html = cachedHtml ?? await __mreactFetchNavigationHtml(href);
 
     if (typeof html !== "string") {
@@ -2842,12 +2853,14 @@ export function __mreactInvalidateNavigationCache(path) {
   for (const href of Array.from(__mreactNavigationState.cache.keys())) {
     if (__mreactNormalizeNavigationPath(href) === normalizedPath) {
       __mreactNavigationState.cache.delete(href);
+      __mreactNavigationState.prefetchedUrls.delete(href);
     }
   }
 }
 
 function __mreactInvalidateAllNavigationCache() {
   __mreactNavigationState.cache.clear();
+  __mreactNavigationState.prefetchedUrls.clear();
 }
 
 function __mreactFetchNavigationHtml(href) {
@@ -2903,11 +2916,19 @@ function __mreactNormalizeNavigationPath(path) {
 }
 
 export function __mreactRestoreHistoryState(state) {
-  if (state === null || state === undefined || state.__mreact !== true || typeof state.html !== "string") {
+  if (state === null || state === undefined || state.__mreact !== true) {
     return false;
   }
 
-  const applied = __mreactApplyNavigationHtml(state.html, state.url);
+  const html = typeof state.html === "string"
+    ? state.html
+    : typeof state.url === "string" ? __mreactNavigationState.cache.get(state.url) : undefined;
+
+  if (typeof html !== "string") {
+    return false;
+  }
+
+  const applied = __mreactApplyNavigationHtml(html, state.url);
 
   if (!applied) {
     return false;
@@ -3120,15 +3141,14 @@ function __mreactSyncRouteDataScripts(root, currentRouteId, nextRouteId) {
     return;
   }
 
-  for (const element of Array.from(document.querySelectorAll(__mreactRouteDataScriptSelector()))) {
-    if (managedIds.has(element.id)) {
-      element.remove();
-    }
-  }
+  for (const id of managedIds) {
+    document.getElementById(id)?.remove();
+    const next = typeof root.getElementById === "function"
+      ? root.getElementById(id)
+      : root.querySelector(\`#\${id}\`);
 
-  for (const element of Array.from(root.querySelectorAll(__mreactRouteDataScriptSelector()))) {
-    if (managedIds.has(element.id)) {
-      document.body.appendChild(element);
+    if (next !== null && next !== undefined) {
+      document.body.appendChild(next);
     }
   }
 }
@@ -3155,7 +3175,6 @@ function __mreactRouteDataScriptSelector() {
 function __mreactCurrentHistoryState(url) {
   return {
     __mreact: true,
-    html: document.body.innerHTML,
     scrollX: Number(globalThis.scrollX ?? 0),
     scrollY: Number(globalThis.scrollY ?? 0),
     url,
@@ -4245,7 +4264,8 @@ export function cell(initial) {
       buildApi.onLoad({ filter: /^devtools$/, namespace: "mreact-devtools-stub" }, () => ({
         contents: `export function emitReactiveDevtoolsEvent() {}
 export function hasReactiveDevtoolsEmitter() { return false; }
-export function currentDevtoolsEmitter() { return undefined; }`,
+export function currentDevtoolsEmitter() { return undefined; }
+export function currentReactiveDevtools() { return undefined; }`,
         loader: "ts",
       }));
       buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
