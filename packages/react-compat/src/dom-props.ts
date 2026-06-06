@@ -81,7 +81,7 @@ export function applyProps(
       continue;
     }
 
-    if (applyFormValueProp(element, name, value, path, options)) {
+    if (isFormValuePropName(name) && applyFormValueProp(element, name, value, path, options)) {
       continue;
     }
 
@@ -172,6 +172,8 @@ function applyInitialProps(
   path: string,
   options: RenderOptions,
 ): void {
+  const useAttributeFastPath = options.hydration === undefined;
+
   for (const name in props) {
     if (!Object.prototype.hasOwnProperty.call(props, name)) {
       continue;
@@ -183,7 +185,7 @@ function applyInitialProps(
       continue;
     }
 
-    if (applyFormValueProp(element, name, value, path, options)) {
+    if (isFormValuePropName(name) && applyFormValueProp(element, name, value, path, options)) {
       continue;
     }
 
@@ -192,12 +194,26 @@ function applyInitialProps(
     }
 
     if (name === "className") {
-      applyAttribute(element, "class", value, path, options);
+      applyInitialOrHydrationAttribute(
+        element,
+        "class",
+        value,
+        path,
+        options,
+        useAttributeFastPath,
+      );
       continue;
     }
 
     if (name === "htmlFor") {
-      applyAttribute(element, "for", value, path, options);
+      applyInitialOrHydrationAttribute(
+        element,
+        "for",
+        value,
+        path,
+        options,
+        useAttributeFastPath,
+      );
       continue;
     }
 
@@ -220,12 +236,26 @@ function applyInitialProps(
     const attributeName = toDomAttributeName(name);
 
     if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
-      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      applyInitialOrHydrationAttribute(
+        element,
+        attributeName,
+        value ? "true" : "false",
+        path,
+        options,
+        useAttributeFastPath,
+      );
       continue;
     }
 
     if (typeof value === "boolean" && isDataAttribute(attributeName)) {
-      applyAttribute(element, attributeName, value ? "true" : "false", path, options);
+      applyInitialOrHydrationAttribute(
+        element,
+        attributeName,
+        value ? "true" : "false",
+        path,
+        options,
+        useAttributeFastPath,
+      );
       continue;
     }
 
@@ -248,7 +278,14 @@ function applyInitialProps(
       continue;
     }
 
-    applyAttribute(element, attributeName, value, path, options);
+    applyInitialOrHydrationAttribute(
+      element,
+      attributeName,
+      value,
+      path,
+      options,
+      useAttributeFastPath,
+    );
   }
 
 }
@@ -406,6 +443,49 @@ function applyAttribute(
   element.setAttribute(name, stringValue);
 }
 
+function applyInitialAttribute(
+  element: Element,
+  name: string,
+  value: unknown,
+): void {
+  if (isDangerousHtmlAttribute(name) && !isDangerousHtmlOptIn(value)) {
+    return;
+  }
+
+  if (isEventLikePropName(name) || value === null || value === undefined || value === false) {
+    return;
+  }
+
+  const stringValue = isDangerousHtmlOptIn(value)
+    ? (value as { __html: string }).__html
+    : String(value);
+
+  if (
+    (isUrlAttribute(name) || isSrcsetAttribute(name)) &&
+    isUnsafeUrlAttribute(name, stringValue)
+  ) {
+    return;
+  }
+
+  element.setAttribute(name, stringValue);
+}
+
+function applyInitialOrHydrationAttribute(
+  element: Element,
+  name: string,
+  value: unknown,
+  path: string,
+  options: RenderOptions,
+  useFastPath: boolean,
+): void {
+  if (useFastPath) {
+    applyInitialAttribute(element, name, value);
+    return;
+  }
+
+  applyAttribute(element, name, value, path, options);
+}
+
 function applyFormValueProp(
   element: Element,
   name: string,
@@ -478,6 +558,15 @@ function applyFormValueProp(
   }
 
   return false;
+}
+
+function isFormValuePropName(name: string): boolean {
+  return (
+    name === "value" ||
+    name === "defaultValue" ||
+    name === "checked" ||
+    name === "defaultChecked"
+  );
 }
 
 function applyStyle(
