@@ -328,7 +328,7 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     name === "children" ||
     name === "key" ||
     name === "ref" ||
-    /^on[A-Z]/.test(name) ||
+    /^on/i.test(name) ||
     value === null ||
     value === undefined ||
     typeof value === "function"
@@ -344,6 +344,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   const attributeName = toHtmlAttributeName(name);
 
   if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
+    return "";
+  }
+
+  if (/^on/i.test(attributeName)) {
     return "";
   }
 

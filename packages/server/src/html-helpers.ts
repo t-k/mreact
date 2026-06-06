@@ -410,7 +410,8 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     name === "ref" ||
     value === null ||
     value === undefined ||
-    typeof value === "function"
+    typeof value === "function" ||
+    /^on/i.test(name)
   ) {
     return "";
   }
@@ -418,6 +419,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   const attributeName = toHtmlAttributeName(name);
 
   if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
+    return "";
+  }
+
+  if (/^on/i.test(attributeName)) {
     return "";
   }
 

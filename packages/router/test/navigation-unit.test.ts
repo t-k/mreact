@@ -122,6 +122,15 @@ describe("router navigation helpers", () => {
     expect(rewriteLocation(response)).toBe("/from-header");
   });
 
+  test("rewriteLocation() rejects protocol-relative / scheme / backslash targets", () => {
+    for (const location of ["//evil.test", "/\\evil", "\\evil", "https://evil.test/x", "javascript:alert(1)", ""]) {
+      expect(rewriteLocation(new Response(null, {
+        headers: { "x-mreact-rewrite": location },
+      }))).toBeUndefined();
+      expect(() => rewrite(location)).toThrow(/unsafe rewrite target/);
+    }
+  });
+
   test("rewriteLocation() returns undefined for an ordinary Response", () => {
     expect(rewriteLocation(new Response("body"))).toBeUndefined();
   });

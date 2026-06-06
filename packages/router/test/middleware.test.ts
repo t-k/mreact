@@ -6,6 +6,7 @@ import {
   parseStaticMiddlewareConfig,
   shouldSkipMiddleware,
 } from "../src/middleware.js";
+import { normalizeRoutePath } from "../src/route-path.js";
 
 describe("router middleware contract", () => {
   test("parses static matcher and id config without importing the middleware module", () => {
@@ -54,6 +55,13 @@ describe("router middleware contract", () => {
     expect(middlewareMatches({ matcher: "/admin*" }, "/administrator")).toBe(true);
     expect(middlewareMatches({ matcher: /^\/api\/v[0-9]+$/ }, "/api/v1")).toBe(true);
     expect(middlewareMatches({ matcher: ["/a", "/b/:path*"] }, "/b/child")).toBe(true);
+  });
+
+  test("exact matchers agree with route path normalization for trailing slash variants", () => {
+    for (const variant of ["/account", "/account/", "/account//"]) {
+      expect(normalizeRoutePath(variant)).toBe("/account");
+      expect(middlewareMatches({ matcher: "/account" }, variant)).toBe(true);
+    }
   });
 
   test("parses and merges route-local middleware skip controls", () => {

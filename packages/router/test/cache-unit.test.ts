@@ -112,6 +112,66 @@ describe("router cache helpers", () => {
     await expect(stored!.text()).resolves.toBe("<p>hi</p>");
   });
 
+  test("cacheRouteResponse skips shared storage for credentialed requests", async () => {
+    const cache = createMemoryRouteCache();
+    const result = await cacheRouteResponse({
+      cache,
+      key: "credentialed",
+      path: "/profile",
+      policy: { cacheControl: "s-maxage=10", revalidateSeconds: 10 },
+      request: new Request("https://app.test/profile", {
+        headers: { cookie: "session=abc" },
+      }),
+      response: new Response("<p>Ada</p>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    });
+
+    expect(result.headers.get("cache-control")).toBe("private, no-store");
+    expect(await cachedRouteResponse({ cache, key: "credentialed" })).toBeUndefined();
+  });
+
+  test("cacheRouteResponse preserves Set-Cookie when skipping shared storage", async () => {
+    const cache = createMemoryRouteCache();
+    const result = await cacheRouteResponse({
+      cache,
+      key: "set-cookie",
+      path: "/profile",
+      policy: { cacheControl: "s-maxage=10", revalidateSeconds: 10 },
+      response: new Response("<p>Ada</p>", {
+        status: 200,
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          "set-cookie": "session=next; Path=/",
+        },
+      }),
+    });
+
+    expect(result.headers.get("cache-control")).toBe("private, no-store");
+    expect(result.headers.get("set-cookie")).toBe("session=next; Path=/");
+    expect(await cachedRouteResponse({ cache, key: "set-cookie" })).toBeUndefined();
+  });
+
+  test("cachedRouteResponse skips HITs for credentialed requests", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "public",
+      path: "/profile",
+      policy: { cacheControl: "s-maxage=10", revalidateSeconds: 10 },
+      response: new Response("<p>public</p>", { status: 200 }),
+    });
+
+    expect(await cachedRouteResponse({
+      cache,
+      key: "public",
+      request: new Request("https://app.test/profile", {
+        headers: { authorization: "Bearer token" },
+      }),
+    })).toBeUndefined();
+  });
+
   test("cachedRouteResponse returns undefined for an expired entry", async () => {
     const cache = createMemoryRouteCache();
     await cacheRouteResponse({

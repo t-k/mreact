@@ -52,22 +52,43 @@ export function createNativeRouteMatcher(
 
   return {
     match(pathname): MatchedRoute | undefined {
-      const output = matcher.matchRoute(pathname);
-
-      if (output == null) {
-        return undefined;
-      }
-
-      const route = sortedRoutes[output.index];
-
-      return route === undefined
-        ? undefined
-        : {
-            route,
-            params: normalizeNativeParams(route, output.params),
-          };
+      return matchNativeRoute(matcher, sortedRoutes, pathname);
     },
   };
+}
+
+export function __matchNativeRouteForTesting(
+  matcher: NativeRouteMatcherInstance,
+  sortedRoutes: readonly AppRoute[],
+  pathname: string,
+): MatchedRoute | undefined {
+  return matchNativeRoute(matcher, sortedRoutes, pathname);
+}
+
+function matchNativeRoute(
+  matcher: NativeRouteMatcherInstance,
+  sortedRoutes: readonly AppRoute[],
+  pathname: string,
+): MatchedRoute | undefined {
+  let output: NativeMatchOutput | null | undefined;
+  try {
+    output = matcher.matchRoute(pathname);
+  } catch {
+    return undefined;
+  }
+
+  if (output == null) {
+    return undefined;
+  }
+
+  const route = sortedRoutes[output.index];
+
+  return route === undefined
+    ? undefined
+    : {
+        route,
+        params: normalizeNativeParams(route, output.params),
+      };
 }
 
 export function normalizeNativeParams(

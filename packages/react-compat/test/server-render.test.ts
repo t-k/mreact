@@ -176,4 +176,18 @@ describe("react-compat server render", () => {
       '<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>',
     );
   });
+
+  test("does not emit string event handler attributes", () => {
+    function App() {
+      return createElement("img", {
+        onClick: "alert(1)",
+        onerror: "alert(2)",
+        alt: "x",
+      } as Record<string, unknown>);
+    }
+
+    const html = renderToString(App);
+    expect(html).toBe('<img alt="x"/>');
+    expect(html).not.toMatch(/\son(?:click|error)=/i);
+  });
 });

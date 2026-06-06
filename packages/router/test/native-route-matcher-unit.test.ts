@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  __matchNativeRouteForTesting,
   nativeModulePackageCandidates,
   normalizeNativeParams,
   shouldUseNativeRouteMatcher,
@@ -75,5 +76,31 @@ describe("normalizeNativeParams", () => {
     ).toEqual({
       slug: ["docs", "hello world", "日本"],
     });
+  });
+});
+
+describe("native route matcher error handling", () => {
+  test("treats native decode errors as a non-match instead of throwing", () => {
+    const matched = __matchNativeRouteForTesting(
+      {
+        matchRoute() {
+          throw new Error("invalid percent-encoding");
+        },
+      },
+      [
+        {
+          file: "/app/users/[id]/page.tsx",
+          kind: "page",
+          path: "/users/[id]",
+          segments: [
+            { kind: "static", value: "users" },
+            { kind: "dynamic", name: "id" },
+          ],
+        },
+      ],
+      "/users/%ZZ",
+    );
+
+    expect(matched).toBeUndefined();
   });
 });

@@ -948,6 +948,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         : await cachedRouteResponse({
             cache: options.routeCache,
             key: cacheKey,
+            request: options.request,
           });
     finishRenderTimingPhase(timing, phaseStartedAt, "routeCacheMs");
 
@@ -1460,6 +1461,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           cache: options.routeCache,
           path: matched.route.path,
           policy: effectiveCachePolicy,
+          request: options.request,
           response,
         });
     finishRenderTimingPhase(timing, phaseStartedAt, "responseBuildMs");

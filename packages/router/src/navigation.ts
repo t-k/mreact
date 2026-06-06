@@ -57,6 +57,10 @@ function throwUnsafeRedirect(location: string): never {
   );
 }
 
+function throwUnsafeRewrite(location: string): never {
+  throw new TypeError(`unsafe rewrite target: ${JSON.stringify(location)}`);
+}
+
 export function redirect(location: string, options: RedirectOptions = {}): never {
   if (!isSafeInternalRedirect(location)) {
     throwUnsafeRedirect(location);
@@ -134,6 +138,10 @@ export function next(): MiddlewareNext {
 }
 
 export function rewrite(location: string, init: ResponseInit = {}): Response {
+  if (!isSafeInternalRedirect(location)) {
+    throwUnsafeRewrite(location);
+  }
+
   const response = new Response(null, {
     ...init,
     status: init.status ?? 200,
@@ -198,10 +206,11 @@ export function cookies(request: Request): RequestCookies {
 
 export function rewriteLocation(response: Response): string | undefined {
   const marked = (response as { [rewriteLocationSymbol]?: unknown })[rewriteLocationSymbol];
-
-  return typeof marked === "string"
+  const candidate = typeof marked === "string"
     ? marked
     : response.headers.get(rewriteHeaderName) ?? undefined;
+
+  return candidate !== undefined && isSafeInternalRedirect(candidate) ? candidate : undefined;
 }
 
 export function isRedirectError(error: unknown): error is Error & { location: string; status: number } {

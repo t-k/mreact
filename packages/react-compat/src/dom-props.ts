@@ -12,6 +12,8 @@ import type { SyntheticEvent } from "./event-types.js";
 import {
   isDangerousHtmlAttribute,
   isDangerousHtmlOptIn,
+  isSrcsetAttribute,
+  isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
   isUrlAttribute,
 } from "./url-safety.js";
@@ -29,16 +31,17 @@ export function applyProps(
 ): void {
   const preserveHydrationAttributes = options.preserveHydrationAttributes === true;
   const previous = getAppliedProps(element);
+  const nextProps = sanitizeMetaRefreshElementProps(element, props);
 
   if (previous === undefined && !preserveHydrationAttributes) {
-    if (applyInitialRowProps(element, props)) {
-      setAppliedProps(element, { props });
+    if (applyInitialRowProps(element, nextProps)) {
+      setAppliedProps(element, { props: nextProps });
       return;
     }
 
     setAppliedProps(element, {
-      props,
-      ...applyInitialProps(element, props, path, options),
+      props: nextProps,
+      ...applyInitialProps(element, nextProps, path, options),
     });
     return;
   }
@@ -46,7 +49,7 @@ export function applyProps(
   const previousProps = previous?.props ?? {};
   let listeners = previous?.listeners;
   const previousAttributeNames = collectAttributeNames(previousProps);
-  const nextAttributeNames = collectAttributeNames(props);
+  const nextAttributeNames = collectAttributeNames(nextProps);
 
   if (!preserveHydrationAttributes) {
     for (const attributeName of previousAttributeNames) {
@@ -71,7 +74,7 @@ export function applyProps(
 
   if (listeners !== undefined) {
     for (const [name, appliedListener] of listeners) {
-      const nextValue = props[name];
+      const nextValue = nextProps[name];
 
       if (nextValue !== appliedListener.handler) {
         listeners.delete(name);
@@ -79,7 +82,7 @@ export function applyProps(
     }
   }
 
-  for (const [name, value] of Object.entries(props)) {
+  for (const [name, value] of Object.entries(nextProps)) {
     if (name === "children" || name === "ref" || name === "key") {
       continue;
     }
@@ -114,6 +117,10 @@ export function applyProps(
       }
       listeners ??= new Map<string, AppliedEventListener>();
       listeners.set(name, { handler });
+      continue;
+    }
+
+    if (/^on/i.test(name)) {
       continue;
     }
 
@@ -163,7 +170,7 @@ export function applyProps(
   }
 
   setAppliedProps(element, {
-    props,
+    props: nextProps,
     ...(listeners === undefined ? {} : { listeners }),
   });
 }
@@ -217,6 +224,10 @@ function applyInitialProps(
       }
       listeners ??= new Map<string, AppliedEventListener>();
       listeners.set(name, { handler });
+      continue;
+    }
+
+    if (/^on/i.test(name)) {
       continue;
     }
 
@@ -338,6 +349,13 @@ function applyAttribute(
     return;
   }
 
+  if (/^on/i.test(name)) {
+    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
+      element.removeAttribute(name);
+    }
+    return;
+  }
+
   if (value === null || value === undefined || value === false) {
     if (element.hasAttribute(name) && !preserveHydrationAttributes) {
       reportRecoverable(
@@ -363,7 +381,10 @@ function applyAttribute(
   // value is unsafe we treat it as if it were null -- remove the
   // existing attribute, log a recoverable mismatch, and stop. This
   // matches react-dom's sanitizeURL posture.
-  if (isUrlAttribute(name) && isUnsafeUrlAttribute(name, stringValue)) {
+  if (
+    (isUrlAttribute(name) || isSrcsetAttribute(name)) &&
+    isUnsafeUrlAttribute(name, stringValue)
+  ) {
     if (element.hasAttribute(name) && !preserveHydrationAttributes) {
       reportRecoverable(
         options,
@@ -538,7 +559,7 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
       name === "children" ||
       name === "ref" ||
       name === "key" ||
-      /^on[A-Z]/.test(name) ||
+      /^on/i.test(name) ||
       value === null ||
       value === undefined
     ) {
@@ -569,6 +590,28 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
   }
 
   return names;
+}
+
+function sanitizeMetaRefreshElementProps(
+  element: Element,
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  if (element.tagName.toLowerCase() !== "meta") {
+    return props;
+  }
+
+  const httpEquiv = props["http-equiv"] ?? props.httpEquiv ?? element.getAttribute("http-equiv");
+  const content = props.content;
+  if (typeof httpEquiv !== "string" || typeof content !== "string") {
+    return props;
+  }
+  if (!isUnsafeMetaRefreshContent(httpEquiv, content)) {
+    return props;
+  }
+
+  const sanitized = { ...props };
+  delete sanitized.content;
+  return sanitized;
 }
 
 function isBooleanishStringAttribute(name: string): boolean {

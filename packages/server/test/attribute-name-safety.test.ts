@@ -92,6 +92,19 @@ describe("SSR attribute name safety (Issue 060)", () => {
     expect(out).toContain('xlink:href="#icon"');
   });
 
+  test("drops string-valued inline event handler attributes", async () => {
+    const out = await jsxToString(
+      createElement("img", {
+        onClick: "alert(1)",
+        onerror: "alert(2)",
+        alt: "x",
+      } as Record<string, unknown>),
+    );
+
+    expect(out).toBe('<img alt="x">');
+    expect(out).not.toMatch(/\son(?:click|error)=/i);
+  });
+
   test("keeps escaping the attribute VALUE on safe names (sanity)", async () => {
     const out = await jsxToString(
       createElement("div", { title: '"><script>alert(1)</script>' }),

@@ -1,3 +1,5 @@
+import { normalizeRoutePath } from "./route-path.js";
+
 export interface RouteMiddlewareControl {
   skip?: boolean | readonly string[];
 }
@@ -133,20 +135,23 @@ export function mergeRouteMiddlewareControls(
 }
 
 function middlewarePatternMatches(pattern: string, pathname: string): boolean {
-  if (pattern === pathname) {
+  const normalizedPattern = normalizeRoutePath(pattern);
+  const normalizedPathname = normalizeRoutePath(pathname);
+
+  if (normalizedPattern === normalizedPathname) {
     return true;
   }
 
-  if (pattern.endsWith("/:path*")) {
-    const prefix = pattern.slice(0, -"/:path*".length);
+  if (normalizedPattern.endsWith("/:path*")) {
+    const prefix = normalizedPattern.slice(0, -"/:path*".length);
 
-    return pathname === prefix || pathname.startsWith(`${prefix}/`);
+    return normalizedPathname === prefix || normalizedPathname.startsWith(`${prefix}/`);
   }
 
-  if (pattern.endsWith("*")) {
-    const prefix = pattern.slice(0, -1);
+  if (normalizedPattern.endsWith("*")) {
+    const prefix = normalizedPattern.slice(0, -1);
 
-    return pathname.startsWith(prefix);
+    return normalizedPathname.startsWith(prefix);
   }
 
   return false;

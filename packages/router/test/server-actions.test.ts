@@ -637,6 +637,37 @@ export default function Page() {
     expect((globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls).toBeUndefined();
   });
 
+  test("rejects form server action requests over the configured field count limit", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-field-limit-"));
+    await writeActionFixture(appDir);
+    delete (globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls;
+    const response = await renderAppRequest({
+      appDir,
+      serverActions: { maxFormFields: 4 },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: "nonce-field-limit",
+          __mreact_csrf: "csrf-field-limit",
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "Too many fields",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: "mreact.csrf=csrf-field-limit",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Server action form field count is too large.",
+    });
+    expect((globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls).toBeUndefined();
+  });
+
   test("applies configured JSON body limits without relying on Content-Length", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-json-body-limit-"));
     await writeActionFixture(appDir);

@@ -92,4 +92,44 @@ describe("react-compat URL scheme guard (Issue 075)", () => {
     );
     expect(container.querySelector("a")!.getAttribute("href")).toBeNull();
   });
+
+  test("drops javascript: candidates from img[srcSet] on render", () => {
+    const container = freshContainer();
+    const root = createRoot(container);
+    root.render(
+      createElement("img", {
+        srcSet: "javascript:alert(1) 1x, /safe.png 2x",
+        alt: "x",
+      }),
+    );
+    expect(container.querySelector("img")!.getAttribute("srcset")).toBeNull();
+  });
+
+  test("drops unsafe meta refresh content on render", () => {
+    const container = freshContainer();
+    const root = createRoot(container);
+    root.render(
+      createElement("meta", {
+        httpEquiv: "refresh",
+        content: "0;url=javascript:alert(1)",
+      }),
+    );
+    expect(container.querySelector("meta")!.getAttribute("http-equiv")).toBe("refresh");
+    expect(container.querySelector("meta")!.getAttribute("content")).toBeNull();
+  });
+
+  test("does not write string event handler attributes", () => {
+    const container = freshContainer();
+    const root = createRoot(container);
+    root.render(
+      createElement("img", {
+        onClick: "alert(1)",
+        onerror: "alert(2)",
+        alt: "x",
+      } as Record<string, unknown>),
+    );
+    const img = container.querySelector("img")!;
+    expect(img.getAttribute("onclick")).toBeNull();
+    expect(img.getAttribute("onerror")).toBeNull();
+  });
 });

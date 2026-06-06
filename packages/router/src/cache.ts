@@ -233,8 +233,13 @@ export function cachedRouteResponse(options: {
   cache?: AppRouterCache | undefined;
   key: string;
   now?: number;
+  request?: Request | undefined;
 }): Promise<Response | undefined> {
   return Promise.resolve().then(async () => {
+    if (requestCarriesCredentials(options.request)) {
+      return undefined;
+    }
+
     const cache = options.cache ?? cacheState.memoryCache;
 
     await consumeInvalidations(cache);
@@ -262,6 +267,7 @@ export async function cacheRouteResponse(options: {
   now?: number;
   path: string;
   policy: RouteCachePolicy | undefined;
+  request?: Request | undefined;
   response: Response;
 }): Promise<Response> {
   if (options.policy === undefined) {
@@ -276,6 +282,24 @@ export async function cacheRouteResponse(options: {
   const body = await options.response.text();
   const cacheControl = options.policy.cacheControl;
   const status = options.response.status;
+  const contentType = options.response.headers.get("content-type") ?? "text/html; charset=utf-8";
+
+  if (
+    requestCarriesCredentials(options.request) ||
+    options.response.headers.has("set-cookie")
+  ) {
+    const headers = new Headers(options.response.headers);
+    headers.set("cache-control", "private, no-store");
+    if (!headers.has("content-type")) {
+      headers.set("content-type", contentType);
+    }
+
+    return new Response(body, {
+      headers,
+      status,
+    });
+  }
+
   await (options.cache ?? cacheState.memoryCache).set(options.key, {
     body,
     cacheControl,
@@ -287,11 +311,19 @@ export async function cacheRouteResponse(options: {
   return new Response(body, {
     headers: {
       "cache-control": cacheControl,
-      "content-type": options.response.headers.get("content-type") ?? "text/html; charset=utf-8",
+      "content-type": contentType,
       "x-mreact-cache": "MISS",
     },
     status,
   });
+}
+
+function requestCarriesCredentials(request: Request | undefined): boolean {
+  if (request === undefined) {
+    return false;
+  }
+
+  return request.headers.has("authorization") || request.headers.has("cookie");
 }
 
 export function revalidatePath(path: string): void {

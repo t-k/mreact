@@ -64,6 +64,7 @@ const actionTokenSecret = process.env.MREACT_SERVER_ACTION_SECRET ?? defaultActi
 const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
 const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_ACTION_FORM_MAX_FIELDS = 1_000;
 let warnedUnrestrictedServerActions = false;
 
 export interface ServerActionContext {
@@ -148,6 +149,7 @@ export interface AppRouterServerActionOptions {
   allowedActions?: readonly AppRouterAllowedServerAction[] | undefined;
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;
   maxBodyBytes?: number | undefined;
+  maxFormFields?: number | undefined;
   replayStore?: ServerActionReplayStore | undefined;
 }
 
@@ -371,6 +373,15 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   }
 
   const formData = await options.request.formData();
+  const fieldCountResponse = validateServerActionFormFieldCount(
+    formData,
+    options.serverActions?.maxFormFields ?? DEFAULT_ACTION_FORM_MAX_FIELDS,
+  );
+
+  if (fieldCountResponse !== undefined) {
+    return fieldCountResponse;
+  }
+
   const csrfResponse = validateFormCsrf(options.request, formData);
 
   if (csrfResponse !== undefined) {
@@ -511,6 +522,28 @@ function validateServerActionBodySize(
 
   if (bytes > maxBodyBytes) {
     return jsonResponse({ ok: false, error: "Server action request body is too large." }, 413);
+  }
+
+  return undefined;
+}
+
+function validateServerActionFormFieldCount(
+  formData: FormData,
+  maxFormFields: number,
+): Response | undefined {
+  if (!Number.isFinite(maxFormFields) || maxFormFields < 0) {
+    return undefined;
+  }
+
+  let count = 0;
+  for (const _ of formData.keys()) {
+    count += 1;
+    if (count > maxFormFields) {
+      return jsonResponse({
+        ok: false,
+        error: "Server action form field count is too large.",
+      }, 413);
+    }
   }
 
   return undefined;
