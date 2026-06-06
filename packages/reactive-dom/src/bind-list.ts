@@ -246,14 +246,11 @@ function bindKeyedList<T>(
     for (const keyedItem of currentKeyedItems) {
       const itemKey = keyedItem.key;
       const existingRecord = records.get(itemKey);
+      let record: KeyedRecord;
 
       if (existingRecord === undefined) {
         reusedAllRecords = false;
-      }
-
-      const record =
-        existingRecord ??
-        createKeyedRecord(
+        record = createKeyedRecord(
           keyedItem.item,
           keyedItem.index,
           currentItems,
@@ -261,8 +258,10 @@ function bindKeyedList<T>(
           options,
           markRecordsForHydration,
         );
-
-      record.update(keyedItem.item);
+      } else {
+        record = existingRecord;
+        record.update(keyedItem.item);
+      }
 
       nextRecords.set(itemKey, record);
       orderedRecords.push(record);

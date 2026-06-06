@@ -999,4 +999,42 @@ describe("bindList", () => {
 
     dispose();
   });
+
+  test("does not update newly created keyed records during owned replacement", async () => {
+    const items = cell([{ id: 0 }, { id: 1 }, { id: 2 }]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item.id);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalObjectIs = Object.is;
+    let objectIsCalls = 0;
+
+    try {
+      Object.is = ((left, right) => {
+        objectIsCalls += 1;
+        return originalObjectIs(left, right);
+      }) as typeof Object.is;
+
+      items.set([{ id: 3 }, { id: 4 }, { id: 5 }]);
+      await flushEffects();
+    } finally {
+      Object.is = originalObjectIs;
+    }
+
+    expect(objectIsCalls).toBe(2);
+    expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
+    dispose();
+  });
 });
