@@ -158,6 +158,36 @@ describe("react-compat DOM prop performance", () => {
 
     expect(arrayIteratorCalls).toBe(0);
   });
+
+  test("does not lowercase ordinary click event props while mounting event targets", () => {
+    const root = document.createElement("div");
+    const originalToLowerCase = String.prototype.toLowerCase;
+    let toLowerCaseCalls = 0;
+
+    String.prototype.toLowerCase = function toLowerCaseSpy() {
+      toLowerCaseCalls += 1;
+      return originalToLowerCase.call(this);
+    };
+
+    try {
+      for (let index = 0; index < 100; index += 1) {
+        const button = document.createElement("button");
+        applyProps(
+          button,
+          {
+            children: String(index),
+            onClick: () => undefined,
+          },
+          String(index),
+          { eventRoot: root },
+        );
+      }
+    } finally {
+      String.prototype.toLowerCase = originalToLowerCase;
+    }
+
+    expect(toLowerCaseCalls).toBe(0);
+  });
 });
 
 function installCountingFormConstructors(hasInstance: () => boolean): void {

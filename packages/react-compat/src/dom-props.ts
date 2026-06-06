@@ -688,7 +688,7 @@ function sanitizeMetaRefreshElementProps(
   element: Element,
   props: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (element.tagName.toLowerCase() !== "meta") {
+  if (element.tagName !== "META" && element.tagName !== "meta") {
     return props;
   }
 
