@@ -3,7 +3,14 @@ import { primitiveBrowserCases, primitiveBrowserFrameworks } from "./cases.js";
 
 describe("primitive browser benchmark configuration", () => {
   it("covers mreact browser primitive frameworks", () => {
-    expect(primitiveBrowserFrameworks).toEqual(["mreact", "mreact react-compat", "react", "solid"]);
+    expect(primitiveBrowserFrameworks).toEqual([
+      "mreact",
+      "mreact react-compat",
+      "react",
+      "solid",
+      "marko",
+      "qwik",
+    ]);
   });
 
   it("defines browser cases for the krausest-style primitive operations", () => {
