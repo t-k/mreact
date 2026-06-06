@@ -85,7 +85,8 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
   },
   {
     name: "computed fan-in 1k",
-    description: "Updates 1,000 source values and validates one derived aggregate text output.",
+    description:
+      "Updates the inputs feeding one aggregate and validates one derived aggregate text output. Caveat: this is not a direct cross-framework source-write comparison because mreact, Solid, and Solid v2 update 1,000 fine-grained sources, while React, Marko, and Qwik update one array/props payload.",
     count: 1_000,
     metric: "duration",
     unit: "ms",

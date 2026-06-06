@@ -214,6 +214,10 @@ describe("primitive adapters", () => {
     expect(primitiveCases.every((benchmarkCase) => benchmarkCase.description.length > 20)).toBe(
       true,
     );
+    expect(
+      primitiveCases.find((benchmarkCase) => benchmarkCase.name === "computed fan-in 1k")
+        ?.description,
+    ).toContain("not a direct cross-framework source-write comparison");
   });
 
   it("runs every primitive case for every adapter", async () => {
