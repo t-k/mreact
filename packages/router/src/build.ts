@@ -1387,7 +1387,7 @@ async function collectBuildServerActionManifest(options: {
       .filter((route) => route.kind === "page")
       .map((route) => relative(options.projectRoot, route.file).split(sep).join("/")),
   );
-  const inferredRouteReferences = [];
+  const inferredRouteReferences: Array<{ code: string; file: string }> = [];
 
   for (const [file, code] of Object.entries(options.files)) {
     if (!isAppRelativeFile(file, relativeRoutesDir) || !isSourceModuleFile(file)) {
@@ -1403,18 +1403,24 @@ async function collectBuildServerActionManifest(options: {
     }
 
     if (routeSourceFiles.has(file)) {
-      inferredRouteReferences.push(
-        collectBuildInferredServerActionReferences({
-          file,
-          files: options.files,
-          relativeRoutesDir,
-          source: code,
-        }).then((inference) => ({ file, inference })),
-      );
+      inferredRouteReferences.push({ code, file });
     }
   }
 
-  for (const { file, inference } of await Promise.all(inferredRouteReferences)) {
+  const inferredRouteResults = await mapWithBuildConcurrency(
+    inferredRouteReferences,
+    async ({ code, file }) => ({
+      file,
+      inference: await collectBuildInferredServerActionReferences({
+        file,
+        files: options.files,
+        relativeRoutesDir,
+        source: code,
+      }),
+    }),
+  );
+
+  for (const { file, inference } of inferredRouteResults) {
     for (const diagnostic of inference.diagnostics) {
       console.warn(formatServerActionInferenceDiagnostic(diagnostic));
     }

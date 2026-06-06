@@ -142,7 +142,7 @@ export function mayUseAwaitBoundarySource(code: string): boolean {
 
 export function routeClosureMayUseAwaitBoundary(options: {
   filename: string;
-  files: Record<string, string>;
+  files: RouteSourceLookup;
   projectRoot: string;
   seen?: Set<string> | undefined;
   source: string;
@@ -184,16 +184,13 @@ export function routeClosureMayUseAwaitBoundary(options: {
         continue;
       }
 
-      const importedSource = options.files[resolved];
-
       if (
-        importedSource !== undefined &&
         routeClosureMayUseAwaitBoundary({
-          filename: resolved,
+          filename: resolved.filename,
           files: options.files,
           projectRoot: options.projectRoot,
           seen,
-          source: importedSource,
+          source: resolved.source,
         })
       ) {
         return true;
@@ -243,10 +240,10 @@ function isRenderedStaticImportReference(
 }
 
 function resolveLocalSourceImport(
-  files: Record<string, string>,
+  files: RouteSourceLookup,
   importer: string,
   specifier: string,
-): string | undefined {
+): { filename: string; source: string } | undefined {
   if (!specifier.startsWith(".")) {
     return undefined;
   }
@@ -254,12 +251,19 @@ function resolveLocalSourceImport(
   const base = join(dirname(importer), specifier);
 
   for (const candidate of sourceModuleCandidates(base)) {
-    if (files[candidate] !== undefined) {
-      return candidate;
+    const source = readRouteSourceLookup(files, candidate);
+    if (source !== undefined) {
+      return { filename: candidate, source };
     }
   }
 
   return undefined;
+}
+
+type RouteSourceLookup = Record<string, string> | ((file: string) => string | undefined);
+
+function readRouteSourceLookup(files: RouteSourceLookup, file: string): string | undefined {
+  return typeof files === "function" ? files(file) : files[file];
 }
 
 function sourceFilenameForCompiler(projectRoot: string, filename: string): string {

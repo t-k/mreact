@@ -1642,7 +1642,7 @@ export default function Page() {
     });
 
     expect(response.status).toBe(500);
-    expect(await response.text()).toContain("Invalid security header value");
+    expect(await response.text()).toBe("Internal Server Error");
   });
 
   test("applies route-local CSP replace, remove, and disable overrides", async () => {

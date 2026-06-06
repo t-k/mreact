@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 import { dirname, relative, sep } from "node:path";
 import {
   analyzeBoundaryGraph,
@@ -10,6 +11,8 @@ import type * as Ts from "typescript";
 
 let ts = undefined as unknown as typeof Ts;
 let typescriptLoaded = false;
+const runtimeInferenceCache = new Map<string, RuntimeInferenceCacheEntry>();
+const maxRuntimeInferenceCacheEntries = 512;
 
 export interface InferredServerActionReference {
   exportName: string;
@@ -61,6 +64,16 @@ export async function collectRuntimeInferredServerActions(options: {
 
   if (formReferences.length === 0) {
     return { diagnostics: [], references: new Map() };
+  }
+
+  const sourceHash = formActionSourceHash(options.code);
+  const cacheKey = `${options.appDir}\0${options.pageFile}\0${sourceHash}`;
+  const cached = runtimeInferenceCache.get(cacheKey);
+  if (cached !== undefined && (await runtimeInferenceCacheEntryIsFresh(cached))) {
+    return {
+      diagnostics: cached.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+      references: new Map(cached.references),
+    };
   }
 
   await loadTypeScript();
@@ -120,6 +133,17 @@ export async function collectRuntimeInferredServerActions(options: {
       });
     }
   }
+
+  const dependencies = await runtimeProgramDependencyStats({
+    appDir: options.appDir,
+    pageFile: options.pageFile,
+    program,
+  });
+  setRuntimeInferenceCacheEntry(cacheKey, {
+    dependencies,
+    diagnostics: diagnostics.map((diagnostic) => ({ ...diagnostic })),
+    references: new Map(references),
+  });
 
   return { diagnostics, references };
 }
@@ -792,6 +816,67 @@ function createRuntimeProgramHost(options: {
   };
 }
 
+interface RuntimeInferenceCacheEntry {
+  dependencies: readonly RuntimeInferenceDependency[];
+  diagnostics: readonly ServerActionInferenceDiagnostic[];
+  references: ReadonlyMap<string, InferredServerActionReference>;
+}
+
+interface RuntimeInferenceDependency {
+  file: string;
+  mtimeMs: number;
+  size: number;
+}
+
+async function runtimeProgramDependencyStats(options: {
+  appDir: string;
+  pageFile: string;
+  program: Ts.Program;
+}): Promise<RuntimeInferenceDependency[]> {
+  const dependencies = options.program
+    .getSourceFiles()
+    .map((sourceFile) => sourceFile.fileName)
+    .filter((file) => file !== options.pageFile && isInsideAppDir(options.appDir, file));
+  const uniqueDependencies = [...new Set(dependencies)];
+
+  return await Promise.all(
+    uniqueDependencies.map(async (file) => {
+      const stats = await stat(file);
+      return { file, mtimeMs: stats.mtimeMs, size: stats.size };
+    }),
+  );
+}
+
+async function runtimeInferenceCacheEntryIsFresh(
+  entry: RuntimeInferenceCacheEntry,
+): Promise<boolean> {
+  for (const dependency of entry.dependencies) {
+    try {
+      const stats = await stat(dependency.file);
+      if (stats.mtimeMs !== dependency.mtimeMs || stats.size !== dependency.size) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function setRuntimeInferenceCacheEntry(
+  key: string,
+  entry: RuntimeInferenceCacheEntry,
+): void {
+  if (runtimeInferenceCache.size >= maxRuntimeInferenceCacheEntries) {
+    const oldestKey = runtimeInferenceCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      runtimeInferenceCache.delete(oldestKey);
+    }
+  }
+  runtimeInferenceCache.set(key, entry);
+}
+
 function defaultCompilerOptions(): Ts.CompilerOptions {
   return {
     allowJs: true,
@@ -819,6 +904,7 @@ export function __readServerActionInferenceTypeScriptLoadedForTests(): boolean {
 export function __resetServerActionInferenceTypeScriptForTests(): void {
   ts = undefined as unknown as typeof Ts;
   typescriptLoaded = false;
+  runtimeInferenceCache.clear();
 }
 
 function formActionOccurrenceKey(reference: {

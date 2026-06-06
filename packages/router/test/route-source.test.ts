@@ -4,6 +4,7 @@ import {
   hasLoaderExport,
   hasPrerenderExport,
   isStreamRouteSource,
+  routeClosureMayUseAwaitBoundary,
   stripRouteClientOnlyExports,
   stripRouteModuleExports,
   stripRouteRequestOnlyExports,
@@ -186,5 +187,32 @@ export default function Page(props) {
     expect(hasPrerenderExport("export const prerender = true;")).toBe(true);
     expect(hasGenerateStaticParamsExport("export function generateStaticParams() {}")).toBe(true);
     expect(hasLoaderExport("export const loader = () => ({ ok: true });")).toBe(true);
+  });
+
+  test("checks imported rendered components through a source lookup without materializing all files", () => {
+    const files = new Map([
+      [
+        "/repo/app/page.tsx",
+        'import { Panel } from "./panel"; export default function Page() { return <Panel />; }',
+      ],
+      [
+        "/repo/app/panel.tsx",
+        'import { Await } from "@reckona/mreact-router"; export function Panel() { return <Await value={Promise.resolve("ok")} then={(value) => <span>{value}</span>} />; }',
+      ],
+    ]);
+    const lookedUp: string[] = [];
+
+    const usesAwait = routeClosureMayUseAwaitBoundary({
+      filename: "/repo/app/page.tsx",
+      files: (file) => {
+        lookedUp.push(file);
+        return files.get(file);
+      },
+      projectRoot: "/repo/app",
+      source: files.get("/repo/app/page.tsx") ?? "",
+    });
+
+    expect(usesAwait).toBe(true);
+    expect(lookedUp).toEqual(["/repo/app/panel.ts", "/repo/app/panel.tsx"]);
   });
 });

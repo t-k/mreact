@@ -9,7 +9,12 @@ import type {
 } from "./build.js";
 import type { AppRouterCache } from "./cache.js";
 import type { ClientRouteManifestEntry } from "./client-route-inference.js";
-import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
+import {
+  createRouteMatcher,
+  type AppRoute,
+  type MatchedRoute,
+  type RouteMatcher,
+} from "./routes.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
@@ -453,7 +458,12 @@ async function renderBuiltAppRequestWithRuntime(
   await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file, {
     includeRender: false,
   });
-  const response = await renderBuiltDynamicResponse({ ...options, request });
+  const response = await renderBuiltDynamicResponse({
+    ...options,
+    matchedRoute: matched,
+    request,
+    requestUrl: new URL(request.url),
+  });
 
   await applyBuiltPrerenderInvalidations(
     options.runtime,
@@ -1413,13 +1423,21 @@ async function readPrerenderedRoute(
 }
 
 function renderBuiltDynamicResponse(
-  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+  options: RenderBuiltAppRequestOptions & {
+    matchedRoute?: MatchedRoute | undefined;
+    requestUrl?: URL | undefined;
+    runtime: BuiltRuntime;
+  },
 ): Promise<Response> {
   return renderAppRequest(builtRenderAppRequestOptions(options));
 }
 
 function builtRenderAppRequestOptions(
-  options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
+  options: RenderBuiltAppRequestOptions & {
+    matchedRoute?: MatchedRoute | undefined;
+    requestUrl?: URL | undefined;
+    runtime: BuiltRuntime;
+  },
 ): RenderAppRequestOptions {
   const renderOptions: RenderAppRequestOptions & {
     __mreactLoadServerRenderArtifacts?: ((routeFile: string) => Promise<void>) | undefined;
@@ -1437,9 +1455,11 @@ function builtRenderAppRequestOptions(
     request: options.request,
     instrumentation: options.instrumentation,
     logger: options.logger,
+    matchedRoute: options.matchedRoute,
     navigationScripts: options.runtime.navigationScripts,
     routeCache: options.routeCache,
     routeMatcher: options.runtime.routeMatcher,
+    requestUrl: options.requestUrl,
     routes: options.runtime.routes,
     __mreactLoadServerRenderArtifacts: async (routeFile: string) => {
       await loadBuiltServerModuleArtifactsForRequest(options.runtime, routeFile, {

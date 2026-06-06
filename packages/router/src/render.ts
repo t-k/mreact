@@ -41,7 +41,7 @@ import {
 import { assetPath } from "./assets.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 import { matchRoute, scanAppRoutes } from "./routes.js";
-import type { AppRoute, RouteMatcher } from "./routes.js";
+import type { AppRoute, MatchedRoute, RouteMatcher } from "./routes.js";
 import { appFileConventionContentType } from "./file-conventions.js";
 import {
   type AppRouterServerActionOptions,
@@ -176,6 +176,7 @@ export interface RenderAppRequestOptions {
   queryClient?: QueryClient | undefined;
   request: Request;
   requestUrl?: URL | undefined;
+  matchedRoute?: MatchedRoute | undefined;
   routeCache?: AppRouterCache | undefined;
   routeMatcher?: RouteMatcher | undefined;
   routes?: readonly AppRoute[] | undefined;
@@ -750,7 +751,8 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
   finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
   const url = options.requestUrl ?? new URL(options.request.url);
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
+  const matched =
+    options.matchedRoute ?? options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
   finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
   const hasMiddleware =
     options.skipMiddleware === true
@@ -796,6 +798,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
   if (middlewareResult.request !== options.request) {
     return renderAppRequestInternal({
       ...options,
+      matchedRoute: undefined,
       request: middlewareResult.request,
       requestUrl: new URL(middlewareResult.request.url),
       skipMiddleware: true,
@@ -2643,10 +2646,9 @@ function routeSourceFilesForAnalysis(options: {
   code: string;
   filename: string;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
-}): Record<string, string> {
-  return options.serverSourceFiles === undefined
-    ? { [options.filename]: options.code }
-    : { ...Object.fromEntries(options.serverSourceFiles), [options.filename]: options.code };
+}): (file: string) => string | undefined {
+  return (file) =>
+    file === options.filename ? options.code : options.serverSourceFiles?.get(file);
 }
 
 async function runServerModule(
@@ -3585,85 +3587,35 @@ async function renderShellPrefixSuffix(
     }
   }
 
+  const staticEntry =
+    cacheKey === undefined ? undefined : shellStaticRenderCache.get(cacheKey);
+  const loadedStaticEntry =
+    staticEntry ??
+    (await loadShellStaticRenderEntry({
+      cacheKey,
+      clientRouteInferenceCache,
+      define,
+      importPolicy,
+      serverModuleCacheVersion,
+      serverModules,
+      serverSourceFiles,
+      shell,
+      timing,
+      vitePlugins,
+    }));
+
   let phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const code = await readServerSourceFile(shell.file, serverModuleCacheVersion, serverSourceFiles);
-  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSourceReadMs");
-  phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const shellUsesAwait = await mayRenderOutOfOrderBoundaryDeep({
-    code,
-    filename: shell.file,
-    serverModuleCacheVersion,
-    serverSourceFiles,
-  });
-  const serverOutput: ServerOutputMode = shellUsesAwait ? "stream" : "string";
-  const artifact = serverModules?.get(shell.file)?.[serverOutput];
-  const clientInference =
-    artifact !== undefined && artifact.sourceHash === memoizedHashText(code)
-      ? {
-          client: false,
-          clientBoundaryImports: [],
-          clientBoundaryFallbackImports: [],
-          diagnostics: [],
-        }
-      : await inferClientRouteModule({
-          cache: clientRouteInferenceCache,
-          code: stripRouteClientOnlyExports(code, shell.file),
-          filename: shell.file,
-          vitePlugins,
-        });
-  for (const diagnostic of clientInference.diagnostics) {
-    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
-  }
-  const output = transformServerModule({
-    code,
-    clientBoundaryImports: clientInference.clientBoundaryImports,
-    clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
-    filename: shell.file,
-    serverModules,
-    serverOutput,
-  });
-  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutTransformMs");
-  const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
-
-  if (fatalDiagnostics.length > 0) {
-    throw new Error(formatServerDiagnostics(shell.file, fatalDiagnostics));
-  }
-
-  phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const component = shellUsesAwait
-    ? selectStreamComponent(
-        await loadServerStreamModule(
-          output.code,
-          shell.file,
-          serverModules,
-          serverModuleCacheVersion,
-          define,
-          vitePlugins,
-          importPolicy,
-        ),
-      )
-    : await loadServerComponent(
-        output.code,
-        shell.file,
-        serverModules,
-        serverModuleCacheVersion,
-        define,
-        vitePlugins,
-        importPolicy,
-      );
-  addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutModuleLoadMs");
-  phaseStartedAt = renderTimingPhaseStartedAt(timing);
-  const layoutHtml = shellUsesAwait
-    ? await renderShellStreamComponent(component as StreamComponent, props)
-    : await (component as ServerComponent)(props);
+  const layoutHtml = loadedStaticEntry.shellUsesAwait
+    ? await renderShellStreamComponent(loadedStaticEntry.component as StreamComponent, props)
+    : await (loadedStaticEntry.component as ServerComponent)(props);
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutComponentRenderMs");
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const rendered = {
     ...splitLayoutSlot(markShellBoundary(layoutHtml, shell), slotContext),
-    hasOutOfOrderBoundary: hasOutOfOrderBoundary(output.code),
+    hasOutOfOrderBoundary: loadedStaticEntry.hasOutOfOrderBoundary,
   };
   addRenderTimingPhaseDuration(timing, phaseStartedAt, "layoutSlotSplitMs");
-  const shellCacheKey = shellUsesAwait ? undefined : cacheKey;
+  const shellCacheKey = loadedStaticEntry.shellUsesAwait ? undefined : cacheKey;
   const cached =
     shellCacheKey !== undefined
       ? readRouterRuntimeCacheEntry(renderedShellCache, shellCacheKey, renderedShellCacheCounters)
@@ -3675,7 +3627,7 @@ async function renderShellPrefixSuffix(
   // entry on the first request that observes the function arity; on
   // an "impure" tag we never overwrite it.
   if (shellCacheKey !== undefined && cached !== "impure") {
-    if (component.length === 0) {
+    if (loadedStaticEntry.component.length === 0) {
       if (renderedShellCache.size >= MAX_RENDERED_SHELL_CACHE_ENTRIES) {
         const oldestKey = renderedShellCache.keys().next().value;
         if (oldestKey !== undefined) {
@@ -3693,6 +3645,108 @@ async function renderShellPrefixSuffix(
   }
 
   return rendered;
+}
+
+async function loadShellStaticRenderEntry(options: {
+  cacheKey: string | undefined;
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
+  define?: UserConfig["define"] | undefined;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion: string | undefined;
+  serverModules: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+  serverSourceFiles: ReadonlyMap<string, string> | undefined;
+  shell: ShellFile;
+  timing?: RenderTiming | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<ShellStaticRenderEntry> {
+  let phaseStartedAt = renderTimingPhaseStartedAt(options.timing);
+  const code = await readServerSourceFile(
+    options.shell.file,
+    options.serverModuleCacheVersion,
+    options.serverSourceFiles,
+  );
+  addRenderTimingPhaseDuration(options.timing, phaseStartedAt, "layoutSourceReadMs");
+  phaseStartedAt = renderTimingPhaseStartedAt(options.timing);
+  const shellUsesAwait = await mayRenderOutOfOrderBoundaryDeep({
+    code,
+    filename: options.shell.file,
+    serverModuleCacheVersion: options.serverModuleCacheVersion,
+    serverSourceFiles: options.serverSourceFiles,
+  });
+  const serverOutput: ServerOutputMode = shellUsesAwait ? "stream" : "string";
+  const artifact = options.serverModules?.get(options.shell.file)?.[serverOutput];
+  const clientInference =
+    artifact !== undefined && artifact.sourceHash === memoizedHashText(code)
+      ? {
+          client: false,
+          clientBoundaryImports: [],
+          clientBoundaryFallbackImports: [],
+          diagnostics: [],
+        }
+      : await inferClientRouteModule({
+          cache: options.clientRouteInferenceCache,
+          code: stripRouteClientOnlyExports(code, options.shell.file),
+          filename: options.shell.file,
+          vitePlugins: options.vitePlugins,
+        });
+  for (const diagnostic of clientInference.diagnostics) {
+    console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+  }
+  const output = transformServerModule({
+    code,
+    clientBoundaryImports: clientInference.clientBoundaryImports,
+    clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
+    filename: options.shell.file,
+    serverModules: options.serverModules,
+    serverOutput,
+  });
+  addRenderTimingPhaseDuration(options.timing, phaseStartedAt, "layoutTransformMs");
+  const fatalDiagnostics = fatalServerDiagnostics(output.diagnostics);
+
+  if (fatalDiagnostics.length > 0) {
+    throw new Error(formatServerDiagnostics(options.shell.file, fatalDiagnostics));
+  }
+
+  phaseStartedAt = renderTimingPhaseStartedAt(options.timing);
+  const component = shellUsesAwait
+    ? selectStreamComponent(
+        await loadServerStreamModule(
+          output.code,
+          options.shell.file,
+          options.serverModules,
+          options.serverModuleCacheVersion,
+          options.define,
+          options.vitePlugins,
+          options.importPolicy,
+        ),
+      )
+    : await loadServerComponent(
+        output.code,
+        options.shell.file,
+        options.serverModules,
+        options.serverModuleCacheVersion,
+        options.define,
+        options.vitePlugins,
+        options.importPolicy,
+      );
+  addRenderTimingPhaseDuration(options.timing, phaseStartedAt, "layoutModuleLoadMs");
+  const entry = {
+    component,
+    hasOutOfOrderBoundary: hasOutOfOrderBoundary(output.code),
+    shellUsesAwait,
+  };
+
+  if (options.cacheKey !== undefined) {
+    if (shellStaticRenderCache.size >= MAX_SHELL_STATIC_RENDER_CACHE_ENTRIES) {
+      const oldestKey = shellStaticRenderCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        shellStaticRenderCache.delete(oldestKey);
+      }
+    }
+    shellStaticRenderCache.set(options.cacheKey, entry);
+  }
+
+  return entry;
 }
 
 async function renderShellStreamComponent(
@@ -3717,14 +3771,31 @@ async function renderShellStreamComponent(
 // next request.
 const shellFilesCache = new Map<string, ShellFile[]>();
 const MAX_SHELL_FILES_CACHE_ENTRIES = 1024;
+const devShellFilesCache = new Map<string, { directoryStats: readonly FileStat[]; files: ShellFile[] }>();
+const shellStaticRenderCache = new Map<string, ShellStaticRenderEntry>();
+const MAX_SHELL_STATIC_RENDER_CACHE_ENTRIES = 1024;
 const routeMiddlewareControlCache = new Map<string, Promise<RouteMiddlewareControl | undefined>>();
 const MAX_ROUTE_MIDDLEWARE_CONTROL_CACHE_ENTRIES = 1024;
 const appMiddlewareFileCache = new Map<string, Promise<boolean>>();
 const MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES = 1024;
+const devAppMiddlewareFileCache = new Map<string, { directoryStat: FileStat; hasMiddleware: boolean }>();
 const routeMiddlewareControlSourceCache = new Map<
   string,
   { control: RouteMiddlewareControl | undefined; mtimeMs: number }
 >();
+const devServerSourceFileCache = new Map<string, { mtimeMs: number; size: number; source: string }>();
+const MAX_DEV_SERVER_SOURCE_FILE_CACHE_ENTRIES = 2048;
+
+interface FileStat {
+  mtimeMs: number;
+  size: number;
+}
+
+interface ShellStaticRenderEntry {
+  component: ServerComponent | StreamComponent;
+  hasOutOfOrderBoundary: boolean;
+  shellUsesAwait: boolean;
+}
 
 async function shellFilesForPage(
   appDir: string,
@@ -3742,6 +3813,36 @@ async function shellFilesForPage(
     }
   }
 
+  const devCacheKey = cacheKey === undefined ? `${appDir}\0${pageFile}` : undefined;
+  if (devCacheKey !== undefined) {
+    const directoryStats = await routeShellDirectoryStats(appDir, pageFile);
+    const cached = devShellFilesCache.get(devCacheKey);
+    if (
+      cached !== undefined &&
+      sameFileStats(cached.directoryStats, directoryStats)
+    ) {
+      return cached.files;
+    }
+
+    const files = await shellFilesForPageUncached(appDir, pageFile);
+    devShellFilesCache.set(devCacheKey, { directoryStats, files });
+    return files;
+  }
+
+  const files = await shellFilesForPageUncached(appDir, pageFile);
+  if (cacheKey !== undefined) {
+    if (shellFilesCache.size >= MAX_SHELL_FILES_CACHE_ENTRIES) {
+      const oldestKey = shellFilesCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        shellFilesCache.delete(oldestKey);
+      }
+    }
+    shellFilesCache.set(cacheKey, files);
+  }
+  return files;
+}
+
+async function shellFilesForPageUncached(appDir: string, pageFile: string): Promise<ShellFile[]> {
   const shells = await existingRouteShellCandidates(appDir, pageFile, async (file) => {
     try {
       await access(file);
@@ -3756,15 +3857,6 @@ async function shellFilesForPage(
     kind: shell.kind,
   }));
 
-  if (cacheKey !== undefined) {
-    if (shellFilesCache.size >= MAX_SHELL_FILES_CACHE_ENTRIES) {
-      const oldestKey = shellFilesCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        shellFilesCache.delete(oldestKey);
-      }
-    }
-    shellFilesCache.set(cacheKey, files);
-  }
   return files;
 }
 
@@ -3805,22 +3897,33 @@ async function hasAppMiddleware(options: {
     }
   }
 
-  const loaded = hasAppMiddlewareUncached(middlewareFiles).catch((error) => {
-    if (cacheKey !== undefined) {
-      appMiddlewareFileCache.delete(cacheKey);
+  if (cacheKey === undefined) {
+    const directoryStat = await fileStat(options.appDir);
+    const cached = devAppMiddlewareFileCache.get(options.appDir);
+    if (
+      cached !== undefined &&
+      sameFileStat(cached.directoryStat, directoryStat)
+    ) {
+      return cached.hasMiddleware;
     }
+
+    const hasMiddleware = await hasAppMiddlewareUncached(middlewareFiles);
+    devAppMiddlewareFileCache.set(options.appDir, { directoryStat, hasMiddleware });
+    return hasMiddleware;
+  }
+
+  const loaded = hasAppMiddlewareUncached(middlewareFiles).catch((error) => {
+    appMiddlewareFileCache.delete(cacheKey);
     throw error;
   });
 
-  if (cacheKey !== undefined) {
-    if (appMiddlewareFileCache.size >= MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES) {
-      const oldestKey = appMiddlewareFileCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        appMiddlewareFileCache.delete(oldestKey);
-      }
+  if (appMiddlewareFileCache.size >= MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES) {
+    const oldestKey = appMiddlewareFileCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      appMiddlewareFileCache.delete(oldestKey);
     }
-    appMiddlewareFileCache.set(cacheKey, loaded);
   }
+  appMiddlewareFileCache.set(cacheKey, loaded);
 
   return loaded;
 }
@@ -3836,6 +3939,46 @@ async function hasAppMiddlewareUncached(files: readonly string[]): Promise<boole
   }
 
   return false;
+}
+
+async function routeShellDirectoryStats(appDir: string, pageFile: string): Promise<FileStat[]> {
+  const directories: string[] = [];
+  let current = dirname(pageFile);
+  const resolvedAppDir = resolve(appDir);
+
+  while (true) {
+    directories.push(current);
+    if (resolve(current) === resolvedAppDir) {
+      break;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+
+  return await Promise.all(directories.map((directory) => fileStat(directory)));
+}
+
+async function fileStat(file: string): Promise<FileStat> {
+  const stats = await stat(file);
+  return { mtimeMs: stats.mtimeMs, size: stats.size };
+}
+
+function sameFileStats(left: readonly FileStat[], right: readonly FileStat[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => {
+      const other = right[index];
+      return other !== undefined && sameFileStat(value, other);
+    })
+  );
+}
+
+function sameFileStat(left: FileStat, right: FileStat): boolean {
+  return left.mtimeMs === right.mtimeMs && left.size === right.size;
 }
 
 async function loadRouteMiddlewareControl(options: {
@@ -4361,10 +4504,9 @@ async function loadComposedRouteMetadataUncached(options: {
   );
   const metadata: RouteMetadata[] = [];
   let dynamic = hasGenerateMetadataExport(options.code);
-
-  for (const shell of layoutFiles) {
+  const layoutMetadataTasks = layoutFiles.map(async (shell) => {
     if (shell.kind !== "layout") {
-      continue;
+      return { code: undefined, metadata: undefined };
     }
 
     const code = await readServerSourceFile(
@@ -4372,7 +4514,6 @@ async function loadComposedRouteMetadataUncached(options: {
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     );
-    dynamic ||= hasGenerateMetadataExport(code);
     const shellMetadata = await loadRouteMetadata({
       appDir: options.appDir,
       code,
@@ -4385,12 +4526,9 @@ async function loadComposedRouteMetadataUncached(options: {
       vitePlugins: options.vitePlugins,
     });
 
-    if (shellMetadata !== undefined) {
-      metadata.push(shellMetadata);
-    }
-  }
-
-  const pageMetadata = await loadRouteMetadata({
+    return { code, metadata: shellMetadata };
+  });
+  const pageMetadataTask = loadRouteMetadata({
     appDir: options.appDir,
     code: options.code,
     context: options.context,
@@ -4402,6 +4540,17 @@ async function loadComposedRouteMetadataUncached(options: {
     vitePlugins: options.vitePlugins,
   });
 
+  for (const task of layoutMetadataTasks) {
+    const shell = await task;
+    if (shell.code !== undefined) {
+      dynamic ||= hasGenerateMetadataExport(shell.code);
+    }
+    if (shell.metadata !== undefined) {
+      metadata.push(shell.metadata);
+    }
+  }
+
+  const pageMetadata = await pageMetadataTask;
   if (pageMetadata !== undefined) {
     metadata.push(pageMetadata);
   }
@@ -4658,7 +4807,7 @@ function readServerSourceFile(
   }
 
   if (serverModuleCacheVersion === undefined) {
-    return readFile(file, "utf8");
+    return readDevServerSourceFile(file);
   }
 
   const key = `${serverModuleCacheVersion}:${file}`;
@@ -4685,6 +4834,28 @@ function readServerSourceFile(
   );
 
   return loaded;
+}
+
+async function readDevServerSourceFile(file: string): Promise<string> {
+  const stats = await fileStat(file);
+  const cached = devServerSourceFileCache.get(file);
+  if (
+    cached !== undefined &&
+    cached.mtimeMs === stats.mtimeMs &&
+    cached.size === stats.size
+  ) {
+    return cached.source;
+  }
+
+  const source = await readFile(file, "utf8");
+  if (devServerSourceFileCache.size >= MAX_DEV_SERVER_SOURCE_FILE_CACHE_ENTRIES) {
+    const oldestKey = devServerSourceFileCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      devServerSourceFileCache.delete(oldestKey);
+    }
+  }
+  devServerSourceFileCache.set(file, { ...stats, source });
+  return source;
 }
 
 function setBoundedCacheEntry<K, V>(
