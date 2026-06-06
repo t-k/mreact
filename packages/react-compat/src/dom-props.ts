@@ -1,14 +1,11 @@
 import {
   getAppliedProps,
   setAppliedProps,
-  type AppliedEventListener,
-  type AppliedProps,
   ensureDelegatedEventListener,
   toEventNames,
 } from "./host-event-binder.js";
 import { HOST_OWN_PROPS_META } from "./element.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
-import type { SyntheticEvent } from "./event-types.js";
 import {
   isDangerousHtmlAttribute,
   isDangerousHtmlOptIn,
@@ -43,16 +40,15 @@ export function applyProps(
     }
 
     const attributeNames = collectAttributeNames(nextProps);
+    applyInitialProps(element, nextProps, path, options);
     setAppliedProps(element, {
       attributeNames,
       props: nextProps,
-      ...applyInitialProps(element, nextProps, path, options),
     });
     return;
   }
 
   const previousProps = previous?.props ?? {};
-  let listeners = previous?.listeners;
   const previousAttributeNames = previous?.attributeNames ?? collectAttributeNames(previousProps);
   const nextAttributeNames = collectAttributeNames(nextProps);
 
@@ -73,16 +69,6 @@ export function applyProps(
           );
           element.removeAttribute(attributeName);
         }
-      }
-    }
-  }
-
-  if (listeners !== undefined) {
-    for (const [name, appliedListener] of listeners) {
-      const nextValue = nextProps[name];
-
-      if (nextValue !== appliedListener.handler) {
-        listeners.delete(name);
       }
     }
   }
@@ -117,21 +103,18 @@ export function applyProps(
       continue;
     }
 
-    if (/^on[A-Z]/.test(name) && typeof value === "function") {
-      if (listeners?.get(name)?.handler === value) {
+    if (isReactEventHandlerPropName(name) && typeof value === "function") {
+      if (previousProps[name] === value) {
         continue;
       }
 
-      const handler = value as (event: SyntheticEvent) => void;
       for (const eventName of toEventNames(name)) {
         ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
       }
-      listeners ??= new Map<string, AppliedEventListener>();
-      listeners.set(name, { handler });
       continue;
     }
 
-    if (/^on/i.test(name)) {
+    if (isEventLikePropName(name)) {
       continue;
     }
 
@@ -183,7 +166,6 @@ export function applyProps(
   setAppliedProps(element, {
     attributeNames: nextAttributeNames,
     props: nextProps,
-    ...(listeners === undefined ? {} : { listeners }),
   });
 }
 
@@ -192,9 +174,7 @@ function applyInitialProps(
   props: Record<string, unknown>,
   path: string,
   options: RenderOptions,
-): Pick<AppliedProps, "listeners"> | {} {
-  let listeners: Map<string, AppliedEventListener> | undefined;
-
+): void {
   for (const name in props) {
     if (!Object.prototype.hasOwnProperty.call(props, name)) {
       continue;
@@ -229,17 +209,14 @@ function applyInitialProps(
       continue;
     }
 
-    if (/^on[A-Z]/.test(name) && typeof value === "function") {
-      const handler = value as (event: SyntheticEvent) => void;
+    if (isReactEventHandlerPropName(name) && typeof value === "function") {
       for (const eventName of toEventNames(name)) {
         ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
       }
-      listeners ??= new Map<string, AppliedEventListener>();
-      listeners.set(name, { handler });
       continue;
     }
 
-    if (/^on/i.test(name)) {
+    if (isEventLikePropName(name)) {
       continue;
     }
 
@@ -277,7 +254,6 @@ function applyInitialProps(
     applyAttribute(element, attributeName, value, path, options);
   }
 
-  return listeners === undefined ? {} : { listeners };
 }
 
 function applyInitialRowProps(
@@ -361,7 +337,7 @@ function applyAttribute(
     return;
   }
 
-  if (/^on/i.test(name)) {
+  if (isEventLikePropName(name)) {
     if (element.hasAttribute(name) && !preserveHydrationAttributes) {
       element.removeAttribute(name);
     }
@@ -577,7 +553,7 @@ function collectAttributeNames(props: Record<string, unknown>): string[] {
       name === "children" ||
       name === "ref" ||
       name === "key" ||
-      /^on/i.test(name) ||
+      isEventLikePropName(name) ||
       value === null ||
       value === undefined
     ) {
@@ -614,6 +590,17 @@ function pushUniqueAttributeName(names: string[], name: string): void {
   if (!names.includes(name)) {
     names.push(name);
   }
+}
+
+function isReactEventHandlerPropName(name: string): boolean {
+  const third = name.charCodeAt(2);
+  return name.charCodeAt(0) === 111 && name.charCodeAt(1) === 110 && third >= 65 && third <= 90;
+}
+
+function isEventLikePropName(name: string): boolean {
+  const first = name.charCodeAt(0);
+  const second = name.charCodeAt(1);
+  return (first === 111 || first === 79) && (second === 110 || second === 78);
 }
 
 function sanitizeMetaRefreshElementProps(

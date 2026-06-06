@@ -3,12 +3,9 @@ import type { SyntheticEvent } from "./event-types.js";
 export interface AppliedProps {
   attributeNames?: string[];
   props: Record<string, unknown>;
-  listeners?: Map<string, AppliedEventListener>;
 }
 
-export interface AppliedEventListener {
-  handler: (event: SyntheticEvent) => void;
-}
+export type AppliedEventListener = (event: SyntheticEvent) => void;
 
 const appliedProps = new WeakMap<Element, AppliedProps>();
 
@@ -24,5 +21,6 @@ export function getAppliedEventHandler(
   element: Element,
   name: string,
 ): ((event: SyntheticEvent) => void) | undefined {
-  return appliedProps.get(element)?.listeners?.get(name)?.handler;
+  const handler = appliedProps.get(element)?.props[name];
+  return typeof handler === "function" ? (handler as (event: SyntheticEvent) => void) : undefined;
 }

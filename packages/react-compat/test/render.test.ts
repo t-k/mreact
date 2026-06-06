@@ -21,7 +21,7 @@ import {
   useState,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
-import { getAppliedProps } from "../src/host-event-binder.js";
+import { getAppliedEventHandler, getAppliedProps } from "../src/host-event-binder.js";
 import { getEventPath, setLogicalEventParent } from "../src/events.js";
 import type { Fiber } from "../src/fiber.js";
 
@@ -575,6 +575,26 @@ describe("react-compat render", () => {
 
     expect(addedListeners).toContain("div:click");
     expect(addedListeners).not.toContain("button:click");
+  });
+
+  test("reads event handlers from applied props without separate listener metadata", () => {
+    const container = document.createElement("div");
+    const onClick = () => undefined;
+
+    render(createElement("button", { onClick }, "Click"), container);
+
+    const button = container.querySelector("button");
+    expect(getAppliedProps(button!)?.listeners).toBeUndefined();
+    expect(getAppliedEventHandler(button!, "onClick")).toBe(onClick);
+  });
+
+  test("classifies event props without regex checks on the mount path", () => {
+    const container = document.createElement("div");
+    const testSpy = vi.spyOn(RegExp.prototype, "test");
+
+    render(createElement("button", { onClick: () => undefined }, "Click"), container);
+
+    expect(testSpy).not.toHaveBeenCalled();
   });
 
   test("synthetic stopPropagation stops delegated parent handlers", () => {
