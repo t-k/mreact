@@ -1,5 +1,5 @@
 import { queueComputation } from "./scheduler.js";
-import { currentDevtoolsEmitter } from "./devtools.js";
+import { currentReactiveDevtools } from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 import {
@@ -57,7 +57,8 @@ export function effect(fn: () => void | (() => void)): () => void {
         return;
       }
 
-      const emit = currentDevtoolsEmitter();
+      const devtools = currentReactiveDevtools();
+      const emit = devtools?.emit;
       const startedAt = emit === undefined ? 0 : performanceNow();
 
       try {
@@ -66,8 +67,8 @@ export function effect(fn: () => void | (() => void)): () => void {
       } finally {
         finishIncrementalTracking(computation, previousDepsSize, nextTrackingVersion);
         runtimeState.activeTracker = previousTracker;
-        if (emit !== undefined) {
-          emit({
+        if (typeof emit === "function") {
+          emit.call(devtools, {
             durationMs: performanceNow() - startedAt,
             id: computation.id,
             package: "@reckona/mreact-reactive-core",

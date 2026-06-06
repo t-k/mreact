@@ -26,6 +26,12 @@ export function currentDevtoolsEmitter(): DevtoolsEmitter | undefined {
   return typeof emit === "function" ? emit.bind(devtools) : undefined;
 }
 
+export function currentReactiveDevtools():
+  | { emit?: DevtoolsEmitter | undefined }
+  | undefined {
+  return currentDevtools();
+}
+
 function currentDevtools():
   | { emit?: DevtoolsEmitter | undefined }
   | undefined {

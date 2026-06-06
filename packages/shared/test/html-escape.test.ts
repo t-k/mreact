@@ -21,4 +21,28 @@ describe("HTML escaping helpers", () => {
       "<route &amp; &quot;id&quot;>",
     );
   });
+
+  test("returns no-escape values without replaceAll passes", () => {
+    const originalReplaceAll = String.prototype.replaceAll;
+    let replaceAllCalls = 0;
+
+    try {
+      String.prototype.replaceAll = function countedReplaceAll(
+        this: string,
+        searchValue: string | RegExp,
+        replaceValue: string,
+      ): string {
+        replaceAllCalls += 1;
+        return originalReplaceAll.call(this, searchValue, replaceValue);
+      };
+
+      expect(escapeHtmlText("plain text")).toBe("plain text");
+      expect(escapeHtmlAttribute("plain attribute")).toBe("plain attribute");
+      expect(escapeHtmlQuotedAttribute("route-id")).toBe("route-id");
+    } finally {
+      String.prototype.replaceAll = originalReplaceAll;
+    }
+
+    expect(replaceAllCalls).toBe(0);
+  });
 });
