@@ -287,6 +287,31 @@ describe("reactive-dom scope: edge branches", () => {
     expect(arrayFromCalls).toBe(0);
   });
 
+  test("createScope does not allocate a disposer set until cleanup is registered", () => {
+    const OriginalSet = globalThis.Set;
+    let setCreations = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          setCreations += 1;
+          super(values);
+        }
+      } as SetConstructor;
+
+      const scope = createScope();
+      withScope(scope, () => {});
+      expect(setCreations).toBe(0);
+
+      withScope(scope, () => {
+        registerDispose(() => {});
+      });
+      expect(setCreations).toBe(1);
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+  });
+
   test("registerDispose-wrapped dispose called twice runs the underlying dispose only once", () => {
     const scope = createScope();
     let calls = 0;

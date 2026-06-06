@@ -810,7 +810,7 @@ describe("bindList", () => {
       globalThis.Set = OriginalSet;
     }
 
-    expect(setCreations).toBe(5);
+    expect(setCreations).toBe(3);
     expect(parent.innerHTML).toBe("<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->");
     dispose();
   });
