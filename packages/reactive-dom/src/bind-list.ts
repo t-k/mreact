@@ -251,7 +251,7 @@ function bindKeyedList<T>(
     }
 
     if (ownsCurrentParent) {
-      removeStaleRecords(records, nextRecords);
+      disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
       ownsParent = true;
     } else {
@@ -749,6 +749,17 @@ function removeStaleRecords(
   }
 
   removeRecordNodes(staleRecords);
+}
+
+function disposeStaleRecords(
+  records: Map<unknown, KeyedRecord>,
+  nextRecords: Map<unknown, KeyedRecord>,
+): void {
+  for (const [itemKey, record] of records) {
+    if (!nextRecords.has(itemKey)) {
+      record.dispose();
+    }
+  }
 }
 
 function removeRecordNodes(records: Iterable<KeyedRecord>): void {

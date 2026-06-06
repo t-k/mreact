@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindList, bindText } from "../src/index.js";
+import { registerDispose } from "../src/scope.js";
 
 describe("bindList", () => {
   test("renders a simple unkeyed list and redraws on update", async () => {
@@ -867,6 +868,54 @@ describe("bindList", () => {
     expect(parentReplacements).toBe(1);
     expect(explicitRecordRemovals).toBe(0);
     expect(parent.innerHTML).toBe("<!--list-->");
+
+    dispose();
+  });
+
+  test("replaces disjoint owned keyed rows without explicitly removing stale row nodes", async () => {
+    const items = cell([0, 1, 2]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    let disposedRows = 0;
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        registerDispose(() => {
+          disposedRows += 1;
+        });
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    let parentReplacements = 0;
+    let explicitRecordRemovals = 0;
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    const removeChild = parent.removeChild.bind(parent);
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+    parent.removeChild = ((node) => {
+      if (new Error().stack?.includes("removeRecordNodes")) {
+        explicitRecordRemovals += 1;
+      }
+      return removeChild(node);
+    }) as typeof parent.removeChild;
+
+    items.set([10, 11, 12]);
+    await flushEffects();
+
+    expect(parentReplacements).toBe(1);
+    expect(explicitRecordRemovals).toBe(0);
+    expect(disposedRows).toBe(3);
+    expect(parent.innerHTML).toBe("<li>10</li><li>11</li><li>12</li><!--list-->");
 
     dispose();
   });
