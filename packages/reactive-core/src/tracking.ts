@@ -87,15 +87,36 @@ export function trackIncrementalSource(
   }
 }
 
+export function preserveIncrementalTracking(computation: ReactiveComputation): void {
+  const trackingVersion = computation.trackingVersion;
+
+  if (trackingVersion === undefined || computation.trackingTouchedDeps !== undefined) {
+    return;
+  }
+
+  const touchedDeps: Source[] = [];
+
+  for (const dep of computation.deps) {
+    if (dep.trackedBy === computation && dep.trackedVersion === trackingVersion) {
+      touchedDeps.push(dep);
+    }
+  }
+
+  computation.trackingTouchedDeps = touchedDeps;
+}
+
 export function cleanupUntrackedDeps(
   computation: ReactiveComputation,
   trackingVersion: number,
 ): void {
-  const touchedDeps = new Set(computation.trackingTouchedDeps);
+  const touchedDeps =
+    computation.trackingTouchedDeps === undefined
+      ? undefined
+      : new Set(computation.trackingTouchedDeps);
 
   for (const dep of computation.deps) {
     if (
-      touchedDeps.has(dep) ||
+      touchedDeps?.has(dep) === true ||
       (dep.trackedBy === computation && dep.trackedVersion === trackingVersion)
     ) {
       continue;

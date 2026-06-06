@@ -6,6 +6,7 @@ import {
   cleanupDeps,
   cleanupUntrackedDeps,
   notifySubscribers,
+  preserveIncrementalTracking,
   trackIncrementalSource,
   trackSource,
 } from "./tracking.js";
@@ -109,7 +110,6 @@ export function computed<T>(
 
     computation.trackingAddedDeps = [];
     computation.trackingCount = 0;
-    computation.trackingTouchedDeps = [];
     computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
 
@@ -144,6 +144,15 @@ export function computed<T>(
   return {
     get(): T {
       trackSource(source);
+
+      if (dirty) {
+        const activeTracker = runtimeState.activeTracker;
+
+        if (activeTracker !== null && activeTracker !== computation) {
+          preserveIncrementalTracking(activeTracker);
+        }
+      }
+
       return recompute();
     },
   };

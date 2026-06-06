@@ -87,6 +87,52 @@ describe("computed", () => {
     expect(seen).toEqual([0, 5]);
   });
 
+  test("flat computed fan-in reruns do not append touched dependency metadata", () => {
+    const first = cell(0);
+    const second = cell(0);
+    const third = cell(0);
+    const total = computed(() => first.get() + second.get() + third.get());
+
+    expect(total.get()).toBe(0);
+
+    const originalPush = Array.prototype.push;
+    let pushCalls = 0;
+
+    try {
+      Array.prototype.push = function countedPush<T>(
+        this: T[],
+        ...items: T[]
+      ): number {
+        pushCalls += 1;
+        return originalPush.apply(this, items);
+      };
+
+      batch(() => {
+        first.set(1);
+        second.set(2);
+        third.set(3);
+      });
+
+      expect(total.get()).toBe(6);
+    } finally {
+      Array.prototype.push = originalPush;
+    }
+
+    expect(pushCalls).toBe(0);
+  });
+
+  test("nested computed reruns preserve direct dependencies read before the nested read", () => {
+    const source = cell(1);
+    const parity = computed(() => source.get() % 2);
+    const total = computed(() => source.get() + parity.get());
+
+    expect(total.get()).toBe(2);
+
+    source.set(3);
+
+    expect(total.get()).toBe(4);
+  });
+
   test("can depend on another computed", () => {
     const count = cell(1);
     const doubled = computed(() => count.get() * 2);
