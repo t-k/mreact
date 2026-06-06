@@ -12,6 +12,7 @@ import {
   createQueryClient,
   dehydrate,
   __MREACT_QUERY_STATE_SCRIPT_ID,
+  installQueryAsyncStorage,
   runWithQueryClient,
   type DehydratedQueryClient,
   type QueryClient,
@@ -143,6 +144,8 @@ const nativeEscapeTransform = {
 } as const;
 const authRuntimeStateKey = "__mreactAuthRuntimeState";
 const authSessionScriptId = "__mreact_auth_session";
+
+installQueryAsyncStorage(new AsyncLocalStorage<QueryClient>());
 
 interface AuthRuntimeRequestState {
   claims?: unknown;

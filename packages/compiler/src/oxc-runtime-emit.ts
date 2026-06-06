@@ -1,9 +1,21 @@
 import type { AttributeIr, ComponentPropIr, JsxNodeIr } from "./ir.js";
-import { isVoidHtmlElement } from "./emit-server-shared.js";
+import {
+  htmlAttributeName,
+  isDangerousHtmlAttribute,
+  isStaticUrlValueUnsafe,
+  isUrlAttribute,
+  isVoidHtmlElement,
+} from "./emit-server-shared.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
 export const oxcServerStringReactNodeRenderHelperPlaceholder =
   "__mreactRenderReactNodeToString";
+
+let currentOxcServerStringUrlSafeHelperName = "_urlAttrSafe";
+
+export function setOxcServerStringUrlSafeHelperName(name: string): void {
+  currentOxcServerStringUrlSafeHelperName = name;
+}
 
 export function emitOxcServerStringChildren(children: readonly JsxNodeIr[]): string {
   if (children.length === 0) {
@@ -52,7 +64,9 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
     return '""';
   }
 
-  const attrs = node.attributes.map(emitOxcServerAttribute).join(" + ");
+  const attrs = node.attributes
+    .map((attr) => emitOxcServerAttribute(node.tagName, attr))
+    .join(" + ");
   const open =
     attrs === ""
       ? JSON.stringify(`<${node.tagName}>`)
@@ -87,16 +101,56 @@ function emitOxcServerComponentProps(
   return `{ ${entries.join(", ")} }`;
 }
 
-function emitOxcServerAttribute(attr: AttributeIr): string {
+function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
+  if (attr.kind === "spread-attr" || attr.kind === "event") {
+    return '""';
+  }
+
+  if (attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
+    return '""';
+  }
+
+  const htmlName = htmlAttributeNameForElement(tagName, attr.name);
+
   if (attr.kind === "static-attr") {
-    return JSON.stringify(` ${attr.name}="${escapeHtmlAttribute(attr.value)}"`);
+    if (isUrlAttribute(htmlName) && isStaticUrlValueUnsafe(htmlName, attr.value)) {
+      return '""';
+    }
+
+    if (isDangerousHtmlAttribute(htmlName)) {
+      return '""';
+    }
+
+    return JSON.stringify(` ${htmlName}="${escapeHtmlAttribute(attr.value)}"`);
   }
 
   if (attr.kind === "dynamic-attr") {
-    return `${JSON.stringify(` ${attr.name}="`)} + _escapeHtml(${attr.code}) + ${JSON.stringify('"')}`;
+    if (isDangerousHtmlAttribute(htmlName)) {
+      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_value.__html) + ${JSON.stringify('"')}; return ""; })()`;
+    }
+
+    if (isUrlAttribute(htmlName)) {
+      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; const _checked = ${currentOxcServerStringUrlSafeHelperName}(${JSON.stringify(htmlName)}, _value === true ? "" : _value); return _checked === undefined ? "" : ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_checked) + ${JSON.stringify('"')}; })()`;
+    }
+
+    return `${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(${attr.code}) + ${JSON.stringify('"')}`;
   }
 
   return '""';
+}
+
+function htmlAttributeNameForElement(tagName: string, name: string): string {
+  if (tagName === "input") {
+    if (name === "defaultValue") {
+      return "value";
+    }
+
+    if (name === "defaultChecked") {
+      return "checked";
+    }
+  }
+
+  return htmlAttributeName(name);
 }
 
 function emitOxcCompatObjectNode(node: JsxNodeIr): string {

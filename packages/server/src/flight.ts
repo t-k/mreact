@@ -738,7 +738,11 @@ function resolveFlightPromiseChunks(
   model: FlightModel,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth = 0,
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): FlightModel {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
+
   if (
     model === null ||
     typeof model === "string" ||
@@ -749,7 +753,9 @@ function resolveFlightPromiseChunks(
   }
 
   if (Array.isArray(model)) {
-    return model.map((item) => resolveFlightPromiseChunks(item, modelChunks, errorChunks));
+    return model.map((item) =>
+      resolveFlightPromiseChunks(item, modelChunks, errorChunks, depth + 1, context),
+    );
   }
 
   if (model.kind === "promise") {
@@ -760,7 +766,22 @@ function resolveFlightPromiseChunks(
     }
 
     if (modelChunks.has(model.id)) {
-      return decodeReactFlightModel(modelChunks.get(model.id), modelChunks, errorChunks);
+      if (context.inProgressChunkIds.has(model.id)) {
+        flightCycle(model.id);
+      }
+
+      context.inProgressChunkIds.add(model.id);
+      try {
+        return decodeReactFlightModel(
+          modelChunks.get(model.id),
+          modelChunks,
+          errorChunks,
+          depth + 1,
+          context,
+        );
+      } finally {
+        context.inProgressChunkIds.delete(model.id);
+      }
     }
 
     return model;
@@ -772,7 +793,7 @@ function resolveFlightPromiseChunks(
       props: Object.fromEntries(
         Object.entries(model.props).map(([key, value]) => [
           key,
-          resolveFlightPromiseChunks(value, modelChunks, errorChunks),
+          resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
         ]),
       ),
     };
@@ -782,8 +803,8 @@ function resolveFlightPromiseChunks(
     return {
       ...model,
       entries: model.entries.map(([key, value]): [FlightModel, FlightModel] => [
-        resolveFlightPromiseChunks(key, modelChunks, errorChunks),
-        resolveFlightPromiseChunks(value, modelChunks, errorChunks),
+        resolveFlightPromiseChunks(key, modelChunks, errorChunks, depth + 1, context),
+        resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
       ]),
     };
   }
@@ -791,7 +812,9 @@ function resolveFlightPromiseChunks(
   if (model.kind === "set") {
     return {
       ...model,
-      values: model.values.map((value) => resolveFlightPromiseChunks(value, modelChunks, errorChunks)),
+      values: model.values.map((value) =>
+        resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
+      ),
     };
   }
 
@@ -802,7 +825,9 @@ function resolveFlightPromiseChunks(
   return Object.fromEntries(
     Object.entries(model).map(([key, value]) => [
       key,
-      value === undefined ? undefined : resolveFlightPromiseChunks(value, modelChunks, errorChunks),
+      value === undefined
+        ? undefined
+        : resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
     ]),
   );
 }
@@ -1252,11 +1277,26 @@ function flightTooDeep(): never {
   );
 }
 
+function flightCycle(id: number): never {
+  throw new FlightDecodeError(`MR_FLIGHT_CYCLE: cyclic chunk reference ${id}`);
+}
+
+interface FlightDecodeContext {
+  inProgressChunkIds: Set<number>;
+}
+
+function createFlightDecodeContext(): FlightDecodeContext {
+  return {
+    inProgressChunkIds: new Set(),
+  };
+}
+
 function decodeReactFlightModel(
   value: unknown,
   modelChunks: ReadonlyMap<number, unknown> = new Map(),
   errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
   depth = 0,
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): FlightModel {
   if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
   if (
@@ -1268,7 +1308,7 @@ function decodeReactFlightModel(
   }
 
   if (typeof value === "string") {
-    return decodeReactFlightString(value, modelChunks, errorChunks);
+    return decodeReactFlightString(value, modelChunks, errorChunks, depth, context);
   }
 
   if (Array.isArray(value)) {
@@ -1282,12 +1322,13 @@ function decodeReactFlightModel(
           modelChunks,
           errorChunks,
           depth + 1,
+          context,
         ),
       };
     }
 
     return value.map((item) =>
-      decodeReactFlightModel(item, modelChunks, errorChunks, depth + 1),
+      decodeReactFlightModel(item, modelChunks, errorChunks, depth + 1, context),
     );
   }
 
@@ -1296,7 +1337,7 @@ function decodeReactFlightModel(
   }
 
   if (valueIsObject(value)) {
-    return decodeReactFlightProps(value, modelChunks, errorChunks, depth + 1);
+    return decodeReactFlightProps(value, modelChunks, errorChunks, depth + 1, context);
   }
 
   return { kind: "undefined" };
@@ -1306,6 +1347,8 @@ function decodeReactFlightString(
   value: string,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth: number,
+  context: FlightDecodeContext,
 ): FlightModel {
   if (value === "$undefined" || value === "$u") {
     return { kind: "undefined" };
@@ -1340,7 +1383,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$[AOoUSsLlGgMmV][0-9a-f]+$/.test(value)) {
-    return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
   }
 
   if (value.startsWith("$S")) {
@@ -1369,7 +1412,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$Q[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
     const entries = Array.isArray(decoded)
       ? decoded.map((entry): [FlightModel, FlightModel] =>
           Array.isArray(entry) ? [entry[0] ?? { kind: "undefined" }, entry[1] ?? { kind: "undefined" }] : [entry, { kind: "undefined" }],
@@ -1383,7 +1426,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$W[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
 
     return {
       kind: "set",
@@ -1392,7 +1435,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$K[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
     const entries = Array.isArray(decoded)
       ? decoded.flatMap((entry): [string, FlightModel][] =>
           Array.isArray(entry) && typeof entry[0] === "string"
@@ -1408,7 +1451,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$i[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
 
     return {
       kind: "iterable",
@@ -1429,7 +1472,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$[0-9a-f]+$/i.test(value)) {
-    return decodeReactFlightChunk(value.slice(1), modelChunks, errorChunks);
+    return decodeReactFlightChunk(value.slice(1), modelChunks, errorChunks, depth + 1, context);
   }
 
   return value;
@@ -1439,7 +1482,10 @@ function decodeReactFlightChunk(
   id: string,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth: number,
+  context: FlightDecodeContext,
 ): FlightModel {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
   const numericId = parseReactFlightId(id);
   const error = errorChunks.get(numericId);
 
@@ -1454,7 +1500,22 @@ function decodeReactFlightChunk(
     };
   }
 
-  return decodeReactFlightModel(modelChunks.get(numericId), modelChunks, errorChunks);
+  if (context.inProgressChunkIds.has(numericId)) {
+    flightCycle(numericId);
+  }
+
+  context.inProgressChunkIds.add(numericId);
+  try {
+    return decodeReactFlightModel(
+      modelChunks.get(numericId),
+      modelChunks,
+      errorChunks,
+      depth,
+      context,
+    );
+  } finally {
+    context.inProgressChunkIds.delete(numericId);
+  }
 }
 
 function decodeReactFlightElementType(value: unknown): FlightElementModel["type"] {
@@ -1477,12 +1538,13 @@ function decodeReactFlightProps(
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
   depth = 0,
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): Record<string, FlightModel> {
   if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
   return Object.fromEntries(
     Object.entries(value).map(([key, child]) => [
       key,
-      decodeReactFlightModel(child, modelChunks, errorChunks, depth + 1),
+      decodeReactFlightModel(child, modelChunks, errorChunks, depth + 1, context),
     ]),
   );
 }

@@ -191,8 +191,14 @@ export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 const queryRuntimeStateKey = "__mreactQueryRuntimeState";
 
 interface QueryRuntimeState {
+  asyncStorage?: QueryAsyncStorage<QueryClient> | undefined;
   browserQueryClient?: QueryClient | undefined;
   currentQueryClient?: QueryClient | undefined;
+}
+
+export interface QueryAsyncStorage<T> {
+  getStore(): T | undefined;
+  run<TResult>(store: T, callback: () => TResult): TResult;
 }
 
 export function createQueryClient(): QueryClient {
@@ -201,6 +207,11 @@ export function createQueryClient(): QueryClient {
 
 export function getQueryClient(): QueryClient {
   const state = queryRuntimeState();
+  const scopedClient = queryAsyncStorage(state)?.getStore();
+
+  if (scopedClient !== undefined) {
+    return scopedClient;
+  }
 
   if (state.currentQueryClient !== undefined) {
     return state.currentQueryClient;
@@ -220,30 +231,60 @@ export function getQueryClient(): QueryClient {
 
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T {
   const state = queryRuntimeState();
-  const previous = state.currentQueryClient;
-  state.currentQueryClient = client;
+  const asyncStorage = queryAsyncStorage(state);
 
-  try {
-    const result = fn();
+  if (asyncStorage === undefined) {
+    const previous = state.currentQueryClient;
+    state.currentQueryClient = client;
 
-    if (isPromise(result)) {
-      return result.finally(() => {
-        state.currentQueryClient = previous;
-      }) as T;
+    try {
+      const result = fn();
+
+      if (isPromise(result)) {
+        return result.finally(() => {
+          state.currentQueryClient = previous;
+        }) as T;
+      }
+
+      state.currentQueryClient = previous;
+      return result;
+    } catch (error) {
+      state.currentQueryClient = previous;
+      throw error;
     }
-
-    state.currentQueryClient = previous;
-    return result;
-  } catch (error) {
-    state.currentQueryClient = previous;
-    throw error;
   }
+
+  return asyncStorage.run(client, () => {
+    const previous = state.currentQueryClient;
+    state.currentQueryClient = client;
+
+    try {
+      const result = fn();
+
+      if (isPromise(result)) {
+        return result.finally(() => {
+          state.currentQueryClient = previous;
+        }) as T;
+      }
+
+      state.currentQueryClient = previous;
+      return result;
+    } catch (error) {
+      state.currentQueryClient = previous;
+      throw error;
+    }
+  });
 }
 
 export function __resetQueryClientForTesting(): void {
   const state = queryRuntimeState();
+  state.asyncStorage = undefined;
   state.currentQueryClient = undefined;
   state.browserQueryClient = undefined;
+}
+
+export function installQueryAsyncStorage(storage: QueryAsyncStorage<QueryClient>): void {
+  queryRuntimeState().asyncStorage = storage;
 }
 
 export function createQuery<TData>(
@@ -511,6 +552,25 @@ function isPromise<T>(value: T): value is T & Promise<unknown> {
 
 function queryRuntimeState(): QueryRuntimeState {
   return getGlobalRuntimeState(queryRuntimeStateKey, () => ({}));
+}
+
+function queryAsyncStorage(state: QueryRuntimeState): QueryAsyncStorage<QueryClient> | undefined {
+  if (state.asyncStorage !== undefined) {
+    return state.asyncStorage;
+  }
+
+  const AsyncStorage = (
+    globalThis as {
+      AsyncLocalStorage?: new <T>() => QueryAsyncStorage<T>;
+    }
+  ).AsyncLocalStorage;
+
+  if (AsyncStorage === undefined) {
+    return undefined;
+  }
+
+  state.asyncStorage = new AsyncStorage<QueryClient>();
+  return state.asyncStorage;
 }
 
 function infiniteResultFromQueryEntry<TPage, TPageParam>(

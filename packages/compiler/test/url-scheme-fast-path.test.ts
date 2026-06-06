@@ -10,6 +10,16 @@ function compileServer(code: string): string {
   return output.code;
 }
 
+function compileServerStream(code: string): string {
+  const output = transform({
+    code,
+    filename: "page.tsx",
+    target: "server",
+    serverOutput: "stream",
+  });
+  return output.code;
+}
+
 async function evaluateCompiled(code: string): Promise<Record<string, unknown>> {
   const dataUrl = `data:text/javascript;base64,${Buffer.from(code).toString("base64")}`;
   return (await import(dataUrl)) as Record<string, unknown>;
@@ -142,5 +152,42 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     // The title attribute should keep the value (escaped). Only the
     // navigation/script-sink attributes are filtered.
     expect(out).toContain('title="javascript:alert(1)"');
+  });
+
+  test("body-statement JSX variables drop unsafe URL attributes", async () => {
+    const code = compileServer(
+      `export default function Page({ url }) { const link = <a href={url}>x</a>; return <div>{link}</div>; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { url: string }) => string;
+
+    expect(Page({ url: "javascript:alert(1)" })).not.toMatch(/javascript:|alert\(1\)/i);
+    expect(Page({ url: "https://example.com/ok" })).toContain(
+      'href="https://example.com/ok"',
+    );
+  });
+
+  test("body-statement JSX variables drop dynamic srcdoc without explicit opt-in", async () => {
+    const code = compileServer(
+      `export default function Page({ html }) { const frame = <iframe srcdoc={html}></iframe>; return <div>{frame}</div>; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { html: unknown }) => string;
+
+    expect(Page({ html: "<img src=x onerror=alert(1)>" })).toBe(
+      "<div><iframe></iframe></div>",
+    );
+    expect(Page({ html: { __html: "<p>safe</p>" } })).toContain(
+      'srcdoc="&lt;p&gt;safe&lt;/p&gt;"',
+    );
+  });
+
+  test("server stream body-statement JSX variables drop unsafe URL attributes", async () => {
+    const code = compileServerStream(
+      `export function App(sink, url) { const link = <a href={url}>x</a>; return <div>{link}</div>; }`,
+    );
+
+    expect(code).toContain("_urlAttrSafe");
+    expect(code).not.toContain('href={url}');
   });
 });

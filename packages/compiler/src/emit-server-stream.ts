@@ -30,6 +30,7 @@ import {
 import {
   emitOxcCompatObjectChildren,
   oxcServerStringReactNodeRenderHelperPlaceholder,
+  setOxcServerStringUrlSafeHelperName,
 } from "./oxc-runtime-emit.js";
 
 export interface EmitServerStreamResult {
@@ -84,6 +85,7 @@ export function emitServerStream(
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
+  setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
   currentClientBoundaryHelperName = clientBoundaryHelperName;
   currentSpreadAttributesHelperName = spreadAttributesHelperName;
   currentStreamNodeHelperName = streamNodeHelperName;

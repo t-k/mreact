@@ -25,7 +25,12 @@ import {
   type RootRuntime,
   type RootRuntimeOptions,
 } from "./hooks.js";
-import { isDangerousHtmlAttribute, isDangerousHtmlOptIn } from "./url-safety.js";
+import {
+  isDangerousHtmlAttribute,
+  isDangerousHtmlOptIn,
+  isUnsafeMetaRefreshContent,
+  isUnsafeUrlAttribute,
+} from "./url-safety.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import { isVoidHtmlElement } from "@reckona/mreact-shared";
 
@@ -195,7 +200,8 @@ function renderElementToString(
 }
 
 function renderAttributesToString(props: Record<string, unknown>): string {
-  const entries = Object.entries(props);
+  const sanitizedProps = sanitizeMetaRefreshProps(props);
+  const entries = Object.entries(sanitizedProps);
   if (
     entries.length === 0 ||
     (entries.length === 1 && entries[0]?.[0] === "children")
@@ -208,6 +214,23 @@ function renderAttributesToString(props: Record<string, unknown>): string {
     attributes += renderHtmlAttribute(name, value);
   }
   return attributes;
+}
+
+function sanitizeMetaRefreshProps(
+  props: Record<string, unknown>,
+): Record<string, unknown> {
+  const httpEquiv = props["http-equiv"] ?? props.httpEquiv;
+  const content = props.content;
+  if (typeof httpEquiv !== "string" || typeof content !== "string") {
+    return props;
+  }
+  if (!isUnsafeMetaRefreshContent(httpEquiv, content)) {
+    return props;
+  }
+
+  const sanitized = { ...props };
+  delete sanitized.content;
+  return sanitized;
 }
 
 function isClassComponentType(
@@ -320,6 +343,10 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 
   const attributeName = toHtmlAttributeName(name);
 
+  if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
+    return "";
+  }
+
   if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
     return ` ${attributeName}="${value ? "true" : "false"}"`;
   }
@@ -346,8 +373,16 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return ` ${attributeName}=""`;
   }
 
-  return ` ${attributeName}="${escapeHtml(value)}"`;
+  const stringValue = String(value);
+
+  if (isUnsafeUrlAttribute(attributeName, stringValue)) {
+    return "";
+  }
+
+  return ` ${attributeName}="${escapeHtml(stringValue)}"`;
 }
+
+const VALID_ATTRIBUTE_NAME = /^[A-Za-z_][\w.\-:]*$/;
 
 function isBooleanishStringAttribute(name: string): boolean {
   const attributeName = toHtmlAttributeName(name).toLowerCase();
