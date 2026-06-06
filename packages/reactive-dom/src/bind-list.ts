@@ -138,6 +138,28 @@ function bindKeyedList<T>(
       return;
     }
 
+    if (currentItems.length === 0) {
+      const ownsCurrentParent =
+        ownsParent &&
+        marker.nextSibling === null &&
+        insertionParent.childNodes.length === recordNodeCount + 1
+          ? true
+          : records.size > 0 && ownsWholeParent(insertionParent, marker, records);
+
+      if (ownsCurrentParent) {
+        disposeRecords(records.values());
+        insertionParent.replaceChildren(marker);
+        ownsParent = true;
+      } else {
+        removeRecordNodes(records.values());
+        ownsParent = marker.nextSibling === null && insertionParent.childNodes.length === 1;
+      }
+
+      records = new Map();
+      recordNodeCount = 0;
+      return;
+    }
+
     const currentKeyedItems = uniqueKeyedItems(currentItems, key);
 
     if (records.size === currentKeyedItems.length && records.size > 0) {

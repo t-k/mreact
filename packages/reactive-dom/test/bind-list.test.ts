@@ -872,6 +872,46 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("clears owned keyed list rows without building an empty keyed item set", async () => {
+    const items = cell([0, 1, 2]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const OriginalSet = globalThis.Set;
+    let setCreations = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          super(values ?? undefined);
+          setCreations += 1;
+        }
+      } as SetConstructor;
+
+      items.set([]);
+      await flushEffects();
+    } finally {
+      globalThis.Set = OriginalSet;
+      dispose();
+    }
+
+    expect(setCreations).toBe(0);
+    expect(parent.innerHTML).toBe("<!--list-->");
+  });
+
   test("replaces disjoint owned keyed rows without explicitly removing stale row nodes", async () => {
     const items = cell([0, 1, 2]);
     const parent = document.createElement("ul");
