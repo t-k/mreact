@@ -23,6 +23,34 @@ import {
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import { getAppliedProps } from "../src/host-event-binder.js";
 import { getEventPath, setLogicalEventParent } from "../src/events.js";
+import type { Fiber } from "../src/fiber.js";
+
+function countFiberSubtree(fiber: Fiber | undefined): number {
+  let count = 0;
+  const seen = new Set<Fiber>();
+  const stack = fiber === undefined ? [] : [fiber];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+
+    if (current === undefined || seen.has(current)) {
+      continue;
+    }
+
+    seen.add(current);
+    count += 1;
+
+    if (current.child !== undefined) {
+      stack.push(current.child);
+    }
+
+    if (current.sibling !== undefined) {
+      stack.push(current.sibling);
+    }
+  }
+
+  return count;
+}
 
 describe("react-compat render", () => {
   afterEach(() => {
@@ -61,6 +89,38 @@ describe("react-compat render", () => {
     render(createElement(App, null), container);
 
     expect(container.innerHTML).toBe("<p>Hello</p>");
+  });
+
+  test("drops removed row subtrees from the retained alternate fiber tree", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const rows = Array.from({ length: 20 }, (_, index) => ({
+      id: index,
+      label: `Row ${index}`,
+    }));
+
+    function Rows({ rows }: { rows: readonly { id: number; label: string }[] }) {
+      return createElement(
+        Fragment,
+        null,
+        rows.map((row) =>
+          createElement(
+            "div",
+            { "data-key": row.id, key: row.id },
+            createElement("span", null, row.label),
+            createElement("button", { type: "button", onClick: () => row.id }, "select"),
+          ),
+        ),
+      );
+    }
+
+    flushSync(() => root.render(createElement(Rows, { rows })));
+    flushSync(() => root.render(createElement(Rows, { rows: [] })));
+
+    const fiberRoot = getFiberRootForContainer(container);
+
+    expect(container.children).toHaveLength(0);
+    expect(countFiberSubtree(fiberRoot?.current.alternate?.child)).toBeLessThan(5);
   });
 
   test("applies className, style, attributes, and events", () => {

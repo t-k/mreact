@@ -29,6 +29,9 @@ export function commitFiberRoot(
     });
   }
   commitHostFiberRoot(root, finishedWork, options);
+  if (hasRemovedAlternateChildren(finishedWork)) {
+    detachRemovedAlternateChildren(finishedWork);
+  }
   root.current = finishedWork;
   root.current.stateNode = root;
   markRootFinished(root, finishedWork.lanes);
@@ -41,6 +44,95 @@ export function commitFiberRoot(
 export function detachFiberRefs(fiber: Fiber): void {
   for (const record of collectRefRecords(fiber)) {
     detachRef(record.ref);
+  }
+}
+
+function detachRemovedAlternateChildren(fiber: Fiber | undefined): void {
+  let cursor: Fiber | undefined = fiber;
+
+  while (cursor !== undefined) {
+    const retained = collectRetainedAlternateChildren(cursor.child);
+    let alternateChild = cursor.alternate?.child;
+
+    while (alternateChild !== undefined) {
+      const nextAlternateChild = alternateChild.sibling;
+
+      if (!retained.has(alternateChild)) {
+        detachFiberSubtree(alternateChild, retained);
+      }
+
+      alternateChild = nextAlternateChild;
+    }
+
+    if (cursor.deletions !== undefined) {
+      for (const deleted of cursor.deletions) {
+        detachFiberSubtree(deleted, retained);
+      }
+      cursor.deletions = undefined;
+    }
+
+    detachRemovedAlternateChildren(cursor.child);
+    cursor = cursor.sibling;
+  }
+}
+
+function hasRemovedAlternateChildren(fiber: Fiber): boolean {
+  return (
+    fiber.childListChanged ||
+    fiber.subtreeChildListChanged ||
+    fiber.deletions !== undefined
+  );
+}
+
+function collectRetainedAlternateChildren(fiber: Fiber | undefined): Set<Fiber> {
+  const retained = new Set<Fiber>();
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    retained.add(cursor);
+
+    if (cursor.alternate !== undefined) {
+      retained.add(cursor.alternate);
+    }
+
+    cursor = cursor.sibling;
+  }
+
+  return retained;
+}
+
+function detachFiberSubtree(fiber: Fiber, preserve: ReadonlySet<Fiber>): void {
+  const stack = [fiber];
+  const seen = new Set<Fiber>();
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+
+    if (current === undefined || seen.has(current) || preserve.has(current)) {
+      continue;
+    }
+
+    seen.add(current);
+
+    let child = current.child;
+    while (child !== undefined) {
+      stack.push(child);
+      child = child.sibling;
+    }
+
+    if (current.alternate !== undefined) {
+      stack.push(current.alternate);
+    }
+
+    current.return = undefined;
+    current.child = undefined;
+    current.sibling = undefined;
+    current.alternate = undefined;
+    current.pendingProps = undefined;
+    current.memoizedProps = undefined;
+    current.memoizedState = undefined;
+    current.stateNode = undefined;
+    current.deletions = undefined;
   }
 }
 
