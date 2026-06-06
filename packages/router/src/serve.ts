@@ -76,6 +76,7 @@ interface BuiltRuntime {
   >;
   serverActionManifest?: readonly { moduleId: string; exportName: string; inferred?: boolean }[] | undefined;
   serverModuleArtifactLoads: Map<string, Promise<void>>;
+  serverModuleClosureFiles: Map<string, readonly string[]>;
   serverModuleFiles: ReadonlyMap<string, string>;
   serverModuleRenderFiles: ReadonlyMap<string, string>;
   serverModuleRequestFiles: ReadonlyMap<string, string>;
@@ -436,9 +437,11 @@ async function renderBuiltAppRequestWithRuntime(
     emitBuiltRenderTiming(options, request, timing, middlewareResult.response.status);
     return middlewareResult.response;
   }
-  request = middlewareResult.request;
-  normalizedPath = normalizeRoutePath(new URL(request.url).pathname);
-  matched = options.runtime.routeMatcher.match(normalizedPath);
+  if (middlewareResult.request !== request) {
+    request = middlewareResult.request;
+    normalizedPath = normalizeRoutePath(new URL(request.url).pathname);
+    matched = options.runtime.routeMatcher.match(normalizedPath);
+  }
 
   if (request.method === "GET" && options.runtime.prerenderableRoutes.has(normalizedPath)) {
     await loadBuiltServerModuleArtifactsForRequest(options.runtime, matched?.route.file, {
@@ -1002,6 +1005,7 @@ async function materializeBuiltRuntime(options: {
       ? {}
       : { serverActionManifest: serverManifest.serverActionManifest }),
     serverModuleArtifactLoads: new Map(),
+    serverModuleClosureFiles: new Map(),
     serverModuleFiles,
     serverModuleRenderFiles,
     serverModuleRequestFiles,
@@ -1273,34 +1277,63 @@ async function loadBuiltServerModuleArtifactClosure(
   seen: Set<string>,
   kind: BuiltServerModuleArtifactKind,
 ): Promise<void> {
+  for (const closureFile of builtServerModuleClosureFiles(runtime, file)) {
+    if (seen.has(closureFile)) {
+      continue;
+    }
+    seen.add(closureFile);
+    await loadBuiltServerModuleArtifact(runtime, closureFile, kind);
+  }
+}
+
+function builtServerModuleClosureFiles(
+  runtime: BuiltRuntime,
+  file: string,
+): readonly string[] {
+  const cached = runtime.serverModuleClosureFiles.get(file);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const closure: string[] = [];
+  collectBuiltServerModuleClosureFiles(runtime, file, new Set(), closure);
+  runtime.serverModuleClosureFiles.set(file, closure);
+  return closure;
+}
+
+function collectBuiltServerModuleClosureFiles(
+  runtime: BuiltRuntime,
+  file: string,
+  seen: Set<string>,
+  closure: string[],
+): void {
   if (seen.has(file)) {
     return;
   }
   seen.add(file);
-
-  await loadBuiltServerModuleArtifact(runtime, file, kind);
+  closure.push(file);
 
   const source = runtime.serverSourceFiles.get(file);
-
   if (source === undefined) {
     return;
   }
 
   for (const specifier of localServerModuleSpecifiers(source)) {
     const resolved = resolveBuiltLocalServerSourceImport(runtime, file, specifier);
-
     if (resolved !== undefined) {
-      await loadBuiltServerModuleArtifactClosure(runtime, resolved, seen, kind);
+      collectBuiltServerModuleClosureFiles(runtime, resolved, seen, closure);
     }
   }
 }
 
+const localServerModuleImportPattern =
+  /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s*)?["'](?<source>\.{1,2}\/[^"']+)["']/g;
+
 function localServerModuleSpecifiers(code: string): string[] {
   const specifiers = new Set<string>();
-  const importPattern =
-    /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s*)?["'](?<source>\.{1,2}\/[^"']+)["']/g;
+  localServerModuleImportPattern.lastIndex = 0;
 
-  for (const match of code.matchAll(importPattern)) {
+  for (const match of code.matchAll(localServerModuleImportPattern)) {
     const source = match.groups?.source;
 
     if (source !== undefined) {
