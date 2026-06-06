@@ -775,6 +775,46 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("appends keyed list items without building an extra appended-key set", async () => {
+    const items = cell([0, 1, 2]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const OriginalSet = globalThis.Set;
+    let setCreations = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          super(values ?? undefined);
+          setCreations += 1;
+        }
+      } as SetConstructor;
+
+      items.set([0, 1, 2, 3, 4]);
+      await flushEffects();
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    expect(setCreations).toBe(5);
+    expect(parent.innerHTML).toBe("<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->");
+    dispose();
+  });
+
   test("removes keyed list items without replacing or reinserting retained nodes", async () => {
     const items = cell([0, 1, 2, 3]);
     const parent = document.createElement("ul");
