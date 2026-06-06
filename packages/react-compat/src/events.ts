@@ -90,12 +90,52 @@ const nativeEventToReactProps = new Map<string, string[]>([
 ]);
 
 export function toEventNames(propName: string): string[] {
+  const eventNames: string[] = [];
+  forEachEventName(propName, (eventName) => {
+    eventNames.push(eventName);
+  });
+  return eventNames;
+}
+
+export function forEachEventName(
+  propName: string,
+  callback: (eventName: string) => void,
+): void {
+  const basePropName = toBaseEventPropName(propName);
+  const mappedEventNames = reactPropToNativeEvent.get(basePropName);
+
+  if (mappedEventNames === undefined) {
+    callback(basePropName.slice(2).toLowerCase());
+    return;
+  }
+
+  for (let index = 0; index < mappedEventNames.length; index += 1) {
+    callback(mappedEventNames[index]!);
+  }
+}
+
+export function ensureDelegatedEventListenersForProp(
+  root: Element,
+  propName: string,
+): void {
+  const basePropName = toBaseEventPropName(propName);
+  const mappedEventNames = reactPropToNativeEvent.get(basePropName);
+
+  if (mappedEventNames === undefined) {
+    ensureDelegatedEventListener(root, basePropName.slice(2).toLowerCase());
+    return;
+  }
+
+  for (let index = 0; index < mappedEventNames.length; index += 1) {
+    ensureDelegatedEventListener(root, mappedEventNames[index]!);
+  }
+}
+
+function toBaseEventPropName(propName: string): string {
   const basePropName = propName.endsWith("Capture")
     ? propName.slice(0, -"Capture".length)
     : propName;
-  return reactPropToNativeEvent.get(basePropName) ?? [
-    basePropName.slice(2).toLowerCase(),
-  ];
+  return basePropName;
 }
 
 export function toEventPropNames(eventName: string): string[] {

@@ -12,6 +12,9 @@ export const SuspenseList = Symbol.for("react.suspense_list");
 export const Activity = Symbol.for("react.activity");
 export const Profiler = Symbol.for("react.profiler");
 export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta");
+export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
+  "modular.react.host_children_only_props_meta",
+);
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
@@ -271,12 +274,25 @@ function copyElementProps(
   base?: Record<string, unknown>,
   omitChildren = false,
 ): Record<string, unknown> {
-  const props: Record<string, unknown> = base === undefined ? {} : { ...base };
+  const props: Record<string, unknown> = {};
+
+  if (base !== undefined) {
+    copyOwnStringElementProps(base, props, omitChildren);
+  }
 
   if (source === null || source === undefined) {
     return props;
   }
 
+  copyOwnStringElementProps(source, props, omitChildren);
+  return props;
+}
+
+function copyOwnStringElementProps(
+  source: Record<string, unknown>,
+  target: Record<string, unknown>,
+  omitChildren: boolean,
+): void {
   for (const name in source) {
     if (!hasOwnProperty.call(source, name)) {
       continue;
@@ -289,11 +305,9 @@ function copyElementProps(
       name !== "__source" &&
       (!omitChildren || name !== "children")
     ) {
-      props[name] = source[name];
+      target[name] = source[name];
     }
   }
-
-  return props;
 }
 
 function normalizeElementType<P>(type: ElementType<P>): ElementType<P> {
@@ -351,6 +365,11 @@ function setHostOwnPropsMeta(props: Record<string, unknown>): void {
   const dataKey = props["data-key"];
 
   if (typeof dataKey !== "number" || !Number.isSafeInteger(dataKey) || dataKey < 0) {
+    if (hostPropsAreChildrenOnly(props)) {
+      (props as { [HOST_CHILDREN_ONLY_PROPS_META]?: true })[
+        HOST_CHILDREN_ONLY_PROPS_META
+      ] = true;
+    }
     return;
   }
 
@@ -400,6 +419,16 @@ function setHostOwnPropsMeta(props: Record<string, unknown>): void {
 
   (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META] =
     dataKey * 4 + selectedState;
+}
+
+function hostPropsAreChildrenOnly(props: Record<string, unknown>): boolean {
+  for (const name in props) {
+    if (hasOwnProperty.call(props, name) && name !== "children") {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 export const isValidElement = isReactCompatElement;

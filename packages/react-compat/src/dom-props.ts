@@ -1,8 +1,7 @@
 import {
   getAppliedProps,
   setAppliedProps,
-  ensureDelegatedEventListener,
-  toEventNames,
+  ensureDelegatedEventListenersForProp,
 } from "./host-event-binder.js";
 import { HOST_OWN_PROPS_META } from "./element.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
@@ -105,9 +104,7 @@ export function applyProps(
         continue;
       }
 
-      for (const eventName of toEventNames(name)) {
-        ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
-      }
+      ensureDelegatedEventListenersForProp(options.eventRoot ?? element, name);
       continue;
     }
 
@@ -223,9 +220,7 @@ function applyInitialProps(
     }
 
     if (isReactEventHandlerPropName(name) && typeof value === "function") {
-      for (const eventName of toEventNames(name)) {
-        ensureDelegatedEventListener(options.eventRoot ?? element, eventName);
-      }
+      ensureDelegatedEventListenersForProp(options.eventRoot ?? element, name);
       continue;
     }
 

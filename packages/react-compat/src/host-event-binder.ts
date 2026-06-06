@@ -7,6 +7,8 @@ export {
 } from "./event-listeners.js";
 export {
   ensureDelegatedEventListener,
+  ensureDelegatedEventListenersForProp,
+  forEachEventName,
   getEventPriority,
   setLogicalEventParent,
   toEventNames,

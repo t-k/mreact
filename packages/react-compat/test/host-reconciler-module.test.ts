@@ -318,6 +318,37 @@ describe("host reconciler module", () => {
     expect(container.textContent).toBe("Row 0Row 1 updated");
   });
 
+  test("updates direct host text without enumerating unchanged host props during commit", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, createElement("span", null, "0"));
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, createElement("span", null, "1"));
+    let propEnumerations = 0;
+    const originalProps = updated.child?.pendingProps;
+
+    if (typeof originalProps !== "object" || originalProps === null) {
+      expect.fail("expected host props");
+    }
+
+    updated.child!.pendingProps = new Proxy(originalProps as Record<string, unknown>, {
+      ownKeys(target) {
+        propEnumerations += 1;
+        return Reflect.ownKeys(target);
+      },
+    });
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.textContent).toBe("1");
+    expect(propEnumerations).toBe(0);
+  });
+
   test("keeps root child sync for keyed removals", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
