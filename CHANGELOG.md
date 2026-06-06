@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.0.141 - 2026-06-06
+
+### Added
+
+- Added real-browser primitive benchmarks for create, update, select, and clear DOM operations, including mreact, React-compatible mreact, React, Solid, and Qwik coverage, while reporting Marko as unsupported until a stable standalone client compiler/runtime fixture is available.
+- Expanded router benchmark coverage for concurrent throughput and p99 latency, RSS deltas, SSR HTML payload bytes, server-only and minimal-opt-out client bundle sizes, loader client navigation, and back-forward restoration.
+
+### Changed
+
+- Improved benchmark comparability by adding peer framework adapters, preserving unsupported cases explicitly, and keeping browser/router benchmark outputs suitable for repeated local runs without committing generated results.
+- Reduced React-compatible event target mount overhead by avoiding generic event-name normalization for common delegated event props and by skipping unnecessary tag-name lowercasing for non-`meta` elements.
+
 ## 0.0.140 - 2026-06-06
 
 ### Added
