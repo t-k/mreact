@@ -13,6 +13,7 @@ import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/route
 import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import { createVariantFixtureCache } from "../variant-fixture-cache.js";
 import {
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
@@ -29,6 +30,11 @@ interface ServerHandle {
   url: string;
 }
 
+interface FixtureState {
+  rootDir: string;
+  server: ServerHandle;
+}
+
 let rootDir: string | undefined;
 let server: ServerHandle | undefined;
 let currentNodeCount = 0;
@@ -36,19 +42,42 @@ let currentLogEnabled = false;
 let currentReactCompat = false;
 let logEventCount = 0;
 const NODE_COUNT_DEFAULT = 1000;
+const primaryFixtureStates = new Map<string, FixtureState>();
+const primaryFixtureLifecycle = createVariantFixtureCache<string, { close(): Promise<void> }>();
 let browserRootDir: string | undefined;
 let browserServer: ServerHandle | undefined;
 let browserLogEnabled = false;
 let browserReactCompat = false;
+const browserFixtureStates = new Map<string, FixtureState>();
+const browserFixtureLifecycle = createVariantFixtureCache<string, { close(): Promise<void> }>();
 let coldStartRootDir: string | undefined;
 let coldStartOutDir: string | undefined;
 let coldStartReactCompat = false;
+
+function fixtureKey(nodeCount: number, logEnabled: boolean, reactCompat: boolean): string {
+  return `${nodeCount}\0${logEnabled ? "log" : "nolog"}\0${reactCompat ? "compat" : "native"}`;
+}
+
+function browserFixtureKey(logEnabled: boolean, reactCompat: boolean): string {
+  return `${logEnabled ? "log" : "nolog"}\0${reactCompat ? "compat" : "native"}`;
+}
 
 async function ensureFixture(
   nodeCount: number,
   logEnabled: boolean,
   reactCompat: boolean,
 ): Promise<string> {
+  const key = fixtureKey(nodeCount, logEnabled, reactCompat);
+  const cached = primaryFixtureStates.get(key);
+  if (cached !== undefined) {
+    rootDir = cached.rootDir;
+    server = cached.server;
+    currentNodeCount = nodeCount;
+    currentLogEnabled = logEnabled;
+    currentReactCompat = reactCompat;
+    return cached.server.url;
+  }
+
   if (
     rootDir !== undefined &&
     currentNodeCount === nodeCount &&
@@ -57,15 +86,6 @@ async function ensureFixture(
     server !== undefined
   ) {
     return server.url;
-  }
-
-  if (server !== undefined) {
-    await server.close();
-    server = undefined;
-  }
-
-  if (rootDir !== undefined) {
-    await rm(rootDir, { force: true, recursive: true });
   }
 
   rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-"));
@@ -236,10 +256,29 @@ export default function Page() {
   currentNodeCount = nodeCount;
   currentLogEnabled = logEnabled;
   currentReactCompat = reactCompat;
-  return server.url;
+  const createdRootDir = rootDir;
+  const createdServer = server;
+  primaryFixtureStates.set(key, { rootDir: createdRootDir, server: createdServer });
+  await primaryFixtureLifecycle.getOrCreate(key, async () => ({
+    close: async () => {
+      await createdServer.close();
+      await rm(createdRootDir, { force: true, recursive: true });
+    },
+  }));
+  return createdServer.url;
 }
 
 async function ensureBrowserFixture(logEnabled: boolean, reactCompat: boolean): Promise<string> {
+  const key = browserFixtureKey(logEnabled, reactCompat);
+  const cached = browserFixtureStates.get(key);
+  if (cached !== undefined) {
+    browserRootDir = cached.rootDir;
+    browserServer = cached.server;
+    browserLogEnabled = logEnabled;
+    browserReactCompat = reactCompat;
+    return cached.server.url;
+  }
+
   if (
     browserRootDir !== undefined &&
     browserServer !== undefined &&
@@ -247,15 +286,6 @@ async function ensureBrowserFixture(logEnabled: boolean, reactCompat: boolean): 
     browserReactCompat === reactCompat
   ) {
     return browserServer.url;
-  }
-
-  if (browserServer !== undefined) {
-    await browserServer.close();
-    browserServer = undefined;
-  }
-
-  if (browserRootDir !== undefined) {
-    await rm(browserRootDir, { force: true, recursive: true });
   }
 
   browserRootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-browser-"));
@@ -321,7 +351,16 @@ export function Counter() {
   });
   browserLogEnabled = logEnabled;
   browserReactCompat = reactCompat;
-  return browserServer.url;
+  const createdRootDir = browserRootDir;
+  const createdServer = browserServer;
+  browserFixtureStates.set(key, { rootDir: createdRootDir, server: createdServer });
+  await browserFixtureLifecycle.getOrCreate(key, async () => ({
+    close: async () => {
+      await createdServer.close();
+      await rm(createdRootDir, { force: true, recursive: true });
+    },
+  }));
+  return createdServer.url;
 }
 
 function createMreactAppRouterAdapter(options: {
@@ -341,27 +380,21 @@ function createMreactAppRouterAdapter(options: {
       return server?.url ?? null;
     },
     async teardown() {
-      if (server !== undefined) {
-        await server.close();
-        server = undefined;
-      }
-      if (browserServer !== undefined) {
-        await browserServer.close();
-        browserServer = undefined;
-      }
-      if (rootDir !== undefined) {
-        await rm(rootDir, { force: true, recursive: true });
-        rootDir = undefined;
-        currentNodeCount = 0;
-        currentLogEnabled = false;
-        currentReactCompat = false;
-      }
-      if (browserRootDir !== undefined) {
-        await rm(browserRootDir, { force: true, recursive: true });
-        browserRootDir = undefined;
-        browserLogEnabled = false;
-        browserReactCompat = false;
-      }
+      await primaryFixtureLifecycle.closeAll();
+      primaryFixtureStates.clear();
+      rootDir = undefined;
+      server = undefined;
+      currentNodeCount = 0;
+      currentLogEnabled = false;
+      currentReactCompat = false;
+
+      await browserFixtureLifecycle.closeAll();
+      browserFixtureStates.clear();
+      browserRootDir = undefined;
+      browserServer = undefined;
+      browserLogEnabled = false;
+      browserReactCompat = false;
+
       if (coldStartRootDir !== undefined) {
         await rm(coldStartRootDir, { force: true, recursive: true });
         coldStartRootDir = undefined;
