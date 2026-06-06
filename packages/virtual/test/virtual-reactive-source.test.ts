@@ -130,4 +130,31 @@ describe("reactive item sources", () => {
       dispose();
     }
   });
+
+  it("reuses measured row layout when only scroll offset changes", () => {
+    const scrollTop = cell(0);
+    const items = Array.from({ length: 100 }, (_unused, index) => ({ id: `item-${index}` }));
+    let estimateCalls = 0;
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => {
+        estimateCalls += 1;
+        return 40;
+      },
+      getColumnCount: () => 2,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => scrollTop.get(),
+      viewportSize: () => 80,
+    });
+
+    virtual.measureItem("item-0", 60);
+    virtual.entries.get();
+    const callsAfterMeasure = estimateCalls;
+
+    scrollTop.set(160);
+    virtual.entries.get();
+
+    expect(estimateCalls).toBe(callsAfterMeasure);
+  });
 });

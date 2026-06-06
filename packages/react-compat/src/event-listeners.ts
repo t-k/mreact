@@ -1,6 +1,7 @@
 import type { SyntheticEvent } from "./event-types.js";
 
 export interface AppliedProps {
+  attributeNames?: string[];
   props: Record<string, unknown>;
   listeners?: Map<string, AppliedEventListener>;
 }

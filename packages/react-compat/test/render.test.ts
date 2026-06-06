@@ -295,6 +295,31 @@ describe("react-compat render", () => {
     expect(objectKeyCalls).toBe(0);
   });
 
+  test("updates host props without Object.entries allocations", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    flushSync(() =>
+      root.render(createElement("div", { "data-key": 1, title: "row" }, "A")),
+    );
+
+    const originalEntries = Object.entries;
+    let objectEntriesCalls = 0;
+    Object.entries = ((value) => {
+      objectEntriesCalls += 1;
+      return originalEntries(value);
+    }) as typeof Object.entries;
+    try {
+      flushSync(() =>
+        root.render(createElement("div", { "data-key": 1, title: "updated" }, "A")),
+      );
+    } finally {
+      Object.entries = originalEntries;
+    }
+
+    expect(objectEntriesCalls).toBe(0);
+  });
+
   test("skips unchanged host attribute writes when children change", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

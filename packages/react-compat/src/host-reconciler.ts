@@ -45,6 +45,7 @@ import {
   restoreRuntimeSnapshot,
   takeRuntimeSnapshot,
   getDevToolsHookState,
+  collectRuntimeInstanceKeys,
   hasContextDependency,
   hasChangedContextDependency,
   type RootRuntime,
@@ -3074,9 +3075,7 @@ function isLazyType(
 }
 
 function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
-  return Array.from(runtime.instances.keys()).filter(
-    (key) => key === prefix || key.startsWith(`${prefix}.`),
-  );
+  return collectRuntimeInstanceKeys(runtime, prefix);
 }
 
 function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {

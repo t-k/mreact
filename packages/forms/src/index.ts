@@ -142,15 +142,16 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     values: cloneValues(options.initialValues),
   });
   const validationGenerations = new Map<FieldName<TValues>, number>();
+  const dirtyFields = new Set<FieldName<TValues>>();
   let activeSubmit: Promise<FormSubmitResult<TValues, unknown>> | undefined;
 
-  function commit(patch: Partial<FormState<TValues>>): void {
+  function commit(patch: Partial<FormState<TValues>>, dirty = dirtyFields.size > 0): void {
     const previous = state.get();
     const next = {
       ...previous,
       ...patch,
     };
-    next.dirty = isDirty(next.values, next.initialValues);
+    next.dirty = dirty;
     next.valid = hasNoErrors(next.errors);
     state.set(next);
   }
@@ -210,9 +211,11 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     name: Name,
     value: TValues[Name],
   ): Promise<void> {
+    const previous = state.get();
+    updateDirtyField(name, value);
     commit({
       values: {
-        ...state.get().values,
+        ...previous.values,
         [name]: value,
       },
     });
@@ -326,6 +329,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       }
 
       initialValues = cloneValues(values);
+      dirtyFields.clear();
       commit({
         errors: {},
         initialValues,
@@ -403,6 +407,18 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     },
     validate: validateForm,
   };
+
+  function updateDirtyField<Name extends FieldName<TValues>>(
+    name: Name,
+    value: TValues[Name],
+  ): void {
+    if (Object.is(value, initialValues[name])) {
+      dirtyFields.delete(name);
+      return;
+    }
+
+    dirtyFields.add(name);
+  }
 }
 
 function fieldState<TValues extends FormValues, Name extends FieldName<TValues>>(
@@ -487,10 +503,6 @@ function normalizeFieldErrors(errors: readonly string[] | string | undefined): s
   }
 
   return typeof errors === "string" ? [errors] : [...errors];
-}
-
-function isDirty<TValues extends FormValues>(values: TValues, initialValues: TValues): boolean {
-  return Object.keys(values).some((key) => !Object.is(values[key], initialValues[key]));
 }
 
 function cloneValues<TValues extends FormValues>(values: TValues): TValues {

@@ -35,11 +35,16 @@ export function applyProps(
 
   if (previous === undefined && !preserveHydrationAttributes) {
     if (applyInitialRowProps(element, nextProps)) {
-      setAppliedProps(element, { props: nextProps });
+      setAppliedProps(element, {
+        attributeNames: collectAttributeNames(nextProps),
+        props: nextProps,
+      });
       return;
     }
 
+    const attributeNames = collectAttributeNames(nextProps);
     setAppliedProps(element, {
+      attributeNames,
       props: nextProps,
       ...applyInitialProps(element, nextProps, path, options),
     });
@@ -48,12 +53,12 @@ export function applyProps(
 
   const previousProps = previous?.props ?? {};
   let listeners = previous?.listeners;
-  const previousAttributeNames = collectAttributeNames(previousProps);
+  const previousAttributeNames = previous?.attributeNames ?? collectAttributeNames(previousProps);
   const nextAttributeNames = collectAttributeNames(nextProps);
 
   if (!preserveHydrationAttributes) {
     for (const attributeName of previousAttributeNames) {
-      if (!nextAttributeNames.has(attributeName)) {
+      if (!nextAttributeNames.includes(attributeName)) {
         if (attributeName === "style") {
           removePreviousStyle(element, previousProps.style, path, options);
           continue;
@@ -82,7 +87,13 @@ export function applyProps(
     }
   }
 
-  for (const [name, value] of Object.entries(nextProps)) {
+  for (const name in nextProps) {
+    if (!Object.prototype.hasOwnProperty.call(nextProps, name)) {
+      continue;
+    }
+
+    const value = nextProps[name];
+
     if (name === "children" || name === "ref" || name === "key") {
       continue;
     }
@@ -170,6 +181,7 @@ export function applyProps(
   }
 
   setAppliedProps(element, {
+    attributeNames: nextAttributeNames,
     props: nextProps,
     ...(listeners === undefined ? {} : { listeners }),
   });
@@ -551,10 +563,16 @@ function removePreviousStyle(
   }
 }
 
-function collectAttributeNames(props: Record<string, unknown>): Set<string> {
-  const names = new Set<string>();
+function collectAttributeNames(props: Record<string, unknown>): string[] {
+  const names: string[] = [];
 
-  for (const [name, value] of Object.entries(props)) {
+  for (const name in props) {
+    if (!Object.prototype.hasOwnProperty.call(props, name)) {
+      continue;
+    }
+
+    const value = props[name];
+
     if (
       name === "children" ||
       name === "ref" ||
@@ -577,19 +595,25 @@ function collectAttributeNames(props: Record<string, unknown>): Set<string> {
     }
 
     if (name === "defaultValue") {
-      names.add("value");
+      pushUniqueAttributeName(names, "value");
       continue;
     }
 
     if (name === "defaultChecked") {
-      names.add("checked");
+      pushUniqueAttributeName(names, "checked");
       continue;
     }
 
-    names.add(attributeName);
+    pushUniqueAttributeName(names, attributeName);
   }
 
   return names;
+}
+
+function pushUniqueAttributeName(names: string[], name: string): void {
+  if (!names.includes(name)) {
+    names.push(name);
+  }
 }
 
 function sanitizeMetaRefreshElementProps(

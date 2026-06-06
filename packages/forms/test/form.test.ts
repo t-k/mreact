@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createForm } from "../src/index.js";
 
@@ -99,6 +100,64 @@ describe("createForm", () => {
     form.setValue("email", "ada@example.test");
     await flushEffects();
     expect(form.field("email").state.get().errors).toEqual([]);
+  });
+
+  it("keeps change validation state notifications bounded for large forms", async () => {
+    const initialValues = Object.fromEntries(
+      Array.from({ length: 30 }, (_unused, index) => [`field${index}`, ""]),
+    ) as Record<string, string>;
+    const form = createForm({
+      initialValues,
+      validate: {
+        field0(value) {
+          return value === "" ? ["Required"] : [];
+        },
+      },
+      validateOn: "change",
+    });
+    let notifications = 0;
+    const dispose = effect(() => {
+      form.state.get();
+      notifications += 1;
+    });
+
+    try {
+      await form.setValue("field0", "Ada");
+      await flushEffects();
+
+      expect(notifications).toBeLessThanOrEqual(3);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("updates one field without rescanning every value for dirty state", async () => {
+    const initialValues = Object.fromEntries(
+      Array.from({ length: 30 }, (_unused, index) => [`field${index}`, ""]),
+    ) as Record<string, string>;
+    const form = createForm({
+      initialValues,
+      validate: {
+        field0(value) {
+          return value === "" ? ["Required"] : [];
+        },
+      },
+      validateOn: "change",
+    });
+    const originalKeys = Object.keys;
+    let objectKeysCalls = 0;
+    Object.keys = ((value) => {
+      objectKeysCalls += 1;
+      return originalKeys(value);
+    }) as typeof Object.keys;
+
+    try {
+      await form.setValue("field0", "Ada");
+    } finally {
+      Object.keys = originalKeys;
+    }
+
+    expect(objectKeysCalls).toBe(0);
   });
 
   it("tracks field validating state and ignores stale async validator results", async () => {

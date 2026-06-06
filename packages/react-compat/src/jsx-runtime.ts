@@ -1,4 +1,4 @@
-import { createElement, Fragment } from "./element.js";
+import { createElementFromJsxConfig, Fragment } from "./element.js";
 import type {
   ElementType,
   ReactCompatElement,
@@ -99,21 +99,5 @@ function createElementFromJsx<P extends Record<string, unknown>>(
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
   key: unknown,
 ): ReactCompatElement<P> {
-  const config = { ...props } as P & {
-    children?: ReactCompatNode;
-    key?: unknown;
-    ref?: unknown;
-  };
-  const hasChildren = Object.hasOwn(config, "children");
-  const children = config.children;
-
-  if (key !== undefined) {
-    config.key = key;
-  }
-
-  delete config.children;
-
-  return hasChildren
-    ? createElement(type, config, children)
-    : createElement(type, config);
+  return createElementFromJsxConfig(type, props, key);
 }

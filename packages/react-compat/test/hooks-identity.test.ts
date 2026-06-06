@@ -14,6 +14,7 @@ describe("react-compat identity hooks", () => {
   test("shares render state across duplicated hook module evaluations", async () => {
     const rendererHooks = await import("../src/hooks.ts?renderer") as {
       createRootRuntime: (rerender: () => void) => unknown;
+      getDevToolsHookState: (runtime: unknown, path: string) => unknown;
       renderWithRootRuntime: <T>(
         runtime: unknown,
         path: string,
@@ -22,6 +23,7 @@ describe("react-compat identity hooks", () => {
     };
     const componentHooks = await import("../src/hooks.ts?component") as {
       useRef: <T>(initialValue: T) => { current: T };
+      useState: <T>(initialValue: T) => [T, (value: T) => void];
     };
     const runtime = rendererHooks.createRootRuntime(() => undefined);
 
@@ -30,6 +32,12 @@ describe("react-compat identity hooks", () => {
     );
 
     expect(ref.current).toBe("shared");
+
+    rendererHooks.renderWithRootRuntime(runtime, "1", () =>
+      componentHooks.useState("state"),
+    );
+
+    expect(rendererHooks.getDevToolsHookState(runtime, "1")).toBeUndefined();
   });
 
   test("useRef preserves object identity and does not trigger render", () => {

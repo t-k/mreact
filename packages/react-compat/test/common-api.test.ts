@@ -2236,19 +2236,26 @@ describe("react-compat common API subset", () => {
   test("useDebugValue stores formatted debug values for DevTools", () => {
     const container = document.createElement("div");
     const values: unknown[] = [];
+    globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
+      inject: () => 99,
+    };
 
     function App() {
       useDebugValue("ready", (value) => `status:${value}`);
       return createElement("p", null, "debug");
     }
 
-    render(createElement(App, null), container);
+    try {
+      render(createElement(App, null), container);
 
-    const fiberRoot = getFiberRootForContainer(container);
-    const appState = fiberRoot?.current.child?.memoizedState as
-      | { hooks?: Array<{ kind?: string; value?: unknown }> }
-      | undefined;
-    values.push(...(appState?.hooks ?? []));
+      const fiberRoot = getFiberRootForContainer(container);
+      const appState = fiberRoot?.current.child?.memoizedState as
+        | { hooks?: Array<{ kind?: string; value?: unknown }> }
+        | undefined;
+      values.push(...(appState?.hooks ?? []));
+    } finally {
+      delete globalThis.__REACT_DEVTOOLS_GLOBAL_HOOK__;
+    }
 
     expect(values).toEqual([
       {

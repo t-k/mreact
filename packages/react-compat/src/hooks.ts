@@ -16,6 +16,7 @@ import { isThenable } from "./thenable.js";
 export interface RootRuntime {
   currentElement?: unknown;
   instances: Map<string, ComponentInstance>;
+  instanceKeysByPrefix: Map<string, Set<string>>;
   activeInstanceKeys: Set<string> | undefined;
   activeProfilerPaths: Set<string> | undefined;
   mountedProfilerPaths: Set<string>;
@@ -55,8 +56,8 @@ interface ComponentInstance {
   dirty: boolean;
   disposed?: boolean;
   contextDependencies?: Map<ReactCompatContextLike<unknown>, unknown>;
-  devToolsHooks: DevToolsHookValue[];
-  devToolsHookTypes: string[];
+  devToolsHooks?: DevToolsHookValue[];
+  devToolsHookTypes?: string[];
   devToolsHookSuppressionDepth: number;
 }
 
@@ -297,6 +298,7 @@ export function createRootRuntime(
 ): RootRuntime {
   return {
     instances: new Map(),
+    instanceKeysByPrefix: new Map(),
     activeInstanceKeys: undefined,
     activeProfilerPaths: undefined,
     mountedProfilerPaths: new Set(),
@@ -491,20 +493,24 @@ export function renderWithRootRuntime<T>(
     hooks: [],
     hookIndex: 0,
     dirty: false,
-    devToolsHooks: [],
-    devToolsHookTypes: [],
     devToolsHookSuppressionDepth: 0,
   };
   instance.owner = owner;
   instance.path = path;
   runtime.instances.set(path, instance);
+  indexInstanceKey(runtime, path);
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
   instance.disposed = false;
   delete instance.contextDependencies;
-  instance.devToolsHooks = [];
-  instance.devToolsHookTypes = [];
+  if (hasInstalledDevToolsHook()) {
+    instance.devToolsHooks = [];
+    instance.devToolsHookTypes = [];
+  } else {
+    delete instance.devToolsHooks;
+    delete instance.devToolsHookTypes;
+  }
   instance.devToolsHookSuppressionDepth = 0;
   hookRenderState.currentRuntime = runtime;
   hookRenderState.currentInstance = instance;
@@ -547,13 +553,35 @@ export function hasContextDependency(
   return keys.some((key) => runtime.instances.get(key)?.contextDependencies !== undefined);
 }
 
+export function collectRuntimeInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
+  const keys = runtime.instanceKeysByPrefix.get(prefix);
+
+  if (keys === undefined) {
+    return [];
+  }
+
+  const activeKeys: string[] = [];
+
+  for (const key of keys) {
+    if (runtime.instances.has(key)) {
+      activeKeys.push(key);
+    }
+  }
+
+  return activeKeys;
+}
+
 export function getDevToolsHookState(
   runtime: RootRuntime,
   path: string,
 ): DevToolsHookState | undefined {
   const instance = runtime.instances.get(path);
 
-  if (instance === undefined) {
+  if (
+    instance === undefined ||
+    instance.devToolsHooks === undefined ||
+    instance.devToolsHookTypes === undefined
+  ) {
     return undefined;
   }
 
@@ -966,12 +994,23 @@ function assignRef<T>(ref: unknown, value: T | null): void {
 function recordDevToolsHook(type: string, value: DevToolsHookValue): void {
   const instance = hookRenderState.currentInstance;
 
-  if (instance === undefined || instance.devToolsHookSuppressionDepth > 0) {
+  if (
+    instance === undefined ||
+    instance.devToolsHookSuppressionDepth > 0 ||
+    instance.devToolsHooks === undefined ||
+    instance.devToolsHookTypes === undefined
+  ) {
     return;
   }
 
   instance.devToolsHookTypes.push(type);
   instance.devToolsHooks.push(value);
+}
+
+function hasInstalledDevToolsHook(): boolean {
+  return typeof (globalThis as {
+    __REACT_DEVTOOLS_GLOBAL_HOOK__?: { inject?: unknown } | undefined;
+  }).__REACT_DEVTOOLS_GLOBAL_HOOK__?.inject === "function";
 }
 
 function runWithoutDevToolsHookTracking<T>(callback: () => T): T {
@@ -1941,8 +1980,49 @@ function cleanupInactiveInstances(runtime: RootRuntime): void {
     if (!activeInstanceKeys.has(key)) {
       cleanupInstance(instance);
       runtime.instances.delete(key);
+      removeInstanceKeyFromIndex(runtime, key);
     }
   }
+}
+
+function indexInstanceKey(runtime: RootRuntime, key: string): void {
+  for (const prefix of instanceKeyPrefixes(key)) {
+    let keys = runtime.instanceKeysByPrefix.get(prefix);
+
+    if (keys === undefined) {
+      keys = new Set();
+      runtime.instanceKeysByPrefix.set(prefix, keys);
+    }
+
+    keys.add(key);
+  }
+}
+
+function removeInstanceKeyFromIndex(runtime: RootRuntime, key: string): void {
+  for (const prefix of instanceKeyPrefixes(key)) {
+    const keys = runtime.instanceKeysByPrefix.get(prefix);
+
+    if (keys === undefined) {
+      continue;
+    }
+
+    keys.delete(key);
+
+    if (keys.size === 0) {
+      runtime.instanceKeysByPrefix.delete(prefix);
+    }
+  }
+}
+
+function instanceKeyPrefixes(key: string): string[] {
+  const parts = key.split(".");
+  const prefixes: string[] = [];
+
+  for (let index = 1; index <= parts.length; index += 1) {
+    prefixes.push(parts.slice(0, index).join("."));
+  }
+
+  return prefixes;
 }
 
 function cleanupInstance(instance: ComponentInstance): void {

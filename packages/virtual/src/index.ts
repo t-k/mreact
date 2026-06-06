@@ -87,6 +87,15 @@ interface VirtualSnapshot<TItem> {
   visibleRange: VisibleRange;
 }
 
+interface MeasuredRowLayout<TItem> {
+  columnCount: number;
+  items: readonly TItem[];
+  measuredVersion: number;
+  rowOffsets: readonly number[];
+  rowSizes: readonly number[];
+  totalSizePx: number;
+}
+
 export function calculateVirtualRange(options: VirtualRangeOptions): VirtualRange {
   const itemCount = clampInteger(options.itemCount, 0);
   const columnCount = clampInteger(options.columnCount ?? 1, 1);
@@ -142,6 +151,8 @@ export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Vi
 function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem> {
   const measuredSizes = new Map<VirtualKey, number>();
   const refreshVersion = cell(0);
+  let measuredVersion = 0;
+  let measuredRowLayout: MeasuredRowLayout<TItem> | undefined;
   let lastItems: readonly TItem[] | undefined;
   let keyIndex: Map<VirtualKey, number> | undefined;
   let keyIndexItems: readonly TItem[] | undefined;
@@ -156,7 +167,12 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     const items = options.items();
     const next = createSnapshot(options, measuredSizes, {
       items,
+      measuredRowLayout,
+      measuredVersion,
       pruneStaleMeasuredSizes: items !== lastItems,
+      updateMeasuredRowLayout(nextLayout) {
+        measuredRowLayout = nextLayout;
+      },
     });
     lastItems = items;
     return next;
@@ -219,6 +235,7 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
       }
 
       measuredSizes.set(key, measuredSize);
+      measuredVersion += 1;
       refreshVersion.set((version) => version + 1);
     },
     refresh,
@@ -367,7 +384,10 @@ function createSnapshot<TItem>(
   measuredSizes: Map<VirtualKey, number>,
   snapshotOptions?: {
     items?: readonly TItem[] | undefined;
+    measuredRowLayout?: MeasuredRowLayout<TItem> | undefined;
+    measuredVersion?: number | undefined;
     pruneStaleMeasuredSizes?: boolean | undefined;
+    updateMeasuredRowLayout?: (layout: MeasuredRowLayout<TItem>) => void;
   },
 ): VirtualSnapshot<TItem> {
   const items = snapshotOptions?.items ?? options.items();
@@ -396,9 +416,16 @@ function createSnapshot<TItem>(
     return createFixedSnapshot(options, items, itemCount, columnCount, rowCount, overscan);
   }
 
-  const rowSizes = computeRowSizes(items, columnCount, options, measuredSizes);
-  const rowOffsets = computeRowOffsets(rowSizes);
-  const totalSizePx = rowSizes.reduce((total, size) => total + size, 0);
+  const layout = getMeasuredRowLayout(
+    items,
+    columnCount,
+    options,
+    measuredSizes,
+    snapshotOptions,
+  );
+  const rowSizes = layout.rowSizes;
+  const rowOffsets = layout.rowOffsets;
+  const totalSizePx = layout.totalSizePx;
 
   if (itemCount === 0 || rowCount === 0) {
     const range = emptyRange(columnCount);
@@ -441,6 +468,44 @@ function createSnapshot<TItem>(
     rowSizes,
     visibleRange: rangeToVisibleRange(range),
   };
+}
+
+function getMeasuredRowLayout<TItem>(
+  items: readonly TItem[],
+  columnCount: number,
+  options: VirtualGridOptions<TItem>,
+  measuredSizes: ReadonlyMap<VirtualKey, number>,
+  snapshotOptions: {
+    measuredRowLayout?: MeasuredRowLayout<TItem> | undefined;
+    measuredVersion?: number | undefined;
+    updateMeasuredRowLayout?: (layout: MeasuredRowLayout<TItem>) => void;
+  } | undefined,
+): MeasuredRowLayout<TItem> {
+  const measuredVersion = snapshotOptions?.measuredVersion ?? 0;
+  const cached = snapshotOptions?.measuredRowLayout;
+
+  if (
+    cached !== undefined &&
+    cached.items === items &&
+    cached.columnCount === columnCount &&
+    cached.measuredVersion === measuredVersion
+  ) {
+    return cached;
+  }
+
+  const rowSizes = computeRowSizes(items, columnCount, options, measuredSizes);
+  const rowOffsets = computeRowOffsets(rowSizes);
+  const layout = {
+    columnCount,
+    items,
+    measuredVersion,
+    rowOffsets,
+    rowSizes,
+    totalSizePx: rowSizes.reduce((total, size) => total + size, 0),
+  };
+  snapshotOptions?.updateMeasuredRowLayout?.(layout);
+
+  return layout;
 }
 
 function createFixedSnapshot<TItem>(

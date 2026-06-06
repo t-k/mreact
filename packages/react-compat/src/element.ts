@@ -120,6 +120,43 @@ export function createElement<P extends Record<string, unknown>>(
   };
 }
 
+export function createElementFromJsxConfig<P extends Record<string, unknown>>(
+  type: ElementType<P>,
+  config: (P & ReactReservedProps & { children?: ReactCompatNode }) | null,
+  keyArgument?: unknown,
+): ReactCompatElement<P> {
+  const normalizedType =
+    typeof type === "object" && type !== null ? normalizeElementType(type) : type;
+  const key = keyArgument !== undefined
+    ? String(keyArgument)
+    : config?.key === undefined ? null : String(config.key);
+  const ref = config?.ref ?? null;
+  const hasChildren = config !== null && config !== undefined && hasOwnProperty.call(config, "children");
+  const children = config?.children;
+  const copiedProps = copyElementProps(config, undefined, true);
+  const props = (typeof normalizedType === "string"
+    ? copiedProps
+    : applyDefaultProps(normalizedType, copiedProps)) as P & {
+      children?: ReactCompatNode;
+    };
+
+  if (hasChildren) {
+    props.children = children;
+  }
+
+  if (typeof normalizedType === "string") {
+    setHostOwnPropsMeta(props);
+  }
+
+  return {
+    $$typeof: REACT_COMPAT_ELEMENT_TYPE,
+    type: normalizedType as ElementType<P>,
+    key,
+    ref,
+    props,
+  };
+}
+
 export function isReactCompatElement(
   value: unknown,
 ): value is ReactCompatElement {
@@ -232,6 +269,7 @@ export function cloneElement<P extends Record<string, unknown>>(
 function copyElementProps(
   source: Record<string, unknown> | null | undefined,
   base?: Record<string, unknown>,
+  omitChildren = false,
 ): Record<string, unknown> {
   const props: Record<string, unknown> = base === undefined ? {} : { ...base };
 
@@ -244,7 +282,13 @@ function copyElementProps(
       continue;
     }
 
-    if (name !== "key" && name !== "ref" && name !== "__self" && name !== "__source") {
+    if (
+      name !== "key" &&
+      name !== "ref" &&
+      name !== "__self" &&
+      name !== "__source" &&
+      (!omitChildren || name !== "children")
+    ) {
       props[name] = source[name];
     }
   }

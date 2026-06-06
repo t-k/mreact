@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { Fragment, createElement } from "../src/index.js";
 import {
@@ -19,6 +21,20 @@ describe("host reconciler module", () => {
   test("exposes host renderability checks independently of the fiber-host compatibility entry", () => {
     expect(canRenderHostFiber(createElement("section", null, "ok"))).toBe(true);
     expect(canRenderHostFiber(Symbol("unsupported"))).toBe(false);
+  });
+
+  test("uses indexed runtime instance keys instead of per-prefix map scans", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const reconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
+    expect(reconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
   });
 
   test("stores single primitive host text without a child text fiber in production", () => {

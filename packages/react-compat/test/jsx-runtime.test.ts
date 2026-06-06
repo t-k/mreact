@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createElement, Fragment } from "../src/index.js";
 import { jsx, jsxs } from "../src/jsx-runtime.js";
@@ -45,6 +46,15 @@ describe("react-compat automatic JSX runtime", () => {
       children: "Save",
       key: "props-key",
     });
+  });
+
+  test("jsx runtime does not spread props before createElement", async () => {
+    const source = await readFile(
+      new URL("../src/jsx-runtime.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("{ ...props }");
   });
 
   test("jsxs does not mutate the input props object", () => {

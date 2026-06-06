@@ -24,6 +24,7 @@ import {
 } from "./context.js";
 import {
   clearRuntimePortalNodes,
+  collectRuntimeInstanceKeys,
   hasStableExternalStores,
   restoreRuntimeSnapshot,
   renderWithProfiler,
@@ -684,9 +685,7 @@ function getMemoRenderStates(runtime: RootRuntime): Map<string, MemoRenderState>
 }
 
 function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
-  return Array.from(runtime.instances.keys()).filter((key) =>
-    key === prefix || key.startsWith(`${prefix}.`),
-  );
+  return collectRuntimeInstanceKeys(runtime, prefix);
 }
 
 function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {
