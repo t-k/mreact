@@ -7,16 +7,23 @@
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
+  type ConcurrentRequestProbeResult,
+  measureConcurrentRequests,
+} from "../http-probes.js";
+import {
+  measureBackForwardRestore,
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureLoaderClientNavigation,
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
@@ -33,6 +40,7 @@ let serverProcess: { close(): Promise<void>; url: string } | undefined;
 let currentNodeCount = 0;
 let browserRootDir: string | undefined;
 let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
+let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
 async function spawnAndWait(
   command: string,
@@ -495,7 +503,12 @@ export default component$(() => {
   await writeFile(
     join(browserRootDir, "src", "routes", "target", "index.tsx"),
     `import { component$ } from "@builder.io/qwik";
-export default component$(() => <main><h1>Navigation target</h1></main>);
+import { routeLoader$ } from "@builder.io/qwik-city";
+export const useTargetData = routeLoader$(() => ({ label: "loaded-target" }));
+export default component$(() => {
+  const data = useTargetData();
+  return <main><h1>Navigation target</h1><p>loader:{data.value.label}</p></main>;
+});
 `,
   );
 
@@ -570,6 +583,7 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
       await rm(browserRootDir, { force: true, recursive: true });
       browserRootDir = undefined;
     }
+    concurrentRequestResult = undefined;
   },
   async renderToString(nodeCount: number): Promise<string> {
     const url = await ensureFixture(nodeCount);
@@ -629,9 +643,33 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
 
     return measureBuildOutputGzipBytes([join(rootDir, "dist"), join(rootDir, "server")]);
   },
+  async measureSsrHtmlGzipBytes(): Promise<number> {
+    const url = await ensureFixture(1000);
+    const response = await fetch(`${url}/`);
+    const html = await response.text();
+    assertLastSpan(html, 1000, "SSR HTML gzip probe");
+    return gzipSync(html).length;
+  },
+  async measureConcurrentRequestThroughputOps(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).throughputOps;
+  },
+  async measureConcurrentRequestP99Ms(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).p99Ms;
+  },
+  async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).rssDeltaBytes;
+  },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
     return measureClientNavigation(url);
+  },
+  async measureLoaderClientNavigationMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureLoaderClientNavigation(url);
+  },
+  async measureBackForwardRestoreMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureBackForwardRestore(url, { expectStateRestore: false });
   },
   async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -650,3 +688,18 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
+
+function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
+  concurrentRequestResult ??= measureConcurrentRequestResult();
+  return concurrentRequestResult;
+}
+
+async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
+  const url = await ensureFixture(1000);
+  return measureConcurrentRequests(url, {
+    path: "/",
+    validate(html) {
+      assertLastSpan(html, 1000, "concurrent response");
+    },
+  });
+}

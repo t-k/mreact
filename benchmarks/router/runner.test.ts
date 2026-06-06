@@ -169,6 +169,73 @@ describe("router benchmark configuration", () => {
     }
   });
 
+  it("exposes low-cost extended probes for production router adapters", () => {
+    const expectedAdapters = [
+      "marko-run",
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "tanstack-start-solid",
+      "next-app-router",
+      "mreact-app-router",
+      "mreact-app-router+mreact react-compat",
+      "mreact-app-router+log enabled",
+    ];
+    const requiredMethods = [
+      "measureConcurrentRequestThroughputOps",
+      "measureConcurrentRequestP99Ms",
+      "measureConcurrentRequestRssDeltaBytes",
+      "measureSsrHtmlGzipBytes",
+    ] as const;
+
+    for (const method of requiredMethods) {
+      expect(
+        routerBenchmarkAdapters
+          .filter((adapter) => adapter[method] !== undefined)
+          .map((adapter) => adapter.name),
+      ).toEqual(expectedAdapters);
+    }
+  });
+
+  it("exposes browser navigation restoration probes for SPA-capable router adapters", () => {
+    const expectedAdapters = [
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "next-app-router",
+      "mreact-app-router",
+      "mreact-app-router+mreact react-compat",
+      "mreact-app-router+log enabled",
+    ];
+
+    expect(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.measureBackForwardRestoreMs !== undefined)
+        .map((adapter) => adapter.name),
+    ).toEqual(expectedAdapters);
+  });
+
+  it("exposes loader client navigation probes for adapters with loader/data routes", () => {
+    const expectedAdapters = [
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "next-app-router",
+      "mreact-app-router",
+      "mreact-app-router+mreact react-compat",
+      "mreact-app-router+log enabled",
+    ];
+
+    expect(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.measureLoaderClientNavigationMs !== undefined)
+        .map((adapter) => adapter.name),
+    ).toEqual(expectedAdapters);
+  });
+
   it("exposes build output gzip probes for every router adapter", () => {
     const adaptersWithBuildOutputProbes = routerBenchmarkAdapters
       .filter((adapter) => adapter.measureBuildOutputGzipBytes !== undefined)

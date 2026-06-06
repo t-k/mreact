@@ -11,11 +11,16 @@
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import {
+  type ConcurrentRequestProbeResult,
+  measureConcurrentRequests,
+} from "../http-probes.js";
 import { measureRouteJavaScriptGzipBytes } from "../browser-probes.js";
 
 const TANSTACK_SOLID_START_VERSION = "2.0.0-beta.18";
@@ -31,6 +36,7 @@ let serverProcess: { close(): Promise<void>; url: string } | undefined;
 let currentNodeCount = 0;
 let browserRootDir: string | undefined;
 let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
+let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
 async function spawnAndWait(
   command: string,
@@ -539,7 +545,7 @@ export const Route = createFileRoute("/")({ component: Page });
     join(browserRootDir, "src", "routes", "target.tsx"),
     `import { createFileRoute } from "@tanstack/solid-router";
 function Page() {
-  return <main><h1>Navigation target</h1></main>;
+  return <main><h1>Navigation target</h1><p>loader:loaded-target</p></main>;
 }
 export const Route = createFileRoute("/target")({ component: Page });
 `,
@@ -683,6 +689,7 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
       await rm(browserRootDir, { force: true, recursive: true });
       browserRootDir = undefined;
     }
+    concurrentRequestResult = undefined;
   },
   async renderToString(nodeCount: number): Promise<string> {
     const url = await ensureFixture(nodeCount);
@@ -753,4 +760,41 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
       join(rootDir, "dist", "server"),
     ]);
   },
+  async measureSsrHtmlGzipBytes(): Promise<number> {
+    const url = await ensureFixture(1000);
+    const response = await fetch(`${url}/`);
+    const html = await response.text();
+
+    if (!html.includes(`>999<`)) {
+      throw new Error("tanstack-start-solid SSR HTML gzip probe did not include the last node");
+    }
+
+    return gzipSync(html).length;
+  },
+  async measureConcurrentRequestThroughputOps(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).throughputOps;
+  },
+  async measureConcurrentRequestP99Ms(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).p99Ms;
+  },
+  async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).rssDeltaBytes;
+  },
 };
+
+function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
+  concurrentRequestResult ??= measureConcurrentRequestResult();
+  return concurrentRequestResult;
+}
+
+async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
+  const url = await ensureFixture(1000);
+  return measureConcurrentRequests(url, {
+    path: "/",
+    validate(html) {
+      if (!html.includes(`>999<`)) {
+        throw new Error("tanstack-start-solid concurrent response did not include the last node");
+      }
+    },
+  });
+}
