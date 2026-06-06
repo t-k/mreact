@@ -3909,9 +3909,11 @@ function __mreactSyncEventBindings(current, next) {
     }
   }
 
-  const bindings = next.__mreactEventBindings;
+  const rawBindings = next.__mreactEventBindings;
+  const bindings =
+    rawBindings === undefined ? [] : Array.isArray(rawBindings) ? rawBindings : [rawBindings];
 
-  if (!Array.isArray(bindings) || bindings.length === 0) {
+  if (bindings.length === 0) {
     current.__mreactEventDisposers = [];
     current.__mreactHasEvents = false;
     return;
