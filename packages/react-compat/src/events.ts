@@ -101,6 +101,13 @@ export function forEachEventName(
   propName: string,
   callback: (eventName: string) => void,
 ): void {
+  const directEventName = directNativeEventName(propName);
+
+  if (directEventName !== undefined) {
+    callback(directEventName);
+    return;
+  }
+
   const basePropName = toBaseEventPropName(propName);
   const mappedEventNames = reactPropToNativeEvent.get(basePropName);
 
@@ -118,6 +125,13 @@ export function ensureDelegatedEventListenersForProp(
   root: Element,
   propName: string,
 ): void {
+  const directEventName = directNativeEventName(propName);
+
+  if (directEventName !== undefined) {
+    ensureDelegatedEventListener(root, directEventName);
+    return;
+  }
+
   const basePropName = toBaseEventPropName(propName);
   const mappedEventNames = reactPropToNativeEvent.get(basePropName);
 
@@ -128,6 +142,49 @@ export function ensureDelegatedEventListenersForProp(
 
   for (let index = 0; index < mappedEventNames.length; index += 1) {
     ensureDelegatedEventListener(root, mappedEventNames[index]!);
+  }
+}
+
+function directNativeEventName(propName: string): string | undefined {
+  switch (propName) {
+    case "onClick":
+    case "onClickCapture":
+      return "click";
+    case "onInput":
+    case "onInputCapture":
+      return "input";
+    case "onKeyDown":
+    case "onKeyDownCapture":
+      return "keydown";
+    case "onKeyUp":
+    case "onKeyUpCapture":
+      return "keyup";
+    case "onMouseDown":
+    case "onMouseDownCapture":
+      return "mousedown";
+    case "onMouseMove":
+    case "onMouseMoveCapture":
+      return "mousemove";
+    case "onMouseOut":
+    case "onMouseOutCapture":
+      return "mouseout";
+    case "onMouseOver":
+    case "onMouseOverCapture":
+      return "mouseover";
+    case "onMouseUp":
+    case "onMouseUpCapture":
+      return "mouseup";
+    case "onScroll":
+    case "onScrollCapture":
+      return "scroll";
+    case "onSubmit":
+    case "onSubmitCapture":
+      return "submit";
+    case "onWheel":
+    case "onWheelCapture":
+      return "wheel";
+    default:
+      return undefined;
   }
 }
 
