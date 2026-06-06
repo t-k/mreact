@@ -40,6 +40,7 @@ export const mreactAdapter: PrimitiveAdapter = {
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
     "create 1k event targets": runCreateEventTargets,
+    "source write with subscriber 1k": runSourceWriteWithSubscriber,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -471,6 +472,42 @@ function runSourceWrite({ count }: PrimitiveRunContext): PrimitiveCaseResult {
   }
 
   return { samples: [duration] };
+}
+
+async function runSourceWriteWithSubscriber({
+  count,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const values = Array.from({ length: count }, () => cell(0));
+  let observedTotal = 0;
+  const disposers = values.map((value) =>
+    effect(() => {
+      observedTotal += value.get();
+    }),
+  );
+
+  try {
+    await flushEffects();
+    observedTotal = 0;
+
+    const start = performance.now();
+    batch(() => {
+      for (let index = 0; index < values.length; index += 1) {
+        (values[index] as Cell<number>).set(1);
+      }
+    });
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    if (observedTotal !== count) {
+      throw new Error(`expected subscribed source total ${count}, received ${observedTotal}`);
+    }
+
+    return { samples: [duration] };
+  } finally {
+    for (const dispose of disposers) {
+      dispose();
+    }
+  }
 }
 
 async function runRepeatedMemory({

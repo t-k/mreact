@@ -8,7 +8,12 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { buildApp, startServer } from "../../../packages/router/dist/index.js";
+import {
+  buildApp,
+  packageCloudflarePagesArtifact,
+  startDevServer,
+  startServer,
+} from "../../../packages/router/dist/index.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/router/dist/index.js";
 import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
@@ -16,9 +21,12 @@ import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import { createVariantFixtureCache } from "../variant-fixture-cache.js";
 import {
   measureClientNavigation,
+  measureBackForwardRestore,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
+  measureHydrationIslands,
   measureInitialPageLoadBeforeInteraction,
+  measureLoaderClientNavigation,
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
@@ -53,6 +61,22 @@ const browserFixtureLifecycle = createVariantFixtureCache<string, { close(): Pro
 let coldStartRootDir: string | undefined;
 let coldStartOutDir: string | undefined;
 let coldStartReactCompat = false;
+const concurrentLoadResults = new Map<string, Promise<ConcurrentLoadResult>>();
+const routeScaleResults = new Map<string, Promise<RouteScaleResult>>();
+
+interface ConcurrentLoadResult {
+  p99Ms: number;
+  rssDeltaBytes: number;
+  throughputOps: number;
+}
+
+interface RouteScaleResult {
+  buildTimeMs: number;
+  coldStartMs: number;
+  matchLatencyMs: number;
+  rootDir: string;
+  rssDeltaBytes: number;
+}
 
 function fixtureKey(nodeCount: number, logEnabled: boolean, reactCompat: boolean): string {
   return `${nodeCount}\0${logEnabled ? "log" : "nolog"}\0${reactCompat ? "compat" : "native"}`;
@@ -335,8 +359,12 @@ export function Counter() {
   }
   await writeFile(
     join(appDir, "target", "page.tsx"),
-    `export default function Page() {
-  return <main><h1>Navigation target</h1></main>;
+    `export function loader() {
+  return { label: "loaded-target" };
+}
+
+export default function Page(props) {
+  return <main><h1>Navigation target</h1><p>loader:{props.data.label}</p></main>;
 }`,
   );
 
@@ -401,6 +429,13 @@ function createMreactAppRouterAdapter(options: {
         coldStartOutDir = undefined;
         coldStartReactCompat = false;
       }
+      concurrentLoadResults.clear();
+      for (const result of await Promise.allSettled(routeScaleResults.values())) {
+        if (result.status === "fulfilled") {
+          await rm(result.value.rootDir, { force: true, recursive: true });
+        }
+      }
+      routeScaleResults.clear();
     },
     async renderToString(nodeCount: number): Promise<string> {
       const url = await ensureFixture(nodeCount, logEnabled, reactCompat);
@@ -490,6 +525,14 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureClientNavigation(url);
     },
+    async measureLoaderClientNavigationMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
+      return measureLoaderClientNavigation(url);
+    },
+    async measureBackForwardRestoreMs(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
+      return measureBackForwardRestore(url);
+    },
     async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureInitialPageLoadBeforeInteraction(url);
@@ -506,9 +549,63 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureSecondInteractionLatency(url);
     },
+    async measureConcurrentRequestThroughputOps(): Promise<number> {
+      return (await ensureConcurrentLoadResult(logEnabled, reactCompat)).throughputOps;
+    },
+    async measureConcurrentRequestP99Ms(): Promise<number> {
+      return (await ensureConcurrentLoadResult(logEnabled, reactCompat)).p99Ms;
+    },
+    async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
+      return (await ensureConcurrentLoadResult(logEnabled, reactCompat)).rssDeltaBytes;
+    },
+    async measureHydration100IslandsMs(): Promise<number> {
+      const url = await createHydrationFixture(logEnabled, reactCompat, 100);
+      return measureHydrationIslands(url, 100);
+    },
+    async measureDevColdStartMs(): Promise<number> {
+      return measureDevServerColdStart(reactCompat);
+    },
+    async measureDevFirstRequestLatencyMs(): Promise<number> {
+      return measureDevServerFirstRequest(reactCompat);
+    },
+    async measureDevHmrUpdateLatencyMs(): Promise<number> {
+      return measureDevServerHmrUpdate(reactCompat);
+    },
     async measureServerColdStartMs(): Promise<number> {
       const outDir = await ensureColdStartFixture(reactCompat);
       return measureServerColdStart(outDir, { logEnabled });
+    },
+    async measureSsrHtmlGzipBytes(): Promise<number> {
+      const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
+      const response = await fetch(`${url}/`);
+      const html = await response.text();
+
+      if (!html.includes(`<span>${NODE_COUNT_DEFAULT - 1}</span>`)) {
+        throw new Error("mreact-app-router SSR HTML gzip probe did not include the last node");
+      }
+
+      return gzipSync(html).length;
+    },
+    async measureRouteScale1000MatchLatencyMs(): Promise<number> {
+      return (await ensureRouteScaleResult(logEnabled, reactCompat)).matchLatencyMs;
+    },
+    async measureRouteScale1000ColdStartMs(): Promise<number> {
+      return (await ensureRouteScaleResult(logEnabled, reactCompat)).coldStartMs;
+    },
+    async measureRouteScale1000BuildTimeMs(): Promise<number> {
+      return (await ensureRouteScaleResult(logEnabled, reactCompat)).buildTimeMs;
+    },
+    async measureRouteScale1000RssDeltaBytes(): Promise<number> {
+      return (await ensureRouteScaleResult(logEnabled, reactCompat)).rssDeltaBytes;
+    },
+    async measureServerActionPostRoundtripMs(): Promise<number> {
+      return measureServerActionPostRoundtrip();
+    },
+    async measureNestedLayoutsDepth5Ms(): Promise<number> {
+      return measureNestedLayoutsDepth5(logEnabled, reactCompat);
+    },
+    async measureCloudflareWorkerLatencyMs(): Promise<number> {
+      return measureCloudflareWorkerLatency(reactCompat);
     },
     async measureBuildOutputGzipBytes(): Promise<number> {
       await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
@@ -520,6 +617,528 @@ function createMreactAppRouterAdapter(options: {
       return measureBuildOutputGzipBytes([join(rootDir, ".mreact")]);
     },
   };
+}
+
+async function ensureConcurrentLoadResult(
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<ConcurrentLoadResult> {
+  const key = browserFixtureKey(logEnabled, reactCompat);
+  const cached = concurrentLoadResults.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const created = measureConcurrentLoad(logEnabled, reactCompat);
+  concurrentLoadResults.set(key, created);
+  return created;
+}
+
+async function measureConcurrentLoad(
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<ConcurrentLoadResult> {
+  const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
+  const totalRequests = 200;
+  const concurrency = 100;
+  const latencies: number[] = [];
+  const beforeRss = process.memoryUsage().rss;
+  const startedAt = performance.now();
+  let nextIndex = 0;
+
+  await Promise.all(
+    Array.from({ length: concurrency }, async () => {
+      for (;;) {
+        const index = nextIndex;
+        nextIndex += 1;
+
+        if (index >= totalRequests) {
+          return;
+        }
+
+        const requestStartedAt = performance.now();
+        const response = await fetch(`${url}/static-page`);
+        const html = await response.text();
+        latencies.push(performance.now() - requestStartedAt);
+
+        if (!html.includes(`<span>${NODE_COUNT_DEFAULT - 1}</span>`)) {
+          throw new Error("concurrent load response did not include the last node");
+        }
+      }
+    }),
+  );
+
+  const elapsedMs = performance.now() - startedAt;
+  const afterRss = process.memoryUsage().rss;
+
+  return {
+    p99Ms: percentile(latencies, 0.99),
+    rssDeltaBytes: Math.max(0, afterRss - beforeRss),
+    throughputOps: totalRequests / (elapsedMs / 1000),
+  };
+}
+
+async function createHydrationFixture(
+  logEnabled: boolean,
+  reactCompat: boolean,
+  islandCount: number,
+): Promise<string> {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-hydration-"));
+  const appDir = join(fixtureDir, "app");
+  const outDir = join(fixtureDir, ".mreact");
+
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+
+  if (reactCompat) {
+    await writeFile(
+      join(appDir, "Counter.compat.tsx"),
+      `import { useState } from "@reckona/mreact-compat/hooks";
+export function Counter(props) {
+  const [count, setCount] = useState(0);
+  return <button type="button" onClick={() => setCount((value) => value + 1)}>island {props.index}: {count}</button>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Counter } from "./Counter.compat";
+const items = Array.from({ length: ${islandCount} }, (_unused, index) => index);
+export default function Page() {
+  return <main>{items.map((index) => <Counter key={index} index={index} />)}</main>;
+}`,
+    );
+  } else {
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+const items = Array.from({ length: ${islandCount} }, (_unused, index) => index);
+export default function Page() {
+  const counts = items.map(() => cell(0));
+  return <main>{items.map((index) => <button key={index} type="button" onClick={() => counts[index].set(value => value + 1)}>island {index}: {counts[index].get()}</button>)}</main>;
+}`,
+    );
+  }
+
+  await buildApp({ appDir, outDir });
+  const server = await startServer({
+    logger: logEnabled ? createBenchmarkLogger() : undefined,
+    outDir,
+    port: 0,
+  });
+
+  return trackOneShotServer(fixtureDir, server);
+}
+
+async function measureDevServerColdStart(reactCompat: boolean): Promise<number> {
+  const fixture = await createDevFixture(reactCompat, "dev-ready");
+  const startedAt = performance.now();
+  const server = await startDevServer({ appDir: fixture.appDir, port: 0 });
+
+  try {
+    return performance.now() - startedAt;
+  } finally {
+    await server.close();
+    await rm(fixture.rootDir, { force: true, recursive: true });
+  }
+}
+
+async function measureDevServerFirstRequest(reactCompat: boolean): Promise<number> {
+  const fixture = await createDevFixture(reactCompat, "dev-first");
+  const server = await startDevServer({ appDir: fixture.appDir, port: 0 });
+
+  try {
+    const startedAt = performance.now();
+    const response = await fetch(server.url);
+    const html = await response.text();
+
+    if (!html.includes("dev-first")) {
+      throw new Error("dev first request did not include expected content");
+    }
+
+    return performance.now() - startedAt;
+  } finally {
+    await server.close();
+    await rm(fixture.rootDir, { force: true, recursive: true });
+  }
+}
+
+async function measureDevServerHmrUpdate(reactCompat: boolean): Promise<number> {
+  const fixture = await createDevFixture(reactCompat, "hmr-initial");
+  const server = await startDevServer({ appDir: fixture.appDir, port: 0 });
+
+  try {
+    await fetch(server.url);
+    const startedAt = performance.now();
+    await writeDevPage(fixture.appDir, reactCompat, "hmr-next");
+
+    for (;;) {
+      const response = await fetch(server.url);
+      const html = await response.text();
+
+      if (html.includes("hmr-next")) {
+        return performance.now() - startedAt;
+      }
+
+      if (performance.now() - startedAt > 10_000) {
+        throw new Error("dev HMR update probe timed out");
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  } finally {
+    await server.close();
+    await rm(fixture.rootDir, { force: true, recursive: true });
+  }
+}
+
+async function createDevFixture(
+  reactCompat: boolean,
+  label: string,
+): Promise<{ appDir: string; rootDir: string }> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-dev-"));
+  const appDir = join(rootDir, "app");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeDevPage(appDir, reactCompat, label);
+  return { appDir, rootDir };
+}
+
+async function writeDevPage(appDir: string, reactCompat: boolean, label: string): Promise<void> {
+  await writeFile(
+    join(appDir, "page.tsx"),
+    reactCompat
+      ? `import { createElement, renderToString } from "@reckona/mreact-compat";
+export default function Page() {
+  return renderToString(() => createElement("main", null, ${JSON.stringify(label)}));
+}`
+      : `export default function Page() {
+  return <main>${label}</main>;
+}`,
+  );
+}
+
+async function ensureRouteScaleResult(
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<RouteScaleResult> {
+  const key = browserFixtureKey(logEnabled, reactCompat);
+  const cached = routeScaleResults.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const created = measureRouteScale(logEnabled, reactCompat);
+  routeScaleResults.set(key, created);
+  return created;
+}
+
+async function measureRouteScale(
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<RouteScaleResult> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-route-scale-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  const routeCount = 1_000;
+  const beforeRss = process.memoryUsage().rss;
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+
+  for (let index = 0; index < routeCount; index += 1) {
+    const routeDir = join(appDir, `route-${index}`);
+    await mkdir(routeDir, { recursive: true });
+    await writeFile(
+      join(routeDir, "page.tsx"),
+      reactCompat
+        ? reactCompatTextPageSource(`route:${index}`)
+        : `export default function Page() {
+  return <main>route:${index}</main>;
+}`,
+    );
+  }
+
+  const buildStartedAt = performance.now();
+  await buildApp({ appDir, outDir, targets: ["node"] });
+  const buildTimeMs = performance.now() - buildStartedAt;
+  const coldStartMs = await measureServerColdStart(outDir, { logEnabled });
+  const server = await startServer({
+    logger: logEnabled ? createBenchmarkLogger() : undefined,
+    outDir,
+    port: 0,
+  });
+
+  try {
+    const matchStartedAt = performance.now();
+    const response = await fetch(`${server.url}/route-999`);
+    const html = await response.text();
+    const matchLatencyMs = performance.now() - matchStartedAt;
+
+    if (!html.includes("route:999")) {
+      throw new Error("route scale probe did not include the last route");
+    }
+
+    return {
+      buildTimeMs,
+      coldStartMs,
+      matchLatencyMs,
+      rootDir,
+      rssDeltaBytes: Math.max(0, process.memoryUsage().rss - beforeRss),
+    };
+  } finally {
+    await server.close();
+  }
+}
+
+async function measureServerActionPostRoundtrip(): Promise<number> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-action-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "actions.ts"),
+    `"use server";
+
+export function save(formData) {
+  return { title: String(formData.get("title")) };
+}`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { save } from "./actions";
+export default function Page() {
+  return <main><form action={save}><input name="title" value="Benchmark" /><button type="submit">Save</button></form></main>;
+}`,
+  );
+
+  try {
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const server = await startServer({ outDir, port: 0 });
+
+    try {
+      const pageResponse = await fetch(server.url);
+      const html = await pageResponse.text();
+      const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const body = new URLSearchParams({
+        __mreact_action_nonce: extractInputValue(html, "__mreact_action_nonce"),
+        __mreact_action_token: extractInputValue(html, "__mreact_action_token"),
+        __mreact_csrf: extractInputValue(html, "__mreact_csrf"),
+        __mreact_export_name: extractInputValue(html, "__mreact_export_name"),
+        __mreact_module_id: extractInputValue(html, "__mreact_module_id"),
+        title: "Benchmark",
+      });
+      const startedAt = performance.now();
+      const response = await fetch(`${server.url}/_mreact/actions`, {
+        body,
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+          origin: server.url,
+          referer: server.url,
+        },
+        method: "POST",
+      });
+      const json = (await response.json()) as { ok?: boolean; value?: { title?: string } };
+      const duration = performance.now() - startedAt;
+
+      if (json.ok !== true || json.value?.title !== "Benchmark") {
+        throw new Error("server action POST probe did not return expected JSON");
+      }
+
+      return duration;
+    } finally {
+      await server.close();
+    }
+  } finally {
+    await rm(rootDir, { force: true, recursive: true });
+  }
+}
+
+async function measureNestedLayoutsDepth5(
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<number> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-nested-layouts-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+
+  let current = appDir;
+  for (let depth = 1; depth <= 5; depth += 1) {
+    current = join(current, `level-${depth}`);
+    await mkdir(current, { recursive: true });
+    await writeFile(
+      join(current, "layout.tsx"),
+      `export default function Layout() {
+  return <section data-depth="${depth}"><Slot /></section>;
+}`,
+    );
+  }
+  await writeFile(
+    join(current, "page.tsx"),
+    reactCompat
+      ? reactCompatTextPageSource("nested-depth-5")
+      : `export default function Page() {
+  return <main>nested-depth-5</main>;
+}`,
+  );
+
+  try {
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const server = await startServer({
+      logger: logEnabled ? createBenchmarkLogger() : undefined,
+      outDir,
+      port: 0,
+    });
+
+    try {
+      const startedAt = performance.now();
+      const response = await fetch(`${server.url}/level-1/level-2/level-3/level-4/level-5`);
+      const html = await response.text();
+      const duration = performance.now() - startedAt;
+
+      if (!html.includes("nested-depth-5") || !html.includes(`data-depth="5"`)) {
+        throw new Error("nested layout probe did not include expected depth");
+      }
+
+      return duration;
+    } finally {
+      await server.close();
+    }
+  } finally {
+    await rm(rootDir, { force: true, recursive: true });
+  }
+}
+
+async function measureCloudflareWorkerLatency(reactCompat: boolean): Promise<number> {
+  const tempParentDir = join(process.cwd(), "benchmarks", "router", ".tmp");
+  await mkdir(tempParentDir, { recursive: true });
+  const rootDir = await mkdtemp(join(tempParentDir, "cloudflare-"));
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    reactCompat
+      ? reactCompatTextPageSource("cloudflare-worker")
+      : `export default function Page() {
+  return <main>cloudflare-worker</main>;
+}`,
+  );
+
+  try {
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const pagesOutDir = join(rootDir, "pages");
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const workerCode = await readFile(join(pagesOutDir, "_worker.js"), "utf8");
+    return measureCloudflareModuleFallback(workerCode);
+  } finally {
+    await rm(rootDir, { force: true, recursive: true });
+  }
+}
+
+async function measureCloudflareModuleFallback(workerCode: string): Promise<number> {
+  const module = (await import(
+    `data:text/javascript,${encodeURIComponent(workerCode)}`
+  )) as {
+    default?: {
+      fetch?: (
+        request: Request,
+        env: Record<string, unknown>,
+        context: { passThroughOnException(): void; waitUntil(promise: Promise<unknown>): void },
+      ) => Promise<Response> | Response;
+    };
+  };
+  const fetchHandler = module.default?.fetch;
+
+  if (fetchHandler === undefined) {
+    throw new Error("Cloudflare module fallback did not expose default.fetch");
+  }
+
+  const startedAt = performance.now();
+  const response = await fetchHandler(new Request("http://local.test/"), {}, {
+    passThroughOnException() {},
+    waitUntil() {},
+  });
+  const html = await response.text();
+  const duration = performance.now() - startedAt;
+
+  if (!html.includes("cloudflare-worker")) {
+    throw new Error("Cloudflare module fallback probe did not include expected content");
+  }
+
+  return duration;
+}
+
+function reactCompatTextPageSource(text: string): string {
+  return `import { createElement, renderToString } from "@reckona/mreact-compat";
+export default function Page() {
+  return renderToString(() => createElement("main", null, ${JSON.stringify(text)}));
+}`;
+}
+
+function extractInputValue(html: string, name: string): string {
+  const pattern = new RegExp(`<input[^>]*name=["']${name}["'][^>]*value=["']([^"']*)["']`, "i");
+  const match = pattern.exec(html);
+
+  if (match?.[1] === undefined) {
+    throw new Error(`server action probe could not find ${name}`);
+  }
+
+  return match[1];
+}
+
+function percentile(values: readonly number[], p: number): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
+
+  return sorted[index]!;
+}
+
+async function trackOneShotServer(rootDir: string, server: ServerHandle): Promise<string> {
+  const url = server.url;
+  const dispose = async (): Promise<void> => {
+    await server.close();
+    await rm(rootDir, { force: true, recursive: true });
+  };
+  await browserFixtureLifecycle.getOrCreate(`oneshot:${rootDir}`, async () => ({ close: dispose }));
+  return url;
 }
 
 function createBenchmarkLogger(): AppRouterLogger {

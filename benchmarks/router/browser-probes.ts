@@ -172,6 +172,126 @@ export async function measureClientNavigation(url: string): Promise<number> {
   }
 }
 
+export async function measureLoaderClientNavigation(url: string): Promise<number> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+    await page.getByRole("link", { name: "Details" }).waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    });
+
+    const documentToken = String(Math.random());
+    await page.evaluate((token) => {
+      (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken = token;
+    }, documentToken);
+    const start = await page.evaluate(() => performance.now());
+    await page.getByRole("link", { name: "Details" }).click();
+    await page.getByText("loader:loaded-target").waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    }).catch((error: unknown) => {
+      throw appendDiagnostics(error, diagnostics);
+    });
+    const end = await page.evaluate(() => performance.now());
+    const retainedToken = await page.evaluate(
+      () => (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken,
+    );
+    if (retainedToken !== documentToken) {
+      throw new Error("loader client navigation caused a full document reload");
+    }
+    return end - start;
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function measureBackForwardRestore(url: string): Promise<number> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+    await page.getByRole("button", { name: "count: 0" }).click();
+    await page.getByRole("button", { name: "count: 1" }).waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    });
+    await page.getByRole("link", { name: "Details" }).click();
+    await page.getByRole("heading", { name: "Navigation target" }).waitFor({
+      state: "visible",
+      timeout: DEFAULT_TIMEOUT_MS,
+    });
+
+    const start = await page.evaluate(() => performance.now());
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await page
+      .getByRole("button", { name: "count: 1" })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
+    await page.goForward({ waitUntil: "domcontentloaded" });
+    await page
+      .getByRole("heading", { name: "Navigation target" })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
+    const end = await page.evaluate(() => performance.now());
+    return end - start;
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function measureHydrationIslands(url: string, islandCount: number): Promise<number> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    const start = performance.now();
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+
+    for (let index = 0; index < islandCount; index += 1) {
+      await page
+        .getByRole("button", { name: `island ${index}: 0` })
+        .waitFor({
+          state: "visible",
+          timeout: DEFAULT_TIMEOUT_MS,
+        })
+        .catch((error: unknown) => {
+          throw appendDiagnostics(error, diagnostics);
+        });
+    }
+
+    await page.getByRole("button", { name: `island ${islandCount - 1}: 0` }).click();
+    await page
+      .getByRole("button", { name: `island ${islandCount - 1}: 1` })
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
+    return performance.now() - start;
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function measureRouteJavaScriptGzipBytes(
   url: string,
   options: { assertInteractive?: boolean } = {},

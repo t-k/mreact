@@ -152,6 +152,29 @@ measure("virtual subscribed measured tail refresh", () => {
   disposeEntriesSubscriber();
 });
 
+measure("virtual 60 frame scroll refresh 100k rows", () => {
+  const items = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `frame-${index}` }));
+  let offset = 0;
+  const virtual = createVirtualList({
+    estimateItemSize: () => 24,
+    getKey: (item) => item.id,
+    items: () => items,
+    overscan: 4,
+    scrollOffset: () => offset,
+    viewportSize: () => 720,
+  });
+  const disposeEntriesSubscriber = effect(() => {
+    virtual.entries.get();
+  });
+
+  for (let frame = 0; frame < 60; frame += 1) {
+    offset = frame * 240;
+    virtual.refresh();
+  }
+
+  disposeEntriesSubscriber();
+});
+
 measure("virtual stale measured refresh", () => {
   const firstItems = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `old-${index}` }));
   const nextItems = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `new-${index}` }));
@@ -212,6 +235,34 @@ await measureAsync("query deep-key observer updates", async () => {
   }
 });
 
+await measureAsync("query notification fanout 1k observers", async () => {
+  const client = createQueryClient();
+  const queryKey = ["fanout"];
+  const observers = Array.from({ length: 1_000 }, () =>
+    createQuery(client, {
+      autoFetch: false,
+      queryFn: () => 0,
+      queryKey,
+    }),
+  );
+  const disposers = observers.map((observer) =>
+    effect(() => {
+      observer.result.get();
+    }),
+  );
+
+  for (let index = 0; index < 1_000; index += 1) {
+    client.setQueryData(queryKey, index);
+  }
+
+  for (const dispose of disposers) {
+    dispose();
+  }
+  for (const observer of observers) {
+    observer.dispose();
+  }
+});
+
 await measureAsync("query infinite fetch 500 pages", async () => {
   const client = createQueryClient();
   const query = createInfiniteQuery<{ payload: string; nextCursor?: number }, number>(client, {
@@ -258,6 +309,29 @@ await measureAsync("forms many schema issues on one field", async () => {
   });
 
   await form.validate();
+});
+
+await measureAsync("forms 100 field sequential key input", async () => {
+  const initialValues = Object.fromEntries(
+    Array.from({ length: 100 }, (_unused, index) => [`field${index}`, ""]),
+  ) as Record<string, string>;
+  const form = createForm({
+    initialValues,
+  });
+  const fields = Object.keys(initialValues).map((name) => form.field(name));
+  const disposers = fields.map((field) =>
+    effect(() => {
+      field.state.get();
+    }),
+  );
+
+  for (let index = 0; index < fields.length; index += 1) {
+    await fields[index]!.setValue(`value-${index}`);
+  }
+
+  for (const dispose of disposers) {
+    dispose();
+  }
 });
 
 await measureAsync("auth current session with large payload", async () => {

@@ -69,6 +69,14 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     unit: "ms",
   },
   {
+    name: "source write with subscriber 1k",
+    description:
+      "Updates 1,000 fine-grained source values when each source has one live non-DOM subscriber, separating direct source write overhead from aggregate computed fan-in and framework-level array update work.",
+    count: 1_000,
+    metric: "duration",
+    unit: "ms",
+  },
+  {
     name: "text binding update 1k",
     description: "Updates one reactive text value that is bound to 1,000 text nodes.",
     count: 1_000,
