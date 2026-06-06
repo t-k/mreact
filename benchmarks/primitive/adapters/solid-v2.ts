@@ -63,6 +63,7 @@ export const solidV2Adapter: PrimitiveAdapter = {
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
+    "source write 1k": runSourceWrite,
     "repeated create update clear memory": runRepeatedMemory,
   },
 };
@@ -371,6 +372,44 @@ function runComputedFanIn({ count, document }: PrimitiveRunContext): PrimitiveCa
     const duration = performance.now() - start;
 
     validateTextNodes([text], String(count));
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runSourceWrite({ count }: PrimitiveRunContext): PrimitiveCaseResult {
+  const root = createRoot((dispose) => {
+    const signals = Array.from({ length: count }, () => createSignal(0));
+
+    return {
+      dispose,
+      setAll(next: number) {
+        for (let index = 0; index < signals.length; index += 1) {
+          signals[index]![1](next);
+        }
+        flush();
+      },
+      sum() {
+        let total = 0;
+        for (let index = 0; index < signals.length; index += 1) {
+          total += signals[index]![0]();
+        }
+        return total;
+      },
+    };
+  });
+
+  try {
+    const start = performance.now();
+    root.setAll(1);
+    const duration = performance.now() - start;
+    const total = root.sum();
+
+    if (total !== count) {
+      throw new Error(`expected source total ${count}, received ${total}`);
+    }
 
     return { samples: [duration] };
   } finally {

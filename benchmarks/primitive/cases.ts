@@ -92,6 +92,14 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     unit: "ms",
   },
   {
+    name: "source write 1k",
+    description:
+      "Updates 1,000 fine-grained source values without subscribers, derived values, DOM writes, or framework-level re-render work, then validates the final source values. Frameworks without an equivalent source primitive report this case as unsupported.",
+    count: 1_000,
+    metric: "duration",
+    unit: "ms",
+  },
+  {
     name: "repeated create update clear memory",
     description:
       "Reports heap growth after repeatedly creating, updating, and clearing 1,000-row lists.",

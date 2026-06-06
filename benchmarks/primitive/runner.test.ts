@@ -209,6 +209,7 @@ describe("primitive adapters", () => {
       "text binding update 1k",
       "computed fan-out 1k",
       "computed fan-in 1k",
+      "source write 1k",
       "repeated create update clear memory",
     ]);
     expect(primitiveCases.every((benchmarkCase) => benchmarkCase.description.length > 20)).toBe(
@@ -222,6 +223,7 @@ describe("primitive adapters", () => {
 
   it("runs every primitive case for every adapter", async () => {
     const caseNames = primitiveCases.map(({ name }) => name);
+    const fineGrainedSourceAdapters = new Set(["mreact", "solid", "solid-v2"]);
 
     for (const adapter of primitiveAdapters) {
       if (adapter.name === "qwik-v2") {
@@ -234,6 +236,13 @@ describe("primitive adapters", () => {
         const runCase = adapter.cases[caseName];
 
         if (runCase === undefined) {
+          if (
+            caseName === "source write 1k" &&
+            !fineGrainedSourceAdapters.has(adapter.name)
+          ) {
+            continue;
+          }
+
           expect.fail(`${adapter.name} missing ${caseName}`);
         }
 

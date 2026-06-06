@@ -43,6 +43,7 @@ export const mreactAdapter: PrimitiveAdapter = {
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
+    "source write 1k": runSourceWrite,
     "repeated create update clear memory": runRepeatedMemory,
   },
 };
@@ -449,6 +450,27 @@ async function runComputedFanIn({
   } finally {
     dispose();
   }
+}
+
+function runSourceWrite({ count }: PrimitiveRunContext): PrimitiveCaseResult {
+  const values = Array.from({ length: count }, () => cell(0));
+
+  const start = performance.now();
+  for (let index = 0; index < values.length; index += 1) {
+    (values[index] as Cell<number>).set(1);
+  }
+  const duration = performance.now() - start;
+
+  let total = 0;
+  for (let index = 0; index < values.length; index += 1) {
+    total += (values[index] as Cell<number>).get();
+  }
+
+  if (total !== count) {
+    throw new Error(`expected source total ${count}, received ${total}`);
+  }
+
+  return { samples: [duration] };
 }
 
 async function runRepeatedMemory({

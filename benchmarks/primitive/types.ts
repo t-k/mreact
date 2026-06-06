@@ -38,6 +38,7 @@ export type PrimitiveCaseName =
   | "text binding update 1k"
   | "computed fan-out 1k"
   | "computed fan-in 1k"
+  | "source write 1k"
   | "repeated create update clear memory";
 
 export interface PrimitiveCaseDefinition {
