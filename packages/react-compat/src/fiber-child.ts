@@ -27,6 +27,16 @@ export function reconcileChildFibers(
   newChildren: ReactCompatNode,
 ): Fiber | undefined {
   const children = normalizeChildren(newChildren);
+  const orderedKeyedChildren = reconcileSameKeyOrderChildren(
+    parent,
+    currentFirstChild,
+    children,
+  );
+
+  if (orderedKeyedChildren !== undefined) {
+    return orderedKeyedChildren;
+  }
+
   const keyed = collectKeyedChildren(currentFirstChild);
   const oldIndexes = collectChildIndexes(currentFirstChild);
   const used = new Set<Fiber>();
@@ -82,6 +92,63 @@ export function reconcileChildFibers(
   }
 
   markRemainingChildrenForDeletion(parent, currentFirstChild, used);
+  parent.child = first;
+  return first;
+}
+
+function reconcileSameKeyOrderChildren(
+  parent: Fiber,
+  currentFirstChild: Fiber | undefined,
+  children: readonly ReactCompatNode[],
+): Fiber | undefined {
+  if (currentFirstChild === undefined || children.length === 0) {
+    return undefined;
+  }
+
+  let cursor: Fiber | undefined = currentFirstChild;
+
+  for (const child of children) {
+    const key = getNodeKey(child);
+
+    if (
+      key === undefined ||
+      cursor === undefined ||
+      cursor.key !== key ||
+      !isReactCompatElement(child) ||
+      !canReuseElementFiber(cursor, child)
+    ) {
+      return undefined;
+    }
+
+    cursor = cursor.sibling;
+  }
+
+  if (cursor !== undefined) {
+    return undefined;
+  }
+
+  cursor = currentFirstChild;
+  let first: Fiber | undefined;
+  let previous: Fiber | undefined;
+
+  for (const child of children) {
+    const key = getNodeKey(child) as string;
+    const fiber = reconcileSingleChild(parent, cursor, child, key) as Fiber;
+
+    fiber.lanes |= parent.lanes;
+    fiber.return = parent;
+    fiber.sibling = undefined;
+
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    previous = fiber;
+    cursor = cursor?.sibling;
+  }
+
   parent.child = first;
   return first;
 }

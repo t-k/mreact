@@ -881,6 +881,54 @@ describe("fiber child reconciliation", () => {
     expect(parent.deletions).toBeUndefined();
   });
 
+  it("reconciles matching keyed order without map or set bookkeeping", () => {
+    const parent = createFiber("host-component", { children: null });
+    const currentA = createFiber("host-component", { id: "old-a" }, "a");
+    const currentB = createFiber("host-component", { id: "old-b" }, "b");
+    const currentC = createFiber("host-component", { id: "old-c" }, "c");
+    currentA.type = "li";
+    currentB.type = "li";
+    currentC.type = "li";
+    currentA.sibling = currentB;
+    currentB.sibling = currentC;
+    const OriginalMap = globalThis.Map;
+    const OriginalSet = globalThis.Set;
+    let mapConstructions = 0;
+    let setConstructions = 0;
+
+    try {
+      globalThis.Map = class CountingMap<K, V> extends OriginalMap<K, V> {
+        constructor(entries?: Iterable<readonly [K, V]> | null) {
+          mapConstructions += 1;
+          super(entries ?? undefined);
+        }
+      } as MapConstructor;
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          setConstructions += 1;
+          super(values ?? undefined);
+        }
+      } as SetConstructor;
+
+      const first = reconcileChildFibers(parent, currentA, [
+        createElement("li", { key: "a", id: "next-a" }, "A"),
+        createElement("li", { key: "b", id: "next-b" }, "B"),
+        createElement("li", { key: "c", id: "next-c" }, "C"),
+      ]);
+
+      expect(first?.alternate).toBe(currentA);
+      expect(first?.sibling?.alternate).toBe(currentB);
+      expect(first?.sibling?.sibling?.alternate).toBe(currentC);
+      expect(parent.deletions).toBeUndefined();
+    } finally {
+      globalThis.Map = OriginalMap;
+      globalThis.Set = OriginalSet;
+    }
+
+    expect(mapConstructions).toBe(0);
+    expect(setConstructions).toBe(0);
+  });
+
   it("marks reused host fibers for prop updates and ref changes", () => {
     const previousRef = () => {};
     const nextRef = () => {};
