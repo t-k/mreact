@@ -521,6 +521,15 @@ async function handleAppRouterViteRequest(
 
     const request = nodeRequestToWebRequest(incoming, origin);
     const routeTransformPlugins = options.navigationScanVitePlugins ?? options.vitePlugins;
+    const [clientStyles, clientStylesByFile, navigationScripts] = await Promise.all([
+      devRouteStyles(project),
+      devSpecialRouteStyles(project),
+      devNavigationScripts(
+        project.routesDir,
+        options.clientRouteInferenceCache,
+        routeTransformPlugins,
+      ),
+    ]);
 
     await sendResponse(
       outgoing,
@@ -532,13 +541,10 @@ async function handleAppRouterViteRequest(
           allowedSourceDirs: project.allowedSourceDirs,
           projectRoot: project.projectRoot,
         },
-        clientStyles: await devRouteStyles(project),
-        clientStylesByFile: await devSpecialRouteStyles(project),
-        navigationScripts: await devNavigationScripts(
-          project.routesDir,
-          options.clientRouteInferenceCache,
-          routeTransformPlugins,
-        ),
+        clientStyles,
+        clientStylesByFile,
+        clientRouteInferenceCache: options.clientRouteInferenceCache,
+        navigationScripts,
         request,
         routeCache: options.routeCache,
         serverActions: options.serverActions,

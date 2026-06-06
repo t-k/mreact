@@ -159,6 +159,7 @@ interface RenderTiming {
 export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
+  clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
   clientScripts?: ReadonlyMap<string, string>;
   clientStylesByFile?: ReadonlyMap<string, readonly string[]>;
   clientStyles?: ReadonlyMap<string, readonly string[]>;
@@ -738,7 +739,8 @@ export async function resolveAppRouterMiddleware(options: {
 
 async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
   const timing = createRenderTiming(options.logger);
-  const clientRouteInferenceCache = createClientRouteInferenceCache();
+  const clientRouteInferenceCache =
+    options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
   let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
