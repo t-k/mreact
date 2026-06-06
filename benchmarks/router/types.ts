@@ -39,10 +39,10 @@ export interface AppFrameworkAdapter {
   teardown?: () => Promise<void>;
   renderToString?: (nodeCount: number) => Promise<string>;
   renderToStream?: (nodeCount: number) => Promise<string>;
-  // genuine streaming: page has an async boundary that resolves after 50ms.
+  // Genuine streaming: page has an async boundary that resolves after 50ms.
   // Both server-side shell pre-flush and body delivery are required to
-  // complete the response. ops/sec ≈ 1 / (TTLB) which includes the 50ms
-  // async wait.
+  // complete the response. The runner records this fixed-latency case as
+  // duration so integer throughput rounding cannot fabricate gaps.
   renderToRealStream?: (nodeCount: number) => Promise<string>;
   // dynamic-attribute heavy fixture: cellCount elements, each with ~9
   // dynamic attributes (class / data-* / title / aria-label / style with
@@ -64,7 +64,7 @@ export interface AppFrameworkAdapter {
   measureInteractiveClientBundleBytes?: () => Promise<number>;
   // Hits the framework's "two independent async boundaries" fixture. Two
   // 50 ms async resolves rendered as siblings. A framework that resolves
-  // them in **parallel** finishes in ~50 ms TTLB; one that resolves
+  // them in parallel finishes in ~50 ms TTLB; one that resolves
   // sequentially (= unintended waterfall) takes ~100 ms. Returns the full
   // HTML so probe code can verify both branches finished.
   renderWaterfall?: () => Promise<string>;

@@ -3,6 +3,7 @@ import type {
   PrimitiveCaseResult,
   PrimitiveRunContext,
 } from "./types.js";
+import { closeBenchmarkDom } from "./dom.js";
 
 export const primitiveRunnerDefaults = {
   warmupRuns: 5,
@@ -24,7 +25,13 @@ export async function collectPrimitiveCaseSamples(
   const notes: string[] = [];
 
   for (let index = 0; index < warmupRuns + measuredRuns; index += 1) {
-    const result = await runCase(createContext());
+    let result: PrimitiveCaseResult;
+
+    try {
+      result = await runCase(createContext());
+    } finally {
+      closeBenchmarkDom();
+    }
 
     if (index < warmupRuns) {
       continue;

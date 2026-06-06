@@ -11,7 +11,12 @@ import {
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import { forcedGcMemoryNote, readHeapUsedAfterForcedGc } from "../memory.js";
+import {
+  calculateHeapDelta,
+  forcedGcMemoryNote,
+  memoryStressCycles,
+  readHeapUsedAfterForcedGc,
+} from "../memory.js";
 import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 // solid-js resolves to its server runtime under Node. The benchmark needs the
@@ -346,15 +351,18 @@ function runComputedFanIn({ count, document }: PrimitiveRunContext): PrimitiveCa
   }
 }
 
-function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveCaseResult {
+async function runRepeatedMemory({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
   const root = createRowsRoot(host, document, []);
-  const before = readHeapUsedAfterForcedGc();
+  const before = await readHeapUsedAfterForcedGc();
 
   try {
-    for (let iteration = 0; iteration < 5; iteration += 1) {
+    for (let iteration = 0; iteration < memoryStressCycles; iteration += 1) {
       root.setRows(rows);
       root.setRows(updatedRows);
       root.setRows([]);
@@ -363,7 +371,7 @@ function runRepeatedMemory({ count, document }: PrimitiveRunContext): PrimitiveC
     validateRows(host, []);
 
     return {
-      samples: [Math.max(0, readHeapUsedAfterForcedGc() - before)],
+      samples: [calculateHeapDelta(await readHeapUsedAfterForcedGc(), before)],
       notes: [forcedGcMemoryNote],
     };
   } finally {

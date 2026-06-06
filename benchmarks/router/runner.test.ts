@@ -157,15 +157,15 @@ describe("router benchmark configuration", () => {
     ).toEqual(["mreact-app-router", "next-app-router"]);
   });
 
-  it("breaks rounded throughput ties by lower mean latency", () => {
+  it("ranks fixed-latency streaming cases by duration without throughput rounding", () => {
     const rows: RouterBenchmarkRow[] = [
       {
         ...completedRow(
           "marko-run",
           "app real streaming 1000 nodes (async 50ms)",
-          "throughput",
-          "ops/sec",
-          20,
+          "duration",
+          "ms",
+          51.1,
         ),
         meanMs: 51.1,
       },
@@ -173,9 +173,9 @@ describe("router benchmark configuration", () => {
         ...completedRow(
           "mreact-app-router",
           "app real streaming 1000 nodes (async 50ms)",
-          "throughput",
-          "ops/sec",
-          20,
+          "duration",
+          "ms",
+          51,
         ),
         meanMs: 51,
       },
@@ -186,6 +186,46 @@ describe("router benchmark configuration", () => {
         (row) => row.framework,
       ),
     ).toEqual(["mreact-app-router", "marko-run"]);
+  });
+
+  it("reports fixed-latency streaming benchmark rows as duration samples", async () => {
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async renderToString(nodeCount) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+          async renderToRealStream(nodeCount) {
+            await Promise.resolve();
+            return `<span>${nodeCount - 1}</span>`;
+          },
+          async renderWaterfall() {
+            await Promise.resolve();
+            return "<span>left</span><span>right</span>";
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(
+      rows.find((row) => row.caseName === "app real streaming 1000 nodes (async 50ms)"),
+    ).toMatchObject({
+      status: "completed",
+      metric: "duration",
+      unit: "ms",
+      hz: 0,
+    });
+    expect(
+      rows.find((row) => row.caseName === "app parallel async boundaries 2x50ms"),
+    ).toMatchObject({
+      status: "completed",
+      metric: "duration",
+      unit: "ms",
+      hz: 0,
+    });
   });
 
   it("reports unsupported timed cases without running them through tinybench", async () => {

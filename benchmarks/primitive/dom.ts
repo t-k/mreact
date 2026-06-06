@@ -1,10 +1,22 @@
 import { Window as HappyDomWindow } from "happy-dom";
 import type { BenchmarkDomContext } from "./types.js";
 
+type ClosableHappyDomWindow = HappyDomWindow & {
+  happyDOM?: {
+    abort?: () => void;
+    close?: () => void;
+  };
+};
+
+let activeWindow: ClosableHappyDomWindow | undefined;
+
 export function createBenchmarkDom(): BenchmarkDomContext {
-  const window = new HappyDomWindow();
+  closeBenchmarkDom();
+
+  const window = new HappyDomWindow() as ClosableHappyDomWindow;
   const document = window.document as unknown as Document;
   const NodeConstructor = window.Node as unknown as typeof Node;
+  activeWindow = window;
 
   globalThis.window = window as unknown as Window & typeof globalThis;
   globalThis.document = document;
@@ -25,4 +37,21 @@ export function createBenchmarkDom(): BenchmarkDomContext {
     document,
     Node: NodeConstructor,
   };
+}
+
+export function closeBenchmarkDom(): void {
+  const window = activeWindow;
+
+  if (window === undefined) {
+    return;
+  }
+
+  activeWindow = undefined;
+  const controller = window.happyDOM;
+
+  if (typeof controller?.close === "function") {
+    controller.close();
+  } else {
+    controller?.abort?.();
+  }
 }

@@ -7,6 +7,12 @@ import { primitiveCases } from "./cases.js";
 import { createBenchmarkDom } from "./dom.js";
 import { filterPrimitiveAdapters, filterPrimitiveCases } from "./filter.js";
 import {
+  calculateHeapDelta,
+  forcedGcMemoryNote,
+  memoryStressCycles,
+  readHeapUsedAfterForcedGc,
+} from "./memory.js";
+import {
   createRowsData,
   validateRows,
   validateRowsReversedWithNodeIdentity,
@@ -139,6 +145,26 @@ describe("primitive fixtures", () => {
     const nodes = [context.document.createTextNode("7"), context.document.createTextNode("8")];
 
     expect(() => validateTextNodes(nodes, "7")).toThrow("text node 1 expected 7, received 8");
+  });
+
+  it("closes the previous happy-dom window before installing a new benchmark DOM", () => {
+    createBenchmarkDom();
+    const previousWindow = globalThis.window as Window & {
+      happyDOM?: { close: () => void };
+    };
+    let closeCalls = 0;
+
+    if (previousWindow.happyDOM === undefined) {
+      expect.fail("happy-dom window API missing");
+    }
+
+    previousWindow.happyDOM.close = () => {
+      closeCalls += 1;
+    };
+
+    createBenchmarkDom();
+
+    expect(closeCalls).toBe(1);
   });
 });
 
@@ -360,7 +386,7 @@ describe("primitive adapters", () => {
 
     expect(row.status).toBe("completed");
     expect(row.samples).toHaveLength(1);
-    expect(row.notes).toEqual(["heapUsed delta after forced GC"]);
+    expect(row.notes).toEqual([forcedGcMemoryNote]);
   });
 
   it("measures every implemented memory adapter with forced garbage collection", async () => {
@@ -387,9 +413,32 @@ describe("primitive adapters", () => {
       expect(row.framework).toBe(adapter.name);
       expect(row.status).toBe("completed");
       expect(row.samples).toHaveLength(1);
-      expect(row.notes).toEqual(["heapUsed delta after forced GC"]);
+      expect(row.notes).toEqual([forcedGcMemoryNote]);
     }
   }, 15_000);
+
+  it("keeps raw memory deltas and amplifies the repeated memory signal", () => {
+    expect(calculateHeapDelta(90, 100)).toBe(-10);
+    expect(memoryStressCycles).toBe(20);
+  });
+
+  it("yields between forced garbage collection passes before reading heap usage", async () => {
+    const originalGc = globalThis.gc;
+    const calls: string[] = [];
+
+    globalThis.gc = () => {
+      calls.push("gc");
+      queueMicrotask(() => calls.push("microtask"));
+    };
+
+    try {
+      await readHeapUsedAfterForcedGc();
+    } finally {
+      globalThis.gc = originalGc;
+    }
+
+    expect(calls).toEqual(["gc", "microtask", "gc", "microtask", "gc", "microtask"]);
+  });
 
   it("does not recreate mreact row elements when updating every tenth keyed row", async () => {
     const context = createBenchmarkDom();

@@ -67,25 +67,6 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
     invoke: (adapter) => adapter.renderDynamicRoute?.() ?? renderGenericDynamicRoute(adapter),
   },
   {
-    name: "app real streaming 1000 nodes (async 50ms)",
-    description:
-      "Streams a route whose body waits on a 50 ms async boundary before the full 1,000-node response completes.",
-    metric: "throughput",
-    unit: "ops/sec",
-    isSupported: (adapter) => adapter.renderToRealStream !== undefined,
-    invoke: (adapter) =>
-      adapter.renderToRealStream?.(nodeCount) ?? unsupported(adapter, "renderToRealStream"),
-  },
-  {
-    name: "app parallel async boundaries 2x50ms",
-    description:
-      "Renders two sibling 50 ms async boundaries and reports whether total response latency stays near one boundary instead of waterfalling.",
-    metric: "throughput",
-    unit: "ops/sec",
-    isSupported: (adapter) => adapter.renderWaterfall !== undefined,
-    invoke: (adapter) => adapter.renderWaterfall?.() ?? unsupported(adapter, "renderWaterfall"),
-  },
-  {
     name: "app static cached route 1000 nodes",
     description:
       "Renders a static-cacheable app route with 1,000 simple text spans after the production server has warmed it.",
@@ -133,6 +114,28 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
     metric: "duration",
     unit: "ms",
     invoke: async (adapter) => (await measureStreamingTimings(adapter)).fullBodyMs,
+  },
+  {
+    name: "app real streaming 1000 nodes (async 50ms)",
+    description:
+      "Measures complete response latency for a route whose body waits on a 50 ms async boundary.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) =>
+      adapter.renderToRealStream === undefined
+        ? undefined
+        : measureInvocationDurationMs(() => adapter.renderToRealStream!(nodeCount)),
+  },
+  {
+    name: "app parallel async boundaries 2x50ms",
+    description:
+      "Measures complete response latency for two sibling 50 ms async boundaries; parallel renderers stay near one boundary.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) =>
+      adapter.renderWaterfall === undefined
+        ? undefined
+        : measureInvocationDurationMs(() => adapter.renderWaterfall!()),
   },
   {
     name: "app client navigation route-to-route",
@@ -224,13 +227,11 @@ const sizeRouterBenchmarkCases: SizeRouterBenchmarkCase[] = [
 export const routerBenchmarkCases: RouterBenchmarkCase[] = [
   timedRouterBenchmarkCases[0]!,
   timedRouterBenchmarkCases[1]!,
-  ...durationRouterBenchmarkCases.slice(0, 3),
+  ...durationRouterBenchmarkCases.slice(0, 5),
   timedRouterBenchmarkCases[3]!,
   timedRouterBenchmarkCases[4]!,
-  timedRouterBenchmarkCases[5]!,
-  timedRouterBenchmarkCases[6]!,
   timedRouterBenchmarkCases[2]!,
-  ...durationRouterBenchmarkCases.slice(3),
+  ...durationRouterBenchmarkCases.slice(5),
   ...sizeRouterBenchmarkCases,
 ];
 
@@ -494,6 +495,12 @@ async function collectDurationSamples(
   }
 
   return samples;
+}
+
+async function measureInvocationDurationMs(invoke: () => Promise<unknown>): Promise<number> {
+  const start = performance.now();
+  await invoke();
+  return performance.now() - start;
 }
 
 async function measureStreamingTimings(adapter: RouterBenchmarkAdapter): Promise<{

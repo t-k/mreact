@@ -10,7 +10,12 @@ import {
 import type { RowFixture } from "../fixtures/rows.js";
 import { validateEventTargets } from "../fixtures/event-targets.js";
 import { validateTextNodes } from "../fixtures/text-binding.js";
-import { forcedGcMemoryNote, readHeapUsedAfterForcedGc } from "../memory.js";
+import {
+  calculateHeapDelta,
+  forcedGcMemoryNote,
+  memoryStressCycles,
+  readHeapUsedAfterForcedGc,
+} from "../memory.js";
 import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from "../types.js";
 
 // Vitest resolves Qwik's development runtime, but the benchmark is explicitly a
@@ -336,11 +341,11 @@ async function runRepeatedMemory({
   const host = document.createElement("div");
   const rows = createRowsData(count);
   const updatedRows = updateEveryTenth(rows);
-  const before = readHeapUsedAfterForcedGc();
+  const before = await readHeapUsedAfterForcedGc();
   let cleanup: (() => void) | undefined;
 
   try {
-    for (let iteration = 0; iteration < 5; iteration += 1) {
+    for (let iteration = 0; iteration < memoryStressCycles; iteration += 1) {
       cleanup?.();
       cleanup = (await render(host, renderRows(rows))).cleanup;
       cleanup();
@@ -352,7 +357,7 @@ async function runRepeatedMemory({
     validateRows(host, []);
 
     return {
-      samples: [Math.max(0, readHeapUsedAfterForcedGc() - before)],
+      samples: [calculateHeapDelta(await readHeapUsedAfterForcedGc(), before)],
       notes: [forcedGcMemoryNote],
     };
   } finally {
