@@ -209,7 +209,11 @@ export async function measureLoaderClientNavigation(url: string): Promise<number
   }
 }
 
-export async function measureBackForwardRestore(url: string): Promise<number> {
+export async function measureBackForwardRestore(
+  url: string,
+  options: { expectStateRestore?: boolean } = {},
+): Promise<number> {
+  const expectStateRestore = options.expectStateRestore ?? true;
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
@@ -229,8 +233,10 @@ export async function measureBackForwardRestore(url: string): Promise<number> {
 
     const start = await page.evaluate(() => performance.now());
     await page.goBack({ waitUntil: "domcontentloaded" });
-    await page
-      .getByRole("button", { name: "count: 1" })
+    const restoredButton = expectStateRestore
+      ? page.getByRole("button", { name: "count: 1" })
+      : page.getByRole("button", { name: /^count: [01]$/ });
+    await restoredButton
       .waitFor({
         state: "visible",
         timeout: DEFAULT_TIMEOUT_MS,

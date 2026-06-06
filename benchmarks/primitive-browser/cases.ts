@@ -1,4 +1,4 @@
-export type PrimitiveBrowserFramework = "mreact" | "mreact react-compat";
+export type PrimitiveBrowserFramework = "mreact" | "mreact react-compat" | "react" | "solid";
 
 export type PrimitiveBrowserCaseName =
   | "browser create 1k rows"
@@ -15,6 +15,8 @@ export interface PrimitiveBrowserCaseDefinition {
 export const primitiveBrowserFrameworks: PrimitiveBrowserFramework[] = [
   "mreact",
   "mreact react-compat",
+  "react",
+  "solid",
 ];
 
 export const primitiveBrowserCases: PrimitiveBrowserCaseDefinition[] = [

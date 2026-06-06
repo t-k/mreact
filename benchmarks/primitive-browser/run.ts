@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ import {
   primitiveBrowserFrameworks,
 } from "./cases.js";
 
+const requireFromHere = createRequire(import.meta.url);
 const browserWarmupRuns = parseNonNegativeInteger(
   process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "2",
   "MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS",
@@ -115,6 +117,9 @@ const env = await collectBenchmarkEnvironment([
   "@reckona/mreact-reactive-core",
   "@reckona/mreact-reactive-dom",
   "@playwright/test",
+  "react",
+  "react-dom",
+  "solid-js",
   "vite",
 ]);
 const dir = await createDatedResultsDir();
@@ -189,6 +194,22 @@ async function createBrowserFixture(): Promise<{
           find: "@reckona/mreact-compat",
           replacement: join(process.cwd(), "packages/react-compat/dist/index.js"),
         },
+        {
+          find: "react-dom/client",
+          replacement: requireFromHere.resolve("react-dom/client"),
+        },
+        {
+          find: "react-dom",
+          replacement: requireFromHere.resolve("react-dom"),
+        },
+        {
+          find: "react",
+          replacement: requireFromHere.resolve("react"),
+        },
+        {
+          find: "solid-js",
+          replacement: requireFromHere.resolve("solid-js/dist/solid.js"),
+        },
       ],
     },
     root: rootDir,
@@ -204,6 +225,10 @@ import { batch, cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindList, bindText } from "@reckona/mreact-reactive-dom";
 import { Fragment, createElement, createRoot, flushSync, useState } from "@reckona/mreact-compat";
+import { Fragment as ReactFragment, createElement as reactCreateElement, useState as reactUseState } from "react";
+import { flushSync as reactDomFlushSync } from "react-dom";
+import { createRoot as createReactRoot } from "react-dom/client";
+import { createComputed as solidCreateComputed, createRoot as createSolidRoot, createSignal as createSolidSignal, mapArray as solidMapArray } from "solid-js";
 
 function createRowsData(count) {
   return Array.from({ length: count }, (_unused, index) => ({
@@ -472,6 +497,215 @@ async function runCompat(caseName, count) {
   }
 }
 
+async function runReact(caseName, count) {
+  const host = createHost();
+  const rows = createRowsData(count);
+  const root = createReactRoot(host);
+
+  try {
+    if (caseName === "browser create 1k rows") {
+      const start = performance.now();
+      reactDomFlushSync(() => root.render(reactRows(rows)));
+      const duration = performance.now() - start;
+      validateRows(host, rows);
+      return duration;
+    }
+
+    if (caseName === "browser update every 10th in 10k rows") {
+      const updatedRows = rows.map((row, index) =>
+        index % 10 === 0 ? { ...row, label: row.label + " updated" } : row,
+      );
+      let setRows;
+      function App() {
+        const [currentRows, setCurrentRows] = reactUseState(rows);
+        setRows = setCurrentRows;
+        return reactRows(currentRows);
+      }
+      reactDomFlushSync(() => root.render(reactCreateElement(App)));
+      validateRows(host, rows);
+      const start = performance.now();
+      reactDomFlushSync(() => setRows(updatedRows));
+      const duration = performance.now() - start;
+      validateRows(host, updatedRows);
+      return duration;
+    }
+
+    if (caseName === "browser select row in 10k rows") {
+      const selectedId = Math.floor(count / 2);
+      let setSelectedId;
+      function App() {
+        const [selected, setSelected] = reactUseState(-1);
+        setSelectedId = setSelected;
+        return reactRows(rows, selected);
+      }
+      reactDomFlushSync(() => root.render(reactCreateElement(App)));
+      validateRows(host, rows);
+      const start = performance.now();
+      reactDomFlushSync(() => setSelectedId(selectedId));
+      const duration = performance.now() - start;
+      validateSelectedRow(host, selectedId);
+      return duration;
+    }
+
+    if (caseName === "browser clear 10k rows") {
+      let setRows;
+      function App() {
+        const [currentRows, setCurrentRows] = reactUseState(rows);
+        setRows = setCurrentRows;
+        return reactRows(currentRows);
+      }
+      reactDomFlushSync(() => root.render(reactCreateElement(App)));
+      validateRows(host, rows);
+      const start = performance.now();
+      reactDomFlushSync(() => setRows([]));
+      const duration = performance.now() - start;
+      validateRows(host, []);
+      return duration;
+    }
+
+    throw new Error("unknown react browser case " + caseName);
+  } finally {
+    root.unmount();
+  }
+}
+
+function reactRows(rows, selectedId = -1) {
+  return reactCreateElement(
+    ReactFragment,
+    null,
+    rows.map((row) =>
+      reactCreateElement(
+        "div",
+        {
+          className: selectedId === row.id ? "selected" : undefined,
+          "data-key": row.id,
+          "data-selected": selectedId === row.id ? "true" : undefined,
+          key: row.id,
+        },
+        row.label,
+      ),
+    ),
+  );
+}
+
+async function runSolid(caseName, count) {
+  if (caseName === "browser create 1k rows") {
+    const host = createHost();
+    const rows = createRowsData(count);
+    const start = performance.now();
+    const root = createSolidRowsRoot(host, rows);
+    const duration = performance.now() - start;
+    try {
+      validateRows(host, rows);
+      return duration;
+    } finally {
+      root.dispose();
+    }
+  }
+
+  if (caseName === "browser update every 10th in 10k rows") {
+    const host = createHost();
+    const rows = createRowsData(count);
+    const updatedRows = rows.map((row, index) =>
+      index % 10 === 0 ? { ...row, label: row.label + " updated" } : row,
+    );
+    const root = createSolidRowsRoot(host, rows);
+    try {
+      validateRows(host, rows);
+      const start = performance.now();
+      root.setRows(updatedRows);
+      const duration = performance.now() - start;
+      validateRows(host, updatedRows);
+      return duration;
+    } finally {
+      root.dispose();
+    }
+  }
+
+  if (caseName === "browser select row in 10k rows") {
+    const host = createHost();
+    const rows = createRowsData(count);
+    const selectedId = Math.floor(count / 2);
+    const root = createSolidSelectableRowsRoot(host, rows);
+    try {
+      validateRows(host, rows);
+      const start = performance.now();
+      root.setSelectedId(selectedId);
+      const duration = performance.now() - start;
+      validateSelectedRow(host, selectedId);
+      return duration;
+    } finally {
+      root.dispose();
+    }
+  }
+
+  if (caseName === "browser clear 10k rows") {
+    const host = createHost();
+    const rows = createRowsData(count);
+    const root = createSolidRowsRoot(host, rows);
+    try {
+      validateRows(host, rows);
+      const start = performance.now();
+      root.setRows([]);
+      const duration = performance.now() - start;
+      validateRows(host, []);
+      return duration;
+    } finally {
+      root.dispose();
+    }
+  }
+
+  throw new Error("unknown solid browser case " + caseName);
+}
+
+function createSolidRowsRoot(host, initialRows) {
+  return createSolidRoot((dispose) => {
+    const [rows, setRows] = createSolidSignal(initialRows);
+    const mappedRows = solidMapArray(rows, (row) => {
+      const element = document.createElement("div");
+      element.dataset.key = String(row.id);
+      element.textContent = row.label;
+      return element;
+    });
+
+    solidCreateComputed(() => {
+      host.replaceChildren(...mappedRows());
+    });
+
+    return { dispose, setRows };
+  });
+}
+
+function createSolidSelectableRowsRoot(host, initialRows) {
+  return createSolidRoot((dispose) => {
+    const [selectedId, setSelectedId] = createSolidSignal(-1);
+    const rowElements = new Map();
+
+    for (const row of initialRows) {
+      const element = document.createElement("div");
+      element.dataset.key = String(row.id);
+      element.textContent = row.label;
+      rowElements.set(row.id, element);
+      host.append(element);
+    }
+
+    solidCreateComputed(() => {
+      const nextSelectedId = selectedId();
+      for (const element of rowElements.values()) {
+        element.className = "";
+        element.removeAttribute("data-selected");
+      }
+      const element = rowElements.get(nextSelectedId);
+      if (element !== undefined) {
+        element.className = "selected";
+        element.dataset.selected = "true";
+      }
+    });
+
+    return { dispose, setSelectedId };
+  });
+}
+
 globalThis.__mreactPrimitiveBrowserBench = {
   async run(framework, caseName, count) {
     if (framework === "mreact") {
@@ -479,6 +713,12 @@ globalThis.__mreactPrimitiveBrowserBench = {
     }
     if (framework === "mreact react-compat") {
       return await runCompat(caseName, count);
+    }
+    if (framework === "react") {
+      return await runReact(caseName, count);
+    }
+    if (framework === "solid") {
+      return await runSolid(caseName, count);
     }
     throw new Error("unknown primitive browser framework " + framework);
   },

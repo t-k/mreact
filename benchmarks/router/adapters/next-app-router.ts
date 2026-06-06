@@ -8,6 +8,7 @@
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { gzipSync } from "node:zlib";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
@@ -15,10 +16,16 @@ import { createRequire } from "node:module";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
+  type ConcurrentRequestProbeResult,
+  measureConcurrentRequests,
+} from "../http-probes.js";
+import {
+  measureBackForwardRestore,
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureLoaderClientNavigation,
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
@@ -40,6 +47,7 @@ let server: ServerHandle | undefined;
 let currentNodeCount = 0;
 let browserRootDir: string | undefined;
 let browserServer: ServerHandle | undefined;
+let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
 const nextBinPath = requireFromHere.resolve("next/dist/bin/next");
 
@@ -397,7 +405,7 @@ export default function Page() {
     join(appDir, "target", "page.tsx"),
     `export const dynamic = "force-dynamic";
 export default function Page() {
-  return <main><h1>Navigation target</h1></main>;
+  return <main><h1>Navigation target</h1><p>loader:loaded-target</p></main>;
 }`,
   );
   await writeFile(
@@ -463,6 +471,7 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
       await rm(browserRootDir, { force: true, recursive: true });
       browserRootDir = undefined;
     }
+    concurrentRequestResult = undefined;
   },
   async renderToString(nodeCount: number): Promise<string> {
     const url = await ensureFixture(nodeCount);
@@ -546,9 +555,37 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
       join(rootDir, ".next", "static"),
     ]);
   },
+  async measureSsrHtmlGzipBytes(): Promise<number> {
+    const url = await ensureFixture(1000);
+    const response = await fetch(`${url}/`);
+    const html = await response.text();
+
+    if (!html.includes(`<span>999</span>`)) {
+      throw new Error("next-app-router SSR HTML gzip probe did not include the last node");
+    }
+
+    return gzipSync(html).length;
+  },
+  async measureConcurrentRequestThroughputOps(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).throughputOps;
+  },
+  async measureConcurrentRequestP99Ms(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).p99Ms;
+  },
+  async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
+    return (await ensureConcurrentRequestResult()).rssDeltaBytes;
+  },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
     return measureClientNavigation(url);
+  },
+  async measureLoaderClientNavigationMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureLoaderClientNavigation(url);
+  },
+  async measureBackForwardRestoreMs(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return measureBackForwardRestore(url, { expectStateRestore: false });
   },
   async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -567,3 +604,20 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
+
+function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
+  concurrentRequestResult ??= measureConcurrentRequestResult();
+  return concurrentRequestResult;
+}
+
+async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
+  const url = await ensureFixture(1000);
+  return measureConcurrentRequests(url, {
+    path: "/",
+    validate(html) {
+      if (!html.includes(`<span>999</span>`)) {
+        throw new Error("next-app-router concurrent response did not include the last node");
+      }
+    },
+  });
+}
