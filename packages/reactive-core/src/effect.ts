@@ -43,6 +43,7 @@ export function effect(fn: () => void | (() => void)): () => void {
 
       computation.trackingAddedDeps = [];
       computation.trackingCount = 0;
+      computation.trackingTouchedDeps = [];
       computation.trackingVersion = nextTrackingVersion;
       runtimeState.activeTracker = computation;
 
@@ -132,6 +133,7 @@ function finishIncrementalTracking(
 
   computation.trackingAddedDeps = undefined;
   computation.trackingCount = undefined;
+  computation.trackingTouchedDeps = undefined;
 }
 
 function performanceNow(): number {

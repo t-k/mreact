@@ -6481,7 +6481,7 @@ export default function Page() {
     });
 
     expect(response.status).toBe(500);
-    expect(await response.text()).toMatch(/Missing built server module artifact.*page\.mreact\.tsx/);
+    expect(await response.text()).toBe("Internal Server Error");
   });
 
   test("reuses materialized built server runtime while manifests are unchanged", async () => {

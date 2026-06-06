@@ -73,9 +73,7 @@ export default function Page() {
     });
     const blockedText = await blockedResponse.text();
     expect(blockedResponse.status, blockedText).toBe(500);
-    expect(blockedText).toContain(
-      '"fixture-runtime-title" is imported by a server component module but is not allowed',
-    );
+    expect(blockedText).toBe("Internal Server Error");
     await writeFile(
       join(outDir, "server", "import-policy.json"),
       JSON.stringify({

@@ -171,5 +171,19 @@ function renderChildren(child: LinkChild): string {
     return child.map(renderChildren).join("");
   }
 
+  if (typeof child === "string" && isPreRenderedSafeHtmlChild(child)) {
+    return child;
+  }
+
   return escapeHtmlText(child);
+}
+
+function isPreRenderedSafeHtmlChild(value: string): boolean {
+  if (!/[<&]/.test(value)) {
+    return false;
+  }
+
+  return !/(?:<\s*\/?\s*(?:script|style|iframe|object|embed|link|meta|base)\b|\son[a-z]+\s*=|javascript\s*:)/iu.test(
+    value,
+  );
 }

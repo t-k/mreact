@@ -17,6 +17,7 @@ export interface ReactiveComputation {
   deps: Set<Source>;
   trackingAddedDeps?: Source[] | undefined;
   trackingCount?: number | undefined;
+  trackingTouchedDeps?: Source[] | undefined;
   trackingVersion?: number | undefined;
   disposed: boolean;
   queued: boolean;

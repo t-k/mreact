@@ -521,7 +521,7 @@ export function POST(request: Request): Response {
 }
 ```
 
-Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for large uploads, use `parseMultipartStream()` to read text fields and stream file parts with per-part and total byte limits. Workers APIs such as R2 require known-length streams, so call `part.fixedLengthStream(length).readable` only when the part has a `Content-Length` header or you can pass the exact byte length; otherwise use the bounded `arrayBuffer()` path for R2 and keep `maxBytes` small enough for your deployment. Put the CSRF field before the file field so the handler can reject before it commits to consuming the file stream.
+Plain `multipart/form-data` route handlers are normal HTTP handlers, so they do not automatically get the server-action CSRF guard. Use `formCsrfFieldName`, `formCsrfCookie()`, `createFormCsrfToken()`, and `validateFormCsrf()` when a cookie-authenticated upload form posts directly to `route.ts`. `request.formData()` buffers multipart file parts in memory; for large uploads, use `parseMultipartStream()` to read text fields and stream file parts with per-part and total byte limits. The parser enforces bounded defaults, exposes the raw `filename`, and also provides `safeFilename` with path separators and dangerous names normalized for storage keys. Workers APIs such as R2 require known-length streams, so call `part.fixedLengthStream(length).readable` only when the part has a `Content-Length` header or you can pass the exact byte length; otherwise use the bounded `arrayBuffer()` path for R2 and keep `maxBytes` small enough for your deployment. Put the CSRF field before the file field so the handler can reject before it commits to consuming the file stream.
 
 ```ts
 // src/app/api/upload/route.ts
@@ -553,7 +553,7 @@ export async function POST(
         return Response.json({ error: "Missing CSRF token." }, { status: 403 });
       }
 
-      await context.env?.MEDIA?.put(part.filename ?? "upload.bin", await part.arrayBuffer(), {
+      await context.env?.MEDIA?.put(part.safeFilename ?? "upload.bin", await part.arrayBuffer(), {
         httpMetadata: { contentType: part.contentType },
       });
     }

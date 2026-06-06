@@ -4,6 +4,8 @@
 
 ```ts
 
+import { ClientRouteModuleAnalysis } from '@reckona/mreact-compiler';
+import { CompilerModuleContext } from '@reckona/mreact-compiler/internal';
 import type { Duplex } from 'node:stream';
 import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 import type { IncomingMessage } from 'node:http';
@@ -276,6 +278,8 @@ export interface AppRouterServerActionOptions {
     authorize?: ServerActionHandlerOptions["authorize"] | undefined;
     // (undocumented)
     maxBodyBytes?: number | undefined;
+    // (undocumented)
+    maxFormFields?: number | undefined;
     // (undocumented)
     replayStore?: ServerActionReplayStore | undefined;
 }
@@ -777,6 +781,8 @@ export interface MultipartStreamParseOptions {
     fields?: Readonly<Record<string, MultipartStreamFieldOptions>>;
     // (undocumented)
     maxBytes?: number;
+    // (undocumented)
+    maxParts?: number;
 }
 
 // @public (undocumented)
@@ -795,6 +801,8 @@ export interface MultipartStreamPart {
     headers: Headers;
     // (undocumented)
     name: string;
+    // (undocumented)
+    safeFilename?: string;
     // (undocumented)
     text(): Promise<string>;
 }
@@ -926,6 +934,10 @@ export interface RenderAppRequestOptions {
     appDir: string;
     // (undocumented)
     assetBaseUrl?: string | undefined;
+    // Warning: (ae-forgotten-export) The symbol "ClientRouteInferenceCache" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
     // (undocumented)
     clientScripts?: ReadonlyMap<string, string>;
     // (undocumented)
@@ -943,6 +955,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
+    matchedRoute?: MatchedRoute | undefined;
+    // (undocumented)
     navigationScripts?: ReadonlyMap<string, string> | undefined;
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
@@ -954,6 +968,8 @@ export interface RenderAppRequestOptions {
     queryClient?: QueryClient | undefined;
     // (undocumented)
     request: Request;
+    // (undocumented)
+    requestUrl?: URL | undefined;
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
     // Warning: (ae-forgotten-export) The symbol "RouteMatcher" needs to be exported by the entry point index.d.ts
@@ -1358,6 +1374,8 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     routeCache?: AppRouterCache | undefined;
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
+    // (undocumented)
+    verboseErrors?: boolean | undefined;
     // (undocumented)
     viteConfig?: UserConfig | undefined;
 }

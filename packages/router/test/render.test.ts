@@ -2528,9 +2528,7 @@ export default function Page(props) {
     });
 
     expect(response.status).toBe(500);
-    await expect(response.text()).resolves.toContain(
-      "Loader imports must stay inside the app directory",
-    );
+    await expect(response.text()).resolves.toBe("Internal Server Error");
   });
 
   test("includes migration guidance for server JSX spread attribute diagnostics", async () => {
@@ -2714,7 +2712,7 @@ export default function Page(props) {
     });
 
     expect(blocked.status).toBe(500);
-    await expect(blocked.text()).resolves.toContain('"fixture-lib" is imported by a loader');
+    await expect(blocked.text()).resolves.toBe("Internal Server Error");
     expect(allowed.status).toBe(200);
     expect(await allowed.text()).toContain("<main>fixture-ok</main>");
   });
@@ -2745,7 +2743,7 @@ export default function Page(props) {
     });
 
     expect(blocked.status).toBe(500);
-    await expect(blocked.text()).resolves.toContain('"fixture-lib" is imported by a loader');
+    await expect(blocked.text()).resolves.toBe("Internal Server Error");
     expect(allowed.status).toBe(200);
     expect(await allowed.text()).toContain("<main>fixture-ok</main>");
   });

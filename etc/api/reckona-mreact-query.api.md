@@ -162,6 +162,9 @@ export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryDat
 }
 
 // @public (undocumented)
+export function installQueryAsyncStorage(storage: QueryAsyncStorage<QueryClient>): void;
+
+// @public (undocumented)
 export interface InvalidateQueriesOptions {
     // (undocumented)
     queryKey?: QueryKey;
@@ -190,6 +193,14 @@ export interface MutationResult<TData> {
 
 // @public (undocumented)
 export type MutationStatus = "idle" | "pending" | "success" | "error";
+
+// @public (undocumented)
+export interface QueryAsyncStorage<T> {
+    // (undocumented)
+    getStore(): T | undefined;
+    // (undocumented)
+    run<TResult>(store: T, callback: () => TResult): TResult;
+}
 
 // @public (undocumented)
 export interface QueryClient {
@@ -270,6 +281,8 @@ export type QueryStatus = "pending" | "success" | "error";
 
 // @public (undocumented)
 export interface QuerySubscriptionOptions {
+    // (undocumented)
+    exact?: boolean | undefined;
     // (undocumented)
     gcTime?: false | number | undefined;
 }

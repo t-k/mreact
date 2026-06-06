@@ -52,7 +52,13 @@ export function emitMreactDevtoolsEvent(packageName: string, event: {
 export function getInstalledDevtools(): Devtools | undefined;
 
 // @public (undocumented)
-export function installDevtools(devtools?: Devtools): Devtools;
+export function installDevtools(devtools?: Devtools, options?: InstallDevtoolsOptions): Devtools;
+
+// @public (undocumented)
+export interface InstallDevtoolsOptions {
+    // (undocumented)
+    force?: boolean | undefined;
+}
 
 // (No @packageDocumentation comment for this package)
 

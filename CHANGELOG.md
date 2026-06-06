@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.139 - 2026-06-06
+
+### Added
+
+- Added `safeFilename` to streamed multipart file parts so upload handlers can keep the raw submitted `filename` for display or auditing while using a normalized storage key for buckets and filesystems.
+
+### Changed
+
+- Improved router development and built-request performance by sharing route scans, route matchers, source reads, route CSS discovery, client navigation inference, server action inference, layout shell static work, route metadata loading, and server action manifest inference across request/build hot paths where the inputs are unchanged.
+- Reduced hot-path allocation and repeated work across reactive-core effects, keyed DOM reconciliation, query notifications and key hashing, React-compatible JSX/host prop updates, forms dirty tracking, virtual row measurement, server HTML escaping, server buffer growth, and compiler route-source helpers.
+- Improved client navigation work by avoiding full-body history snapshots, starting matching client route script preloads earlier, deduplicating repeated prefetches, and synchronizing route data scripts by stable IDs.
+
+### Fixed
+
+- Hardened server and router security behavior for cyclic Flight chunk references, unsafe URL schemes, `srcdoc` and string event-handler SSR sinks, middleware trailing-slash matching, rewrite target validation, malformed native route matcher escapes, user-varying route cache responses, oversized server action form bodies, query client request isolation, multipart parser defaults, static export path traversal, and prototype-pollution-shaped form/store keys.
+- Fixed router `Link` escaping and client/server URL-safety parity, Cloudflare/native HTML escape parity, production devtools hook installation defaults, and generic 500 bodies for development/render fallback errors unless verbose errors are explicitly enabled.
+
 ## 0.0.138 - 2026-06-05
 
 ### Added

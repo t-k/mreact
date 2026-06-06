@@ -69,6 +69,7 @@ export function trackIncrementalSource(
   source.trackedBy = computation;
   source.trackedVersion = trackingVersion;
   computation.trackingCount = (computation.trackingCount ?? 0) + 1;
+  computation.trackingTouchedDeps?.push(source);
 
   if (computation.deps.has(source)) {
     return;
@@ -90,8 +91,13 @@ export function cleanupUntrackedDeps(
   computation: ReactiveComputation,
   trackingVersion: number,
 ): void {
+  const touchedDeps = new Set(computation.trackingTouchedDeps);
+
   for (const dep of computation.deps) {
-    if (dep.trackedBy === computation && dep.trackedVersion === trackingVersion) {
+    if (
+      touchedDeps.has(dep) ||
+      (dep.trackedBy === computation && dep.trackedVersion === trackingVersion)
+    ) {
       continue;
     }
 

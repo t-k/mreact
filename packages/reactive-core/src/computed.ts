@@ -109,6 +109,7 @@ export function computed<T>(
 
     computation.trackingAddedDeps = [];
     computation.trackingCount = 0;
+    computation.trackingTouchedDeps = [];
     computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
 
@@ -135,6 +136,7 @@ export function computed<T>(
     } finally {
       computation.trackingAddedDeps = undefined;
       computation.trackingCount = undefined;
+      computation.trackingTouchedDeps = undefined;
       runtimeState.activeTracker = previousTracker;
     }
   }

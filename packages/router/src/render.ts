@@ -3959,12 +3959,23 @@ async function routeShellDirectoryStats(appDir: string, pageFile: string): Promi
     current = parent;
   }
 
-  return await Promise.all(directories.map((directory) => fileStat(directory)));
+  return await Promise.all(directories.map((directory) => fileStatOrMissing(directory)));
 }
 
 async function fileStat(file: string): Promise<FileStat> {
   const stats = await stat(file);
   return { mtimeMs: stats.mtimeMs, size: stats.size };
+}
+
+async function fileStatOrMissing(file: string): Promise<FileStat> {
+  try {
+    return await fileStat(file);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return { mtimeMs: -1, size: -1 };
+    }
+    throw error;
+  }
 }
 
 function sameFileStats(left: readonly FileStat[], right: readonly FileStat[]): boolean {
