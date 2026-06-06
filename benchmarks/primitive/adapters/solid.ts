@@ -48,6 +48,7 @@ export const solidAdapter: PrimitiveAdapter = {
     "clear 10k rows": runClearRows,
     "keyed reverse 1k rows": runKeyedReverse,
     "create 1k event targets": runCreateEventTargets,
+    "source write with subscriber 1k": runSourceWriteWithSubscriber,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
     "computed fan-in 1k": runComputedFanIn,
@@ -381,6 +382,48 @@ function runSourceWrite({ count }: PrimitiveRunContext): PrimitiveCaseResult {
 
     if (total !== count) {
       throw new Error(`expected source total ${count}, received ${total}`);
+    }
+
+    return { samples: [duration] };
+  } finally {
+    root.dispose();
+  }
+}
+
+function runSourceWriteWithSubscriber({ count }: PrimitiveRunContext): PrimitiveCaseResult {
+  const root = createRoot((dispose) => {
+    const signals = Array.from({ length: count }, () => createSignal(0));
+    let observedTotal = 0;
+
+    for (const [value] of signals) {
+      createComputed(() => {
+        observedTotal += value();
+      });
+    }
+
+    observedTotal = 0;
+
+    return {
+      dispose,
+      observedTotal() {
+        return observedTotal;
+      },
+      setAll(next: number) {
+        for (let index = 0; index < signals.length; index += 1) {
+          signals[index]![1](next);
+        }
+      },
+    };
+  });
+
+  try {
+    const start = performance.now();
+    root.setAll(1);
+    const duration = performance.now() - start;
+    const total = root.observedTotal();
+
+    if (total !== count) {
+      throw new Error(`expected subscribed source total ${count}, received ${total}`);
     }
 
     return { samples: [duration] };

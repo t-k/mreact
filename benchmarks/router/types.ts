@@ -21,6 +21,23 @@ export type AppFrameworkCaseName =
   | "app static cached route 1000 nodes"
   | "app dynamic-attr grid 200 cells"
   | "app dynamic route params data"
+  | "app concurrent throughput 100 connections"
+  | "app concurrent p99 latency 100 connections"
+  | "app concurrent RSS delta 100 connections"
+  | "app hydration 100 islands"
+  | "app dev cold start"
+  | "app dev first request latency"
+  | "app dev HMR update latency"
+  | "app SSR HTML gzip bytes 1000 nodes"
+  | "app 1000 route match latency"
+  | "app 1000 route cold start"
+  | "app 1000 route build time"
+  | "app 1000 route RSS delta"
+  | "app server action form POST roundtrip"
+  | "app nested layouts depth 5"
+  | "app loader client navigation route-to-route"
+  | "app client navigation back-forward restore"
+  | "app Cloudflare Worker request latency"
   | "app client navigation route-to-route"
   | "app initial page load JS before interaction"
   | "app first interaction from DOMContentLoaded"
@@ -77,6 +94,23 @@ export interface AppFrameworkAdapter {
   measureSecondInteractionLatencyMs?: () => Promise<number>;
   measureServerColdStartMs?: () => Promise<number>;
   measureBuildOutputGzipBytes?: () => Promise<number>;
+  measureConcurrentRequestThroughputOps?: () => Promise<number>;
+  measureConcurrentRequestP99Ms?: () => Promise<number>;
+  measureConcurrentRequestRssDeltaBytes?: () => Promise<number>;
+  measureHydration100IslandsMs?: () => Promise<number>;
+  measureDevColdStartMs?: () => Promise<number>;
+  measureDevFirstRequestLatencyMs?: () => Promise<number>;
+  measureDevHmrUpdateLatencyMs?: () => Promise<number>;
+  measureSsrHtmlGzipBytes?: () => Promise<number>;
+  measureRouteScale1000MatchLatencyMs?: () => Promise<number>;
+  measureRouteScale1000ColdStartMs?: () => Promise<number>;
+  measureRouteScale1000BuildTimeMs?: () => Promise<number>;
+  measureRouteScale1000RssDeltaBytes?: () => Promise<number>;
+  measureServerActionPostRoundtripMs?: () => Promise<number>;
+  measureNestedLayoutsDepth5Ms?: () => Promise<number>;
+  measureLoaderClientNavigationMs?: () => Promise<number>;
+  measureBackForwardRestoreMs?: () => Promise<number>;
+  measureCloudflareWorkerLatencyMs?: () => Promise<number>;
   // Same interactive fixture but opting out of the SPA navigation runtime
   // (mreact: `export const clientNavigation = false`, Marko: native — has no
   // navigation runtime to begin with). For frameworks without such an
@@ -91,8 +125,8 @@ export interface AppFrameworkAdapter {
   getServerUrl?: () => string | null;
 }
 
-export type AppFrameworkMetric = "throughput" | "size" | "duration";
-export type AppFrameworkUnit = "ops/sec" | "gzip bytes" | "ms";
+export type AppFrameworkMetric = "throughput" | "size" | "duration" | "memory";
+export type AppFrameworkUnit = "ops/sec" | "gzip bytes" | "ms" | "bytes";
 
 export interface AppFrameworkRow {
   framework: AppFrameworkName;

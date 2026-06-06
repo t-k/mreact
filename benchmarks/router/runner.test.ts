@@ -31,12 +31,29 @@ describe("router benchmark configuration", () => {
       "app static cached route 1000 nodes",
       "app dynamic-attr grid 200 cells",
       "app dynamic route params data",
+      "app concurrent throughput 100 connections",
+      "app concurrent p99 latency 100 connections",
+      "app concurrent RSS delta 100 connections",
+      "app hydration 100 islands",
+      "app dev cold start",
+      "app dev first request latency",
+      "app dev HMR update latency",
+      "app 1000 route match latency",
+      "app 1000 route cold start",
+      "app 1000 route build time",
+      "app 1000 route RSS delta",
+      "app server action form POST roundtrip",
+      "app nested layouts depth 5",
+      "app loader client navigation route-to-route",
+      "app client navigation back-forward restore",
+      "app Cloudflare Worker request latency",
       "app client navigation route-to-route",
       "app initial page load JS before interaction",
       "app first interaction from DOMContentLoaded",
       "app first interaction after networkidle",
       "app second interaction latency",
       "app server cold start",
+      "app SSR HTML gzip bytes 1000 nodes",
       "app client bundle gzip bytes (server-only page)",
       "app client bundle gzip bytes (interactive page)",
       "app client bundle gzip bytes (interactive page, minimal opt-out)",
@@ -113,6 +130,43 @@ describe("router benchmark configuration", () => {
       "mreact-app-router+mreact react-compat",
       "mreact-app-router+log enabled",
     ]);
+  });
+
+  it("exposes extended router probes for mreact app-router variants", () => {
+    const requiredMethods = [
+      "measureConcurrentRequestThroughputOps",
+      "measureConcurrentRequestP99Ms",
+      "measureConcurrentRequestRssDeltaBytes",
+      "measureHydration100IslandsMs",
+      "measureDevColdStartMs",
+      "measureDevFirstRequestLatencyMs",
+      "measureDevHmrUpdateLatencyMs",
+      "measureSsrHtmlGzipBytes",
+      "measureRouteScale1000MatchLatencyMs",
+      "measureRouteScale1000ColdStartMs",
+      "measureRouteScale1000BuildTimeMs",
+      "measureRouteScale1000RssDeltaBytes",
+      "measureServerActionPostRoundtripMs",
+      "measureNestedLayoutsDepth5Ms",
+      "measureLoaderClientNavigationMs",
+      "measureBackForwardRestoreMs",
+      "measureCloudflareWorkerLatencyMs",
+    ] as const;
+    const mreactAdapters = routerBenchmarkAdapters.filter((adapter) =>
+      adapter.name.startsWith("mreact-app-router"),
+    );
+
+    for (const method of requiredMethods) {
+      expect(
+        mreactAdapters
+          .filter((adapter) => adapter[method] !== undefined)
+          .map((adapter) => adapter.name),
+      ).toEqual([
+        "mreact-app-router",
+        "mreact-app-router+mreact react-compat",
+        "mreact-app-router+log enabled",
+      ]);
+    }
   });
 
   it("exposes build output gzip probes for every router adapter", () => {

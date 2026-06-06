@@ -30,6 +30,12 @@ interface SizeRouterBenchmarkCase extends RouterBenchmarkCase {
   invoke(adapter: RouterBenchmarkAdapter): Promise<number> | undefined;
 }
 
+interface ValueRouterBenchmarkCase extends RouterBenchmarkCase {
+  metric: "duration" | "memory" | "throughput";
+  unit: "bytes" | "ms" | "ops/sec";
+  invoke(adapter: RouterBenchmarkAdapter): Promise<number> | undefined;
+}
+
 interface DurationRouterBenchmarkCase extends RouterBenchmarkCase {
   metric: "duration";
   unit: "ms";
@@ -87,6 +93,137 @@ const timedRouterBenchmarkCases: TimedRouterBenchmarkCase[] = [
     invoke: (adapter) =>
       adapter.renderDynamicAttrGrid?.(dynamicAttrCellCount) ??
       unsupported(adapter, "renderDynamicAttrGrid"),
+  },
+];
+
+const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
+  {
+    name: "app concurrent throughput 100 connections",
+    description:
+      "Runs a fixed burst against the production fixture with up to 100 concurrent requests and reports sustained request throughput.",
+    metric: "throughput",
+    unit: "ops/sec",
+    invoke: (adapter) => adapter.measureConcurrentRequestThroughputOps?.(),
+  },
+  {
+    name: "app concurrent p99 latency 100 connections",
+    description:
+      "Runs the same concurrent request burst and reports per-request p99 latency, exposing event-loop stalls hidden by sequential tinybench runs.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureConcurrentRequestP99Ms?.(),
+  },
+  {
+    name: "app concurrent RSS delta 100 connections",
+    description:
+      "Reports RSS growth across the concurrent request burst so sustained-load memory trends are visible in router benchmark output.",
+    metric: "memory",
+    unit: "bytes",
+    invoke: (adapter) => adapter.measureConcurrentRequestRssDeltaBytes?.(),
+  },
+  {
+    name: "app hydration 100 islands",
+    description:
+      "Loads an app route with 100 independently interactive islands and reports time until all islands can update in real Chromium.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureHydration100IslandsMs?.(),
+  },
+  {
+    name: "app dev cold start",
+    description:
+      "Starts the framework dev server for a minimal app and reports server readiness latency.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureDevColdStartMs?.(),
+  },
+  {
+    name: "app dev first request latency",
+    description:
+      "Requests a minimal app route from a warm dev server and reports first request latency.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureDevFirstRequestLatencyMs?.(),
+  },
+  {
+    name: "app dev HMR update latency",
+    description:
+      "Edits a route module while the dev server is running and reports time until the changed response is observable.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureDevHmrUpdateLatencyMs?.(),
+  },
+  {
+    name: "app 1000 route match latency",
+    description:
+      "Builds a 1,000-route app and reports request latency for a route near the end of the route table.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureRouteScale1000MatchLatencyMs?.(),
+  },
+  {
+    name: "app 1000 route cold start",
+    description:
+      "Builds a 1,000-route app and reports production server cold-start latency for that route scale.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureRouteScale1000ColdStartMs?.(),
+  },
+  {
+    name: "app 1000 route build time",
+    description:
+      "Reports production build time for a 1,000-route app to catch route-count scaling regressions.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureRouteScale1000BuildTimeMs?.(),
+  },
+  {
+    name: "app 1000 route RSS delta",
+    description:
+      "Reports process RSS growth while building and serving a 1,000-route app.",
+    metric: "memory",
+    unit: "bytes",
+    invoke: (adapter) => adapter.measureRouteScale1000RssDeltaBytes?.(),
+  },
+  {
+    name: "app server action form POST roundtrip",
+    description:
+      "Renders a form with an inferred server action, submits the encoded form POST, and reports action roundtrip latency.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureServerActionPostRoundtripMs?.(),
+  },
+  {
+    name: "app nested layouts depth 5",
+    description:
+      "Renders a route under five nested layouts, guarding against sequential layout shell regressions.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureNestedLayoutsDepth5Ms?.(),
+  },
+  {
+    name: "app loader client navigation route-to-route",
+    description:
+      "Measures browser client navigation to a route with loader data, covering data-bearing SPA transitions.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureLoaderClientNavigationMs?.(),
+  },
+  {
+    name: "app client navigation back-forward restore",
+    description:
+      "Measures browser back-forward restoration after SPA navigation so history snapshot regressions are visible.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureBackForwardRestoreMs?.(),
+  },
+  {
+    name: "app Cloudflare Worker request latency",
+    description:
+      "Builds the Cloudflare Pages worker bundle and reports request latency through its exported fetch handler. A workerd/Miniflare harness should replace this fallback once the local workerd path-resolution failure is fixed.",
+    metric: "duration",
+    unit: "ms",
+    invoke: (adapter) => adapter.measureCloudflareWorkerLatencyMs?.(),
   },
 ];
 
@@ -189,6 +326,14 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
 
 const sizeRouterBenchmarkCases: SizeRouterBenchmarkCase[] = [
   {
+    name: "app SSR HTML gzip bytes 1000 nodes",
+    description:
+      "Measures gzip-compressed HTML payload bytes for the 1,000-node SSR route, complementing client bundle size cases.",
+    metric: "size",
+    unit: "gzip bytes",
+    invoke: (adapter) => adapter.measureSsrHtmlGzipBytes?.(),
+  },
+  {
     name: "app client bundle gzip bytes (server-only page)",
     description:
       "Measures gzip-compressed client JavaScript shipped for a route with no user-authored interactivity.",
@@ -231,6 +376,7 @@ export const routerBenchmarkCases: RouterBenchmarkCase[] = [
   timedRouterBenchmarkCases[3]!,
   timedRouterBenchmarkCases[4]!,
   timedRouterBenchmarkCases[2]!,
+  ...valueRouterBenchmarkCases,
   ...durationRouterBenchmarkCases.slice(5),
   ...sizeRouterBenchmarkCases,
 ];
@@ -246,7 +392,7 @@ export function rankCompletedRows(
 
   return [...completedRows].sort((left, right) => {
     const valueOrder =
-      metric === "size" || metric === "duration"
+      metric === "size" || metric === "duration" || metric === "memory"
         ? left.value - right.value
         : right.value - left.value;
 
@@ -313,6 +459,23 @@ export async function runRouterBenchmarks(
       rows.push(...(await collectDurationRowsRoundRobin(activeAdapters, benchmarkCase)));
     }
 
+    for (const benchmarkCase of valueRouterBenchmarkCases) {
+      for (const adapter of activeAdapters) {
+        try {
+          const value = await benchmarkCase.invoke(adapter);
+
+          if (value === undefined) {
+            rows.push(unsupportedRow(adapter, benchmarkCase));
+            continue;
+          }
+
+          rows.push(valueRow(adapter, benchmarkCase, value));
+        } catch (error) {
+          rows.push(failedRow(adapter, benchmarkCase, error));
+        }
+      }
+    }
+
     for (const benchmarkCase of sizeRouterBenchmarkCases) {
       for (const adapter of activeAdapters) {
         try {
@@ -353,6 +516,28 @@ export async function runRouterBenchmarks(
   }
 
   return rows;
+}
+
+function valueRow(
+  adapter: RouterBenchmarkAdapter,
+  benchmarkCase: ValueRouterBenchmarkCase,
+  value: number,
+): RouterBenchmarkRow {
+  const rounded = round(value, benchmarkCase.metric === "memory" ? 0 : 4);
+
+  return {
+    framework: adapter.name,
+    version: adapter.version,
+    caseName: benchmarkCase.name,
+    status: "completed",
+    metric: benchmarkCase.metric,
+    unit: benchmarkCase.unit,
+    value: rounded,
+    hz: benchmarkCase.metric === "throughput" ? rounded : 0,
+    meanMs: benchmarkCase.metric === "duration" ? rounded : 0,
+    p75Ms: 0,
+    p99Ms: 0,
+  };
 }
 
 async function collectDurationRowsRoundRobin(

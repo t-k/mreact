@@ -206,6 +206,7 @@ describe("primitive adapters", () => {
       "clear 10k rows",
       "keyed reverse 1k rows",
       "create 1k event targets",
+      "source write with subscriber 1k",
       "text binding update 1k",
       "computed fan-out 1k",
       "computed fan-in 1k",
@@ -237,7 +238,8 @@ describe("primitive adapters", () => {
 
         if (runCase === undefined) {
           if (
-            caseName === "source write 1k" &&
+            (caseName === "source write 1k" ||
+              caseName === "source write with subscriber 1k") &&
             !fineGrainedSourceAdapters.has(adapter.name)
           ) {
             continue;

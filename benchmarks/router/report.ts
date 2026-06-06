@@ -81,7 +81,23 @@ function isMreactVariantOnlyColdStart(
   rankedRows: readonly RouterBenchmarkRow[],
 ): boolean {
   return (
-    caseName === "app server cold start" &&
+    (caseName === "app server cold start" ||
+      caseName === "app concurrent throughput 100 connections" ||
+      caseName === "app concurrent p99 latency 100 connections" ||
+      caseName === "app concurrent RSS delta 100 connections" ||
+      caseName === "app hydration 100 islands" ||
+      caseName === "app dev cold start" ||
+      caseName === "app dev first request latency" ||
+      caseName === "app dev HMR update latency" ||
+      caseName === "app 1000 route match latency" ||
+      caseName === "app 1000 route cold start" ||
+      caseName === "app 1000 route build time" ||
+      caseName === "app 1000 route RSS delta" ||
+      caseName === "app server action form POST roundtrip" ||
+      caseName === "app nested layouts depth 5" ||
+      caseName === "app loader client navigation route-to-route" ||
+      caseName === "app client navigation back-forward restore" ||
+      caseName === "app Cloudflare Worker request latency") &&
     rankedRows.length > 0 &&
     rankedRows.every((row) => row.framework.includes("mreact"))
   );
