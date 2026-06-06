@@ -33,16 +33,13 @@ export function applyProps(
   if (previous === undefined && !preserveHydrationAttributes) {
     if (applyInitialRowProps(element, nextProps)) {
       setAppliedProps(element, {
-        attributeNames: collectAttributeNames(nextProps),
         props: nextProps,
       });
       return;
     }
 
-    const attributeNames = collectAttributeNames(nextProps);
     applyInitialProps(element, nextProps, path, options);
     setAppliedProps(element, {
-      attributeNames,
       props: nextProps,
     });
     return;

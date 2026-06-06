@@ -19,7 +19,7 @@ interface DelegatedRoot {
 type DelegatedListenerStore = EventListener | EventListener[];
 
 type EventElement = HTMLElement & {
-  __mreactEventBindings?: EventBinding[];
+  __mreactEventBindings?: EventBinding | EventBinding[];
   __mreactHasEvents?: true;
 };
 
@@ -41,9 +41,11 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   eventElement.__mreactHasEvents = true;
   const bindings = eventElement.__mreactEventBindings;
   if (bindings === undefined) {
-    eventElement.__mreactEventBindings = [binding];
-  } else {
+    eventElement.__mreactEventBindings = binding;
+  } else if (Array.isArray(bindings)) {
     bindings.push(binding);
+  } else {
+    eventElement.__mreactEventBindings = [bindings, binding];
   }
 
   let disposeListener: Dispose;
@@ -57,16 +59,28 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   return registerDispose(() => {
     disposeListener();
     const currentBindings = eventElement.__mreactEventBindings;
-    const index = currentBindings?.indexOf(binding) ?? -1;
 
-    if (index !== -1) {
-      currentBindings?.splice(index, 1);
+    if (Array.isArray(currentBindings)) {
+      const index = currentBindings.indexOf(binding);
+
+      if (index !== -1) {
+        currentBindings.splice(index, 1);
+      }
+
+      if (currentBindings.length === 1) {
+        eventElement.__mreactEventBindings = currentBindings[0]!;
+        return;
+      }
+
+      if (currentBindings.length > 0) {
+        return;
+      }
+    } else if (currentBindings !== binding) {
+      return;
     }
 
-    if (currentBindings?.length === 0) {
-      delete eventElement.__mreactEventBindings;
-      delete eventElement.__mreactHasEvents;
-    }
+    delete eventElement.__mreactEventBindings;
+    delete eventElement.__mreactHasEvents;
   });
 }
 

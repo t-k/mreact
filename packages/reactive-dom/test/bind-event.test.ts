@@ -172,18 +172,28 @@ describe("bindEvent", () => {
     document.addEventListener = documentAddEventListener;
   });
 
-  test("appends event binding metadata without replacing the binding list", () => {
+  test("stores a single event binding without array metadata", () => {
+    const button = document.createElement("button");
+
+    const dispose = bindEvent(button, "click", () => {});
+
+    expect(Array.isArray((button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings)).toBe(false);
+
+    dispose();
+  });
+
+  test("promotes event binding metadata to an array for multiple bindings", () => {
     const button = document.createElement("button");
 
     const disposeFirst = bindEvent(button, "click", () => {});
-    const bindings = (button as unknown as { __mreactEventBindings?: unknown[] })
+    const firstBinding = (button as unknown as { __mreactEventBindings?: unknown })
       .__mreactEventBindings;
 
     const disposeSecond = bindEvent(button, "input", () => {});
+    const bindings = (button as unknown as { __mreactEventBindings?: unknown[] })
+      .__mreactEventBindings;
 
-    expect((button as unknown as { __mreactEventBindings?: unknown[] }).__mreactEventBindings).toBe(
-      bindings,
-    );
+    expect(bindings).toEqual([firstBinding, expect.any(Object)]);
     expect(bindings).toHaveLength(2);
 
     disposeFirst();
@@ -205,7 +215,8 @@ describe("bindEvent", () => {
 
     disposeFirst();
     expect(eventElement.__mreactHasEvents).toBe(true);
-    expect(eventElement.__mreactEventBindings).toHaveLength(1);
+    expect(Array.isArray(eventElement.__mreactEventBindings)).toBe(false);
+    expect(eventElement.__mreactEventBindings).toEqual(expect.any(Object));
 
     disposeSecond();
     expect(eventElement.__mreactHasEvents).toBeUndefined();

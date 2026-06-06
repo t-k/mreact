@@ -421,6 +421,23 @@ describe("react-compat render", () => {
     expect(getAppliedProps(rendered)?.props).toBe(element.props);
   });
 
+  test("defers host attribute-name snapshots until the first update", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    flushSync(() =>
+      root.render(createElement("div", { className: "selected", "data-key": 1 }, "row")),
+    );
+
+    const rendered = container.querySelector("div")!;
+    expect(getAppliedProps(rendered)?.attributeNames).toBeUndefined();
+
+    flushSync(() => root.render(createElement("div", { "data-key": 1 }, "row")));
+
+    expect(rendered.className).toBe("");
+    expect(getAppliedProps(rendered)?.attributeNames).toEqual(["data-key"]);
+  });
+
   test("creates SVG subtrees in the SVG namespace and foreignObject children in HTML", () => {
     const container = document.createElement("div");
     const createElementNS = vi.spyOn(document, "createElementNS");
