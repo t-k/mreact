@@ -1387,6 +1387,7 @@ async function collectBuildServerActionManifest(options: {
       .filter((route) => route.kind === "page")
       .map((route) => relative(options.projectRoot, route.file).split(sep).join("/")),
   );
+  const inferredRouteReferences = [];
 
   for (const [file, code] of Object.entries(options.files)) {
     if (!isAppRelativeFile(file, relativeRoutesDir) || !isSourceModuleFile(file)) {
@@ -1402,29 +1403,33 @@ async function collectBuildServerActionManifest(options: {
     }
 
     if (routeSourceFiles.has(file)) {
-      const inference = await collectBuildInferredServerActionReferences({
-        file,
-        files: options.files,
-        relativeRoutesDir,
-        source: code,
-      });
+      inferredRouteReferences.push(
+        collectBuildInferredServerActionReferences({
+          file,
+          files: options.files,
+          relativeRoutesDir,
+          source: code,
+        }).then((inference) => ({ file, inference })),
+      );
+    }
+  }
 
-      for (const diagnostic of inference.diagnostics) {
-        console.warn(formatServerActionInferenceDiagnostic(diagnostic));
-      }
+  for (const { file, inference } of await Promise.all(inferredRouteReferences)) {
+    for (const diagnostic of inference.diagnostics) {
+      console.warn(formatServerActionInferenceDiagnostic(diagnostic));
+    }
 
-      routeReferences.set(file, inference.references);
+    routeReferences.set(file, inference.references);
 
-      for (const reference of inference.references) {
-        const key = `${reference.moduleId}#${reference.exportName}`;
+    for (const reference of inference.references) {
+      const key = `${reference.moduleId}#${reference.exportName}`;
 
-        if (!entries.has(key)) {
-          entries.set(key, {
-            exportName: reference.exportName,
-            inferred: reference.inferred,
-            moduleId: reference.moduleId,
-          });
-        }
+      if (!entries.has(key)) {
+        entries.set(key, {
+          exportName: reference.exportName,
+          inferred: reference.inferred,
+          moduleId: reference.moduleId,
+        });
       }
     }
   }

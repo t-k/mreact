@@ -7,21 +7,27 @@ export async function collectRouteCssFiles(options: {
   appDir: string;
   pageFile: string;
   projectRoot: string;
+  readSource?: ((file: string) => Promise<string | undefined> | string | undefined) | undefined;
 }): Promise<string[]> {
   return await collectRouteCssFilesFromSources({
     ...options,
-    readSource: (file) => readFile(file, "utf8"),
+    readSource: options.readSource ?? ((file) => readFile(file, "utf8")),
   });
 }
 
 export async function collectRouteCssFilesFromSources(options: {
   appDir: string;
+  isFile?: ((file: string) => Promise<boolean> | boolean) | undefined;
   pageFile: string;
   projectRoot: string;
   readSource: (file: string) => Promise<string | undefined> | string | undefined;
 }): Promise<string[]> {
-  const shellFiles = (await existingRouteShellCandidates(options.appDir, options.pageFile, isFile))
-    .map((candidate) => candidate.file);
+  const fileExists = options.isFile ?? isFile;
+  const shellFiles = (
+    await existingRouteShellCandidates(options.appDir, options.pageFile, async (file) =>
+      fileExists(file),
+    )
+  ).map((candidate) => candidate.file);
   const files = [...shellFiles, options.pageFile];
   const seen = new Set<string>();
   const cssFiles: string[] = [];
@@ -57,12 +63,31 @@ export async function collectRouteCssHrefs(options: {
   hrefPrefix?: string | undefined;
   pageFile: string;
   projectRoot: string;
+  readSource?: ((file: string) => Promise<string | undefined> | string | undefined) | undefined;
 }): Promise<string[]> {
   return (await collectRouteCssFiles(options)).map((file) => {
     const href = `/${relative(options.projectRoot, file).split(sep).join("/")}`;
 
     return options.hrefPrefix === undefined ? href : `${options.hrefPrefix}${href.slice(1)}`;
   });
+}
+
+export function createCachedRouteSourceReader(
+  readSource: (file: string) => Promise<string | undefined> | string | undefined = (file) =>
+    readFile(file, "utf8"),
+): (file: string) => Promise<string | undefined> {
+  const cache = new Map<string, Promise<string | undefined>>();
+
+  return (file) => {
+    const cached = cache.get(file);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const loaded = Promise.resolve(readSource(file));
+    cache.set(file, loaded);
+    return loaded;
+  };
 }
 
 export async function collectSpecialBoundaryFiles(directory: string): Promise<string[]> {

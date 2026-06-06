@@ -39,8 +39,12 @@ import {
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
 import { renderAppRequest } from "./render.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
-import { collectRouteCssHrefs, collectSpecialBoundaryFiles } from "./route-styles.js";
-import { scanAppRoutes } from "./routes.js";
+import {
+  collectRouteCssHrefs,
+  collectSpecialBoundaryFiles,
+  createCachedRouteSourceReader,
+} from "./route-styles.js";
+import { createRouteMatcher, scanAppRoutes, type AppRoute } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
 import { hasJsxSyntax } from "./source-jsx.js";
 import { workspacePackageFile } from "./workspace-packages.js";
@@ -521,11 +525,16 @@ async function handleAppRouterViteRequest(
 
     const request = nodeRequestToWebRequest(incoming, origin);
     const routeTransformPlugins = options.navigationScanVitePlugins ?? options.vitePlugins;
+    const routes = await scanAppRoutes({ appDir: project.routesDir });
+    const routeMatcher = createRouteMatcher(routes);
+    const readRouteSource = createCachedRouteSourceReader();
     const [clientStyles, clientStylesByFile, navigationScripts] = await Promise.all([
-      devRouteStyles(project),
-      devSpecialRouteStyles(project),
+      devRouteStyles(project, routes, readRouteSource),
+      devSpecialRouteStyles(project, readRouteSource),
       devNavigationScripts(
         project.routesDir,
+        routes,
+        readRouteSource,
         options.clientRouteInferenceCache,
         routeTransformPlugins,
       ),
@@ -547,6 +556,8 @@ async function handleAppRouterViteRequest(
         navigationScripts,
         request,
         routeCache: options.routeCache,
+        routeMatcher,
+        routes,
         serverActions: options.serverActions,
         vitePlugins: routeTransformPlugins,
       }),
@@ -802,9 +813,11 @@ function clientAssetBuildErrorResponse(filename: string, error: unknown): Respon
 
 async function devRouteStyles(
   project: ResolvedAppRouterProject,
+  routes: readonly AppRoute[],
+  readSource: (file: string) => Promise<string | undefined>,
 ): Promise<ReadonlyMap<string, readonly string[]>> {
   const entries = await Promise.all(
-    (await scanAppRoutes({ appDir: project.routesDir })).map(async (route) => {
+    routes.map(async (route) => {
       if (route.kind !== "page") {
         return undefined;
       }
@@ -814,6 +827,7 @@ async function devRouteStyles(
         hrefPrefix: devCssPrefix,
         pageFile: route.file,
         projectRoot: project.projectRoot,
+        readSource,
       });
 
       return hrefs.length === 0 ? undefined : ([route.path, hrefs as readonly string[]] as const);
@@ -828,6 +842,7 @@ async function devRouteStyles(
 
 async function devSpecialRouteStyles(
   project: ResolvedAppRouterProject,
+  readSource: (file: string) => Promise<string | undefined>,
 ): Promise<ReadonlyMap<string, readonly string[]>> {
   const entries = await Promise.all(
     (await collectSpecialBoundaryFiles(project.routesDir)).map(async (file) => {
@@ -836,6 +851,7 @@ async function devSpecialRouteStyles(
         hrefPrefix: devCssPrefix,
         pageFile: file,
         projectRoot: project.projectRoot,
+        readSource,
       });
 
       return hrefs.length === 0 ? undefined : ([file, hrefs as readonly string[]] as const);
@@ -850,17 +866,22 @@ async function devSpecialRouteStyles(
 
 async function devNavigationScripts(
   appDir: string,
+  routes: readonly AppRoute[],
+  readSource: (file: string) => Promise<string | undefined>,
   inferenceCache?: ClientRouteInferenceCache | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
 ): Promise<ReadonlyMap<string, string>> {
   const cache = inferenceCache ?? createClientRouteInferenceCache();
   const entries = await Promise.all(
-    (await scanAppRoutes({ appDir })).map(async (route) => {
+    routes.map(async (route) => {
       if (route.kind !== "page") {
         return undefined;
       }
 
-      const source = await readFile(route.file, "utf8");
+      const source = await readSource(route.file);
+      if (source === undefined) {
+        return undefined;
+      }
       const navigation = await resolveNavigationRuntime({
         appDir,
         cache,

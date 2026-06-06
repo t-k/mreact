@@ -175,6 +175,7 @@ export interface RenderAppRequestOptions {
   onResponse?: AppRouterResponseHook | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
+  requestUrl?: URL | undefined;
   routeCache?: AppRouterCache | undefined;
   routeMatcher?: RouteMatcher | undefined;
   routes?: readonly AppRoute[] | undefined;
@@ -599,7 +600,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   }
 
   const trace = traceContextFromRequest(options.request);
-  const url = new URL(options.request.url);
+  const url = options.requestUrl ?? new URL(options.request.url);
   const requestEvent = {
     method: options.request.method,
     path: url.pathname,
@@ -607,7 +608,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
     ...(trace === undefined ? {} : { trace }),
   };
   invokeRouterInstrumentation(options.instrumentation?.onRequestStart, requestEvent);
-  const response = await renderAppRequestInternal(options);
+  const response = await renderAppRequestInternal({ ...options, requestUrl: url });
   invokeRouterInstrumentation(options.instrumentation?.onRequestEnd, {
     ...requestEvent,
     status: response.status,
@@ -747,7 +748,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
   let phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const routes = options.routes ?? (await scanAppRoutes({ appDir: options.appDir }));
   finishRenderTimingPhase(timing, phaseStartedAt, "routeScanMs");
-  const url = new URL(options.request.url);
+  const url = options.requestUrl ?? new URL(options.request.url);
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const matched = options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
   finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
@@ -796,6 +797,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     return renderAppRequestInternal({
       ...options,
       request: middlewareResult.request,
+      requestUrl: new URL(middlewareResult.request.url),
       skipMiddleware: true,
     });
   }
@@ -3453,9 +3455,8 @@ async function applyLayouts(options: {
   let html = options.html;
   let shellHasOutOfOrderBoundary = false;
   const slotContext = createSlotRenderContext(options.slots);
-
-  for (const shell of layoutFiles.reverse()) {
-    const rendered = await renderShellPrefixSuffix(
+  const renderShell = (shell: ShellFile) =>
+    renderShellPrefixSuffix(
       options.appDir,
       shell,
       options.props,
@@ -3469,6 +3470,18 @@ async function applyLayouts(options: {
       options.vitePlugins,
       options.importPolicy,
     );
+  const renderedShells =
+    Object.keys(slotContext.namedSlots).length === 0
+      ? await Promise.all(layoutFiles.map(renderShell))
+      : undefined;
+
+  for (let index = layoutFiles.length - 1; index >= 0; index -= 1) {
+    const shell = layoutFiles[index];
+    if (shell === undefined) {
+      continue;
+    }
+
+    const rendered = renderedShells?.[index] ?? (await renderShell(shell));
     shellHasOutOfOrderBoundary ||= rendered.hasOutOfOrderBoundary;
     html = `${rendered.prefix}${html}${rendered.suffix}`;
   }
@@ -3505,12 +3518,9 @@ async function layoutShellsForPage(
   importPolicy?: AppRouterImportPolicy | undefined,
 ): Promise<RenderedShell[]> {
   const layoutFiles = await shellFilesForPage(appDir, pageFile, serverModuleCacheVersion);
-  const shells: RenderedShell[] = [];
   const slotContext = createSlotRenderContext(slots);
-
-  for (const shell of layoutFiles) {
-    shells.push(
-      await renderShellPrefixSuffix(
+  const renderShell = (shell: ShellFile) =>
+    renderShellPrefixSuffix(
         appDir,
         shell,
         props,
@@ -3523,8 +3533,16 @@ async function layoutShellsForPage(
         define,
         vitePlugins,
         importPolicy,
-      ),
-    );
+      );
+  const shells =
+    Object.keys(slotContext.namedSlots).length === 0
+      ? await Promise.all(layoutFiles.map(renderShell))
+      : [];
+
+  if (shells.length === 0 && layoutFiles.length > 0) {
+    for (const shell of layoutFiles) {
+      shells.push(await renderShell(shell));
+    }
   }
 
   warnUnconsumedRouteSlots({

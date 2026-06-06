@@ -219,6 +219,17 @@ describe("router Vite middleware", () => {
     expect(packageJson.peerDependencies?.vite).toBe(">=8 <9");
   });
 
+  test("shares the dev app route scan across styles, navigation, and render", async () => {
+    const source = await readFile(new URL("../src/vite.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("const routes = await scanAppRoutes({ appDir: project.routesDir });");
+    expect(source).toContain("devRouteStyles(project, routes, readRouteSource)");
+    expect(source).toContain("devSpecialRouteStyles(project, readRouteSource)");
+    expect(source).toContain("devNavigationScripts(\n        project.routesDir,\n        routes,");
+    expect(source).toContain("routes,");
+    expect(source).toContain("routeMatcher,");
+  });
+
   test("serves page HTML and client assets through HTTP", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-"));
     await mkdir(join(appDir, "dashboard"), { recursive: true });
