@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.140 - 2026-06-06
+
+### Added
+
+- Added a primitive `source write 1k` benchmark that directly measures 1,000 fine-grained source writes for mreact, Solid, and Solid v2 while reporting frameworks without an equivalent source primitive as unsupported.
+
+### Changed
+
+- Improved benchmark methodology for primitive and router comparisons by tightening DOM lifecycle isolation, browser probe coverage, build output size reporting, fixture reuse, and benchmark caveats for cases that are not direct source-write comparisons.
+- Reduced reactive update overhead across computed fan-in tracking, DOM event binding, keyed list updates, empty clears, DOM scope disposal, and same-order keyed children.
+- Reduced React-compatible mount and update overhead for initial DOM props, event props, removed fiber subtrees, and keyed record updates.
+
+### Fixed
+
+- Fixed router benchmark variant fixture reuse so repeated framework variants no longer share mutable benchmark fixtures between runs.
+- Fixed route hydration for components with a single event binding after the reactive DOM event metadata optimization, preserving click and input handlers when the generated client route resumes existing server DOM.
+
 ## 0.0.139 - 2026-06-06
 
 ### Added
