@@ -3,9 +3,10 @@ import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { extname, join, normalize } from "node:path";
+import { dirname, extname, join, normalize } from "node:path";
 import { chromium } from "@playwright/test";
 import { build as viteBuild } from "vite";
+import { qwikVite } from "@builder.io/qwik/optimizer";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { formatBenchmarkMarkdown } from "../shared/report.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
@@ -17,6 +18,7 @@ import {
 } from "./cases.js";
 
 const requireFromHere = createRequire(import.meta.url);
+const qwikPackageDir = dirname(dirname(requireFromHere.resolve("@builder.io/qwik")));
 const browserWarmupRuns = parseNonNegativeInteger(
   process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "2",
   "MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS",
@@ -33,14 +35,49 @@ const rows: BenchmarkRow[] = [];
 
 try {
   const page = await browser.newPage();
-  await page.goto(server.url, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => {
-    return typeof (globalThis as { __mreactPrimitiveBrowserBench?: unknown })
-      .__mreactPrimitiveBrowserBench === "object";
+  const diagnostics: string[] = [];
+  page.on("console", (message) => diagnostics.push(`[console:${message.type()}] ${message.text()}`));
+  page.on("pageerror", (error) => diagnostics.push(`[pageerror] ${error.stack ?? error.message}`));
+  page.on("requestfailed", (request) =>
+    diagnostics.push(`[requestfailed] ${request.url()} ${request.failure()?.errorText ?? ""}`),
+  );
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      diagnostics.push(`[response:${response.status()}] ${response.url()}`);
+    }
   });
+  await page.goto(server.url, { waitUntil: "domcontentloaded" });
+  await page
+    .waitForFunction(() => {
+      return typeof (globalThis as { __mreactPrimitiveBrowserBench?: unknown })
+        .__mreactPrimitiveBrowserBench === "object";
+    })
+    .catch((error: unknown) => {
+      const suffix = diagnostics.length === 0 ? "no browser diagnostics" : diagnostics.join("\n");
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${suffix}`,
+      );
+    });
 
   for (const benchmarkCase of primitiveBrowserCases) {
     for (const framework of primitiveBrowserFrameworks) {
+      if (framework === "marko") {
+        rows.push({
+          suite: "primitive-browser",
+          framework,
+          version: "workspace",
+          caseName: benchmarkCase.name,
+          status: "unsupported",
+          metric: "duration",
+          unit: "ms",
+          value: 0,
+          notes: [
+            "Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added.",
+          ],
+        });
+        continue;
+      }
+
       try {
         const samples = await page.evaluate(
           async (options) => {
@@ -117,6 +154,8 @@ const env = await collectBenchmarkEnvironment([
   "@reckona/mreact-reactive-core",
   "@reckona/mreact-reactive-dom",
   "@playwright/test",
+  "@builder.io/qwik",
+  "marko",
   "react",
   "react-dom",
   "solid-js",
@@ -165,6 +204,13 @@ async function createBrowserFixture(): Promise<{
     },
     configFile: false,
     logLevel: "silent",
+    plugins: [
+      qwikVite({
+        client: { input: join(sourceDir, "bench.ts") },
+        csr: true,
+        srcDir: sourceDir,
+      }),
+    ],
     resolve: {
       alias: [
         {
@@ -193,6 +239,22 @@ async function createBrowserFixture(): Promise<{
         {
           find: "@reckona/mreact-compat",
           replacement: join(process.cwd(), "packages/react-compat/dist/index.js"),
+        },
+        {
+          find: /^@builder\.io\/qwik$/,
+          replacement: join(qwikPackageDir, "dist/core.mjs"),
+        },
+        {
+          find: "@builder.io/qwik/build",
+          replacement: join(qwikPackageDir, "dist/build/index.mjs"),
+        },
+        {
+          find: "@builder.io/qwik/preloader",
+          replacement: join(qwikPackageDir, "dist/preloader.mjs"),
+        },
+        {
+          find: "@builder.io/qwik/qwikloader.js",
+          replacement: join(qwikPackageDir, "dist/qwikloader.js"),
         },
         {
           find: "react-dom/client",
@@ -229,6 +291,7 @@ import { Fragment as ReactFragment, createElement as reactCreateElement, useStat
 import { flushSync as reactDomFlushSync } from "react-dom";
 import { createRoot as createReactRoot } from "react-dom/client";
 import { createComputed as solidCreateComputed, createRoot as createSolidRoot, createSignal as createSolidSignal, mapArray as solidMapArray } from "solid-js";
+import { Fragment as QwikFragment, jsx as qwikJsx, render as qwikRender } from "@builder.io/qwik";
 
 function createRowsData(count) {
   return Array.from({ length: count }, (_unused, index) => ({
@@ -706,6 +769,78 @@ function createSolidSelectableRowsRoot(host, initialRows) {
   });
 }
 
+async function runQwik(caseName, count) {
+  const host = createHost();
+  const rows = createRowsData(count);
+  let result;
+
+  try {
+    if (caseName === "browser create 1k rows") {
+      const start = performance.now();
+      result = await qwikRender(host, qwikRows(rows));
+      const duration = performance.now() - start;
+      validateRows(host, rows);
+      return duration;
+    }
+
+    result = await qwikRender(host, qwikRows(rows));
+    validateRows(host, rows);
+
+    if (caseName === "browser update every 10th in 10k rows") {
+      const updatedRows = rows.map((row, index) =>
+        index % 10 === 0 ? { ...row, label: row.label + " updated" } : row,
+      );
+      const start = performance.now();
+      await qwikRender(host, qwikRows(updatedRows));
+      const duration = performance.now() - start;
+      validateRows(host, updatedRows);
+      return duration;
+    }
+
+    if (caseName === "browser select row in 10k rows") {
+      const selectedId = Math.floor(count / 2);
+      const start = performance.now();
+      await qwikRender(host, qwikRows(rows, selectedId));
+      const duration = performance.now() - start;
+      validateSelectedRow(host, selectedId);
+      return duration;
+    }
+
+    if (caseName === "browser clear 10k rows") {
+      const start = performance.now();
+      await qwikRender(host, qwikRows([]));
+      const duration = performance.now() - start;
+      validateRows(host, []);
+      return duration;
+    }
+
+    throw new Error("unknown qwik browser case " + caseName);
+  } finally {
+    result?.cleanup();
+  }
+}
+
+function qwikRows(rows, selectedId = -1) {
+  return qwikJsx(
+    QwikFragment,
+    {
+      children: rows.map((row) =>
+        qwikJsx(
+          "div",
+          {
+            class: selectedId === row.id ? "selected" : undefined,
+            "data-key": row.id,
+            "data-selected": selectedId === row.id ? "true" : undefined,
+            children: row.label,
+          },
+          row.id,
+        ),
+      ),
+    },
+    null,
+  );
+}
+
 globalThis.__mreactPrimitiveBrowserBench = {
   async run(framework, caseName, count) {
     if (framework === "mreact") {
@@ -719,6 +854,9 @@ globalThis.__mreactPrimitiveBrowserBench = {
     }
     if (framework === "solid") {
       return await runSolid(caseName, count);
+    }
+    if (framework === "qwik") {
+      return await runQwik(caseName, count);
     }
     throw new Error("unknown primitive browser framework " + framework);
   },
