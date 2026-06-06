@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   stripTypeScriptWithOxc,
   transformJsxToCreateElementWithOxc,
@@ -17,6 +19,16 @@ describe("compiler oxc-transform edge branches", () => {
     );
     expect(result).not.toMatch(/import\s+type/);
     expect(result).toContain("export const x");
+  });
+
+  test("stripTypeScriptWithOxc memoizes repeated TypeScript snippets", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages/compiler/src/oxc-transform.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("stripTypeScriptCache");
+    expect(source).toContain("stripTypeScriptCacheLimit");
   });
 
   test("transformJsxWithOxc rewrites JSX using the automatic runtime", () => {

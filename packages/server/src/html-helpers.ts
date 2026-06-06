@@ -184,7 +184,12 @@ function appendReactNodeList(
 
   for (const node of nodes) {
     if (chain !== undefined) {
-      chain = chain.then(() => appendReactNode(sink, node, state));
+      const buffered = renderReactNodeToBufferedString(node, state);
+      chain = chain.then(async () => {
+        await buffered.result;
+        await buffered.sink.drain();
+        sink.append(buffered.sink.toString());
+      });
       continue;
     }
 
@@ -196,6 +201,18 @@ function appendReactNodeList(
   }
 
   return chain;
+}
+
+function renderReactNodeToBufferedString(
+  node: unknown,
+  state: HtmlRenderState,
+): { result: void | PromiseLike<void>; sink: ReturnType<typeof createStringSink> } {
+  const sink = createStringSink();
+
+  return {
+    result: appendReactNode(sink, node, state),
+    sink,
+  };
 }
 
 function appendReactElement(
@@ -294,7 +311,12 @@ function appendRawTextNodeList(
 
   for (const node of nodes) {
     if (chain !== undefined) {
-      chain = chain.then(() => appendRawTextNode(sink, node));
+      const buffered = renderRawTextNodeToBufferedString(node);
+      chain = chain.then(async () => {
+        await buffered.result;
+        await buffered.sink.drain();
+        sink.append(buffered.sink.toString());
+      });
       continue;
     }
 
@@ -306,6 +328,17 @@ function appendRawTextNodeList(
   }
 
   return chain;
+}
+
+function renderRawTextNodeToBufferedString(
+  node: unknown,
+): { result: void | PromiseLike<void>; sink: ReturnType<typeof createStringSink> } {
+  const sink = createStringSink();
+
+  return {
+    result: appendRawTextNode(sink, node),
+    sink,
+  };
 }
 
 function appendSuspenseElement(

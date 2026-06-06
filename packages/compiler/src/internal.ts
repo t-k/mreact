@@ -1060,8 +1060,33 @@ interface Replacement {
   text: string;
 }
 
+const parseModuleCache = new Map<string, CompilerModuleContext>();
+const parseModuleCacheLimit = 128;
+
 function parseModule(code: string, filename: string | undefined) {
-  return parseModuleContext(createCompilerModuleContext({ code, filename }));
+  const cacheKey = `${filename ?? ""}\0${code}`;
+  const cached = parseModuleCache.get(cacheKey);
+
+  if (cached !== undefined) {
+    return parseModuleContext(cached);
+  }
+
+  const parsed = createCompilerModuleContext({ code, filename });
+  rememberParsedModule(cacheKey, parsed);
+
+  return parseModuleContext(parsed);
+}
+
+function rememberParsedModule(cacheKey: string, context: CompilerModuleContext): void {
+  if (parseModuleCache.size >= parseModuleCacheLimit) {
+    const first = parseModuleCache.keys().next().value;
+
+    if (first !== undefined) {
+      parseModuleCache.delete(first);
+    }
+  }
+
+  parseModuleCache.set(cacheKey, context);
 }
 
 function parseModuleContext(context: CompilerModuleContext): CompilerModuleContext {

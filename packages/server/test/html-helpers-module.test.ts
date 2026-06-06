@@ -85,6 +85,39 @@ describe("server HTML helpers module", () => {
     await expect(renderReactNodeToString(null)).resolves.toBe("");
   });
 
+  test("starts sibling async server components before awaiting earlier siblings", async () => {
+    const started: string[] = [];
+    let resolveFirst: (() => void) | undefined;
+    let resolveSecond: (() => void) | undefined;
+
+    function First() {
+      started.push("first");
+      return new Promise((resolve) => {
+        resolveFirst = () => resolve(createElement("span", null, "A"));
+      });
+    }
+
+    function Second() {
+      started.push("second");
+      return new Promise((resolve) => {
+        resolveSecond = () => resolve(createElement("span", null, "B"));
+      });
+    }
+
+    const rendered = renderReactNodeToString([
+      createElement(First, { key: "a" }),
+      createElement(Second, { key: "b" }),
+    ]);
+    await Promise.resolve();
+
+    expect(started).toEqual(["first", "second"]);
+
+    resolveSecond?.();
+    resolveFirst?.();
+
+    await expect(rendered).resolves.toBe("<span>A</span><span>B</span>");
+  });
+
   test("html serializes HTML void elements without closing tags", async () => {
     const response = html(
       createElement(

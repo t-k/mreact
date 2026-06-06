@@ -1,8 +1,17 @@
 import { transformSync } from "oxc-transform";
 
+const stripTypeScriptCache = new Map<string, string>();
+const stripTypeScriptCacheLimit = 512;
+
 export function stripTypeScriptWithOxc(source: string): string {
   if (!needsTypeScriptStripping(source)) {
     return source.trimEnd();
+  }
+
+  const cached = stripTypeScriptCache.get(source);
+
+  if (cached !== undefined) {
+    return cached;
   }
 
   const result = transformSync("snippet.tsx", source, {
@@ -15,11 +24,23 @@ export function stripTypeScriptWithOxc(source: string): string {
     },
   });
 
-  if (result.errors.length > 0) {
-    return source.trimEnd();
+  const stripped = result.errors.length > 0 ? source.trimEnd() : result.code.trimEnd();
+
+  rememberStrippedTypeScript(source, stripped);
+
+  return stripped;
+}
+
+function rememberStrippedTypeScript(source: string, stripped: string): void {
+  if (stripTypeScriptCache.size >= stripTypeScriptCacheLimit) {
+    const first = stripTypeScriptCache.keys().next().value;
+
+    if (first !== undefined) {
+      stripTypeScriptCache.delete(first);
+    }
   }
 
-  return result.code.trimEnd();
+  stripTypeScriptCache.set(source, stripped);
 }
 
 function needsTypeScriptStripping(source: string): boolean {

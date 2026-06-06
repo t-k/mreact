@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   collectClientRouteModuleAnalysis,
   collectFormActionExpressionReferences,
@@ -44,6 +46,7 @@ import {
   isOxcJsxBranch,
   readOxcReturnExpressionFromStatement,
 } from "../src/oxc-expression-utils.js";
+import { getOxcLocationFromOffset } from "../src/oxc-node-utils.js";
 import {
   formatOxcBodyStatement,
   lowerOxcBodyStatementJsx,
@@ -67,6 +70,35 @@ import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
 
 describe("compiler OXC internals", () => {
+  test("memoizes repeated module parses for route source helper calls", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages/compiler/src/internal.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("parseModuleCache");
+    expect(source).toContain("parseModuleCacheLimit");
+  });
+
+  test("caches OXC source line starts for repeated source locations", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages/compiler/src/oxc-node-utils.ts"),
+      "utf8",
+    );
+    const code = "first\nsecond\nthird";
+
+    expect(getOxcLocationFromOffset(code, code.indexOf("third"))).toEqual({
+      column: 1,
+      line: 3,
+    });
+    expect(getOxcLocationFromOffset(code, code.indexOf("cond"))).toEqual({
+      column: 3,
+      line: 2,
+    });
+    expect(source).toContain("lineStartCache");
+    expect(source).toContain("findLineStartIndex");
+  });
+
   test("collects real JSX form action references only", () => {
     const code = `import { remove, save } from "./actions";
 
