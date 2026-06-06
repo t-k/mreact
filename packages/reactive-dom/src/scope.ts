@@ -54,6 +54,10 @@ export function disposeScope(scope: DomScope): void {
 
   scope.disposed = true;
 
+  if (scope.disposers.size === 0) {
+    return;
+  }
+
   const disposers = Array.from(scope.disposers).reverse();
   scope.disposers.clear();
 

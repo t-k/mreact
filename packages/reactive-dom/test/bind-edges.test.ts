@@ -268,6 +268,25 @@ describe("reactive-dom scope: edge branches", () => {
     expect(calls).toBe(1);
   });
 
+  test("disposeScope with no registered disposers does not allocate a disposer array", () => {
+    const scope = createScope();
+    const originalFrom = Array.from;
+    let arrayFromCalls = 0;
+
+    try {
+      Array.from = ((...args: Parameters<typeof Array.from>) => {
+        arrayFromCalls += 1;
+        return originalFrom(...args);
+      }) as typeof Array.from;
+
+      disposeScope(scope);
+    } finally {
+      Array.from = originalFrom;
+    }
+
+    expect(arrayFromCalls).toBe(0);
+  });
+
   test("registerDispose-wrapped dispose called twice runs the underlying dispose only once", () => {
     const scope = createScope();
     let calls = 0;
