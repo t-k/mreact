@@ -124,6 +124,40 @@ describe("react-compat DOM prop performance", () => {
     expect(attributeReads).toBe(baselineAttributeReads);
     expect(button.outerHTML).toBe('<button data-index="1" type="button"></button>');
   });
+
+  test("does not allocate iterable event-name arrays for ordinary click props", () => {
+    const root = document.createElement("div");
+    const button = document.createElement("button");
+    const originalIterator = Array.prototype[Symbol.iterator];
+    let arrayIteratorCalls = 0;
+
+    Object.defineProperty(Array.prototype, Symbol.iterator, {
+      configurable: true,
+      value(this: unknown[]) {
+        arrayIteratorCalls += 1;
+        return originalIterator.call(this);
+      },
+    });
+
+    try {
+      applyProps(
+        button,
+        {
+          children: "Click",
+          onClick: () => undefined,
+        },
+        "0",
+        { eventRoot: root },
+      );
+    } finally {
+      Object.defineProperty(Array.prototype, Symbol.iterator, {
+        configurable: true,
+        value: originalIterator,
+      });
+    }
+
+    expect(arrayIteratorCalls).toBe(0);
+  });
 });
 
 function installCountingFormConstructors(hasInstance: () => boolean): void {

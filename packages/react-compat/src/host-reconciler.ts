@@ -3,6 +3,7 @@ import {
   ERROR_BOUNDARY_TYPE,
   FORWARD_REF_TYPE,
   Fragment,
+  HOST_CHILDREN_ONLY_PROPS_META,
   HOST_OWN_PROPS_META,
   LAZY_TYPE,
   MEMO_TYPE,
@@ -1621,13 +1622,23 @@ function commitHostDirtyFiber(
 
     const props = fiber.pendingProps as Record<string, unknown>;
     const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
+    const directTextChild =
+      fiber.child === undefined && fiber.hydrateExisting !== true
+        ? getDirectHostTextChild(props.children)
+        : undefined;
+    const textOnlyChildrenUpdate =
+      directTextChild !== undefined &&
+      hostPropsAreKnownChildrenOnly(fiber.memoizedProps) &&
+      hostPropsAreKnownChildrenOnly(props);
     const propsAreUnchanged =
       fiber.hydrateExisting !== true &&
+      !textOnlyChildrenUpdate &&
       hostPropsEqual(fiber.memoizedProps, props);
     const propsAreChildrenOnly =
-      fiber.hydrateExisting !== true &&
-      hostPropsAreChildrenOnly(fiber.memoizedProps) &&
-      hostPropsAreChildrenOnly(props);
+      textOnlyChildrenUpdate ||
+      (fiber.hydrateExisting !== true &&
+        hostPropsAreChildrenOnly(fiber.memoizedProps) &&
+        hostPropsAreChildrenOnly(props));
     const textOnlyRowUpdate =
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
@@ -1640,11 +1651,6 @@ function commitHostDirtyFiber(
       });
       applyChangedRef(previousProps?.ref, props.ref, element);
     }
-
-    const directTextChild =
-      fiber.child === undefined && fiber.hydrateExisting !== true
-        ? getDirectHostTextChild(props.children)
-        : undefined;
 
     if (directTextChild !== undefined) {
       syncDirectHostTextChild(element, directTextChild);
@@ -2007,13 +2013,23 @@ function commitHostFiber(
 
     const props = fiber.pendingProps as Record<string, unknown>;
     const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
+    const directTextChild =
+      fiber.child === undefined && fiber.hydrateExisting !== true
+        ? getDirectHostTextChild(props.children)
+        : undefined;
+    const textOnlyChildrenUpdate =
+      directTextChild !== undefined &&
+      hostPropsAreKnownChildrenOnly(fiber.memoizedProps) &&
+      hostPropsAreKnownChildrenOnly(props);
     const propsAreUnchanged =
       fiber.hydrateExisting !== true &&
+      !textOnlyChildrenUpdate &&
       hostPropsEqual(fiber.memoizedProps, props);
     const propsAreChildrenOnly =
-      fiber.hydrateExisting !== true &&
-      hostPropsAreChildrenOnly(fiber.memoizedProps) &&
-      hostPropsAreChildrenOnly(props);
+      textOnlyChildrenUpdate ||
+      (fiber.hydrateExisting !== true &&
+        hostPropsAreChildrenOnly(fiber.memoizedProps) &&
+        hostPropsAreChildrenOnly(props));
     const textOnlyRowUpdate =
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
@@ -2026,11 +2042,6 @@ function commitHostFiber(
       });
       applyChangedRef(previousProps?.ref, props.ref, element);
     }
-    const directTextChild =
-      fiber.child === undefined && fiber.hydrateExisting !== true
-        ? getDirectHostTextChild(props.children)
-        : undefined;
-
     if (directTextChild !== undefined) {
       syncDirectHostTextChild(element, directTextChild);
     } else if (
@@ -2350,6 +2361,16 @@ function hostPropsAreChildrenOnly(props: unknown): boolean {
   }
 
   return true;
+}
+
+function hostPropsAreKnownChildrenOnly(props: unknown): boolean {
+  return (
+    typeof props === "object" &&
+    props !== null &&
+    (props as { [HOST_CHILDREN_ONLY_PROPS_META]?: true })[
+      HOST_CHILDREN_ONLY_PROPS_META
+    ] === true
+  );
 }
 
 function isRowTextOnlyUpdate(previous: unknown, next: Record<string, unknown>): boolean {
