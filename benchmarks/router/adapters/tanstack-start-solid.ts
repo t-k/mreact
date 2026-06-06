@@ -10,12 +10,13 @@
 // adapter init で 1 回だけ実行。
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
-import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
+import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import { measureRouteJavaScriptGzipBytes } from "../browser-probes.js";
 
 const TANSTACK_SOLID_START_VERSION = "2.0.0-beta.18";
 const TANSTACK_SOLID_ROUTER_VERSION = "2.0.0-beta.17";
@@ -28,6 +29,8 @@ const fixtureParent = pathResolve(repoRoot, "benchmarks/router/.tmp");
 let rootDir: string | undefined;
 let serverProcess: { close(): Promise<void>; url: string } | undefined;
 let currentNodeCount = 0;
+let browserRootDir: string | undefined;
+let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
 
 async function spawnAndWait(
   command: string,
@@ -164,18 +167,26 @@ declare module "@tanstack/solid-router" {
 
   await writeFile(
     join(rootDir, "src", "routes", "__root.tsx"),
-    `import { Scripts, createRootRoute } from "@tanstack/solid-router";
+    `import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/solid-router";
+import { Loading } from "solid-js";
 export const Route = createRootRoute({
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+    ],
+  }),
+  component: Outlet,
   shellComponent: RootDocument,
 });
-function RootDocument(props: { children: unknown }) {
+function RootDocument(props: { children: any }) {
   return (
     <html lang="en">
       <head>
-        <meta charset="utf-8" />
+        <HeadContent />
       </head>
       <body>
-        {props.children}
+        <Loading fallback={null}>{props.children}</Loading>
         <Scripts />
       </body>
     </html>
@@ -311,15 +322,28 @@ export const Route = createFileRoute("/data-grid")({ component: Page });
   await writeFile(
     join(rootDir, "server-wrapper.mjs"),
     `import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import entry from "./dist/server/server.js";
 
 const port = Number(process.env.PORT ?? 3000);
+const clientDir = new URL("./dist/client/", import.meta.url);
 const httpServer = createServer(async (incoming, outgoing) => {
   try {
     const origin = "http://" + (incoming.headers.host ?? ("127.0.0.1:" + port));
     const url = new URL(incoming.url ?? "/", origin);
     const method = incoming.method ?? "GET";
+    if ((method === "GET" || method === "HEAD") && url.pathname.startsWith("/assets/")) {
+      try {
+        const file = await readFile(new URL("." + url.pathname, clientDir));
+        outgoing.writeHead(200, { "content-type": url.pathname.endsWith(".js") ? "text/javascript" : "application/octet-stream" });
+        if (method !== "HEAD") outgoing.write(file);
+        outgoing.end();
+        return;
+      } catch {
+        // Fall through to the framework handler.
+      }
+    }
     const init = { method, headers: Object.entries(incoming.headers).flatMap(([k, v]) => v === undefined ? [] : Array.isArray(v) ? v.map(value => [k, value]) : [[k, v]]) };
     if (method !== "GET" && method !== "HEAD") {
       init.body = Readable.toWeb(incoming);
@@ -387,6 +411,251 @@ httpServer.listen(port, "127.0.0.1", () => {
   return url;
 }
 
+async function ensureBrowserFixture(): Promise<string> {
+  if (browserRootDir !== undefined && browserServerProcess !== undefined) {
+    return browserServerProcess.url;
+  }
+
+  if (browserServerProcess !== undefined) {
+    await browserServerProcess.close();
+    browserServerProcess = undefined;
+  }
+  if (browserRootDir !== undefined) {
+    await rm(browserRootDir, { force: true, recursive: true });
+  }
+
+  await mkdir(fixtureParent, { recursive: true });
+  browserRootDir = await mkdtemp(join(fixtureParent, "tanstack-start-solid-browser-fixture-"));
+
+  await writeFile(
+    join(browserRootDir, "package.json"),
+    JSON.stringify(
+      {
+        name: "mreact-bench-tanstack-start-solid-browser-fixture",
+        private: true,
+        type: "module",
+        scripts: {
+          build: "vite build",
+        },
+        dependencies: {
+          "@solidjs/signals": "2.0.0-beta.10",
+          "@solidjs/web": "2.0.0-beta.10",
+          "@tanstack/solid-router": TANSTACK_SOLID_ROUTER_VERSION,
+          "@tanstack/solid-start": TANSTACK_SOLID_START_VERSION,
+          "solid-js": SOLID_JS_VERSION,
+          vite: VITE_VERSION,
+          "vite-plugin-solid": "^2.11.9",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  await writeFile(
+    join(browserRootDir, "vite.config.ts"),
+    `import { defineConfig } from "vite";
+import { tanstackStart } from "@tanstack/solid-start/plugin/vite";
+import solid from "vite-plugin-solid";
+export default defineConfig({
+  resolve: { alias: { "solid-js/web": "@solidjs/web" } },
+  plugins: [tanstackStart(), solid({ ssr: true })],
+});
+`,
+  );
+
+  await mkdir(join(browserRootDir, "src", "routes"), { recursive: true });
+  await writeFile(
+    join(browserRootDir, "src", "router.tsx"),
+    `import { createRouter as createTanStackRouter } from "@tanstack/solid-router";
+import { routeTree } from "./routeTree.gen";
+export function getRouter() {
+  return createTanStackRouter({ routeTree, scrollRestoration: true });
+}
+declare module "@tanstack/solid-router" {
+  interface Register {
+    router: ReturnType<typeof getRouter>;
+  }
+}
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "client.tsx"),
+    `import { StartClient, hydrateStart } from "@tanstack/solid-start/client";
+import { hydrate } from "solid-js/web";
+
+hydrateStart().then((router) => {
+  hydrate(() => <StartClient router={router} />, document);
+});
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "routes", "__root.tsx"),
+    `import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/solid-router";
+import { Loading } from "solid-js";
+export const Route = createRootRoute({
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+    ],
+  }),
+  component: Outlet,
+  shellComponent: RootDocument,
+});
+function RootDocument(props: { children: any }) {
+  return (
+    <html lang="en">
+      <head>
+        <HeadContent />
+      </head>
+      <body>
+        <Loading fallback={null}>{props.children}</Loading>
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "routes", "index.tsx"),
+    `import { Link, createFileRoute } from "@tanstack/solid-router";
+import { createSignal } from "solid-js";
+
+function Page() {
+  const [count, setCount] = createSignal(0);
+  return (
+    <main>
+      <button type="button" onClick={() => setCount((value) => value + 1)}>count: {count()}</button>
+      <Link to="/target">Details</Link>
+    </main>
+  );
+}
+export const Route = createFileRoute("/")({ component: Page });
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "src", "routes", "target.tsx"),
+    `import { createFileRoute } from "@tanstack/solid-router";
+function Page() {
+  return <main><h1>Navigation target</h1></main>;
+}
+export const Route = createFileRoute("/target")({ component: Page });
+`,
+  );
+  await writeFile(
+    join(browserRootDir, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          target: "ESNext",
+          module: "ESNext",
+          moduleResolution: "bundler",
+          jsx: "preserve",
+          jsxImportSource: "@solidjs/web",
+          strict: false,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          isolatedModules: true,
+          allowJs: true,
+          resolveJsonModule: true,
+        },
+        include: ["src/**/*"],
+      },
+      null,
+      2,
+    ),
+  );
+  await writeFile(
+    join(browserRootDir, "server-wrapper.mjs"),
+    `import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { Readable } from "node:stream";
+import entry from "./dist/server/server.js";
+
+const port = Number(process.env.PORT ?? 3000);
+const clientDir = new URL("./dist/client/", import.meta.url);
+const httpServer = createServer(async (incoming, outgoing) => {
+  try {
+    const origin = "http://" + (incoming.headers.host ?? ("127.0.0.1:" + port));
+    const url = new URL(incoming.url ?? "/", origin);
+    const method = incoming.method ?? "GET";
+    if ((method === "GET" || method === "HEAD") && url.pathname.startsWith("/assets/")) {
+      try {
+        const file = await readFile(new URL("." + url.pathname, clientDir));
+        outgoing.writeHead(200, { "content-type": url.pathname.endsWith(".js") ? "text/javascript" : "application/octet-stream" });
+        if (method !== "HEAD") outgoing.write(file);
+        outgoing.end();
+        return;
+      } catch {
+        // Fall through to the framework handler.
+      }
+    }
+    const init = { method, headers: Object.entries(incoming.headers).flatMap(([k, v]) => v === undefined ? [] : Array.isArray(v) ? v.map(value => [k, value]) : [[k, v]]) };
+    if (method !== "GET" && method !== "HEAD") {
+      init.body = Readable.toWeb(incoming);
+      init.duplex = "half";
+    }
+    const request = new Request(url, init);
+    const response = await entry.fetch(request);
+    outgoing.writeHead(response.status, Object.fromEntries(response.headers));
+    if (response.body) {
+      for await (const chunk of response.body) outgoing.write(chunk);
+    }
+    outgoing.end();
+  } catch (error) {
+    outgoing.statusCode = 500;
+    outgoing.setHeader("content-type", "text/plain");
+    outgoing.end(error instanceof Error ? error.stack : String(error));
+  }
+});
+
+httpServer.listen(port, "127.0.0.1", () => {
+  console.log("listening on " + port);
+});
+`,
+  );
+
+  await spawnAndWait("pnpm", ["install", "--ignore-workspace", "--silent"], {
+    cwd: browserRootDir,
+  });
+  await spawnAndWait("pnpm", ["run", "build"], {
+    cwd: browserRootDir,
+    env: { NODE_ENV: "production" },
+  });
+
+  const port = await findFreePort();
+  const child = spawn(process.execPath, ["server-wrapper.mjs"], {
+    cwd: browserRootDir,
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, NODE_ENV: "production", PORT: String(port) },
+  });
+
+  let stderr = "";
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString("utf8");
+  });
+
+  const url = `http://127.0.0.1:${port}`;
+  const ready = await waitForServer(url, 30_000);
+  if (!ready) {
+    child.kill();
+    throw new Error(
+      `tanstack-start-solid browser server did not become ready in 30s: ${stderr.slice(-2000)}`,
+    );
+  }
+
+  browserServerProcess = {
+    url,
+    close: async () => {
+      child.kill();
+      await new Promise<void>((resolve) => child.once("exit", () => resolve()));
+    },
+  };
+  return url;
+}
+
 export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
   name: "tanstack-start-solid",
   version: TANSTACK_SOLID_START_VERSION,
@@ -401,10 +670,18 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
       await serverProcess.close();
       serverProcess = undefined;
     }
+    if (browserServerProcess !== undefined) {
+      await browserServerProcess.close();
+      browserServerProcess = undefined;
+    }
     if (rootDir !== undefined) {
       await rm(rootDir, { force: true, recursive: true });
       rootDir = undefined;
       currentNodeCount = 0;
+    }
+    if (browserRootDir !== undefined) {
+      await rm(browserRootDir, { force: true, recursive: true });
+      browserRootDir = undefined;
     }
   },
   async renderToString(nodeCount: number): Promise<string> {
@@ -455,32 +732,25 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
     return html;
   },
   async measureServerOnlyClientBundleBytes(): Promise<number> {
-    return measureClientChunks();
+    const url = await ensureFixture(1000);
+    return measureRouteJavaScriptGzipBytes(url);
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
-    return measureClientChunks();
+    const url = await ensureBrowserFixture();
+    return measureRouteJavaScriptGzipBytes(url);
+  },
+  async measureBuildOutputGzipBytes(): Promise<number> {
+    if (rootDir === undefined) {
+      await ensureFixture(1000);
+    }
+
+    if (rootDir === undefined) {
+      throw new Error("tanstack-start-solid fixture not initialized");
+    }
+
+    return measureBuildOutputGzipBytes([
+      join(rootDir, "dist", "client"),
+      join(rootDir, "dist", "server"),
+    ]);
   },
 };
-
-async function measureClientChunks(): Promise<number> {
-  if (rootDir === undefined) {
-    throw new Error("tanstack-start-solid fixture not initialized");
-  }
-  const dir = join(rootDir, "dist", "client", "assets");
-  let total = 0;
-  try {
-    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
-      const filePath =
-        "parentPath" in entry && typeof (entry as { parentPath?: string }).parentPath === "string"
-          ? join((entry as { parentPath: string }).parentPath, entry.name)
-          : join(dir, entry.name);
-      const code = await readFile(filePath);
-      total += gzipSync(code).length;
-    }
-  } catch {
-    // ignore
-  }
-  return total;
-}

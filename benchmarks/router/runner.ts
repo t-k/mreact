@@ -265,111 +265,166 @@ export async function runRouterBenchmarks(
   const rows: RouterBenchmarkRow[] = [];
   const benchTimeMs = options.benchTimeMs ?? 1_500;
   const warmupTimeMs = options.warmupTimeMs ?? 250;
+  const activeAdapters: RouterBenchmarkAdapter[] = [];
 
   for (const adapter of adapters) {
     try {
       await adapter.setup?.();
       await adapter.renderToString?.(nodeCount);
+      activeAdapters.push(adapter);
     } catch (error) {
       rows.push(...failedRowsForAdapter(adapter, error));
-      continue;
     }
+  }
 
+  try {
     for (const benchmarkCase of timedRouterBenchmarkCases) {
-      if (!benchmarkCase.isSupported(adapter)) {
-        rows.push(unsupportedRow(adapter, benchmarkCase));
-        continue;
-      }
-
-      const bench = new Bench({
-        time: benchTimeMs,
-        warmupTime: warmupTimeMs,
-        retainSamples: true,
-      });
-      bench.add(`${adapter.name} / ${benchmarkCase.name}`, async () => {
-        await benchmarkCase.invoke(adapter);
-      });
-
-      try {
-        await bench.run();
-        const task = bench.tasks[0];
-
-        if (task === undefined) {
-          throw new Error("tinybench did not return a task result");
+      for (const adapter of activeAdapters) {
+        if (!benchmarkCase.isSupported(adapter)) {
+          rows.push(unsupportedRow(adapter, benchmarkCase));
+          continue;
         }
 
-        rows.push(rowFromTask(adapter, benchmarkCase, task));
-      } catch (error) {
-        rows.push(failedRow(adapter, benchmarkCase, error));
+        const bench = new Bench({
+          time: benchTimeMs,
+          warmupTime: warmupTimeMs,
+          retainSamples: true,
+        });
+        bench.add(`${adapter.name} / ${benchmarkCase.name}`, async () => {
+          await benchmarkCase.invoke(adapter);
+        });
+
+        try {
+          await bench.run();
+          const task = bench.tasks[0];
+
+          if (task === undefined) {
+            throw new Error("tinybench did not return a task result");
+          }
+
+          rows.push(rowFromTask(adapter, benchmarkCase, task));
+        } catch (error) {
+          rows.push(failedRow(adapter, benchmarkCase, error));
+        }
       }
     }
 
     for (const benchmarkCase of durationRouterBenchmarkCases) {
-      try {
-        const samples = await collectDurationSamples(() => benchmarkCase.invoke(adapter));
-
-        if (samples === undefined) {
-          rows.push(unsupportedRow(adapter, benchmarkCase));
-          continue;
-        }
-
-        const value = median(samples);
-
-        rows.push({
-          framework: adapter.name,
-          version: adapter.version,
-          caseName: benchmarkCase.name,
-          status: "completed",
-          metric: benchmarkCase.metric,
-          unit: benchmarkCase.unit,
-          value: round(value, 4),
-          hz: 0,
-          meanMs: round(mean(samples), 4),
-          p75Ms: round(percentile(samples, 0.75), 4),
-          p99Ms: round(percentile(samples, 0.99), 4),
-          samplesMs: samples.map((sample) => round(sample, 4)),
-        });
-      } catch (error) {
-        rows.push(failedRow(adapter, benchmarkCase, error));
-      }
+      rows.push(...(await collectDurationRowsRoundRobin(activeAdapters, benchmarkCase)));
     }
 
     for (const benchmarkCase of sizeRouterBenchmarkCases) {
-      try {
-        const bytes = await benchmarkCase.invoke(adapter);
+      for (const adapter of activeAdapters) {
+        try {
+          const bytes = await benchmarkCase.invoke(adapter);
 
-        if (bytes === undefined) {
-          rows.push(unsupportedRow(adapter, benchmarkCase));
-          continue;
+          if (bytes === undefined) {
+            rows.push(unsupportedRow(adapter, benchmarkCase));
+            continue;
+          }
+
+          rows.push({
+            framework: adapter.name,
+            version: adapter.version,
+            caseName: benchmarkCase.name,
+            status: "completed",
+            metric: benchmarkCase.metric,
+            unit: benchmarkCase.unit,
+            value: bytes,
+            hz: 0,
+            meanMs: 0,
+            p75Ms: 0,
+            p99Ms: 0,
+            gzipBytes: bytes,
+          });
+        } catch (error) {
+          rows.push(failedRow(adapter, benchmarkCase, error));
         }
-
-        rows.push({
-          framework: adapter.name,
-          version: adapter.version,
-          caseName: benchmarkCase.name,
-          status: "completed",
-          metric: benchmarkCase.metric,
-          unit: benchmarkCase.unit,
-          value: bytes,
-          hz: 0,
-          meanMs: 0,
-          p75Ms: 0,
-          p99Ms: 0,
-          gzipBytes: bytes,
-        });
-      } catch (error) {
-        rows.push(failedRow(adapter, benchmarkCase, error));
       }
     }
-
-    try {
-      await adapter.teardown?.();
-    } catch {
-      // Teardown failures should not hide benchmark results.
+  } finally {
+    for (const adapter of activeAdapters) {
+      try {
+        await adapter.teardown?.();
+      } catch {
+        // Teardown failures should not hide benchmark results.
+      }
     }
   }
 
   return rows;
+}
+
+async function collectDurationRowsRoundRobin(
+  adapters: readonly RouterBenchmarkAdapter[],
+  benchmarkCase: DurationRouterBenchmarkCase,
+): Promise<RouterBenchmarkRow[]> {
+  const states = adapters.map((adapter) => ({
+    adapter,
+    error: undefined as unknown,
+    failed: false,
+    samples: [] as number[],
+    unsupported: false,
+  }));
+
+  for (let index = 0; index < 9; index += 1) {
+    for (const state of states) {
+      if (state.failed || state.unsupported) {
+        continue;
+      }
+
+      try {
+        const value = await benchmarkCase.invoke(state.adapter);
+
+        if (value === undefined) {
+          state.unsupported = true;
+          continue;
+        }
+
+        if (index >= 2) {
+          state.samples.push(value);
+        }
+      } catch (error) {
+        state.failed = true;
+        state.error = error;
+      }
+    }
+  }
+
+  return states.map((state) => {
+    if (state.failed) {
+      return failedRow(state.adapter, benchmarkCase, state.error);
+    }
+
+    if (state.unsupported) {
+      return unsupportedRow(state.adapter, benchmarkCase);
+    }
+
+    return durationRowFromSamples(state.adapter, benchmarkCase, state.samples);
+  });
+}
+
+function durationRowFromSamples(
+  adapter: RouterBenchmarkAdapter,
+  benchmarkCase: DurationRouterBenchmarkCase,
+  samples: readonly number[],
+): RouterBenchmarkRow {
+  const value = median(samples);
+
+  return {
+    framework: adapter.name,
+    version: adapter.version,
+    caseName: benchmarkCase.name,
+    status: "completed",
+    metric: benchmarkCase.metric,
+    unit: benchmarkCase.unit,
+    value: round(value, 4),
+    hz: 0,
+    meanMs: round(mean(samples), 4),
+    p75Ms: round(percentile(samples, 0.75), 4),
+    p99Ms: round(percentile(samples, 0.99), 4),
+    samplesMs: samples.map((sample) => round(sample, 4)),
+  };
 }
 
 function unsupportedRow(
@@ -475,26 +530,6 @@ async function renderGenericDynamicRoute(adapter: RouterBenchmarkAdapter): Promi
   }
 
   return html;
-}
-
-async function collectDurationSamples(
-  invoke: () => Promise<number> | undefined,
-): Promise<number[] | undefined> {
-  const samples: number[] = [];
-
-  for (let index = 0; index < 9; index += 1) {
-    const value = await invoke();
-
-    if (value === undefined) {
-      return undefined;
-    }
-
-    if (index >= 2) {
-      samples.push(value);
-    }
-  }
-
-  return samples;
 }
 
 async function measureInvocationDurationMs(invoke: () => Promise<unknown>): Promise<number> {

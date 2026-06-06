@@ -1,4 +1,5 @@
 import { chromium, type Page } from "@playwright/test";
+import { gzipSync } from "node:zlib";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -166,6 +167,63 @@ export async function measureClientNavigation(url: string): Promise<number> {
       throw new Error("route-to-route navigation caused a full document reload");
     }
     return end - start;
+  } finally {
+    await browser.close();
+  }
+}
+
+export async function measureRouteJavaScriptGzipBytes(
+  url: string,
+  options: { assertInteractive?: boolean } = {},
+): Promise<number> {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    const diagnostics = collectDiagnostics(page);
+    const jsResponses: Promise<number>[] = [];
+
+    page.on("response", (response) => {
+      const request = response.request();
+
+      if (request.resourceType() !== "script" && !new URL(response.url()).pathname.endsWith(".js")) {
+        return;
+      }
+
+      jsResponses.push(
+        response
+          .body()
+          .then((body) => gzipSync(body).length)
+          .catch(() => 0),
+      );
+    });
+
+    await page.goto(url, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+
+    if (options.assertInteractive === true) {
+      await page
+        .getByRole("button", { name: /count: 0/ })
+        .waitFor({
+          state: "visible",
+          timeout: DEFAULT_TIMEOUT_MS,
+        })
+        .catch((error: unknown) => {
+          throw appendDiagnostics(error, diagnostics);
+        });
+      await page.getByRole("button", { name: /count: 0/ }).click();
+      await page
+        .getByRole("button", { name: /count: 1/ })
+        .waitFor({
+          state: "visible",
+          timeout: DEFAULT_TIMEOUT_MS,
+        })
+        .catch((error: unknown) => {
+          throw appendDiagnostics(error, diagnostics);
+        });
+    }
+
+    const bytes = await Promise.all(jsResponses);
+    return bytes.reduce((sum, value) => sum + value, 0);
   } finally {
     await browser.close();
   }

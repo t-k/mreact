@@ -6,17 +6,18 @@
 // を `node` で起動 (内部で http.Server を立ち上げる)。
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
-import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
+import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
 
@@ -610,10 +611,23 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
     return html;
   },
   async measureServerOnlyClientBundleBytes(): Promise<number> {
-    return measureClientChunks();
+    const url = await ensureFixture(1000);
+    return measureRouteJavaScriptGzipBytes(url);
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
-    return measureClientChunks();
+    const url = await ensureBrowserFixture();
+    return measureRouteJavaScriptGzipBytes(url, { assertInteractive: true });
+  },
+  async measureBuildOutputGzipBytes(): Promise<number> {
+    if (rootDir === undefined) {
+      await ensureFixture(1000);
+    }
+
+    if (rootDir === undefined) {
+      throw new Error("qwik-city fixture not initialized");
+    }
+
+    return measureBuildOutputGzipBytes([join(rootDir, "dist"), join(rootDir, "server")]);
   },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -636,24 +650,3 @@ export const qwikCityAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
-
-async function measureClientChunks(): Promise<number> {
-  if (rootDir === undefined) throw new Error("qwik-city fixture not initialized");
-  const dir = join(rootDir, "dist", "build");
-  let total = 0;
-  try {
-    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
-      const filePath =
-        "parentPath" in entry && typeof (entry as { parentPath?: string }).parentPath === "string"
-          ? join((entry as { parentPath: string }).parentPath, entry.name)
-          : join(dir, entry.name);
-      const code = await readFile(filePath);
-      total += gzipSync(code).length;
-    }
-  } catch {
-    // ignore
-  }
-  return total;
-}

@@ -10,17 +10,18 @@
 // adapter init で 1 回だけ実行。
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
-import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
+import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
 
@@ -313,15 +314,28 @@ export const Route = createFileRoute("/data-grid")({ component: Page });
   await writeFile(
     join(rootDir, "server-wrapper.mjs"),
     `import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import entry from "./dist/server/server.js";
 
 const port = Number(process.env.PORT ?? 3000);
+const clientDir = new URL("./dist/client/", import.meta.url);
 const httpServer = createServer(async (incoming, outgoing) => {
   try {
     const origin = "http://" + (incoming.headers.host ?? ("127.0.0.1:" + port));
     const url = new URL(incoming.url ?? "/", origin);
     const method = incoming.method ?? "GET";
+    if ((method === "GET" || method === "HEAD") && url.pathname.startsWith("/assets/")) {
+      try {
+        const file = await readFile(new URL("." + url.pathname, clientDir));
+        outgoing.writeHead(200, { "content-type": url.pathname.endsWith(".js") ? "text/javascript" : "application/octet-stream" });
+        if (method !== "HEAD") outgoing.write(file);
+        outgoing.end();
+        return;
+      } catch {
+        // Fall through to the framework handler.
+      }
+    }
     const init = { method, headers: Object.entries(incoming.headers).flatMap(([k, v]) => v === undefined ? [] : Array.isArray(v) ? v.map(value => [k, value]) : [[k, v]]) };
     if (method !== "GET" && method !== "HEAD") {
       init.body = Readable.toWeb(incoming);
@@ -695,10 +709,26 @@ export const tanstackStartAdapter: AppFrameworkAdapter = {
     return html;
   },
   async measureServerOnlyClientBundleBytes(): Promise<number> {
-    return measureClientChunks();
+    const url = await ensureFixture(1000);
+    return measureRouteJavaScriptGzipBytes(url);
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
-    return measureClientChunks();
+    const url = await ensureBrowserFixture();
+    return measureRouteJavaScriptGzipBytes(url, { assertInteractive: true });
+  },
+  async measureBuildOutputGzipBytes(): Promise<number> {
+    if (rootDir === undefined) {
+      await ensureFixture(1000);
+    }
+
+    if (rootDir === undefined) {
+      throw new Error("tanstack-start fixture not initialized");
+    }
+
+    return measureBuildOutputGzipBytes([
+      join(rootDir, "dist", "client"),
+      join(rootDir, "dist", "server"),
+    ]);
   },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -721,26 +751,3 @@ export const tanstackStartAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
-
-async function measureClientChunks(): Promise<number> {
-  if (rootDir === undefined) {
-    throw new Error("tanstack-start fixture not initialized");
-  }
-  const dir = join(rootDir, "dist", "client", "assets");
-  let total = 0;
-  try {
-    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
-      const filePath =
-        "parentPath" in entry && typeof (entry as { parentPath?: string }).parentPath === "string"
-          ? join((entry as { parentPath: string }).parentPath, entry.name)
-          : join(dir, entry.name);
-      const code = await readFile(filePath);
-      total += gzipSync(code).length;
-    }
-  } catch {
-    // ignore
-  }
-  return total;
-}

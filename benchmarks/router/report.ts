@@ -31,10 +31,18 @@ export function formatRouterBenchmarkMarkdown(
   for (const benchmarkCase of routerBenchmarkCases) {
     lines.push(`### ${benchmarkCase.name}`, "");
     lines.push(benchmarkCase.description, "");
+    const rankedRows = rankCompletedRows(rows, benchmarkCase.name);
+
+    if (isMreactVariantOnlyColdStart(benchmarkCase.name, rankedRows)) {
+      lines.push(
+        "This section currently compares mreact app-router variants only; it is not a cross-framework ranking.",
+        "",
+      );
+    }
+
     lines.push("| rank | framework | case | value | diff vs 1st | unit |");
     lines.push("| ---: | --- | --- | ---: | ---: | --- |");
 
-    const rankedRows = rankCompletedRows(rows, benchmarkCase.name);
     const bestRow = rankedRows[0];
 
     if (rankedRows.length === 0) {
@@ -66,6 +74,17 @@ export function formatRouterBenchmarkMarkdown(
   }
 
   return lines.join("\n");
+}
+
+function isMreactVariantOnlyColdStart(
+  caseName: string,
+  rankedRows: readonly RouterBenchmarkRow[],
+): boolean {
+  return (
+    caseName === "app server cold start" &&
+    rankedRows.length > 0 &&
+    rankedRows.every((row) => row.framework.includes("mreact"))
+  );
 }
 
 function escapeMarkdownCell(value: string): string {

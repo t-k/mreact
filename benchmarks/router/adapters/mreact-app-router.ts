@@ -12,11 +12,13 @@ import { buildApp, startServer } from "../../../packages/router/dist/index.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../../packages/router/dist/index.js";
 import type { AppFrameworkAdapter } from "../types.js";
 import { buildDynamicAttrCells, type DynamicAttrCell } from "../dynamic-attr-cells.js";
+import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
 
@@ -430,18 +432,15 @@ function createMreactAppRouterAdapter(options: {
     },
     async measureServerOnlyClientBundleBytes(): Promise<number> {
       if (reactCompat) {
-        return measureReactCompatServerOnlyBundle();
+        const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
+        return measureRouteJavaScriptGzipBytes(url);
       }
-      // mreact emits **no client bundle** for routes without `cell` / `onClick`
-      // / `window` / `document` / `localStorage`. The 1000-span fixture is
-      // pure server-render → manifest entry has `client: false` → no script
-      // emitted. Total bytes shipped to browser = 0.
-      return 0;
+      const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
+      return measureRouteJavaScriptGzipBytes(url);
     },
     async measureInteractiveClientBundleBytes(): Promise<number> {
-      return reactCompat
-        ? measureReactCompatInteractiveBundle({ clientNavigation: true })
-        : measureInteractiveBundle({ clientNavigation: true });
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
+      return measureRouteJavaScriptGzipBytes(url, { assertInteractive: true });
     },
     async measureInteractiveClientBundleMinimalBytes(): Promise<number> {
       if (reactCompat) {
@@ -477,6 +476,15 @@ function createMreactAppRouterAdapter(options: {
     async measureServerColdStartMs(): Promise<number> {
       const outDir = await ensureColdStartFixture(reactCompat);
       return measureServerColdStart(outDir, { logEnabled });
+    },
+    async measureBuildOutputGzipBytes(): Promise<number> {
+      await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
+
+      if (rootDir === undefined) {
+        throw new Error("mreact-app-router fixture not initialized");
+      }
+
+      return measureBuildOutputGzipBytes([join(rootDir, ".mreact")]);
     },
   };
 }
@@ -583,27 +591,6 @@ ${hint}export default function Page() {
     return gzipSync(code).length;
   } finally {
     await rm(interactiveDir, { force: true, recursive: true });
-  }
-}
-
-async function measureReactCompatServerOnlyBundle(): Promise<number> {
-  const fixtureDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-react-compat-server-"));
-  const appDir = join(fixtureDir, "app");
-  const outDir = join(fixtureDir, ".mreact");
-
-  try {
-    await mkdir(appDir, { recursive: true });
-    await writeFile(
-      join(appDir, "layout.tsx"),
-      `export default function Layout() {
-  return <html lang="en"><body><Slot /></body></html>;
-}`,
-    );
-    await writeFile(join(appDir, "page.tsx"), reactCompatSpanPageSource("[0]"));
-    await buildApp({ appDir, outDir });
-    return sumClientBundleGzipBytes(outDir);
-  } finally {
-    await rm(fixtureDir, { force: true, recursive: true });
   }
 }
 

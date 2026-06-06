@@ -7,18 +7,19 @@
 // 追加ランタイムはこの build 時間が支配的。
 import { createServer, type Server } from "node:http";
 import { spawn } from "node:child_process";
-import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import { createRequire } from "node:module";
 import type { AppFrameworkAdapter } from "../types.js";
+import { measureBuildOutputGzipBytes } from "../build-output-size.js";
 import {
   measureClientNavigation,
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
 
@@ -524,16 +525,26 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     return html;
   },
   async measureServerOnlyClientBundleBytes(): Promise<number> {
-    return measureBundleFloor();
+    const url = await ensureFixture(1000);
+    return measureRouteJavaScriptGzipBytes(url);
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
-    // Next.js 16.2 hits an internal prerender bug when any user-authored
-    // Client Component is added to our temp fixture. Working around it is
-    // out of scope. The framework chunks Next.js ships unconditionally are
-    // ~all of the client JS bytes anyway (adding `"use client"` would only
-    // add a few KB on top), so we return the same floor for both cases and
-    // document the asymmetry in the result md and adapter setup comment.
-    return measureBundleFloor();
+    const url = await ensureBrowserFixture();
+    return measureRouteJavaScriptGzipBytes(url, { assertInteractive: true });
+  },
+  async measureBuildOutputGzipBytes(): Promise<number> {
+    if (rootDir === undefined) {
+      await ensureFixture(1000);
+    }
+
+    if (rootDir === undefined) {
+      throw new Error("next-app-router fixture not initialized");
+    }
+
+    return measureBuildOutputGzipBytes([
+      join(rootDir, ".next", "server"),
+      join(rootDir, ".next", "static"),
+    ]);
   },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
@@ -556,28 +567,3 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
     return measureSecondInteractionLatency(url);
   },
 };
-
-async function measureBundleFloor(): Promise<number> {
-  if (rootDir === undefined) {
-    throw new Error("next-app-router fixture not initialized");
-  }
-
-  // Count built client-side JS emitted under `.next/static`. Next 16's
-  // production output no longer reliably exposes older chunk names such as
-  // `framework` / `main-app`, so filtering by historical names can report a
-  // false zero.
-  const staticDir = join(rootDir, ".next", "static");
-  const files = await readdir(staticDir, { recursive: true, withFileTypes: true });
-  let total = 0;
-  for (const file of files) {
-    if (!file.isFile()) continue;
-    if (!file.name.endsWith(".js")) continue;
-    const relPath =
-      "parentPath" in file && typeof (file as { parentPath?: string }).parentPath === "string"
-        ? join((file as { parentPath: string }).parentPath, file.name)
-        : join(staticDir, file.name);
-    const code = await readFile(relPath);
-    total += gzipSync(code).length;
-  }
-  return total;
-}

@@ -115,6 +115,14 @@ describe("router benchmark configuration", () => {
     ]);
   });
 
+  it("exposes build output gzip probes for every router adapter", () => {
+    const adaptersWithBuildOutputProbes = routerBenchmarkAdapters
+      .filter((adapter) => adapter.measureBuildOutputGzipBytes !== undefined)
+      .map((adapter) => adapter.name);
+
+    expect(adaptersWithBuildOutputProbes).toEqual(routerBenchmarkAdapters.map((adapter) => adapter.name));
+  });
+
   it("ranks throughput high-to-low and size low-to-high", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("next-app-router", "app render 1000 nodes", "throughput", "ops/sec", 10),
@@ -272,6 +280,40 @@ describe("router benchmark configuration", () => {
 
     expect(renderRow?.status).toBe("completed");
     expect(renderRow?.samplesMs?.length).toBeGreaterThan(0);
+  });
+
+  it("collects duration probes round-robin across adapters", async () => {
+    const calls: string[] = [];
+    const createAdapter = (name: "mreact-app-router" | "next-app-router") => ({
+      name,
+      version: "test",
+      async renderToString(nodeCount: number) {
+        return `<span>${nodeCount - 1}</span>`;
+      },
+      async measureFirstInteractionAfterNetworkIdleMs() {
+        calls.push(name);
+        return name === "mreact-app-router" ? 10 : 20;
+      },
+    });
+
+    const rows = await runRouterBenchmarks(
+      [createAdapter("mreact-app-router"), createAdapter("next-app-router")],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(calls.slice(0, 6)).toEqual([
+      "mreact-app-router",
+      "next-app-router",
+      "mreact-app-router",
+      "next-app-router",
+      "mreact-app-router",
+      "next-app-router",
+    ]);
+    expect(rows.find((row) => row.framework === "mreact-app-router" && row.caseName === "app first interaction after networkidle")).toMatchObject({
+      status: "completed",
+      value: 10,
+      samplesMs: [10, 10, 10, 10, 10, 10, 10],
+    });
   });
 });
 

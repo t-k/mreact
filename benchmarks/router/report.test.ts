@@ -54,6 +54,32 @@ describe("router benchmark report", () => {
       "| router | mreact-app-router | test | app streaming first byte 1000 nodes | completed | duration | ms | 8 | best | 0 | 0 | 0 | 0 | 0 | 7.5, 8, 8.5 |  |",
     );
   });
+
+  it("annotates server cold start rankings when they are only mreact variant comparisons", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow("mreact-app-router", "app server cold start", "duration", "ms", 200),
+      completedRow(
+        "mreact-app-router+mreact react-compat",
+        "app server cold start",
+        "duration",
+        "ms",
+        240,
+      ),
+      completedRow(
+        "mreact-app-router+log enabled",
+        "app server cold start",
+        "duration",
+        "ms",
+        210,
+      ),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(markdown).toContain(
+      "This section currently compares mreact app-router variants only; it is not a cross-framework ranking.",
+    );
+  });
 });
 
 const testEnvironment: BenchmarkEnvironment = {
