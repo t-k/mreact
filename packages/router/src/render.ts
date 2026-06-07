@@ -119,6 +119,7 @@ import {
   responseHeadersForMetadata,
   serializeRobots,
   serializeSitemap,
+  validateRouteMetadata,
 } from "./metadata.js";
 import {
   createSlotRenderContext,
@@ -4434,22 +4435,30 @@ async function resolveRouteMetadataModule(
   module: RouteMetadataModule,
   context: RouteMetadataContext,
 ): Promise<RouteMetadata | undefined> {
+  const staticMetadata = validateRouteMetadata(module.metadata);
+
   if (module.generateMetadata === undefined) {
-    return module.metadata;
+    return staticMetadata;
   }
 
+  let generated: RouteMetadata | undefined;
   try {
-    const generated = await module.generateMetadata(context);
-    return generated === undefined
-      ? module.metadata
-      : mergeRouteMetadata([module.metadata, generated].filter(isRouteMetadata));
+    generated = await module.generateMetadata(context);
   } catch (error) {
-    if (module.metadata !== undefined) {
-      return module.metadata;
+    if (staticMetadata !== undefined) {
+      return staticMetadata;
     }
 
     throw error;
   }
+
+  const validatedGenerated = validateRouteMetadata(generated, "generateMetadata");
+  const merged =
+    validatedGenerated === undefined
+      ? staticMetadata
+      : mergeRouteMetadata([staticMetadata, validatedGenerated].filter(isRouteMetadata));
+
+  return validateRouteMetadata(merged);
 }
 
 function isRouteMetadata(value: RouteMetadata | undefined): value is RouteMetadata {

@@ -26,7 +26,7 @@ describe("mreact Cloudflare Workers adapter", () => {
       `export const prerender = true;
 export default function Page() { return <main>Cloudflare route</main>; }`,
     );
-    await buildApp({ appDir, outDir });
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
     const serverManifest = JSON.parse(
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     );
@@ -108,6 +108,107 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
     expect(response.headers.get("permissions-policy")).toBe(
       "camera=(), microphone=(), geolocation=()",
     );
+  });
+
+  test("applies metadata CSP and security headers from built Cloudflare pages", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-metadata-headers-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: { directives: { "default-src": "'self'", "script-src": ["'self'"] } },
+  security: {
+    frameOptions: "DENY",
+    referrerPolicy: "no-referrer",
+  },
+};
+export default function Page() {
+  return <main>Cloudflare metadata headers</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'self'; script-src 'self'",
+    );
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  test("applies metadata headers when a built Cloudflare page returns a Response", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-response-metadata-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = {
+  csp: { directives: { "default-src": "'self'" } },
+  security: { frameOptions: "DENY" },
+};
+export default function Page() {
+  return new Response("<main>Response body</main>", {
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-security-policy")).toBe("default-src 'self'");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 
   test("Cloudflare route modules can import parseMultipartStream from the router entrypoint", async () => {
@@ -1280,7 +1381,7 @@ export default function Page(props) {
   return <main>User <Name value={props.data.value} /></main>;
 }`,
     );
-    await buildApp({ appDir, outDir });
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
     const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
     const registrySource = await readFile(registryPath, "utf8");
     const serverManifest = JSON.parse(
@@ -1343,7 +1444,7 @@ export default function Page(props) {
   return <main>User <Content /></main>;
 }`,
     );
-    await buildApp({ appDir, outDir });
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
     const registryPath = join(outDir, "cloudflare", "route-modules.mjs");
     const registrySource = await readFile(registryPath, "utf8");
     const serverManifest = JSON.parse(
@@ -1448,7 +1549,7 @@ export default function Page() {
 }`,
     );
 
-    await expect(buildApp({ appDir, outDir })).resolves.toMatchObject({
+    await expect(buildApp({ appDir, outDir, targets: ["cloudflare"] })).resolves.toMatchObject({
       routes: [expect.objectContaining({ path: "/users/:id" })],
     });
     const routeFiles = await readdir(join(outDir, "cloudflare", "routes"));
@@ -1587,6 +1688,47 @@ export default function Page() {
     expect(uploadHtml).not.toContain("<title>Image Vault</title>");
     expect(plain.status).toBe(200);
     expect(plainHtml).toContain("<title>Image Vault</title>");
+  });
+
+  test("built route modules reject invalid metadata with the shared contract", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-invalid-metadata-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = { title: { text: "Invalid" } };
+export default function Page() {
+  return <main>Invalid metadata</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(500);
   });
 
   test("built string route modules emit metadata head void elements without closing tags", async () => {

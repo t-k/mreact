@@ -147,7 +147,8 @@ export interface ClientRouteInferenceDiagnostic {
   code:
     | typeof clientBoundaryInferenceServerOnlyReferenceCode
     | typeof clientBoundaryInferenceFunctionCallInteractiveCode
-    | typeof clientBoundaryInferenceUnsupportedReferenceCode;
+    | typeof clientBoundaryInferenceUnsupportedReferenceCode
+    | typeof navigationRuntimeLinkDisabledCode;
   filename: string;
   level: "warn";
   localNames: string[];
@@ -162,6 +163,7 @@ const clientBoundaryInferenceFunctionCallInteractiveCode =
   "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE";
 const clientBoundaryInferenceUnsupportedReferenceCode =
   "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE";
+const navigationRuntimeLinkDisabledCode = "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
 
 export async function routeToClientManifestEntry(
   route: AppRoute,
@@ -569,6 +571,31 @@ export async function resolveNavigationRuntime(options: {
     }));
 
   return references.usesNavigationLink;
+}
+
+export function navigationRuntimeLinkDisabledDiagnostic(options: {
+  filename: string;
+  references: Pick<ClientRouteReferenceResult, "usesNavigationLink">;
+  routePath?: string | undefined;
+  source: string;
+}): ClientRouteInferenceDiagnostic | undefined {
+  if (
+    !options.references.usesNavigationLink ||
+    detectNavigationRuntimeOverride(options.source) !== false
+  ) {
+    return undefined;
+  }
+
+  return {
+    code: navigationRuntimeLinkDisabledCode,
+    filename: options.filename,
+    level: "warn",
+    localNames: [],
+    message:
+      "A rendered Link was detected, but this route exports navigationRuntime = false. Client-side navigation will be disabled for this route; remove the override or replace Link with a plain anchor if that is intentional.",
+    routePath: options.routePath,
+    source: options.source,
+  };
 }
 
 async function inferClientRouteShellModules(options: {

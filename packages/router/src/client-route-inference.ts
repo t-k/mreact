@@ -8,6 +8,7 @@ export {
   inferClientRouteModule,
   isClientRouteModule,
   isClientRouteSource,
+  navigationRuntimeLinkDisabledDiagnostic,
   resolveNavigationRuntime,
   routeToClientManifestEntry,
   type ClientReferenceImport,

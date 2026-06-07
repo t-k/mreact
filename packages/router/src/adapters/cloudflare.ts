@@ -27,7 +27,9 @@ import {
 } from "../logger.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
+import { contentSecurityPolicy } from "../csp.js";
 import { isNotFoundError } from "../navigation.js";
+import { validateRouteMetadata } from "../metadata.js";
 import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
@@ -392,14 +394,15 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       throw error;
     }
 
-    if (rendered instanceof Response) {
-      return withDefaultSecurityHeaders(rendered, request);
-    }
-
-    const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
     const metadata = await runWithCloudflareQueryClient(queryClient, () =>
       resolveCloudflareRouteMetadata([pageModule], props),
     );
+
+    if (rendered instanceof Response) {
+      return withDefaultSecurityHeaders(rendered, request, metadata);
+    }
+
+    const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
     const body = withCloudflareHydrationMarkers({
       data,
       html: rendered,
@@ -430,6 +433,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
             headers: { "content-type": "text/html; charset=utf-8" },
           }),
       request,
+      metadata,
     );
   };
 }
@@ -688,10 +692,25 @@ function cloudflareDocumentReloadNavigationResponse(): Response {
   });
 }
 
-function withDefaultSecurityHeaders(response: Response, request: Request): Response {
+function withDefaultSecurityHeaders(
+  response: Response,
+  request: Request,
+  metadata?: RouteMetadata | undefined,
+): Response {
   const headers = new Headers(response.headers);
+  const csp = contentSecurityPolicy(metadata?.csp);
 
-  for (const [name, value] of Object.entries(routeSecurityHeaders({ request, security: undefined }))) {
+  if (
+    isHtmlContentType(headers.get("content-type")) &&
+    csp !== undefined &&
+    !headers.has("content-security-policy")
+  ) {
+    headers.set("content-security-policy", csp);
+  }
+
+  for (const [name, value] of Object.entries(
+    routeSecurityHeaders({ request, security: metadata?.security }),
+  )) {
     if (!headers.has(name)) {
       headers.set(name, value);
     }
@@ -1356,11 +1375,15 @@ async function resolveCloudflareRouteMetadata<Data, Env>(
   const metadata: RouteMetadata[] = [];
 
   for (const module of modules) {
-    let next = module.metadata;
+    let next = validateRouteMetadata(module.metadata);
 
     if (module.generateMetadata !== undefined) {
       const generated = await module.generateMetadata(context);
-      next = mergeCloudflareRouteMetadata([next, generated].filter(isCloudflareRouteMetadata));
+      next = mergeCloudflareRouteMetadata(
+        [next, validateRouteMetadata(generated, "generateMetadata")].filter(
+          isCloudflareRouteMetadata,
+        ),
+      );
     }
 
     if (next !== undefined) {
@@ -1368,7 +1391,7 @@ async function resolveCloudflareRouteMetadata<Data, Env>(
     }
   }
 
-  return mergeCloudflareRouteMetadata(metadata);
+  return validateRouteMetadata(mergeCloudflareRouteMetadata(metadata));
 }
 
 function isCloudflareRouteMetadata(value: RouteMetadata | undefined): value is RouteMetadata {
