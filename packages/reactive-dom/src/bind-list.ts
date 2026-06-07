@@ -104,7 +104,7 @@ interface KeyedRecord {
   nodes: Node[];
   prevIndex?: number | undefined;
   dispose: Dispose;
-  update(item: unknown, index: number, items: readonly unknown[]): void;
+  update(item: unknown, index: number, items: readonly unknown[]): boolean;
 }
 
 interface KeyedItem<T> {
@@ -176,8 +176,7 @@ function bindKeyedList<T>(
         }
       }
 
-      if (sameKeyOrder) {
-        updateRecords(records, currentKeyedItems, currentItems);
+      if (sameKeyOrder && updateRecords(records, currentKeyedItems, currentItems)) {
         return;
       }
     }
@@ -221,6 +220,7 @@ function bindKeyedList<T>(
       const removedRecords = tryRemoveKeyedRecords(
         records,
         currentKeyedItems,
+        currentItems,
       );
 
       if (removedRecords !== undefined) {
@@ -261,7 +261,20 @@ function bindKeyedList<T>(
         );
       } else {
         record = existingRecord;
-        record.update(keyedItem.item, keyedItem.index, currentItems);
+        if (!record.update(keyedItem.item, keyedItem.index, currentItems)) {
+          reusedAllRecords = false;
+          removeRecordNodes([existingRecord]);
+          existingRecord.dispose();
+          record = createKeyedRecord(
+            keyedItem.item,
+            keyedItem.index,
+            keyedItem.key,
+            currentItems,
+            renderItem,
+            options,
+            markRecordsForHydration,
+          );
+        }
       }
 
       nextRecords.set(itemKey, record);
@@ -348,9 +361,17 @@ function tryAppendKeyedRecords<T>(
 
   for (let index = 0; index < records.size; index += 1) {
     const previousKey = previousKeys.next();
-    const itemKey = currentKeyedItems[index]?.key;
+    const keyedItem = currentKeyedItems[index];
+    const itemKey = keyedItem?.key;
 
     if (previousKey.done || !Object.is(previousKey.value, itemKey)) {
+      return undefined;
+    }
+
+    if (
+      keyedItem === undefined ||
+      records.get(itemKey)?.update(keyedItem.item, keyedItem.index, currentItems) !== true
+    ) {
       return undefined;
     }
   }
@@ -471,10 +492,14 @@ function updateRecords<T>(
   records: Map<unknown, KeyedRecord>,
   currentKeyedItems: readonly KeyedItem<T>[],
   currentItems: readonly T[],
-): void {
+): boolean {
   for (const keyedItem of currentKeyedItems) {
-    records.get(keyedItem.key)?.update(keyedItem.item, keyedItem.index, currentItems);
+    if (records.get(keyedItem.key)?.update(keyedItem.item, keyedItem.index, currentItems) !== true) {
+      return false;
+    }
   }
+
+  return true;
 }
 
 function createKeyedRecord<T>(
@@ -486,13 +511,12 @@ function createKeyedRecord<T>(
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
 ): KeyedRecord {
-  const itemRef = createReactiveItemRef(item, options, item !== key);
-  const indexRef = renderItem.length >= 2 ? createReactivePrimitiveRef(index) : undefined;
-  const itemsRef = renderItem.length >= 3 ? createReactiveArrayRef(items) : undefined;
+  const itemRef = createReactiveItemRef(item, options);
+  let currentItem = item as unknown;
+  let currentIndex = index;
+  let currentItems = items as readonly unknown[];
   const scoped = untrack(() =>
-    createScopedRenderNodes(() =>
-      renderItem(itemRef.value, indexRef?.value ?? index, itemsRef?.value ?? items)
-    ),
+    createScopedRenderNodes(() => renderItem(itemRef.value, index, items)),
   );
   const nodes = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
 
@@ -500,9 +524,23 @@ function createKeyedRecord<T>(
     nodes,
     dispose: scoped.dispose,
     update(nextItem, nextIndex, nextItems) {
+      if (!isObjectLike(currentItem) && !Object.is(currentItem, nextItem)) {
+        return false;
+      }
+
+      if (renderItem.length >= 2 && currentIndex !== nextIndex) {
+        return false;
+      }
+
+      if (renderItem.length >= 3 && currentItems !== nextItems) {
+        return false;
+      }
+
       itemRef.update(nextItem as T);
-      indexRef?.update(nextIndex);
-      itemsRef?.update(nextItems as readonly T[]);
+      currentItem = nextItem;
+      currentIndex = nextIndex;
+      currentItems = nextItems;
+      return true;
     },
   };
 }
@@ -510,22 +548,11 @@ function createKeyedRecord<T>(
 function createReactiveItemRef<T>(
   item: T,
   options: BindListOptions<T>,
-  reactivePrimitive: boolean,
 ): { value: T; update(item: T): void } {
   if (!isObjectLike(item)) {
-    if (!reactivePrimitive) {
-      return {
-        value: item,
-        update() {},
-      };
-    }
-
-    const current = cell<unknown>(item);
     return {
-      value: createPrimitiveProxy(current) as T,
-      update(next) {
-        current.set(next);
-      },
+      value: item,
+      update() {},
     };
   }
 
@@ -539,63 +566,6 @@ function createReactiveItemRef<T>(
       current.set(next);
     },
   };
-}
-
-function createReactivePrimitiveRef<T>(
-  value: T,
-): { value: T; update(value: T): void } {
-  const current = cell<unknown>(value);
-  return {
-    value: createPrimitiveProxy(current) as T,
-    update(next) {
-      current.set(next);
-    },
-  };
-}
-
-function createPrimitiveProxy(current: Cell<unknown>): object {
-  return {
-    valueOf() {
-      return current.get();
-    },
-    toString() {
-      return String(current.get());
-    },
-    [Symbol.toPrimitive]() {
-      return current.get() as string | number | bigint | boolean | null | undefined;
-    },
-  };
-}
-
-function createReactiveArrayRef<T>(
-  items: readonly T[],
-): { value: readonly T[]; update(items: readonly T[]): void } {
-  const current = cell<readonly T[]>(items);
-  return {
-    value: createArrayProxy(current) as readonly T[],
-    update(next) {
-      current.set(next);
-    },
-  };
-}
-
-function createArrayProxy<T>(current: Cell<readonly T[]>): readonly T[] {
-  return new Proxy([] as unknown as readonly T[], {
-    get(_target, property) {
-      const value = current.get();
-      const result = Reflect.get(value, property, value);
-      return typeof result === "function" ? result.bind(value) : result;
-    },
-    getOwnPropertyDescriptor(_target, property) {
-      return Reflect.getOwnPropertyDescriptor(current.get(), property);
-    },
-    has(_target, property) {
-      return Reflect.has(current.get(), property);
-    },
-    ownKeys() {
-      return Reflect.ownKeys(current.get());
-    },
-  });
 }
 
 function createItemProxy<T extends object>(current: Cell<unknown>): T {
@@ -804,6 +774,7 @@ function isObjectLike(value: unknown): value is object {
 function tryRemoveKeyedRecords<T>(
   records: Map<unknown, KeyedRecord>,
   currentKeyedItems: readonly KeyedItem<T>[],
+  currentItems: readonly T[],
 ): { nextRecords: Map<unknown, KeyedRecord>; staleRecords: KeyedRecord[] } | undefined {
   if (currentKeyedItems.length >= records.size || currentKeyedItems.length === 0) {
     return undefined;
@@ -819,6 +790,14 @@ function tryRemoveKeyedRecords<T>(
 
       if (Object.is(previousKey, itemKey)) {
         if (nextRecords.has(previousKey)) {
+          return undefined;
+        }
+
+        const keyedItem = currentKeyedItems[previousIndex];
+        if (
+          keyedItem === undefined ||
+          !record.update(keyedItem.item, keyedItem.index, currentItems)
+        ) {
           return undefined;
         }
 

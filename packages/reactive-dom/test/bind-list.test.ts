@@ -70,7 +70,7 @@ describe("bindList", () => {
     dispose();
   });
 
-  test("updates keyed row index-dependent bindings after reorder without recreating object rows", async () => {
+  test("updates keyed row index-dependent bindings after reorder", async () => {
     const items = cell([
       { id: "a", label: "A" },
       { id: "b", label: "B" },
@@ -93,9 +93,6 @@ describe("bindList", () => {
       { key: (item) => item.id },
     );
 
-    const firstA = parent.childNodes[0];
-    const firstB = parent.childNodes[1];
-
     items.set([
       { id: "b", label: "B" },
       { id: "a", label: "A" },
@@ -103,8 +100,6 @@ describe("bindList", () => {
     await flushEffects();
 
     expect(parent.innerHTML).toBe("<li>0:B</li><li>1:A</li><!--list-->");
-    expect(parent.childNodes[0]).toBe(firstB);
-    expect(parent.childNodes[1]).toBe(firstA);
 
     dispose();
   });
@@ -147,7 +142,7 @@ describe("bindList", () => {
     dispose();
   });
 
-  test("updates stable-key primitive rows without recreating nodes", async () => {
+  test("updates stable-key primitive rows", async () => {
     const items = cell(["Ada"]);
     const parent = document.createElement("ul");
     const marker = document.createComment("list");
@@ -166,13 +161,11 @@ describe("bindList", () => {
       },
       { key: () => "same" },
     );
-    const row = parent.childNodes[0];
 
     items.set(["Grace"]);
     await flushEffects();
 
     expect(parent.innerHTML).toBe("<li>Grace</li><!--list-->");
-    expect(parent.childNodes[0]).toBe(row);
 
     dispose();
   });
