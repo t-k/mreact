@@ -271,7 +271,16 @@ function bindKeyedList<T>(
       }
     }
 
-    if (ownsCurrentParent) {
+    const canClaimEmptyParent =
+      records.size === 0 &&
+      marker.nextSibling === null &&
+      insertionParent.childNodes.length === 1;
+
+    if (canClaimEmptyParent) {
+      disposeStaleRecords(records, nextRecords);
+      insertionParent.replaceChildren(...orderedNodes, marker);
+      ownsParent = true;
+    } else if (ownsCurrentParent) {
       disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
       ownsParent = true;
