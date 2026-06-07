@@ -159,6 +159,7 @@ function renderHostFiberIntoContainer(
       collectPortalNodes(fiberRoot.current, runtime);
       removeStalePortalNodes(portalSnapshot, runtime);
       commitDevToolsRoot(container, fiberRoot);
+      runtime.idMode = "client";
       committed = true;
       return finishedWork;
     } finally {
@@ -218,6 +219,7 @@ function renderHydratingHostFiberIntoContainer(
       collectPortalNodes(fiberRoot.current, runtime);
       removeStalePortalNodes(portalSnapshot, runtime);
       commitDevToolsRoot(container, fiberRoot);
+      runtime.idMode = "client";
       committed = true;
       return finishedWork;
     } finally {
@@ -266,17 +268,33 @@ export function hydrateRoot(
   const runtime = createRootRuntime((priority = "sync") => {
     if (runtime.currentElement !== undefined) {
       enqueueRootRender(fiberRoot, runtime.currentElement, laneForRenderPriority(priority), () => {
+        const useHydratingRerender =
+          runtime.idMode === "server" ||
+          renderOptions.resumeId !== undefined ||
+          renderOptions.consumeResumeMarkers !== undefined;
         if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
-          return renderHydratingHostFiberIntoContainer(
-            container,
-            fiberRoot,
-            runtime,
-            runtime.currentElement as ReactCompatNode,
-            renderOptions,
-          );
+          return useHydratingRerender
+            ? renderHydratingHostFiberIntoContainer(
+                container,
+                fiberRoot,
+                runtime,
+                runtime.currentElement as ReactCompatNode,
+                renderOptions,
+              )
+            : renderHostFiberIntoContainer(
+                container,
+                fiberRoot,
+                runtime,
+                runtime.currentElement as ReactCompatNode,
+              );
         }
 
-        renderIntoContainer(container, runtime.currentElement, runtime, renderOptions);
+        renderIntoContainer(
+          container,
+          runtime.currentElement,
+          runtime,
+          useHydratingRerender ? renderOptions : {},
+        );
       });
     }
   }, {

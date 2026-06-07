@@ -311,31 +311,66 @@ function applyInitialRowProps(
 export function applyPostChildFormProps(
   element: Element,
   props: Record<string, unknown>,
+  previousProps?: Record<string, unknown>,
 ): void {
-  const value = props.value ?? props.defaultValue;
+  if (element instanceof HTMLInputElement) {
+    if (hasOwnProp(props, "checked")) {
+      const checked = props.checked !== null && props.checked !== undefined && props.checked !== false;
+      element.checked = checked;
+      element.defaultChecked = checked;
+      if (checked) {
+        element.setAttribute("checked", "");
+      } else {
+        element.removeAttribute("checked");
+      }
+    }
 
-  if (value === undefined || value === null) {
+    const value = postChildFormValue(props, previousProps);
+    if (value !== undefined) {
+      element.value = value;
+      element.setAttribute("value", value);
+    }
     return;
   }
 
-  if (element instanceof HTMLInputElement) {
-    element.value = String(value);
-    element.setAttribute("value", String(value));
+  const value = postChildFormValue(props, previousProps);
+
+  if (value === undefined) {
     return;
   }
 
   if (element instanceof HTMLTextAreaElement) {
-    element.value = String(value);
-    element.textContent = String(value);
+    element.value = value;
+    element.textContent = value;
     return;
   }
 
   if (element instanceof HTMLSelectElement) {
-    const nextValue = String(value);
     for (const option of Array.from(element.options)) {
-      option.selected = option.value === nextValue;
+      option.selected = option.value === value;
     }
   }
+}
+
+function postChildFormValue(
+  props: Record<string, unknown>,
+  previousProps: Record<string, unknown> | undefined,
+): string | undefined {
+  if (hasOwnProp(props, "value")) {
+    return props.value === null || props.value === undefined ? "" : String(props.value);
+  }
+
+  if (previousProps === undefined && hasOwnProp(props, "defaultValue")) {
+    return props.defaultValue === null || props.defaultValue === undefined
+      ? ""
+      : String(props.defaultValue);
+  }
+
+  return undefined;
+}
+
+function hasOwnProp(props: Record<string, unknown>, name: string): boolean {
+  return Object.prototype.hasOwnProperty.call(props, name);
 }
 
 function applyAttribute(

@@ -202,6 +202,7 @@ export interface ReactiveTextBinding {
 }
 
 const reactiveTextBindingsByNode = new WeakMap<Text, ReactiveTextBinding>();
+const hydratedIdsByRuntime = new WeakMap<RootRuntime, Map<string, string>>();
 
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
   const previousPriority = currentEventPriority;
@@ -954,14 +955,30 @@ export function useRef<T>(initial: T): { current: T } {
 
 export function useId(): string {
   const runtime = requireRuntime();
+  const instance = requireInstance();
+  const idSlotKey = `${instance.path}:${instance.hookIndex}`;
   const idRef = runWithoutDevToolsHookTracking(() =>
     useRef<string | undefined>(undefined)
   );
 
   if (idRef.current === undefined) {
-    const mode = runtime.idMode === "server" ? "R" : "r";
-    idRef.current = `_${runtime.identifierPrefix}${mode}_${runtime.idCounter}_`;
-    runtime.idCounter += 1;
+    const hydratedId = runtime.idMode === "client"
+      ? hydratedIdsByRuntime.get(runtime)?.get(idSlotKey)
+      : undefined;
+
+    if (hydratedId !== undefined) {
+      idRef.current = hydratedId;
+    } else {
+      const mode = runtime.idMode === "server" ? "R" : "r";
+      idRef.current = `_${runtime.identifierPrefix}${mode}_${runtime.idCounter}_`;
+      runtime.idCounter += 1;
+
+      if (runtime.idMode === "server") {
+        const hydratedIds = hydratedIdsByRuntime.get(runtime) ?? new Map<string, string>();
+        hydratedIds.set(idSlotKey, idRef.current);
+        hydratedIdsByRuntime.set(runtime, hydratedIds);
+      }
+    }
   }
 
   recordDevToolsHook("useId", {
@@ -1215,7 +1232,7 @@ export function useLayoutEffect(
 export function useSyncExternalStore<T>(
   subscribe: (listener: () => void) => () => void,
   getSnapshot: () => T,
-  getServerSnapshot: () => T = getSnapshot,
+  getServerSnapshot?: () => T,
 ): T {
   const runtime = requireRuntime();
   const instance = requireInstance();
@@ -1224,7 +1241,12 @@ export function useSyncExternalStore<T>(
   let slot = instance.hooks[index];
 
   if (slot === undefined) {
-    slot = { kind: "store", value: getServerSnapshot() };
+    slot = {
+      kind: "store",
+      value: runtime.idMode === "server" && getServerSnapshot !== undefined
+        ? getServerSnapshot()
+        : getSnapshot(),
+    };
     instance.hooks[index] = slot;
   }
 
@@ -1232,13 +1254,17 @@ export function useSyncExternalStore<T>(
     throw new Error("Hook order changed between renders.");
   }
 
-  const currentSnapshot = getSnapshot();
+  const isHydrationMount =
+    runtime.idMode === "server" && slot.hasMounted !== true && getServerSnapshot !== undefined;
+  const currentSnapshot = isHydrationMount ? slot.value as T : getSnapshot();
 
   if (!Object.is(slot.value, currentSnapshot)) {
     slot.value = currentSnapshot;
   }
 
-  recordExternalStoreCheck(getSnapshot, currentSnapshot);
+  if (!isHydrationMount) {
+    recordExternalStoreCheck(getSnapshot, currentSnapshot);
+  }
 
   runWithoutDevToolsHookTracking(() => useEffect(() => {
     const checkForUpdates = (): void => {

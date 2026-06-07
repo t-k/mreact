@@ -527,6 +527,85 @@ describe("react-compat render", () => {
     expect(checkbox?.hasAttribute("defaultChecked")).toBe(false);
   });
 
+  test("preserves uncontrolled form state across unrelated rerenders", () => {
+    const container = document.createElement("div");
+
+    function Form({ tick }: { tick: number }) {
+      return createElement(
+        "form",
+        { "data-render": tick },
+        createElement("input", { name: "user", defaultValue: "Ada" }),
+        createElement("textarea", { name: "bio", defaultValue: "Hello" }),
+        createElement(
+          "select",
+          { name: "role", defaultValue: "admin" },
+          createElement("option", { value: "admin" }, "Admin"),
+          createElement("option", { value: "user" }, "User"),
+        ),
+        createElement("input", { type: "checkbox", defaultChecked: true }),
+      );
+    }
+
+    render(createElement(Form, { tick: 0 }), container);
+
+    const user = container.querySelector<HTMLInputElement>('input[name="user"]')!;
+    const bio = container.querySelector<HTMLTextAreaElement>("textarea")!;
+    const role = container.querySelector<HTMLSelectElement>("select")!;
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+
+    user.value = "Grace";
+    bio.value = "Updated";
+    role.value = "user";
+    checkbox.checked = false;
+
+    render(createElement(Form, { tick: 1 }), container);
+
+    expect(container.querySelector("form")?.getAttribute("data-render")).toBe("1");
+    expect(user.value).toBe("Grace");
+    expect(bio.value).toBe("Updated");
+    expect(role.value).toBe("user");
+    expect(checkbox.checked).toBe(false);
+  });
+
+  test("keeps controlled form props updating live DOM state", () => {
+    const container = document.createElement("div");
+
+    function Form({ value, checked }: { value: string; checked: boolean }) {
+      return createElement(
+        "form",
+        null,
+        createElement("input", { name: "user", value }),
+        createElement("textarea", { value }),
+        createElement(
+          "select",
+          { value },
+          createElement("option", { value: "Ada" }, "Ada"),
+          createElement("option", { value: "Grace" }, "Grace"),
+        ),
+        createElement("input", { type: "checkbox", checked }),
+      );
+    }
+
+    render(createElement(Form, { value: "Ada", checked: false }), container);
+
+    const user = container.querySelector<HTMLInputElement>('input[name="user"]')!;
+    const bio = container.querySelector<HTMLTextAreaElement>("textarea")!;
+    const role = container.querySelector<HTMLSelectElement>("select")!;
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+
+    user.value = "Manual";
+    bio.value = "Manual";
+    role.value = "Grace";
+    checkbox.checked = false;
+
+    render(createElement(Form, { value: "Grace", checked: true }), container);
+
+    expect(user.value).toBe("Grace");
+    expect(bio.value).toBe("Grace");
+    expect(role.value).toBe("Grace");
+    expect(checkbox.checked).toBe(true);
+  });
+
   test("passes a synthetic event wrapper to event handlers", () => {
     const container = document.createElement("div");
     let seen:

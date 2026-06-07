@@ -10,10 +10,77 @@ import {
   queueHydrationEvent,
   readEventHydrationManifest,
   Suspense,
+  useId,
+  useSyncExternalStore,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat deep hydration", () => {
+  test("useSyncExternalStore keeps the server snapshot for the hydration pass", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<p>server</p>";
+    const renderedSnapshots: string[] = [];
+    const recoveries: string[] = [];
+    let snapshot = "client";
+    const listeners = new Set<() => void>();
+
+    function StoreLabel() {
+      const value = useSyncExternalStore(
+        (listener) => {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+        () => snapshot,
+        () => "server",
+      );
+      renderedSnapshots.push(value);
+      return createElement("p", null, value);
+    }
+
+    hydrateRoot(container, createElement(StoreLabel, null), {
+      onRecoverableError(error, info) {
+        recoveries.push(`${info.kind}:${error.message}`);
+      },
+    });
+
+    expect(renderedSnapshots[0]).toBe("server");
+    expect(container.innerHTML).toBe("<p>client</p>");
+    expect(recoveries).toEqual([]);
+
+    snapshot = "latest";
+    for (const listener of listeners) {
+      listener();
+    }
+
+    expect(container.innerHTML).toBe("<p>latest</p>");
+  });
+
+  test("uses client-mode ids for components mounted after hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<section></section>";
+
+    function ClientOnlyField() {
+      const id = useId();
+      return createElement("input", { id });
+    }
+
+    function App({ showClientOnly }: { showClientOnly: boolean }) {
+      return createElement("section", null, [
+        showClientOnly ? createElement(ClientOnlyField, { key: "client" }) : null,
+      ]);
+    }
+
+    const root = hydrateRoot(container, createElement(App, { showClientOnly: false }), {
+      identifierPrefix: "app-",
+    });
+
+    root.render(createElement(App, { showClientOnly: true }));
+
+    expect(container.querySelector("input")?.id).toBe("_app-r_0_");
+  });
+
   test("reports and recovers text, attribute, and tag mismatches", () => {
     const container = document.createElement("div");
     container.innerHTML = '<span id="server">server</span>';

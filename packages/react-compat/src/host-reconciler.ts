@@ -1661,9 +1661,7 @@ function commitHostDirtyFiber(
       commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
-      applyPostChildFormProps(element, props);
-    }
+    applyPostChildFormProps(element, props, previousProps);
     fiber.memoizedProps = props;
     finishCommittedFiber(fiber);
     return;
@@ -2065,9 +2063,7 @@ function commitHostFiber(
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
-      applyPostChildFormProps(element, props);
-    }
+    applyPostChildFormProps(element, props, previousProps);
     fiber.memoizedProps = props;
     finishCommittedFiber(fiber);
     return [element];

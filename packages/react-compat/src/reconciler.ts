@@ -116,6 +116,7 @@ export function renderIntoContainer(
         scope.before?.parentNode?.removeChild(scope.before);
         scope.after?.parentNode?.removeChild(scope.after);
       }
+      runtime.idMode = "client";
       committed = true;
     } finally {
       runtime.endRender(committed);
