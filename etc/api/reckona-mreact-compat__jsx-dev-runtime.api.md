@@ -92,9 +92,12 @@ export interface JSXIntrinsicElements {
     textarea: JSXHTMLAttributes<HTMLTextAreaElement>;
 }
 
+// @public (undocumented)
+export const REACTIVE_TEXT_BINDING_META: unique symbol;
+
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/jsx-dev-runtime.ts:33:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-dev-runtime.d.ts
+// packages/react-compat/src/jsx-dev-runtime.ts:38:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-dev-runtime.d.ts
 
 // (No @packageDocumentation comment for this package)
 

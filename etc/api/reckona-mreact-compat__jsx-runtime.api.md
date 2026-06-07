@@ -110,9 +110,12 @@ export function jsxs<P extends Record<string, unknown>>(type: ElementType<P>, pr
     ref?: unknown;
 }) | null, key?: unknown): ReactCompatElement<P>;
 
+// @public (undocumented)
+export const REACTIVE_TEXT_BINDING_META: unique symbol;
+
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/jsx-runtime.ts:83:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
+// packages/react-compat/src/jsx-runtime.ts:88:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.145 - 2026-06-07
+
+### Added
+
+- Added a compiler diagnostic for async client components so unsupported async client rendering is reported during compilation instead of being left to fail later.
+
+### Changed
+
+- Improved React-compatible compiled text bindings so compiler-proven direct state text children carry binding metadata through the JSX runtime and host reconciler, preserving targeted text updates without re-diffing unrelated host props.
+- Moved router benchmark ranking sections that only compare mreact app-router variants after cross-framework rankings, making the benchmark report easier to scan for framework comparisons first.
+
 ## 0.0.144 - 2026-06-07
 
 ### Fixed
