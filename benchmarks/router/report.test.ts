@@ -80,6 +80,64 @@ describe("router benchmark report", () => {
       "This section currently compares mreact app-router variants only; it is not a cross-framework ranking.",
     );
   });
+
+  it("moves mreact-only rankings after cross-framework rankings", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow("mreact-app-router", "app hydration 100 islands", "duration", "ms", 80),
+      completedRow(
+        "mreact-app-router+mreact react-compat",
+        "app hydration 100 islands",
+        "duration",
+        "ms",
+        100,
+      ),
+      completedRow("mreact-app-router", "app nested layouts depth 5", "duration", "ms", 6),
+      completedRow(
+        "mreact-app-router+mreact react-compat",
+        "app nested layouts depth 5",
+        "duration",
+        "ms",
+        8,
+      ),
+      completedRow(
+        "mreact-app-router",
+        "app client navigation route-to-route",
+        "duration",
+        "ms",
+        12,
+      ),
+      completedRow(
+        "next-app-router",
+        "app client navigation route-to-route",
+        "duration",
+        "ms",
+        20,
+      ),
+      completedRow(
+        "mreact-app-router",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        5,
+      ),
+      completedRow(
+        "qwik-city",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        50,
+      ),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(sectionIndex(markdown, "app client navigation route-to-route")).toBeLessThan(
+      sectionIndex(markdown, "app hydration 100 islands"),
+    );
+    expect(
+      sectionIndex(markdown, "app client bundle gzip bytes (server-only page)"),
+    ).toBeLessThan(sectionIndex(markdown, "app nested layouts depth 5"));
+  });
 });
 
 const testEnvironment: BenchmarkEnvironment = {
@@ -112,4 +170,8 @@ function completedRow(
     value,
     version: "test",
   };
+}
+
+function sectionIndex(markdown: string, caseName: RouterBenchmarkRow["caseName"]): number {
+  return markdown.indexOf(`### ${caseName}`);
 }
