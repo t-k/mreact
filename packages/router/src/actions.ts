@@ -146,7 +146,7 @@ export function __readDefaultReplayStore(): BoundedReplayStore {
 }
 
 export interface AppRouterServerActionOptions {
-  allowedActions?: readonly AppRouterAllowedServerAction[] | undefined;
+  allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;
   maxBodyBytes?: number | undefined;
   maxFormFields?: number | undefined;
@@ -327,6 +327,11 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
   const contentType = options.request.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
+    const manifestResponse = validateServerActionManifest(options.serverActions?.allowedActions);
+    if (manifestResponse !== undefined) {
+      return manifestResponse;
+    }
+
     // JSON path delegates CSRF/replay to createServerActionHandler. The
     // registry is still needed here, but the handler short-circuits on
     // CSRF mismatch before invoking the action.
@@ -345,7 +350,6 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     }
 
     const replayStore = options.serverActions?.replayStore ?? usedFormActionNonces;
-    warnIfUnrestrictedServerActions(options.serverActions?.allowedActions);
     const handle = createServerActionHandler(jsonServerActionRegistry({
       allowedActions: options.serverActions?.allowedActions,
       appDir: options.appDir,
@@ -354,7 +358,8 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       ...(options.serverActions?.authorize === undefined
         ? {}
         : { authorize: options.serverActions.authorize }),
-      ...(options.serverActions?.allowedActions === undefined
+      ...(options.serverActions?.allowedActions === undefined ||
+      options.serverActions.allowedActions === "any"
         ? {}
         : { allowedActions: jsonAllowedServerActions(options.serverActions.allowedActions) }),
       csrf: true,
@@ -370,6 +375,11 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     !contentType.includes("multipart/form-data")
   ) {
     return jsonResponse({ ok: false, error: "Unsupported server action content type." }, 415);
+  }
+
+  const manifestResponse = validateServerActionManifest(options.serverActions?.allowedActions);
+  if (manifestResponse !== undefined) {
+    return manifestResponse;
   }
 
   const formData = await options.request.formData();
@@ -625,7 +635,7 @@ function jsonAllowedServerActions(
 }
 
 function jsonServerActionRegistry(options: {
-  allowedActions: readonly AppRouterAllowedServerAction[] | undefined;
+  allowedActions: readonly AppRouterAllowedServerAction[] | "any" | undefined;
   appDir: string;
   registry: ServerActionRegistry;
 }): ServerActionRegistry {
@@ -635,9 +645,11 @@ function jsonServerActionRegistry(options: {
     inferredKeys.add(serverActionKey(reference));
   }
 
-  for (const reference of options.allowedActions ?? []) {
-    if (reference.inferred === true) {
-      inferredKeys.add(serverActionKey(reference));
+  if (Array.isArray(options.allowedActions)) {
+    for (const reference of options.allowedActions) {
+      if (reference.inferred === true) {
+        inferredKeys.add(serverActionKey(reference));
+      }
     }
   }
 
@@ -662,10 +674,14 @@ function serverActionKey(reference: ServerActionRequestReference): string {
 
 function isAllowedServerAction(
   reference: ServerActionRequestReference,
-  allowedActions: readonly AppRouterAllowedServerAction[] | undefined,
+  allowedActions: readonly AppRouterAllowedServerAction[] | "any" | undefined,
 ): boolean {
   if (allowedActions === undefined) {
     warnIfUnrestrictedServerActions(allowedActions);
+    return true;
+  }
+
+  if (allowedActions === "any") {
     return true;
   }
 
@@ -676,7 +692,7 @@ function isAllowedServerAction(
 }
 
 function warnIfUnrestrictedServerActions(
-  allowedActions: readonly AppRouterAllowedServerAction[] | undefined,
+  allowedActions: readonly AppRouterAllowedServerAction[] | "any" | undefined,
 ): void {
   if (
     allowedActions !== undefined ||
@@ -690,6 +706,16 @@ function warnIfUnrestrictedServerActions(
   console.warn(
     "[mreact] Server actions are running without an allowedActions manifest. Built app-router deployments generate this manifest automatically; direct production integrations should pass serverActions.allowedActions.",
   );
+}
+
+function validateServerActionManifest(
+  allowedActions: readonly AppRouterAllowedServerAction[] | "any" | undefined,
+): Response | undefined {
+  if (allowedActions !== undefined || !isProductionEnvironment()) {
+    return undefined;
+  }
+
+  return jsonResponse({ ok: false, error: "Server action manifest required." }, 403);
 }
 
 function lowerFormActions(options: {
@@ -817,18 +843,19 @@ async function collectImportedServerActions(options: {
 }
 
 function isInferredServerActionReference(options: {
-  allowedActions: readonly AppRouterAllowedServerAction[] | undefined;
+  allowedActions: readonly AppRouterAllowedServerAction[] | "any" | undefined;
   appDir: string;
   exportName: string;
   moduleId: string;
 }): boolean {
   if (
-    options.allowedActions?.some(
+    Array.isArray(options.allowedActions) &&
+    options.allowedActions.some(
       (allowed) =>
         allowed.inferred === true &&
         allowed.moduleId === options.moduleId &&
         allowed.exportName === options.exportName,
-    ) === true
+    )
   ) {
     return true;
   }

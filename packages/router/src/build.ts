@@ -89,6 +89,11 @@ import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
+import {
+  parseRouteMiddlewareControl,
+  parseStaticMiddlewareConfig,
+  validateRouteMiddlewareControl,
+} from "./middleware.js";
 import type { PluginOption, UserConfig } from "vite";
 
 const nativeEscapeTransform = {
@@ -107,6 +112,46 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
   outDir: string;
   targets?: readonly AppRouterBuildTarget[] | undefined;
   viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
+}
+
+async function validateBuildMiddlewareControls(
+  appDir: string,
+  routes: readonly AppRoute[],
+): Promise<void> {
+  const availableIds = await collectBuildMiddlewareIds(appDir);
+
+  for (const route of routes) {
+    if (route.kind !== "page") {
+      continue;
+    }
+
+    validateRouteMiddlewareControl({
+      availableIds,
+      control: parseRouteMiddlewareControl(await readFile(route.file, "utf8")),
+      routePath: route.path,
+    });
+  }
+}
+
+async function collectBuildMiddlewareIds(appDir: string): Promise<ReadonlySet<string>> {
+  const ids = new Set<string>();
+
+  for (const file of [join(appDir, "middleware.ts"), join(appDir, "middleware.mreact.ts")]) {
+    let code: string;
+    try {
+      code = await readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+
+    const id = parseStaticMiddlewareConfig(code).id;
+
+    if (id !== undefined) {
+      ids.add(id);
+    }
+  }
+
+  return ids;
 }
 
 export type BuildAppPhase =
@@ -283,6 +328,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       : await timeBuildPhase(timingSink, "scan", () =>
           scanAppRoutes({ appDir: project.routesDir }),
         );
+  await validateBuildMiddlewareControls(project.routesDir, routes);
   const viteDefine = options.viteConfig?.define;
   const vitePlugins = options.viteConfig?.plugins;
   const files =

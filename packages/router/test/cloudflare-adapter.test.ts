@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
+import { __resetQueryClientForTesting } from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
 import {
   createCloudflareBuiltRequestHandler,
@@ -584,6 +586,144 @@ export async function POST(request: Request) {
         },
       ],
     });
+  });
+
+  test("renders Cloudflare loader, page, metadata, and document when AsyncLocalStorage is unavailable", async () => {
+    const globalWithStorage = globalThis as {
+      AsyncLocalStorage?: unknown;
+    };
+    const previous = globalWithStorage.AsyncLocalStorage;
+    delete globalWithStorage.AsyncLocalStorage;
+    let metadataTitle: string | undefined;
+
+    try {
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {},
+        clientManifest: {
+          routes: [
+            {
+              bytes: 128,
+              client: true,
+              kind: "page",
+              path: "/",
+              script: "assets/routes/index.abc123.js",
+            },
+          ],
+        },
+        renderRoute: createCloudflareRouteModuleRenderer({
+          document({ body, data, modulePreload, queryClient }) {
+            const documentData = data as { profile: { name: string } };
+            const cached = queryClient.getQueryData<{ name: string }>(["profile"]);
+            return `<!doctype html><html><head><title>Document ${cached?.name}</title>${modulePreload}</head><body><section data-document="${documentData.profile.name}">${body}</section></body></html>`;
+          },
+          modules: {
+            "page.tsx": {
+              async loader({ queryClient }) {
+                const profile = await queryClient.fetchQuery({
+                  queryKey: ["profile"],
+                  queryFn: async () => ({ name: "Ada" }),
+                });
+
+                return { profile };
+              },
+              generateMetadata(context) {
+                const scoped = (
+                  context as typeof context & {
+                    queryClient?: {
+                      getQueryData<T>(queryKey: readonly unknown[]): T | undefined;
+                    };
+                  }
+                ).queryClient?.getQueryData<{ name: string }>(["profile"]);
+                metadataTitle = `Metadata ${scoped?.name}`;
+                return { title: metadataTitle };
+              },
+              default({ data, queryClient }) {
+                const loaderData = data as { profile: { name: string } };
+                const cached = queryClient.getQueryData<{ name: string }>(["profile"]);
+                return `<main>${loaderData.profile.name}:${cached?.name}</main>`;
+              },
+            },
+          },
+        }),
+        serverManifest: {
+          files: {},
+          routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+          version: 1,
+        },
+      });
+
+      const response = await handler.fetch(
+        new Request("https://app.example/"),
+        {},
+        createExecutionContext(),
+      );
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain('<section data-document="Ada">');
+      expect(html).toContain("<main>Ada:Ada</main>");
+      expect(html).toContain("<title>Document Ada</title>");
+      expect(metadataTitle).toBe("Metadata Ada");
+    } finally {
+      if (previous === undefined) {
+        delete globalWithStorage.AsyncLocalStorage;
+      } else {
+        globalWithStorage.AsyncLocalStorage = previous;
+      }
+    }
+  });
+
+  test("does not rerun Cloudflare loaders when user code throws the query scope message", async () => {
+    __resetQueryClientForTesting();
+    const globalWithStorage = globalThis as {
+      AsyncLocalStorage?: typeof AsyncLocalStorage;
+    };
+    const previous = globalWithStorage.AsyncLocalStorage;
+    globalWithStorage.AsyncLocalStorage = AsyncLocalStorage;
+    let calls = 0;
+
+    try {
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {},
+        clientManifest: { routes: [] },
+        renderRoute: createCloudflareRouteModuleRenderer({
+          modules: {
+            "page.tsx": {
+              loader() {
+                calls += 1;
+                throw new Error(
+                  "mreact query client scope is unavailable on the server. Install AsyncLocalStorage with installQueryAsyncStorage() or run in a supported Node runtime.",
+                );
+              },
+              default() {
+                return "<main>Home</main>";
+              },
+            },
+          },
+        }),
+        serverManifest: {
+          files: {},
+          routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+          version: 1,
+        },
+      });
+
+      const response = await handler.fetch(
+        new Request("https://app.example/"),
+        {},
+        createExecutionContext(),
+      );
+
+      expect(response.status).toBe(500);
+      expect(calls).toBe(1);
+    } finally {
+      if (previous === undefined) {
+        delete globalWithStorage.AsyncLocalStorage;
+      } else {
+        globalWithStorage.AsyncLocalStorage = previous;
+      }
+      __resetQueryClientForTesting();
+    }
   });
 
   test("passes through Response values thrown from Cloudflare page loaders", async () => {

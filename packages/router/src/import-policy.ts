@@ -143,11 +143,19 @@ function importPolicyPackageError(label: string, packageName: string): string {
     normalizedLabel.includes("action")
       ? normalizedLabel
       : `${normalizedLabel} module`;
+  const aliasHint =
+    packageName === "~" || packageName === "@"
+      ? [
+          "",
+          'This looks like an app-local alias import. Use a relative import such as "./" or "../" in server-side route code, or move the import behind a supported client boundary.',
+        ]
+      : [];
 
   return [
     `"${packageName}" is imported by a ${moduleKind} but is not allowed by the app-router import policy.`,
     "",
     "The policy blocks server-side static imports from loader, middleware, route handler, metadata, and server action modules unless the package is explicitly allowed.",
+    ...aliasHint,
     "",
     "Allow it in the Vite plugin config:",
     "  mreactRouter({",

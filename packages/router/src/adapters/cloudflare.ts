@@ -5,6 +5,7 @@ import {
   __MREACT_QUERY_STATE_SCRIPT_ID,
   createQueryClient,
   dehydrate,
+  isQueryClientScopeUnavailableError,
   runWithQueryClient,
   type DehydratedQueryClient,
   type QueryClient,
@@ -361,7 +362,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       data =
         pageModule.loader === undefined
           ? undefined
-          : await runWithQueryClient(queryClient, () => pageModule.loader!(loaderContext));
+          : await runWithCloudflareQueryClient(queryClient, () => pageModule.loader!(loaderContext));
     } catch (error) {
       if (error instanceof Response) {
         return error;
@@ -382,7 +383,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     let rendered: Awaited<ReturnType<typeof component>>;
 
     try {
-      rendered = await runWithQueryClient(queryClient, () => component(props));
+      rendered = await runWithCloudflareQueryClient(queryClient, () => component(props));
     } catch (error) {
       if (isNotFoundError(error)) {
         return cloudflareNotFoundResponse(request);
@@ -396,7 +397,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
 
     const modulePreload = cloudflareModulePreloadTag(context.clientManifest, context.route.path);
-    const metadata = await runWithQueryClient(queryClient, () =>
+    const metadata = await runWithCloudflareQueryClient(queryClient, () =>
       resolveCloudflareRouteMetadata([pageModule], props),
     );
     const body = withCloudflareHydrationMarkers({
@@ -410,7 +411,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     const documented =
       options.document === undefined
         ? defaultCloudflareDocument(body, modulePreload, metadata)
-        : await runWithQueryClient(queryClient, () =>
+        : await runWithCloudflareQueryClient(queryClient, () =>
             options.document!({
               ...props,
               body,
@@ -467,6 +468,18 @@ function injectCloudflareQueryStateScript(html: string, state: DehydratedQueryCl
   return /<\/body>/i.test(html)
     ? html.replace(/<\/body>/i, () => `${script}</body>`)
     : `${html}${script}`;
+}
+
+function runWithCloudflareQueryClient<T>(queryClient: QueryClient, fn: () => T): T {
+  try {
+    return runWithQueryClient(queryClient, fn);
+  } catch (error) {
+    if (isQueryClientScopeUnavailableError(error)) {
+      return fn();
+    }
+
+    throw error;
+  }
 }
 
 async function dispatchCloudflareServerRoute<Env>(

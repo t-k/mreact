@@ -4178,6 +4178,33 @@ export function middleware() {
     expect(state.__mreactStaticMatcherMiddlewareImports).toBe(1);
   });
 
+  test("rejects unknown route-local middleware skip ids at build time", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-middleware-skip-id-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "webhook"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { id: "auth" };
+
+export function middleware() {
+  return new Response("blocked", { status: 451 });
+}`,
+    );
+    await writeFile(
+      join(appDir, "webhook", "page.tsx"),
+      `export const middleware = { skip: ["auh"] };
+
+export default function Page() {
+  return <main>webhook</main>;
+}`,
+    );
+
+    await expect(buildApp({ appDir, outDir, targets: ["node"] })).rejects.toThrow(
+      /Unknown middleware skip id "auh"/,
+    );
+  });
+
   test("rejects project paths that resolve outside the project root", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-escaped-paths-"));
     const outsideDir = await mkdtemp(join(tmpdir(), "mreact-app-build-outside-public-"));

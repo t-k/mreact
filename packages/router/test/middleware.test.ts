@@ -5,6 +5,7 @@ import {
   parseRouteMiddlewareControl,
   parseStaticMiddlewareConfig,
   shouldSkipMiddleware,
+  validateRouteMiddlewareControl,
 } from "../src/middleware.js";
 import { normalizeRoutePath } from "../src/route-path.js";
 
@@ -92,5 +93,15 @@ describe("router middleware contract", () => {
     expect(shouldSkipMiddleware({ id: "auth" }, { skip: ["auth"] })).toBe(true);
     expect(shouldSkipMiddleware({ id: "auth" }, { skip: ["analytics"] })).toBe(false);
     expect(shouldSkipMiddleware(undefined, { skip: ["auth"] })).toBe(false);
+  });
+
+  test("rejects route-local middleware skip ids that do not exist", () => {
+    expect(() =>
+      validateRouteMiddlewareControl({
+        availableIds: new Set(["auth", "analytics"]),
+        control: { skip: ["auth", "typo"] },
+        routePath: "/webhook",
+      }),
+    ).toThrow(/Unknown middleware skip id "typo"/);
   });
 });

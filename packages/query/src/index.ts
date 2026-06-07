@@ -189,16 +189,20 @@ export interface DehydratedQueryClient {
 export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 
 const queryRuntimeStateKey = "__mreactQueryRuntimeState";
+const queryClientScopeUnavailableErrorKey = "__mreactQueryClientScopeUnavailable";
 
 interface QueryRuntimeState {
   asyncStorage?: QueryAsyncStorage<QueryClient> | undefined;
   browserQueryClient?: QueryClient | undefined;
-  currentQueryClient?: QueryClient | undefined;
 }
 
 export interface QueryAsyncStorage<T> {
   getStore(): T | undefined;
   run<TResult>(store: T, callback: () => TResult): TResult;
+}
+
+interface QueryClientScopeUnavailableError extends Error {
+  [queryClientScopeUnavailableErrorKey]: true;
 }
 
 export function createQueryClient(): QueryClient {
@@ -211,10 +215,6 @@ export function getQueryClient(): QueryClient {
 
   if (scopedClient !== undefined) {
     return scopedClient;
-  }
-
-  if (state.currentQueryClient !== undefined) {
-    return state.currentQueryClient;
   }
 
   if (typeof document === "undefined") {
@@ -234,57 +234,30 @@ export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T {
   const asyncStorage = queryAsyncStorage(state);
 
   if (asyncStorage === undefined) {
-    const previous = state.currentQueryClient;
-    state.currentQueryClient = client;
-
-    try {
-      const result = fn();
-
-      if (isPromise(result)) {
-        return result.finally(() => {
-          state.currentQueryClient = previous;
-        }) as T;
-      }
-
-      state.currentQueryClient = previous;
-      return result;
-    } catch (error) {
-      state.currentQueryClient = previous;
-      throw error;
-    }
+    throw createQueryClientScopeUnavailableError();
   }
 
-  return asyncStorage.run(client, () => {
-    const previous = state.currentQueryClient;
-    state.currentQueryClient = client;
-
-    try {
-      const result = fn();
-
-      if (isPromise(result)) {
-        return result.finally(() => {
-          state.currentQueryClient = previous;
-        }) as T;
-      }
-
-      state.currentQueryClient = previous;
-      return result;
-    } catch (error) {
-      state.currentQueryClient = previous;
-      throw error;
-    }
-  });
+  return asyncStorage.run(client, fn);
 }
 
 export function __resetQueryClientForTesting(): void {
   const state = queryRuntimeState();
   state.asyncStorage = undefined;
-  state.currentQueryClient = undefined;
   state.browserQueryClient = undefined;
 }
 
 export function installQueryAsyncStorage(storage: QueryAsyncStorage<QueryClient>): void {
   queryRuntimeState().asyncStorage = storage;
+}
+
+export function isQueryClientScopeUnavailableError(
+  error: unknown,
+): error is QueryClientScopeUnavailableError {
+  return (
+    error instanceof Error &&
+    (error as Partial<QueryClientScopeUnavailableError>)[queryClientScopeUnavailableErrorKey] ===
+      true
+  );
 }
 
 export function createQuery<TData>(
@@ -546,10 +519,6 @@ function hydrateFromDocument(client: QueryClient): void {
   }
 }
 
-function isPromise<T>(value: T): value is T & Promise<unknown> {
-  return value instanceof Promise;
-}
-
 function queryRuntimeState(): QueryRuntimeState {
   return getGlobalRuntimeState(queryRuntimeStateKey, () => ({}));
 }
@@ -571,6 +540,14 @@ function queryAsyncStorage(state: QueryRuntimeState): QueryAsyncStorage<QueryCli
 
   state.asyncStorage = new AsyncStorage<QueryClient>();
   return state.asyncStorage;
+}
+
+function createQueryClientScopeUnavailableError(): QueryClientScopeUnavailableError {
+  const error = new Error(
+    "mreact query client scope is unavailable on the server. Install AsyncLocalStorage with installQueryAsyncStorage() or run in a supported Node runtime.",
+  ) as QueryClientScopeUnavailableError;
+  error[queryClientScopeUnavailableErrorKey] = true;
+  return error;
 }
 
 function infiniteResultFromQueryEntry<TPage, TPageParam>(

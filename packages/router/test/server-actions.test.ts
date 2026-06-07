@@ -998,11 +998,10 @@ export default function Page() {
     });
   });
 
-  test("accepts production server action requests with a same-origin Referer", async () => {
+  test("rejects production server action requests without an allowed action manifest", async () => {
     await withNodeEnv("production", async () => {
       const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-referer-"));
       await writeActionFixture(appDir);
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const pageResponse = await renderAppRequest({
         appDir,
         request: new Request("https://local.test/"),
@@ -1030,9 +1029,117 @@ export default function Page() {
         }),
       });
 
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "Server action manifest required.",
+      });
+    });
+  });
+
+  test("rejects production JSON actions without a manifest before loading the registry", async () => {
+    await withNodeEnv("production", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-manifest-first-json-"));
+      await writeFile(
+        join(appDir, "actions.ts"),
+        `"use server";
+import { token } from "~/lib/token.js";
+
+export async function save() {
+  return token;
+}`,
+      );
+
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/_mreact/actions", {
+          body: JSON.stringify({
+            args: [],
+            exportName: "save",
+            moduleId: "actions.ts",
+          }),
+          headers: {
+            "content-type": "application/json",
+            cookie: "mreact.csrf=csrf-json-manifest-first",
+            origin: "https://local.test",
+            "x-mreact-action-nonce": "nonce-json-manifest-first",
+            "x-mreact-csrf": "csrf-json-manifest-first",
+          },
+          method: "POST",
+        }),
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "Server action manifest required.",
+      });
+    });
+  });
+
+  test("rejects production form actions without a manifest before parsing form data", async () => {
+    await withNodeEnv("production", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-manifest-first-form-"));
+      await writeActionFixture(appDir);
+      const request = new Request("https://local.test/_mreact/actions", {
+        body: new URLSearchParams({}),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          origin: "https://local.test",
+        },
+        method: "POST",
+      });
+      const formData = vi.fn(async () => {
+        throw new Error("form data should not be parsed");
+      });
+      Object.defineProperty(request, "formData", { value: formData });
+
+      const response = await renderAppRequest({ appDir, request });
+
+      expect(response.status).toBe(403);
+      expect(formData).not.toHaveBeenCalled();
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "Server action manifest required.",
+      });
+    });
+  });
+
+  test("accepts production server action requests with an explicit any action manifest", async () => {
+    await withNodeEnv("production", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-explicit-any-"));
+      await writeActionFixture(appDir);
+      const pageResponse = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const html = await pageResponse.text();
+      const csrf = extractInputValue(html, "__mreact_csrf");
+      const nonce = extractInputValue(html, "__mreact_action_nonce");
+      const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const response = await renderAppRequest({
+        appDir,
+        serverActions: {
+          allowedActions: "any",
+        },
+        request: new Request("https://local.test/_mreact/actions", {
+          body: new URLSearchParams({
+            __mreact_action_nonce: nonce,
+            __mreact_csrf: csrf,
+            __mreact_export_name: "save",
+            __mreact_module_id: "actions.ts",
+            title: "Allowed referer",
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            cookie,
+            referer: "https://local.test/form",
+          },
+          method: "POST",
+        }),
+      });
+
       expect(response.status).toBe(200);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("allowedActions"));
-      warn.mockRestore();
     });
   });
 
@@ -1116,6 +1223,59 @@ export function echo() {
       ok: true,
       value: { version: "fixture-ok" },
     });
+  });
+
+  test("explains likely app-local alias imports in import policy errors", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-action-alias-policy-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { save } from "./actions.js";
+
+export default function Page() {
+  return <form action={save}><button>Save</button></form>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+import { token } from "~/lib/token.js";
+
+export async function save() {
+  return token;
+}`,
+    );
+
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const token = extractInputValue(html, "__mreact_action_token");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_action_token: token,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.text()).resolves.toContain(
+      "This looks like an app-local alias import. Use a relative import such as",
+    );
   });
 
   test("rejects JSON server action nonce replay", async () => {
