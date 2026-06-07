@@ -62,7 +62,7 @@ describe("nativeModulePackageCandidates", () => {
 });
 
 describe("normalizeNativeParams", () => {
-  test("decodes catch-all params to match the JS matcher", () => {
+  test("normalizes native catch-all arrays without splitting decoded slashes", () => {
     expect(
       normalizeNativeParams(
         {
@@ -71,11 +71,48 @@ describe("normalizeNativeParams", () => {
           path: "/[...slug]",
           segments: [{ kind: "catch-all", name: "slug" }],
         },
-        { slug: "docs/hello%20world/%E6%97%A5%E6%9C%AC" },
+        {},
+        { slug: ["a/b", "a%2Fb"] },
       ),
     ).toEqual({
-      slug: ["docs", "hello world", "日本"],
+      slug: ["a/b", "a%2Fb"],
     });
+  });
+});
+
+describe("native route matcher parity", () => {
+  test("matches native catch-all params with JS matcher parity for encoded slash cases", () => {
+    const route = {
+      file: "/app/docs/[...slug]/page.tsx",
+      kind: "page" as const,
+      path: "/docs/[...slug]",
+      segments: [
+        { kind: "static" as const, value: "docs" },
+        { kind: "catch-all" as const, name: "slug" },
+      ],
+    };
+
+    for (const [pathname, slug] of [
+      ["/docs/a%2Fb", ["a/b"]],
+      ["/docs/a%252Fb", ["a%2Fb"]],
+      ["/docs/a/b", ["a", "b"]],
+    ] as const) {
+      expect(
+        __matchNativeRouteForTesting(
+          {
+            matchRoute() {
+              return {
+                index: 0,
+                params: {},
+                catchAllParams: { slug },
+              };
+            },
+          },
+          [route],
+          pathname,
+        )?.params,
+      ).toEqual({ slug });
+    }
   });
 });
 

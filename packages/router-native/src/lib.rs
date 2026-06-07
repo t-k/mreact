@@ -42,6 +42,13 @@ pub struct NativeRouteMatcher {
 pub struct NativeMatch {
   pub index: u32,
   pub params: HashMap<String, String>,
+  pub catch_all_params: HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug)]
+struct MatchParams {
+  params: HashMap<String, String>,
+  catch_all_params: HashMap<String, Vec<String>>,
 }
 
 #[cfg(not(test))]
@@ -99,7 +106,8 @@ impl RouteMatcherCore {
       if let Some(params) = match_segments(&route.segments, &pathname_segments)? {
         return Ok(Some(NativeMatch {
           index: route.index,
-          params,
+          params: params.params,
+          catch_all_params: params.catch_all_params,
         }));
       }
     }
@@ -111,7 +119,7 @@ impl RouteMatcherCore {
 fn match_segments(
   route_segments: &[RouteSegment],
   pathname_segments: &[&str],
-) -> Result<Option<HashMap<String, String>>, String> {
+) -> Result<Option<MatchParams>, String> {
   let catch_all_index = route_segments
     .iter()
     .position(|segment| matches!(segment, RouteSegment::CatchAll { .. }));
@@ -127,7 +135,10 @@ fn match_segments(
     }
   }
 
-  let mut params: Option<HashMap<String, String>> = None;
+  let mut params = MatchParams {
+    params: HashMap::new(),
+    catch_all_params: HashMap::new(),
+  };
 
   for (index, segment) in route_segments.iter().enumerate() {
     let Some(value) = pathname_segments.get(index) else {
@@ -141,9 +152,10 @@ fn match_segments(
         }
       }
       RouteSegment::Dynamic { name } => {
-        params
-          .get_or_insert_with(HashMap::new)
-          .insert(name.clone(), decode_uri_component(value)?);
+        let Ok(decoded) = decode_uri_component(value) else {
+          return Ok(None);
+        };
+        params.params.insert(name.clone(), decoded);
       }
       RouteSegment::CatchAll { name } => {
         let suffix_segments = &route_segments[index + 1..];
@@ -156,10 +168,11 @@ fn match_segments(
         let decoded_parts = pathname_segments[index..catch_all_end]
           .iter()
           .map(|part| decode_uri_component(part))
-          .collect::<Result<Vec<_>, String>>()?;
-        params
-          .get_or_insert_with(HashMap::new)
-          .insert(name.clone(), decoded_parts.join("/"));
+          .collect::<Result<Vec<_>, String>>();
+        let Ok(decoded_parts) = decoded_parts else {
+          return Ok(None);
+        };
+        params.catch_all_params.insert(name.clone(), decoded_parts);
 
         for (suffix_index, suffix_segment) in suffix_segments.iter().enumerate() {
           let Some(value) = pathname_segments.get(catch_all_end + suffix_index) else {
@@ -173,9 +186,10 @@ fn match_segments(
               }
             }
             RouteSegment::Dynamic { name } => {
-              params
-                .get_or_insert_with(HashMap::new)
-                .insert(name.clone(), decode_uri_component(value)?);
+              let Ok(decoded) = decode_uri_component(value) else {
+                return Ok(None);
+              };
+              params.params.insert(name.clone(), decoded);
             }
             RouteSegment::CatchAll { .. } => return Ok(None),
           }
@@ -186,7 +200,7 @@ fn match_segments(
     }
   }
 
-  Ok(Some(params.unwrap_or_default()))
+  Ok(Some(params))
 }
 
 fn normalize_path(pathname: &str) -> String {
@@ -304,6 +318,7 @@ mod tests {
       NativeMatch {
         index: 0,
         params: HashMap::new(),
+        catch_all_params: HashMap::new(),
       },
     );
     assert_eq!(
@@ -311,6 +326,7 @@ mod tests {
       NativeMatch {
         index: 1,
         params: HashMap::from([("id".to_string(), "intro".to_string())]),
+        catch_all_params: HashMap::new(),
       },
     );
     assert_eq!(
@@ -320,9 +336,66 @@ mod tests {
         .unwrap(),
       NativeMatch {
         index: 2,
-        params: HashMap::from([("slug".to_string(), "guides/install".to_string())]),
+        params: HashMap::new(),
+        catch_all_params: HashMap::from([(
+          "slug".to_string(),
+          vec!["guides".to_string(), "install".to_string()],
+        )]),
       },
     );
+  }
+
+  #[test]
+  fn preserves_catch_all_segment_boundaries_for_encoded_slashes() {
+    let matcher = RouteMatcherCore::new(
+      r#"[
+        {"index":0,"segments":[{"kind":"static","value":"docs"},{"kind":"catch-all","name":"slug"}]}
+      ]"#,
+    )
+    .unwrap();
+
+    assert_eq!(
+      matcher.match_route("/docs/a%2Fb").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::new(),
+        catch_all_params: HashMap::from([("slug".to_string(), vec!["a/b".to_string()])]),
+      },
+    );
+    assert_eq!(
+      matcher.match_route("/docs/a%252Fb").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::new(),
+        catch_all_params: HashMap::from([("slug".to_string(), vec!["a%2Fb".to_string()])]),
+      },
+    );
+    assert_eq!(
+      matcher.match_route("/docs/a/b").unwrap().unwrap(),
+      NativeMatch {
+        index: 0,
+        params: HashMap::new(),
+        catch_all_params: HashMap::from([(
+          "slug".to_string(),
+          vec!["a".to_string(), "b".to_string()],
+        )]),
+      },
+    );
+  }
+
+  #[test]
+  fn returns_none_for_malformed_percent_escapes() {
+    let matcher = RouteMatcherCore::new(
+      r#"[
+        {"index":0,"segments":[{"kind":"static","value":"docs"},{"kind":"catch-all","name":"slug"}]}
+      ]"#,
+    )
+    .unwrap();
+
+    assert_eq!(matcher.match_route("/docs/%ZZ").unwrap(), None);
+    assert_eq!(matcher.match_route("/docs/%E0").unwrap(), None);
+    assert_eq!(matcher.match_route("/docs/%").unwrap(), None);
+    assert_eq!(matcher.match_route("/docs/%C0%AF").unwrap(), None);
   }
 
   #[test]
@@ -339,14 +412,16 @@ mod tests {
       matcher.match_route("/hello").unwrap().unwrap(),
       NativeMatch {
         index: 1,
-        params: HashMap::from([("slug".to_string(), "hello".to_string())]),
+        params: HashMap::new(),
+        catch_all_params: HashMap::from([("slug".to_string(), vec!["hello".to_string()])]),
       },
     );
     assert_eq!(
       matcher.match_route("/hello/opengraph-image").unwrap().unwrap(),
       NativeMatch {
         index: 0,
-        params: HashMap::from([("slug".to_string(), "hello".to_string())]),
+        params: HashMap::new(),
+        catch_all_params: HashMap::from([("slug".to_string(), vec!["hello".to_string()])]),
       },
     );
   }
@@ -363,6 +438,7 @@ mod tests {
       NativeMatch {
         index: 0,
         params: HashMap::from([("id".to_string(), "Ada Lovelace".to_string())]),
+        catch_all_params: HashMap::new(),
       },
     );
   }

@@ -18,6 +18,7 @@ interface NativeRouteMatcherModule {
 interface NativeMatchOutput {
   index: number;
   params: Record<string, string>;
+  catchAllParams?: Record<string, string[]> | undefined;
 }
 
 let loadedNativeModule: NativeRouteMatcherModule | false | undefined;
@@ -87,13 +88,14 @@ function matchNativeRoute(
     ? undefined
     : {
         route,
-        params: normalizeNativeParams(route, output.params),
+        params: normalizeNativeParams(route, output.params, output.catchAllParams),
       };
 }
 
 export function normalizeNativeParams(
   route: AppRoute,
   params: Record<string, string>,
+  catchAllParams: Record<string, string[]> = {},
 ): MatchedRoute["params"] {
   const normalized: MatchedRoute["params"] = { ...params };
 
@@ -101,24 +103,22 @@ export function normalizeNativeParams(
     if (segment.kind !== "catch-all") {
       continue;
     }
+    const catchAllValue = catchAllParams[segment.name];
+    if (catchAllValue !== undefined) {
+      normalized[segment.name] = catchAllValue;
+      continue;
+    }
+
     const value = normalized[segment.name];
     if (typeof value === "string") {
       normalized[segment.name] = value
         .split("/")
         .filter((part: string) => part !== "")
-        .map((part: string) => safeDecodeURIComponent(part) ?? part);
+        .map((part: string) => part);
     }
   }
 
   return normalized;
-}
-
-function safeDecodeURIComponent(value: string): string | undefined {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return undefined;
-  }
 }
 
 export function shouldUseNativeRouteMatcher(

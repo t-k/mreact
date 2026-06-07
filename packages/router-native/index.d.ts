@@ -1,6 +1,7 @@
 export interface NativeMatch {
   index: number;
   params: Record<string, string>;
+  catchAllParams: Record<string, string[]>;
 }
 
 export class NativeRouteMatcher {
