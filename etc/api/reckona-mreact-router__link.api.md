@@ -15,7 +15,7 @@ export function Link(props: LinkProps): ReactCompatElement;
 export function Link(sink: HtmlSink, props: LinkProps): void;
 
 // @public (undocumented)
-export type LinkChild = ReactCompatNode | Node | readonly LinkChild[];
+export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
 // @public (undocumented)
 export interface LinkOptions {
@@ -50,6 +50,11 @@ export type LinkScroll = "top" | "preserve";
 
 // @public (undocumented)
 export type LinkTransition = "auto" | "none" | false;
+
+// @public (undocumented)
+export type TrustedLinkHtml = {
+    readonly [TRUSTED_LINK_HTML]: string;
+};
 
 // (No @packageDocumentation comment for this package)
 

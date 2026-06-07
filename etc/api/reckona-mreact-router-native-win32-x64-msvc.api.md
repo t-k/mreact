@@ -25,6 +25,8 @@ export function mergeFlightRows(baseRows: string, patchRows: string): string;
 // @public (undocumented)
 export interface NativeMatch {
     // (undocumented)
+    catchAllParams: Record<string, string[]>;
+    // (undocumented)
     index: number;
     // (undocumented)
     params: Record<string, string>;

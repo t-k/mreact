@@ -625,7 +625,7 @@ export function Link(props: LinkProps): ReactCompatElement;
 export function Link(sink: HtmlSink, props: LinkProps): void;
 
 // @public (undocumented)
-export type LinkChild = ReactCompatNode | Node | readonly LinkChild[];
+export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
 // @public (undocumented)
 export interface LinkOptions {
@@ -1467,6 +1467,11 @@ export function textError(message: string, status?: number, init?: ResponseInit)
 
 // @public (undocumented)
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;
+
+// @public (undocumented)
+export type TrustedLinkHtml = {
+    readonly [TRUSTED_LINK_HTML]: string;
+};
 
 // @public (undocumented)
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;

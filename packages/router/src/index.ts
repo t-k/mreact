@@ -144,6 +144,7 @@ export type {
   LinkProps,
   LinkScroll,
   LinkTransition,
+  TrustedLinkHtml,
 } from "./link.js";
 export type {
   AppRouterNavigationState,
