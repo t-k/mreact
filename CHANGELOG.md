@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Fixed `@reckona/mreact-query` hydration so dehydrated `updatedAt` timestamps are preserved on the browser cache, making `staleTime` measure freshness from the server fetch time instead of the hydration time.
+- Clarified query hydration docs and the App Router query example so default browser observers are described as stale-while-revalidate on mount, while examples that want no mount refetch pass `staleTime`.
+
 ## 0.0.141 - 2026-06-06
 
 ### Added

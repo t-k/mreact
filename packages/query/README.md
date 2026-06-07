@@ -35,13 +35,13 @@ hydrate(getQueryClient(), state);
 - Query results expose `errorReason` as `"aborted"`, `"retry-exhausted"`, `"network"`, or `"unknown"` so UI can avoid treating cancellations like user-visible failures.
 - `cancelQueries()` aborts in-flight queries by key prefix without retrying the canceled request.
 - `removeQueries()` aborts matching in-flight queries, evicts matching cache entries, and resets subscribed observers to an empty pending result.
-- `createQuery()` creates a reactive query observer. It auto-fetches empty queries in browsers by default and remains observe-only during server render; pass `autoFetch: false` to require loader-prefetched data only.
+- `createQuery()` creates a reactive query observer. It auto-fetches empty queries in browsers by default and remains observe-only during server render. Hydrated entries render immediately, then revalidate on mount unless their server `updatedAt` timestamp is still covered by `staleTime`; pass `autoFetch: false` to require loader-prefetched data only.
 - `createQuery()` accepts `gcTime` to evict an idle cache entry after the last observer disposes. It is disabled by default; pass a non-negative millisecond value when short-lived browser views should release data after unmount.
 - `createQuery()` can opt into browser revalidation with `refetchOnWindowFocus` and `refetchOnReconnect`. These hooks are disabled by default and refetch through the same cache entry and abort signal path as manual `refetch()`.
 - `createInfiniteQuery()` stores cursor pages under one query key, exposes `pages`, `pageParams`, `hasNextPage`, and `fetchNextPage()`, and dedupes concurrent requests for the same next page.
 - `createMutation()` handles mutations and invalidation.
 - Mutation lifecycle hooks run in this order: `onMutate`, `mutationFn`, state update, `onSuccess`, query invalidation, then `onSettled`. On failure, state updates before `onError` and `onSettled`. The value returned by `onMutate` is passed to `onError` and `onSettled`, which supports optimistic rollback without external bookkeeping.
-- `dehydrate()` and `hydrate()` move query state from server to client.
+- `dehydrate()` and `hydrate()` move query state from server to client while preserving each successful query's `updatedAt` timestamp for `staleTime` checks.
 - `getQueryClient()` returns the browser singleton query client.
 
 ## Router Usage

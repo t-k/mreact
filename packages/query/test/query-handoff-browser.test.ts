@@ -5,9 +5,10 @@ import {
   __MREACT_QUERY_STATE_SCRIPT_ID,
   __resetQueryClientForTesting,
   createQuery,
-  dehydrate,
   createQueryClient,
+  dehydrate,
   getQueryClient,
+  hashQueryKey,
 } from "../src/index.js";
 
 describe("browser query client hand-off", () => {
@@ -60,4 +61,77 @@ describe("browser query client hand-off", () => {
       status: "success",
     });
   });
+
+  it("revalidates stale hydrated query data on mount", () => {
+    __resetQueryClientForTesting();
+    injectQueryState({
+      queries: [
+        {
+          data: "server",
+          queryHash: hashQueryKey(["time"]),
+          queryKey: ["time"],
+          updatedAt: Date.now() - 1_000,
+        },
+      ],
+    });
+    const client = getQueryClient();
+    let calls = 0;
+
+    const query = createQuery(client, {
+      queryKey: ["time"],
+      staleTime: 100,
+      queryFn: () => {
+        calls += 1;
+        return "client";
+      },
+    });
+
+    expect(calls).toBe(1);
+    expect(query.result.get()).toMatchObject({
+      data: "server",
+      isFetching: true,
+      status: "success",
+    });
+  });
+
+  it("keeps fresh hydrated query data on mount when staleTime covers the server timestamp", () => {
+    __resetQueryClientForTesting();
+    injectQueryState({
+      queries: [
+        {
+          data: "server",
+          queryHash: hashQueryKey(["time"]),
+          queryKey: ["time"],
+          updatedAt: Date.now(),
+        },
+      ],
+    });
+    const client = getQueryClient();
+    let calls = 0;
+
+    const query = createQuery(client, {
+      queryKey: ["time"],
+      staleTime: 60_000,
+      queryFn: () => {
+        calls += 1;
+        return "client";
+      },
+    });
+
+    expect(calls).toBe(0);
+    expect(query.result.get()).toMatchObject({
+      data: "server",
+      isFetching: false,
+      status: "success",
+    });
+  });
 });
+
+function injectQueryState(state: unknown): void {
+  document.body.innerHTML = "";
+  const script = document.createElement("script");
+  script.id = __MREACT_QUERY_STATE_SCRIPT_ID;
+  script.type = "application/json";
+  script.textContent = JSON.stringify(state);
+  document.body.append(script);
+}
