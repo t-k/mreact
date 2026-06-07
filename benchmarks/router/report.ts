@@ -1,6 +1,7 @@
 import { routerBenchmarkCases, rankCompletedRows } from "./runner.js";
 import type { BenchmarkEnvironment } from "../shared/types.js";
-import type { RouterBenchmarkRow } from "./types.js";
+import type { RouterBenchmarkCase } from "./runner.js";
+import type { RouterBenchmarkCaseName, RouterBenchmarkRow } from "./types.js";
 
 export function formatRouterBenchmarkMarkdown(
   env: BenchmarkEnvironment,
@@ -28,12 +29,11 @@ export function formatRouterBenchmarkMarkdown(
     "",
   ];
 
-  for (const benchmarkCase of routerBenchmarkCases) {
+  for (const { benchmarkCase, rankedRows } of reportRankingSections(rows)) {
     lines.push(`### ${benchmarkCase.name}`, "");
     lines.push(benchmarkCase.description, "");
-    const rankedRows = rankCompletedRows(rows, benchmarkCase.name);
 
-    if (isMreactVariantOnlyColdStart(benchmarkCase.name, rankedRows)) {
+    if (isMreactVariantOnlyRanking(benchmarkCase.name, rankedRows)) {
       lines.push(
         "This section currently compares mreact app-router variants only; it is not a cross-framework ranking.",
         "",
@@ -76,28 +76,55 @@ export function formatRouterBenchmarkMarkdown(
   return lines.join("\n");
 }
 
-function isMreactVariantOnlyColdStart(
+interface ReportRankingSection {
+  benchmarkCase: RouterBenchmarkCase;
+  rankedRows: RouterBenchmarkRow[];
+}
+
+function reportRankingSections(rows: readonly RouterBenchmarkRow[]): ReportRankingSection[] {
+  const crossFrameworkSections: ReportRankingSection[] = [];
+  const mreactOnlySections: ReportRankingSection[] = [];
+
+  for (const benchmarkCase of routerBenchmarkCases) {
+    const rankedRows = rankCompletedRows(rows, benchmarkCase.name);
+    const section = { benchmarkCase, rankedRows };
+
+    if (isMreactVariantOnlyRanking(benchmarkCase.name, rankedRows)) {
+      mreactOnlySections.push(section);
+    } else {
+      crossFrameworkSections.push(section);
+    }
+  }
+
+  return [...crossFrameworkSections, ...mreactOnlySections];
+}
+
+const mreactVariantOnlyRankingCaseNames = new Set<RouterBenchmarkCaseName>([
+  "app server cold start",
+  "app concurrent throughput 100 connections",
+  "app concurrent p99 latency 100 connections",
+  "app concurrent RSS delta 100 connections",
+  "app hydration 100 islands",
+  "app dev cold start",
+  "app dev first request latency",
+  "app dev HMR update latency",
+  "app 1000 route match latency",
+  "app 1000 route cold start",
+  "app 1000 route build time",
+  "app 1000 route RSS delta",
+  "app server action form POST roundtrip",
+  "app nested layouts depth 5",
+  "app loader client navigation route-to-route",
+  "app client navigation back-forward restore",
+  "app Cloudflare Worker request latency",
+]);
+
+function isMreactVariantOnlyRanking(
   caseName: string,
   rankedRows: readonly RouterBenchmarkRow[],
 ): boolean {
   return (
-    (caseName === "app server cold start" ||
-      caseName === "app concurrent throughput 100 connections" ||
-      caseName === "app concurrent p99 latency 100 connections" ||
-      caseName === "app concurrent RSS delta 100 connections" ||
-      caseName === "app hydration 100 islands" ||
-      caseName === "app dev cold start" ||
-      caseName === "app dev first request latency" ||
-      caseName === "app dev HMR update latency" ||
-      caseName === "app 1000 route match latency" ||
-      caseName === "app 1000 route cold start" ||
-      caseName === "app 1000 route build time" ||
-      caseName === "app 1000 route RSS delta" ||
-      caseName === "app server action form POST roundtrip" ||
-      caseName === "app nested layouts depth 5" ||
-      caseName === "app loader client navigation route-to-route" ||
-      caseName === "app client navigation back-forward restore" ||
-      caseName === "app Cloudflare Worker request latency") &&
+    mreactVariantOnlyRankingCaseNames.has(caseName as RouterBenchmarkCaseName) &&
     rankedRows.length > 0 &&
     rankedRows.every((row) => row.framework.includes("mreact"))
   );
