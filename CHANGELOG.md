@@ -1,11 +1,35 @@
 # Changelog
 
-## Unreleased
+## 0.0.144 - 2026-06-07
+
+### Fixed
+
+- Improved `@reckona/mreact-reactive-dom` keyed `bindList()` initial browser rendering by claiming empty marker-only parents with a single whole-parent replacement instead of inserting each row one at a time, reducing the `primitive-browser` create 1k rows median from 1.1ms to 0.9ms in the release verification run.
+
+## 0.0.143 - 2026-06-07
 
 ### Fixed
 
 - Fixed `@reckona/mreact-query` hydration so dehydrated `updatedAt` timestamps are preserved on the browser cache, making `staleTime` measure freshness from the server fetch time instead of the hydration time.
 - Clarified query hydration docs and the App Router query example so default browser observers are described as stale-while-revalidate on mount, while examples that want no mount refetch pass `staleTime`.
+
+## 0.0.142 - 2026-06-07
+
+### Added
+
+- Added typed route URL helpers for the App Router: `href()` builds encoded internal route URLs from patterns such as `"/users/:id"` and build output now writes `.mreact/routes.d.ts` with the discovered route path union and typed route map.
+
+### Changed
+
+- Changed App Router production builds to emit only Node-compatible server/client artifacts by default. Cloudflare Workers, AWS Lambda, or all adapter artifacts now require an explicit `--target`, `buildTargets`, or `buildApp({ targets })` opt-in.
+- Hardened App Router metadata handling across Node and Cloudflare by validating static and generated metadata before head/header emission, rejecting unsafe head attributes and URL schemes, and applying metadata CSP/security headers to Cloudflare page responses, including generated string/stream route modules and pages that return a `Response`.
+- Hardened request-scoped server query state so server integrations without installed `AsyncLocalStorage` fail instead of falling back to shared module-level query client state.
+
+### Fixed
+
+- Fixed production server action dispatch to fail closed when no generated or explicit action allow-list is present. Direct integrations that intentionally expose every registered server action must now opt in with `allowedActions: "any"`.
+- Fixed silent middleware skip ID typos by validating configured skip IDs against discovered middleware IDs during build and render setup.
+- Added a diagnostic when a route renders `Link` while explicitly exporting `navigationRuntime = false`, making the client-navigation opt-out visible during build and development.
 
 ## 0.0.141 - 2026-06-06
 

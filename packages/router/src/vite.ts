@@ -25,7 +25,9 @@ import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   collectClientRouteReferences,
   createClientRouteInferenceCache,
+  formatClientRouteInferenceDiagnostic,
   isClientRouteSource,
+  navigationRuntimeLinkDisabledDiagnostic,
   resolveNavigationRuntime,
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
@@ -882,13 +884,36 @@ async function devNavigationScripts(
       if (source === undefined) {
         return undefined;
       }
+      const references = await collectClientRouteReferences({
+        appDir,
+        cache,
+        code: source,
+        filename: route.file,
+        routePath: route.path,
+        vitePlugins,
+      });
       const navigation = await resolveNavigationRuntime({
         appDir,
         cache,
         code: source,
         filename: route.file,
+        references,
         vitePlugins,
       });
+
+      for (const diagnostic of references.diagnostics) {
+        console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+      }
+      const navigationRuntimeDiagnostic = navigationRuntimeLinkDisabledDiagnostic({
+        filename: route.file,
+        references,
+        routePath: route.path,
+        source,
+      });
+
+      if (navigationRuntimeDiagnostic !== undefined) {
+        console.warn(formatClientRouteInferenceDiagnostic(navigationRuntimeDiagnostic));
+      }
 
       return navigation
         ? ([route.path, navigationRuntimeScriptForDev()] as const)

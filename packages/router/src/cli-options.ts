@@ -186,7 +186,7 @@ export function formatCliHelp(command?: string | undefined): string {
       "",
       "Options:",
       "  --target=node|cloudflare|aws-lambda|all",
-      "      Select build artifacts. aws-lambda writes .mreact/aws-lambda/mreact-handler.mjs and .mreact/server/import-policy.json.",
+      "      Select build artifacts. Defaults to node. aws-lambda writes .mreact/aws-lambda/mreact-handler.mjs and .mreact/server/import-policy.json.",
       "  --client-source-maps=none|hidden",
       "      Control production client source map output.",
       "  -h, --help",

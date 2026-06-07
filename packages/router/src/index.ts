@@ -6,6 +6,7 @@ export { defineMessages, detectLocale } from "./i18n.js";
 export { defer, isDeferredLoaderData } from "./deferred.js";
 export type { DeferredLoaderData } from "./deferred.js";
 export { Link, linkProps } from "./link.js";
+export { href } from "./typed-routes.js";
 export { parseMultipartStream } from "./multipart.js";
 export type {
   MultipartFixedLengthStream,
@@ -81,6 +82,14 @@ export type {
   PackageCloudflarePagesArtifactOptions,
 } from "./build.js";
 export type { ServerActionContext } from "./actions.js";
+export type {
+  AppRouteHref,
+  DynamicHrefOptions,
+  RouteParamsFor,
+  RouteSearchParams,
+  RouteSearchValue,
+  StaticHrefOptions,
+} from "./typed-routes.js";
 export type {
   InferLoaderData,
   LayoutProps,

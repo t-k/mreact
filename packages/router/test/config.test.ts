@@ -2,9 +2,13 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { resolveAppRouterProjectOptions } from "../src/config.js";
+import { resolveAppRouterProjectOptions, resolveBuildTargets } from "../src/config.js";
 
 describe("router project config", () => {
+  test("defaults build targets to node only", () => {
+    expect(resolveBuildTargets(undefined)).toEqual(["node"]);
+  });
+
   test("defaults production client source maps to none", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-sourcemaps-default-"));
 

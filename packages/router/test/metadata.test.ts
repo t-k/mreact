@@ -7,9 +7,75 @@ import {
   responseHeadersForMetadata,
   serializeRobots,
   serializeSitemap,
+  validateRouteMetadata,
 } from "../src/metadata.js";
 
 describe("router metadata contract", () => {
+  test("rejects non-JSON and non-schema metadata values with a field path", () => {
+    expect(() =>
+      validateRouteMetadata(
+        {
+          title: () => "bad",
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.title: expected string, number, or boolean");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          openGraph: { images: [{ width: new Date("2026-06-07T00:00:00.000Z") }] },
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.openGraph.images.0.url");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          csp: { directives: { "style-src": [123] } },
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.csp.directives.style-src.0");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          head: [{ attrs: { "src=https://evil.example/x.js": true }, tag: "script" }],
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.head.0.attrs.src=https://evil.example/x.js");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          head: [{ attrs: { onload: "alert(1)" }, tag: "script" }],
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.head.0.attrs.onload");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          head: [{ attrs: { href: "javascript:alert(1)" }, tag: "link" }],
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.head.0.attrs.href");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          head: [{ attrs: { srcset: "javascript:alert(1) 1x" }, tag: "link" }],
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.head.0.attrs.srcset");
+  });
+
   test("merges inherited metadata without dropping additive head or open graph images", () => {
     expect(
       mergeRouteMetadata([

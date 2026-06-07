@@ -687,6 +687,8 @@ export default function Loading() {
 
 Server actions are inferred when an imported function is passed to `<form action={action}>`. The router follows typed form action references through supported static expressions, including registry-style member expressions such as `actions.save`, lowers the form to a server action reference, and registers only the referenced export in generated production manifests. The referenced server action implementation stays in the server graph and is stripped from production client route bundles. A top-level `"use server"` directive is still supported for compatibility and marks every exported function in that module as a server action. Cached route HTML can be invalidated with `revalidatePath()`.
 
+Production server action dispatch is fail-closed when no generated or explicit action manifest is present. Built app-router deployments pass the generated manifest automatically. Direct production integrations that intentionally expose every registered server action must opt in with `serverActions: { allowedActions: "any" }`; otherwise pass the generated `allowedActions` array.
+
 The browser navigation runtime applies `x-mreact-revalidate` headers from navigation and client fetch responses. It also clears cached navigation HTML after successful non-GET/HEAD client fetches, so link-based SPA navigation re-requests loader-rendered pages after ordinary route-handler mutations such as `fetch("/api/items/123", { method: "DELETE" })`.
 
 Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Pass `serverActions: { maxBodyBytes }` to the dev server, production server, Vite plugin, or deployment adapter when an app needs a different limit.
@@ -755,7 +757,7 @@ export async function loader() {
 
 ### Query Prefetch and Hydration
 
-`@reckona/mreact-query` provides a tiny query client. The router gives loaders a per-request `QueryClient`; after render it dehydrates the cache into HTML.
+`@reckona/mreact-query` provides a tiny query client. The router gives loaders a per-request `QueryClient`; after render it dehydrates the cache into HTML. Server code must get request-scoped query state through the loader context or `runWithQueryClient()` with installed `AsyncLocalStorage`; `runWithQueryClient()` throws on the server when no request scope storage is available instead of falling back to module-level state.
 
 ```tsx
 // src/app/query/page.tsx
@@ -766,6 +768,7 @@ import {
 } from "@reckona/mreact-query";
 
 const TIME_KEY = ["time"] as const;
+const TIME_STALE_TIME_MS = 30_000;
 
 async function fetchTime() {
   return { value: new Date().toISOString() };
@@ -774,6 +777,7 @@ async function fetchTime() {
 export async function loader(context: { queryClient: QueryClient }) {
   return context.queryClient.fetchQuery({
     queryKey: TIME_KEY,
+    staleTime: TIME_STALE_TIME_MS,
     queryFn: fetchTime,
   });
 }
@@ -781,6 +785,7 @@ export async function loader(context: { queryClient: QueryClient }) {
 export default function Page(props: { data: { value: string } }) {
   const query = createQuery(getQueryClient(), {
     queryKey: TIME_KEY,
+    staleTime: TIME_STALE_TIME_MS,
     queryFn: fetchTime,
   });
   const result = query.result.get();
@@ -794,7 +799,7 @@ export default function Page(props: { data: { value: string } }) {
 }
 ```
 
-`createQuery()` auto-fetches empty queries in the browser by default and stays observe-only during server render. Pass `autoFetch: false` for routes that must only consume loader-prefetched cache entries.
+`createQuery()` auto-fetches empty queries in the browser by default and stays observe-only during server render. Hydrated entries render immediately, then revalidate on mount unless their server `updatedAt` timestamp is still covered by `staleTime`; pass `autoFetch: false` for routes that must only consume loader-prefetched cache entries.
 
 ### Virtual Lists And Grids
 
@@ -983,6 +988,8 @@ Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `m
 ### CDN Asset Base URLs and Source Maps
 
 Built client route assets are written to `.mreact/client`, and public files are copied from `public/` to `.mreact/client/public`. See [CDN Assets](docs/deploy/assets.md) for `assetBaseUrl`, `publicAssetBaseUrl`, cache policy, and `clientSourceMaps` modes.
+
+`mreact-router build` defaults to Node-compatible server/client artifacts. Build with `--target=cloudflare`, `--target=aws-lambda`, or `--target=all` when adapter-specific artifacts are needed. The build also writes `.mreact/routes.d.ts`; import `href()` from `@reckona/mreact-router` to build encoded URLs from typed route patterns such as `"/users/:id"` and `"/files/:...path"`.
 
 ## Reactive Primitives
 

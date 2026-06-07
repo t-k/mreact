@@ -108,6 +108,7 @@ import {
   parseRouteMiddlewareControl,
   parseStaticMiddlewareConfig,
   shouldSkipMiddleware,
+  validateRouteMiddlewareControl,
   type MiddlewareModule,
   type RouteMiddlewareControl,
 } from "./middleware.js";
@@ -118,6 +119,7 @@ import {
   responseHeadersForMetadata,
   serializeRobots,
   serializeSitemap,
+  validateRouteMetadata,
 } from "./metadata.js";
 import {
   createSlotRenderContext,
@@ -2215,6 +2217,18 @@ async function runMiddleware(options: {
   ];
   const pathname = new URL(options.request.url).pathname;
 
+  if (Array.isArray(options.middlewareControl?.skip)) {
+    validateRouteMiddlewareControl({
+      availableIds: await collectAvailableMiddlewareIds({
+        candidates,
+        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverSourceFiles: options.serverSourceFiles,
+      }),
+      control: options.middlewareControl,
+      routePath: pathname,
+    });
+  }
+
   for (const file of candidates) {
     try {
       await access(file);
@@ -2316,6 +2330,35 @@ async function runMiddleware(options: {
   }
 
   return undefined;
+}
+
+async function collectAvailableMiddlewareIds(options: {
+  candidates: readonly string[];
+  serverModuleCacheVersion?: string | undefined;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
+}): Promise<ReadonlySet<string>> {
+  const ids = new Set<string>();
+
+  for (const file of options.candidates) {
+    try {
+      await access(file);
+    } catch {
+      continue;
+    }
+
+    const code = await readServerSourceFile(
+      file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const id = parseStaticMiddlewareConfig(code).id;
+
+    if (id !== undefined) {
+      ids.add(id);
+    }
+  }
+
+  return ids;
 }
 
 async function loadMiddlewareModule(options: {
@@ -4392,22 +4435,30 @@ async function resolveRouteMetadataModule(
   module: RouteMetadataModule,
   context: RouteMetadataContext,
 ): Promise<RouteMetadata | undefined> {
+  const staticMetadata = validateRouteMetadata(module.metadata);
+
   if (module.generateMetadata === undefined) {
-    return module.metadata;
+    return staticMetadata;
   }
 
+  let generated: RouteMetadata | undefined;
   try {
-    const generated = await module.generateMetadata(context);
-    return generated === undefined
-      ? module.metadata
-      : mergeRouteMetadata([module.metadata, generated].filter(isRouteMetadata));
+    generated = await module.generateMetadata(context);
   } catch (error) {
-    if (module.metadata !== undefined) {
-      return module.metadata;
+    if (staticMetadata !== undefined) {
+      return staticMetadata;
     }
 
     throw error;
   }
+
+  const validatedGenerated = validateRouteMetadata(generated, "generateMetadata");
+  const merged =
+    validatedGenerated === undefined
+      ? staticMetadata
+      : mergeRouteMetadata([staticMetadata, validatedGenerated].filter(isRouteMetadata));
+
+  return validateRouteMetadata(merged);
 }
 
 function isRouteMetadata(value: RouteMetadata | undefined): value is RouteMetadata {

@@ -34,6 +34,24 @@ export function shouldSkipMiddleware(
   return typeof config?.id === "string" && control.skip.includes(config.id);
 }
 
+export function validateRouteMiddlewareControl(options: {
+  availableIds: ReadonlySet<string>;
+  control: RouteMiddlewareControl | undefined;
+  routePath: string;
+}): void {
+  if (!Array.isArray(options.control?.skip)) {
+    return;
+  }
+
+  for (const id of options.control.skip) {
+    if (!options.availableIds.has(id)) {
+      throw new Error(
+        `Unknown middleware skip id "${id}" for route "${options.routePath}". Available middleware ids: ${formatAvailableMiddlewareIds(options.availableIds)}.`,
+      );
+    }
+  }
+}
+
 export function parseStaticMiddlewareConfig(code: string): StaticMiddlewareConfig {
   const configBody = /\bexport\s+const\s+config\s*=\s*\{(?<body>[\s\S]*?)\}\s*;?/.exec(code)
     ?.groups?.body;
@@ -155,4 +173,8 @@ function middlewarePatternMatches(pattern: string, pathname: string): boolean {
   }
 
   return false;
+}
+
+function formatAvailableMiddlewareIds(ids: ReadonlySet<string>): string {
+  return ids.size === 0 ? "(none)" : [...ids].sort().join(", ");
 }

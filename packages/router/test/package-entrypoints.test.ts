@@ -136,6 +136,70 @@ data.count.toUpperCase();
     }
   }, 10_000);
 
+  test("public entrypoint exposes typed route href helpers", () => {
+    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-href-types-"));
+    const filename = join(directory, "typed-href.ts");
+
+    writeFileSync(
+      filename,
+      `
+import { href } from "@reckona/mreact-router";
+
+const user = href("/users/:id", { params: { id: "ada" } });
+const files = href("/users/:id/files/:...path", { params: { id: "ada", path: ["notes", "day 1"] } });
+const search = href("/search", { search: { q: "compiler", page: 2, exact: true } });
+user.toUpperCase();
+files.toUpperCase();
+search.toUpperCase();
+
+// @ts-expect-error dynamic route params are required.
+href("/users/:id");
+// @ts-expect-error unknown params are rejected.
+href("/users/:id", { params: { slug: "ada" } });
+// @ts-expect-error catch-all params must be arrays.
+href("/files/:...path", { params: { path: "notes" } });
+// @ts-expect-error href only accepts internal route paths.
+href("https://example.test/users/:id", { params: { id: "ada" } });
+`,
+    );
+
+    try {
+      const program = ts.createProgram({
+        rootNames: [filename, join(process.cwd(), "packages", "router", "src", "index.ts")],
+        options: {
+          baseUrl: process.cwd(),
+          ignoreDeprecations: "6.0",
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          noEmit: true,
+          paths: {
+            "@reckona/mreact-router": ["packages/router/src/index.ts"],
+            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+            "@reckona/mreact-query": ["packages/query/src/index.ts"],
+            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+            "@reckona/mreact-reactive-core/runtime-state": [
+              "packages/reactive-core/src/runtime-state-public.ts",
+            ],
+            "@reckona/mreact-server": ["packages/server/src/index.ts"],
+            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+          },
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+          types: ["node"],
+        },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) => flattenDiagnostic(diagnostic));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  }, 10_000);
+
   test("link subpath exports Link as a valid mreact JSX component", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
     const filename = join(directory, "link-jsx.tsx");

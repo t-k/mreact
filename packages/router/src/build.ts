@@ -31,6 +31,7 @@ import {
   detectClientNavigationHint,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
+  navigationRuntimeLinkDisabledDiagnostic,
   resolveNavigationRuntime,
   type ClientRouteManifestEntry,
   type ClientRouteInferenceCache,
@@ -89,6 +90,11 @@ import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
+import {
+  parseRouteMiddlewareControl,
+  parseStaticMiddlewareConfig,
+  validateRouteMiddlewareControl,
+} from "./middleware.js";
 import type { PluginOption, UserConfig } from "vite";
 
 const nativeEscapeTransform = {
@@ -107,6 +113,46 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
   outDir: string;
   targets?: readonly AppRouterBuildTarget[] | undefined;
   viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
+}
+
+async function validateBuildMiddlewareControls(
+  appDir: string,
+  routes: readonly AppRoute[],
+): Promise<void> {
+  const availableIds = await collectBuildMiddlewareIds(appDir);
+
+  for (const route of routes) {
+    if (route.kind !== "page") {
+      continue;
+    }
+
+    validateRouteMiddlewareControl({
+      availableIds,
+      control: parseRouteMiddlewareControl(await readFile(route.file, "utf8")),
+      routePath: route.path,
+    });
+  }
+}
+
+async function collectBuildMiddlewareIds(appDir: string): Promise<ReadonlySet<string>> {
+  const ids = new Set<string>();
+
+  for (const file of [join(appDir, "middleware.ts"), join(appDir, "middleware.mreact.ts")]) {
+    let code: string;
+    try {
+      code = await readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+
+    const id = parseStaticMiddlewareConfig(code).id;
+
+    if (id !== undefined) {
+      ids.add(id);
+    }
+  }
+
+  return ids;
 }
 
 export type BuildAppPhase =
@@ -283,6 +329,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       : await timeBuildPhase(timingSink, "scan", () =>
           scanAppRoutes({ appDir: project.routesDir }),
         );
+  await validateBuildMiddlewareControls(project.routesDir, routes);
   const viteDefine = options.viteConfig?.define;
   const vitePlugins = options.viteConfig?.plugins;
   const files =
@@ -608,6 +655,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const writeManifestFiles = async () => {
     await Promise.all([
       writeFile(join(serverDir, "manifest.json"), JSON.stringify(serverManifest, null, 2)),
+      writeFile(join(options.outDir, "routes.d.ts"), typedRoutesDeclaration(routes)),
       writeFile(
         join(serverDir, "import-policy.json"),
         JSON.stringify(generatedImportPolicy, null, 2),
@@ -658,6 +706,38 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   }
 
   return { routes };
+}
+
+function typedRoutesDeclaration(routes: readonly AppRoute[]): string {
+  const routePaths = Array.from(
+    new Set(
+      routes
+        .filter((route) => route.kind === "page" || route.kind === "server")
+        .map((route) => route.path),
+    ),
+  ).sort((left, right) => {
+    if (left === "/") {
+      return -1;
+    }
+    if (right === "/") {
+      return 1;
+    }
+    return left.localeCompare(right);
+  });
+  const routeUnion = routePaths.map((routePath) => JSON.stringify(routePath)).join(" | ");
+  const routesObject = routePaths
+    .map((routePath) => `  readonly ${JSON.stringify(routePath)}: AppRouteHref<${JSON.stringify(routePath)}>;`)
+    .join("\n");
+
+  return [
+    `import type { AppRouteHref } from "@reckona/mreact-router";`,
+    ``,
+    `export type AppRoutePath = ${routeUnion === "" ? "never" : routeUnion};`,
+    `export declare const routes: {`,
+    routesObject,
+    `};`,
+    ``,
+  ].join("\n");
 }
 
 async function timeBuildPhase<T>(
@@ -2790,6 +2870,8 @@ function cloudflarePageRouteFacadeModuleSource(componentImport: string): string 
   return `import * as componentModule from ${JSON.stringify(componentImport)};
 
 const componentSlots = readComponentModuleExport(componentModule, "slots");
+const componentGenerateMetadata = readComponentModuleExport(componentModule, "generateMetadata");
+const componentMetadata = readComponentModuleExport(componentModule, "metadata");
 
 export function App(props) {
   return renderCloudflareRouteComponent(props);
@@ -2801,6 +2883,9 @@ export function CloudflareRouteComponent(props) {
   return renderCloudflareRouteComponent(props);
 }
 export const slots = componentSlots === undefined ? undefined : { ...componentSlots };
+export const generateMetadata =
+  typeof componentGenerateMetadata === "function" ? componentGenerateMetadata : undefined;
+export const metadata = componentMetadata;
 
 function renderCloudflareRouteComponent(props) {
   const routeComponent = resolveCloudflareRouteComponent();
@@ -3192,9 +3277,9 @@ async function renderCloudflareStringRoute(props) {
   }
   html = injectCloudflareHead(html, metadata, cloudflareRouteHeadTags(props.clientManifest, props.route.path));
   return new Response(html, {
-    headers: {
+    headers: cloudflareMetadataHeaders(metadata, props.request, {
       "content-type": "text/html; charset=utf-8"
-    }
+    })
   });
 }
 
@@ -3376,9 +3461,9 @@ async function renderCloudflareStringRoute(props) {
   }
   html = injectCloudflareHead(html, metadata, cloudflareRouteHeadTags(props.clientManifest, props.route.path));
   return new Response(html, {
-    headers: {
+    headers: cloudflareMetadataHeaders(metadata, props.request, {
       "content-type": "text/html; charset=utf-8"
-    }
+    })
   });
 }
 
@@ -3471,11 +3556,11 @@ export const slots = pageModule.slots;
 export const App = renderCloudflareStreamRoute;
 export default renderCloudflareStreamRoute;
 
-function renderCloudflareStreamRoute(props) {
+async function renderCloudflareStreamRoute(props) {
+  const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
   const body = renderToReadableStream(async ($sink) => {
     const slotHtml = await renderRouteSlots(pageModule.slots, props);
     const layoutShells = await renderLayoutShells(shells, props, slotHtml);
-    const metadata = await resolveRouteMetadata([...shells.map((shell) => shell.module), pageModule], props);
     const routeHeadTags = cloudflareRouteHeadTags(props.clientManifest, props.route.path);
     $sink.append("<!DOCTYPE html>");
     if (layoutShells.length === 0) {
@@ -3495,10 +3580,10 @@ function renderCloudflareStreamRoute(props) {
     }
   });
   return new Response(body, {
-    headers: {
+    headers: cloudflareMetadataHeaders(metadata, props.request, {
       "content-type": "text/html; charset=utf-8",
       "x-mreact-stream": "1"
-    }
+    })
   });
 }
 
@@ -3673,16 +3758,401 @@ async function resolveRouteMetadata(modules, props) {
     request: props.request
   };
   for (const module of modules) {
-    let next = module.metadata;
+    let next = validateRouteMetadata(module.metadata);
     if (typeof module.generateMetadata === "function") {
-      const generated = await module.generateMetadata(context);
+      const generated = validateRouteMetadata(await module.generateMetadata(context), "generateMetadata");
       next = mergeRouteMetadata([next, generated].filter(Boolean));
     }
     if (next !== undefined) {
       metadata.push(next);
     }
   }
-  return mergeRouteMetadata(metadata);
+  return validateRouteMetadata(mergeRouteMetadata(metadata));
+}
+
+function validateRouteMetadata(metadata, path = "metadata") {
+  if (metadata === undefined) {
+    return undefined;
+  }
+  assertMetadataObject(metadata, path);
+  validateOptionalMetadataObject(metadata.alternates, \`\${path}.alternates\`, { canonical: validateMetadataScalar });
+  validateOptionalCspMetadata(metadata.csp, \`\${path}.csp\`);
+  validateOptionalMetadataScalar(metadata.description, \`\${path}.description\`);
+  validateOptionalHeadMetadata(metadata.head, \`\${path}.head\`);
+  validateOptionalMetadataObject(metadata.icons, \`\${path}.icons\`, {
+    apple: validateMetadataScalar,
+    icon: validateMetadataScalar,
+  });
+  validateOptionalOpenGraphMetadata(metadata.openGraph, \`\${path}.openGraph\`);
+  validateOptionalMetadataScalar(metadata.lang, \`\${path}.lang\`);
+  validateOptionalRobotsMetadata(metadata.robots, \`\${path}.robots\`);
+  validateOptionalSecurityMetadata(metadata.security, \`\${path}.security\`);
+  validateOptionalThemeColorMetadata(metadata.themeColor, \`\${path}.themeColor\`);
+  validateOptionalMetadataScalar(metadata.title, \`\${path}.title\`);
+  validateOptionalViewportMetadata(metadata.viewport, \`\${path}.viewport\`);
+  validateUnknownJsonMetadataFields(metadata, path, new Set(["alternates", "csp", "description", "head", "icons", "lang", "openGraph", "robots", "security", "themeColor", "title", "viewport"]));
+  return metadata;
+}
+
+function validateOptionalMetadataScalar(value, path) {
+  if (value !== undefined) {
+    validateMetadataScalar(value, path);
+  }
+}
+
+function validateMetadataScalar(value, path) {
+  if (!isMetadataScalar(value)) {
+    throw new Error(\`Invalid metadata field \${path}: expected string, number, or boolean.\`);
+  }
+}
+
+function isMetadataScalar(value) {
+  return typeof value === "string" || (typeof value === "number" && Number.isFinite(value)) || typeof value === "boolean";
+}
+
+function validateOptionalMetadataObject(value, path, validators) {
+  if (value === undefined) {
+    return;
+  }
+  assertMetadataObject(value, path);
+  for (const [key, validator] of Object.entries(validators)) {
+    if (value[key] !== undefined) {
+      validator(value[key], \`\${path}.\${key}\`);
+    }
+  }
+  validateUnknownJsonMetadataFields(value, path, new Set(Object.keys(validators)));
+}
+
+function validateOptionalCspMetadata(value, path) {
+  if (value === undefined) {
+    return;
+  }
+  assertMetadataObject(value, path);
+  if (value.disable !== undefined && typeof value.disable !== "boolean") {
+    throw new Error(\`Invalid metadata field \${path}.disable: expected boolean.\`);
+  }
+  if (value.nonce !== undefined && typeof value.nonce !== "string") {
+    throw new Error(\`Invalid metadata field \${path}.nonce: expected string.\`);
+  }
+  validateOptionalDirectiveMap(value.directives, \`\${path}.directives\`);
+  validateOptionalDirectiveMap(value.replace, \`\${path}.replace\`);
+  if (value.remove !== undefined) {
+    validateStringArray(value.remove, \`\${path}.remove\`);
+  }
+  validateUnknownJsonMetadataFields(value, path, new Set(["directives", "disable", "nonce", "remove", "replace"]));
+}
+
+function validateOptionalDirectiveMap(value, path) {
+  if (value === undefined) {
+    return;
+  }
+  assertMetadataObject(value, path);
+  for (const [name, directive] of Object.entries(value)) {
+    if (typeof directive !== "string") {
+      validateStringArray(directive, \`\${path}.\${name}\`);
+    }
+  }
+}
+
+function validateStringArray(value, path) {
+  if (!Array.isArray(value)) {
+    throw new Error(\`Invalid metadata field \${path}: expected string or string array.\`);
+  }
+  value.forEach((entry, index) => {
+    if (typeof entry !== "string") {
+      throw new Error(\`Invalid metadata field \${path}.\${index}: expected string.\`);
+    }
+  });
+}
+
+function validateOptionalHeadMetadata(value, path) {
+  if (value === undefined) {
+    return;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(\`Invalid metadata field \${path}: expected array.\`);
+  }
+  value.forEach((descriptor, index) => {
+    const descriptorPath = \`\${path}.\${index}\`;
+    assertMetadataObject(descriptor, descriptorPath);
+    if (!["base", "link", "meta", "script", "style"].includes(String(descriptor.tag))) {
+      throw new Error(\`Invalid metadata field \${descriptorPath}.tag: expected supported head tag.\`);
+    }
+    if (descriptor.content !== undefined && typeof descriptor.content !== "string") {
+      throw new Error(\`Invalid metadata field \${descriptorPath}.content: expected string.\`);
+    }
+    if (descriptor.nonce !== undefined && typeof descriptor.nonce !== "boolean" && typeof descriptor.nonce !== "string") {
+      throw new Error(\`Invalid metadata field \${descriptorPath}.nonce: expected string or boolean.\`);
+    }
+    if (descriptor.attrs !== undefined) {
+      assertMetadataObject(descriptor.attrs, \`\${descriptorPath}.attrs\`);
+      for (const [name, attr] of Object.entries(descriptor.attrs)) {
+        validateHeadAttribute(name, attr, \`\${descriptorPath}.attrs.\${name}\`);
+        if (attr !== undefined && typeof attr !== "boolean" && typeof attr !== "number" && typeof attr !== "string") {
+          throw new Error(\`Invalid metadata field \${descriptorPath}.attrs.\${name}: expected string, number, boolean, or undefined.\`);
+        }
+      }
+    }
+  });
+}
+
+function validateHeadAttribute(name, value, path) {
+  if (!isSafeHeadAttributeName(name)) {
+    throw new Error(\`Invalid metadata field \${path}: expected safe HTML attribute name.\`);
+  }
+  const canonicalName = name.toLowerCase();
+  if (canonicalName.startsWith("on") || canonicalName === "srcdoc") {
+    throw new Error(\`Invalid metadata field \${path}: event and dangerous attributes are not allowed.\`);
+  }
+  if (typeof value === "string" && isUnsafeUrlAttribute(canonicalName, value)) {
+    throw new Error(\`Invalid metadata field \${path}: unsafe URL value.\`);
+  }
+}
+
+function isSafeHeadAttributeName(name) {
+  if (name.length === 0) {
+    return false;
+  }
+  for (let index = 0; index < name.length; index += 1) {
+    const code = name.charCodeAt(index);
+    if (code <= 0x20 || code === 0x22 || code === 0x27 || code === 0x2f || code === 0x3c || code === 0x3d || code === 0x3e || code === 0x60 || code === 0x7f) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function isUnsafeUrlAttribute(name, value) {
+  if (name === "srcset" || name === "imagesrcset") {
+    const canonical = canonicalizeUrlForSchemeCheck(value);
+    for (const candidate of canonical.split(",")) {
+      const url = candidate.trim().split(/\\s+/)[0] ?? "";
+      if (url !== "" && isUnsafeUrlValueForName("src", url)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (name !== "href" && name !== "src" && name !== "action" && name !== "formaction" && name !== "xlink:href" && name !== "ping" && name !== "poster" && name !== "background" && name !== "manifest") {
+    return false;
+  }
+
+  return isUnsafeUrlValueForName(name, value);
+}
+
+function canonicalizeUrlForSchemeCheck(value) {
+  let start = 0;
+  while (start < value.length && value.charCodeAt(start) <= 0x20) {
+    start += 1;
+  }
+
+  return value.slice(start).replace(/[\\t\\r\\n]/g, "");
+}
+
+function isUnsafeUrlValueForName(name, value) {
+  const canonical = canonicalizeUrlForSchemeCheck(value);
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(canonical);
+  if (match === null) {
+    return false;
+  }
+  const scheme = match[1].toLowerCase();
+  if (scheme === "data" && (name === "src" || name === "poster")) {
+    return !/^data:image\\/(?!svg\\+xml(?:[;,]|$))/i.test(canonical);
+  }
+  return scheme === "javascript" || scheme === "data" || scheme === "vbscript" || scheme === "livescript" || scheme === "mhtml" || scheme === "file";
+}
+
+function validateOptionalOpenGraphMetadata(value, path) {
+  if (value === undefined) {
+    return;
+  }
+  assertMetadataObject(value, path);
+  validateOptionalMetadataScalar(value.description, \`\${path}.description\`);
+  validateOptionalMetadataImage(value.image, \`\${path}.image\`);
+  if (value.images !== undefined) {
+    if (!Array.isArray(value.images)) {
+      throw new Error(\`Invalid metadata field \${path}.images: expected array.\`);
+    }
+    value.images.forEach((image, index) => validateOptionalMetadataImage(image, \`\${path}.images.\${index}\`));
+  }
+  validateOptionalMetadataScalar(value.title, \`\${path}.title\`);
+  validateUnknownJsonMetadataFields(value, path, new Set(["description", "image", "images", "title"]));
+}
+
+function validateOptionalMetadataImage(value, path) {
+  if (value === undefined || isMetadataScalar(value)) {
+    return;
+  }
+  assertMetadataObject(value, path);
+  validateMetadataScalar(value.url, \`\${path}.url\`);
+  validateOptionalMetadataScalar(value.alt, \`\${path}.alt\`);
+  validateOptionalMetadataScalar(value.height, \`\${path}.height\`);
+  validateOptionalMetadataScalar(value.type, \`\${path}.type\`);
+  validateOptionalMetadataScalar(value.width, \`\${path}.width\`);
+  validateUnknownJsonMetadataFields(value, path, new Set(["alt", "height", "type", "url", "width"]));
+}
+
+function validateOptionalRobotsMetadata(value, path) {
+  if (value === undefined || typeof value === "string") {
+    return;
+  }
+  assertMetadataObject(value, path);
+  if (value.follow !== undefined && typeof value.follow !== "boolean") {
+    throw new Error(\`Invalid metadata field \${path}.follow: expected boolean.\`);
+  }
+  if (value.index !== undefined && typeof value.index !== "boolean") {
+    throw new Error(\`Invalid metadata field \${path}.index: expected boolean.\`);
+  }
+  validateUnknownJsonMetadataFields(value, path, new Set(["follow", "index"]));
+}
+
+function validateOptionalSecurityMetadata(value, path) {
+  if (value !== undefined) {
+    validateJsonSerializableMetadata(value, path);
+  }
+}
+
+function validateOptionalThemeColorMetadata(value, path) {
+  if (value === undefined || isMetadataScalar(value)) {
+    return;
+  }
+  validateOptionalMetadataObject(value, path, {
+    color: validateMetadataScalar,
+    media: validateMetadataScalar,
+  });
+}
+
+function validateOptionalViewportMetadata(value, path) {
+  if (value === undefined || isMetadataScalar(value)) {
+    return;
+  }
+  assertMetadataObject(value, path);
+  for (const [key, viewportValue] of Object.entries(value)) {
+    if (viewportValue !== undefined && viewportValue !== null && !isMetadataScalar(viewportValue)) {
+      throw new Error(\`Invalid metadata field \${path}.\${key}: expected string, number, boolean, null, or undefined.\`);
+    }
+  }
+}
+
+function validateUnknownJsonMetadataFields(value, path, knownFields) {
+  for (const [key, entry] of Object.entries(value)) {
+    if (!knownFields.has(key)) {
+      validateJsonSerializableMetadata(entry, \`\${path}.\${key}\`);
+    }
+  }
+}
+
+function validateJsonSerializableMetadata(value, path) {
+  if (value === undefined || value === null || isMetadataScalar(value)) {
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => validateJsonSerializableMetadata(entry, \`\${path}.\${index}\`));
+    return;
+  }
+  if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+    for (const [key, entry] of Object.entries(value)) {
+      validateJsonSerializableMetadata(entry, \`\${path}.\${key}\`);
+    }
+    return;
+  }
+  throw new Error(\`Invalid metadata field \${path}: expected a JSON-serializable value.\`);
+}
+
+function assertMetadataObject(value, path) {
+  if (typeof value !== "object" || value === null || Array.isArray(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+    throw new Error(\`Invalid metadata field \${path}: expected object.\`);
+  }
+}
+
+function cloudflareMetadataHeaders(metadata, request, extraHeaders) {
+  const headers = new Headers(extraHeaders);
+  const csp = contentSecurityPolicy(metadata?.csp);
+  if (csp !== undefined && !headers.has("content-security-policy")) {
+    headers.set("content-security-policy", csp);
+  }
+  for (const [name, value] of Object.entries(routeSecurityHeaders(metadata?.security, request))) {
+    if (!headers.has(name)) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
+function contentSecurityPolicy(csp) {
+  if (csp?.disable === true || csp?.directives === undefined) {
+    return undefined;
+  }
+  const serialized = [];
+  for (const [name, value] of Object.entries(csp.directives)) {
+    if (!/^[a-z][a-z0-9-]*$/i.test(name)) {
+      throw new TypeError(\`invalid CSP directive name: \${JSON.stringify(name)}\`);
+    }
+    const values = Array.isArray(value) ? [...value] : [value];
+    for (const rawValue of values) {
+      if (typeof rawValue !== "string" || !isValidCspDirectiveValue(rawValue)) {
+        throw new TypeError(\`invalid CSP directive value for \${name}: \${JSON.stringify(rawValue)}\`);
+      }
+    }
+    if (csp.nonce !== undefined && (name === "script-src" || name === "style-src")) {
+      values.push(\`'nonce-\${csp.nonce}'\`);
+    }
+    serialized.push(\`\${name} \${values.join(" ")}\`);
+  }
+  return serialized.join("; ");
+}
+
+function isValidCspDirectiveValue(value) {
+  if (/^'[A-Za-z0-9+/=_:.-]+'$/.test(value)) {
+    return true;
+  }
+  if (value.length === 0) {
+    return false;
+  }
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x20 || code === 0x22 || code === 0x27 || code === 0x3b || code === 0x7f) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function routeSecurityHeaders(security, request) {
+  const headers = {
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "x-content-type-options": "nosniff",
+  };
+  if (security?.contentTypeOptions === null) {
+    delete headers["x-content-type-options"];
+  } else {
+    headers["x-content-type-options"] = validateHeaderValue(security?.contentTypeOptions ?? "nosniff");
+  }
+  if (security?.referrerPolicy === null) {
+    delete headers["referrer-policy"];
+  } else {
+    headers["referrer-policy"] = validateHeaderValue(security?.referrerPolicy ?? "strict-origin-when-cross-origin");
+  }
+  if (security?.frameOptions === null) {
+    delete headers["x-frame-options"];
+  } else if (security?.frameOptions !== undefined) {
+    headers["x-frame-options"] = validateHeaderValue(security.frameOptions);
+  }
+  if (request.url.startsWith("https://") && security?.hsts !== undefined && security.hsts !== false && security.hsts !== null) {
+    headers["strict-transport-security"] = \`max-age=\${Math.trunc(security.hsts.maxAge)}\${security.hsts.includeSubDomains === true ? "; includeSubDomains" : ""}\${security.hsts.preload === true ? "; preload" : ""}\`;
+  }
+  return headers;
+}
+
+function validateHeaderValue(value) {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) {
+      throw new TypeError(\`Invalid security header value: \${JSON.stringify(value)}\`);
+    }
+  }
+  return value;
 }
 
 function mergeRouteMetadata(metadata) {
@@ -4587,6 +5057,16 @@ async function writeClientRouteBundles(options: {
 
       for (const diagnostic of references.diagnostics) {
         console.warn(formatClientRouteInferenceDiagnostic(diagnostic));
+      }
+      const navigationRuntimeDiagnostic = navigationRuntimeLinkDisabledDiagnostic({
+        filename: route.file,
+        references,
+        routePath: route.path,
+        source,
+      });
+
+      if (navigationRuntimeDiagnostic !== undefined) {
+        console.warn(formatClientRouteInferenceDiagnostic(navigationRuntimeDiagnostic));
       }
 
       if (!references.client) {

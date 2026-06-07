@@ -46,7 +46,7 @@ hydrate(getQueryClient(), state);
 
 ## Router Usage
 
-Use the request-scoped query client inside `loader`, then hydrate the browser singleton returned by `getQueryClient()`. This keeps large apps centered around query keys instead of passing every server-state value through page props.
+Use the request-scoped query client inside `loader`, then hydrate the browser singleton returned by `getQueryClient()`. This keeps large apps centered around query keys instead of passing every server-state value through page props. Server integrations that call `runWithQueryClient()` directly must first install `AsyncLocalStorage` with `installQueryAsyncStorage()`; without a request scope storage, `runWithQueryClient()` throws instead of using module-level state.
 
 ## Infinite Queries
 

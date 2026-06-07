@@ -157,7 +157,7 @@ export function resolveBuildTargets(
   targets: readonly AppRouterBuildTarget[] | undefined,
 ): readonly AppRouterBuildTarget[] {
   if (targets === undefined) {
-    return ["node", "cloudflare"];
+    return ["node"];
   }
 
   const uniqueTargets = [...new Set(targets)];
