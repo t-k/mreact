@@ -104,7 +104,7 @@ interface KeyedRecord {
   nodes: Node[];
   prevIndex?: number | undefined;
   dispose: Dispose;
-  update(item: unknown): void;
+  update(item: unknown, index: number, items: readonly unknown[]): void;
 }
 
 interface KeyedItem<T> {
@@ -177,7 +177,7 @@ function bindKeyedList<T>(
       }
 
       if (sameKeyOrder) {
-        updateRecords(records, currentKeyedItems);
+        updateRecords(records, currentKeyedItems, currentItems);
         return;
       }
     }
@@ -253,6 +253,7 @@ function bindKeyedList<T>(
         record = createKeyedRecord(
           keyedItem.item,
           keyedItem.index,
+          keyedItem.key,
           currentItems,
           renderItem,
           options,
@@ -260,7 +261,7 @@ function bindKeyedList<T>(
         );
       } else {
         record = existingRecord;
-        record.update(keyedItem.item);
+        record.update(keyedItem.item, keyedItem.index, currentItems);
       }
 
       nextRecords.set(itemKey, record);
@@ -369,6 +370,7 @@ function tryAppendKeyedRecords<T>(
     const record = createKeyedRecord(
       keyedItem.item,
       keyedItem.index,
+      keyedItem.key,
       currentItems,
       renderItem,
       options,
@@ -468,42 +470,61 @@ function longestIncreasingSubsequenceIndexes(values: readonly number[]): number[
 function updateRecords<T>(
   records: Map<unknown, KeyedRecord>,
   currentKeyedItems: readonly KeyedItem<T>[],
+  currentItems: readonly T[],
 ): void {
   for (const keyedItem of currentKeyedItems) {
-    records.get(keyedItem.key)?.update(keyedItem.item);
+    records.get(keyedItem.key)?.update(keyedItem.item, keyedItem.index, currentItems);
   }
 }
 
 function createKeyedRecord<T>(
   item: T,
   index: number,
+  key: unknown,
   items: readonly T[],
   renderItem: ListItemRenderer<T>,
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
 ): KeyedRecord {
-  const itemRef = createReactiveItemRef(item, options);
+  const itemRef = createReactiveItemRef(item, options, item !== key);
+  const indexRef = renderItem.length >= 2 ? createReactivePrimitiveRef(index) : undefined;
+  const itemsRef = renderItem.length >= 3 ? createReactiveArrayRef(items) : undefined;
   const scoped = untrack(() =>
-    createScopedRenderNodes(() => renderItem(itemRef.value, index, items)),
+    createScopedRenderNodes(() =>
+      renderItem(itemRef.value, indexRef?.value ?? index, itemsRef?.value ?? items)
+    ),
   );
   const nodes = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
 
   return {
     nodes,
     dispose: scoped.dispose,
-    update: itemRef.update,
+    update(nextItem, nextIndex, nextItems) {
+      itemRef.update(nextItem as T);
+      indexRef?.update(nextIndex);
+      itemsRef?.update(nextItems as readonly T[]);
+    },
   };
 }
 
 function createReactiveItemRef<T>(
   item: T,
   options: BindListOptions<T>,
+  reactivePrimitive: boolean,
 ): { value: T; update(item: T): void } {
   if (!isObjectLike(item)) {
+    if (!reactivePrimitive) {
+      return {
+        value: item,
+        update() {},
+      };
+    }
+
+    const current = cell<unknown>(item);
     return {
-      value: item,
-      update() {
-        // Primitive item values are passed by value and cannot be proxied.
+      value: createPrimitiveProxy(current) as T,
+      update(next) {
+        current.set(next);
       },
     };
   }
@@ -518,6 +539,63 @@ function createReactiveItemRef<T>(
       current.set(next);
     },
   };
+}
+
+function createReactivePrimitiveRef<T>(
+  value: T,
+): { value: T; update(value: T): void } {
+  const current = cell<unknown>(value);
+  return {
+    value: createPrimitiveProxy(current) as T,
+    update(next) {
+      current.set(next);
+    },
+  };
+}
+
+function createPrimitiveProxy(current: Cell<unknown>): object {
+  return {
+    valueOf() {
+      return current.get();
+    },
+    toString() {
+      return String(current.get());
+    },
+    [Symbol.toPrimitive]() {
+      return current.get() as string | number | bigint | boolean | null | undefined;
+    },
+  };
+}
+
+function createReactiveArrayRef<T>(
+  items: readonly T[],
+): { value: readonly T[]; update(items: readonly T[]): void } {
+  const current = cell<readonly T[]>(items);
+  return {
+    value: createArrayProxy(current) as readonly T[],
+    update(next) {
+      current.set(next);
+    },
+  };
+}
+
+function createArrayProxy<T>(current: Cell<readonly T[]>): readonly T[] {
+  return new Proxy([] as unknown as readonly T[], {
+    get(_target, property) {
+      const value = current.get();
+      const result = Reflect.get(value, property, value);
+      return typeof result === "function" ? result.bind(value) : result;
+    },
+    getOwnPropertyDescriptor(_target, property) {
+      return Reflect.getOwnPropertyDescriptor(current.get(), property);
+    },
+    has(_target, property) {
+      return Reflect.has(current.get(), property);
+    },
+    ownKeys() {
+      return Reflect.ownKeys(current.get());
+    },
+  });
 }
 
 function createItemProxy<T extends object>(current: Cell<unknown>): T {

@@ -70,6 +70,141 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("updates keyed row index-dependent bindings after reorder without recreating object rows", async () => {
+    const items = cell([
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item, index) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => `${Number(index)}:${item.label}`);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const firstA = parent.childNodes[0];
+    const firstB = parent.childNodes[1];
+
+    items.set([
+      { id: "b", label: "B" },
+      { id: "a", label: "A" },
+    ]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<li>0:B</li><li>1:A</li><!--list-->");
+    expect(parent.childNodes[0]).toBe(firstB);
+    expect(parent.childNodes[1]).toBe(firstA);
+
+    dispose();
+  });
+
+  test("updates keyed row event closures with current index and items after reorder", async () => {
+    const items = cell([
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    const clicks: string[] = [];
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item, index, rows) => {
+        const button = document.createElement("button");
+        button.textContent = item.label;
+        button.addEventListener("click", () => {
+          clicks.push(`${Number(index)}:${Array.from(rows, (row) => row.id).join(",")}`);
+        });
+        return button;
+      },
+      { key: (item) => item.id },
+    );
+
+    items.set([
+      { id: "b", label: "B" },
+      { id: "a", label: "A" },
+    ]);
+    await flushEffects();
+
+    parent.querySelector("button")?.click();
+
+    expect(clicks).toEqual(["0:b,a"]);
+
+    dispose();
+  });
+
+  test("updates stable-key primitive rows without recreating nodes", async () => {
+    const items = cell(["Ada"]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => String(item));
+        return li;
+      },
+      { key: () => "same" },
+    );
+    const row = parent.childNodes[0];
+
+    items.set(["Grace"]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<li>Grace</li><!--list-->");
+    expect(parent.childNodes[0]).toBe(row);
+
+    dispose();
+  });
+
+  test("updates stable-key primitive number and boolean rows", async () => {
+    const items = cell<Array<number | boolean>>([1, false]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => String(item));
+        return li;
+      },
+      { key: (_item, index) => index },
+    );
+
+    items.set([2, true]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<li>2</li><li>true</li><!--list-->");
+
+    dispose();
+  });
+
   test("ignores duplicate keyed rows without leaking orphan records", async () => {
     const items = cell([
       { id: "a", label: "A1" },

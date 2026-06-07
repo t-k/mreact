@@ -20,6 +20,24 @@ describe("bindProp", () => {
     expect(button.disabled).toBe(true);
   });
 
+  test("clears removed style keys when a bound style object changes", async () => {
+    const style = cell<Record<string, unknown>>({
+      color: "red",
+      backgroundColor: "blue",
+      "--accent": "green",
+    });
+    const div = document.createElement("div");
+
+    bindProp(div, "style", () => style.get());
+
+    style.set({ color: "red" });
+    await flushEffects();
+
+    expect(div.style.color).toBe("red");
+    expect(div.style.backgroundColor).toBe("");
+    expect(div.style.getPropertyValue("--accent")).toBe("");
+  });
+
   test("removes boolean attributes left by server HTML when the bound DOM property becomes false", async () => {
     const hidden = cell(true);
     const item = document.createElement("li");

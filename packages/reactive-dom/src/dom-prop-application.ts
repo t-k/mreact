@@ -70,7 +70,7 @@ export function applyDomProp(
   }
 
   if (name === "style" && typeof value === "object" && value !== null) {
-    Object.assign((element as HTMLElement).style, value);
+    applyStyleObject(element as HTMLElement, value as Record<string, unknown>);
     return;
   }
 
@@ -108,6 +108,38 @@ export function removeDomProp(element: Element, name: string): void {
   const attrName = toDomAttributeName(name);
   clearDomProperty(element, name, attrName);
   element.removeAttribute(attrName);
+}
+
+function applyStyleObject(element: HTMLElement, value: Record<string, unknown>): void {
+  const nextNames = new Set(Object.keys(value).map(styleObjectKeyToCssName));
+
+  for (const cssName of Array.from(element.style)) {
+    if (!nextNames.has(cssName)) {
+      element.style.removeProperty(cssName);
+    }
+  }
+
+  for (const [name, nextValue] of Object.entries(value)) {
+    const cssName = styleObjectKeyToCssName(name);
+
+    if (nextValue === null || nextValue === undefined || nextValue === false) {
+      element.style.removeProperty(cssName);
+      continue;
+    }
+
+    if (name.startsWith("--") || name.includes("-")) {
+      element.style.setProperty(cssName, String(nextValue));
+      continue;
+    }
+
+    (element.style as unknown as Record<string, string>)[name] = String(nextValue);
+  }
+}
+
+function styleObjectKeyToCssName(name: string): string {
+  return name.startsWith("--")
+    ? name
+    : name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
 export function toDomAttributeName(name: string): string {

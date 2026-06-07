@@ -86,4 +86,33 @@ describe("DOM prop application policy", () => {
     removeDomProp(div, "style");
     expect(div.getAttribute("style")).toBeNull();
   });
+
+  test("clears style object properties omitted by the next object", () => {
+    const div = document.createElement("div");
+
+    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, { preferProperty: true });
+    applyDomProp(div, "style", { color: "red" }, { preferProperty: true });
+
+    expect(div.style.color).toBe("red");
+    expect(div.style.backgroundColor).toBe("");
+  });
+
+  test("clears custom style properties omitted by the next object", () => {
+    const div = document.createElement("div");
+
+    applyDomProp(div, "style", { "--accent": "red" }, { preferProperty: true });
+    applyDomProp(div, "style", {}, { preferProperty: true });
+
+    expect(div.style.getPropertyValue("--accent")).toBe("");
+  });
+
+  test("clears falsey style object values", () => {
+    const div = document.createElement("div");
+
+    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, { preferProperty: true });
+    applyDomProp(div, "style", { color: null, backgroundColor: false }, { preferProperty: true });
+
+    expect(div.style.color).toBe("");
+    expect(div.style.backgroundColor).toBe("");
+  });
 });
