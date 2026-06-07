@@ -1054,7 +1054,7 @@ export function App() {
       export function App() {
         return <nav><Link href="/newest" prefetch="viewport">New</Link></nav>;
       }`,
-        call: 'Link({ href: ("/newest"), prefetch: ("viewport"), children: "New" })',
+        call: 'Link({ href: ("/newest"), prefetch: ("viewport"), children: Link.trustedHtml("New") })',
       },
       {
         code: `import { Link } from "@reckona/mreact-router";
@@ -1062,7 +1062,7 @@ export function App() {
       export function App() {
         return <nav><Link href="/newest">New</Link></nav>;
       }`,
-        call: 'Link({ href: ("/newest"), children: "New" })',
+        call: 'Link({ href: ("/newest"), children: Link.trustedHtml("New") })',
       },
       {
         code: `import * as Router from "@reckona/mreact-router";
@@ -1070,7 +1070,7 @@ export function App() {
       export function App() {
         return <nav><Router.Link href="/newest">New</Router.Link></nav>;
       }`,
-        call: 'Router.Link({ href: ("/newest"), children: "New" })',
+        call: 'Router.Link({ href: ("/newest"), children: Router.Link.trustedHtml("New") })',
       },
     ];
 

@@ -625,7 +625,7 @@ function emitAppendStatements(
           );
         }
 
-        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
+        return `  await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)});`;
       }
 
       if (part.kind === "react-node") {
@@ -721,7 +721,7 @@ function emitSyncPartAsAppendStatement(
       );
     }
 
-    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName)});`;
+    return `${indent}await ${part.name}(${sinkName}, ${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)});`;
   }
 
   if (part.kind === "react-node") {
@@ -868,7 +868,7 @@ function tryEmitPartAsStringExpression(
   }
   if (part.kind === "component" && part.hydrationId === undefined) {
     return emitRenderableHtmlExpression(
-      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName)})`,
+      `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)})`,
     );
   }
   // Non-compat component parts require `await sink-write`; lists with
@@ -2491,6 +2491,7 @@ function emitPropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[] = [],
   escapeHelperName = "_escapeHtml",
+  componentName?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -2505,15 +2506,19 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
+    const childrenExpression =
+      emitStreamRendererFromChildren(children, escapeHelperName) ??
+      emitHtmlExpressionFromChildren(children, escapeHelperName);
     entries.push(
-      `children: ${
-        emitStreamRendererFromChildren(children, escapeHelperName) ??
-        emitHtmlExpressionFromChildren(children, escapeHelperName)
-      }`,
+      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
   }
 
   return `{ ${entries.join(", ")} }`;
+}
+
+function isRouterLinkComponentName(name: string | undefined): name is string {
+  return name !== undefined && (name === "Link" || name.endsWith(".Link"));
 }
 
 function emitCompatRuntimePropsObject(

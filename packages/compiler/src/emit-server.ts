@@ -559,6 +559,7 @@ function collectHtmlStatements(
           contextProviderHelperName,
           contextConsumerHelperName,
           reactNodeRenderHelperName,
+          node.name,
         ),
         asyncComponentNames,
       )};`,
@@ -1467,6 +1468,7 @@ function emitPropsObject(
   contextProviderHelperName?: string,
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
+  componentName?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -1481,12 +1483,26 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
+    const childrenExpression = emitHtmlExpressionFromChildren(
+      children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    );
     entries.push(
-      `children: ${emitHtmlExpressionFromChildren(children, escapeHelperName, escapeBatchHelperName, asyncComponentNames, dynamicAttributes, contextProviderHelperName, contextConsumerHelperName, reactNodeRenderHelperName)}`,
+      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
   }
 
   return `{ ${entries.join(", ")} }`;
+}
+
+function isRouterLinkComponentName(name: string | undefined): name is string {
+  return name !== undefined && (name === "Link" || name.endsWith(".Link"));
 }
 
 function emitCompatRuntimePropsObject(

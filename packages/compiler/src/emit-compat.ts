@@ -322,7 +322,7 @@ function emitComponent(
   helperNames: CompatHelperNames,
   dev: boolean,
 ): string {
-  const directTextBindings = collectDirectTextBindings(component);
+  const directTextBindings = collectDirectTextBindings(component, helperNames);
   const body = component.bodyStatements.map((statement) =>
     `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames)}`
   );
@@ -560,8 +560,12 @@ function emitComponentProps(
   return `{ ${entries.join(", ")} }`;
 }
 
-function collectDirectTextBindings(component: ComponentIr): DirectTextBinding[] {
+function collectDirectTextBindings(
+  component: ComponentIr,
+  helperNames?: CompatHelperNames,
+): DirectTextBinding[] {
   const candidates: DirectTextBinding[] = [];
+  const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
 
   for (const statement of component.bodyStatements) {
     const match = statement.match(
@@ -575,12 +579,25 @@ function collectDirectTextBindings(component: ComponentIr): DirectTextBinding[] 
 
     candidates.push({
       stateName,
-      tupleName: `_${stateName}StateTuple`,
-      bindingName: `_${stateName}TextBinding`,
+      tupleName: allocator(`_${stateName}StateTuple`),
+      bindingName: allocator(`_${stateName}TextBinding`),
     });
   }
 
   return candidates.filter((candidate) => directTextBindingIsSafe(component, candidate));
+}
+
+function collectReservedComponentLocalNames(
+  component: ComponentIr,
+  helperNames?: CompatHelperNames,
+): string[] {
+  return [
+    component.name,
+    component.exportName,
+    ...component.parameters,
+    ...component.bindingNames,
+    ...Object.values(helperNames ?? {}).filter((name): name is string => name !== undefined),
+  ];
 }
 
 function directTextBindingIsSafe(
@@ -597,6 +614,11 @@ function directTextBindingIsSafe(
     }
 
     if (node.kind === "expr" && containsIdentifier(node.code, candidate.stateName)) {
+      unsafe = true;
+      return;
+    }
+
+    if (nodeHasStructuralIdentifierUse(node, candidate.stateName)) {
       unsafe = true;
       return;
     }
@@ -625,6 +647,51 @@ function directTextBindingIsSafe(
   }
 
   return directTextUses === 1 && !unsafe && hasDirectTextBindingHost(component.root, candidate);
+}
+
+function nodeHasStructuralIdentifierUse(node: JsxNodeIr, stateName: string): boolean {
+  if (node.kind === "conditional") {
+    return containsIdentifier(node.conditionCode, stateName);
+  }
+
+  if (node.kind === "list") {
+    return [
+      node.itemsCode,
+      node.keyCode,
+      ...(node.bodyStatements ?? []),
+    ].some((code) => code !== undefined && containsIdentifier(code, stateName));
+  }
+
+  if (node.kind === "component") {
+    return (
+      (node.keyCode !== undefined && containsIdentifier(node.keyCode, stateName)) ||
+      node.props.some((prop) => {
+        if (prop.kind === "render-prop") {
+          return false;
+        }
+
+        return containsIdentifier(prop.code, stateName);
+      })
+    );
+  }
+
+  if (node.kind === "element") {
+    return node.keyCode !== undefined && containsIdentifier(node.keyCode, stateName);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      node.valueCode,
+      node.placeholderTagCode,
+      node.catchName,
+    ].some((code) => code !== undefined && containsIdentifier(code, stateName));
+  }
+
+  if (node.kind === "fragment") {
+    return (node.bodyStatements ?? []).some((statement) => containsIdentifier(statement, stateName));
+  }
+
+  return false;
 }
 
 function isDirectTextBindingDeclaration(statement: string, stateName: string): boolean {

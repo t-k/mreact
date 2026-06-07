@@ -85,7 +85,7 @@ describe("compiler server stream JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.clientReferences).toBeUndefined();
     expect(output.code).not.toContain("renderToString as _renderCompatToString");
-    expect(output.code).toContain('await Link($sink, { href: ("/newest"), prefetch: ("viewport"), children: "New" })');
+    expect(output.code).toContain('await Link($sink, { href: ("/newest"), prefetch: ("viewport"), children: Link.trustedHtml("New") })');
   });
 
   test("emitted server stream component passes router Link children as native HTML strings", () => {
@@ -1014,7 +1014,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("Link({ href: (`/user/${value.name}`), children: _escapeHtml(value.name) })");
+    expect(output.code).toContain("Link({ href: (`/user/${value.name}`), children: Link.trustedHtml(_escapeHtml(value.name)) })");
     expect(output.code).not.toContain("_renderCompatToString(Link,");
   });
 

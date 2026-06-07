@@ -3,10 +3,13 @@ import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
 
+const TRUSTED_LINK_HTML = Symbol.for("modular.react.router.trusted_link_html");
+
 export type LinkPrefetch = "intent" | "viewport" | "none" | false;
 export type LinkScroll = "top" | "preserve";
 export type LinkTransition = "auto" | "none" | false;
-export type LinkChild = ReactCompatNode | Node | readonly LinkChild[];
+export type TrustedLinkHtml = { readonly [TRUSTED_LINK_HTML]: string };
+export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
 export interface LinkOptions {
   href: string;
@@ -50,6 +53,12 @@ export function Link(
 
   return renderLink(sinkOrProps as LinkProps);
 }
+
+(Link as typeof Link & { trustedHtml(html: string): TrustedLinkHtml }).trustedHtml = (
+  html: string,
+): TrustedLinkHtml => ({
+  [TRUSTED_LINK_HTML]: html,
+});
 
 function renderLink(props: LinkProps): string | HTMLAnchorElement {
   const { href, prefetch, reload, scroll, transition, ...rest } = props;
@@ -171,19 +180,18 @@ function renderChildren(child: LinkChild): string {
     return child.map(renderChildren).join("");
   }
 
-  if (typeof child === "string" && isPreRenderedSafeHtmlChild(child)) {
-    return child;
+  if (isTrustedLinkHtml(child)) {
+    return child[TRUSTED_LINK_HTML];
   }
 
   return escapeHtmlText(child);
 }
 
-function isPreRenderedSafeHtmlChild(value: string): boolean {
-  if (!/[<&]/.test(value)) {
-    return false;
-  }
-
-  return !/(?:<\s*\/?\s*(?:script|style|iframe|object|embed|link|meta|base)\b|\son[a-z]+\s*=|javascript\s*:)/iu.test(
-    value,
+function isTrustedLinkHtml(value: unknown): value is TrustedLinkHtml {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    TRUSTED_LINK_HTML in value &&
+    typeof (value as TrustedLinkHtml)[TRUSTED_LINK_HTML] === "string"
   );
 }

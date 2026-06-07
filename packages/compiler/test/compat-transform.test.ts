@@ -726,6 +726,99 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
   });
 
+  test("does not emit direct text binding metadata when state controls a conditional", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      export function App() {
+        const [count, setCount] = useState(1);
+        return count > 0 ? <p>{count}</p> : null;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const [count, setCount] = useState(1);");
+    expect(output.code).not.toContain("_countTextBinding");
+    expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
+  });
+
+  test("does not emit direct text binding metadata when state controls list inputs or keys", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      export function App() {
+        const [count, setCount] = useState(1);
+        return Array.from({ length: count }).map((item) => <p key={count}>{count}</p>);
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const [count, setCount] = useState(1);");
+    expect(output.code).not.toContain("_countTextBinding");
+    expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
+  });
+
+  test("does not emit direct text binding metadata when state crosses a component prop boundary", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      function Child(props) {
+        return <span>{props.value}</span>;
+      }
+
+      export function App() {
+        const [count, setCount] = useState(1);
+        return <><p>{count}</p><Child value={count} /></>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const [count, setCount] = useState(1);");
+    expect(output.code).not.toContain("_countTextBinding");
+    expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
+  });
+
+  test("allocates direct text binding helper names without colliding with user locals", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      export function App() {
+        const _countStateTuple = "user tuple";
+        const _countTextBinding = "user binding";
+        const _REACTIVE_TEXT_BINDING_META = "user meta";
+        const [count, setCount] = useState(0);
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('const _countStateTuple = "user tuple";');
+    expect(output.code).toContain('const _countTextBinding = "user binding";');
+    expect(output.code).toContain('const _REACTIVE_TEXT_BINDING_META = "user meta";');
+    expect(output.code).toContain("const _countStateTuple$1 = useState(0);");
+    expect(output.code).toContain("const [count, setCount] = _countStateTuple$1;");
+    expect(output.code).toContain(
+      "const _countTextBinding$1 = _countStateTuple$1[_REACTIVE_TEXT_BINDING_META$1];",
+    );
+    expect(output.code).toContain("[_REACTIVE_TEXT_BINDING_META$1]: _countTextBinding$1");
+  });
+
   test("runs compiler-proven direct text bindings without a compat component rerender", async () => {
     const previousNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";

@@ -66,4 +66,32 @@ describe("router Link", () => {
       '<a href="/profile">&lt;script&gt;alert(1)&lt;/script&gt;</a>',
     );
   });
+
+  test("escapes entity-encoded javascript urls in string children", () => {
+    let html = "";
+    Link(
+      {
+        append(value) {
+          html += value;
+        },
+      },
+      {
+        children: '<a href="java&#x73;cript:alert(1)">x</a>',
+        href: "/profile",
+      },
+    );
+
+    expect(html).toBe(
+      '<a href="/profile">&lt;a href="java&amp;#x73;cript:alert(1)"&gt;x&lt;/a&gt;</a>',
+    );
+  });
+
+  test("escapes ordinary text children containing markup characters", () => {
+    const html = Link({
+      children: "1 < 2 & 3",
+      href: "/math",
+    });
+
+    expect(html).toBe('<a href="/math">1 &lt; 2 &amp; 3</a>');
+  });
 });
