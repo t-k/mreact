@@ -304,6 +304,23 @@ describe("createQueryClient", () => {
     expect(target.getQueryData(["profile"])).toEqual({ name: "Grace" });
   });
 
+  it("preserves dehydrated updatedAt timestamps when hydrating query data", () => {
+    const target = createQueryClient();
+
+    hydrate(target, {
+      queries: [
+        {
+          data: { name: "Grace" },
+          queryHash: hashQueryKey(["profile"]),
+          queryKey: ["profile"],
+          updatedAt: 123_456,
+        },
+      ],
+    });
+
+    expect(target.getQueryEntry(["profile"])?.updatedAt).toBe(123_456);
+  });
+
   it("hashes object query keys deterministically", () => {
     expect(hashQueryKey(["search", { page: 1, q: "mreact" }])).toBe(
       hashQueryKey(["search", { q: "mreact", page: 1 }]),

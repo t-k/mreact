@@ -1,4 +1,9 @@
 import { emitQueryDevtoolsEvent } from "./devtools.js";
+import {
+  hydrateQueryDataSymbol,
+  type HydrateQueryDataOptions,
+  type HydratableQueryClient,
+} from "./hydration-internal.js";
 import type {
   FetchQueryOptions,
   InvalidateQueriesOptions,
@@ -18,6 +23,10 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   version: number;
 }
 
+interface SetSuccessOptions {
+  updatedAt?: number | undefined;
+}
+
 interface QuerySubscription<TData = unknown> {
   exact: boolean;
   queryHash: string;
@@ -26,7 +35,7 @@ interface QuerySubscription<TData = unknown> {
   listener: (entry: QueryEntry<TData>) => void;
 }
 
-export function createQueryLifecycle(): QueryClient {
+export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
   const cache = new Map<string, InternalQueryEntry>();
   const exactSubscriptions = new Map<string, Set<QuerySubscription>>();
   const prefixSubscriptions = new Set<QuerySubscription>();
@@ -114,7 +123,11 @@ export function createQueryLifecycle(): QueryClient {
     }
   }
 
-  function setSuccess<TData>(queryKey: QueryKey, data: TData): void {
+  function setSuccess<TData>(
+    queryKey: QueryKey,
+    data: TData,
+    options: SetSuccessOptions = {},
+  ): void {
     const entry = getOrCreateEntry<TData>(queryKey);
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
@@ -130,8 +143,16 @@ export function createQueryLifecycle(): QueryClient {
     entry.promise = undefined;
     entry.stale = false;
     entry.status = "success";
-    entry.updatedAt = Date.now();
+    entry.updatedAt = options.updatedAt ?? Date.now();
     notify(entry);
+  }
+
+  function hydrateQueryData<TData>(
+    queryKey: QueryKey,
+    data: TData,
+    options: HydrateQueryDataOptions,
+  ): void {
+    setSuccess(queryKey, data, { updatedAt: options.updatedAt });
   }
 
   function retainSubscription(queryKey: QueryKey): void {
@@ -282,6 +303,7 @@ export function createQueryLifecycle(): QueryClient {
       return entry === undefined ? undefined : (toPublicEntry(entry) as QueryEntry<TData>);
     },
     setQueryData: setSuccess,
+    [hydrateQueryDataSymbol]: hydrateQueryData,
     invalidateQueries(options: InvalidateQueriesOptions = {}): void {
       const prefixSegments =
         options.queryKey === undefined ? undefined : hashQueryKeySegments(options.queryKey);

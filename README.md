@@ -768,6 +768,7 @@ import {
 } from "@reckona/mreact-query";
 
 const TIME_KEY = ["time"] as const;
+const TIME_STALE_TIME_MS = 30_000;
 
 async function fetchTime() {
   return { value: new Date().toISOString() };
@@ -776,6 +777,7 @@ async function fetchTime() {
 export async function loader(context: { queryClient: QueryClient }) {
   return context.queryClient.fetchQuery({
     queryKey: TIME_KEY,
+    staleTime: TIME_STALE_TIME_MS,
     queryFn: fetchTime,
   });
 }
@@ -783,6 +785,7 @@ export async function loader(context: { queryClient: QueryClient }) {
 export default function Page(props: { data: { value: string } }) {
   const query = createQuery(getQueryClient(), {
     queryKey: TIME_KEY,
+    staleTime: TIME_STALE_TIME_MS,
     queryFn: fetchTime,
   });
   const result = query.result.get();
@@ -796,7 +799,7 @@ export default function Page(props: { data: { value: string } }) {
 }
 ```
 
-`createQuery()` auto-fetches empty queries in the browser by default and stays observe-only during server render. Pass `autoFetch: false` for routes that must only consume loader-prefetched cache entries.
+`createQuery()` auto-fetches empty queries in the browser by default and stays observe-only during server render. Hydrated entries render immediately, then revalidate on mount unless their server `updatedAt` timestamp is still covered by `staleTime`; pass `autoFetch: false` for routes that must only consume loader-prefetched cache entries.
 
 ### Virtual Lists And Grids
 

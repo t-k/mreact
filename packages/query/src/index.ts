@@ -1,5 +1,6 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
+import { hydrateQueryDataSymbol, type HydratableQueryClient } from "./hydration-internal.js";
 import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./query-lifecycle.js";
 
 export { hashQueryKey } from "./query-lifecycle.js";
@@ -500,7 +501,16 @@ export function dehydrate(client: QueryClient): DehydratedQueryClient {
 }
 
 export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient): void {
+  const hydratableClient = client as QueryClient & Partial<HydratableQueryClient>;
+
   for (const query of dehydrated.queries) {
+    if (hydratableClient[hydrateQueryDataSymbol] !== undefined) {
+      hydratableClient[hydrateQueryDataSymbol](query.queryKey, query.data, {
+        updatedAt: query.updatedAt,
+      });
+      continue;
+    }
+
     client.setQueryData(query.queryKey, query.data);
   }
 }
