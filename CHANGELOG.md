@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.146 - 2026-06-07
+
+### Fixed
+
+- Fixed router `Link` server rendering so string children are always escaped as text, closing a raw-HTML heuristic that could interpret entity-encoded markup as trusted link content. Compiler-generated router `Link` children now use an explicit trusted-HTML wrapper for framework-owned SSR output.
+- Fixed compiler-proven React-compatible direct text bindings so structural state uses are detected before the fast path is emitted and generated helper names avoid collisions with component-local bindings.
+- Fixed React-compatible hydration semantics for `useSyncExternalStore()` initial server snapshots, post-hydration `useId()` client IDs, uncontrolled form `defaultValue`/`defaultChecked` preservation, and controlled form live-state updates after child reconciliation.
+- Fixed native route matcher catch-all params so encoded slashes preserve segment boundaries without double decoding, and malformed percent escapes return no match instead of throwing.
+- Fixed reactive DOM keyed list reuse so replaced object rows, primitive rows, reordered index/items closures, and style object property removals update without leaving stale DOM, while preserving strict JavaScript value semantics for list renderer arguments.
+
 ## 0.0.145 - 2026-06-07
 
 ### Added
