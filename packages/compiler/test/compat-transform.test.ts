@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
+import { createElement, createRoot } from "@reckona/mreact-compat";
 import { transform } from "../src/index.js";
 import {
+  compileCompatModule,
   runCompatComponent,
   runCompatHydration,
   runCompatServerComponent,
@@ -640,6 +642,137 @@ describe("compiler compat mode", () => {
     expect(output.code).toContain(
       'import { useState } from "@reckona/mreact-compat";',
     );
+  });
+
+  test("emits direct text binding metadata for compiler-proven useState text children", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      let update;
+
+      export function App() {
+        const [count, setCount] = useState(0);
+        update = setCount;
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toContainEqual({
+      source: "@reckona/mreact-compat/jsx-runtime",
+      specifiers: ["REACTIVE_TEXT_BINDING_META", "jsx"],
+    });
+    expect(output.code).toContain("const _countStateTuple = useState(0);");
+    expect(output.code).toContain("const [count, setCount] = _countStateTuple;");
+    expect(output.code).toContain(
+      "const _countTextBinding = _countStateTuple[_REACTIVE_TEXT_BINDING_META];",
+    );
+    expect(output.code).toContain(
+      "[_REACTIVE_TEXT_BINDING_META]: _countTextBinding",
+    );
+  });
+
+  test("emits direct text binding metadata from jsx-dev-runtime for compiler-proven dev output", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      export function App() {
+        const [count, setCount] = useState(0);
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toContainEqual({
+      source: "@reckona/mreact-compat/jsx-dev-runtime",
+      specifiers: ["REACTIVE_TEXT_BINDING_META", "jsxDEV"],
+    });
+    expect(output.code).toContain(
+      'import { REACTIVE_TEXT_BINDING_META as _REACTIVE_TEXT_BINDING_META, jsxDEV as _jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";',
+    );
+  });
+
+  test("does not emit direct text binding metadata when state is also used outside the text child", () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      export function App() {
+        const [count, setCount] = useState(0);
+        return <p data-count={count}>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@reckona/mreact-compat/jsx-runtime",
+        specifiers: ["jsx"],
+      },
+    ]);
+    expect(output.code).toContain("const [count, setCount] = useState(0);");
+    expect(output.code).not.toContain("_countTextBinding");
+    expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
+  });
+
+  test("runs compiler-proven direct text bindings without a compat component rerender", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+      export function App(props) {
+        let renders = props.renders();
+        props.setRenders(renders + 1);
+        const [count, setCount] = useState(0);
+        props.capture(() => setCount(1));
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    let update = () => {};
+    let renders = 0;
+
+    try {
+      const module = compileCompatModule(output.code);
+      const App = module.App as (props: Record<string, unknown>) => unknown;
+      const container = document.createElement("div");
+      createRoot(container).render(createElement(App, {
+        capture(nextUpdate: () => void) {
+          update = nextUpdate;
+        },
+        renders() {
+          return renders;
+        },
+        setRenders(next: number) {
+          renders = next;
+        },
+      }));
+
+      expect(container.innerHTML).toBe("<p>0</p>");
+      expect(renders).toBe(1);
+
+      update();
+
+      expect(container.innerHTML).toBe("<p>1</p>");
+      expect(renders).toBe(1);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 
   test("preserves top-level helper function used by compat component body", async () => {

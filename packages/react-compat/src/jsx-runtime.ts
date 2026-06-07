@@ -1,4 +1,8 @@
-import { createElementFromJsxConfig, Fragment } from "./element.js";
+import {
+  createElementFromJsxConfig,
+  Fragment,
+  REACTIVE_TEXT_BINDING_META,
+} from "./element.js";
 import type {
   ElementType,
   ReactCompatElement,
@@ -6,6 +10,7 @@ import type {
 } from "./element.js";
 
 export { Fragment };
+export { REACTIVE_TEXT_BINDING_META };
 
 export type JSXEvent<
   TCurrentTarget extends EventTarget,

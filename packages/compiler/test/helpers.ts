@@ -25,7 +25,12 @@ import {
   useContext,
   useState,
 } from "@reckona/mreact-compat";
-import { Fragment, jsx, jsxs } from "@reckona/mreact-compat/jsx-runtime";
+import {
+  Fragment,
+  REACTIVE_TEXT_BINDING_META,
+  jsx,
+  jsxs,
+} from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
 import { cell, computed, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
@@ -305,7 +310,7 @@ function extractCompatRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>Fragment|jsx|jsxDEV|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>Fragment|REACTIVE_TEXT_BINDING_META|jsx|jsxDEV|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -438,6 +443,10 @@ function getCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "Fragment") {
     return Fragment;
+  }
+
+  if (importedName === "REACTIVE_TEXT_BINDING_META") {
+    return REACTIVE_TEXT_BINDING_META;
   }
 
   throw new Error(`Unsupported compat runtime import: ${importedName}`);

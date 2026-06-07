@@ -1,4 +1,8 @@
-import { Fragment, jsx } from "./jsx-runtime.js";
+import {
+  Fragment,
+  REACTIVE_TEXT_BINDING_META,
+  jsx,
+} from "./jsx-runtime.js";
 import type {
   ElementType,
   ReactCompatElement,
@@ -10,6 +14,7 @@ import type {
 } from "./jsx-runtime.js";
 
 export { Fragment };
+export { REACTIVE_TEXT_BINDING_META };
 export type {
   FormEvent,
   FormEventHandler,

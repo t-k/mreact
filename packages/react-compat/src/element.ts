@@ -15,6 +15,9 @@ export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta
 export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
   "modular.react.host_children_only_props_meta",
 );
+export const REACTIVE_TEXT_BINDING_META = Symbol.for(
+  "modular.react.reactive_text_binding_meta",
+);
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
@@ -274,18 +277,19 @@ function copyElementProps(
   base?: Record<string, unknown>,
   omitChildren = false,
 ): Record<string, unknown> {
-  const props: Record<string, unknown> = {};
+  const props: Record<PropertyKey, unknown> = {};
 
   if (base !== undefined) {
     copyOwnStringElementProps(base, props, omitChildren);
   }
 
   if (source === null || source === undefined) {
-    return props;
+    return props as Record<string, unknown>;
   }
 
   copyOwnStringElementProps(source, props, omitChildren);
-  return props;
+  copyOwnSymbolElementProps(source, props);
+  return props as Record<string, unknown>;
 }
 
 function copyOwnStringElementProps(
@@ -307,6 +311,16 @@ function copyOwnStringElementProps(
     ) {
       target[name] = source[name];
     }
+  }
+}
+
+function copyOwnSymbolElementProps(
+  source: Record<string, unknown>,
+  target: Record<PropertyKey, unknown>,
+): void {
+  const symbolSource = source as Record<PropertyKey, unknown>;
+  for (const symbol of Object.getOwnPropertySymbols(source)) {
+    target[symbol] = symbolSource[symbol];
   }
 }
 

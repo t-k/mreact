@@ -1,8 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createElement, Fragment } from "../src/index.js";
-import { jsx, jsxs } from "../src/jsx-runtime.js";
-import { Fragment as DevFragment, jsxDEV } from "../src/jsx-dev-runtime.js";
+import { jsx, jsxs, REACTIVE_TEXT_BINDING_META } from "../src/jsx-runtime.js";
+import {
+  Fragment as DevFragment,
+  REACTIVE_TEXT_BINDING_META as DEV_REACTIVE_TEXT_BINDING_META,
+  jsxDEV,
+} from "../src/jsx-dev-runtime.js";
 
 async function importProductionRuntime(): Promise<
   typeof import("../src/jsx-runtime.js")
@@ -131,5 +135,14 @@ describe("react-compat automatic JSX runtime", () => {
     expect(production.Fragment).toBe(Fragment);
     expect(DevFragment).toBe(Fragment);
     expect(dev.Fragment).toBe(Fragment);
+  });
+
+  test("runtime entrypoints export reactive text binding metadata", async () => {
+    const production = await importProductionRuntime();
+    const dev = await importDevRuntime();
+
+    expect(production.REACTIVE_TEXT_BINDING_META).toBe(REACTIVE_TEXT_BINDING_META);
+    expect(DEV_REACTIVE_TEXT_BINDING_META).toBe(REACTIVE_TEXT_BINDING_META);
+    expect(dev.REACTIVE_TEXT_BINDING_META).toBe(REACTIVE_TEXT_BINDING_META);
   });
 });

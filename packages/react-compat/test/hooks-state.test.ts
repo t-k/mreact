@@ -76,6 +76,42 @@ describe("react-compat useState", () => {
     expect(container.querySelector("button")?.textContent).toBe("1");
   });
 
+  test("updates compiler-proven direct text bindings without re-rendering the component", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const container = document.createElement("div");
+    const reactiveTextBindingMeta = Symbol.for("modular.react.reactive_text_binding_meta");
+    let renders = 0;
+    let update: (value: number) => void = () => {};
+
+    function Counter() {
+      renders += 1;
+      const state = useState(0) as unknown as [
+        number,
+        (value: number) => void,
+      ] & Record<PropertyKey, unknown>;
+      expect(state).toHaveLength(2);
+      const [count, setCount] = state;
+      const textBinding = state[reactiveTextBindingMeta];
+      update = setCount;
+      return createElement("p", { [reactiveTextBindingMeta]: textBinding }, count);
+    }
+
+    try {
+      createRoot(container).render(createElement(Counter, null));
+
+      expect(container.innerHTML).toBe("<p>0</p>");
+      expect(renders).toBe(1);
+
+      update(1);
+
+      expect(container.innerHTML).toBe("<p>1</p>");
+      expect(renders).toBe(1);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
   test("batches discrete event updates and flushes once after the handler", () => {
     const container = document.createElement("div");
     let renders = 0;

@@ -8,6 +8,7 @@ import {
   LAZY_TYPE,
   MEMO_TYPE,
   Profiler,
+  REACTIVE_TEXT_BINDING_META,
   STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
@@ -49,6 +50,7 @@ import {
   collectRuntimeInstanceKeys,
   hasContextDependency,
   hasChangedContextDependency,
+  subscribeReactiveTextBinding,
   type RootRuntime,
 } from "./hooks.js";
 import { isThenable } from "./thenable.js";
@@ -1653,7 +1655,8 @@ function commitHostDirtyFiber(
     }
 
     if (directTextChild !== undefined) {
-      syncDirectHostTextChild(element, directTextChild);
+      const text = syncDirectHostTextChild(element, directTextChild);
+      subscribeReactiveHostTextBinding(props, text);
     } else if (fiber.subtreeFlags !== NoFlags) {
       commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
@@ -2043,7 +2046,8 @@ function commitHostFiber(
       applyChangedRef(previousProps?.ref, props.ref, element);
     }
     if (directTextChild !== undefined) {
-      syncDirectHostTextChild(element, directTextChild);
+      const text = syncDirectHostTextChild(element, directTextChild);
+      subscribeReactiveHostTextBinding(props, text);
     } else if (
       fiber.hostChildListChanged ||
       fiber.childListChanged ||
@@ -2410,17 +2414,36 @@ function shouldUseDirectHostTextChild(): boolean {
   return globalProcess?.env?.NODE_ENV === "production";
 }
 
-function syncDirectHostTextChild(element: Element, text: string): void {
+function syncDirectHostTextChild(element: Element, text: string): Text {
   const firstChild = element.firstChild;
 
   if (firstChild instanceof Text && firstChild.nextSibling === null) {
     if (firstChild.data !== text) {
       firstChild.data = text;
     }
-    return;
+    return firstChild;
   }
 
   element.textContent = text;
+  const nextFirstChild = element.firstChild;
+
+  if (!(nextFirstChild instanceof Text)) {
+    const textNode = document.createTextNode(text);
+    element.replaceChildren(textNode);
+    return textNode;
+  }
+
+  return nextFirstChild;
+}
+
+function subscribeReactiveHostTextBinding(
+  props: Record<string, unknown>,
+  text: Text,
+): void {
+  subscribeReactiveTextBinding(
+    (props as Record<PropertyKey, unknown>)[REACTIVE_TEXT_BINDING_META],
+    text,
+  );
 }
 
 function shouldPreserveContentEditableChildren(

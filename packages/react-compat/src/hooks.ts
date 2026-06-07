@@ -11,6 +11,7 @@ import {
   useContext,
   withContextReadObserver,
 } from "./context.js";
+import { REACTIVE_TEXT_BINDING_META } from "./element.js";
 import { isThenable } from "./thenable.js";
 
 export interface RootRuntime {
@@ -124,7 +125,7 @@ export type DevToolsHookValue =
   | { kind: "effect"; effectKind: "insertion" | "layout" | "normal"; deps?: readonly unknown[] };
 
 type HookSlot =
-  | { kind: "state"; value: unknown; hostCommitValue?: unknown }
+  | { kind: "state"; value: unknown; hostCommitValue?: unknown; textBinding?: ReactiveTextBinding }
   | {
       kind: "action-state";
       state: unknown;
@@ -194,6 +195,13 @@ const strictMemoPrimitiveOwnerIds = new Map<unknown, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
+
+export interface ReactiveTextBinding {
+  value: unknown;
+  subscribers: Set<Text>;
+}
+
+const reactiveTextBindingsByNode = new WeakMap<Text, ReactiveTextBinding>();
 
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
   const previousPriority = currentEventPriority;
@@ -778,6 +786,20 @@ export function useState<T>(
     }
 
     slot.value = nextValue;
+    const canUseDirectTextBinding =
+      hookRenderState.hostCommitDepth === 0 &&
+      hookRenderState.currentRuntime !== runtime &&
+      hookRenderState.currentInstance !== instance &&
+      runtime.effectFlushPhase === undefined &&
+      eventBatchDepth === 0 &&
+      transitionDepth === 0 &&
+      optionsAllowDirectTextBinding(value) &&
+      updateDirectTextBinding(slot.textBinding, nextValue);
+
+    if (canUseDirectTextBinding) {
+      return;
+    }
+
     if (hookRenderState.hostCommitDepth > 0) {
       updateHostCommitDirtyState(instance);
       hookRenderState.queuedHostCommitRerenders.add(runtime);
@@ -792,7 +814,86 @@ export function useState<T>(
     value: slot.value,
   });
 
-  return [slot.value as T, setState];
+  const result = [slot.value as T, setState] as [
+    T,
+    (value: T | ((previous: T) => T)) => void,
+  ] & Record<PropertyKey, unknown>;
+  result[REACTIVE_TEXT_BINDING_META] = getStateTextBinding(slot);
+  return result;
+}
+
+export function subscribeReactiveTextBinding(binding: unknown, node: Text): void {
+  if (!isReactiveTextBinding(binding)) {
+    clearReactiveTextBinding(node);
+    return;
+  }
+
+  const previous = reactiveTextBindingsByNode.get(node);
+
+  if (previous !== undefined && previous !== binding) {
+    previous.subscribers.delete(node);
+  }
+
+  reactiveTextBindingsByNode.set(node, binding);
+  binding.subscribers.add(node);
+}
+
+function clearReactiveTextBinding(node: Text): void {
+  const previous = reactiveTextBindingsByNode.get(node);
+
+  if (previous === undefined) {
+    return;
+  }
+
+  previous.subscribers.delete(node);
+  reactiveTextBindingsByNode.delete(node);
+}
+
+function getStateTextBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveTextBinding {
+  slot.textBinding ??= {
+    value: slot.value,
+    subscribers: new Set(),
+  };
+  slot.textBinding.value = slot.value;
+  return slot.textBinding;
+}
+
+function optionsAllowDirectTextBinding(value: unknown): boolean {
+  return typeof value !== "function";
+}
+
+function updateDirectTextBinding(binding: ReactiveTextBinding | undefined, value: unknown): boolean {
+  if (binding === undefined || binding.subscribers.size === 0) {
+    return false;
+  }
+
+  let updated = false;
+  const nextText = String(value);
+
+  for (const node of binding.subscribers) {
+    if (node.parentNode === null) {
+      binding.subscribers.delete(node);
+      reactiveTextBindingsByNode.delete(node);
+      continue;
+    }
+
+    if (node.data !== nextText) {
+      node.data = nextText;
+    }
+    updated = true;
+  }
+
+  binding.value = value;
+  return updated;
+}
+
+function isReactiveTextBinding(value: unknown): value is ReactiveTextBinding {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "subscribers" in value &&
+    (value as { subscribers?: unknown }).subscribers instanceof Set
+  );
 }
 
 export function useReducer<TState, TAction, TInitial = TState>(

@@ -69,6 +69,10 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
   const specifiers = new Set<string>();
 
   for (const component of ir.components) {
+    if (collectDirectTextBindings(component).length > 0) {
+      specifiers.add("REACTIVE_TEXT_BINDING_META");
+    }
+
     visit(component.root, (node) => {
       if (node.kind === "fragment") {
         specifiers.add("Fragment");
@@ -89,9 +93,16 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
 
 interface CompatHelperNames {
   Fragment?: string;
+  REACTIVE_TEXT_BINDING_META?: string;
   jsx?: string;
   jsxDEV?: string;
   jsxs?: string;
+}
+
+interface DirectTextBinding {
+  stateName: string;
+  tupleName: string;
+  bindingName: string;
 }
 
 function allocateHelperNames(
@@ -104,6 +115,11 @@ function allocateHelperNames(
   for (const specifier of specifiers) {
     if (specifier === "Fragment") {
       helperNames.Fragment = allocator("_Fragment");
+      continue;
+    }
+
+    if (specifier === "REACTIVE_TEXT_BINDING_META") {
+      helperNames.REACTIVE_TEXT_BINDING_META = allocator("_REACTIVE_TEXT_BINDING_META");
       continue;
     }
 
@@ -206,7 +222,7 @@ function parseCompatRuntimeImportLine(
   return specifierText.split(",").flatMap((rawSpecifier): CompatRuntimeImportSpecifier[] => {
     const specifier = rawSpecifier.trim();
     const aliasMatch = specifier.match(
-      /^(?<importedName>Fragment|jsx|jsxDEV|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>Fragment|REACTIVE_TEXT_BINDING_META|jsx|jsxDEV|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (aliasMatch?.groups !== undefined) {
@@ -223,7 +239,7 @@ function parseCompatRuntimeImportLine(
       }];
     }
 
-    return /^(Fragment|jsx|jsxDEV|jsxs)$/.test(specifier)
+    return /^(Fragment|REACTIVE_TEXT_BINDING_META|jsx|jsxDEV|jsxs)$/.test(specifier)
       ? [{ importedName: specifier, localName: specifier, source }]
       : [];
   });
@@ -250,6 +266,12 @@ function createImportGroups(
     if (specifier === "Fragment") {
       const localName = helperNames.Fragment ?? "_Fragment";
       addImportSpecifier(groups, componentImportSource, "Fragment", localName);
+      continue;
+    }
+
+    if (specifier === "REACTIVE_TEXT_BINDING_META") {
+      const localName = helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META";
+      addImportSpecifier(groups, componentImportSource, "REACTIVE_TEXT_BINDING_META", localName);
       continue;
     }
 
@@ -300,7 +322,10 @@ function emitComponent(
   helperNames: CompatHelperNames,
   dev: boolean,
 ): string {
-  const body = component.bodyStatements.map((statement) => `  ${statement}`);
+  const directTextBindings = collectDirectTextBindings(component);
+  const body = component.bodyStatements.map((statement) =>
+    `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames)}`
+  );
   const parameters = component.parameters.join(", ");
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
     component.async === true ? "async " : ""
@@ -309,7 +334,7 @@ function emitComponent(
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
-    `  return ${emitJsxNode(component.root, helperNames, dev)};`,
+    `  return ${emitJsxNode(component.root, helperNames, dev, directTextBindings)};`,
     `}`,
   ].join("\n");
 }
@@ -318,6 +343,7 @@ function emitJsxNode(
   node: JsxNodeIr,
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
@@ -328,8 +354,8 @@ function emitJsxNode(
   }
 
   if (node.kind === "conditional") {
-    const whenTrue = emitCompatChildren(node.whenTrue, helperNames, dev);
-    const whenFalse = emitCompatChildren(node.whenFalse, helperNames, dev);
+    const whenTrue = emitCompatChildren(node.whenTrue, helperNames, dev, directTextBindings);
+    const whenFalse = emitCompatChildren(node.whenFalse, helperNames, dev, directTextBindings);
 
     return node.conditionValueName === undefined
       ? `(${node.conditionCode}) ? ${whenTrue} : ${whenFalse}`
@@ -338,7 +364,7 @@ function emitJsxNode(
 
   if (node.kind === "list") {
     const parameters = emitListParameters(node);
-    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, helperNames, dev)})`;
+    return `(${node.itemsCode}).map(${emitListRenderer(node, parameters, helperNames, dev, directTextBindings)})`;
   }
 
   if (node.kind === "fragment") {
@@ -348,7 +374,7 @@ function emitJsxNode(
   if (node.kind === "component") {
     const keyArgument =
       node.keyCode === undefined ? undefined : `(${node.keyCode})`;
-    const props = emitComponentProps(node.props, node.children, helperNames, dev);
+    const props = emitComponentProps(node.props, node.children, helperNames, dev, directTextBindings);
     return dev
       ? emitJsxDevCall(helperNames.jsxDEV ?? "_jsxDEV", node.name, props, keyArgument, node.children.length > 1)
       : `${helperNames.jsx ?? "_jsx"}(${node.name}, ${props}${keyArgument === undefined ? "" : `, ${keyArgument}`})`;
@@ -358,23 +384,24 @@ function emitJsxNode(
     return "null";
   }
 
-  return emitJsxCall(JSON.stringify(node.tagName), node, helperNames, dev);
+  return emitJsxCall(JSON.stringify(node.tagName), node, helperNames, dev, directTextBindings);
 }
 
 function emitCompatChildren(
   children: JsxNodeIr[],
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
   if (children.length === 0) {
     return "null";
   }
 
   if (children.length === 1) {
-    return emitJsxNode(children[0] as JsxNodeIr, helperNames, dev);
+    return emitJsxNode(children[0] as JsxNodeIr, helperNames, dev, directTextBindings);
   }
 
-  return `[${children.map((child) => emitJsxNode(child, helperNames, dev)).join(", ")}]`;
+  return `[${children.map((child) => emitJsxNode(child, helperNames, dev, directTextBindings)).join(", ")}]`;
 }
 
 function emitListRenderer(
@@ -382,8 +409,9 @@ function emitListRenderer(
   parameters: string,
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
-  const valueExpression = emitCompatChildren(node.children, helperNames, dev);
+  const valueExpression = emitCompatChildren(node.children, helperNames, dev, directTextBindings);
 
   if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
     return `(${parameters}) => ${valueExpression}`;
@@ -403,6 +431,7 @@ function emitJsxCall(
   node: JsxElementIr | JsxFragmentIr,
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
   if (dev) {
     const keyArgument =
@@ -412,7 +441,7 @@ function emitJsxCall(
     return emitJsxDevCall(
       helperNames.jsxDEV ?? "_jsxDEV",
       typeExpression,
-      emitProps(node, helperNames, dev),
+      emitProps(node, helperNames, dev, directTextBindings),
       keyArgument,
       node.children.length > 1,
     );
@@ -427,7 +456,7 @@ function emitJsxCall(
       ? `, (${node.keyCode})`
       : "";
 
-  return `${callee}(${typeExpression}, ${emitProps(node, helperNames, dev)}${keyArgument})`;
+  return `${callee}(${typeExpression}, ${emitProps(node, helperNames, dev, directTextBindings)}${keyArgument})`;
 }
 
 function emitJsxDevCall(
@@ -444,13 +473,23 @@ function emitProps(
   node: JsxElementIr | JsxFragmentIr,
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
   const entries =
     node.kind === "element" ? node.attributes.map(emitAttribute) : [];
-  const children = emitChildren(node.children, helperNames, dev);
+  const children = emitChildren(node.children, helperNames, dev, directTextBindings);
+  const directTextBinding = node.kind === "element"
+    ? findDirectTextBindingForChildren(node.children, directTextBindings)
+    : undefined;
 
   if (children !== undefined) {
     entries.push(`children: ${children}`);
+  }
+
+  if (directTextBinding !== undefined) {
+    entries.push(
+      `[${helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META"}]: ${directTextBinding.bindingName}`,
+    );
   }
 
   return `{ ${entries.join(", ")} }`;
@@ -460,16 +499,17 @@ function emitChildren(
   children: JsxNodeIr[],
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string | undefined {
   if (children.length === 0) {
     return undefined;
   }
 
   if (children.length === 1) {
-    return emitJsxNode(children[0] as JsxNodeIr, helperNames, dev);
+    return emitJsxNode(children[0] as JsxNodeIr, helperNames, dev, directTextBindings);
   }
 
-  return `[${children.map((child) => emitJsxNode(child, helperNames, dev)).join(", ")}]`;
+  return `[${children.map((child) => emitJsxNode(child, helperNames, dev, directTextBindings)).join(", ")}]`;
 }
 
 function emitAttribute(attr: AttributeIr): string {
@@ -493,6 +533,7 @@ function emitComponentProps(
   children: JsxNodeIr[],
   helperNames: CompatHelperNames,
   dev: boolean,
+  directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
   const entries = props
     .map((prop) => {
@@ -501,7 +542,8 @@ function emitComponentProps(
       }
 
       if (prop.kind === "render-prop") {
-        const renderedChildren = emitChildren(prop.children, helperNames, dev) ?? "null";
+        const renderedChildren =
+          emitChildren(prop.children, helperNames, dev, directTextBindings) ?? "null";
         return prop.valueName === undefined
           ? `${emitPropName(prop.name)}: ${renderedChildren}`
           : `${emitPropName(prop.name)}: (${prop.valueName}) => ${renderedChildren}`;
@@ -512,10 +554,147 @@ function emitComponentProps(
     .filter(Boolean);
 
   if (children.length > 0) {
-    entries.push(`children: ${emitChildren(children, helperNames, dev) ?? "null"}`);
+    entries.push(`children: ${emitChildren(children, helperNames, dev, directTextBindings) ?? "null"}`);
   }
 
   return `{ ${entries.join(", ")} }`;
+}
+
+function collectDirectTextBindings(component: ComponentIr): DirectTextBinding[] {
+  const candidates: DirectTextBinding[] = [];
+
+  for (const statement of component.bodyStatements) {
+    const match = statement.match(
+      /^\s*const\s+\[\s*(?<stateName>[A-Za-z_$][\w$]*)\s*,\s*[A-Za-z_$][\w$]*\s*\]\s*=\s*useState\(.+\);\s*$/,
+    );
+    const stateName = match?.groups?.stateName;
+
+    if (stateName === undefined) {
+      continue;
+    }
+
+    candidates.push({
+      stateName,
+      tupleName: `_${stateName}StateTuple`,
+      bindingName: `_${stateName}TextBinding`,
+    });
+  }
+
+  return candidates.filter((candidate) => directTextBindingIsSafe(component, candidate));
+}
+
+function directTextBindingIsSafe(
+  component: ComponentIr,
+  candidate: DirectTextBinding,
+): boolean {
+  let directTextUses = 0;
+  let unsafe = false;
+
+  visit(component.root, (node) => {
+    if (node.kind === "expr" && node.code === candidate.stateName) {
+      directTextUses += 1;
+      return;
+    }
+
+    if (node.kind === "expr" && containsIdentifier(node.code, candidate.stateName)) {
+      unsafe = true;
+      return;
+    }
+
+    if (node.kind === "element") {
+      for (const attr of node.attributes) {
+        if (attr.kind === "static-attr") {
+          continue;
+        }
+
+        if (containsIdentifier(attr.code, candidate.stateName)) {
+          unsafe = true;
+        }
+      }
+    }
+  });
+
+  for (const statement of component.bodyStatements) {
+    if (isDirectTextBindingDeclaration(statement, candidate.stateName)) {
+      continue;
+    }
+
+    if (containsIdentifier(statement, candidate.stateName)) {
+      unsafe = true;
+    }
+  }
+
+  return directTextUses === 1 && !unsafe && hasDirectTextBindingHost(component.root, candidate);
+}
+
+function isDirectTextBindingDeclaration(statement: string, stateName: string): boolean {
+  return new RegExp(
+    `^\\s*const\\s+\\[\\s*${stateName}\\s*,\\s*[A-Za-z_$][\\w$]*\\s*\\]\\s*=\\s*useState\\(.+\\);\\s*$`,
+  ).test(statement);
+}
+
+function hasDirectTextBindingHost(
+  node: JsxNodeIr,
+  candidate: DirectTextBinding,
+): boolean {
+  let found = false;
+
+  visit(node, (current) => {
+    if (
+      current.kind === "element" &&
+      findDirectTextBindingForChildren(current.children, [candidate]) !== undefined
+    ) {
+      found = true;
+    }
+  });
+
+  return found;
+}
+
+function rewriteDirectTextBindingStatement(
+  statement: string,
+  directTextBindings: readonly DirectTextBinding[],
+  helperNames: CompatHelperNames,
+): string {
+  for (const binding of directTextBindings) {
+    const match = statement.match(
+      /^\s*const\s+\[\s*(?<stateName>[A-Za-z_$][\w$]*)\s*,\s*(?<setterName>[A-Za-z_$][\w$]*)\s*\]\s*=\s*(?<initializer>useState\(.+\));\s*$/,
+    );
+
+    if (match?.groups?.stateName !== binding.stateName) {
+      continue;
+    }
+
+    const metadataName = helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META";
+    return [
+      `const ${binding.tupleName} = ${match.groups.initializer};`,
+      `  const [${binding.stateName}, ${match.groups.setterName}] = ${binding.tupleName};`,
+      `  const ${binding.bindingName} = ${binding.tupleName}[${metadataName}];`,
+    ].join("\n");
+  }
+
+  return statement;
+}
+
+function findDirectTextBindingForChildren(
+  children: readonly JsxNodeIr[],
+  directTextBindings: readonly DirectTextBinding[],
+): DirectTextBinding | undefined {
+  if (children.length !== 1) {
+    return undefined;
+  }
+
+  const child = children[0];
+
+  if (child?.kind !== "expr") {
+    return undefined;
+  }
+
+  return directTextBindings.find((binding) => binding.stateName === child.code);
+}
+
+function containsIdentifier(code: string, name: string): boolean {
+  return new RegExp(`(^|[^A-Za-z_$\\d])${name}([^A-Za-z_$\\d]|$)`).test(code);
 }
 
 function emitPropName(name: string): string {
