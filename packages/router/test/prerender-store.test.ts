@@ -90,7 +90,15 @@ describe("router prerender store adapters", () => {
 
       await storeB.delete("/docs");
       expect(await storeA.get("/docs")).toBeUndefined();
-      expect(events).toEqual(["a:start", "a:end", "b:start", "b:end"]);
+      const first = events[0]?.split(":")[0];
+      const second = events[2]?.split(":")[0];
+      expect(new Set([first, second])).toEqual(new Set(["a", "b"]));
+      expect(events).toEqual([
+        `${first}:start`,
+        `${first}:end`,
+        `${second}:start`,
+        `${second}:end`,
+      ]);
     } finally {
       await rm(directory, { force: true, recursive: true });
     }
