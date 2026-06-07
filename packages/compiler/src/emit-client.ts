@@ -293,11 +293,12 @@ function emitComponent(
   const allocator = createNameAllocator([...component.bindingNames, templateName]);
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
+  const functionKeyword = emitFunctionKeyword(component);
 
   if (component.root.kind === "component") {
     const state = { allocateName: allocator, textIndex: 0, helperNames, clientBoundaryHelperName };
     return [
-      `${component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+      `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
       `  return ${emitComponentCall(
         component.root.name,
@@ -317,7 +318,7 @@ function emitComponent(
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
     return [
-      `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+      `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
@@ -339,7 +340,7 @@ function emitComponent(
   });
   return [
     `const ${templateName} = ${helperNames.createTemplate}(${templateHtml});`,
-    `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+    `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
     `  const ${fragmentName} = ${templateName}();`,
     component.root.kind === "fragment"
@@ -351,6 +352,12 @@ function emitComponent(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function emitFunctionKeyword(component: ComponentIr): string {
+  return `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
+    component.async === true ? "async " : ""
+  }function`;
 }
 
 function renderStaticHtml(node: JsxNodeIr): string {

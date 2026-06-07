@@ -302,9 +302,12 @@ function emitComponent(
 ): string {
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
+  const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
+    component.async === true ? "async " : ""
+  }function`;
 
   return [
-    `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}function ${component.name}(${parameters}) {`,
+    `${functionKeyword} ${component.name}(${parameters}) {`,
     ...body,
     `  return ${emitJsxNode(component.root, helperNames, dev)};`,
     `}`,

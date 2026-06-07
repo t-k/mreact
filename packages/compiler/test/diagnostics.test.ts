@@ -1,3 +1,4 @@
+import { parseSync } from "oxc-parser";
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 
@@ -198,6 +199,86 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test("reports async function components as unsupported in client output", () => {
+    const code = [
+      "async function getTitle() { return 'Hello'; }",
+      "export async function App() {",
+      "  const title = await getTitle();",
+      "  return <h1>{title}</h1>;",
+      "}",
+    ].join("\n");
+    const clientOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+    const serverStringOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "string",
+      dev: true,
+    });
+    const serverStreamOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: true,
+    });
+
+    expect(clientOutput.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_ASYNC_COMPONENT_CLIENT_UNSUPPORTED",
+        level: "error",
+      }),
+    );
+    expect(serverStringOutput.diagnostics).toEqual([]);
+    expect(serverStreamOutput.diagnostics).toEqual([]);
+    expectModuleParses(clientOutput.code);
+    expectModuleParses(serverStringOutput.code);
+    expectModuleParses(serverStreamOutput.code);
+  });
+
+  test("reports async arrow components as unsupported in client output", () => {
+    const code = [
+      "async function getTitle() { return 'Hello'; }",
+      "export const App = async () => {",
+      "  const title = await getTitle();",
+      "  return <h1>{title}</h1>;",
+      "};",
+    ].join("\n");
+    const output = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+    const compatOutput = transform({
+      code,
+      filename: "App.tsx",
+      target: "client",
+      mode: "compat",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_ASYNC_COMPONENT_CLIENT_UNSUPPORTED",
+        level: "error",
+      }),
+    );
+    expect(compatOutput.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_ASYNC_COMPONENT_CLIENT_UNSUPPORTED",
+        level: "error",
+      }),
+    );
+    expectModuleParses(output.code);
+    expectModuleParses(compatOutput.code);
+  });
+
   test("reports unparseable JSX text expression recovery", () => {
     const output = transform({
       code: `export function App() {
@@ -266,3 +347,9 @@ describe("compiler diagnostics", () => {
     );
   });
 });
+
+function expectModuleParses(code: string): void {
+  const parsed = parseSync("output.js", code, { sourceType: "module" });
+
+  expect(parsed.errors).toEqual([]);
+}

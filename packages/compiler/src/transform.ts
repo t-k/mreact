@@ -3,6 +3,7 @@ import { emitCompat } from "./emit-compat.js";
 import { emitServer } from "./emit-server.js";
 import { emitServerStream } from "./emit-server-stream.js";
 import { analyzeCompilerModuleContextWithOxc, analyzeWithOxc } from "./oxc.js";
+import { unsupportedClientAsyncComponentDiagnostic } from "./diagnostics.js";
 import type { ComponentIr, JsxNodeIr } from "./ir.js";
 import type { AnalyzeToIrInput, AnalyzeToIrOutput, CompilerModuleContext } from "./internal.js";
 import type { AnalyzeModuleOptions } from "./types.js";
@@ -74,6 +75,11 @@ function transformWithAnalyzer(
   } as const;
   const analyzed = analyze(analyzeTarget, analyzeOptions);
   const diagnostics = [...analyzed.diagnostics];
+
+  if (input.target === "client") {
+    diagnostics.push(...collectClientAsyncComponentDiagnostics(analyzed.ir.components));
+  }
+
   const emitted =
     mode === "compat" && input.target === "client"
       ? emitCompat(analyzed.ir, { dev: input.dev })
@@ -167,6 +173,14 @@ function transformWithAnalyzer(
     diagnostics,
     metadata,
   };
+}
+
+function collectClientAsyncComponentDiagnostics(
+  components: readonly ComponentIr[],
+): TransformOutput["diagnostics"] {
+  return components
+    .filter((component) => component.async === true)
+    .map((component) => unsupportedClientAsyncComponentDiagnostic(component.name));
 }
 
 function createSourceMap(input: TransformInput, outputCode: string): string {

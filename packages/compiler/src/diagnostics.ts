@@ -77,6 +77,14 @@ export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
   };
 }
 
+export function unsupportedClientAsyncComponentDiagnostic(name: string): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_ASYNC_COMPONENT_CLIENT_UNSUPPORTED",
+    message: `Async component '${name}' cannot be emitted by the client target. Async components are server-only; move data fetching into a route loader with <Await>, or fetch on the client with an effect or query library.`,
+  };
+}
+
 export function unsupportedAwaitInnerComponentDiagnostic(
   name: string,
   loc?: SourceLocation,
