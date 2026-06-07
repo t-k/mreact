@@ -170,6 +170,11 @@ export interface InvalidateQueriesOptions {
     queryKey?: QueryKey;
 }
 
+// Warning: (ae-forgotten-export) The symbol "QueryClientScopeUnavailableError" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export function isQueryClientScopeUnavailableError(error: unknown): error is QueryClientScopeUnavailableError;
+
 // @public (undocumented)
 interface MutationObserver_2<TVariables, TData> {
     // (undocumented)

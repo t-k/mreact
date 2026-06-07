@@ -54,6 +54,11 @@ export interface AppMetadataRoute {
 // @public (undocumented)
 export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
+// Warning: (ae-forgotten-export) The symbol "HasRouteParams" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type AppRouteHref<Path extends `/${string}`> = HasRouteParams<Path> extends true ? (options: DynamicHrefOptions<Path>) => string : (options?: StaticHrefOptions) => string;
+
 // @public (undocumented)
 export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
     // (undocumented)
@@ -273,7 +278,7 @@ export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 // @public (undocumented)
 export interface AppRouterServerActionOptions {
     // (undocumented)
-    allowedActions?: readonly AppRouterAllowedServerAction[] | undefined;
+    allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
     // (undocumented)
     authorize?: ServerActionHandlerOptions["authorize"] | undefined;
     // (undocumented)
@@ -502,6 +507,12 @@ export interface DetectedLocale<Locale extends string = string> {
 export function detectLocale<Locale extends string>(request: Request, options: LocaleRoutingOptions<Locale>): DetectedLocale<Locale>;
 
 // @public (undocumented)
+export interface DynamicHrefOptions<Path extends `/${string}`> extends StaticHrefOptions {
+    // (undocumented)
+    params: RouteParamsFor<Path>;
+}
+
+// @public (undocumented)
 export interface FileSystemPrerenderStoreOptions {
     // (undocumented)
     directory: string;
@@ -545,6 +556,9 @@ export const getSession: typeof getSession_2;
 
 // @public (undocumented)
 export function headers(request: Request): Headers;
+
+// @public (undocumented)
+export function href<const Path extends `/${string}`>(path: Path, ...args: HasRouteParams<Path> extends true ? [options: DynamicHrefOptions<Path>] : [options?: StaticHrefOptions]): string;
 
 // @public (undocumented)
 export function html(value: string, init?: ResponseInit): Response;
@@ -1153,6 +1167,12 @@ export interface RouteMetadata {
 // @public (undocumented)
 export type RouteParams = Record<string, readonly string[] | string>;
 
+// Warning: (ae-forgotten-export) The symbol "Simplify" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ExtractRouteParams" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type RouteParamsFor<Path extends `/${string}`> = Simplify<ExtractRouteParams<Path>>;
+
 // @public (undocumented)
 export interface RouterInstrumentation {
     // (undocumented)
@@ -1242,6 +1262,12 @@ export interface RouterTraceContext {
     // (undocumented)
     tracestate?: string;
 }
+
+// @public (undocumented)
+export type RouteSearchParams = Record<string, RouteSearchValue | readonly RouteSearchValue[]>;
+
+// @public (undocumented)
+export type RouteSearchValue = boolean | number | string | null | undefined;
 
 // @public (undocumented)
 export interface RouteSecurityHeaders {
@@ -1423,6 +1449,14 @@ export interface StartServerOptions {
     serverActions?: AppRouterServerActionOptions | undefined;
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy;
+}
+
+// @public (undocumented)
+export interface StaticHrefOptions {
+    // (undocumented)
+    hash?: string | undefined;
+    // (undocumented)
+    search?: RouteSearchParams | undefined;
 }
 
 // @public (undocumented)

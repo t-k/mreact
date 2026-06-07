@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.142 - 2026-06-07
+
+### Added
+
+- Added typed route URL helpers for the App Router: `href()` builds encoded internal route URLs from patterns such as `"/users/:id"` and build output now writes `.mreact/routes.d.ts` with the discovered route path union and typed route map.
+
+### Changed
+
+- Changed App Router production builds to emit only Node-compatible server/client artifacts by default. Cloudflare Workers, AWS Lambda, or all adapter artifacts now require an explicit `--target`, `buildTargets`, or `buildApp({ targets })` opt-in.
+- Hardened App Router metadata handling across Node and Cloudflare by validating static and generated metadata before head/header emission, rejecting unsafe head attributes and URL schemes, and applying metadata CSP/security headers to Cloudflare page responses, including generated string/stream route modules and pages that return a `Response`.
+- Hardened request-scoped server query state so server integrations without installed `AsyncLocalStorage` fail instead of falling back to shared module-level query client state.
+
+### Fixed
+
+- Fixed production server action dispatch to fail closed when no generated or explicit action allow-list is present. Direct integrations that intentionally expose every registered server action must now opt in with `allowedActions: "any"`.
+- Fixed silent middleware skip ID typos by validating configured skip IDs against discovered middleware IDs during build and render setup.
+- Added a diagnostic when a route renders `Link` while explicitly exporting `navigationRuntime = false`, making the client-navigation opt-out visible during build and development.
+
 ## 0.0.141 - 2026-06-06
 
 ### Added
