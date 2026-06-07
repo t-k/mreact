@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.144 - 2026-06-07
+
+### Fixed
+
+- Improved `@reckona/mreact-reactive-dom` keyed `bindList()` initial browser rendering by claiming empty marker-only parents with a single whole-parent replacement instead of inserting each row one at a time, reducing the `primitive-browser` create 1k rows median from 1.1ms to 0.9ms in the release verification run.
+
 ## 0.0.143 - 2026-06-07
 
 ### Fixed
