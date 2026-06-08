@@ -57,6 +57,15 @@ describe("docs-site example contract", () => {
     expect(nav.indexOf('slug: "guides/project-structure"')).toBeLessThan(
       nav.indexOf('slug: "guides/app-router"'),
     );
+    expect(nav.indexOf('slug: "guides/app-router"')).toBeLessThan(
+      nav.indexOf('slug: "guides/routing"'),
+    );
+    expect(nav.indexOf('slug: "guides/environment-variables"')).toBeGreaterThan(
+      nav.indexOf('slug: "guides/data-loading"'),
+    );
+    expect(nav.indexOf('slug: "guides/environment-variables"')).toBeLessThan(
+      nav.indexOf('slug: "guides/http-apis"'),
+    );
     expect(nav).toContain('{ text: "Overview", slug: "" }');
     expect(nav).not.toContain(
       'text: "Getting Started",\n    items: [{ text: "Getting Started", slug: "getting-started" }]',

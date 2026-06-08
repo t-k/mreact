@@ -22,7 +22,6 @@ export const sidebar: readonly NavGroup[] = [
     items: [
       { text: "Project Structure", slug: "guides/project-structure" },
       { text: "App Router", slug: "guides/app-router" },
-      { text: "Environment Variables", slug: "guides/environment-variables" },
       { text: "Routing", slug: "guides/routing" },
       { text: "Layouts and Slots", slug: "guides/layouts-and-slots" },
       { text: "Server and Client Model", slug: "guides/server-and-client-model" },
@@ -31,6 +30,7 @@ export const sidebar: readonly NavGroup[] = [
       { text: "Client Boundaries", slug: "guides/client-boundaries" },
       { text: "Link and Navigation", slug: "guides/link-and-navigation" },
       { text: "Data Loading", slug: "guides/data-loading" },
+      { text: "Environment Variables", slug: "guides/environment-variables" },
       { text: "HTTP APIs", slug: "guides/http-apis" },
       { text: "Route Handlers", slug: "guides/route-handlers" },
       { text: "Middleware", slug: "guides/middleware" },
