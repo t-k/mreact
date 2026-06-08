@@ -52,6 +52,7 @@ import referenceMetadataApi, * as referenceMetadataApiMeta from "./content/refer
 import referenceResponseHelpers, * as referenceResponseHelpersMeta from "./content/reference/response-helpers.mdx";
 import referenceRouteHandlerContext, * as referenceRouteHandlerContextMeta from "./content/reference/route-handler-context.mdx";
 import referenceRouteModuleExports, * as referenceRouteModuleExportsMeta from "./content/reference/route-module-exports.mdx";
+import { BenchmarkResults } from "./ui/BenchmarkResults.js";
 
 export interface DocsPage {
   description: string;
@@ -64,13 +65,27 @@ function page(
   slug: string,
   Content: () => ReactElement | null,
   meta: { description?: string | undefined; title?: string | undefined },
+  options?: { readonly replacements?: readonly HtmlReplacement[] | undefined },
 ): DocsPage {
+  const renderedHtml = applyHtmlReplacements(renderToString(Content), options?.replacements ?? []);
+
   return {
     description: meta.description ?? "Mreact documentation.",
-    html: enhanceCodeBlocks(renderToString(Content)),
+    html: enhanceCodeBlocks(renderedHtml),
     slug,
     title: meta.title ?? slug,
   };
+}
+
+interface HtmlReplacement {
+  readonly html: string;
+  readonly marker: string;
+}
+
+function applyHtmlReplacements(html: string, replacements: readonly HtmlReplacement[]): string {
+  return replacements.reduce((currentHtml, replacement) => {
+    return currentHtml.replace(replacement.marker, replacement.html);
+  }, html);
 }
 
 function enhanceCodeBlocks(html: string): string {
@@ -81,7 +96,14 @@ function enhanceCodeBlocks(html: string): string {
 
 export const docsPages = [
   page("", overview, overviewMeta),
-  page("benchmarks", benchmarks, benchmarksMeta),
+  page("benchmarks", benchmarks, benchmarksMeta, {
+    replacements: [
+      {
+        html: renderToString(BenchmarkResults),
+        marker: "<p>BENCHMARK_RESULTS_PLACEHOLDER</p>",
+      },
+    ],
+  }),
   page("getting-started", gettingStarted, gettingStartedMeta),
   page("guides/app-router", guidesAppRouter, guidesAppRouterMeta),
   page("guides/project-structure", guidesProjectStructure, guidesProjectStructureMeta),

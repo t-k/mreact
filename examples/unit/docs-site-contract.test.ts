@@ -85,7 +85,7 @@ describe("docs-site example contract", () => {
 
     expect(contentRegistry).toContain('import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";');
     expect(contentRegistry).toContain('page("", overview, overviewMeta)');
-    expect(contentRegistry).toContain('page("benchmarks", benchmarks, benchmarksMeta)');
+    expect(contentRegistry).toContain('page("benchmarks", benchmarks, benchmarksMeta, {');
     expect(contentRegistry).toContain('filter((slug) => slug !== "")');
     expect(contentRegistry).not.toContain('page("overview", overview, overviewMeta)');
     expect(homePage).toContain('pageForSlug("")');
@@ -117,20 +117,44 @@ describe("docs-site example contract", () => {
     expect(css).not.toContain("padding: 2.7rem 1rem 1rem");
   });
 
+  test("renders readable document lists and the latest benchmark run", async () => {
+    const css = await readDocsSite("src/app/globals.css");
+    const benchmarks = await readDocsSite("src/content/benchmarks.mdx");
+    const benchmarkData = await readDocsSite("src/benchmark-results.ts");
+    const benchmarkResults = await readDocsSite("src/ui/BenchmarkResults.tsx");
+
+    expect(css).toContain("list-style: disc");
+    expect(css).toContain("list-style: decimal");
+    expect(css).toContain(".benchmark-results");
+    expect(css).toContain(".benchmark-bar-fill");
+    expect(benchmarks).toContain("BENCHMARK_RESULTS_PLACEHOLDER");
+    expect(await readDocsSite("src/content-registry.ts")).toContain("renderToString(BenchmarkResults)");
+    expect(benchmarkData).toContain("benchmarks/results/2026-06-07/002");
+    expect(benchmarkData).toContain("browser create 1k rows");
+    expect(benchmarkData).toContain("mreact-app-router");
+    expect(benchmarkResults).toContain("benchmark-chart");
+    expect(benchmarkResults).toContain("lowerIsBetter");
+  });
+
   test("keeps prose typography readable and aligned with the earlier docs site", async () => {
     const css = await readDocsSite("src/app/globals.css");
 
-    expect(css).toContain("--bg: #fafaf9");
-    expect(css).toContain("--text: #1c1917");
-    expect(css).toContain("--brand: #92400e");
-    expect(css).toContain("--bg: #0b0f1a");
-    expect(css).toContain("--brand: #a5b4fc");
-    expect(css).toContain("--code-panel-bg: #020617");
+    expect(css).toContain("--bg: oklch(");
+    expect(css).toContain("--text: oklch(");
+    expect(css).toContain("--brand: oklch(");
+    expect(css).toContain("--code-panel-bg: oklch(");
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    expect(css).not.toMatch(/\b(?:rgb|rgba|hsl|hsla)\(/);
     expect(css).toContain("color-scheme: only dark");
     expect(css).toContain('-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif');
-    expect(css).toContain("max-width: 720px");
+    expect(css).toContain("width: 100%");
+    expect(css).toContain("max-width: none");
     expect(css).toContain("line-height: 1.75");
-    expect(css).toContain("margin: 16px 0");
+    expect(css).toContain("font-size: 1rem");
+    expect(css).toContain("margin: 1rem 0");
+    expect(css).not.toContain("font-size: 16px");
+    expect(css).not.toContain("max-width: 720px");
+    expect(css).not.toContain("margin: 16px 0");
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
     expect(css).toContain(".site-source-link");
