@@ -10,15 +10,25 @@ export const metadata = {
 export default function RootLayout() {
   return (
     <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script src={sitePath("docs-copy.js")} defer></script>
+      </head>
       <body>
         <a class="skip-link" href="#content">
           Skip to content
         </a>
         <div class="site-shell">
           <aside class="site-sidebar">
-            <a class="site-brand" href={sitePath()}>
-              Mreact Docs
-            </a>
+            <div class="site-sidebar-header">
+              <a class="site-brand" href={sitePath()}>
+                Mreact Docs
+              </a>
+              <a class="site-source-link" href="https://github.com/t-k/mreact">
+                GitHub
+              </a>
+            </div>
             <nav aria-label="Primary">
               {sidebar.map((group) => (
                 <section class="nav-group" key={group.text}>

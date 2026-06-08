@@ -1,0 +1,22 @@
+export const title = "Benchmarks";
+export const description = "Current Mreact benchmark areas and how to interpret the results.";
+
+# Benchmarks
+
+Benchmarks are part of Mreact's development loop. They are used to watch client bundle size, server rendering throughput, streaming behavior, route artifact shape, and deployment startup paths.
+
+## What we measure
+
+- **Client bundle size** - How much JavaScript is shipped for routes that need browser interactivity.
+- **Server rendering cost** - How much work the server does to produce HTML.
+- **Streaming behavior** - Whether pages can deliver useful HTML before all deferred work finishes.
+- **Route artifact shape** - Whether middleware, redirects, loaders, and render modules stay separated enough to avoid unnecessary imports.
+- **Deployment startup** - Cold and first-request behavior on AWS Lambda, Cloudflare, and containers.
+
+## Latest results
+
+The current benchmark artifacts live in the repository benchmark outputs. This page should link to published benchmark reports once they are generated for the docs site.
+
+## How to read results
+
+Treat benchmark numbers as trend signals, not universal promises. Compare runs with the same Node version, adapter target, route set, and build mode before drawing conclusions.

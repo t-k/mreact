@@ -1,6 +1,7 @@
 import { renderToString, type ReactElement } from "@reckona/mreact";
 
 import overview, * as overviewMeta from "./content/overview.mdx";
+import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";
 import gettingStarted, * as gettingStartedMeta from "./content/getting-started.mdx";
 import guidesAppRouter, * as guidesAppRouterMeta from "./content/guides/app-router.mdx";
 import guidesAuthentication, * as guidesAuthenticationMeta from "./content/guides/authentication.mdx";
@@ -66,14 +67,21 @@ function page(
 ): DocsPage {
   return {
     description: meta.description ?? "Mreact documentation.",
-    html: renderToString(Content),
+    html: enhanceCodeBlocks(renderToString(Content)),
     slug,
     title: meta.title ?? slug,
   };
 }
 
+function enhanceCodeBlocks(html: string): string {
+  return html.replaceAll(/<pre>([\s\S]*?)<\/pre>/g, (_match, preBody: string) => {
+    return `<div class="code-block"><button class="code-copy" type="button">Copy</button><pre>${preBody}</pre></div>`;
+  });
+}
+
 export const docsPages = [
-  page("overview", overview, overviewMeta),
+  page("", overview, overviewMeta),
+  page("benchmarks", benchmarks, benchmarksMeta),
   page("getting-started", gettingStarted, gettingStartedMeta),
   page("guides/app-router", guidesAppRouter, guidesAppRouterMeta),
   page("guides/project-structure", guidesProjectStructure, guidesProjectStructureMeta),
@@ -135,5 +143,5 @@ export function pageForSlug(slug: string): DocsPage | undefined {
 }
 
 export function allSlugs(): readonly string[] {
-  return docsPages.map((page) => page.slug);
+  return docsPages.map((page) => page.slug).filter((slug) => slug !== "");
 }

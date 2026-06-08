@@ -11,11 +11,11 @@ export interface NavGroup {
 export const sidebar: readonly NavGroup[] = [
   {
     text: "Overview",
-    items: [{ text: "Overview", slug: "overview" }],
-  },
-  {
-    text: "Getting Started",
-    items: [{ text: "Getting Started", slug: "getting-started" }],
+    items: [
+      { text: "Overview", slug: "" },
+      { text: "Benchmarks", slug: "benchmarks" },
+      { text: "Getting Started", slug: "getting-started" },
+    ],
   },
   {
     text: "Guides",

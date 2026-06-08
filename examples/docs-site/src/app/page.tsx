@@ -5,11 +5,11 @@ export const prerender = true;
 
 export const metadata = {
   title: "Overview | Mreact Docs",
-  description: "Start here for Mreact's purpose, status, and documentation map.",
+  description: "Why Mreact exists, what it optimizes for, and how experimental it is today.",
 };
 
 export default function HomePage() {
-  const page = pageForSlug("overview");
+  const page = pageForSlug("");
 
   if (page === undefined) {
     return <main>Missing overview.</main>;

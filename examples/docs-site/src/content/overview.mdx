@@ -1,17 +1,26 @@
 export const title = "Overview";
-export const description = "What Mreact is, what is stable enough to try, and where to go next.";
+export const description = "Why Mreact exists, what it optimizes for, and how experimental it is today.";
 
-# Mreact documentation
+# Mreact
 
-Mreact is a compiler-first, React-flavored framework for building server-rendered applications that only ship client JavaScript where a route needs it. The docs are organized around the path a developer follows: understand the model, build features, deploy safely, then look up exact APIs.
+Mreact is a [React](https://react.dev/)-flavored framework inspired by [Marko](https://markojs.com/)'s HTML-first and streaming-first philosophy, with ideas from [Solid](https://www.solidjs.com/) and [Qwik](https://qwik.dev/) where they fit Mreact's compiler model.
 
-## Status and limitations
+## Motivations
 
-Mreact is experimental. APIs may change before `0.1.0`, and some areas are intentionally conservative: client boundary inference follows supported static shapes rather than arbitrary program semantics, MDX is integrated through Vite plugins rather than native `page.mdx` routes, and production authentication examples are starter patterns rather than complete identity-provider integrations.
+- **Fine-grained reactivity** - Use a dependency graph to update only the parts that need to change.
+- **Modular runtime** - Avoid shipping client runtime for routes that do not need it. A route with no client-side signals can stay server-rendered without a client route bundle.
+- **Compile-time over runtime** - Prefer compiler work over a large browser runtime.
+- **Chunk-based streaming SSR** - Favor memory efficiency and incremental delivery by sending HTML in chunks instead of buffering the full document, similar to Marko's streaming model.
+- **Dual environment optimization** - Compile server and browser output separately. The server output specializes in HTML, loaders, middleware, metadata, and server actions, while the browser output specializes in DOM updates and route-local interactivity.
 
-## Reading path
+## Status
 
-- Start with Getting Started if you want to create and run an app.
-- Use Guides when you are implementing routes, APIs, auth, metadata, CSS, or deployment-sensitive behavior.
-- Use Deployments when you are preparing production output, GitHub Pages, Cloudflare, Lambda, containers, source maps, logging, or CDN assets.
-- Use Reference when you need exact option names, route exports, adapter APIs, or environment variables.
+Mreact is experimental. APIs may change.
+
+We are dogfooding it in our own products and have tested deployments on Cloud Run, Cloudflare, and AWS Lambda.
+
+## Performance
+
+Mreact is developed with performance in mind, including client bundle size, server rendering cost, streaming behavior, and deployment startup time.
+
+See the [Benchmarks](/benchmarks/) page for the latest benchmark results and what they measure.

@@ -1,10 +1,12 @@
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
 
 const outDir = join(process.cwd(), ".mreact");
 const exportDir = join(process.cwd(), "dist");
 const basePath = normalizeBasePath(process.env.MREACT_DOCS_BASE_PATH ?? "");
+
+await rm(exportDir, { recursive: true, force: true });
 
 await exportStaticApp({
   exportDir,
