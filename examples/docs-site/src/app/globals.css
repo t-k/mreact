@@ -353,8 +353,7 @@ a:hover {
 }
 
 .benchmark-meta,
-.benchmark-panel,
-.benchmark-highlight {
+.benchmark-ranking-card {
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 0.625rem;
@@ -406,110 +405,162 @@ a:hover {
   margin: 0;
 }
 
-.benchmark-highlights {
+.benchmark-ranking-suite {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
 }
 
-.benchmark-highlight {
+.benchmark-ranking-suite + .benchmark-ranking-suite {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 52rem;
+}
+
+.benchmark-ranking-suite-heading {
   display: grid;
-  gap: 0.3rem;
-  padding: 1rem;
+  gap: 0.35rem;
 }
 
-.benchmark-highlight-value {
-  color: var(--brand);
-  font-size: 1.35rem;
-  font-weight: 750;
-  line-height: 1.15;
+.benchmark-ranking-suite-heading h3 {
+  margin-bottom: 0;
 }
 
-.benchmark-highlight-label {
+.benchmark-ranking-suite-heading p {
   color: var(--text-2);
-  font-size: 0.9rem;
-  line-height: 1.4;
+  margin: 0;
 }
 
-.benchmark-grid {
+.benchmark-ranking-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
 }
 
-.benchmark-panel {
+.benchmark-ranking-card {
+  container-type: inline-size;
   display: grid;
   gap: 1rem;
   padding: 1.25rem;
 }
 
-.benchmark-panel-heading {
+.benchmark-ranking-card-heading {
   align-items: baseline;
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
   justify-content: space-between;
 }
 
-.benchmark-panel h3 {
+.benchmark-ranking-card h4 {
+  font-size: 1.05rem;
   margin: 0;
+  text-wrap: pretty;
 }
 
-.benchmark-panel p {
-  color: var(--text-2);
-  margin: 0;
-}
-
-.benchmark-panel-heading p {
+.benchmark-ranking-card-heading span {
   color: var(--text-3);
   flex: none;
-  font-size: 0.82rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-transform: uppercase;
 }
 
-.benchmark-chart {
+.benchmark-ranking-card p {
+  color: var(--text-2);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.benchmark-rank-list {
   display: grid;
-  gap: 0.7rem;
+  gap: 0.65rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.benchmark-bar-row {
+.benchmark-rank-row {
   align-items: center;
+  background: color-mix(in oklch, var(--bg) 72%, var(--bg-soft));
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) minmax(7rem, max-content);
+  grid-template-columns: 3rem minmax(0, 1fr) max-content max-content;
+  padding: 0.65rem 0.75rem;
 }
 
-.benchmark-label,
-.benchmark-value {
-  font-size: 0.88rem;
+.benchmark-rank-row.is-mreact {
+  background: color-mix(in oklch, var(--brand) 15%, var(--bg));
+  border-color: color-mix(in oklch, var(--brand) 52%, var(--border));
 }
 
-.benchmark-label {
-  color: var(--text);
-  overflow-wrap: anywhere;
-}
-
-.benchmark-value {
-  color: var(--text-2);
+.benchmark-rank-index,
+.benchmark-rank-value,
+.benchmark-rank-diff {
   font-variant-numeric: tabular-nums;
-  text-align: right;
   white-space: nowrap;
 }
 
-.benchmark-bar-track {
+.benchmark-rank-index {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 999rem;
-  display: block;
-  height: 0.625rem;
-  overflow: hidden;
+  color: var(--text-2);
+  display: inline-flex;
+  font-size: 0.8rem;
+  font-weight: 800;
+  justify-content: center;
+  line-height: 1;
+  padding: 0.32rem 0.45rem;
 }
 
-.benchmark-bar-fill {
-  background: linear-gradient(90deg, var(--brand), var(--accent));
-  border-radius: inherit;
-  display: block;
-  height: 100%;
-  width: var(--bar-width);
+.benchmark-rank-framework {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 700;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.benchmark-rank-row:first-child .benchmark-rank-index {
+  background: color-mix(in oklch, var(--brand) 18%, var(--bg));
+  border-color: color-mix(in oklch, var(--brand) 45%, var(--border));
+  color: var(--brand-strong);
+}
+
+.benchmark-rank-row.is-mreact .benchmark-rank-framework {
+  color: var(--brand-strong);
+  font-weight: 850;
+}
+
+.benchmark-rank-value {
+  color: var(--text-2);
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-align: right;
+}
+
+.benchmark-rank-diff {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+@container (max-width: 23rem) {
+  .benchmark-ranking-card-heading {
+    align-items: flex-start;
+    display: grid;
+  }
+
+  .benchmark-rank-row {
+    grid-template-columns: 3rem minmax(0, 1fr);
+  }
+
+  .benchmark-rank-value,
+  .benchmark-rank-diff {
+    grid-column: 2;
+    text-align: left;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -553,18 +604,7 @@ a:hover {
     display: grid;
   }
 
-  .benchmark-meta,
-  .benchmark-grid,
-  .benchmark-bar-row {
+  .benchmark-meta {
     grid-template-columns: 1fr;
-  }
-
-  .benchmark-panel-heading {
-    align-items: flex-start;
-    display: grid;
-  }
-
-  .benchmark-value {
-    text-align: left;
   }
 }

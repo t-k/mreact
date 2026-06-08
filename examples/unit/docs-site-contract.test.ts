@@ -55,7 +55,9 @@ describe("docs-site example contract", () => {
       { text: "Getting Started", slug: "getting-started" },
     ],`);
     expect(nav).toContain('{ text: "Overview", slug: "" }');
-    expect(nav).not.toContain('text: "Getting Started",\n    items: [{ text: "Getting Started", slug: "getting-started" }]');
+    expect(nav).not.toContain(
+      'text: "Getting Started",\n    items: [{ text: "Getting Started", slug: "getting-started" }]',
+    );
     expect(nav).not.toContain('slug: "overview"');
   });
 
@@ -65,7 +67,9 @@ describe("docs-site example contract", () => {
 
     expect(layout).toContain("Mreact Docs");
     expect(layout).toContain('<meta charset="utf-8" />');
-    expect(layout).toContain('<meta name="viewport" content="width=device-width, initial-scale=1" />');
+    expect(layout).toContain(
+      '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    );
     expect(layout).toContain("https://github.com/t-k/mreact");
     expect(layout).toContain('src={sitePath("docs-copy.js")}');
     expect(overview).toContain("# Mreact");
@@ -83,13 +87,17 @@ describe("docs-site example contract", () => {
     const homePage = await readDocsSite("src/app/page.tsx");
     const exportScript = await readDocsSite("scripts/export-static.ts");
 
-    expect(contentRegistry).toContain('import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";');
+    expect(contentRegistry).toContain(
+      'import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";',
+    );
     expect(contentRegistry).toContain('page("", overview, overviewMeta)');
     expect(contentRegistry).toContain('page("benchmarks", benchmarks, benchmarksMeta, {');
     expect(contentRegistry).toContain('filter((slug) => slug !== "")');
     expect(contentRegistry).not.toContain('page("overview", overview, overviewMeta)');
     expect(homePage).toContain('pageForSlug("")');
-    expect(homePage).toContain("Why Mreact exists, what it optimizes for, and how experimental it is today.");
+    expect(homePage).toContain(
+      "Why Mreact exists, what it optimizes for, and how experimental it is today.",
+    );
     expect(homePage).not.toContain('pageForSlug("overview")');
     expect(exportScript).toContain("rm(exportDir");
   });
@@ -126,14 +134,27 @@ describe("docs-site example contract", () => {
     expect(css).toContain("list-style: disc");
     expect(css).toContain("list-style: decimal");
     expect(css).toContain(".benchmark-results");
-    expect(css).toContain(".benchmark-bar-fill");
+    expect(css).toContain(".benchmark-ranking-grid");
+    expect(css).toContain(".benchmark-ranking-card");
+    expect(css).toContain(".benchmark-rank-row.is-mreact");
     expect(benchmarks).toContain("BENCHMARK_RESULTS_PLACEHOLDER");
-    expect(await readDocsSite("src/content-registry.ts")).toContain("renderToString(BenchmarkResults)");
+    expect(await readDocsSite("src/content-registry.ts")).toContain(
+      "renderToString(BenchmarkResults)",
+    );
     expect(benchmarkData).toContain("benchmarks/results/2026-06-07/002");
+    expect(benchmarkData).toContain("primitive.md");
+    expect(benchmarkData).toContain("router.md");
+    expect(benchmarkData).toContain("primitive-browser.md");
+    expect(benchmarkData).toContain("cardCount: 15");
+    expect(benchmarkData).toContain("cardCount: 37");
+    expect(benchmarkData).toContain("cardCount: 4");
+    expect(benchmarkData).toContain("benchmarkRankingSuites");
     expect(benchmarkData).toContain("browser create 1k rows");
     expect(benchmarkData).toContain("mreact-app-router");
-    expect(benchmarkResults).toContain("benchmark-chart");
-    expect(benchmarkResults).toContain("lowerIsBetter");
+    expect(benchmarkResults).toContain("benchmark-ranking-grid");
+    expect(benchmarkResults).toContain("benchmark-rank-row");
+    expect(benchmarkResults).toContain("isMreactFramework");
+    expect(benchmarkResults).not.toContain("Full summary rows");
   });
 
   test("keeps prose typography readable and aligned with the earlier docs site", async () => {
@@ -146,7 +167,9 @@ describe("docs-site example contract", () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).not.toMatch(/\b(?:rgb|rgba|hsl|hsla)\(/);
     expect(css).toContain("color-scheme: only dark");
-    expect(css).toContain('-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif');
+    expect(css).toContain(
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+    );
     expect(css).toContain("width: 100%");
     expect(css).toContain("max-width: none");
     expect(css).toContain("line-height: 1.75");
@@ -161,11 +184,14 @@ describe("docs-site example contract", () => {
   });
 
   test("has source content for the critical launch pages", async () => {
-    await expect(access(join(docsSiteRoot, "src", "content", "overview.mdx"))).resolves.toBeUndefined();
+    await expect(
+      access(join(docsSiteRoot, "src", "content", "overview.mdx")),
+    ).resolves.toBeUndefined();
 
     for (const slug of requiredSlugs) {
-      await expect(access(join(docsSiteRoot, "src", "content", `${slug}.mdx`))).resolves
-        .toBeUndefined();
+      await expect(
+        access(join(docsSiteRoot, "src", "content", `${slug}.mdx`)),
+      ).resolves.toBeUndefined();
     }
   });
 

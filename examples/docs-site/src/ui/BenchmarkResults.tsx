@@ -1,9 +1,7 @@
 import {
-  benchmarkCharts,
-  benchmarkHighlights,
+  benchmarkRankingSuites,
   latestBenchmarkRun,
-  type BenchmarkChartDefinition,
-  type BenchmarkUnit,
+  type BenchmarkRankingRow,
 } from "../benchmark-results.js";
 
 export function BenchmarkResults() {
@@ -13,7 +11,8 @@ export function BenchmarkResults() {
         <div>
           <h3 id="latest-benchmark-results">Run 2026-06-07/002</h3>
           <p>
-            Selected completed rows from the latest repository benchmark artifacts. Charts show representative rows from the latest run, while the repository artifacts contain the full JSON and Markdown reports.
+            Complete ranking cards from the latest benchmark Markdown reports. These cards mirror
+            the ranking sections in the repository artifacts without trimming the result set.
           </p>
           <p class="benchmark-source-path">
             Source: <code>{latestBenchmarkRun.path}</code>
@@ -41,74 +40,52 @@ export function BenchmarkResults() {
         </dl>
       </div>
 
-      <div class="benchmark-highlights" aria-label="Mreact benchmark highlights">
-        {benchmarkHighlights.map((highlight) => (
-          <div class="benchmark-highlight" key={highlight.metric}>
-            <span class="benchmark-highlight-value">{formatMetric(highlight.value, highlight.unit)}</span>
-            <span class="benchmark-highlight-label">{highlight.metric}</span>
-          </div>
-        ))}
-      </div>
-
-      <div class="benchmark-grid">
-        {benchmarkCharts.map((chart) => (
-          <BenchmarkChart chart={chart} key={chart.id} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function BenchmarkChart({ chart }: { readonly chart: BenchmarkChartDefinition }) {
-  const maxValue = Math.max(...chart.rows.map((row) => row.value), 1);
-  const sortedRows = [...chart.rows].sort((a, b) => {
-    return chart.lowerIsBetter ? a.value - b.value : b.value - a.value;
-  });
-
-  return (
-    <section class="benchmark-panel" aria-labelledby={`${chart.id}-title`}>
-      <div class="benchmark-panel-heading">
-        <h3 id={`${chart.id}-title`}>{chart.title}</h3>
-        <p>{chart.lowerIsBetter ? "Lower is better." : "Higher is better."}</p>
-      </div>
-      <p>{chart.description}</p>
-      <div class="benchmark-chart" aria-label={`${chart.caseName} chart`}>
-        {sortedRows.map((row) => {
-          const width = Math.max(2, (row.value / maxValue) * 100);
-
-          return (
-            <div class="benchmark-bar-row" key={`${chart.id}-${row.framework}`}>
-              <span class="benchmark-label">{row.framework}</span>
-              <span class="benchmark-bar-track" aria-hidden="true">
-                <span class="benchmark-bar-fill" style={`--bar-width: ${formatPercent(width)}%;`} />
-              </span>
-              <span class="benchmark-value">{formatMetric(row.value, chart.unit)}</span>
+      {benchmarkRankingSuites.map((suite) => (
+        <section
+          class="benchmark-ranking-suite"
+          aria-labelledby={`${suite.id}-rankings`}
+          key={suite.id}
+        >
+          <div class="benchmark-ranking-suite-heading">
+            <div>
+              <h3 id={`${suite.id}-rankings`}>{suite.title}</h3>
+              <p>
+                <code>{suite.source}</code> / {suite.cardCount} ranking cards
+              </p>
             </div>
-          );
-        })}
-      </div>
+          </div>
+          <div class="benchmark-ranking-grid">
+            {suite.cards.map((card) => (
+              <article class="benchmark-ranking-card" key={card.id}>
+                <div class="benchmark-ranking-card-heading">
+                  <h4>{card.title}</h4>
+                  <span>{card.rows.length} entries</span>
+                </div>
+                <p>{card.description}</p>
+                <ol class="benchmark-rank-list">
+                  {card.rows.map((row) => (
+                    <li
+                      class={`benchmark-rank-row${isMreactFramework(row) ? " is-mreact" : ""}`}
+                      key={`${card.id}-${row.rank}-${row.framework}`}
+                    >
+                      <span class="benchmark-rank-index">#{row.rank}</span>
+                      <span class="benchmark-rank-framework">{row.framework}</span>
+                      <span class="benchmark-rank-value">
+                        {row.value} {row.unit}
+                      </span>
+                      <span class="benchmark-rank-diff">{row.diff}</span>
+                    </li>
+                  ))}
+                </ol>
+              </article>
+            ))}
+          </div>
+        </section>
+      ))}
     </section>
   );
 }
 
-function formatMetric(value: number, unit: BenchmarkUnit): string {
-  if (unit === "gzip bytes") {
-    return `${Math.round(value).toLocaleString("en-US")} B gzip`;
-  }
-
-  if (unit === "ops/sec") {
-    return `${Math.round(value).toLocaleString("en-US")} ops/sec`;
-  }
-
-  return `${value.toLocaleString("en-US", {
-    maximumFractionDigits: value < 10 ? 2 : 1,
-    minimumFractionDigits: value < 1 ? 2 : 0,
-  })} ms`;
-}
-
-function formatPercent(value: number): string {
-  return value.toLocaleString("en-US", {
-    maximumFractionDigits: 2,
-    useGrouping: false,
-  });
+function isMreactFramework(row: BenchmarkRankingRow): boolean {
+  return row.isMreact;
 }
