@@ -14,6 +14,7 @@ export default function RootLayout() {
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script src={sitePath("docs-copy.js")} defer></script>
+        <script src={sitePath("docs-benchmarks.js")} defer></script>
       </head>
       <body>
         <a class="skip-link" href="#content">

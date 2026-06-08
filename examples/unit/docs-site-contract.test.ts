@@ -156,6 +156,8 @@ describe("docs-site example contract", () => {
     const benchmarks = await readDocsSite("src/content/benchmarks.mdx");
     const benchmarkData = await readDocsSite("src/benchmark-results.ts");
     const benchmarkResults = await readDocsSite("src/ui/BenchmarkResults.tsx");
+    const benchmarkFilters = await readDocsSite("public/docs-benchmarks.js");
+    const layout = await readDocsSite("src/app/layout.tsx");
 
     expect(css).toContain("list-style: disc");
     expect(css).toContain("list-style: decimal");
@@ -199,6 +201,38 @@ describe("docs-site example contract", () => {
     expect(benchmarkResults).toContain("benchmark-diff");
     expect(benchmarkResults).toContain("displayRank");
     expect(benchmarkResults).toContain("isMreactFramework");
+    expect(benchmarkResults).toContain("classifyBenchmarkCard");
+    expect(benchmarkResults).toContain("BenchmarkFilterBar");
+    expect(benchmarkResults).toContain("data-benchmark-badges");
+    expect(benchmarkResults).toContain("data-benchmark-filter");
+    expect(benchmarkResults).toContain("aria-pressed");
+    expect(benchmarkResults).toContain("benchmark-badge-list");
+    expect(benchmarkResults).toContain("benchmark-badge is-primary");
+    expect(benchmarkResults).toContain("is-size");
+    expect(benchmarkResults).toContain("is-ssr");
+    expect(benchmarkResults).toContain("is-interactivity");
+    expect(benchmarkResults).toContain('"Size"');
+    expect(benchmarkResults).toContain('"SSR"');
+    expect(benchmarkResults).toContain('"Interactivity"');
+    expect(benchmarkResults).toContain('"Navigation"');
+    expect(benchmarkResults).toContain('"Startup"');
+    expect(benchmarkResults).toContain('"Concurrency"');
+    expect(benchmarkResults).toContain('"Memory"');
+    expect(benchmarkResults).toContain('"Dev"');
+    expect(benchmarkResults).toContain('"Client"');
+    expect(benchmarkResults).toContain('"Server"');
+    expect(benchmarkResults).toContain('"Production"');
+    expect(css).toContain(".benchmark-badge-list");
+    expect(css).toContain(".benchmark-badge");
+    expect(css).toContain(".benchmark-filter-list");
+    expect(css).toContain(".benchmark-badge.is-size");
+    expect(css).toContain(".benchmark-badge.is-ssr");
+    expect(css).toContain(".benchmark-badge.is-interactivity");
+    expect(layout).toContain('docs-benchmarks.js');
+    expect(benchmarkFilters).toContain("data-benchmark-filter");
+    expect(benchmarkFilters).toContain("data-benchmark-badges");
+    expect(benchmarkFilters).toContain("aria-pressed");
+    expect(benchmarkFilters).toContain("hidden");
     expect(benchmarkResults).not.toContain("Full summary rows");
   });
 

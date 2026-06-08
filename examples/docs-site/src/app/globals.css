@@ -429,6 +429,34 @@ a:hover {
   margin: 0;
 }
 
+.benchmark-filter-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.benchmark-filter {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999rem;
+  color: var(--text-2);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 0.34rem 0.55rem;
+}
+
+.benchmark-filter.is-active {
+  box-shadow: 0 0 0 0.14rem color-mix(in oklch, var(--brand) 18%, transparent);
+}
+
+.benchmark-filter:focus-visible {
+  outline: 0.15rem solid var(--brand);
+  outline-offset: 0.15rem;
+}
+
 .benchmark-ranking-grid {
   display: grid;
   gap: 1rem;
@@ -467,6 +495,113 @@ a:hover {
   font-size: 0.82rem;
   font-weight: 700;
   text-transform: uppercase;
+}
+
+.benchmark-badge-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.benchmark-badge {
+  background: var(--benchmark-badge-bg, color-mix(in oklch, var(--bg) 74%, var(--border)));
+  border: 1px solid var(--benchmark-badge-border, var(--border));
+  border-radius: 999rem;
+  color: var(--benchmark-badge-text, var(--text-2));
+  font-size: 0.72rem;
+  font-weight: 750;
+  line-height: 1;
+  padding: 0.32rem 0.5rem;
+}
+
+.benchmark-badge.is-primary {
+  font-weight: 850;
+}
+
+.benchmark-badge.is-size {
+  --benchmark-badge-bg: oklch(0.94 0.045 145);
+  --benchmark-badge-border: oklch(0.78 0.1 145);
+  --benchmark-badge-text: oklch(0.34 0.085 145);
+}
+
+.benchmark-badge.is-ssr {
+  --benchmark-badge-bg: oklch(0.94 0.04 250);
+  --benchmark-badge-border: oklch(0.75 0.095 250);
+  --benchmark-badge-text: oklch(0.32 0.09 250);
+}
+
+.benchmark-badge.is-interactivity {
+  --benchmark-badge-bg: oklch(0.94 0.055 55);
+  --benchmark-badge-border: oklch(0.76 0.11 55);
+  --benchmark-badge-text: oklch(0.34 0.09 55);
+}
+
+.benchmark-badge.is-navigation {
+  --benchmark-badge-bg: oklch(0.94 0.048 205);
+  --benchmark-badge-border: oklch(0.74 0.105 205);
+  --benchmark-badge-text: oklch(0.32 0.085 205);
+}
+
+.benchmark-badge.is-startup {
+  --benchmark-badge-bg: oklch(0.94 0.05 20);
+  --benchmark-badge-border: oklch(0.74 0.12 20);
+  --benchmark-badge-text: oklch(0.34 0.095 20);
+}
+
+.benchmark-badge.is-concurrency {
+  --benchmark-badge-bg: oklch(0.94 0.042 305);
+  --benchmark-badge-border: oklch(0.76 0.105 305);
+  --benchmark-badge-text: oklch(0.34 0.09 305);
+}
+
+.benchmark-badge.is-memory {
+  --benchmark-badge-bg: oklch(0.94 0.047 120);
+  --benchmark-badge-border: oklch(0.76 0.1 120);
+  --benchmark-badge-text: oklch(0.34 0.085 120);
+}
+
+.benchmark-badge.is-dev,
+.benchmark-badge.is-development {
+  --benchmark-badge-bg: oklch(0.94 0.035 275);
+  --benchmark-badge-border: oklch(0.74 0.085 275);
+  --benchmark-badge-text: oklch(0.34 0.075 275);
+}
+
+.benchmark-badge.is-build {
+  --benchmark-badge-bg: oklch(0.94 0.045 185);
+  --benchmark-badge-border: oklch(0.75 0.1 185);
+  --benchmark-badge-text: oklch(0.32 0.085 185);
+}
+
+.benchmark-badge.is-routing {
+  --benchmark-badge-bg: oklch(0.94 0.04 230);
+  --benchmark-badge-border: oklch(0.75 0.095 230);
+  --benchmark-badge-text: oklch(0.32 0.09 230);
+}
+
+.benchmark-badge.is-client {
+  --benchmark-badge-bg: oklch(0.94 0.045 335);
+  --benchmark-badge-border: oklch(0.75 0.105 335);
+  --benchmark-badge-text: oklch(0.34 0.09 335);
+}
+
+.benchmark-badge.is-server {
+  --benchmark-badge-bg: oklch(0.93 0.02 255);
+  --benchmark-badge-border: oklch(0.72 0.04 255);
+  --benchmark-badge-text: oklch(0.32 0.04 255);
+}
+
+.benchmark-badge.is-browser {
+  --benchmark-badge-bg: oklch(0.94 0.05 85);
+  --benchmark-badge-border: oklch(0.76 0.105 85);
+  --benchmark-badge-text: oklch(0.33 0.085 85);
+}
+
+.benchmark-badge.is-production {
+  --benchmark-badge-bg: oklch(0.94 0.035 160);
+  --benchmark-badge-border: oklch(0.76 0.08 160);
+  --benchmark-badge-text: oklch(0.33 0.07 160);
 }
 
 .benchmark-chart {
