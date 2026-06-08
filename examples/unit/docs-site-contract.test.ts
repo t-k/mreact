@@ -118,6 +118,13 @@ describe("docs-site example contract", () => {
     expect(gettingStarted).not.toContain("A terminal that can run `npx`");
     expect(gettingStarted).toContain("Open the local URL printed by the dev server");
     expect(gettingStarted).toContain("src/app/page.tsx");
+    expect(gettingStarted).toContain("src/lib/app-info.ts");
+    expect(gettingStarted).toContain("counter starter");
+    expect(gettingStarted).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(gettingStarted).toContain("const count = cell<number>(0);");
+    expect(gettingStarted).toContain("count.get()");
+    expect(gettingStarted).toContain("count.set((value) => value + 1)");
+    expect(gettingStarted).toContain("Reset");
     expect(gettingStarted).toContain("src/app/docs/page.tsx");
     expect(gettingStarted).toContain("pnpm typecheck");
     expect(gettingStarted).toContain("pnpm lint");

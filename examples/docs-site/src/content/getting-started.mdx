@@ -31,7 +31,7 @@ npx @reckona/create-mreact-app
 
 ## What was generated
 
-With `--src-dir`, routes live in `src/app`, shared application code starts in `src/lib`, and public assets live in `public`:
+With `--src-dir`, routes live in `src/app`, shared application code starts in `src/lib`, and public assets live in `public`. The basic template now starts with a small counter app:
 
 ```text
 my-app/
@@ -40,6 +40,7 @@ my-app/
       layout.tsx
       page.tsx
     lib/
+      app-info.ts
   public/
   vite.config.ts
   tsconfig.json
@@ -48,21 +49,37 @@ my-app/
 
 The generated `vite.config.ts` wires the Mreact router plugin to those paths. The generated `tsconfig.json` includes app-router global types, so route layouts can use `<Slot />` without adding a local import. The generated `package.json` includes scripts for development, production build, type checking, linting, tests, and production serving.
 
-## Edit the first page
+## Try the counter
 
-Start with the home route at `src/app/page.tsx`. A route module exports a default component for the page and can export metadata for the document head:
+Open the local URL and click `+1`. The generated home page is a counter starter that uses `cell` for client interactivity while still keeping the route file in the app router.
+
+The `--src-dir` starter renders `src/app/page.tsx` with a title from `src/lib/app-info.ts`:
 
 ```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+import { appTitle } from "../lib/app-info.js";
+
 export const metadata = {
-  title: "Home",
-  description: "My first Mreact route.",
+  title: "Counter",
 };
 
 export default function Page() {
+  const count = cell<number>(0);
+
   return (
     <main>
-      <h1>Hello from Mreact</h1>
-      <p>This route is server-rendered by default.</p>
+      <h1>{appTitle}</h1>
+      <p>
+        Count: <strong>{count.get()}</strong>
+      </p>
+      <p>
+        <button type="button" onClick={() => count.set((value) => value + 1)}>
+          +1
+        </button>{" "}
+        <button type="button" onClick={() => count.set(0)}>
+          Reset
+        </button>
+      </p>
     </main>
   );
 }
@@ -70,7 +87,7 @@ export default function Page() {
 
 ## Add a route
 
-Add a page at `src/app/docs/page.tsx` to create `/docs/`:
+Add a second page at `src/app/docs/page.tsx` to create `/docs/`:
 
 ```tsx
 export const metadata = {
