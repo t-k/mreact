@@ -3,7 +3,7 @@ export const description = "Recommended folders for routes, shared code, public 
 
 # Project structure
 
-A generated `--src-dir` app uses this shape:
+Use this shape for a small `--src-dir` app:
 
 ```text
 my-app/
@@ -11,10 +11,49 @@ my-app/
     app/
       layout.tsx
       page.tsx
+      not-found.tsx
+      docs/
+        page.tsx
+        not-found.tsx
+      users/
+        $id/
+          page.tsx
+      files/
+        $...path/
+          page.tsx
+      api/
+        users/
+          route.ts
+          $id/
+            route.ts
     lib/
-      app-info.ts
+      format-date.ts
+      session.ts
   public/
+    favicon.svg
   vite.config.ts
 ```
 
-Keep route modules under `src/app`, app-local shared modules under `src/lib`, and static files under `public`. Built output goes to `.mreact` and should be treated as generated deployment material.
+Keep route modules under `src/app`, app-local shared modules under `src/lib`, and static files under `public/`. Built output goes to `.mreact` and should be treated as generated deployment material.
+
+## App routes
+
+The `src/app` directory is the route tree. A `page.tsx` file renders a page for its folder path, so `src/app/page.tsx` handles `/` and `src/app/docs/page.tsx` handles `/docs/`. A `layout.tsx` file wraps the matching subtree and is the right place for shared document structure, shell UI, and providers.
+
+Dynamic route folders start with `$`. Use `$id/` when the URL segment is a single identifier, such as `src/app/users/$id/page.tsx` for `/users/42/`. Route modules read that value as `params.id`. Catch-all route folders use `$...name`, such as `src/app/files/$...path/page.tsx`; the matched remainder is available as `params.path`.
+
+Add `not-found.tsx` where a route subtree needs its own 404 UI. The nearest `not-found.tsx` boundary is used when a route does not match or when route code calls `notFound()`. Use a root `src/app/not-found.tsx` for the site-wide fallback and nested files such as `src/app/docs/not-found.tsx` for section-specific messaging.
+
+## HTTP API routes
+
+Use `route.ts` for regular HTTP API endpoints inside the same route tree. For example, `src/app/api/users/route.ts` handles `/api/users/`, and `src/app/api/users/$id/route.ts` handles `/api/users/:id/`. Keep API-specific helpers in `src/lib` when they are shared by more than one endpoint or page.
+
+## Supporting files
+
+Use `src/lib` for application code that is not itself a route module: session helpers, formatting helpers, data access, and server-only utilities. Use `public/` for files that should be served by URL without going through the router, such as icons, robots.txt, and static downloads.
+
+## Related pages
+
+- [App Router](/guides/app-router/)
+- [HTTP APIs](/guides/http-apis/)
+- [Environment Variables](/guides/environment-variables/)

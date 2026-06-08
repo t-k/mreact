@@ -128,6 +128,27 @@ describe("docs-site example contract", () => {
     expect(gettingStarted).toContain("[App Router](/guides/app-router/)");
   });
 
+  test("documents project structure conventions for routes, params, 404s, and output", async () => {
+    const projectStructure = await readDocsSite("src/content/guides/project-structure.mdx");
+
+    expect(projectStructure).toContain("src/app");
+    expect(projectStructure).toContain("src/lib");
+    expect(projectStructure).toContain("public/");
+    expect(projectStructure).toContain(".mreact");
+    expect(projectStructure).toContain("not-found.tsx");
+    expect(projectStructure).toContain("users/");
+    expect(projectStructure).toContain("$id/");
+    expect(projectStructure).toContain("params.id");
+    expect(projectStructure).toContain("$...path/");
+    expect(projectStructure).toContain("params.path");
+    expect(projectStructure).toContain("api/");
+    expect(projectStructure).toContain("route.ts");
+    expect(projectStructure).toContain("notFound()");
+    expect(projectStructure).not.toContain("app-info.ts");
+    expect(projectStructure).toContain("[App Router](/guides/app-router/)");
+    expect(projectStructure).toContain("[HTTP APIs](/guides/http-apis/)");
+  });
+
   test("documents Link prefetch controls and configures syntax highlighting", async () => {
     const linkGuide = await readDocsSite("src/content/guides/link-and-navigation.mdx");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
