@@ -20,8 +20,8 @@ export const sidebar: readonly NavGroup[] = [
   {
     text: "Guides",
     items: [
-      { text: "App Router", slug: "guides/app-router" },
       { text: "Project Structure", slug: "guides/project-structure" },
+      { text: "App Router", slug: "guides/app-router" },
       { text: "Environment Variables", slug: "guides/environment-variables" },
       { text: "Routing", slug: "guides/routing" },
       { text: "Layouts and Slots", slug: "guides/layouts-and-slots" },

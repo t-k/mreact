@@ -3,7 +3,16 @@ export const description = "Create a project, run the dev server, add a route, a
 
 # Getting started
 
-Create a new app with the project generator:
+## Requirements
+
+- Node.js 20 or newer.
+- A package manager: pnpm or npm.
+
+The examples below use pnpm. If you prefer npm, choose npm in the generator and use the matching install and run commands.
+
+## Create an app
+
+Run the project generator with the basic template:
 
 ```bash
 npx @reckona/create-mreact-app my-app --template basic --src-dir
@@ -12,11 +21,56 @@ pnpm install
 pnpm dev
 ```
 
-The generated project includes an explicit `vite.config.ts`, app-router route globals in `tsconfig.json`, and package scripts for development, build, typecheck, lint, test, and production serving.
+Open the local URL printed by the dev server. It defaults to `http://localhost:3000` unless `PORT`, `--port`, or `vite.config.ts` changes it.
+
+The generator can also prompt for the package manager, template, `src/app` layout, and deploy target:
+
+```bash
+npx @reckona/create-mreact-app
+```
+
+## What was generated
+
+With `--src-dir`, routes live in `src/app`, shared application code starts in `src/lib`, and public assets live in `public`:
+
+```text
+my-app/
+  src/
+    app/
+      layout.tsx
+      page.tsx
+    lib/
+  public/
+  vite.config.ts
+  tsconfig.json
+  package.json
+```
+
+The generated `vite.config.ts` wires the Mreact router plugin to those paths. The generated `tsconfig.json` includes app-router global types, so route layouts can use `<Slot />` without adding a local import. The generated `package.json` includes scripts for development, production build, type checking, linting, tests, and production serving.
+
+## Edit the first page
+
+Start with the home route at `src/app/page.tsx`. A route module exports a default component for the page and can export metadata for the document head:
+
+```tsx
+export const metadata = {
+  title: "Home",
+  description: "My first Mreact route.",
+};
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Hello from Mreact</h1>
+      <p>This route is server-rendered by default.</p>
+    </main>
+  );
+}
+```
 
 ## Add a route
 
-Routes live under `src/app` when `--src-dir` is used. Add a page at `src/app/docs/page.tsx`:
+Add a page at `src/app/docs/page.tsx` to create `/docs/`:
 
 ```tsx
 export const metadata = {
@@ -25,15 +79,40 @@ export const metadata = {
 };
 
 export default function Page() {
-  return <main><h1>Docs</h1></main>;
+  return (
+    <main>
+      <h1>Docs</h1>
+      <p>This page is another server-rendered route.</p>
+    </main>
+  );
 }
 ```
 
-## Build and start
+When the dev server is running, visit `/docs/` to confirm the route was picked up.
+
+## Check the project
+
+Before treating the app as production-ready, run the generated verification scripts:
 
 ```bash
+pnpm typecheck
+pnpm lint
+pnpm test
 pnpm build
+```
+
+The `build` script writes production output to `.mreact`. Treat that directory as generated deployment material.
+
+## Start production output
+
+```bash
 pnpm start
 ```
 
-For local request summaries, run `mreact-router dev --log=requests` or `mreact-router start .mreact --log=requests`.
+`pnpm start` serves the built `.mreact` output with the Node adapter. For local request summaries, run `mreact-router dev --log=requests` during development or `mreact-router start .mreact --log=requests` after a build.
+
+## Next steps
+
+- Read [Project Structure](/guides/project-structure/) before adding more folders.
+- Read [App Router](/guides/app-router/) to understand pages, layouts, route handlers, middleware, and metadata.
+- Read [Production Checklist](/deployments/production-checklist/) before deploying an app.

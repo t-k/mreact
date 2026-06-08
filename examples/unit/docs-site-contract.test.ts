@@ -54,6 +54,9 @@ describe("docs-site example contract", () => {
       { text: "Benchmarks", slug: "benchmarks" },
       { text: "Getting Started", slug: "getting-started" },
     ],`);
+    expect(nav.indexOf('slug: "guides/project-structure"')).toBeLessThan(
+      nav.indexOf('slug: "guides/app-router"'),
+    );
     expect(nav).toContain('{ text: "Overview", slug: "" }');
     expect(nav).not.toContain(
       'text: "Getting Started",\n    items: [{ text: "Getting Started", slug: "getting-started" }]',
@@ -100,6 +103,29 @@ describe("docs-site example contract", () => {
     );
     expect(homePage).not.toContain('pageForSlug("overview")');
     expect(exportScript).toContain("rm(exportDir");
+  });
+
+  test("keeps Getting Started actionable for a first app", async () => {
+    const gettingStarted = await readDocsSite("src/content/getting-started.mdx");
+
+    expect(gettingStarted).toContain("Node.js 20 or newer");
+    expect(gettingStarted).toContain("A package manager: pnpm or npm");
+    expect(gettingStarted).toContain("The examples below use pnpm");
+    expect(gettingStarted).toContain(
+      "npx @reckona/create-mreact-app my-app --template basic --src-dir",
+    );
+    expect(gettingStarted).not.toContain("bun");
+    expect(gettingStarted).not.toContain("A terminal that can run `npx`");
+    expect(gettingStarted).toContain("Open the local URL printed by the dev server");
+    expect(gettingStarted).toContain("src/app/page.tsx");
+    expect(gettingStarted).toContain("src/app/docs/page.tsx");
+    expect(gettingStarted).toContain("pnpm typecheck");
+    expect(gettingStarted).toContain("pnpm lint");
+    expect(gettingStarted).toContain("pnpm test");
+    expect(gettingStarted).toContain("pnpm build");
+    expect(gettingStarted).toContain("pnpm start");
+    expect(gettingStarted).toContain("[Project Structure](/guides/project-structure/)");
+    expect(gettingStarted).toContain("[App Router](/guides/app-router/)");
   });
 
   test("documents Link prefetch controls and configures syntax highlighting", async () => {
