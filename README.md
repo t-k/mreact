@@ -82,6 +82,8 @@ pnpm start
 
 Inspect router CLI options with `mreact-router --help`, `mreact-router help build`, or command-level help such as `mreact-router build --help`.
 
+Production builds print compact progress by default, including route discovery, server output, client output, artifact writing, and the final route count with total duration. The build progress output is separate from request logging.
+
 Override the development server port with `mreact-router dev --port 15174`. The flag takes precedence over `PORT` and `vite.config.ts` `server.port`.
 
 Enable compact request logs in either local development or built-output serving with `mreact-router dev --log=requests`, `mreact-router start .mreact --log=requests`, or `MREACT_ROUTER_LOG=requests`.

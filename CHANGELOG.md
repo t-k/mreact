@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.147 - 2026-06-08
+
+### Added
+
+- Added compact default progress output for `mreact-router build`, including route discovery, server output, client output, artifact writing, and the final route count with total duration. Programmatic `buildApp()` callers can use `onBuildProgress` to receive the same coarse build phase events without parsing CLI output, and build failures now include the active build phase when one is known.
+
 ## 0.0.146 - 2026-06-07
 
 ### Fixed
