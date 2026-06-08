@@ -13,4 +13,24 @@ export default function Page() {
 }
 ```
 
+## Prefetch, not preload
+
+The API is named `prefetch`, not `preload`. It controls navigation preparation, not server runtime module preloading or HTML asset preload links.
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export function Navigation() {
+  return (
+    <nav>
+      <Link href="/dashboard" prefetch="intent">Dashboard</Link>
+      <Link href="/docs" prefetch="viewport">Docs</Link>
+      <Link href="/settings" prefetch="none">Settings</Link>
+    </nav>
+  );
+}
+```
+
+`prefetch="intent"` is the default behavior for likely user intent. `prefetch="viewport"` prepares links when they enter the viewport. `prefetch="none"` disables route prefetch for links where eager work would be wasteful or surprising.
+
 Server-only routes can get the lightweight navigation runtime without becoming hydrated client routes.

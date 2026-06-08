@@ -51,6 +51,30 @@ describe("docs-site example contract", () => {
     }
   });
 
+  test("uses official product branding while keeping package names lowercase", async () => {
+    const layout = await readDocsSite("src/app/layout.tsx");
+    const overview = await readDocsSite("src/content/overview.mdx");
+
+    expect(layout).toContain("Mreact Docs");
+    expect(overview).toContain("# Mreact documentation");
+    expect(overview).toContain("Mreact is a compiler-first");
+    expect(overview).toContain("`0.1.0`");
+    expect(await readDocsSite("package.json")).toContain("@reckona/example-docs-site");
+  });
+
+  test("documents Link prefetch controls and configures syntax highlighting", async () => {
+    const linkGuide = await readDocsSite("src/content/guides/link-and-navigation.mdx");
+    const viteConfig = await readDocsSite("vite.config.ts");
+    const css = await readDocsSite("src/app/globals.css");
+
+    expect(linkGuide).toContain("The API is named `prefetch`, not `preload`");
+    expect(linkGuide).toContain('prefetch="intent"');
+    expect(linkGuide).toContain('prefetch="viewport"');
+    expect(linkGuide).toContain('prefetch="none"');
+    expect(viteConfig).toContain("rehype-highlight");
+    expect(css).toContain(".hljs-keyword");
+  });
+
   test("has source content for the critical launch pages", async () => {
     for (const slug of requiredSlugs) {
       await expect(access(join(docsSiteRoot, "src", "content", `${slug}.mdx`))).resolves

@@ -65,7 +65,7 @@ function page(
   meta: { description?: string | undefined; title?: string | undefined },
 ): DocsPage {
   return {
-    description: meta.description ?? "mreact documentation.",
+    description: meta.description ?? "Mreact documentation.",
     html: renderToString(Content),
     slug,
     title: meta.title ?? slug,

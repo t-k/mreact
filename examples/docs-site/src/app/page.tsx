@@ -4,8 +4,8 @@ import { DocPage } from "../ui/DocPage.js";
 export const prerender = true;
 
 export const metadata = {
-  title: "Overview | mreact Docs",
-  description: "Start here for mreact's purpose, status, and documentation map.",
+  title: "Overview | Mreact Docs",
+  description: "Start here for Mreact's purpose, status, and documentation map.",
 };
 
 export default function HomePage() {

@@ -16,13 +16,13 @@ export function generateMetadata(
 
   if (page === undefined) {
     return {
-      title: "Not Found | mreact Docs",
-      description: "The requested mreact documentation page was not found.",
+      title: "Not Found | Mreact Docs",
+      description: "The requested Mreact documentation page was not found.",
     };
   }
 
   return {
-    title: `${page.title} | mreact Docs`,
+    title: `${page.title} | Mreact Docs`,
     description: page.description,
   };
 }

@@ -3,8 +3,8 @@ import { sidebar } from "../nav.config.js";
 import { sitePath } from "../site-path.js";
 
 export const metadata = {
-  title: "mreact Docs",
-  description: "Documentation for building and deploying mreact applications.",
+  title: "Mreact Docs",
+  description: "Documentation for building and deploying Mreact applications.",
 };
 
 export default function RootLayout() {
@@ -17,7 +17,7 @@ export default function RootLayout() {
         <div class="site-shell">
           <aside class="site-sidebar">
             <a class="site-brand" href={sitePath()}>
-              mreact Docs
+              Mreact Docs
             </a>
             <nav aria-label="Primary">
               {sidebar.map((group) => (

@@ -168,14 +168,56 @@ a:hover {
   background: #0f172a;
   border-radius: 8px;
   color: #e2e8f0;
+  color-scheme: dark;
   overflow: auto;
   padding: 1rem;
+  scrollbar-color: #64748b #0f172a;
 }
 
 .doc-article pre code {
   background: transparent;
   color: inherit;
+  display: block;
+  min-width: max-content;
   padding: 0;
+}
+
+.doc-article .hljs-keyword,
+.doc-article .hljs-selector-tag {
+  color: #93c5fd;
+}
+
+.doc-article .hljs-string,
+.doc-article .hljs-template-string {
+  color: #86efac;
+}
+
+.doc-article .hljs-title,
+.doc-article .hljs-title.function_,
+.doc-article .hljs-built_in {
+  color: #fbbf24;
+}
+
+.doc-article .hljs-attr,
+.doc-article .hljs-attribute,
+.doc-article .hljs-property {
+  color: #67e8f9;
+}
+
+.doc-article .hljs-comment {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.doc-article .hljs-number,
+.doc-article .hljs-literal {
+  color: #f0abfc;
+}
+
+.doc-article .hljs-type,
+.doc-article .hljs-variable,
+.doc-article .hljs-params {
+  color: #c4b5fd;
 }
 
 .doc-footer {

@@ -1,8 +1,8 @@
 export const prerender = true;
 
 export const metadata = {
-  title: "Not Found | mreact Docs",
-  description: "The requested mreact documentation page was not found.",
+  title: "Not Found | Mreact Docs",
+  description: "The requested Mreact documentation page was not found.",
 };
 
 export default function NotFoundPage() {
