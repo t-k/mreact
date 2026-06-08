@@ -109,6 +109,7 @@ type ServerTransformOutput = ReturnType<typeof transform>;
 type ServerTransformCache = Map<string, Promise<ServerTransformOutput>>;
 
 export interface BuildAppOptions extends AppRouterProjectOptions {
+  onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
   onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
   outDir: string;
   targets?: readonly AppRouterBuildTarget[] | undefined;
@@ -177,6 +178,21 @@ export interface BuildAppPhaseTiming {
   ms: number;
   phase: BuildAppPhase;
 }
+
+export type BuildAppProgressEvent =
+  | {
+      kind: "phase-start";
+      phase: BuildAppPhase;
+    }
+  | {
+      kind: "phase-end";
+      ms: number;
+      phase: BuildAppPhase;
+    }
+  | {
+      count: number;
+      kind: "routes-discovered";
+    };
 
 export interface BuildAppResult {
   routes: AppRoute[];
@@ -319,23 +335,26 @@ type StaticParams = Record<string, string | number | boolean | readonly string[]
 
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
   const timingSink = options.onBuildPhaseTiming;
+  const progressSink = options.onBuildProgress;
+  const shouldTrackBuildPhases = timingSink !== undefined || progressSink !== undefined;
   const project = resolveAppRouterProjectOptions(options);
   const buildTargets = resolveBuildTargets(options.targets ?? project.buildTargets);
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const shouldBuildAwsLambda = buildTargets.includes("aws-lambda");
   const routes =
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? await scanAppRoutes({ appDir: project.routesDir })
-      : await timeBuildPhase(timingSink, "scan", () =>
+      : await timeBuildPhase(timingSink, progressSink, "scan", () =>
           scanAppRoutes({ appDir: project.routesDir }),
         );
+  progressSink?.({ count: routes.length, kind: "routes-discovered" });
   await validateBuildMiddlewareControls(project.routesDir, routes);
   const viteDefine = options.viteConfig?.define;
   const vitePlugins = options.viteConfig?.plugins;
   const files =
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? await collectBuildFiles(project.projectRoot, project.allowedSourceDirs, project.routesDir)
-      : await timeBuildPhase(timingSink, "collectFiles", () =>
+      : await timeBuildPhase(timingSink, progressSink, "collectFiles", () =>
           collectBuildFiles(project.projectRoot, project.allowedSourceDirs, project.routesDir),
         );
   const serverClientRouteInferenceCache = createClientRouteInferenceCache();
@@ -344,7 +363,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const clientDir = join(options.outDir, "client");
   const cloudflareDir = join(options.outDir, "cloudflare");
   const sourceAnalysis =
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? await analyzeBuildRouteSources({
           clientRouteInferenceCache: serverClientRouteInferenceCache,
           files,
@@ -353,7 +372,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           routes,
           vitePlugins,
         })
-      : await timeBuildPhase(timingSink, "analyzeSources", () =>
+      : await timeBuildPhase(timingSink, progressSink, "analyzeSources", () =>
           analyzeBuildRouteSources({
             clientRouteInferenceCache: serverClientRouteInferenceCache,
             files,
@@ -364,7 +383,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         );
 
-  if (timingSink === undefined) {
+  if (shouldTrackBuildPhases === false) {
     await validateProductionRoutes({
       clientRouteInferenceCache: serverClientRouteInferenceCache,
       files,
@@ -376,7 +395,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       vitePlugins,
     });
   } else {
-    await timeBuildPhase(timingSink, "validate", () =>
+    await timeBuildPhase(timingSink, progressSink, "validate", () =>
       validateProductionRoutes({
         clientRouteInferenceCache: serverClientRouteInferenceCache,
         files,
@@ -390,7 +409,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     );
   }
 
-  if (timingSink === undefined) {
+  if (shouldTrackBuildPhases === false) {
     await rm(options.outDir, { force: true, recursive: true });
     await Promise.all([
       mkdir(serverDir, { recursive: true }),
@@ -400,7 +419,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       mkdir(join(clientDir, "assets", "routes"), { recursive: true }),
     ]);
   } else {
-    await timeBuildPhase(timingSink, "prepareOutput", async () => {
+    await timeBuildPhase(timingSink, progressSink, "prepareOutput", async () => {
       await rm(options.outDir, { force: true, recursive: true });
       await Promise.all([
         mkdir(serverDir, { recursive: true }),
@@ -413,22 +432,22 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   }
 
   const publicAssets =
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? await buildPublicAssetManifest(project, clientDir)
-      : await timeBuildPhase(timingSink, "publicAssets", () =>
+      : await timeBuildPhase(timingSink, progressSink, "publicAssets", () =>
           buildPublicAssetManifest(project, clientDir),
         );
 
   const clientRouteInferenceCache = createClientRouteInferenceCache();
   const [serverActionManifest, serverModules, generatedImportPolicy] = await Promise.all([
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? collectBuildServerActionManifest({
           files,
           projectRoot: project.projectRoot,
           routes,
           routesDir: project.routesDir,
         })
-      : timeBuildPhase(timingSink, "serverActionManifest", () =>
+      : timeBuildPhase(timingSink, progressSink, "serverActionManifest", () =>
           collectBuildServerActionManifest({
             files,
             projectRoot: project.projectRoot,
@@ -436,12 +455,12 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             routesDir: project.routesDir,
           }),
         ),
-    timingSink === undefined
-        ? buildServerModuleArtifacts({
-            bundleCache: new Map(),
-            clientRouteInferenceCache: serverClientRouteInferenceCache,
-            define: viteDefine,
-            files,
+    shouldTrackBuildPhases === false
+      ? buildServerModuleArtifacts({
+          bundleCache: new Map(),
+          clientRouteInferenceCache: serverClientRouteInferenceCache,
+          define: viteDefine,
+          files,
           prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
           project,
           projectRoot: project.projectRoot,
@@ -450,7 +469,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           serverTransformCache,
           vitePlugins,
         })
-      : timeBuildPhase(timingSink, "serverModules", () =>
+      : timeBuildPhase(timingSink, progressSink, "serverModules", () =>
           buildServerModuleArtifacts({
             bundleCache: new Map(),
             clientRouteInferenceCache: serverClientRouteInferenceCache,
@@ -465,14 +484,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             vitePlugins,
           }),
         ),
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? buildGeneratedImportPolicy({
           files,
           projectRoot: project.projectRoot,
           routes,
           routesDir: project.routesDir,
         })
-      : timeBuildPhase(timingSink, "importPolicy", () =>
+      : timeBuildPhase(timingSink, progressSink, "importPolicy", () =>
           buildGeneratedImportPolicy({
             files,
             projectRoot: project.projectRoot,
@@ -486,20 +505,20 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     file: relative(project.projectRoot, route.file),
   }));
   const [serverModuleArtifacts, clientBundle] = await Promise.all([
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? writeServerModuleArtifactFiles(
           serverDir,
           serverModules,
           generatedImportPolicy.runtimePackages,
         )
-      : timeBuildPhase(timingSink, "serverModuleArtifacts", () =>
+      : timeBuildPhase(timingSink, progressSink, "serverModuleArtifacts", () =>
           writeServerModuleArtifactFiles(
             serverDir,
             serverModules,
             generatedImportPolicy.runtimePackages,
           ),
         ),
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? writeClientRouteBundles({
           appDir: project.routesDir,
           assetBaseUrl: project.assetBaseUrl,
@@ -513,7 +532,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           sourceMaps: project.clientSourceMaps,
           vitePlugins,
         })
-      : timeBuildPhase(timingSink, "clientBundles", () =>
+      : timeBuildPhase(timingSink, progressSink, "clientBundles", () =>
           writeClientRouteBundles({
             appDir: project.routesDir,
             assetBaseUrl: project.assetBaseUrl,
@@ -533,9 +552,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   const navigationRuntimeScript = clientRoutes.some(
     (route) => route.navigation === true && !route.client,
   )
-    ? timingSink === undefined
+    ? shouldTrackBuildPhases === false
       ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
-      : await timeBuildPhase(timingSink, "navigationRuntime", () =>
+      : await timeBuildPhase(timingSink, progressSink, "navigationRuntime", () =>
           writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions),
         )
     : undefined;
@@ -555,7 +574,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ]),
   ).sort();
   const prerenderedRoutes =
-    timingSink === undefined
+    shouldTrackBuildPhases === false
       ? await prerenderStaticRoutes({
           appDir: project.routesDir,
           assetBaseUrl: project.assetBaseUrl,
@@ -567,7 +586,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           sourceAnalysis,
           vitePlugins,
         })
-      : await timeBuildPhase(timingSink, "prerender", () =>
+      : await timeBuildPhase(timingSink, progressSink, "prerender", () =>
           prerenderStaticRoutes({
             appDir: project.routesDir,
             assetBaseUrl: project.assetBaseUrl,
@@ -583,7 +602,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   let cloudflareRouteModules: CloudflareRouteModulesOutput | undefined;
   if (shouldBuildCloudflare) {
     cloudflareRouteModules =
-      timingSink === undefined
+      shouldTrackBuildPhases === false
         ? await writeCloudflareRouteModules({
             cloudflareDir,
             define: viteDefine,
@@ -596,7 +615,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             sourceAnalysis,
             vitePlugins,
           })
-        : await timeBuildPhase(timingSink, "cloudflare", () =>
+        : await timeBuildPhase(timingSink, progressSink, "cloudflare", () =>
             writeCloudflareRouteModules({
               cloudflareDir,
               define: viteDefine,
@@ -667,13 +686,13 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       ),
     ]);
   };
-  if (timingSink === undefined) {
+  if (shouldTrackBuildPhases === false) {
     await writeManifestFiles();
   } else {
-    await timeBuildPhase(timingSink, "writeManifests", writeManifestFiles);
+    await timeBuildPhase(timingSink, progressSink, "writeManifests", writeManifestFiles);
   }
 
-  if (timingSink === undefined) {
+  if (shouldTrackBuildPhases === false) {
     await Promise.all([
       ...(shouldBuildAwsLambda ? [writeAwsLambdaHandlerArtifact(options.outDir)] : []),
       ...(shouldBuildCloudflare
@@ -688,7 +707,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         : []),
     ]);
   } else {
-    await timeBuildPhase(timingSink, "adapterArtifacts", async () => {
+    await timeBuildPhase(timingSink, progressSink, "adapterArtifacts", async () => {
       await Promise.all([
         ...(shouldBuildAwsLambda ? [writeAwsLambdaHandlerArtifact(options.outDir)] : []),
         ...(shouldBuildCloudflare
@@ -741,17 +760,25 @@ function typedRoutesDeclaration(routes: readonly AppRoute[]): string {
 }
 
 async function timeBuildPhase<T>(
-  sink: (timing: BuildAppPhaseTiming) => void,
+  timingSink: ((timing: BuildAppPhaseTiming) => void) | undefined,
+  progressSink: ((event: BuildAppProgressEvent) => void) | undefined,
   phase: BuildAppPhase,
   run: () => Promise<T>,
 ): Promise<T> {
+  progressSink?.({ kind: "phase-start", phase });
   const startedAt = performance.now();
 
   try {
     return await run();
   } finally {
-    sink({
-      ms: roundBuildPhaseMs(performance.now() - startedAt),
+    const ms = roundBuildPhaseMs(performance.now() - startedAt);
+    timingSink?.({
+      ms,
+      phase,
+    });
+    progressSink?.({
+      kind: "phase-end",
+      ms,
       phase,
     });
   }
