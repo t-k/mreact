@@ -436,6 +436,8 @@ a:hover {
 }
 
 .benchmark-panel {
+  align-content: start;
+  align-self: start;
   display: grid;
   gap: 1rem;
   padding: 1.25rem;
