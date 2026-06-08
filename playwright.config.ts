@@ -16,7 +16,11 @@ export function playwrightTestIgnoreForCwd(cwd = process.cwd()): string[] {
 export default defineConfig({
   testDir: ".",
   testIgnore: playwrightTestIgnoreForCwd(),
-  testMatch: ["packages/router/e2e/**/*.spec.ts", "examples/e2e/**/*.spec.ts"],
+  testMatch: [
+    "packages/create-mreact-app/e2e/**/*.spec.ts",
+    "packages/router/e2e/**/*.spec.ts",
+    "examples/e2e/**/*.spec.ts",
+  ],
   timeout: 60_000,
   use: {
     ...devices["Desktop Chrome"],

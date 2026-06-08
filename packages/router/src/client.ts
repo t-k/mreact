@@ -2515,7 +2515,34 @@ function __mreactEvaluateHydrationNode(factory) {
   }
 }
 
-__mreactHydrateRoute();
+const __mreactRouteHydrationReported = Symbol.for("mreact.routeHydrationReported");
+
+function __mreactReportRouteHydrationError(error) {
+  if (error !== null && typeof error === "object") {
+    if (error[__mreactRouteHydrationReported] === true) {
+      return;
+    }
+    error[__mreactRouteHydrationReported] = true;
+  }
+
+  if (typeof console !== "undefined" && typeof console.error === "function") {
+    console.error(
+      \`mreact: route hydration failed for route "\${__mreactRouteId}". Server HTML remains visible, but client interactivity for this route was not attached.\`,
+      error,
+    );
+  }
+}
+
+function __mreactRunRouteHydration(factory) {
+  try {
+    return factory();
+  } catch (error) {
+    __mreactReportRouteHydrationError(error);
+    throw error;
+  }
+}
+
+__mreactRunRouteHydration(() => __mreactHydrateRoute());
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
 ${
@@ -2989,7 +3016,12 @@ ${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content,
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {
-    void import(/* @vite-ignore */ script).then((module) => module.${routeHydrationContract.routeHydrateExport}?.());
+    void import(/* @vite-ignore */ script)
+      .then((module) => __mreactRunRouteHydration(() => module.${routeHydrationContract.routeHydrateExport}?.()))
+      .catch((error) => {
+        __mreactReportRouteHydrationError(error);
+        throw error;
+      });
   } else {
     __mreactMarkRouteHydrated();
   }

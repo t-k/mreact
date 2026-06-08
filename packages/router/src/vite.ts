@@ -287,7 +287,8 @@ export function cell(initial) {
       if (id === virtualReactiveDevtoolsId) {
         return `export function emitReactiveDevtoolsEvent() {}
 export function hasReactiveDevtoolsEmitter() { return false; }
-export function currentDevtoolsEmitter() { return undefined; }`;
+export function currentDevtoolsEmitter() { return undefined; }
+export function currentReactiveDevtools() { return undefined; }`;
       }
 
       if (id.startsWith(virtualClientPrefix)) {

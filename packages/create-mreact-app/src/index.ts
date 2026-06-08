@@ -60,14 +60,14 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.146",
-  "@reckona/mreact-devtools": "^0.0.146",
-  "@reckona/mreact-forms": "^0.0.146",
-  "@reckona/mreact": "^0.0.146",
-  "@reckona/mreact-query": "^0.0.146",
-  "@reckona/mreact-reactive-core": "^0.0.146",
+  "@reckona/mreact-auth": "^0.0.148",
+  "@reckona/mreact-devtools": "^0.0.148",
+  "@reckona/mreact-forms": "^0.0.148",
+  "@reckona/mreact": "^0.0.148",
+  "@reckona/mreact-query": "^0.0.148",
+  "@reckona/mreact-reactive-core": "^0.0.148",
   "@reckona/mreact-reactive-dom": "^0.0.51",
-  "@reckona/mreact-router": "^0.0.146",
+  "@reckona/mreact-router": "^0.0.148",
   "@reckona/mreact-test-utils": "^0.0.51",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
@@ -486,7 +486,6 @@ function pageSourceForTemplate(options: {
   srcDir?: boolean | undefined;
   tailwind: boolean;
 }): string {
-  if (options.cloudflare) return cloudflarePageSource;
   if (options.dashboard) return dashboardHomePageSource;
   if (options.srcDir) return srcDirPageSource;
   if (options.tailwind) return tailwindPageSource;
@@ -879,36 +878,64 @@ export default function Layout() {
 `;
 }
 
-const pageSource = `export const metadata = {
-  title: "Home",
-};
-
-export default function Page() {
-  return <main>Hello from mreact</main>;
-}
-`;
-
-const srcDirPageSource = `import { appTitle } from "../lib/app-info.js";
+const pageSource = `import { cell } from "@reckona/mreact-reactive-core";
 
 export const metadata = {
-  title: "Home",
+  title: "Counter",
 };
 
 export default function Page() {
-  return <main>{appTitle}</main>;
+  const count = cell<number>(0);
+
+  return (
+    <main>
+      <h1>mreact counter</h1>
+      <p>
+        Count: <strong>{count.get()}</strong>
+      </p>
+      <p>
+        <button type="button" onClick={() => count.set((value) => value + 1)}>
+          +1
+        </button>{" "}
+        <button type="button" onClick={() => count.set(0)}>
+          Reset
+        </button>
+      </p>
+    </main>
+  );
 }
 `;
 
-const appInfoSource = `export const appTitle = "Hello from mreact";
-`;
+const srcDirPageSource = `import { cell } from "@reckona/mreact-reactive-core";
+import { appTitle } from "../lib/app-info.js";
 
-const cloudflarePageSource = `export const metadata = {
-  title: "Home",
+export const metadata = {
+  title: "Counter",
 };
 
 export default function Page() {
-  return <main>Hello from mreact on Cloudflare</main>;
+  const count = cell<number>(0);
+
+  return (
+    <main>
+      <h1>{appTitle}</h1>
+      <p>
+        Count: <strong>{count.get()}</strong>
+      </p>
+      <p>
+        <button type="button" onClick={() => count.set((value) => value + 1)}>
+          +1
+        </button>{" "}
+        <button type="button" onClick={() => count.set(0)}>
+          Reset
+        </button>
+      </p>
+    </main>
+  );
 }
+`;
+
+const appInfoSource = `export const appTitle = "mreact counter";
 `;
 
 const cloudflareWorkerEnvSource = `export {};
@@ -922,18 +949,40 @@ declare global {
 }
 `;
 
-const tailwindPageSource = `export const metadata = {
-  title: "Home",
+const tailwindPageSource = `import { cell } from "@reckona/mreact-reactive-core";
+
+export const metadata = {
+  title: "Counter",
 };
 
 export default function Page() {
+  const count = cell<number>(0);
+
   return (
-    <main class="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-4 px-6">
-      <p class="text-sm uppercase tracking-wide text-cyan-300">mreact</p>
-      <h1 class="text-4xl font-semibold">Hello from mreact</h1>
-      <p class="text-slate-300">
-        This page is rendered by the app router and styled with Tailwind.
-      </p>
+    <main class="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-5 px-6">
+      <p class="text-sm font-medium text-cyan-300">mreact</p>
+      <h1 class="text-4xl font-semibold">Counter starter</h1>
+      <section class="grid gap-3 rounded-lg border border-slate-800 bg-slate-900 p-5">
+        <p class="text-slate-300">
+          Count: <strong class="text-white">{count.get()}</strong>
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="button"
+            class="rounded-md bg-cyan-300 px-4 py-2 font-medium text-slate-950"
+            onClick={() => count.set((value) => value + 1)}
+          >
+            +1
+          </button>
+          <button
+            type="button"
+            class="rounded-md border border-slate-700 px-4 py-2 text-slate-100"
+            onClick={() => count.set(0)}
+          >
+            Reset
+          </button>
+        </div>
+      </section>
     </main>
   );
 }
@@ -1519,6 +1568,10 @@ function readmeSource(
   const tailwindNote = options.tailwind
     ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
     : "";
+  const starterNote =
+    options.dashboard
+      ? ""
+      : "\nThe generated home page is a counter starter that uses `cell` for client interactivity.\n";
   const cloudflareNote = options.cloudflare
     ? `
 ## Cloudflare Workers
@@ -1564,5 +1617,5 @@ mreact app-router project generated by \`@reckona/create-mreact-app\`.
 - \`${run} lint\`
 - \`${run} test\`
 - \`${run} start\`
-${tailwindNote}${cloudflareNote}${deployNote}${dashboardNote}${pnpmTroubleshooting}`;
+${starterNote}${tailwindNote}${cloudflareNote}${deployNote}${dashboardNote}${pnpmTroubleshooting}`;
 }

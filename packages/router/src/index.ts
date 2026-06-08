@@ -75,6 +75,7 @@ export type {
   BuildAppPhase,
   BuildAppPhaseTiming,
   BuildAppOptions,
+  BuildAppProgressEvent,
   BuildAppResult,
   BuiltImportPolicyArtifact,
   CloudflarePagesArtifactManifest,

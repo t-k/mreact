@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.148 - 2026-06-08
+
+### Added
+
+- Changed the default `@reckona/create-mreact-app` basic and Tailwind starters to render a small `cell`-based counter on the home page, giving new projects an immediately interactive example instead of a static hello page.
+- Added Playwright coverage that scaffolds a generated app, starts the mreact dev server, and verifies that the generated counter hydrates and updates in the browser.
+
+### Fixed
+
+- Fixed the App Router Vite development reactive devtools stub so client route hydration no longer fails when reactive-core imports `currentReactiveDevtools()`.
+- Added a route hydration console diagnostic that reports `mreact: route hydration failed for route "..."` when hydration code throws after the route module has loaded, making the remaining static server HTML and missing interactivity easier to understand during development.
+
+## 0.0.147 - 2026-06-08
+
+### Added
+
+- Added compact default progress output for `mreact-router build`, including route discovery, server output, client output, artifact writing, and the final route count with total duration. Programmatic `buildApp()` callers can use `onBuildProgress` to receive the same coarse build phase events without parsing CLI output, and build failures now include the active build phase when one is known.
+
 ## 0.0.146 - 2026-06-07
 
 ### Fixed

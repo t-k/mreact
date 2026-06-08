@@ -61,6 +61,103 @@ describe("router CLI entry", () => {
     }
   });
 
+  test("prints compact build progress and a duration summary", async () => {
+    const buildApp = vi.fn(
+      async (options: {
+        onBuildProgress?: (event: {
+          count?: number;
+          kind: string;
+          ms?: number;
+          phase?: string;
+        }) => void;
+      }) => {
+        options.onBuildProgress?.({ kind: "phase-start", phase: "scan" });
+        options.onBuildProgress?.({ kind: "phase-end", ms: 2.5, phase: "scan" });
+        options.onBuildProgress?.({ count: 2, kind: "routes-discovered" });
+        options.onBuildProgress?.({ kind: "phase-start", phase: "serverModules" });
+        options.onBuildProgress?.({ kind: "phase-end", ms: 10, phase: "serverModules" });
+        options.onBuildProgress?.({ kind: "phase-start", phase: "clientBundles" });
+        options.onBuildProgress?.({ kind: "phase-end", ms: 11, phase: "clientBundles" });
+        options.onBuildProgress?.({ kind: "phase-start", phase: "writeManifests" });
+        options.onBuildProgress?.({ kind: "phase-end", ms: 1, phase: "writeManifests" });
+
+        return { routes: [{ path: "/" }, { path: "/about" }] };
+      },
+    );
+    vi.doMock("../src/build.js", () => ({
+      buildApp,
+      packageAwsLambdaArtifact: vi.fn(),
+      packageCloudflarePagesArtifact: vi.fn(),
+    }));
+    vi.doMock("../src/vite-config.js", () => ({
+      loadMreactRouterViteConfigDetails: vi.fn(async () => ({
+        project: { projectRoot: appDir, routesDir: appDir },
+        viteConfig: undefined,
+      })),
+    }));
+    process.argv = [process.argv[0]!, "cli.ts", "build", "--target=node"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      const messages = logSpy.mock.calls.map((call) => call[0]);
+
+      expect(messages).toEqual([
+        expect.stringMatching(/^mreact-router build v/),
+        expect.stringMatching(/^Target: node$/),
+        expect.stringMatching(/^Root: /),
+        "Config: loading...",
+        "Routes: discovering...",
+        "Routes: 2 discovered",
+        "Server: building...",
+        "Client: building...",
+        "Artifacts: writing...",
+        expect.stringMatching(/^Built 2 routes in \d+(?:\.\d+)?s\.$/),
+      ]);
+      expect(buildApp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outDir: expect.stringMatching(/\.mreact$/),
+          targets: ["node"],
+        }),
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  test("prints the active build phase when build fails", async () => {
+    vi.doMock("../src/build.js", () => ({
+      buildApp: vi.fn(
+        async (options: {
+          onBuildProgress?: (event: { kind: string; phase?: string }) => void;
+        }) => {
+          options.onBuildProgress?.({ kind: "phase-start", phase: "clientBundles" });
+          throw new Error("client transform failed");
+        },
+      ),
+      packageAwsLambdaArtifact: vi.fn(),
+      packageCloudflarePagesArtifact: vi.fn(),
+    }));
+    vi.doMock("../src/vite-config.js", () => ({
+      loadMreactRouterViteConfigDetails: vi.fn(async () => ({
+        project: { projectRoot: appDir, routesDir: appDir },
+        viteConfig: undefined,
+      })),
+    }));
+    process.argv = [process.argv[0]!, "cli.ts", "build", "--target=node"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Build failed during client output build: client transform failed",
+      );
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
   test("passes the start host option to startServer", async () => {
     const startServer = vi.fn(async () => ({
       close: async () => undefined,

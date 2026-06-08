@@ -37,10 +37,14 @@ describe("create-mreact-app scaffolder", () => {
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
     expect(viteConfig).toContain('routesDir: "app"');
     expect(layout).not.toContain("<title>");
-    expect(page).toContain("Hello from mreact");
+    expect(page).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(page).toContain("const count = cell<number>(0);");
+    expect(page).toContain("count.get()");
+    expect(page).toContain("count.set((value) => value + 1)");
     expect(readme).toContain("pnpm approve-builds");
     expect(readme).toContain("Ignored build scripts");
     expect(readme).toContain("pnpm.onlyBuiltDependencies");
+    expect(readme).toContain("counter starter");
   });
 
   test("does not include pnpm approve-builds guidance for npm projects", async () => {
@@ -118,7 +122,11 @@ describe("create-mreact-app scaffolder", () => {
     expect(viteConfig).toContain('allowedSourceDirs: ["src"]');
     expect(layout).not.toContain("<title>");
     expect(page).toContain('from "../lib/app-info.js"');
-    expect(appInfo).toContain("Hello from mreact");
+    expect(page).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(page).toContain("const count = cell<number>(0);");
+    expect(page).toContain("count.get()");
+    expect(page).toContain("count.set((value) => value + 1)");
+    expect(appInfo).toContain("mreact counter");
   });
 
   test("generates Tailwind files only for the Tailwind template", async () => {
@@ -144,6 +152,11 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.devDependencies?.autoprefixer).toBeUndefined();
     expect(packageJson.scripts?.["dev:router"]).toBe("mreact-router dev");
     expect(packageJson.scripts?.["build:css"]).toContain("./public/styles.css");
+    const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
+    expect(page).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(page).toContain("const count = cell<number>(0);");
+    expect(page).toContain("count.get()");
+    expect(page).toContain("count.set((value) => value + 1)");
     expect(layout).toContain('href="/styles.css"');
     expect(layout).not.toContain("<title>");
     expect(css).toContain('@import "tailwindcss";');
@@ -183,6 +196,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.devDependencies?.["@cloudflare/workers-types"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@cloudflare/workers-types");
     expect(tsconfig.include).toContain("worker-env.d.ts");
+    expect(page).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(page).toContain("count.set((value) => value + 1)");
     expect(page).not.toContain("export const prerender = true;");
     expect(wrangler).toContain('main = ".mreact/cloudflare/worker.mjs"');
     expect(wrangler).toContain("[[r2_buckets]]");

@@ -351,6 +351,8 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
     // (undocumented)
     onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
     // (undocumented)
+    onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
+    // (undocumented)
     outDir: string;
     // (undocumented)
     targets?: readonly AppRouterBuildTarget[] | undefined;
@@ -368,6 +370,19 @@ export interface BuildAppPhaseTiming {
     // (undocumented)
     phase: BuildAppPhase;
 }
+
+// @public (undocumented)
+export type BuildAppProgressEvent = {
+    kind: "phase-start";
+    phase: BuildAppPhase;
+} | {
+    kind: "phase-end";
+    ms: number;
+    phase: BuildAppPhase;
+} | {
+    count: number;
+    kind: "routes-discovered";
+};
 
 // @public (undocumented)
 export interface BuildAppResult {

@@ -43,6 +43,8 @@ export default defineConfig({
 
 `mreact-router build` reads this config. Pass `--target=node` for plain Node/container output, `--target=aws-lambda` for Lambda artifacts with a generated handler and import policy, or `--target=cloudflare` for Workers artifacts with a generated Worker module. Configure `buildTargets: ["aws-lambda"]`, `["cloudflare"]`, or another explicit target list in `mreactRouter()` when one deployment target should be the project default. Without an explicit target, build output includes only the Node-compatible server/client artifacts; Cloudflare and Lambda artifacts are opt-in. The legacy `appDir` shortcut remains available for tests and older direct programmatic usage, but it is deprecated. Use `projectRoot` + `routesDir` for new code. The shortcut is planned for removal after `0.1.0`.
 
+Production builds print compact progress by default, including route discovery, server output, client output, artifact writing, and the final route count with total duration. Programmatic builds can pass `onBuildProgress` to receive the same coarse phase events without parsing CLI output.
+
 Production client source maps are disabled by default. Set `clientSourceMaps: "linked"` to emit public `.js.map` files beside route scripts and include `sourceMappingURL` comments, or set `clientSourceMaps: "hidden"` to emit upload-only maps under `.mreact/source-maps/client/` without exposing them in the client manifest. The CLI accepts the same modes with `mreact-router build --client-source-maps=hidden`, `linked`, or `none`.
 
 Production client route bundles can drop selected browser logging calls with `production.dropClientConsole`. Set it to `true` to remove `console.debug`, `console.info`, and `console.log` while preserving `console.warn` and `console.error`, or pass an array such as `["log"]` to choose specific methods.
@@ -301,6 +303,8 @@ Each line includes method, path, status, duration, and runtime. Query strings, h
 Built Node output binds to `127.0.0.1` by default. Use `mreact-router start .mreact --host 0.0.0.0 --host-policy=strict` or `HOST=0.0.0.0 MREACT_ROUTER_HOST_POLICY=strict mreact-router start .mreact` inside containers behind explicit port publishing or a reverse proxy. This bind address is separate from Host header trust; configure `--allowed-hosts`, `MREACT_ROUTER_ALLOWED_HOSTS`, or `hostPolicy` for public deployments.
 
 Use `mreact-router --help`, `mreact-router help build`, or command-level help such as `mreact-router build --help` to inspect supported commands, build targets, and generated artifacts.
+
+Build progress output is always limited to coarse phases and does not include request data. Use `--log=requests` only when you want request summaries from `dev` or `start`.
 
 Server-only pages get the lightweight navigation runtime automatically — without becoming hydrated client routes — whenever they render a `Link` (from `@reckona/mreact-router/link`) anywhere in their server-rendered tree, including through nested components and layouts:
 
