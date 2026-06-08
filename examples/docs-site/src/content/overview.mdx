@@ -8,6 +8,7 @@ Mreact is a [React](https://react.dev/)-flavored framework inspired by [Marko](h
 ## Motivations
 
 - **Fine-grained reactivity** - Use a dependency graph to update only the parts that need to change.
+- **Automatic server/client boundary inference** - Infer which route modules and components need browser runtime so static server-rendered paths can stay server-only by default.
 - **Modular runtime** - Avoid shipping client runtime for routes that do not need it. A route with no client-side signals can stay server-rendered without a client route bundle.
 - **Compile-time over runtime** - Prefer compiler work over a large browser runtime.
 - **Chunk-based streaming SSR** - Favor memory efficiency and incremental delivery by sending HTML in chunks instead of buffering the full document, similar to Marko's streaming model.

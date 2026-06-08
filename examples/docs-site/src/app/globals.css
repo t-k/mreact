@@ -235,7 +235,7 @@ a:hover {
   color: #e2e8f0;
   margin: 0;
   overflow: auto;
-  padding: 2.7rem 1rem 1rem;
+  padding: 1rem;
   scrollbar-color: #7e879e var(--code-panel-bg);
 }
 
@@ -252,6 +252,7 @@ a:hover {
   background: #111827;
   border: 1px solid #334155;
   border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.32);
   color: #e2e8f0;
   cursor: pointer;
   font: inherit;

@@ -71,6 +71,7 @@ describe("docs-site example contract", () => {
     expect(overview).toContain("# Mreact");
     expect(overview).toContain("Mreact is a [React](https://react.dev/)-flavored framework");
     expect(overview).toContain("## Motivations");
+    expect(overview).toContain("Automatic server/client boundary inference");
     expect(overview).toContain("## Status");
     expect(overview).toContain("## Performance");
     expect(overview).toContain("[Benchmarks](/benchmarks/)");
@@ -112,6 +113,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".hljs-keyword");
     expect(css).toContain(".code-block");
     expect(css).toContain(".code-copy");
+    expect(css).toContain("padding: 1rem");
+    expect(css).not.toContain("padding: 2.7rem 1rem 1rem");
   });
 
   test("keeps prose typography readable and aligned with the earlier docs site", async () => {
