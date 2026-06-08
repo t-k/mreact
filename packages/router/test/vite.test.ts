@@ -188,6 +188,27 @@ describe("router Vite middleware", () => {
     ).resolves.toBe("\0mreact-router-reactive-core");
   });
 
+  test("serves a reactive devtools stub compatible with reactive-core in dev", async () => {
+    const projectRoot = process.cwd();
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["packages/router/test"],
+      projectRoot,
+      publicDir: "packages/router/test",
+      routesDir: "packages/router/test",
+    });
+    const load = typeof plugin.load === "function" ? plugin.load : plugin.load?.handler;
+    expect(load).toBeDefined();
+
+    const source = await load?.call(
+      {} as never,
+      "\0mreact-router-reactive-devtools",
+      {},
+    );
+
+    expect(source).toContain("export function currentReactiveDevtools()");
+    expect(source).toContain("return undefined");
+  });
+
   test("resolves the mreact root runtime to ESM in dev SSR", async () => {
     const projectRoot = process.cwd();
     const plugin = mreactRouter({
