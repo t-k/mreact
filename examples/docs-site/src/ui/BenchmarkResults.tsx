@@ -18,6 +18,9 @@ export function BenchmarkResults() {
           <p class="benchmark-source-path">
             Source: <code>{latestBenchmarkRun.path}</code>
           </p>
+          <p class="benchmark-source-path">
+            <a href={githubUrlForRunPath(latestBenchmarkRun.path)}>View run on GitHub</a>
+          </p>
         </div>
         <dl class="benchmark-run-list">
           <div>
@@ -51,7 +54,10 @@ export function BenchmarkResults() {
             <div>
               <h3 id={`${suite.id}-rankings`}>{suite.title}</h3>
               <p>
-                <code>{suite.source}</code> / {suite.cardCount} ranking cards
+                <code>{suite.source}</code> / {suite.cardCount} ranking cards /{" "}
+                <a href={githubUrlForFilePath(`${latestBenchmarkRun.path}/${suite.source}`)}>
+                  View source on GitHub
+                </a>
               </p>
             </div>
           </div>
@@ -64,6 +70,14 @@ export function BenchmarkResults() {
       ))}
     </section>
   );
+}
+
+function githubUrlForRunPath(path: string): string {
+  return `https://github.com/t-k/mreact/tree/${latestBenchmarkRun.gitCommit}/${path}`;
+}
+
+function githubUrlForFilePath(path: string): string {
+  return `https://github.com/t-k/mreact/blob/${latestBenchmarkRun.gitCommit}/${path}`;
 }
 
 function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }) {

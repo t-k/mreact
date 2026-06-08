@@ -158,8 +158,15 @@ describe("docs-site example contract", () => {
     expect(benchmarks).toContain("Primitive DOM and reactivity work");
     expect(benchmarks).toContain("Browser runtime behavior");
     expect(benchmarks).toContain("App router and deployment paths");
-    expect(benchmarks).toContain("The latest section renders every ranking card");
+    expect(benchmarks).toContain("Resumability-oriented frameworks");
+    expect(benchmarks).toContain("Primitive DOM-update cases mostly measure already-active update paths");
+    expect(benchmarks.indexOf("## How to read results")).toBeLessThan(
+      benchmarks.indexOf("## Latest results"),
+    );
     expect(benchmarkResults).toContain("benchmark-ranking-grid");
+    expect(benchmarkResults).toContain("githubUrlForRunPath");
+    expect(benchmarkResults).toContain("View run on GitHub");
+    expect(benchmarkResults).toContain("View source on GitHub");
     expect(benchmarkResults).toContain("BenchmarkRankingPanel");
     expect(benchmarkResults).toContain("benchmark-chart");
     expect(benchmarkResults).toContain("benchmark-bar-row");

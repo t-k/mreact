@@ -13,12 +13,12 @@ Benchmarks are part of Mreact's development loop. They are used to watch primiti
 - **Client bundle shape** - How much JavaScript is shipped for server-only routes and interactive routes after gzip compression.
 - **Route artifact boundaries** - Whether middleware, redirects, loaders, server actions, layouts, and render modules stay separated enough to avoid unnecessary imports.
 
-The latest section renders every ranking card from the current `primitive.md`, `router.md`, and `primitive-browser.md` reports, not a hand-picked subset.
+## How to read results
+
+Treat benchmark numbers as trend signals, not universal promises. Compare runs with the same Node version, adapter target, route set, and build mode before drawing conclusions.
+
+Resumability-oriented frameworks such as Qwik and Marko are designed around delaying or avoiding client-side activation, not only around already-active update paths. Primitive DOM-update cases mostly measure already-active update paths, and the browser interaction cases use small synthetic routes, so read interaction timing together with shipped JavaScript size, startup work, and whether unused UI needs to activate at all.
 
 ## Latest results
 
 BENCHMARK_RESULTS_PLACEHOLDER
-
-## How to read results
-
-Treat benchmark numbers as trend signals, not universal promises. Compare runs with the same Node version, adapter target, route set, and build mode before drawing conclusions.
