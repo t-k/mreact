@@ -149,6 +149,33 @@ describe("docs-site example contract", () => {
     expect(projectStructure).toContain("[HTTP APIs](/guides/http-apis/)");
   });
 
+  test("documents the App Router as the routing model hub", async () => {
+    const appRouter = await readDocsSite("src/content/guides/app-router.mdx");
+
+    expect(appRouter).toContain("file-system router");
+    expect(appRouter).toContain("## Core conventions");
+    expect(appRouter).toContain("layout.tsx");
+    expect(appRouter).toContain("page.tsx");
+    expect(appRouter).toContain("template.tsx");
+    expect(appRouter).toContain("loading.tsx");
+    expect(appRouter).toContain("error.tsx");
+    expect(appRouter).toContain("not-found.tsx");
+    expect(appRouter).toContain("route.ts");
+    expect(appRouter).toContain("middleware.ts");
+    expect(appRouter).toContain("## Request flow");
+    expect(appRouter).toContain("middleware runs first");
+    expect(appRouter).toContain("Route handlers use the same file-system matcher");
+    expect(appRouter).toContain("## Server by default");
+    expect(appRouter).toContain("stay JavaScript-free in the browser");
+    expect(appRouter).toContain("[Routing](/guides/routing/)");
+    expect(appRouter).toContain("[Layouts and Slots](/guides/layouts-and-slots/)");
+    expect(appRouter).toContain("[Data Loading](/guides/data-loading/)");
+    expect(appRouter).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(appRouter).toContain("[Middleware](/guides/middleware/)");
+    expect(appRouter).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+    expect(appRouter).toContain("[Server and Client Model](/guides/server-and-client-model/)");
+  });
+
   test("documents Link prefetch controls and configures syntax highlighting", async () => {
     const linkGuide = await readDocsSite("src/content/guides/link-and-navigation.mdx");
     const contentRegistry = await readDocsSite("src/content-registry.ts");

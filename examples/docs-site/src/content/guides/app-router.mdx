@@ -3,11 +3,53 @@ export const description = "The file-system router model used by Mreact applicat
 
 # App Router
 
-The app router maps files under `app/` or `src/app/` to pages, layouts, route handlers, middleware, and metadata conventions. It is the main entry point for building full Mreact applications.
+The App Router is Mreact's file-system router for full applications. Files under `app/` or `src/app/` define pages, layouts, route handlers, middleware, metadata, loading boundaries, error boundaries, and not-found boundaries.
 
-## What to learn here
+Use this page as the map for the router model. The focused guides explain each convention in more detail.
 
-- How route files become URLs.
-- How pages, layouts, templates, loading states, errors, and not-found boundaries compose.
-- How server-rendered routes stay JavaScript-free until client behavior is detected.
-- How deployment adapters run the same built app on Node, Cloudflare, Lambda, containers, and static hosts.
+## Core conventions
+
+```text
+src/app/
+  layout.tsx
+  page.tsx
+  not-found.tsx
+  users/
+    $id/
+      page.tsx
+  api/
+    users/
+      route.ts
+  middleware.ts
+```
+
+- `page.tsx` renders a URL.
+- `layout.tsx` wraps child routes with `<Slot />`.
+- `template.tsx` remounts for route changes where persistent layout state is not wanted.
+- `loading.tsx` provides a loading boundary for streaming and deferred data.
+- `error.tsx` renders route-local errors.
+- `not-found.tsx` renders 404 UI for the nearest route subtree.
+- `route.ts` defines HTTP API endpoints.
+- `middleware.ts` can short-circuit or rewrite requests before route rendering.
+
+## Request flow
+
+For a page request, middleware runs first. If it returns a `Response`, rendering stops there. Otherwise the matched route can run its loader, resolve metadata, render layouts and the page, and stream the response when the route uses streaming boundaries.
+
+Route handlers use the same file-system matcher but return `Response` objects directly instead of rendering a page.
+
+## Server by default
+
+Route modules are server-rendered by default. A route can stay JavaScript-free in the browser when it does not need client behavior. Mreact infers client runtime needs from route-level client code, client boundaries, signals, event handlers, and navigation behavior.
+
+Use explicit client boundaries when a component should hydrate in the browser. Keep server-only work in loaders, middleware, route handlers, metadata functions, and server actions.
+
+## Where to go next
+
+- [Routing](/guides/routing/) covers static routes, dynamic segments, catch-all segments, route groups, and params.
+- [Layouts and Slots](/guides/layouts-and-slots/) covers nested layouts, `<Slot />`, named slots, and templates.
+- [Data Loading](/guides/data-loading/) covers loaders, params, redirects, `notFound()`, `defer()`, and `<Await>`.
+- [HTTP APIs](/guides/http-apis/) covers `route.ts` endpoints for ordinary API work.
+- [Middleware](/guides/middleware/) covers request guards, redirects, rewrites, and request-level policy.
+- [Metadata and Head](/guides/metadata-and-head/) covers static metadata and request-aware metadata.
+- [Server and Client Model](/guides/server-and-client-model/) covers server defaults, inferred client routes, and explicit client boundaries.
