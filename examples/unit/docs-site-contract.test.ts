@@ -211,6 +211,7 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".tree-path.is-file");
     expect(css).toContain(".tree-path.is-param");
     expect(css).toContain("padding: 1rem");
+    expect(css).not.toContain("padding-inline: 0.08rem");
     expect(css).not.toContain("padding: 2.7rem 1rem 1rem");
   });
 
