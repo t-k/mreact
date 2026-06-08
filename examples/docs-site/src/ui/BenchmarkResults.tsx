@@ -1,6 +1,7 @@
 import {
   benchmarkRankingSuites,
   latestBenchmarkRun,
+  type BenchmarkRankingCard,
   type BenchmarkRankingRow,
 } from "../benchmark-results.js";
 
@@ -56,28 +57,7 @@ export function BenchmarkResults() {
           </div>
           <div class="benchmark-ranking-grid">
             {suite.cards.map((card) => (
-              <article class="benchmark-ranking-card" key={card.id}>
-                <div class="benchmark-ranking-card-heading">
-                  <h4>{card.title}</h4>
-                  <span>{card.rows.length} entries</span>
-                </div>
-                <p>{card.description}</p>
-                <ol class="benchmark-rank-list">
-                  {card.rows.map((row) => (
-                    <li
-                      class={`benchmark-rank-row${isMreactFramework(row) ? " is-mreact" : ""}`}
-                      key={`${card.id}-${row.rank}-${row.framework}`}
-                    >
-                      <span class="benchmark-rank-index">#{row.rank}</span>
-                      <span class="benchmark-rank-framework">{row.framework}</span>
-                      <span class="benchmark-rank-value">
-                        {row.value} {row.unit}
-                      </span>
-                      <span class="benchmark-rank-diff">{row.diff}</span>
-                    </li>
-                  ))}
-                </ol>
-              </article>
+              <BenchmarkRankingPanel card={card} key={card.id} />
             ))}
           </div>
         </section>
@@ -86,6 +66,75 @@ export function BenchmarkResults() {
   );
 }
 
+function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }) {
+  const maxValue = Math.max(...card.rows.map((row) => valueAsNumber(row)), 1);
+
+  return (
+    <section class="benchmark-panel" aria-labelledby={`${card.id}-title`}>
+      <div class="benchmark-panel-heading">
+        <h4 id={`${card.id}-title`}>{card.title}</h4>
+        <p>{card.rows.length} entries</p>
+      </div>
+      <p>{card.description}</p>
+      <div class="benchmark-chart" aria-label={`${card.title} ranking chart`}>
+        {rankingRowsWithDisplayRank(card.rows).map((row) => {
+          const width = Math.max(2, (valueAsNumber(row) / maxValue) * 100);
+
+          return (
+            <div
+              class={`benchmark-bar-row${isMreactFramework(row) ? " is-mreact" : ""}`}
+              key={`${card.id}-${row.rank}-${row.framework}`}
+            >
+              <span class="benchmark-label">
+                #{row.displayRank} {row.framework}
+              </span>
+              <span class="benchmark-bar-track" aria-hidden="true">
+                <span
+                  class="benchmark-bar-fill"
+                  style={`--bar-width: ${formatPercent(width)}%;`}
+                />
+              </span>
+              <span class="benchmark-value">
+                <span>
+                  {row.value} {row.unit}
+                </span>
+                <span class="benchmark-diff">{row.diff}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function rankingRowsWithDisplayRank(rows: readonly BenchmarkRankingRow[]) {
+  let previousValue: string | undefined;
+  let previousDisplayRank = 0;
+
+  return rows.map((row, index) => {
+    const displayRank = row.value === previousValue ? previousDisplayRank : index + 1;
+    previousValue = row.value;
+    previousDisplayRank = displayRank;
+
+    return {
+      ...row,
+      displayRank,
+    };
+  });
+}
+
 function isMreactFramework(row: BenchmarkRankingRow): boolean {
   return row.isMreact;
+}
+
+function valueAsNumber(row: BenchmarkRankingRow): number {
+  return globalThis.parseFloat(row.value.replace(",", ""));
+}
+
+function formatPercent(value: number): string {
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+    useGrouping: false,
+  });
 }

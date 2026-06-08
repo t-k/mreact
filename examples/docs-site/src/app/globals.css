@@ -353,7 +353,7 @@ a:hover {
 }
 
 .benchmark-meta,
-.benchmark-ranking-card {
+.benchmark-panel {
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 0.625rem;
@@ -432,135 +432,102 @@ a:hover {
 .benchmark-ranking-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 25rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
 }
 
-.benchmark-ranking-card {
-  container-type: inline-size;
+.benchmark-panel {
   display: grid;
   gap: 1rem;
   padding: 1.25rem;
 }
 
-.benchmark-ranking-card-heading {
+.benchmark-panel-heading {
   align-items: baseline;
   display: flex;
-  gap: 0.75rem;
+  gap: 1rem;
   justify-content: space-between;
 }
 
-.benchmark-ranking-card h4 {
-  font-size: 1.05rem;
+.benchmark-panel h4 {
+  font-size: 1.08rem;
   margin: 0;
   text-wrap: pretty;
 }
 
-.benchmark-ranking-card-heading span {
+.benchmark-panel p {
+  color: var(--text-2);
+  margin: 0;
+}
+
+.benchmark-panel-heading p {
   color: var(--text-3);
   flex: none;
-  font-size: 0.78rem;
-  font-weight: 750;
+  font-size: 0.82rem;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
-.benchmark-ranking-card p {
-  color: var(--text-2);
-  font-size: 0.92rem;
-  line-height: 1.55;
-  margin: 0;
-}
-
-.benchmark-rank-list {
+.benchmark-chart {
   display: grid;
-  gap: 0.65rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  gap: 0.7rem;
 }
 
-.benchmark-rank-row {
+.benchmark-bar-row {
   align-items: center;
-  background: color-mix(in oklch, var(--bg) 72%, var(--bg-soft));
-  border: 1px solid var(--border);
-  border-radius: 0.625rem;
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: 3rem minmax(0, 1fr) max-content max-content;
-  padding: 0.65rem 0.75rem;
+  grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr) minmax(7rem, max-content);
 }
 
-.benchmark-rank-row.is-mreact {
-  background: color-mix(in oklch, var(--brand) 15%, var(--bg));
-  border-color: color-mix(in oklch, var(--brand) 52%, var(--border));
+.benchmark-label,
+.benchmark-value {
+  font-size: 0.88rem;
 }
 
-.benchmark-rank-index,
-.benchmark-rank-value,
-.benchmark-rank-diff {
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.benchmark-rank-index {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 999rem;
-  color: var(--text-2);
-  display: inline-flex;
-  font-size: 0.8rem;
-  font-weight: 800;
-  justify-content: center;
-  line-height: 1;
-  padding: 0.32rem 0.45rem;
-}
-
-.benchmark-rank-framework {
+.benchmark-label {
   color: var(--text);
-  font-size: 0.92rem;
-  font-weight: 700;
-  min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.benchmark-rank-row:first-child .benchmark-rank-index {
-  background: color-mix(in oklch, var(--brand) 18%, var(--bg));
-  border-color: color-mix(in oklch, var(--brand) 45%, var(--border));
-  color: var(--brand-strong);
-}
-
-.benchmark-rank-row.is-mreact .benchmark-rank-framework {
+.benchmark-bar-row.is-mreact .benchmark-label {
   color: var(--brand-strong);
   font-weight: 850;
 }
 
-.benchmark-rank-value {
+.benchmark-value {
   color: var(--text-2);
-  font-size: 0.86rem;
-  font-weight: 700;
+  display: grid;
+  gap: 0.1rem;
+  font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
 }
 
-.benchmark-rank-diff {
+.benchmark-diff {
   color: var(--text-3);
-  font-size: 0.8rem;
-  text-align: right;
+  font-size: 0.78rem;
+  font-weight: 650;
 }
 
-@container (max-width: 23rem) {
-  .benchmark-ranking-card-heading {
-    align-items: flex-start;
-    display: grid;
-  }
+.benchmark-bar-track {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 999rem;
+  display: block;
+  height: 0.625rem;
+  overflow: hidden;
+}
 
-  .benchmark-rank-row {
-    grid-template-columns: 3rem minmax(0, 1fr);
-  }
+.benchmark-bar-fill {
+  background: color-mix(in oklch, var(--text-3) 52%, var(--bg));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  width: var(--bar-width);
+}
 
-  .benchmark-rank-value,
-  .benchmark-rank-diff {
-    grid-column: 2;
-    text-align: left;
-  }
+.benchmark-bar-row.is-mreact .benchmark-bar-fill {
+  background: linear-gradient(90deg, var(--brand), var(--accent));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -604,7 +571,17 @@ a:hover {
     display: grid;
   }
 
-  .benchmark-meta {
+  .benchmark-meta,
+  .benchmark-bar-row {
     grid-template-columns: 1fr;
+  }
+
+  .benchmark-panel-heading {
+    align-items: flex-start;
+    display: grid;
+  }
+
+  .benchmark-value {
+    text-align: left;
   }
 }

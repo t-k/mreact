@@ -135,8 +135,10 @@ describe("docs-site example contract", () => {
     expect(css).toContain("list-style: decimal");
     expect(css).toContain(".benchmark-results");
     expect(css).toContain(".benchmark-ranking-grid");
-    expect(css).toContain(".benchmark-ranking-card");
-    expect(css).toContain(".benchmark-rank-row.is-mreact");
+    expect(css).toContain(".benchmark-panel");
+    expect(css).toContain(".benchmark-bar-row.is-mreact");
+    expect(css).toContain(".benchmark-bar-track");
+    expect(css).toContain(".benchmark-bar-fill");
     expect(benchmarks).toContain("BENCHMARK_RESULTS_PLACEHOLDER");
     expect(await readDocsSite("src/content-registry.ts")).toContain(
       "renderToString(BenchmarkResults)",
@@ -152,7 +154,11 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain("browser create 1k rows");
     expect(benchmarkData).toContain("mreact-app-router");
     expect(benchmarkResults).toContain("benchmark-ranking-grid");
-    expect(benchmarkResults).toContain("benchmark-rank-row");
+    expect(benchmarkResults).toContain("BenchmarkRankingPanel");
+    expect(benchmarkResults).toContain("benchmark-chart");
+    expect(benchmarkResults).toContain("benchmark-bar-row");
+    expect(benchmarkResults).toContain("benchmark-diff");
+    expect(benchmarkResults).toContain("displayRank");
     expect(benchmarkResults).toContain("isMreactFramework");
     expect(benchmarkResults).not.toContain("Full summary rows");
   });
