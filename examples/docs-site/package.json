@@ -1,0 +1,28 @@
+{
+  "name": "@reckona/example-docs-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "mreact-router build --target=node && tsx scripts/export-static.ts",
+    "dev": "mreact-router dev",
+    "lint": "oxlint . --ignore-pattern .mreact --ignore-pattern dist",
+    "start": "mreact-router start .mreact",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@reckona/mreact": "workspace:*",
+    "@reckona/mreact-router": "workspace:*"
+  },
+  "devDependencies": {
+    "@mdx-js/rollup": "^3.1.1",
+    "@tailwindcss/vite": "4.3.0",
+    "rehype-slug": "^6.0.0",
+    "remark-frontmatter": "^5.0.0",
+    "remark-mdx-frontmatter": "^5.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11",
+    "vitest": "^4.1.6"
+  }
+}

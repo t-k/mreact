@@ -1,0 +1,8 @@
+export const title = "SSG and Static Export";
+export const description = "Build-time prerendering and static export for static hosts such as GitHub Pages.";
+
+# SSG and static export
+
+Set `export const prerender = true` to render a route during the build. Dynamic routes can export `generateStaticParams()` to enumerate concrete paths.
+
+Static hosts can use `exportStaticApp()` after `mreact-router build` to write route HTML and client assets to a deployable directory.

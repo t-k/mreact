@@ -1,0 +1,13 @@
+export const title = "AWS Lambda";
+export const description = "Build, package, preload, and diagnose AWS Lambda handlers.";
+
+# AWS Lambda
+
+Use the AWS Lambda target for API Gateway HTTP API v2 or Lambda Function URL payload format 2.0:
+
+```bash
+mreact-router build --target=aws-lambda
+mreact-router package aws-lambda --from .mreact --out .lambda
+```
+
+Use preloaded handlers when first-request latency matters, and keep deployment artifacts minimal: `.mreact`, the handler, lockfiles, package metadata, and production dependencies.

@@ -1,0 +1,8 @@
+export const title = "Client Boundaries";
+export const description = "Hydrated islands, route-level client routes, and fallback SSR behavior.";
+
+# Client boundaries
+
+Mark an island with `.client.tsx` or a top-level `"use client"` directive. Server-renderable children remain visible in the initial HTML where possible, so content can paint and be indexed before hydration.
+
+The analyzer follows supported static render shapes. For dynamic registries or hidden dispatch, use explicit route configuration.

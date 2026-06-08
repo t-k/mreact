@@ -1,0 +1,8 @@
+export const title = "Cache Policy";
+export const description = "Choose cache policy for route HTML, hashed assets, public files, and CDN releases.";
+
+# Cache policy
+
+Hashed route assets can use a long immutable cache. Manifest files and non-fingerprinted public assets should use shorter cache or revalidation. Keep the app server deployment and CDN upload in one release transaction so HTML never points at missing route scripts or stylesheets.
+
+Use route cache and `cacheControl()` for route HTML, not for browser bundle assets.

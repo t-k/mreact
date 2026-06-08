@@ -1,0 +1,16 @@
+export const title = "Link and Navigation";
+export const description = "Use Link, prefetch controls, scroll behavior, and navigation state.";
+
+# Link and navigation
+
+Use `Link` from `@reckona/mreact-router/link` when a route needs explicit navigation behavior such as viewport prefetch, preserved scroll, or a forced document reload.
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export default function Page() {
+  return <Link href="/docs" prefetch="viewport">Docs</Link>;
+}
+```
+
+Server-only routes can get the lightweight navigation runtime without becoming hydrated client routes.

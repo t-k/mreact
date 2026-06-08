@@ -1,0 +1,31 @@
+export const title = "Source Maps";
+export const description = "Disable production client source maps, emit hidden upload-only maps, and upload to Sentry-style services.";
+
+# Source maps
+
+Production client source maps are disabled by default. Keep that default when you do not need browser stack trace symbolication.
+
+## Hidden upload-only maps
+
+Use hidden maps when a service such as Sentry should receive maps but visitors should not discover them through the client manifest or `sourceMappingURL` comments.
+
+```ts
+mreactRouter({
+  projectRoot: __dirname,
+  routesDir: "src/app",
+  clientSourceMaps: "hidden",
+});
+```
+
+Hidden maps are written under `.mreact/source-maps/client/`. Upload those files during CI after `mreact-router build`, then deploy `.mreact/client` without the hidden map directory.
+
+## Linked maps
+
+Use `clientSourceMaps: "linked"` only for debugging environments where public `.js.map` files are acceptable.
+
+## Sentry-style upload flow
+
+1. Build with `clientSourceMaps: "hidden"` or `mreact-router build --client-source-maps=hidden`.
+2. Upload `.mreact/source-maps/client/**/*.map` with the release identifier used by your deployment.
+3. Deploy `.mreact/client` and server output.
+4. Do not copy `.mreact/source-maps` to the public static asset host.

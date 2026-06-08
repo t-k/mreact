@@ -1,0 +1,8 @@
+export const title = "Container and Cloud Run";
+export const description = "Run Node build output in containers, including Cloud Run.";
+
+# Container and Cloud Run
+
+Container deployments run the Node server output. Bind to `0.0.0.0`, use the platform-provided `PORT`, set strict host policy, and configure allowed hosts for public origins.
+
+Cloud Run injects `PORT` automatically. A typical container should start `mreact-router start .mreact`.

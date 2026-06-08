@@ -1,0 +1,8 @@
+export const title = "Server Actions";
+export const description = "Use form actions, CSRF-bound tokens, body limits, and revalidation.";
+
+# Server actions
+
+Server actions are inferred when an imported function is passed to `<form action={action}>`. The action implementation stays in the server graph and production client bundles only receive an action reference.
+
+Set `MREACT_SERVER_ACTION_SECRET` consistently across multi-instance deployments so forms rendered on one instance can submit to another.

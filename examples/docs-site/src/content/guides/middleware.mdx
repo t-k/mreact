@@ -1,0 +1,8 @@
+export const title = "Middleware";
+export const description = "Short-circuit requests, redirect users, and skip middleware per route.";
+
+# Middleware
+
+Middleware can return a `Response` to stop rendering or return `undefined` to continue. Use static `config.matcher` values to avoid running middleware on unrelated paths.
+
+Middleware is a good place for coarse auth redirects, request gating, and route-independent response decisions.

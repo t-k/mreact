@@ -1,0 +1,8 @@
+export const title = "SSR and Streaming";
+export const description = "Server rendering, streaming routes, loading boundaries, and Await.";
+
+# SSR and streaming
+
+mreact renders pages on the server and can stream route shells before deferred work finishes. Use `<Await>` for route-local async boundaries, and collocate `loading.tsx` when a route needs a loading boundary.
+
+Streaming is preserved on compatible runtimes. Buffered platforms such as standard Lambda proxy responses materialize the stream before returning the body.

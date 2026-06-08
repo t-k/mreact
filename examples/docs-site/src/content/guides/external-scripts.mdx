@@ -1,0 +1,8 @@
+export const title = "External Scripts";
+export const description = "Integrate GTM, GA4, JSON-LD, and SPA page view tracking safely.";
+
+# External scripts
+
+Use `metadata.head` for route-owned external scripts and inline bootstraps. Pair executable scripts with CSP nonces and add third-party hosts to `script-src` only when production traffic needs them.
+
+For SPA page views, subscribe to navigation state in a small client island and push events to the analytics queue after navigation completes.

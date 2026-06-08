@@ -1,0 +1,12 @@
+export const title = "Cloudflare";
+export const description = "Build and deploy mreact apps to Cloudflare Workers or Pages advanced mode.";
+
+# Cloudflare
+
+Build Workers artifacts with the Cloudflare target:
+
+```bash
+mreact-router build --target=cloudflare
+```
+
+The build emits `.mreact/cloudflare/worker.mjs`, route modules, server route modules, and `.mreact/client` assets. Cloudflare Pages advanced mode can package the output with `mreact-router package cloudflare-pages`.

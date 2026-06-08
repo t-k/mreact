@@ -1,0 +1,20 @@
+export const title = "Project Structure";
+export const description = "Recommended folders for routes, shared code, public assets, and generated output.";
+
+# Project structure
+
+A generated `--src-dir` app uses this shape:
+
+```text
+my-app/
+  src/
+    app/
+      layout.tsx
+      page.tsx
+    lib/
+      app-info.ts
+  public/
+  vite.config.ts
+```
+
+Keep route modules under `src/app`, app-local shared modules under `src/lib`, and static files under `public`. Built output goes to `.mreact` and should be treated as generated deployment material.

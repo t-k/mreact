@@ -1,0 +1,8 @@
+export const title = "Server and Client Model";
+export const description = "How mreact decides what runs on the server and what hydrates in the browser.";
+
+# Server and client model
+
+Server-rendered routes stay JavaScript-free by default. A route gets client output when route-level client behavior, a `.client.tsx` boundary, or explicit `"use client"` requires browser execution.
+
+Use `.client.tsx` for islands that hydrate independently. Use route-level `"use client"` only when the whole route is a client route.

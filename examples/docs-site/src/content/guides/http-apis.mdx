@@ -1,0 +1,49 @@
+export const title = "HTTP APIs";
+export const description = "Write ordinary JSON APIs with route.ts files, validation, auth guards, status codes, and CORS.";
+
+# HTTP APIs
+
+Use `route.ts` when you want ordinary HTTP endpoints for client components, forms, webhooks, admin tools, or external integrations.
+
+## JSON GET endpoint
+
+```ts
+export async function GET(
+  request: Request,
+  context: { params: { id: string } },
+): Promise<Response> {
+  const url = new URL(request.url);
+  const includePosts = url.searchParams.get("include") === "posts";
+  const user = await loadUser(context.params.id, { includePosts });
+
+  if (user === undefined) {
+    return Response.json({ error: "User not found" }, { status: 404 });
+  }
+
+  return Response.json({ user });
+}
+```
+
+## JSON POST endpoint
+
+```ts
+export async function POST(request: Request): Promise<Response> {
+  const body = await request.json();
+  const parsed = parseCreateUser(body);
+
+  if (!parsed.ok) {
+    return Response.json({ error: "Invalid request" }, { status: 422 });
+  }
+
+  const user = await createUser(parsed.value);
+  return Response.json({ user }, { status: 201 });
+}
+```
+
+## Production checklist
+
+- Validate request bodies before using them.
+- Return specific status codes for expected failures.
+- Add auth guards before reading private data.
+- Add CSRF protection for cookie-authenticated browser mutations.
+- Configure CORS explicitly when non-same-origin clients call the API.

@@ -1,0 +1,8 @@
+export const title = "File Uploads and CSRF";
+export const description = "Handle multipart uploads, bounded streams, filenames, and CSRF for cookie-authenticated forms.";
+
+# File uploads and CSRF
+
+Plain multipart route handlers do not automatically get the server-action CSRF guard. For cookie-authenticated upload forms, render a CSRF field and validate it before consuming large file parts.
+
+Use bounded multipart parsing and storage-safe filenames when accepting user uploads.

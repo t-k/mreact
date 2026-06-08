@@ -1,0 +1,8 @@
+export const title = "CSP";
+export const description = "Configure Content Security Policy with metadata, nonces, inline scripts, and inline styles.";
+
+# CSP
+
+Use `metadata.csp` to set route-specific Content Security Policy. A nonce can be generated in `generateMetadata()` and applied to `metadata.head` script or style descriptors with `nonce: true`.
+
+Be careful with `style-src`: adding a nonce to style policy changes how browsers treat inline styles. Prefer external CSS for strict production CSP.

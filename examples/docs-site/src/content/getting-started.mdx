@@ -1,0 +1,39 @@
+export const title = "Getting Started";
+export const description = "Create a project, run the dev server, add a route, and build production output.";
+
+# Getting started
+
+Create a new app with the project generator:
+
+```bash
+npx @reckona/create-mreact-app my-app --template basic --src-dir
+cd my-app
+pnpm install
+pnpm dev
+```
+
+The generated project includes an explicit `vite.config.ts`, app-router route globals in `tsconfig.json`, and package scripts for development, build, typecheck, lint, test, and production serving.
+
+## Add a route
+
+Routes live under `src/app` when `--src-dir` is used. Add a page at `src/app/docs/page.tsx`:
+
+```tsx
+export const metadata = {
+  title: "Docs",
+  description: "A server-rendered route.",
+};
+
+export default function Page() {
+  return <main><h1>Docs</h1></main>;
+}
+```
+
+## Build and start
+
+```bash
+pnpm build
+pnpm start
+```
+
+For local request summaries, run `mreact-router dev --log=requests` or `mreact-router start .mreact --log=requests`.

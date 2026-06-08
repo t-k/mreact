@@ -1,0 +1,20 @@
+export const title = "Production Checklist";
+export const description = "The launch checklist for host policy, secrets, source maps, cache, CSP, auth, logging, and assets.";
+
+# Production checklist
+
+Use this page before the first public deployment and before each major deployment target change.
+
+## Required decisions
+
+- Set the deployment target: Node/container, Cloudflare, AWS Lambda, or static hosting.
+- Set exact allowed hosts and choose the correct host policy.
+- Decide which environment variables are runtime secrets and which values are safe for the browser.
+- Decide whether production client source maps stay disabled or are emitted as hidden upload-only maps.
+- Define CDN upload and cache invalidation order for `.mreact/client`.
+- Configure logging and diagnostics without logging headers, cookies, request bodies, or secrets.
+- Replace demo auth stores with durable production session storage.
+
+## Verify before launch
+
+Run the production build, serve or export the built output, open the critical routes, verify 404 behavior, and inspect response headers for CSP, security headers, cache policy, and source map exposure.

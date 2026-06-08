@@ -1,0 +1,36 @@
+export const title = "Environment Variables";
+export const description = "How to read server-only values, expose safe client values, and separate build-time from runtime configuration.";
+
+# Environment variables
+
+Environment variables have two different jobs in an mreact app: runtime configuration that only server code can read, and public values that are intentionally bundled or serialized for the browser.
+
+## Server-only values
+
+Read secrets in server-only code paths such as loaders, middleware, route handlers, server actions, and `generateMetadata`. Good examples are database URLs, OIDC client secrets, private API tokens, session secrets, and webhook secrets.
+
+```ts
+export async function loader() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl === undefined) {
+    throw new Error("DATABASE_URL is required.");
+  }
+  return { ready: true };
+}
+```
+
+Do not import a module that reads secrets from `.client.tsx` files or route-level client code.
+
+## Client-exposed values
+
+Only expose values that are safe for every visitor to see, such as a public API origin, GTM container ID, or browser Sentry DSN. Pass them through page data, metadata, or a small client config object. Use a clear prefix in your app convention, for example `PUBLIC_`, even though the prefix itself is not a security boundary.
+
+## Build-time versus runtime
+
+Values read by Vite `define` or client transforms are build-time values. Values read inside server request handlers are runtime values. Cloudflare bindings, Lambda environment variables, and container environment variables should be handled as runtime inputs when the value can differ between deployments.
+
+## Deployment differences
+
+- Containers and Cloud Run inject process environment variables into the Node server.
+- AWS Lambda exposes configured environment variables to the handler process.
+- Cloudflare Workers should prefer `context.env` bindings inside loaders and route handlers for Worker-specific resources and secrets.

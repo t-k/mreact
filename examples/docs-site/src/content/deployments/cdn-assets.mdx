@@ -1,0 +1,17 @@
+export const title = "CDN Assets";
+export const description = "Host only built assets on a CDN while application routes remain on the app origin.";
+
+# CDN assets
+
+Upload `.mreact/client` to a static origin and configure base URLs for generated asset references.
+
+```ts
+mreactRouter({
+  projectRoot: __dirname,
+  routesDir: "src/app",
+  assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+  publicAssetBaseUrl: "https://cdn.example.com/",
+});
+```
+
+`assetBaseUrl` changes route scripts, modulepreload links, dynamic import preload helpers, and route stylesheet assets. It does not move application routes to the CDN; HTML routes still come from the app origin unless you use a static export workflow.

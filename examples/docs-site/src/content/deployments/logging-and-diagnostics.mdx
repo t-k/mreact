@@ -1,0 +1,16 @@
+export const title = "Logging and Diagnostics";
+export const description = "Use request logs, Lambda timings, instrumentation hooks, and trace context safely.";
+
+# Logging and diagnostics
+
+Use compact request logs for local and production smoke diagnosis:
+
+```bash
+mreact-router dev --log=requests
+mreact-router start .mreact --log=requests
+MREACT_ROUTER_LOG=requests mreact-router start .mreact
+```
+
+Request summaries include method, path, status, duration, and runtime. They intentionally omit query strings, headers, cookies, and bodies.
+
+For AWS Lambda latency work, enable adapter timings temporarily and inspect request normalization, runtime materialization, loader, middleware, render, and response conversion phases.

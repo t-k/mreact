@@ -1,0 +1,8 @@
+export const title = "Cache and Revalidation";
+export const description = "Route HTML cache, cacheControl, revalidate, and client navigation invalidation.";
+
+# Cache and revalidation
+
+Use `export const revalidate = N` for route-level cached HTML. Use `cacheControl()` when policy depends on request data. Use `revalidatePath()` after mutations to invalidate cached route HTML.
+
+Shared route cache storage is opt-in through `sMaxAge`.

@@ -1,0 +1,8 @@
+export const title = "Data Loading";
+export const description = "Load route data with loaders and pass it into pages.";
+
+# Data loading
+
+Export `loader(context)` from a page module to load data before render. The context includes params, the current request, a per-request query client, and adapter environment when available.
+
+Loaders may return data, throw `notFound()`, or return a `Response` for redirects and custom status handling.

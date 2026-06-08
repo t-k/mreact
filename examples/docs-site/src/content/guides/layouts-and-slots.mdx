@@ -1,0 +1,14 @@
+export const title = "Layouts and Slots";
+export const description = "How layouts wrap child routes and named slots fill layout regions.";
+
+# Layouts and slots
+
+Layouts wrap child routes with `<Slot />`. Named slots let a page fill a specific region of a parent layout without turning the whole tree into client code.
+
+```tsx
+export default function DocsLayout() {
+  return <section><aside><Slot name="aside" /></aside><article><Slot /></article></section>;
+}
+```
+
+Use layouts for persistent shells and templates for route changes that should remount.

@@ -1,0 +1,16 @@
+export const title = "Routing";
+export const description = "Static, dynamic, catch-all, route group, and metadata route conventions.";
+
+# Routing
+
+Use `page.tsx` for pages, `$id` for dynamic segments, `$...slug` for catch-all segments, and parenthesized route groups for URL-free organization.
+
+```text
+src/app/
+  page.tsx
+  users/$id/page.tsx
+  files/$...path/page.tsx
+  (marketing)/contact/page.tsx
+```
+
+Route params are decoded before they reach loaders and page props. Re-encode params before embedding them into new URLs.
