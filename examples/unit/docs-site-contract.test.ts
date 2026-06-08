@@ -155,6 +155,10 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain("benchmarkRankingSuites");
     expect(benchmarkData).toContain("browser create 1k rows");
     expect(benchmarkData).toContain("mreact-app-router");
+    expect(benchmarks).toContain("Primitive DOM and reactivity work");
+    expect(benchmarks).toContain("Browser runtime behavior");
+    expect(benchmarks).toContain("App router and deployment paths");
+    expect(benchmarks).toContain("The latest section renders every ranking card");
     expect(benchmarkResults).toContain("benchmark-ranking-grid");
     expect(benchmarkResults).toContain("BenchmarkRankingPanel");
     expect(benchmarkResults).toContain("benchmark-chart");

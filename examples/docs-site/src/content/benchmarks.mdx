@@ -3,15 +3,17 @@ export const description = "Current Mreact benchmark areas and how to interpret 
 
 # Benchmarks
 
-Benchmarks are part of Mreact's development loop. They are used to watch client bundle size, server rendering throughput, streaming behavior, route artifact shape, and deployment startup paths.
+Benchmarks are part of Mreact's development loop. They are used to watch primitive runtime behavior, browser DOM costs, app-router throughput, client bundle size, route artifact shape, and deployment startup paths.
 
 ## What we measure
 
-- **Client bundle size** - How much JavaScript is shipped for routes that need browser interactivity.
-- **Server rendering cost** - How much work the server does to produce HTML.
-- **Streaming behavior** - Whether pages can deliver useful HTML before all deferred work finishes.
-- **Route artifact shape** - Whether middleware, redirects, loaders, and render modules stay separated enough to avoid unnecessary imports.
-- **Deployment startup** - Cold and first-request behavior on AWS Lambda, Cloudflare, and containers.
+- **Primitive DOM and reactivity work** - How keyed list operations, source writes, text bindings, computed fan-out, computed fan-in, and memory-sensitive primitive cases behave across frameworks.
+- **Browser runtime behavior** - How the same DOM-heavy primitive cases behave in real Chromium rather than only in the server-side benchmark harness.
+- **App router and deployment paths** - How server rendering, streaming, static cache hits, middleware, route matching, cold starts, build time, and adapter targets behave under app-router workloads.
+- **Client bundle shape** - How much JavaScript is shipped for server-only routes and interactive routes after gzip compression.
+- **Route artifact boundaries** - Whether middleware, redirects, loaders, server actions, layouts, and render modules stay separated enough to avoid unnecessary imports.
+
+The latest section renders every ranking card from the current `primitive.md`, `router.md`, and `primitive-browser.md` reports, not a hand-picked subset.
 
 ## Latest results
 
