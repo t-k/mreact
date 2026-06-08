@@ -122,6 +122,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("--brand: #92400e");
     expect(css).toContain("--bg: #0b0f1a");
     expect(css).toContain("--brand: #a5b4fc");
+    expect(css).toContain("--code-panel-bg: #020617");
+    expect(css).toContain("color-scheme: only dark");
     expect(css).toContain('-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif');
     expect(css).toContain("max-width: 720px");
     expect(css).toContain("line-height: 1.75");

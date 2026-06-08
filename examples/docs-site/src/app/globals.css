@@ -12,8 +12,8 @@
   --brand-strong: #7c2d12;
   --accent: #f59e0b;
   --code-bg: #f4f2ef;
-  --code-panel-bg: #0a0e18;
-  --code-panel-border: #222a3d;
+  --code-panel-bg: #020617;
+  --code-panel-border: #111827;
 }
 
 html {
@@ -224,7 +224,7 @@ a:hover {
   background: var(--code-panel-bg);
   border: 1px solid var(--code-panel-border);
   border-radius: 10px;
-  color-scheme: dark;
+  color-scheme: only dark;
   margin: 20px 0;
   overflow: hidden;
   position: relative;
@@ -249,8 +249,8 @@ a:hover {
 }
 
 .code-copy {
-  background: #161c2b;
-  border: 1px solid #39445d;
+  background: #111827;
+  border: 1px solid #334155;
   border-radius: 6px;
   color: #e2e8f0;
   cursor: pointer;
@@ -265,7 +265,7 @@ a:hover {
 }
 
 .code-copy:hover {
-  background: #222a3d;
+  background: #1e293b;
 }
 
 .doc-article .hljs-keyword,
@@ -333,8 +333,8 @@ a:hover {
     --brand-strong: #c7d2fe;
     --accent: #38bdf8;
     --code-bg: #0a0e18;
-    --code-panel-bg: #0a0e18;
-    --code-panel-border: #222a3d;
+    --code-panel-bg: #020617;
+    --code-panel-border: #111827;
   }
 
   .doc-article code {
