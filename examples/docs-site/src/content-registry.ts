@@ -90,8 +90,75 @@ function applyHtmlReplacements(html: string, replacements: readonly HtmlReplacem
 
 function enhanceCodeBlocks(html: string): string {
   return html.replaceAll(/<pre>([\s\S]*?)<\/pre>/g, (_match, preBody: string) => {
-    return `<div class="code-block"><button class="code-copy" type="button">Copy</button><pre>${preBody}</pre></div>`;
+    const highlightedPreBody = highlightFileTreeCodeBlock(preBody);
+    const fileTreeBlockClass = "code-block is-file-tree";
+    const blockClass = highlightedPreBody === preBody ? "code-block" : fileTreeBlockClass;
+
+    return `<div class="${blockClass}"><button class="code-copy" type="button">Copy</button><pre>${highlightedPreBody}</pre></div>`;
   });
+}
+
+function highlightFileTreeCodeBlock(preBody: string): string {
+  const codeMatch = preBody.match(/^<code([^>]*)>([\s\S]*?)<\/code>$/);
+  if (codeMatch === null) {
+    return preBody;
+  }
+
+  const attributes = codeMatch[1];
+  const codeBody = codeMatch[2];
+  if (attributes === undefined || codeBody === undefined) {
+    return preBody;
+  }
+
+  if (!attributes.includes("language-text") || !isFileTree(codeBody)) {
+    return preBody;
+  }
+
+  return `<code${attributes}>${codeBody
+    .split("\n")
+    .map((line) => highlightFileTreeLine(line))
+    .join("\n")}</code>`;
+}
+
+function isFileTree(codeBody: string): boolean {
+  const lines = codeBody.split("\n").filter((line) => line.trim() !== "");
+  if (lines.length < 3) {
+    return false;
+  }
+
+  const [rootLine] = lines;
+  if (rootLine === undefined) {
+    return false;
+  }
+
+  return rootLine.endsWith("/") && lines.some((line) => /^ {2,}\S/.test(line));
+}
+
+function highlightFileTreeLine(line: string): string {
+  const lineMatch = line.match(/^(\s*)(\S.*)$/);
+  if (lineMatch === null) {
+    return line;
+  }
+
+  const indent = lineMatch[1];
+  const path = lineMatch[2];
+  if (indent === undefined || path === undefined) {
+    return line;
+  }
+
+  return `${indent}<span class="${fileTreePathClass(path)}">${path}</span>`;
+}
+
+function fileTreePathClass(path: string): string {
+  if (path.startsWith("$")) {
+    return "tree-path is-param";
+  }
+
+  if (path.endsWith("/")) {
+    return "tree-path is-dir";
+  }
+
+  return "tree-path is-file";
 }
 
 export const docsPages = [

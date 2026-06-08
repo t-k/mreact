@@ -25,6 +25,9 @@
   --syntax-comment: oklch(0.704 0.04 256.788);
   --syntax-number: oklch(0.833 0.145 321.434);
   --syntax-type: oklch(0.811 0.111 293.571);
+  --tree-dir: oklch(0.828 0.189 84.429);
+  --tree-file: oklch(0.929 0.013 255.508);
+  --tree-param: oklch(0.865 0.127 207.078);
 }
 
 html {
@@ -291,6 +294,26 @@ a:hover {
 
 .code-copy:hover {
   background: var(--code-copy-bg-hover);
+}
+
+.doc-article .is-file-tree .tree-path {
+  border-radius: 4px;
+  padding-inline: 0.08rem;
+}
+
+.doc-article .tree-path.is-dir {
+  color: var(--tree-dir);
+  font-weight: 700;
+}
+
+.doc-article .tree-path.is-file {
+  color: var(--tree-file);
+}
+
+.doc-article .tree-path.is-param {
+  background: color-mix(in oklch, var(--tree-param) 14%, transparent);
+  color: var(--tree-param);
+  font-weight: 700;
 }
 
 .doc-article .hljs-keyword,
