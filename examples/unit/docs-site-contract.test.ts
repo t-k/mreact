@@ -225,6 +225,9 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".benchmark-badge-list");
     expect(css).toContain(".benchmark-badge");
     expect(css).toContain(".benchmark-filter-list");
+    expect(css).toContain('.benchmark-filter[aria-pressed="true"]');
+    expect(css).toContain("border-width: 0.125rem");
+    expect(css).toContain("background: var(--benchmark-badge-text, var(--text))");
     expect(css).toContain(".benchmark-badge.is-size");
     expect(css).toContain(".benchmark-badge.is-ssr");
     expect(css).toContain(".benchmark-badge.is-interactivity");
@@ -255,6 +258,7 @@ describe("docs-site example contract", () => {
     expect(css).toContain("font-size: 1rem");
     expect(css).toContain("margin: 1rem 0");
     expect(css).not.toContain("font-size: 16px");
+    expect(css).not.toMatch(/font-size:\s*0\./);
     expect(css).not.toContain("max-width: 720px");
     expect(css).not.toContain("margin: 16px 0");
     expect(css).toContain("text-wrap: balance");
