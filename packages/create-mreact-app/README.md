@@ -38,8 +38,8 @@ Generated apps include an explicit `vite.config.ts` with the mreact router plugi
 The template selects the starting app content. Deploy targets (including
 Cloudflare) are chosen separately with `--deploy`; see [Deploy](#deploy).
 
-- `basic` -- router + TypeScript starter (default)
-- `tailwind` -- adds Tailwind CSS
+- `basic` -- router + TypeScript counter starter (default)
+- `tailwind` -- adds Tailwind CSS to the counter starter
 - `dashboard` -- full demo: Tailwind, auth guards, a working demo login (`demo@example.com` / `kanban1234`), query cache hydration, and a development devtools overlay
 
 When the target directory is inside a pnpm workspace that contains local `@reckona/*` packages, generated `@reckona/*` dependency ranges use `workspace:*` so in-repo examples exercise the checked-out source instead of the npm registry.
