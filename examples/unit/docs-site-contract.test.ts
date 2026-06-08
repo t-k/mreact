@@ -166,6 +166,7 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".benchmark-panel");
     expect(css).toContain("align-content: start");
     expect(css).toContain("align-self: start");
+    expect(css).toContain("font-size: 1.18rem");
     expect(css).toContain(".benchmark-bar-row.is-mreact");
     expect(css).toContain(".benchmark-bar-track");
     expect(css).toContain(".benchmark-bar-fill");
