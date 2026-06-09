@@ -17,6 +17,46 @@ export default function Page() {
 }
 ```
 
+## Typed route hrefs
+
+Use `href()` from `@reckona/mreact-router` when a link points at a dynamic route. It accepts Mreact route patterns such as `/users/:id` and `/files/:...path`, requires matching params at compile time, and encodes params, search values, and hashes at runtime.
+
+```tsx
+import { href } from "@reckona/mreact-router";
+import { Link } from "@reckona/mreact-router/link";
+
+export function UserLink(props: { user: { id: string; name: string } }) {
+  const profileHref = href("/users/:id", {
+    hash: "profile",
+    params: { id: props.user.id },
+    search: { tab: "activity" },
+  });
+
+  return <Link href={profileHref}>{props.user.name}</Link>;
+}
+```
+
+Catch-all params are arrays of decoded path segments:
+
+```tsx
+import { href } from "@reckona/mreact-router";
+import { Link } from "@reckona/mreact-router/link";
+
+export function FileLink() {
+  return (
+    <Link
+      href={href("/files/:...path", {
+        params: { path: ["notes", "day 1"] },
+      })}
+    >
+      Day 1 notes
+    </Link>
+  );
+}
+```
+
+Build output includes `.mreact/routes.d.ts`, which declares `AppRoutePath` and the discovered page and route-handler patterns. The generated declarations mean dynamic params are required at compile time, unknown params are rejected, and internal route patterns stay separate from external URLs.
+
 ## Prefetch, not preload
 
 The API is named `prefetch`, not `preload`. It controls navigation preparation, not server runtime module preloading or HTML asset preload links.

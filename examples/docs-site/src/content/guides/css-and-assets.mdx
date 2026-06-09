@@ -1,8 +1,192 @@
 export const title = "CSS and Assets";
-export const description = "Use route CSS imports, Tailwind, public assets, client assets, and CDN base URLs.";
+export const description = "Use route CSS imports, Tailwind, public assets, CSS-referenced assets, image priority, and CDN base URLs.";
 
 # CSS and assets
 
-Import CSS from pages, layouts, or templates to emit route stylesheet assets. Public files live under `public/` and are copied into the built client output. For docs-style sites, Tailwind can be wired through the Vite plugin and a single layout-level CSS import.
+Mreact uses Vite for CSS and asset transforms, then records the route assets that the app router needs to link from server-rendered HTML. Use this page when you need to decide where CSS should be imported, where images should live, and how production asset URLs should be hosted.
 
-For production CDN hosting, configure `assetBaseUrl` for built route assets and `publicAssetBaseUrl` for public asset helpers.
+## What Mreact builds
+
+The build output separates three asset groups:
+
+- Route stylesheet assets imported by route files.
+- Client route scripts, modulepreload links, and dynamic import preload helpers.
+- Copied public assets from `public/`.
+
+CSS `url()` references are handled by Vite and become part of the hashed client asset closure. The copied public assets keep their URL paths.
+
+## Import CSS from route files
+
+Import CSS from a route-owned file when the stylesheet should be linked with that route. A shared stylesheet usually belongs in the root layout.
+
+```tsx
+// src/app/layout.tsx
+import "./globals.css";
+
+export default function Layout(props) {
+  return (
+    <html lang="en">
+      <body>{props.children}</body>
+    </html>
+  );
+}
+```
+
+Mreact discovers CSS imported by a layout, page, template, error, or not-found route file and emits route stylesheet assets for the matched route. Import broad design system CSS from layouts, and import narrow route-only CSS from the route that owns it.
+
+CSS imports do not make the route a client route. A server-rendered route can link CSS without shipping a hydrated page component.
+
+## Tailwind
+
+Use the Vite plugin path for Tailwind CSS. Keep Tailwind input CSS in the app tree and import it from a layout so route HTML links the compiled stylesheet.
+
+```ts
+// vite.config.ts
+import tailwindcss from "@tailwindcss/vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    tailwindcss(),
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+      publicDir: "public",
+      allowedSourceDirs: ["src"],
+    }),
+  ],
+});
+```
+
+```css
+/* src/app/globals.css */
+@import "tailwindcss";
+```
+
+The `tailwind` create-app template wires this for a starter app. For existing apps, add the plugin, add the CSS input, and import that CSS from a route layout.
+
+## Public assets
+
+Put files in `public/` when they need stable root URLs such as `/favicon.svg`, `/robots.txt`, `/logo.svg`, or downloadable files.
+
+```text file-tree
+my-app/
+  public/
+    favicon.svg
+    logo.svg
+  src/
+    app/
+      layout.tsx
+      page.tsx
+```
+
+```tsx
+export default function Page() {
+  return <img src="/logo.svg" alt="Acme" width="160" height="40" />;
+}
+```
+
+`public/favicon.svg` is served as `/favicon.svg`. These public assets are not fingerprinted, so replacing `/logo.svg` in place can be cached differently from a hashed route asset. In the built Node server, public assets use `Cache-Control: public, max-age=3600`; for CDN deployments, keep non-fingerprinted public assets on a shorter cache or deploy them under versioned filenames when you need long caching.
+
+## Assets referenced from CSS
+
+Use relative `url()` references for images or fonts that are owned by a CSS file. Vite rewrites the reference to a hashed client asset and Mreact keeps that asset in the built client closure.
+
+```css
+/* src/app/marketing/hero.css */
+.hero {
+  background-image: url("./assets/logo.svg");
+  background-position: center;
+  background-size: cover;
+}
+```
+
+This is different from `public/`: the referenced file is bundled as a hashed client asset, and the generated CSS points at the built asset URL. Use this for CSS-owned decorative assets and component-local assets. Use `public/` when application code, crawlers, or external systems need a stable URL.
+
+## Images and priority
+
+Prefer visible HTML images for the Largest Contentful Paint image so the browser can discover the resource early. Add explicit dimensions to avoid layout shifts, do not lazy-load the LCP image, and use `fetchpriority="high"` only for one or two truly critical images.
+
+```html
+<img src="/hero.avif" alt="Product dashboard" width="1200" height="630" fetchpriority="high">
+```
+
+For below-the-fold images, use lazy loading and leave the browser's priority heuristics alone.
+
+```html
+<img src="/gallery/day-1.avif" alt="Notebook page" width="800" height="600" loading="lazy">
+```
+
+For decorative CSS backgrounds, `image-set()` can offer AVIF, WebP, and fallback formats. If the background is likely to be the LCP image, prefer an HTML `<img>` or add a carefully limited preload because CSS background images are not discovered by the browser's early preload scanner.
+
+```css
+.card-art {
+  background-image: url("./card.jpg");
+  background-image: image-set(
+    url("./card.avif") type("image/avif") 1x,
+    url("./card@2x.avif") type("image/avif") 2x,
+    url("./card.webp") type("image/webp") 1x,
+    url("./card.jpg") type("image/jpeg") 1x
+  );
+}
+```
+
+## Preload only critical hidden resources
+
+Use metadata `head` descriptors for resource hints when the browser cannot discover an important resource early, such as a CSS background that must paint above the fold. Keep preloads scarce so they do not compete with route scripts, CSS, or the actual LCP image.
+
+```tsx
+import type { RouteMetadata } from "@reckona/mreact-router";
+
+export const metadata = {
+  head: [
+    {
+      tag: "link",
+      attrs: {
+        as: "image",
+        fetchpriority: "high",
+        href: "/hero-background.avif",
+        rel: "preload",
+      },
+    },
+  ],
+} satisfies RouteMetadata;
+```
+
+Do not use the old `importance` attribute. Use correct `as`, `type`, and `crossorigin` attributes for preload entries that need them.
+
+## CDN base URLs
+
+Use CDN configuration when the app server should still serve HTML routes, but static route assets should load from a CDN.
+
+```ts
+// vite.config.ts
+mreactRouter({
+  projectRoot: __dirname,
+  routesDir: "src/app",
+  publicDir: "public",
+  allowedSourceDirs: ["src"],
+  assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+  publicAssetBaseUrl: "https://cdn.example.com/",
+});
+```
+
+`assetBaseUrl` changes route scripts, modulepreload links, dynamic import preload helpers, and route stylesheet assets. Upload the built `.mreact/client/` assets to that CDN path in the same release transaction as the app server deployment so HTML never points at missing files.
+
+`publicAssetBaseUrl` is for public asset URL generation in integrations that use the router manifest. Root-relative URLs you write manually, such as `<img src="/logo.svg">`, remain the literal URL you wrote. Use [CDN Assets](/deployments/cdn-assets/) for the production upload layout and [Cache Policy](/deployments/cache-policy/) for cache headers.
+
+## CSP and external styles
+
+For strict production CSP, prefer external CSS files over inline styles. If you add a stylesheet CDN, update `style-src` and `font-src` deliberately instead of widening policy with broad wildcards.
+
+Inline style attributes and third-party stylesheet hosts are security policy decisions, not just styling decisions. Keep route metadata, deployment headers, and external script/style integrations aligned with [CSP](/guides/csp/) and [Metadata and Head](/guides/metadata-and-head/).
+
+## Related pages
+
+- [Project Structure](/guides/project-structure/)
+- [Link and Navigation](/guides/link-and-navigation/)
+- [CSP](/guides/csp/)
+- [Metadata and Head](/guides/metadata-and-head/)
+- [CDN Assets](/deployments/cdn-assets/)
+- [Cache Policy](/deployments/cache-policy/)

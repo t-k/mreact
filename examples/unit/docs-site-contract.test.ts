@@ -367,6 +367,17 @@ describe("docs-site example contract", () => {
     expect(linkGuide).toContain("## Use Link for app navigation");
     expect(linkGuide).toContain('import { Link } from "@reckona/mreact-router/link";');
     expect(linkGuide).toContain('<Link href="/docs">Docs</Link>');
+    expect(linkGuide).toContain("## Typed route hrefs");
+    expect(linkGuide).toContain('import { href } from "@reckona/mreact-router";');
+    expect(linkGuide).toContain('const profileHref = href("/users/:id", {');
+    expect(linkGuide).toContain("params: { id: props.user.id },");
+    expect(linkGuide).toContain('href={href("/files/:...path", {');
+    expect(linkGuide).toContain('params: { path: ["notes", "day 1"] },');
+    expect(linkGuide).toContain(".mreact/routes.d.ts");
+    expect(linkGuide).toContain("AppRoutePath");
+    expect(linkGuide).toContain("dynamic params are required at compile time");
+    expect(linkGuide).toContain("search");
+    expect(linkGuide).toContain("hash");
     expect(linkGuide).toContain("## Prefetch, not preload");
     expect(linkGuide).toContain("The API is named `prefetch`, not `preload`");
     expect(linkGuide).toContain('prefetch="intent"');
@@ -414,6 +425,45 @@ describe("docs-site example contract", () => {
     expect(css).toContain("padding: 1rem");
     expect(css).not.toContain("padding-inline: 0.08rem");
     expect(css).not.toContain("padding: 2.7rem 1rem 1rem");
+  });
+
+  test("documents CSS imports, asset handling, image priority, CDN base URLs, and cache rules", async () => {
+    const cssAssets = await readDocsSite("src/content/guides/css-and-assets.mdx");
+
+    expect(cssAssets).toContain("## What Mreact builds");
+    expect(cssAssets).toContain("route stylesheet assets");
+    expect(cssAssets).toContain("copied public assets");
+    expect(cssAssets).toContain("CSS `url()` references");
+    expect(cssAssets).toContain("## Import CSS from route files");
+    expect(cssAssets).toContain("// src/app/layout.tsx");
+    expect(cssAssets).toContain('import "./globals.css";');
+    expect(cssAssets).toContain("layout, page, template, error, or not-found");
+    expect(cssAssets).toContain("## Tailwind");
+    expect(cssAssets).toContain("@tailwindcss/vite");
+    expect(cssAssets).toContain('@import "tailwindcss";');
+    expect(cssAssets).toContain("## Public assets");
+    expect(cssAssets).toContain("public/favicon.svg");
+    expect(cssAssets).toContain('src="/logo.svg"');
+    expect(cssAssets).toContain("public assets are not fingerprinted");
+    expect(cssAssets).toContain("Cache-Control: public, max-age=3600");
+    expect(cssAssets).toContain("## Assets referenced from CSS");
+    expect(cssAssets).toContain('background-image: url("./assets/logo.svg");');
+    expect(cssAssets).toContain("hashed client asset");
+    expect(cssAssets).toContain("## Images and priority");
+    expect(cssAssets).toContain('fetchpriority="high"');
+    expect(cssAssets).toContain('loading="lazy"');
+    expect(cssAssets).toContain("image-set(");
+    expect(cssAssets).toContain("## CDN base URLs");
+    expect(cssAssets).toContain("assetBaseUrl");
+    expect(cssAssets).toContain("publicAssetBaseUrl");
+    expect(cssAssets).toContain("route scripts, modulepreload links, dynamic import preload helpers, and route stylesheet assets");
+    expect(cssAssets).toContain("## CSP and external styles");
+    expect(cssAssets).toContain("style-src");
+    expect(cssAssets).toContain("## Related pages");
+    expect(cssAssets).toContain("[CSP](/guides/csp/)");
+    expect(cssAssets).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+    expect(cssAssets).toContain("[CDN Assets](/deployments/cdn-assets/)");
+    expect(cssAssets).toContain("[Cache Policy](/deployments/cache-policy/)");
   });
 
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
