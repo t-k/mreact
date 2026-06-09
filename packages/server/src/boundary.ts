@@ -7,41 +7,49 @@ import {
 } from "./html-internals.js";
 import { createStringSink, type StringHtmlSink } from "./sink.js";
 
+/** Options shared by async boundaries that render resolved values or caught errors. */
 export interface AsyncBoundaryOptions {
   catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
   hydrationAwaitId?: string;
 }
 
+/** Options for rendering a boundary whose resolved content can arrive out of order. */
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
   hydration?: boolean;
   placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
   placeholderTag?: string;
 }
 
+/** Options for emitting the out-of-order fragment reorder script. */
 export interface OutOfOrderReorderScriptOptions {
   nonce?: string;
   src?: string;
 }
 
+/** Options for script tags that hydrate server-rendered data. */
 export interface HydrationScriptOptions {
   nonce?: string;
 }
 
+/** Options for scripts that reveal React Suspense segments. */
 export interface ReactSuspenseScriptOptions {
   nonce?: string;
   src?: string;
 }
 
+/** Options for React Suspense boundaries rendered with streamed segments. */
 export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
   fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
   nonce?: string;
 }
 
+/** Error metadata used when forcing a React Suspense boundary to client render. */
 export interface ReactSuspenseClientRenderOptions {
   message?: string;
   stack?: string;
 }
 
+/** Renderer invoked with an async boundary's resolved value. */
 export type AsyncBoundaryRender<T> = (
   sink: HtmlSink,
   value: Awaited<T>,
@@ -49,6 +57,7 @@ export type AsyncBoundaryRender<T> = (
 
 const outOfOrderBoundaryInstances = new WeakMap<HtmlSink, Map<string, number>>();
 
+/** Renders a value once it resolves, or renders a configured catch branch on error. */
 export async function renderAsyncBoundary<T>(
   sink: HtmlSink,
   value: T,
@@ -217,6 +226,7 @@ function inheritBackpressure(childSink: StringHtmlSink, parentSink: HtmlSink): S
   };
 }
 
+/** Emits a placeholder immediately and defers resolved HTML as an out-of-order fragment. */
 export function renderOutOfOrderBoundary<T>(
   sink: HtmlSink,
   id: string,
@@ -287,6 +297,7 @@ async function renderOutOfOrderFragment<T>(
   }
 }
 
+/** Emits the client script that swaps out-of-order fragments into their placeholders. */
 export function renderOutOfOrderReorderScript(
   sink: HtmlSink,
   options: OutOfOrderReorderScriptOptions = {},
@@ -306,6 +317,7 @@ export function renderOutOfOrderReorderScript(
   );
 }
 
+/** Wraps streamed content in React Suspense completion markers. */
 export function renderReactSuspenseBoundary(
   sink: HtmlSink,
   render: (sink: HtmlSink) => void | PromiseLike<void>,
@@ -322,6 +334,7 @@ export function renderReactSuspenseBoundary(
   sink.append("<!--/$-->");
 }
 
+/** Emits a React Suspense fallback and streams the resolved segment out of order. */
 export function renderReactSuspenseOutOfOrderBoundary<T>(
   sink: HtmlSink,
   boundaryId: string,
@@ -370,6 +383,7 @@ function nextOutOfOrderBoundaryInstanceId(sink: HtmlSink, id: string): string {
   return count === 0 ? id : `${id}-${count.toString(36)}`;
 }
 
+/** Emits a React Suspense boundary that instructs the client to render the fallback. */
 export function renderReactSuspenseClientRenderBoundary(
   sink: HtmlSink,
   fallback: (sink: HtmlSink) => void | PromiseLike<void>,
@@ -429,6 +443,7 @@ function renderReactSuspenseRevealScript(
   return `<script${renderNonceAttribute(options.nonce)}>${reactSuspenseRevealScriptBody};$RC(${serializeScriptJson(boundaryId)},${serializeScriptJson(segmentId)})</script>`;
 }
 
+/** Wraps server-rendered HTML in hydration start and end markers. */
 export function renderHydrationBoundary(
   sink: HtmlSink,
   id: string,
@@ -455,4 +470,5 @@ const outOfOrderReorderScript = `(()=>{function apply(root){const fragments=Arra
 
 const reactSuspenseRevealScriptBody = `(self.$RC=self.$RC||function(bid,sid){var b=document.getElementById(bid);var s=document.getElementById(sid);if(!b||!s)return;var p=b.parentNode;var e=b.nextSibling;var d=0;var r=[];for(var n=e;n;n=n.nextSibling){if(n.nodeType===8){if(n.data==="$"||n.data==="$?"||n.data==="$!")d++;else if(n.data==="/$"){if(d===0){e=n;break;}d--;}}r.push(n);}for(var i=0;r[i];i++)p.removeChild(r[i]);while(s.firstChild)p.insertBefore(s.firstChild,e);s.remove();b.data="$";})`;
 
+/** External script body that reveals a React Suspense segment when loaded. */
 export const reactSuspenseRevealExternalScript = `(()=>{${reactSuspenseRevealScriptBody};var s=document.currentScript;if(!s)return;var b=s.getAttribute("data-boundary-id");var seg=s.getAttribute("data-segment-id");if(b!==null&&seg!==null)self.$RC(b,seg);})();`;

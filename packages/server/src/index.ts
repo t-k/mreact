@@ -4,8 +4,11 @@ import {
   type ReactCompatNode,
 } from "@reckona/mreact-compat";
 
+/** Fragment marker used to group children without emitting an extra element. */
 export { Fragment } from "@reckona/mreact-compat";
+/** Any value accepted by the React-compatible renderer. */
 export type { ReactCompatNode } from "@reckona/mreact-compat";
+/** Receives HTML chunks and deferred work while server rendering. */
 export type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 
 export {
@@ -109,11 +112,13 @@ export type {
   ScriptAssetOptions,
 } from "./html-helpers.js";
 
+/** Props accepted by the server Suspense compatibility component. */
 export interface SuspenseProps extends Record<string, unknown> {
   fallback?: unknown;
   children?: unknown;
 }
 
+/** Creates a React-compatible Suspense boundary for server rendering. */
 export function Suspense(props: SuspenseProps): never {
   const config: SuspenseProps = {};
 

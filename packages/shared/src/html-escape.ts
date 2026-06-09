@@ -2,14 +2,17 @@ const textEscapePattern = /[&<>]/;
 const attributeEscapePattern = /["&<>]/;
 const quotedAttributeEscapePattern = /["&]/;
 
+/** Escapes text content for safe insertion between HTML tags. */
 export function escapeHtmlText(value: unknown): string {
   return escapeHtml(String(value), textEscapePattern, textReplacement);
 }
 
+/** Escapes a value for safe use in an HTML attribute. */
 export function escapeHtmlAttribute(value: unknown): string {
   return escapeHtml(String(value), attributeEscapePattern, attributeReplacement);
 }
 
+/** Escapes a value for safe use inside an already quoted HTML attribute. */
 export function escapeHtmlQuotedAttribute(value: unknown): string {
   return escapeHtml(String(value), quotedAttributeEscapePattern, quotedAttributeReplacement);
 }

@@ -28,6 +28,7 @@ import {
 import { createStringSink, hasDeferredTasks, type StreamRender } from "./sink.js";
 import { renderToReadableStream } from "./stream.js";
 
+/** External script asset attributes emitted by renderScriptAsset. */
 export interface ScriptAssetOptions {
   src: string;
   nonce?: string;
@@ -35,27 +36,32 @@ export interface ScriptAssetOptions {
   crossOrigin?: "anonymous" | "use-credentials";
 }
 
+/** Event handler entry used by the hydration manifest. */
 export interface EventHydrationEntry {
   id: string;
   event: string;
   handler: string;
 }
 
+/** Manifest of event handlers that can be hydrated on the client. */
 export interface EventHydrationManifest {
   version: 1;
   events: EventHydrationEntry[];
 }
 
+/** Response options used when wrapping rendered HTML in a Response. */
 export interface HtmlResponseOptions {
   headers?: HeadersInit;
   status?: number;
   statusText?: string;
 }
 
+/** Serializes state for safe embedding in an HTML script tag. */
 export function serializeSsrState(value: unknown): string {
   return serializeScriptJson(value);
 }
 
+/** Appends serialized SSR state as a JSON script tag. */
 export function renderSsrState(
   sink: HtmlSink,
   value: unknown,
@@ -66,6 +72,7 @@ export function renderSsrState(
   );
 }
 
+/** Creates a defensive copy of an event hydration manifest. */
 export function createEventHydrationManifest(
   events: readonly EventHydrationEntry[],
 ): EventHydrationManifest {
@@ -75,6 +82,7 @@ export function createEventHydrationManifest(
   };
 }
 
+/** Appends an event hydration manifest as a JSON script tag. */
 export function renderEventHydrationManifest(
   sink: HtmlSink,
   manifest: EventHydrationManifest,
@@ -85,6 +93,7 @@ export function renderEventHydrationManifest(
   );
 }
 
+/** Appends an external script tag with optional nonce and integrity attributes. */
 export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): void {
   const integrityAttribute =
     options.integrity === undefined ? "" : ` integrity="${escapeAttribute(options.integrity)}"`;
@@ -98,6 +107,7 @@ export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): 
   );
 }
 
+/** Creates an HTML Response from a React-compatible node. */
 export function html(node: unknown, options: HtmlResponseOptions = {}): Response {
   const headers = new Headers(options.headers);
   const responseOptions: ResponseInit = { headers };
@@ -123,6 +133,7 @@ export function html(node: unknown, options: HtmlResponseOptions = {}): Response
   );
 }
 
+/** Renders sink output to a string after awaiting deferred work. */
 export async function renderToString(render: StreamRender): Promise<string> {
   const sink = createStringSink();
 
@@ -132,6 +143,7 @@ export async function renderToString(render: StreamRender): Promise<string> {
   return sink.toString();
 }
 
+/** Renders a React-compatible node to an HTML string. */
 export async function renderReactNodeToString(node: unknown): Promise<string> {
   const sink = createStringSink();
   const state: HtmlRenderState = { suspenseId: 0 };

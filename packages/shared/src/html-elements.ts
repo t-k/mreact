@@ -15,6 +15,7 @@ const voidHtmlElementNames = new Set([
   "wbr",
 ]);
 
+/** Returns true when an HTML tag is a void element that cannot have children. */
 export function isVoidHtmlElement(tagName: string): boolean {
   return voidHtmlElementNames.has(tagName);
 }

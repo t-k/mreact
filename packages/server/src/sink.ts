@@ -1,22 +1,27 @@
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 
+/** HTML sink that buffers output as a string and can await deferred tasks. */
 export interface StringHtmlSink extends HtmlSink {
   bufferStrategy(): StringSinkBufferStrategy;
   drain(): Promise<void>;
   toString(): string;
 }
 
+/** String buffering strategy used by createStringSink. */
 export type StringSinkBufferStrategy = "concat" | "array-join";
 
+/** Options controlling how a string sink buffers appended chunks. */
 export interface StringSinkOptions {
   strategy?: StringSinkBufferStrategy | "auto";
   arrayJoinThreshold?: number;
 }
 
+/** Callback that writes server-rendered HTML into a sink. */
 export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
 const stringSinkDeferredTasks = new WeakMap<HtmlSink, PromiseLike<void>[]>();
 
+/** Creates an HTML sink that stores appended chunks in memory as a string. */
 export function createStringSink(options: StringSinkOptions = {}): StringHtmlSink {
   // Default to "concat" - V8 rope flattening yields 2-6x throughput over
   // `Array#join("")` across all measured fixture sizes (see
@@ -81,6 +86,7 @@ export function createStringSink(options: StringSinkOptions = {}): StringHtmlSin
   return sink;
 }
 
+/** Returns true when a sink created by createStringSink has deferred tasks. */
 export function hasDeferredTasks(sink: HtmlSink): boolean {
   return (stringSinkDeferredTasks.get(sink)?.length ?? 0) > 0;
 }

@@ -26,10 +26,12 @@ const UNSAFE_URL_SCHEMES = new Set([
   "file",
 ]);
 
+/** Returns true for HTML attributes that require explicit unsafe-HTML opt-in handling. */
 export function isDangerousHtmlAttribute(name: string): boolean {
   return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
 }
 
+/** Narrows a value to an explicit raw HTML opt-in payload. */
 export function isDangerousHtmlOptIn(
   value: unknown,
 ): value is { __html: string } {
@@ -41,14 +43,17 @@ export function isDangerousHtmlOptIn(
   );
 }
 
+/** Returns true when an attribute name normally carries a single URL value. */
 export function isUrlAttribute(name: string): boolean {
   return URL_ATTRIBUTE_NAMES.has(name);
 }
 
+/** Returns true when an attribute name carries a srcset-style URL list. */
 export function isSrcsetAttribute(name: string): boolean {
   return SRCSET_ATTRIBUTE_NAMES.has(name);
 }
 
+/** Checks whether an HTML URL-bearing attribute value uses a blocked scheme. */
 export function isUnsafeUrlAttribute(name: string, value: string): boolean {
   if (isUrlAttribute(name)) {
     return isUnsafeUrlValueForName(name, value);
@@ -65,10 +70,12 @@ export function isUnsafeUrlAttribute(name: string, value: string): boolean {
   return false;
 }
 
+/** Returns the original URL attribute value when it is safe, otherwise undefined. */
 export function safeUrlAttributeValue(name: string, value: string): string | undefined {
   return isUnsafeUrlAttribute(name, value) ? undefined : value;
 }
 
+/** Checks whether a meta refresh content value redirects to an unsafe URL. */
 export function isUnsafeMetaRefreshContent(httpEquiv: string, content: string): boolean {
   if (httpEquiv.toLowerCase() !== "refresh") return false;
   const match = /^[^;]*;\s*url\s*=\s*([\s\S]+)$/iu.exec(content);

@@ -1,12 +1,15 @@
 import { getNativeFlight } from "./native-flight.js";
 
+/** Symbol tag used to identify client references in serialized Flight values. */
 export const CLIENT_REFERENCE_TYPE = Symbol.for("modular.react.client_reference");
+/** Symbol tag used to identify server references in serialized Flight values. */
 export const SERVER_REFERENCE_TYPE = Symbol.for("modular.react.server_reference");
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("react.fragment");
 
+/** Registered client reference included in a Flight response. */
 export interface FlightClientReference {
   id: number;
   moduleId: string;
@@ -14,37 +17,46 @@ export interface FlightClientReference {
   chunks?: string[];
 }
 
+/** Input used to register a client reference before assigning a Flight id. */
 export interface FlightClientReferenceInput {
   name: string;
   moduleId: string;
   exportName: string;
 }
 
+/** Client manifest entry with resolved module chunks. */
 export interface FlightClientManifestEntry extends FlightClientReferenceInput {
   chunks: string[];
 }
 
+/** Function that can be invoked through a server action request. */
 export type ServerAction = (...args: unknown[]) => unknown | Promise<unknown>;
 
+/** Validation result returned by server action guards. */
 export type ServerActionValidationResult = boolean | string;
 
+/** Server action entry with optional argument validation. */
 export interface ServerActionDescriptor {
   action: ServerAction;
   validateArgs?: (args: unknown[]) => ServerActionValidationResult;
 }
 
+/** Registry mapping server action keys to handlers. */
 export type ServerActionRegistry = Record<string, ServerAction | ServerActionDescriptor>;
 
+/** Store used to reject replayed server action nonces. */
 export interface ServerActionReplayStore {
   has(value: string): boolean;
   add(value: string): void;
 }
 
+/** Module export reference requested by a server action request. */
 export interface ServerActionRequestReference {
   moduleId: string;
   exportName: string;
 }
 
+/** Security and validation options for createServerActionHandler. */
 export interface ServerActionHandlerOptions {
   // Issue 076: secure defaults. When undefined, the handler enforces the
   // same-origin policy by comparing `Origin` to the request URL. Pass an
@@ -77,11 +89,13 @@ export interface ServerActionHandlerOptions {
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
+/** Options for embedding a serialized Flight response in a script tag. */
 export interface FlightScriptOptions {
   id?: string;
   nonce?: string;
 }
 
+/** Registered server reference included in a Flight response. */
 export interface FlightServerReference {
   id: number;
   moduleId: string;
@@ -89,6 +103,7 @@ export interface FlightServerReference {
   bound?: FlightModel[];
 }
 
+/** Runtime marker object representing a client module export. */
 export interface ClientReference {
   $$typeof: typeof CLIENT_REFERENCE_TYPE;
   moduleId: string;
@@ -96,6 +111,7 @@ export interface ClientReference {
   chunks?: string[];
 }
 
+/** Runtime marker object representing a server module export. */
 export interface ServerReference {
   $$typeof: typeof SERVER_REFERENCE_TYPE;
   moduleId: string;
@@ -103,6 +119,7 @@ export interface ServerReference {
   bound?: unknown[];
 }
 
+/** Serializable Flight payload with root model and module references. */
 export interface FlightResponse {
   version: 1;
   root: FlightModel;
@@ -110,6 +127,7 @@ export interface FlightResponse {
   serverReferences: FlightServerReference[];
 }
 
+/** Recursive value model supported by the mreact Flight serializer. */
 export type FlightModel =
   | null
   | string
@@ -135,11 +153,13 @@ export type FlightModel =
   | FlightDataViewModel
   | { kind: "undefined" };
 
+/** Plain object shape inside a Flight model. */
 export interface FlightObjectModel {
   kind?: never;
   [key: string]: FlightModel | undefined;
 }
 
+/** Serialized React-compatible element inside a Flight model. */
 export interface FlightElementModel {
   kind: "element";
   type: string | FlightClientReferenceModel | { kind: "fragment" };
@@ -147,56 +167,67 @@ export interface FlightElementModel {
   props: Record<string, FlightModel>;
 }
 
+/** Reference to a client module export inside a Flight model. */
 export interface FlightClientReferenceModel {
   kind: "client-reference";
   id: number;
 }
 
+/** Reference to a server module export inside a Flight model. */
 export interface FlightServerReferenceModel {
   kind: "server-reference";
   id: number;
 }
 
+/** Serialized Date value inside a Flight model. */
 export interface FlightDateModel {
   kind: "date";
   value: string;
 }
 
+/** Serialized bigint value inside a Flight model. */
 export interface FlightBigIntModel {
   kind: "bigint";
   value: string;
 }
 
+/** Serialized non-finite or negative-zero number inside a Flight model. */
 export interface FlightNumberModel {
   kind: "number";
   value: "Infinity" | "-Infinity" | "NaN" | "-0";
 }
 
+/** Serialized global symbol reference inside a Flight model. */
 export interface FlightSymbolModel {
   kind: "symbol";
   name: string;
 }
 
+/** Serialized Map value inside a Flight model. */
 export interface FlightMapModel {
   kind: "map";
   entries: [FlightModel, FlightModel][];
 }
 
+/** Serialized Set value inside a Flight model. */
 export interface FlightSetModel {
   kind: "set";
   values: FlightModel[];
 }
 
+/** Serialized FormData value inside a Flight model. */
 export interface FlightFormDataModel {
   kind: "form-data";
   entries: [string, FlightModel][];
 }
 
+/** Serialized iterable value inside a Flight model. */
 export interface FlightIterableModel {
   kind: "iterable";
   values: FlightModel[];
 }
 
+/** Serialized Error value inside a Flight model. */
 export interface FlightErrorModel {
   kind: "error";
   name: string;
@@ -204,27 +235,32 @@ export interface FlightErrorModel {
   digest?: string;
 }
 
+/** Reference to an outlined promise chunk inside a Flight model. */
 export interface FlightPromiseModel {
   kind: "promise";
   id: number;
 }
 
+/** Serialized ArrayBuffer value inside a Flight model. */
 export interface FlightArrayBufferModel {
   kind: "array-buffer";
   bytes: number[];
 }
 
+/** Serialized typed array value inside a Flight model. */
 export interface FlightTypedArrayModel {
   kind: "typed-array";
   arrayType: FlightTypedArrayName;
   bytes: number[];
 }
 
+/** Serialized DataView value inside a Flight model. */
 export interface FlightDataViewModel {
   kind: "data-view";
   bytes: number[];
 }
 
+/** Typed array constructor names supported by the Flight serializer. */
 export type FlightTypedArrayName =
   | "Int8Array"
   | "Uint8Array"
@@ -262,12 +298,14 @@ const reactFlightModelTokens = [
   "$undefined",
 ] as const;
 
+/** Lists the React Flight row tags and model tokens covered by the serializer. */
 export interface ReactFlightProtocolCoverage {
   binaryRowTags: string[];
   modelTokens: string[];
   rowTags: string[];
 }
 
+/** Returns the React Flight protocol tags and tokens supported by this package. */
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage {
   return {
     binaryRowTags: [...reactFlightBinaryRowTags],
@@ -296,6 +334,7 @@ interface ServerCacheScope {
   ownerStack: string[];
 }
 
+/** Creates a runtime client reference marker for a module export. */
 export function createClientReference(
   moduleId: string,
   exportName = "default",
@@ -309,6 +348,7 @@ export function createClientReference(
   };
 }
 
+/** Creates a runtime server reference marker for a module export. */
 export function createServerReference(
   moduleId: string,
   exportName = "default",
@@ -322,6 +362,7 @@ export function createServerReference(
   };
 }
 
+/** Returns true when a value is a runtime client reference marker. */
 export function isClientReference(value: unknown): value is ClientReference {
   return (
     typeof value === "object" &&
@@ -330,6 +371,7 @@ export function isClientReference(value: unknown): value is ClientReference {
   );
 }
 
+/** Returns true when a value is a runtime server reference marker. */
 export function isServerReference(value: unknown): value is ServerReference {
   return (
     typeof value === "object" &&
@@ -338,6 +380,7 @@ export function isServerReference(value: unknown): value is ServerReference {
   );
 }
 
+/** Serializes a renderable value into a structured Flight response. */
 export async function renderToFlightResponse<P extends Record<string, unknown>>(
   renderable: ((props: P) => unknown) | unknown,
   props = {} as P,
@@ -363,10 +406,12 @@ export async function renderToFlightResponse<P extends Record<string, unknown>>(
   });
 }
 
+/** Serializes a Flight response to JSON text. */
 export function stringifyFlightResponse(response: FlightResponse): string {
   return JSON.stringify(response);
 }
 
+/** Renders a Flight response as an HTML script tag. */
 export function renderFlightResponseScript(
   response: FlightResponse,
   options: FlightScriptOptions = {},
@@ -378,6 +423,7 @@ export function renderFlightResponseScript(
   return `<script type="application/json" data-mreact-flight${idAttribute}${nonceAttribute}>${serializeJsonForHtml(response)}</script>`;
 }
 
+/** Creates a request handler that validates and invokes registered server actions. */
 export function createServerActionHandler(
   actions: ServerActionRegistry,
   options: ServerActionHandlerOptions = {},
@@ -498,6 +544,7 @@ export function createServerActionHandler(
   };
 }
 
+/** Encodes a structured Flight response into React Flight row text. */
 export function toReactFlightRows(response: FlightResponse): string {
   // Issue 081 note: a native encoder exists in
   // `packages/router-native/src/flight.rs::encode_flight_response`
@@ -555,6 +602,7 @@ export function toReactFlightRows(response: FlightResponse): string {
   return rows.join("\n");
 }
 
+/** Decodes React Flight row text into a structured Flight response. */
 export function fromReactFlightRows(rows: string): FlightResponse {
   // Issue 081 note: a native decoder exists in
   // `packages/router-native/src/flight.rs::decode_flight_rows`
@@ -644,6 +692,7 @@ export function fromReactFlightRows(rows: string): FlightResponse {
   };
 }
 
+/** Merges additional React Flight row text into an existing Flight response. */
 export function mergeReactFlightRows(
   response: FlightResponse,
   rows: string,
@@ -700,6 +749,7 @@ export function mergeReactFlightRows(
   };
 }
 
+/** Builds a Flight client manifest from client references and chunk resolution. */
 export function createFlightClientManifest(
   references: readonly FlightClientReferenceInput[],
   resolveChunks: (reference: FlightClientReferenceInput) => string[],
@@ -710,6 +760,7 @@ export function createFlightClientManifest(
   }));
 }
 
+/** Renders modulepreload links for client chunks referenced by a Flight response. */
 export function renderFlightPreloadLinks(
   response: FlightResponse,
   options: { nonce?: string } = {},

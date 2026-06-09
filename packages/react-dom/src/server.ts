@@ -3,31 +3,37 @@ import {
   type ReactCompatNode,
 } from "@reckona/mreact-compat";
 
+/** React DOM server package version. */
 export const version = "19.2.6";
 
+/** Destination accepted by a pipeable server render stream. */
 export interface PipeableStreamDestination {
   write(chunk: string | Uint8Array): unknown;
   end?(): unknown;
   destroy?(error?: unknown): unknown;
 }
 
+/** Minimal pipeable stream returned by Node-oriented server rendering. */
 export interface PipeableStream {
   pipe<TDestination extends PipeableStreamDestination>(destination: TDestination): TDestination;
   abort(reason?: unknown): void;
 }
 
+/** External bootstrap script descriptor emitted after the rendered HTML. */
 export interface BootstrapScriptDescriptor {
   src: string;
   integrity?: string;
   crossOrigin?: string;
 }
 
+/** Import map descriptor emitted as an inline bootstrap resource. */
 export interface ReactImportMap {
   imports?: Record<string, string>;
   integrity?: Record<string, string>;
   scopes?: Record<string, Record<string, string>>;
 }
 
+/** Bootstrap scripts, modules, and import maps appended to server output. */
 export interface RenderBootstrapOptions {
   nonce?: string;
   importMap?: ReactImportMap;
@@ -36,10 +42,12 @@ export interface RenderBootstrapOptions {
   bootstrapModules?: Array<string | BootstrapScriptDescriptor>;
 }
 
+/** Shared server render options accepted by string rendering helpers. */
 export interface ServerOptions {
   identifierPrefix?: string;
 }
 
+/** Options for rendering HTML to a pipeable stream. */
 export interface RenderToPipeableStreamOptions {
   identifierPrefix?: string;
   namespaceURI?: string;
@@ -58,6 +66,7 @@ export interface RenderToPipeableStreamOptions {
   formState?: unknown;
 }
 
+/** Options for rendering HTML to a WHATWG readable stream. */
 export interface RenderToReadableStreamOptions {
   identifierPrefix?: string;
   namespaceURI?: string;
@@ -74,22 +83,28 @@ export interface RenderToReadableStreamOptions {
   formState?: unknown;
 }
 
+/** Readable stream augmented with the allReady promise used by React DOM server. */
 export interface ReactDOMServerReadableStream extends ReadableStream<Uint8Array> {
   allReady: Promise<void>;
 }
 
+/** Options accepted by resumable server rendering helpers. */
 export type ResumeOptions = RenderToReadableStreamOptions & RenderToPipeableStreamOptions;
+/** Placeholder type for postponed render state. */
 export type PostponedState = unknown;
 
+/** Renders a React-compatible node to an HTML string. */
 export function renderToString(element: ReactCompatNode, _options?: ServerOptions): string {
   return renderCompatToString(() => element);
 }
 
+/** Renders a React-compatible node to static HTML without hydration metadata. */
 export function renderToStaticMarkup(element: ReactCompatNode, options?: ServerOptions): string {
   void options;
   return renderToString(element);
 }
 
+/** Renders a React-compatible node to a WHATWG readable stream. */
 export async function renderToReadableStream(
   element: ReactCompatNode,
   options: RenderToReadableStreamOptions = {},
@@ -137,6 +152,7 @@ export async function renderToReadableStream(
   return Object.assign(stream, { allReady });
 }
 
+/** Renders a React-compatible node to a Node-style pipeable stream. */
 export function renderToPipeableStream(
   element: ReactCompatNode,
   options: RenderToPipeableStreamOptions = {},
@@ -181,6 +197,7 @@ export function renderToPipeableStream(
   };
 }
 
+/** Resumes postponed server rendering into a WHATWG readable stream. */
 export async function resume(
   element: ReactCompatNode,
   _postponedState: PostponedState,
@@ -189,6 +206,7 @@ export async function resume(
   return renderToReadableStream(element, options);
 }
 
+/** Resumes postponed server rendering into a Node-style pipeable stream. */
 export async function resumeToPipeableStream(
   element: ReactCompatNode,
   _postponedState: PostponedState,

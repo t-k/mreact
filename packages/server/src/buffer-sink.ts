@@ -30,6 +30,7 @@ interface BufferConstructor {
 
 declare const Buffer: BufferConstructor;
 
+/** Accumulates server-rendered chunks into a Node Buffer. */
 export interface BufferSink {
   append(chunk: string | NodeBuffer): void;
   toBuffer(): NodeBuffer;
@@ -37,6 +38,7 @@ export interface BufferSink {
   size(): number;
 }
 
+/** Options controlling allocation and growth for a Node buffer sink. */
 export interface BufferSinkOptions {
   /**
    * Initial backing buffer size (UTF-8 bytes). The buffer grows
@@ -50,15 +52,6 @@ export interface BufferSinkOptions {
   growthFactor?: number;
 }
 
-/**
- * Creates a Node-only buffer sink with a single pre-allocated growing
- * backing `Buffer`. UTF-8 encoding happens in-place at the current write
- * offset, avoiding per-chunk Buffer allocation and a final concat.
- *
- * Compared to `Buffer.concat`-style implementations, this trades a small
- * amount of headroom memory for ~5-10x throughput on small chunks
- * (see docs/benchmarks/2026-05-12-server-sink-strategy.md).
- */
 /**
  * A streaming-flavored buffer sink used by
  * `renderToReadableStream`. Coalesces successive `append(chunk)` calls
@@ -87,6 +80,7 @@ export interface StreamingBufferSink {
   size(): number;
 }
 
+/** Options controlling automatic flush behavior for a streaming buffer sink. */
 export interface StreamingBufferSinkOptions {
   /** UTF-8 byte threshold that triggers an automatic flush from inside
    *  `append`. Default 8 KiB (one common TCP segment payload). */
@@ -98,6 +92,7 @@ export interface StreamingBufferSinkOptions {
   onFlush(buffer: Uint8Array): void;
 }
 
+/** Creates a streaming sink that coalesces appended text into byte buffers. */
 export function createStreamingBufferSink(
   options: StreamingBufferSinkOptions,
 ): StreamingBufferSink {
@@ -186,6 +181,10 @@ function hasNodeBuffer(): boolean {
   return typeof Buffer !== "undefined" && typeof Buffer.allocUnsafe === "function";
 }
 
+/**
+ * Creates a Node-only buffer sink with a single pre-allocated growing
+ * backing `Buffer`.
+ */
 export function createBufferSink(options: BufferSinkOptions = {}): BufferSink {
   const initialSize = options.initialSize ?? 8192;
   const growthFactor = options.growthFactor ?? 2;

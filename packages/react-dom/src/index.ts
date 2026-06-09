@@ -7,19 +7,24 @@ import {
 } from "@reckona/mreact-compat";
 import { runWithEventPriority } from "@reckona/mreact-compat/event-priority";
 import { createRoot, hydrateRoot } from "./client.js";
-export {
-  createPortal,
-  flushSync,
-  render,
-  unmountComponentAtNode,
-  useFormState,
-  createRoot,
-  hydrateRoot,
-};
+
+/** Creates a portal that renders children into a DOM container outside the current tree. */
+export { createPortal };
+/** Runs a callback synchronously while flushing pending DOM work. */
+export { flushSync };
+/** Renders an element into a DOM container using the legacy React DOM API. */
+export { render };
+/** Unmounts a legacy React DOM tree from a container. */
+export { unmountComponentAtNode };
+/** Alias for useActionState exposed through the React DOM form API surface. */
+export { useFormState };
+export { createRoot, hydrateRoot };
 export type { HydrateRootOptions, Root, RootOptions } from "./client.js";
 
+/** React DOM-compatible package version. */
 export const version = "19.2.6";
 
+/** Idle form status returned when no form submission is pending. */
 export interface FormStatusNotPending {
   pending: false;
   data: null;
@@ -27,6 +32,7 @@ export interface FormStatusNotPending {
   action: null;
 }
 
+/** Pending form status returned while a submission is in progress. */
 export interface FormStatusPending {
   pending: true;
   data: FormData;
@@ -34,12 +40,15 @@ export interface FormStatusPending {
   action: string | ((formData: FormData) => void | Promise<void>);
 }
 
+/** Current form submission state returned by useFormStatus. */
 export type FormStatus = FormStatusPending | FormStatusNotPending;
 
+/** Options applied when inserting a preconnect resource hint. */
 export interface PreconnectOptions {
   crossOrigin?: "anonymous" | "use-credentials" | "";
 }
 
+/** Allowed destination values for preload resource hints. */
 export type PreloadAs =
   | "audio"
   | "document"
@@ -54,6 +63,7 @@ export type PreloadAs =
   | "video"
   | "worker";
 
+/** Options applied when inserting a preload resource hint. */
 export interface PreloadOptions {
   as: PreloadAs;
   crossOrigin?: "anonymous" | "use-credentials" | "";
@@ -67,6 +77,7 @@ export interface PreloadOptions {
   media?: string;
 }
 
+/** Options applied when inserting a modulepreload resource hint. */
 export interface PreloadModuleOptions {
   as?: RequestDestination;
   crossOrigin?: "anonymous" | "use-credentials" | "";
@@ -74,6 +85,7 @@ export interface PreloadModuleOptions {
   nonce?: string;
 }
 
+/** Options applied when preinitializing a script or stylesheet resource. */
 export interface PreinitOptions {
   as: "script" | "style";
   crossOrigin?: "anonymous" | "use-credentials" | "";
@@ -83,6 +95,7 @@ export interface PreinitOptions {
   nonce?: string;
 }
 
+/** Options applied when preinitializing a JavaScript module resource. */
 export interface PreinitModuleOptions {
   as?: "script";
   crossOrigin?: "anonymous" | "use-credentials" | "";
@@ -92,16 +105,19 @@ export interface PreinitModuleOptions {
 
 type LinkAttributes = Record<string, string | undefined>;
 
+/** Returns the current form submission status for the nearest form action. */
 export function useFormStatus(): FormStatus {
   throw new Error(
     "useFormStatus is not supported by @reckona/mreact-dom yet. Use useFormState/useActionState for local pending state instead.",
   );
 }
 
+/** Resets a form element after a server action-style submission completes. */
 export function requestFormReset(form: HTMLFormElement): void {
   form.reset();
 }
 
+/** Runs a callback at discrete event priority and returns its result. */
 export function unstable_batchedUpdates<T>(callback: () => T): T;
 export function unstable_batchedUpdates<TArgument, TResult>(
   callback: (argument: TArgument) => TResult,
@@ -118,16 +134,19 @@ export function unstable_batchedUpdates<TArgument, TResult>(
   );
 }
 
+/** Inserts a dns-prefetch link for the provided host if it is not already present. */
 export function prefetchDNS(href: string): void {
   upsertHeadLink("dns-prefetch", href, {});
 }
 
+/** Inserts a preconnect link for the provided origin if it is not already present. */
 export function preconnect(href: string, options: PreconnectOptions = {}): void {
   upsertHeadLink("preconnect", href, {
     crossorigin: options.crossOrigin,
   });
 }
 
+/** Inserts a preload link for the provided resource if it is not already present. */
 export function preload(href: string, options: PreloadOptions): void {
   upsertHeadLink("preload", href, {
     as: options.as,
@@ -143,6 +162,7 @@ export function preload(href: string, options: PreloadOptions): void {
   });
 }
 
+/** Inserts a modulepreload link for the provided module if it is not already present. */
 export function preloadModule(href: string, options: PreloadModuleOptions = {}): void {
   upsertHeadLink("modulepreload", href, {
     as: options.as,
@@ -152,6 +172,7 @@ export function preloadModule(href: string, options: PreloadModuleOptions = {}):
   });
 }
 
+/** Preinitializes a script or stylesheet resource in the document head. */
 export function preinit(href: string, options: PreinitOptions): void {
   if (options.as === "style") {
     upsertHeadLink("stylesheet", href, {
@@ -173,6 +194,7 @@ export function preinit(href: string, options: PreinitOptions): void {
   });
 }
 
+/** Preinitializes a JavaScript module resource in the document head. */
 export function preinitModule(href: string, options: PreinitModuleOptions = {}): void {
   upsertHeadScript(href, {
     type: "module",
@@ -243,6 +265,7 @@ function escapeSelectorValue(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 }
 
+/** React DOM-compatible default export object. */
 const ReactDOM = {
   createPortal,
   flushSync,

@@ -1,3 +1,4 @@
+/** Moves out-of-order fragments into their matching placeholders within a DOM root. */
 export function applyOutOfOrderFragments(root: ParentNode = document): void {
   const fragments = Array.from(
     root.querySelectorAll<HTMLTemplateElement>(

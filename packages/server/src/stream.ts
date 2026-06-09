@@ -1,12 +1,14 @@
 import { createStreamingBufferSink } from "./buffer-sink.js";
 import type { StreamRender } from "./sink.js";
 
+/** Options controlling server render stream error logging behavior. */
 export interface RenderToReadableStreamOptions {
   logAbortedDeferredErrors?: boolean;
 }
 
 const streamQueuedChunkSoftLimitBytes = 1024 * 1024;
 
+/** Renders HTML sink output to a WHATWG readable byte stream. */
 export function renderToReadableStream(
   render: StreamRender,
   options: RenderToReadableStreamOptions = {},
