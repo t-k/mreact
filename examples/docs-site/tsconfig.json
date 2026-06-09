@@ -3,6 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "jsxImportSource": "@reckona/mreact",
+    "resolveJsonModule": true,
     "types": ["@reckona/mreact-router/app-router-globals", "vite/client"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.mdx", "vite.config.ts"]

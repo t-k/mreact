@@ -57,7 +57,7 @@ describe("docs-site example contract", () => {
     expect(packageJson.scripts?.build).toContain("mreact-router build");
     expect(packageJson.scripts?.build).toContain("export-static");
     expect(packageJson.scripts?.build).toContain("pagefind --site dist");
-    expect(packageJson.scripts?.typecheck).toBe("tsc --noEmit");
+    expect(packageJson.scripts?.typecheck).toBe("pnpm sync:api && tsc --noEmit");
     expect(packageJson.scripts?.test).toContain("vitest run");
     expect(packageJson.devDependencies?.pagefind).toBeDefined();
   });
@@ -434,11 +434,15 @@ describe("docs-site example contract", () => {
     expect(compat).not.toContain("@reckona/mreact-next");
   });
 
-  test("links directly to the generated TypeDoc API reference inside the docs site", async () => {
+  test("renders the generated TypeDoc JSON API reference as docs-site routes", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
     const apiReference = await readDocsSite("src/content/reference/api.mdx");
-    const generatedApiIndex = await readFile(join(root, "docs", "api", "index.html"), "utf8");
+    const typedocConfig = await readFile(join(root, "typedoc.json"), "utf8");
+    const generatedApiJson = await readFile(join(root, "docs", "api", "index.json"), "utf8");
+    const apiData = await readDocsSite("src/api-reference-data.tsx");
+    const apiIndexRoute = await readDocsSite("src/app/api/page.tsx");
+    const apiDetailRoute = await readDocsSite("src/app/api/$...apiPath/page.tsx");
     const exportScript = await readDocsSite("scripts/export-static.ts");
 
     expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
@@ -455,25 +459,37 @@ describe("docs-site example contract", () => {
     expect(apiReference).toContain("[LoaderContext](/api/interfaces/_reckona_mreact-router..LoaderContext.html)");
     expect(apiReference).not.toContain("pnpm docs:api");
     expect(apiReference).not.toContain("Generate or refresh");
-    expect(exportScript).toContain("copyGeneratedApiReference");
-    expect(exportScript).toContain('join(exportDir, "api")');
-    expect(exportScript).toContain("postprocessGeneratedApiReference");
-    expect(exportScript).toContain("writeGeneratedApiIntegrationStyles");
-    expect(exportScript).toContain("data-mreact-docs-api-shell");
-    expect(exportScript).toContain("docs-api.css");
-    expect(exportScript).toContain("rewriteGeneratedApiRepositoryLinks");
-    expect(exportScript).toContain("--dark-color-background: var(--mreact-docs-bg)");
-    expect(exportScript).toContain(':root[data-theme="dark"]');
-    expect(exportScript).toContain("color-scheme: only light");
-    expect(exportScript).toContain("--mreact-docs-code-bg");
-    expect(exportScript).toContain("--mreact-docs-code-text");
-    expect(exportScript).toContain(":where(p, li, td, dd) > code");
-    expect(generatedApiIndex).not.toContain('href="media/react-compat"');
-    expect(generatedApiIndex).not.toContain('href="media/primitive"');
-    expect(generatedApiIndex).not.toContain('href="media/app-router"');
-    expect(generatedApiIndex).toContain(
-      'href="https://github.com/t-k/mreact/tree/main/examples/react-compat"',
-    );
+    expect(typedocConfig).toContain('"json": "docs/api/index.json"');
+    expect(typedocConfig).toContain('"emit": "both"');
+    expect(generatedApiJson).toContain('"schemaVersion"');
+    expect(generatedApiJson).toContain('"name": "@reckona/mreact-router"');
+    const docsSitePackage = await readFile(join(docsSiteRoot, "package.json"), "utf8");
+    const syncApiScript = await readDocsSite("scripts/sync-api-reference.ts");
+
+    expect(apiData).toContain("./generated/api-reference.json");
+    expect(apiData).toContain("apiPageForPath");
+    expect(apiData).toContain("allApiPagePaths");
+    expect(apiData).toContain("ApiReferencePage");
+    expect(apiData).toContain("apiLinkForEntry");
+    expect(apiData).toContain("escapeCodeText");
+    expect(apiData).toContain("<code>{escapeCodeText(signaturePreview(entry.node))}</code>");
+    expect(apiData).toContain("<code>{escapeCodeText(signatureBlock(entry.node))}</code>");
+    expect(apiData).toContain("<code>{escapeCodeText(memberSignature(member))}</code>");
+    expect(docsSitePackage).toContain('"sync:api": "tsx scripts/sync-api-reference.ts"');
+    expect(docsSitePackage).toContain("pnpm sync:api && mreact-router build");
+    expect(docsSitePackage).toContain("pnpm sync:api && tsc --noEmit");
+    expect(syncApiScript).toContain('join(docsSiteRoot, "..", "..", "docs", "api", "index.json")');
+    expect(syncApiScript).toContain('join(docsSiteRoot, "src", "generated", "api-reference.json")');
+    expect(apiIndexRoute).toContain("apiReferenceIndexPage()");
+    expect(apiIndexRoute).toContain("<ApiReferencePage page={page} />");
+    expect(apiDetailRoute).toContain("allApiPagePaths()");
+    expect(apiDetailRoute).toContain("apiPageForPath");
+    expect(apiDetailRoute).toContain("notFound()");
+    expect(exportScript).not.toContain("copyGeneratedApiReference");
+    expect(exportScript).not.toContain("postprocessGeneratedApiReference");
+    expect(exportScript).not.toContain("writeGeneratedApiIntegrationStyles");
+    expect(exportScript).not.toContain("data-mreact-docs-api-shell");
+    expect(exportScript).not.toContain("docs-api.css");
   });
 
   test("keeps every Reference page practical and connected to generated API details", async () => {
@@ -1910,9 +1926,12 @@ describe("docs-site example contract", () => {
     const exportScript = await readDocsSite("scripts/export-static.ts");
     expect(exportScript).toContain("MREACT_DOCS_BASE_PATH");
     expect(exportScript).toContain("rewriteHtmlBasePaths");
-    expect(exportScript).toContain("copyGeneratedApiReference");
-    expect(exportScript).toContain('join(process.cwd(), "..", "..", "docs", "api")');
-    expect(exportScript).toContain('join(exportDir, "api")');
+    expect(exportScript).toContain("flattenHtmlRouteDirectories");
+    expect(exportScript).toContain('entry.name.endsWith(".html")');
+    expect(exportScript).toContain("await rename(tempFile, path)");
+    expect(exportScript).not.toContain("copyGeneratedApiReference");
+    expect(exportScript).not.toContain('join(process.cwd(), "..", "..", "docs", "api")');
+    expect(exportScript).not.toContain('join(exportDir, "api")');
   });
 });
 

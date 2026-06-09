@@ -409,6 +409,112 @@ a:hover {
   font-weight: 650;
 }
 
+.api-reference {
+  max-width: none;
+}
+
+.api-summary-grid,
+.api-entry-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  margin: 1.25rem 0 2rem;
+}
+
+.api-summary-card,
+.api-entry-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text);
+  display: grid;
+  gap: 0.55rem;
+  padding: 1rem;
+  text-decoration: none;
+}
+
+.api-summary-card {
+  align-content: start;
+}
+
+.api-summary-card h2 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.api-summary-card p {
+  color: var(--text-2);
+  margin: 0;
+}
+
+.api-summary-card ul {
+  margin: 0.25rem 0 0;
+}
+
+.api-entry-card {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 8rem;
+}
+
+.api-entry-card:hover {
+  border-color: color-mix(in oklch, var(--brand) 45%, var(--border));
+  color: var(--text);
+}
+
+.api-entry-card strong {
+  font-size: 1.1rem;
+}
+
+.api-entry-card code {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-entry-kind,
+.api-entry-meta span {
+  color: var(--text-2);
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.api-entry-group {
+  margin: 2rem 0;
+}
+
+.api-breadcrumbs,
+.api-entry-meta {
+  align-items: center;
+  color: var(--text-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.api-breadcrumbs span {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.5rem;
+}
+
+.api-member-list {
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.api-member-row {
+  background: var(--bg);
+  padding: 0.8rem 1rem;
+}
+
+.api-member-row + .api-member-row {
+  border-top: 1px solid var(--border);
+}
+
 .benchmark-results {
   display: grid;
   gap: 2rem;

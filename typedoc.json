@@ -24,6 +24,8 @@
     "packages/test-utils",
     "packages/vite-plugin"
   ],
+  "emit": "both",
+  "json": "docs/api/index.json",
   "out": "docs/api",
   "readme": "README.md",
   "excludeInternal": true,

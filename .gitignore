@@ -27,6 +27,7 @@ benchmarks/router/.tmp/
 /security/
 /size/
 /test-results/
+/examples/docs-site/src/generated/api-reference.json
 
 # Repo-history backups
 .git-backup-*/
