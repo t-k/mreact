@@ -516,6 +516,47 @@ describe("docs-site example contract", () => {
     expect(csp).toContain("[Production Checklist](/deployments/production-checklist/)");
   });
 
+  test("documents external scripts with metadata head, CSP nonces, JSON-LD, noscript, SPA page views, and performance limits", async () => {
+    const externalScripts = await readDocsSite("src/content/guides/external-scripts.mdx");
+
+    expect(externalScripts).toContain("## Choose an integration path");
+    expect(externalScripts).toContain("metadata.head");
+    expect(externalScripts).toContain("body JSX");
+    expect(externalScripts).toContain(".client.tsx");
+    expect(externalScripts).toContain("## Add route-owned head scripts");
+    expect(externalScripts).toContain("generateMetadata");
+    expect(externalScripts).toContain("randomBytes(16).toString(\"base64url\")");
+    expect(externalScripts).toContain("GTM_CONTAINER_ID");
+    expect(externalScripts).toContain("GA4_MEASUREMENT_ID");
+    expect(externalScripts).toContain("nonce: true");
+    expect(externalScripts).toContain("window.dataLayer=window.dataLayer||[];");
+    expect(externalScripts).toContain("https://www.googletagmanager.com");
+    expect(externalScripts).toContain("fetchpriority: \"low\"");
+    expect(externalScripts).toContain("## Add body-only fallbacks");
+    expect(externalScripts).toContain("<noscript>");
+    expect(externalScripts).toContain("metadata.head cannot emit");
+    expect(externalScripts).toContain("## JSON-LD");
+    expect(externalScripts).toContain('type="application/ld+json"');
+    expect(externalScripts).toContain("JSON.stringify");
+    expect(externalScripts).toContain("Do not interpolate request data");
+    expect(externalScripts).toContain("## SPA page views");
+    expect(externalScripts).toContain("@reckona/mreact-router/navigation-state");
+    expect(externalScripts).toContain("subscribeNavigationState");
+    expect(externalScripts).toContain('event: "page_view"');
+    expect(externalScripts).toContain("page_path");
+    expect(externalScripts).toContain("__mreactAnalyticsInstalled");
+    expect(externalScripts).toContain("## Performance and failure budget");
+    expect(externalScripts).toContain('fetchpriority="low"');
+    expect(externalScripts).toContain("Long Animation Frames");
+    expect(externalScripts).toContain("batch analytics events");
+    expect(externalScripts).toContain("## Security checklist");
+    expect(externalScripts).toContain("Do not put secrets or PII");
+    expect(externalScripts).toContain("Add third-party hosts only to the directives they need");
+    expect(externalScripts).toContain("[CSP](/guides/csp/)");
+    expect(externalScripts).toContain("[Environment Variables](/guides/environment-variables/)");
+    expect(externalScripts).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+  });
+
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 

@@ -1,8 +1,207 @@
 export const title = "External Scripts";
-export const description = "Integrate GTM, GA4, JSON-LD, and SPA page view tracking safely.";
+export const description = "Integrate GTM, GA4, JSON-LD, noscript fallbacks, and SPA page view tracking safely.";
 
 # External scripts
 
-Use `metadata.head` for route-owned external scripts and inline bootstraps. Pair executable scripts with CSP nonces and add third-party hosts to `script-src` only when production traffic needs them.
+Use external scripts only when the route really needs a third-party runtime. Keep the integration explicit: route-owned head scripts go through `metadata.head`, body-only fallbacks stay in page JSX, and SPA page view tracking belongs in a small client island.
 
-For SPA page views, subscribe to navigation state in a small client island and push events to the analytics queue after navigation completes.
+## Choose an integration path
+
+- Use `metadata.head` for route-owned `<script>`, `<link>`, `<meta>`, and structured data descriptors.
+- Use body JSX for markup that cannot live in the document head, such as a GTM `<noscript>` iframe fallback.
+- Use a `.client.tsx` island when the integration must observe client navigation, browser APIs, or user interaction.
+- Use an HTTP API when another service needs to call your app, rather than exposing a secret in the browser.
+
+Do not put analytics secrets in client code. Public IDs such as a GTM container ID or GA4 measurement ID are safe to expose, but API secrets, write keys, and private webhook tokens are not.
+
+## Add route-owned head scripts
+
+Generate a per-request nonce, attach it to `metadata.csp`, and mark executable `metadata.head` descriptors with `nonce: true`. Add third-party hosts only to the CSP directives they need.
+
+```tsx
+// src/app/analytics/page.tsx
+import { randomBytes } from "node:crypto";
+import type {
+  GenerateMetadataContext,
+  RouteMetadata,
+} from "@reckona/mreact-router";
+import { AnalyticsPageViews } from "./AnalyticsPageViews.client.js";
+
+const GTM_CONTAINER_ID = "GTM-XXXXXXX";
+const GA4_MEASUREMENT_ID = "G-XXXXXXXXXX";
+
+function createNonce(): string {
+  return randomBytes(16).toString("base64url");
+}
+
+export function generateMetadata(
+  _context: GenerateMetadataContext,
+): RouteMetadata {
+  const nonce = createNonce();
+
+  return {
+    csp: {
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "https://www.googletagmanager.com"],
+        "connect-src": ["'self'", "https://www.google-analytics.com"],
+        "img-src": ["'self'", "data:", "https://www.google-analytics.com"],
+      },
+      nonce,
+    },
+    head: [
+      {
+        tag: "script",
+        nonce: true,
+        content: "window.dataLayer=window.dataLayer||[];",
+      },
+      {
+        tag: "script",
+        nonce: true,
+        attrs: {
+          async: true,
+          fetchpriority: "low",
+          src: `https://www.googletagmanager.com/gtm.js?id=${GTM_CONTAINER_ID}`,
+        },
+      },
+      {
+        tag: "script",
+        nonce: true,
+        content:
+          "function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','" +
+          GA4_MEASUREMENT_ID +
+          "');",
+      },
+    ],
+  };
+}
+
+export default function Page() {
+  return (
+    <main>
+      <AnalyticsPageViews />
+      <h1>Analytics</h1>
+    </main>
+  );
+}
+```
+
+`metadata.head` descriptors are validated. Event handler attributes are rejected, dangerous attributes are rejected, unsafe URL values are rejected, and text content is escaped before serialization.
+
+## Add body-only fallbacks
+
+The metadata.head cannot emit `<noscript>` fallback markup. Put the GTM no-JavaScript fallback in body JSX if you need it, and include the iframe host in CSP only when you actually deploy the fallback.
+
+```tsx
+export default function Page() {
+  return (
+    <main>
+      <noscript>
+        <iframe
+          src="https://www.googletagmanager.com/ns.html?id=GTM-XXXXXXX"
+          height="0"
+          width="0"
+          style="display:none;visibility:hidden"
+          title="Google Tag Manager"
+        />
+      </noscript>
+      <h1>Analytics</h1>
+    </main>
+  );
+}
+```
+
+If your CSP uses `frame-src` or `child-src`, add only the iframe host required by the fallback.
+
+## JSON-LD
+
+Use JSON-LD for structured data that belongs to the page. Keep it application-owned and deterministic. Do not interpolate request data, user content, or secrets into JSON-LD.
+
+```tsx
+import type { RouteMetadata } from "@reckona/mreact-router";
+
+const productJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "Acme Dashboard",
+  description: "Operational dashboard for Acme teams.",
+};
+
+export const metadata = {
+  head: [
+    {
+      tag: "script",
+      attrs: { type: "application/ld+json" },
+      content: JSON.stringify(productJsonLd),
+    },
+  ],
+} satisfies RouteMetadata;
+```
+
+`type="application/ld+json"` is data, not executable JavaScript, but it still appears in the page source. Treat it as public metadata.
+
+## SPA page views
+
+Initial document loads are usually tracked by the external script itself. Client navigation needs a small island that listens to Mreact navigation state and pushes a `page_view` after navigation completes.
+
+```tsx
+// src/app/analytics/AnalyticsPageViews.client.tsx
+import { subscribeNavigationState } from "@reckona/mreact-router/navigation-state";
+
+type AnalyticsWindow = typeof window & {
+  dataLayer?: unknown[];
+  __mreactAnalyticsInstalled?: boolean;
+};
+
+function pushPageView(path: string): void {
+  const w = window as AnalyticsWindow;
+  w.dataLayer = w.dataLayer ?? [];
+  w.dataLayer.push({ event: "page_view", page_path: path });
+}
+
+export function AnalyticsPageViews() {
+  const w = window as AnalyticsWindow;
+
+  if (w.__mreactAnalyticsInstalled !== true) {
+    w.__mreactAnalyticsInstalled = true;
+    pushPageView(location.pathname + location.search);
+
+    subscribeNavigationState((state) => {
+      if (state.pending === false) {
+        pushPageView(location.pathname + location.search);
+      }
+    });
+  }
+
+  return null;
+}
+```
+
+Keep analytics payloads small and public. `page_path` is usually enough for a page view; avoid email addresses, account IDs, tokens, or raw search params that may contain private data.
+
+## Performance and failure budget
+
+Third-party scripts can dominate startup and interaction time. Treat each vendor as part of the route performance budget.
+
+- Load non-critical analytics with `async` and `fetchpriority="low"`.
+- Do not use `fetchpriority="high"` for analytics, ads, chat widgets, or A/B testing snippets unless they are critical to the route's first interaction.
+- Prefer to batch analytics events when possible. Use `navigator.sendBeacon()`, `fetch(..., { keepalive: true })`, or feature-detected `fetchLater()` for low-priority telemetry instead of sending many small blocking requests.
+- Use browser performance traces and Long Animation Frames data to identify heavy third-party scripts in real traffic.
+- Keep local development stubs for vendor scripts when tests should run offline.
+
+## Security checklist
+
+- Do not put secrets or PII in metadata, script content, JSON-LD, dataLayer events, URLs, or query strings.
+- Add third-party hosts only to the directives they need: usually `script-src`, `connect-src`, `img-src`, or `frame-src`.
+- Use CSP nonces for route-owned inline executable code.
+- Prefer external CSS and static assets over inline style/script blocks.
+- Keep vendor IDs in safe public config and read private tokens only on the server.
+- Test with CSP enabled before release; do not widen policy with wildcards just to silence a blocked request.
+
+## Related pages
+
+- [CSP](/guides/csp/)
+- [Metadata and Head](/guides/metadata-and-head/)
+- [Environment Variables](/guides/environment-variables/)
+- [Link and Navigation](/guides/link-and-navigation/)
+- [Production Checklist](/deployments/production-checklist/)
