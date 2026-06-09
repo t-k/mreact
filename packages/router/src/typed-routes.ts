@@ -1,23 +1,44 @@
+/**
+ * Represents a value accepted in generated route search params.
+ */
 export type RouteSearchValue = boolean | number | string | null | undefined;
+/**
+ * Represents search params accepted by typed route href helpers.
+ */
 export type RouteSearchParams = Record<
   string,
   RouteSearchValue | readonly RouteSearchValue[]
 >;
 
+/**
+ * Extracts dynamic and catch-all params from an app route path pattern.
+ */
 export type RouteParamsFor<Path extends `/${string}`> = Simplify<ExtractRouteParams<Path>>;
 
+/**
+ * Builds the callable `href()` helper type for a specific app route path.
+ */
 export type AppRouteHref<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never
   ? (options?: StaticHrefOptions) => string
   : (options: DynamicHrefOptions<Path>) => string;
 
+/**
+ * Builds the Link `href` string type accepted for a specific app route path.
+ */
 export type AppRouteLinkHref<Path extends `/${string}`> =
   `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
 
+/**
+ * Configures a static href with optional search params and hash.
+ */
 export interface StaticHrefOptions {
   hash?: string | undefined;
   search?: RouteSearchParams | undefined;
 }
 
+/**
+ * Configures a dynamic href with route params, optional search params, and hash.
+ */
 export interface DynamicHrefOptions<Path extends `/${string}`> extends StaticHrefOptions {
   params: RouteParamsFor<Path>;
 }
@@ -38,18 +59,30 @@ type SegmentRouteParam<Segment extends string> = Segment extends `:...${infer Na
 
 type Simplify<T> = { [Key in keyof T]: T[Key] } & {};
 
+/**
+ * Represents the search and hash suffix portion of a typed route href.
+ */
 export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
 
+/**
+ * Builds the pathname string type for a typed route href.
+ */
 export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/"
   ? "/"
   : Path extends `/${infer Segments}`
     ? `/${AppRouteLinkSegments<Segments>}`
     : never;
 
+/**
+ * Builds the joined path segment string type for a typed route href.
+ */
 export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}`
   ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}`
   : AppRouteLinkSegment<Segments>;
 
+/**
+ * Builds the string type for one static or dynamic route segment.
+ */
 export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}`
   ? string
   : Segment;

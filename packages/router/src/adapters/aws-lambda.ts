@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AppRouterServerActionOptions } from "../actions.js";
 import type { AppRouterCache } from "../cache.js";
-import type { AppRouterImportPolicy } from "../import-policy.js";
+import type { AppRouterImportPolicy as BaseAppRouterImportPolicy } from "../import-policy.js";
 import {
   normalizeBuiltAppRuntimePreloadStrategy,
   type NormalizedBuiltAppRuntimePreloadStrategy,
@@ -20,10 +20,16 @@ import {
   type RouterRequestLogFields,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
-import type { RouterInstrumentation } from "../trace.js";
+import type { RouterInstrumentation as BaseRouterInstrumentation } from "../trace.js";
 
-export type { RouterInstrumentation } from "../trace.js";
-export type { AppRouterImportPolicy } from "../import-policy.js";
+/**
+ * Registers optional hooks for AWS Lambda router request, middleware, and route instrumentation.
+ */
+export type RouterInstrumentation = BaseRouterInstrumentation;
+/**
+ * Controls which source roots and runtime packages an AWS Lambda handler may import.
+ */
+export type AppRouterImportPolicy = BaseAppRouterImportPolicy;
 import {
   createBuiltRequestRuntime,
   preloadBuiltAppRuntime,
@@ -34,6 +40,9 @@ import {
   type ResponseSinkStrategy,
 } from "../serve.js";
 
+/**
+ * Represents the AWS API Gateway HTTP API v2 event consumed by buffered handlers.
+ */
 export interface AwsLambdaHttpEventV2 {
   body?: string | undefined;
   cookies?: string[] | undefined;
@@ -50,6 +59,9 @@ export interface AwsLambdaHttpEventV2 {
   version?: "2.0" | string | undefined;
 }
 
+/**
+ * Represents the AWS API Gateway HTTP API v2 result returned by buffered handlers.
+ */
 export interface AwsLambdaHttpResultV2 {
   body: string;
   cookies?: string[] | undefined;
@@ -58,12 +70,18 @@ export interface AwsLambdaHttpResultV2 {
   statusCode: number;
 }
 
+/**
+ * Describes response metadata passed to Lambda streaming response helpers.
+ */
 export interface AwsLambdaStreamingResponseMetadata {
   cookies?: string[] | undefined;
   headers: Record<string, string>;
   statusCode: number;
 }
 
+/**
+ * Defines the writable stream interface used by Lambda streaming handlers.
+ */
 export interface AwsLambdaStreamingResponseStream {
   destroy?: ((error?: unknown) => void) | undefined;
   end(): void;
@@ -71,6 +89,9 @@ export interface AwsLambdaStreamingResponseStream {
   write(chunk: string | Uint8Array): boolean;
 }
 
+/**
+ * Configures AWS Lambda request handlers for built app-router output.
+ */
 export interface AwsLambdaRequestHandlerOptions {
   allowedHosts?: readonly string[] | undefined;
   errorHandler?:
@@ -97,11 +118,17 @@ export interface AwsLambdaRequestHandlerOptions {
   trustForwardedProto?: boolean | undefined;
 }
 
+/**
+ * Selects how an AWS Lambda handler resolves its app-router import policy.
+ */
 export type AwsLambdaImportPolicy =
   | AppRouterImportPolicy
   | "generated"
   | { fromManifest: true };
 
+/**
+ * Configures preload behavior for built app-router modules in AWS Lambda.
+ */
 export type AwsLambdaPreloadStrategy =
   | "all"
   | "hot-route-requests"
@@ -117,10 +144,16 @@ type NormalizedAwsLambdaPreloadStrategy = NormalizedBuiltAppRuntimePreloadStrate
 
 type AwsLambdaDefaultPreloadMode = "all" | "middleware";
 
+/**
+ * Handles one AWS API Gateway HTTP API v2 event with a buffered response.
+ */
 export type AwsLambdaRequestHandler = (
   event: AwsLambdaHttpEventV2,
 ) => Promise<AwsLambdaHttpResultV2>;
 
+/**
+ * Handles one AWS API Gateway HTTP API v2 event with a Lambda response stream.
+ */
 export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (
   event: AwsLambdaHttpEventV2,
   responseStream: AwsLambdaStreamingResponseStream,

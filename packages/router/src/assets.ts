@@ -1,3 +1,6 @@
+/**
+ * Describes the generated files associated with a client bundle manifest entry.
+ */
 export interface AssetManifestEntry {
   assets?: readonly string[];
   css?: readonly string[];
@@ -5,17 +8,29 @@ export interface AssetManifestEntry {
   imports?: readonly string[];
 }
 
+/**
+ * Maps app-router entry keys to generated client asset metadata.
+ */
 export type AssetManifest = Readonly<Record<string, AssetManifestEntry>>;
 
+/**
+ * Configures URL generation for asset helper functions.
+ */
 export interface AssetHelperOptions {
   base?: string;
 }
 
+/**
+ * Represents a preload or stylesheet link descriptor derived from an asset manifest.
+ */
 export interface AssetLinkDescriptor {
   attrs: Record<string, string>;
   tag: "link";
 }
 
+/**
+ * Resolves a manifest entry key to its public asset URL.
+ */
 export function assetHref(
   manifest: AssetManifest,
   key: string,
@@ -24,6 +39,9 @@ export function assetHref(
   return assetPath(manifestEntry(manifest, key).file, options.base);
 }
 
+/**
+ * Builds unique preload and stylesheet link descriptors for one or more manifest entries.
+ */
 export function assetPreloadLinks(
   manifest: AssetManifest,
   keys: readonly string[] | string,

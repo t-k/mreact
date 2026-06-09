@@ -1,3 +1,6 @@
+/**
+ * Represents parsed W3C trace context headers for router instrumentation.
+ */
 export interface RouterTraceContext {
   parentSpanId: string;
   sampled: boolean;
@@ -6,6 +9,9 @@ export interface RouterTraceContext {
   tracestate?: string;
 }
 
+/**
+ * Describes a router request lifecycle instrumentation event.
+ */
 export interface RouterRequestInstrumentationEvent {
   method: string;
   path: string;
@@ -13,32 +19,50 @@ export interface RouterRequestInstrumentationEvent {
   trace?: RouterTraceContext;
 }
 
+/**
+ * Describes completion of a router request lifecycle event.
+ */
 export interface RouterRequestEndInstrumentationEvent
   extends RouterRequestInstrumentationEvent {
   status: number;
 }
 
+/**
+ * Describes a route-level loader or render instrumentation event.
+ */
 export interface RouterRouteInstrumentationEvent
   extends RouterRequestInstrumentationEvent {
   routeId: string;
   routePath: string;
 }
 
+/**
+ * Describes completion of a route-level instrumentation event.
+ */
 export interface RouterRouteEndInstrumentationEvent
   extends RouterRouteInstrumentationEvent {
   error?: unknown;
 }
 
+/**
+ * Describes a middleware instrumentation event.
+ */
 export interface RouterMiddlewareInstrumentationEvent
   extends RouterRequestInstrumentationEvent {
   name: string;
 }
 
+/**
+ * Describes completion of a middleware instrumentation event.
+ */
 export interface RouterMiddlewareEndInstrumentationEvent
   extends RouterMiddlewareInstrumentationEvent {
   error?: unknown;
 }
 
+/**
+ * Registers optional hooks for app-router request, middleware, and route instrumentation.
+ */
 export interface RouterInstrumentation {
   onLoaderEnd?: (event: RouterRouteEndInstrumentationEvent) => void | Promise<void>;
   onLoaderStart?: (event: RouterRouteInstrumentationEvent) => void | Promise<void>;
@@ -48,6 +72,9 @@ export interface RouterInstrumentation {
   onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
 }
 
+/**
+ * Parses W3C trace context header values for router instrumentation.
+ */
 export function parseTraceContext(
   traceparent: string | null | undefined,
   tracestate: string | null | undefined,
@@ -81,6 +108,9 @@ export function parseTraceContext(
   };
 }
 
+/**
+ * Reads trace context headers from a request.
+ */
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined {
   return parseTraceContext(request.headers.get("traceparent"), request.headers.get("tracestate"));
 }

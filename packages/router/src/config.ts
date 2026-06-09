@@ -1,10 +1,25 @@
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 
+/**
+ * Selects the deployment runtime artifacts emitted by an app-router build.
+ */
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
+/**
+ * Names a browser console method that can be stripped from client bundles.
+ */
 export type AppRouterClientConsoleMethod = "debug" | "error" | "info" | "log" | "trace" | "warn";
+/**
+ * Controls how client bundle source maps are generated.
+ */
 export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
+/**
+ * Configures client source map output with a boolean shortcut or explicit mode.
+ */
 export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
 
+/**
+ * Configures production-only app-router build behavior.
+ */
 export interface AppRouterProductionOptions {
   dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
 }

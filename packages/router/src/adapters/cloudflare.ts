@@ -35,11 +35,17 @@ import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 
+/**
+ * Represents the Cloudflare Worker execution context used by router handlers.
+ */
 export interface CloudflareExecutionContext {
   passThroughOnException(): void;
   waitUntil(promise: Promise<unknown>): void;
 }
 
+/**
+ * Loads static assets for Cloudflare router requests.
+ */
 export interface CloudflareAssetLoader<Env = unknown> {
   fetch?:
     | ((
@@ -51,6 +57,9 @@ export interface CloudflareAssetLoader<Env = unknown> {
     | undefined;
 }
 
+/**
+ * Provides manifests, environment, and execution context to Cloudflare rendering.
+ */
 export interface CloudflareRenderContext<Env = unknown> {
   clientManifest: CloudflareClientManifest;
   context: CloudflareExecutionContext;
@@ -58,6 +67,9 @@ export interface CloudflareRenderContext<Env = unknown> {
   serverManifest: BuiltServerManifest;
 }
 
+/**
+ * Configures a Cloudflare Worker request handler for app-router output.
+ */
 export interface CloudflareRequestHandlerOptions<Env = unknown> {
   assets?: CloudflareAssetLoader<Env> | undefined;
   clientManifest: CloudflareClientManifest;
@@ -77,10 +89,16 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
   serverManifest: BuiltServerManifest;
 }
 
+/**
+ * Defines the Cloudflare Worker `fetch` handler shape returned by router adapters.
+ */
 export interface CloudflareRequestHandler<Env = unknown> {
   fetch(request: Request, env: Env, context: CloudflareExecutionContext): Promise<Response>;
 }
 
+/**
+ * Provides route match data to Cloudflare built-route rendering.
+ */
 export interface CloudflareBuiltRouteRenderContext<
   Env = unknown,
 > extends CloudflareRenderContext<Env> {
@@ -88,6 +106,9 @@ export interface CloudflareBuiltRouteRenderContext<
   route: AppRoute;
 }
 
+/**
+ * Provides loader context to Cloudflare route modules.
+ */
 export interface CloudflareRouteModuleLoaderContext<
   Env = unknown,
 > extends CloudflareBuiltRouteRenderContext<Env> {
@@ -95,12 +116,18 @@ export interface CloudflareRouteModuleLoaderContext<
   request: Request;
 }
 
+/**
+ * Provides request context to Cloudflare server route handlers.
+ */
 export interface CloudflareServerRouteContext<
   Env = unknown,
 > extends CloudflareBuiltRouteRenderContext<Env> {
   request: Request;
 }
 
+/**
+ * Provides props to Cloudflare route module components.
+ */
 export interface CloudflareRouteModuleComponentProps<
   Data = unknown,
   Env = unknown,
@@ -110,10 +137,16 @@ export interface CloudflareRouteModuleComponentProps<
   request: Request;
 }
 
+/**
+ * Renders a Cloudflare route module response body or `Response`.
+ */
 export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (
   props: CloudflareRouteModuleComponentProps<Data, Env>,
 ) => Response | string | PromiseLike<Response | string>;
 
+/**
+ * Defines the exports accepted from a Cloudflare page route module.
+ */
 export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
   App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
   CloudflareRouteComponent?: CloudflareRouteModuleComponent<Data, Env> | undefined;
@@ -129,11 +162,17 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
   metadata?: RouteMetadata | undefined;
 }
 
+/**
+ * Handles a Cloudflare server route request.
+ */
 export type CloudflareServerRouteHandler<Env = unknown> = (
   request: Request,
   context: CloudflareServerRouteContext<Env>,
 ) => unknown | PromiseLike<unknown>;
 
+/**
+ * Defines HTTP method exports accepted from a Cloudflare server route module.
+ */
 export interface CloudflareServerRouteModule<Env = unknown> {
   ALL?: CloudflareServerRouteHandler<Env> | undefined;
   DELETE?: CloudflareServerRouteHandler<Env> | undefined;
@@ -146,6 +185,9 @@ export interface CloudflareServerRouteModule<Env = unknown> {
   PUT?: CloudflareServerRouteHandler<Env> | undefined;
 }
 
+/**
+ * Provides request context to Cloudflare metadata route modules.
+ */
 export interface CloudflareMetadataRouteContext {
   baseUrl: string;
   host: string;
@@ -153,21 +195,33 @@ export interface CloudflareMetadataRouteContext {
   request: Request;
 }
 
+/**
+ * Defines the default export accepted from a Cloudflare metadata route module.
+ */
 export interface CloudflareMetadataRouteModule {
   default?: ((context: CloudflareMetadataRouteContext) => unknown | PromiseLike<unknown>) | undefined;
 }
 
+/**
+ * Represents one registered Cloudflare route module entry.
+ */
 export type CloudflareRouteModuleRegistryEntry<Env = unknown> =
   | CloudflareRouteModule<unknown, Env>
   | CloudflareMetadataRouteModule
   | CloudflareServerRouteModule<Env>;
 
+/**
+ * Maps generated route module file keys to Cloudflare route modules or lazy loaders.
+ */
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<
   string,
   | CloudflareRouteModuleRegistryEntry<Env>
   | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
 >;
 
+/**
+ * Configures the Cloudflare route module renderer.
+ */
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
   document?:
     | ((
@@ -180,16 +234,25 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
   modules: CloudflareRouteModuleRegistry<Env>;
 }
 
+/**
+ * Represents an import glob of Cloudflare route modules.
+ */
 export type CloudflareRouteModuleGlob<Env = unknown> = Record<
   string,
   | CloudflareRouteModuleRegistryEntry<Env>
   | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
 >;
 
+/**
+ * Configures collection of Cloudflare route modules from a built manifest.
+ */
 export interface CollectCloudflareRouteModulesOptions {
   manifest: BuiltServerManifest;
 }
 
+/**
+ * Configures a Cloudflare request handler that renders matched built routes.
+ */
 export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omit<
   CloudflareRequestHandlerOptions<Env>,
   "render"
@@ -202,16 +265,25 @@ export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omi
     | undefined;
 }
 
+/**
+ * Describes client assets and route metadata used by Cloudflare handlers.
+ */
 export interface CloudflareClientManifest {
   assets?: readonly string[] | undefined;
   publicAssets?: readonly string[] | undefined;
   routes: ClientRouteManifestEntry[];
 }
 
+/**
+ * Represents a Cloudflare asset binding with a `fetch` method.
+ */
 export interface CloudflareAssetBinding {
   fetch(request: Request): Response | Promise<Response>;
 }
 
+/**
+ * Configures static asset loading from a Cloudflare asset binding.
+ */
 export interface CloudflareStaticAssetLoaderOptions<Env = unknown> {
   binding:
     | CloudflareAssetBinding
@@ -223,12 +295,18 @@ export interface CloudflareStaticAssetLoaderOptions<Env = unknown> {
   prefix?: string | undefined;
 }
 
+/**
+ * Defines the Cloudflare Cache API subset used by prerender stores.
+ */
 export interface CloudflareCache {
   delete(request: Request | string): boolean | Promise<boolean>;
   match(request: Request | string): Response | Promise<Response | undefined> | undefined;
   put(request: Request | string, response: Response): void | Promise<void>;
 }
 
+/**
+ * Configures a Cloudflare Cache API backed prerender store.
+ */
 export interface CloudflarePrerenderStoreOptions {
   cache: CloudflareCache;
   keyOrigin?: string | undefined;

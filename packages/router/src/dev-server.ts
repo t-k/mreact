@@ -21,6 +21,9 @@ import {
 } from "./logger.js";
 import type { HttpUpgradeHandler } from "./upgrade.js";
 
+/**
+ * Configures the Vite-powered app-router development server.
+ */
 export interface StartDevServerOptions extends AppRouterProjectOptions {
   port?: number | undefined;
   hostname?: string;

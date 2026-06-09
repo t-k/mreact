@@ -163,6 +163,9 @@ export interface AppRouterServerActionOptions {
   replayStore?: ServerActionReplayStore | undefined;
 }
 
+/**
+ * Describes a server action request reference that the app router may dispatch.
+ */
 export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
   inferred?: boolean | undefined;
 }
@@ -186,6 +189,9 @@ interface ActionReference {
   moduleId: string;
 }
 
+/**
+ * Identifies an inferred form action expression rewritten during route preparation.
+ */
 export interface PreparedFormActionReference {
   end: number;
   expression: string;

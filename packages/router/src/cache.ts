@@ -1,16 +1,25 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
+/**
+ * Describes the cache lifetime assigned to a rendered route response.
+ */
 export interface RouteCachePolicy {
   cacheControl: string;
   revalidateSeconds: number;
 }
 
+/**
+ * Configures cache-control directives for route response caching.
+ */
 export interface CacheControlOptions {
   maxAge?: number | undefined;
   sMaxAge?: number | undefined;
   staleWhileRevalidate?: boolean | number | undefined;
 }
 
+/**
+ * Stores a cached route response body and its expiration metadata.
+ */
 export interface AppRouterCacheEntry {
   body: string;
   cacheControl: string;
@@ -19,6 +28,9 @@ export interface AppRouterCacheEntry {
   status: number;
 }
 
+/**
+ * Defines the storage interface used by app-router route response caching.
+ */
 export interface AppRouterCache {
   deleteByPath(path: string): void | Promise<void>;
   get(
@@ -28,6 +40,9 @@ export interface AppRouterCache {
   set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
 }
 
+/**
+ * Configures the process-local in-memory route cache implementation.
+ */
 export interface MemoryRouteCacheOptions {
   maxEntries?: number;
   sweepIntervalMs?: number;

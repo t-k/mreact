@@ -1,3 +1,6 @@
+/**
+ * Reports runtime cache counters for a named router cache.
+ */
 export interface RouterRuntimeCacheStat {
   evictions: number;
   hits: number;

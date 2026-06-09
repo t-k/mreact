@@ -1,5 +1,11 @@
+/**
+ * Names the client navigation operation that produced the current router state.
+ */
 export type AppRouterNavigationType = "push" | "replace" | "pop" | "refresh";
 
+/**
+ * Describes the latest client-side app-router navigation state.
+ */
 export interface AppRouterNavigationState {
   pending: boolean;
   from: string | null;
@@ -7,6 +13,9 @@ export interface AppRouterNavigationState {
   type: AppRouterNavigationType | null;
 }
 
+/**
+ * Receives app-router client navigation state updates.
+ */
 export type AppRouterNavigationStateListener = (
   state: AppRouterNavigationState,
 ) => void;
@@ -18,6 +27,9 @@ const idleNavigationState: AppRouterNavigationState = {
   type: null,
 };
 
+/**
+ * Reads the current client navigation state snapshot.
+ */
 export function getNavigationState(): AppRouterNavigationState {
   const runtimeState = (globalThis as {
     __mreactNavigationState?: { current?: unknown };
@@ -31,6 +43,9 @@ export function getNavigationState(): AppRouterNavigationState {
   return navigationStateFromDocument();
 }
 
+/**
+ * Subscribes to app-router client navigation state changes.
+ */
 export function subscribeNavigationState(
   listener: AppRouterNavigationStateListener,
 ): () => void {

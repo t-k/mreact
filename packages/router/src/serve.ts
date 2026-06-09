@@ -119,10 +119,16 @@ interface BuiltPublicAsset {
  * that on your workload.
  */
 export type ResponseSinkStrategy = "string" | "buffer";
+/**
+ * Controls whether built request handling trusts the incoming Host header.
+ */
 export type RequestHostPolicy = "strict" | "trusted-proxy";
 
 let warnedImplicitHostTrust = false;
 
+/**
+ * Configures rendering a request against a built app-router output directory.
+ */
 export interface RenderBuiltAppRequestOptions {
   outDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -159,6 +165,9 @@ export interface BuiltRequestRuntime {
   ): Promise<Response>;
 }
 
+/**
+ * Selects which built runtime modules should be preloaded.
+ */
 export type BuiltAppRuntimePreloadMode =
   | "all"
   | "hot-route-requests"
@@ -166,11 +175,17 @@ export type BuiltAppRuntimePreloadMode =
   | "middleware"
   | "none";
 
+/**
+ * Configures built app runtime preload scope and optional hot routes.
+ */
 export interface BuiltAppRuntimePreloadStrategy {
   mode: BuiltAppRuntimePreloadMode;
   routes?: readonly string[] | undefined;
 }
 
+/**
+ * Configures the Node HTTP server used to serve a built app-router output.
+ */
 export interface StartServerOptions {
   outDir: string;
   port: number;
@@ -232,6 +247,9 @@ export function warnIfImplicitHostTrust(options: {
   );
 }
 
+/**
+ * Defines storage for prerendered route responses used by built request rendering.
+ */
 export interface AppRouterPrerenderStore {
   delete(path: string): void | Promise<void>;
   get(path: string): BuiltPrerenderedRoute | undefined | Promise<BuiltPrerenderedRoute | undefined>;
@@ -277,6 +295,9 @@ export async function createBuiltRequestRuntime(
   };
 }
 
+/**
+ * Preloads selected modules from a built app-router runtime.
+ */
 export async function preloadBuiltAppRuntime(options: {
   importPolicy?: AppRouterImportPolicy | undefined;
   outDir: string;
@@ -363,6 +384,9 @@ function builtRuntimePreloadRoutes(
   });
 }
 
+/**
+ * Renders a request using a built app-router output directory.
+ */
 export async function renderBuiltAppRequest(
   options: RenderBuiltAppRequestOptions,
 ): Promise<Response> {

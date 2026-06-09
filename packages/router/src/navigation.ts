@@ -11,6 +11,9 @@ export interface RedirectOptions {
 
 export type MiddlewareNext = undefined;
 
+/**
+ * Describes a parser used by `parseForm()` to validate submitted form data.
+ */
 export interface ParseSchema<T> {
   parse(value: FormData): T;
 }
@@ -270,12 +273,18 @@ export function rewriteLocation(response: Response): string | undefined {
   return candidate !== undefined && isSafeInternalRedirect(candidate) ? candidate : undefined;
 }
 
+/**
+ * Checks whether an unknown error is an app-router redirect signal.
+ */
 export function isRedirectError(error: unknown): error is Error & { location: string; status: number } {
   return error instanceof Error &&
     error.name === redirectErrorName &&
     typeof (error as { location?: unknown }).location === "string";
 }
 
+/**
+ * Checks whether an unknown error is an app-router not-found signal.
+ */
 export function isNotFoundError(error: unknown): boolean {
   return error instanceof Error && error.name === notFoundErrorName;
 }

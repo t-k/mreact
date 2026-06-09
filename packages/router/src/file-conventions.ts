@@ -1,3 +1,6 @@
+/**
+ * Names file conventions that app-router treats as metadata or static asset routes.
+ */
 export type AppFileConvention =
   | "apple-icon"
   | "icon"

@@ -12,6 +12,9 @@ const alwaysAllowedPackages = new Set([
   "@reckona/mreact-router",
 ]);
 
+/**
+ * Controls which source roots and runtime packages built app-router handlers may import.
+ */
 export interface AppRouterImportPolicy {
   allowedPackages?: readonly string[] | undefined;
   allowedSourceDirs?: readonly string[] | undefined;

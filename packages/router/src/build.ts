@@ -109,6 +109,9 @@ const serverArtifactFilesystemConcurrency = 2;
 type ServerTransformOutput = ReturnType<typeof transform>;
 type ServerTransformCache = Map<string, Promise<ServerTransformOutput>>;
 
+/**
+ * Configures an app-router production build and its deployment targets.
+ */
 export interface BuildAppOptions extends AppRouterProjectOptions {
   onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
   onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
@@ -157,6 +160,9 @@ async function collectBuildMiddlewareIds(appDir: string): Promise<ReadonlySet<st
   return ids;
 }
 
+/**
+ * Names a high-level phase reported while building an app-router application.
+ */
 export type BuildAppPhase =
   | "scan"
   | "collectFiles"
@@ -175,11 +181,17 @@ export type BuildAppPhase =
   | "writeManifests"
   | "adapterArtifacts";
 
+/**
+ * Captures the elapsed time for a completed app-router build phase.
+ */
 export interface BuildAppPhaseTiming {
   ms: number;
   phase: BuildAppPhase;
 }
 
+/**
+ * Reports build progress events emitted during app-router compilation and packaging.
+ */
 export type BuildAppProgressEvent =
   | {
       kind: "phase-start";
@@ -195,16 +207,25 @@ export type BuildAppProgressEvent =
       kind: "routes-discovered";
     };
 
+/**
+ * Contains the route graph produced by an app-router build.
+ */
 export interface BuildAppResult {
   routes: AppRoute[];
 }
 
+/**
+ * Describes the generated import policy artifact consumed by built request handlers.
+ */
 export interface BuiltImportPolicyArtifact {
   byRoute: Record<string, string[]>;
   runtimePackages: string[];
   version: 1;
 }
 
+/**
+ * Summarizes the files and entry point produced for an AWS Lambda artifact.
+ */
 export interface AwsLambdaArtifactManifest {
   files: Array<{ bytes: number; path: string }>;
   handler: string;
@@ -213,6 +234,9 @@ export interface AwsLambdaArtifactManifest {
   version: 1;
 }
 
+/**
+ * Summarizes the files and worker entry produced for a Cloudflare Pages artifact.
+ */
 export interface CloudflarePagesArtifactManifest {
   files: Array<{ bytes: number; path: string }>;
   runtime: "cloudflare-pages";
@@ -221,6 +245,9 @@ export interface CloudflarePagesArtifactManifest {
   worker: "_worker.js";
 }
 
+/**
+ * Configures packaging of a built app-router output directory for AWS Lambda.
+ */
 export interface PackageAwsLambdaArtifactOptions {
   fromDir: string;
   handlerEntry?: string | undefined;
@@ -228,6 +255,9 @@ export interface PackageAwsLambdaArtifactOptions {
   skipRuntimeDependencyCheck?: boolean | undefined;
 }
 
+/**
+ * Configures packaging of a built app-router output directory for Cloudflare Pages.
+ */
 export interface PackageCloudflarePagesArtifactOptions {
   fromDir: string;
   outDir: string;

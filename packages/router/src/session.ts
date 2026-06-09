@@ -1,5 +1,8 @@
 import { deleteCookie, parseCookieHeader, setCookie } from "./cookies.js";
 
+/**
+ * Stores session data and expiration metadata for one session id.
+ */
 export interface SessionRecord<TData = unknown> {
   createdAt: number;
   data: TData;
@@ -8,17 +11,26 @@ export interface SessionRecord<TData = unknown> {
   rotatedAt?: number;
 }
 
+/**
+ * Defines the persistence API used by app-router session helpers.
+ */
 export interface SessionStore<TData = unknown> {
   delete(id: string): void | Promise<void>;
   get(id: string): SessionRecord<TData> | undefined | Promise<SessionRecord<TData> | undefined>;
   set(record: SessionRecord<TData>): void | Promise<void>;
 }
 
+/**
+ * Configures the process-local memory session store.
+ */
 export interface MemorySessionStoreOptions {
   maxEntries?: number;
   sweepIntervalMs?: number;
 }
 
+/**
+ * Configures the cookie used by app-router session helpers.
+ */
 export interface SessionCookieOptions {
   cookieName?: string;
   maxAgeSeconds?: number;

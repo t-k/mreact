@@ -1,3 +1,6 @@
+/**
+ * Configures attributes used when serializing a Set-Cookie header.
+ */
 export interface CookieOptions {
   domain?: string;
   expires?: Date;

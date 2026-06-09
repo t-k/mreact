@@ -1,18 +1,30 @@
+/**
+ * Configures locale detection for app-router requests.
+ */
 export interface LocaleRoutingOptions<Locale extends string = string> {
   defaultLocale: Locale;
   locales: readonly Locale[];
 }
 
+/**
+ * Reports the locale selected for an incoming request.
+ */
 export interface DetectedLocale<Locale extends string = string> {
   locale: Locale;
   pathname: string;
   source: "accept-language" | "default" | "path";
 }
 
+/**
+ * Describes a nested tree of localized message strings.
+ */
 export type MessageTree = {
   readonly [key: string]: MessageTree | string;
 };
 
+/**
+ * Detects the request locale from the URL path or Accept-Language header.
+ */
 export function detectLocale<Locale extends string>(
   request: Request,
   options: LocaleRoutingOptions<Locale>,
@@ -48,6 +60,9 @@ export function detectLocale<Locale extends string>(
   };
 }
 
+/**
+ * Preserves literal types for a localized message tree.
+ */
 export function defineMessages<const Messages extends MessageTree>(messages: Messages): Messages {
   return messages;
 }

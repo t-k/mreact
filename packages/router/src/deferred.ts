@@ -1,9 +1,15 @@
 const deferredLoaderDataSymbol = Symbol.for("mreact.router.deferred-loader-data");
 
+/**
+ * Marks loader data that contains streamed deferred values.
+ */
 export type DeferredLoaderData<TData extends Record<string, unknown>> = TData & {
   readonly [deferredLoaderDataSymbol]: true;
 };
 
+/**
+ * Marks loader data for deferred streaming without changing its data shape.
+ */
 export function defer<TData extends Record<string, unknown>>(
   data: TData,
 ): DeferredLoaderData<TData> {
@@ -15,6 +21,9 @@ export function defer<TData extends Record<string, unknown>>(
   }) as DeferredLoaderData<TData>;
 }
 
+/**
+ * Checks whether loader data was marked with `defer()`.
+ */
 export function isDeferredLoaderData(
   value: unknown,
 ): value is DeferredLoaderData<Record<string, unknown>> {

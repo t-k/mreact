@@ -161,6 +161,9 @@ interface RenderTiming {
   phases: Record<string, number>;
 }
 
+/**
+ * Configures server rendering for a source app-router request.
+ */
 export interface RenderAppRequestOptions {
   appDir: string;
   assetBaseUrl?: string | undefined;
@@ -199,11 +202,17 @@ export interface AppRouterRenderPreload {
   wait: "before-render";
 }
 
+/**
+ * Allows callers to inspect or replace an app-router response before it is returned.
+ */
 export type AppRouterResponseHook = (
   response: Response,
   context: AppRouterResponseHookContext,
 ) => Response | undefined | void | Promise<Response | undefined | void>;
 
+/**
+ * Provides request context to an app-router response hook.
+ */
 export interface AppRouterResponseHookContext {
   request: Request;
 }
@@ -595,6 +604,9 @@ interface RouteSourceAnalysis {
   usesRuntimeCacheControl: boolean;
 }
 
+/**
+ * Renders a source app-router request into a `Response`.
+ */
 export async function renderAppRequest(options: RenderAppRequestOptions): Promise<Response> {
   const authStorage = authRequestStorage();
 

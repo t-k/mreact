@@ -8,8 +8,14 @@ import {
   type AppRouterLogger,
 } from "../logger.js";
 
+/**
+ * Handles one standard Web `Request` in an edge runtime.
+ */
 export type EdgeRequestHandler = (request: Request) => Response | Promise<Response>;
 
+/**
+ * Configures edge-runtime logging, rendering, and error handling.
+ */
 export interface EdgeRequestHandlerOptions {
   logger?: AppRouterLogger | undefined;
   onError?: ((error: unknown, request: Request) => Response | Promise<Response>) | undefined;

@@ -4,6 +4,9 @@ import { dirname, join } from "node:path";
 import type { BuiltPrerenderedRoute } from "./build.js";
 import type { AppRouterPrerenderStore } from "./serve.js";
 
+/**
+ * Configures the process-local prerender store used for cached prerendered routes.
+ */
 export interface MemoryPrerenderStoreOptions {
   backing?: Map<string, MemoryPrerenderStoreEntry>;
   maxEntries?: number;
@@ -18,6 +21,9 @@ export interface MemoryPrerenderStoreEntry {
   lastAccessedAt: number;
 }
 
+/**
+ * Configures a filesystem-backed prerender store.
+ */
 export interface FileSystemPrerenderStoreOptions {
   directory: string;
   lockPollMs?: number;
@@ -25,6 +31,9 @@ export interface FileSystemPrerenderStoreOptions {
   namespace?: string;
 }
 
+/**
+ * Defines the adapter API used by key-value prerender stores.
+ */
 export interface KeyValuePrerenderStoreAdapter {
   delete(key: string): void | Promise<void>;
   get(key: string): string | undefined | Promise<string | undefined>;
@@ -32,12 +41,18 @@ export interface KeyValuePrerenderStoreAdapter {
   withLock?<T>(key: string, task: (token: string) => Promise<T>): Promise<T>;
 }
 
+/**
+ * Configures a key-value-backed prerender store.
+ */
 export interface KeyValuePrerenderStoreOptions {
   adapter: KeyValuePrerenderStoreAdapter;
   namespace?: string;
   ttlMs?: number;
 }
 
+/**
+ * Creates an in-memory prerender store with optional TTL and LRU eviction.
+ */
 export function createMemoryPrerenderStore(
   options: MemoryPrerenderStoreOptions = {},
 ): AppRouterPrerenderStore {
@@ -100,6 +115,9 @@ export function createMemoryPrerenderStore(
   };
 }
 
+/**
+ * Creates a prerender store that persists entries as JSON files.
+ */
 export function createFileSystemPrerenderStore(
   options: FileSystemPrerenderStoreOptions,
 ): AppRouterPrerenderStore {
@@ -162,6 +180,9 @@ export function createFileSystemPrerenderStore(
   };
 }
 
+/**
+ * Creates a prerender store backed by a caller-provided key-value adapter.
+ */
 export function createKeyValuePrerenderStore(
   options: KeyValuePrerenderStoreOptions,
 ): AppRouterPrerenderStore {

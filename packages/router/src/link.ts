@@ -2,30 +2,77 @@ import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
-import type { AppRouteLinkHref } from "./typed-routes.js";
-export type {
-  AppRouteLinkHref,
-  AppRouteLinkHrefSuffix,
-  AppRouteLinkPathname,
-  AppRouteLinkSegment,
-  AppRouteLinkSegments,
+import type {
+  AppRouteLinkHref as RouterAppRouteLinkHref,
+  AppRouteLinkHrefSuffix as RouterAppRouteLinkHrefSuffix,
+  AppRouteLinkPathname as RouterAppRouteLinkPathname,
+  AppRouteLinkSegment as RouterAppRouteLinkSegment,
+  AppRouteLinkSegments as RouterAppRouteLinkSegments,
 } from "./typed-routes.js";
+
+/**
+ * Builds the Link `href` string type accepted for a specific app route path.
+ */
+export type AppRouteLinkHref<Path extends `/${string}`> = RouterAppRouteLinkHref<Path>;
+/**
+ * Represents the search and hash suffix portion of a typed route href.
+ */
+export type AppRouteLinkHrefSuffix = RouterAppRouteLinkHrefSuffix;
+/**
+ * Builds the pathname string type for a typed route href.
+ */
+export type AppRouteLinkPathname<Path extends `/${string}`> = RouterAppRouteLinkPathname<Path>;
+/**
+ * Builds the string type for one static or dynamic route segment.
+ */
+export type AppRouteLinkSegment<Segment extends string> = RouterAppRouteLinkSegment<Segment>;
+/**
+ * Builds the joined path segment string type for a typed route href.
+ */
+export type AppRouteLinkSegments<Segments extends string> = RouterAppRouteLinkSegments<Segments>;
 
 const TRUSTED_LINK_HTML = Symbol.for("modular.react.router.trusted_link_html");
 
+/**
+ * Selects when the app router should prefetch a linked route.
+ */
 export type LinkPrefetch = "intent" | "viewport" | "none" | false;
+/**
+ * Controls scroll restoration behavior after client navigation.
+ */
 export type LinkScroll = "top" | "preserve";
+/**
+ * Controls whether client navigation participates in view transitions.
+ */
 export type LinkTransition = "auto" | "none" | false;
+/**
+ * Wraps pre-escaped HTML that can be used as trusted link children.
+ */
 export type TrustedLinkHtml = { readonly [TRUSTED_LINK_HTML]: string };
+/**
+ * Represents children accepted by the app-router Link renderer.
+ */
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
+/**
+ * Allows applications to augment the set of statically registered app route paths.
+ */
 export interface AppRouteDeclarations {}
+/**
+ * Extracts registered route paths from `AppRouteDeclarations`.
+ */
 export type RegisteredAppRoutePath = AppRouteDeclarations extends { readonly path: infer Path }
   ? Extract<Path, `/${string}`>
   : never;
+/**
+ * Resolves the accepted `href` type for app-router links.
+ */
 export type LinkHref = [RegisteredAppRoutePath] extends [never]
   ? string
   : AppRouteLinkHref<RegisteredAppRoutePath>;
 
+/**
+ * Configures client navigation behavior for a router link.
+ */
 export interface LinkOptions<Href extends string = LinkHref> {
   href: Href;
   prefetch?: LinkPrefetch | undefined;
@@ -34,6 +81,9 @@ export interface LinkOptions<Href extends string = LinkHref> {
   transition?: LinkTransition | undefined;
 }
 
+/**
+ * Combines router link options with anchor attributes and children.
+ */
 export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
   children?: LinkChild;
   [attribute: string]: unknown;
@@ -60,6 +110,9 @@ export function linkProps(options: LinkOptions<string>): Record<string, string> 
   };
 }
 
+/**
+ * Produces a compile-time error shape when a typed Link receives an unresolved route pattern.
+ */
 export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never]
   ? unknown
   : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`>

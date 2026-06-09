@@ -2,6 +2,9 @@ const csrfCookieNameProduction = "__Host-mreact.csrf";
 const csrfCookieNameDevelopment = "mreact.csrf";
 const formFieldCsrf = "__mreact_csrf";
 
+/**
+ * Names the hidden form field used for app-router CSRF validation.
+ */
 export const formCsrfFieldName = formFieldCsrf;
 
 export function serverActionCookie(csrfToken: string): string {
@@ -20,14 +23,23 @@ export function serverActionCookie(csrfToken: string): string {
   return parts.join("; ");
 }
 
+/**
+ * Creates or reuses the CSRF token embedded into server-rendered forms.
+ */
 export function createFormCsrfToken(request?: Request | undefined): string {
   return readExistingFormCsrfToken(request) ?? randomToken();
 }
 
+/**
+ * Serializes the CSRF cookie used to validate app-router form submissions.
+ */
 export function formCsrfCookie(csrfToken: string): string {
   return serverActionCookie(csrfToken);
 }
 
+/**
+ * Validates the CSRF cookie and hidden form field for a form submission.
+ */
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined {
   const formToken = stringFormValue(formData.get(formFieldCsrf));
   const cookieHeader = request.headers.get("cookie");

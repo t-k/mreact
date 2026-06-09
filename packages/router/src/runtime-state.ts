@@ -3,6 +3,9 @@ type RuntimeStateRoot = Record<string, unknown>;
 
 const namespace = "__mreactRouterRuntimeState";
 
+/**
+ * Reads or initializes shared server runtime state stored on `globalThis`.
+ */
 export function getServerRuntimeState<TState extends object>(
   key: string,
   create: () => TState,

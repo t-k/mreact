@@ -6,12 +6,21 @@ import {
   type AppFileConvention,
 } from "./file-conventions.js";
 
+/**
+ * Configures app route discovery from a routes directory.
+ */
 export interface ScanAppRoutesOptions {
   appDir: string;
 }
 
+/**
+ * Represents any route discovered by the app-router file-system scanner.
+ */
 export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
+/**
+ * Describes a page route that renders a component.
+ */
 export interface PageRoute {
   kind: "page";
   path: string;
@@ -19,6 +28,9 @@ export interface PageRoute {
   segments: RouteSegment[];
 }
 
+/**
+ * Describes a server route that handles HTTP methods directly.
+ */
 export interface ServerRoute {
   kind: "server";
   path: string;
@@ -26,6 +38,9 @@ export interface ServerRoute {
   segments: RouteSegment[];
 }
 
+/**
+ * Describes a generated metadata route such as robots or sitemap.
+ */
 export interface AppMetadataRoute {
   convention: AppFileConvention;
   kind: "metadata";
@@ -34,6 +49,9 @@ export interface AppMetadataRoute {
   segments: RouteSegment[];
 }
 
+/**
+ * Describes a static asset route produced from an app file convention.
+ */
 export interface AppAssetRoute {
   convention: AppFileConvention;
   kind: "asset";
@@ -42,11 +60,17 @@ export interface AppAssetRoute {
   segments: RouteSegment[];
 }
 
+/**
+ * Represents a static, dynamic, or catch-all segment in an app route path.
+ */
 export type RouteSegment =
   | { kind: "static"; value: string }
   | { kind: "dynamic"; name: string }
   | { kind: "catch-all"; name: string };
 
+/**
+ * Holds the route and params selected for a request pathname.
+ */
 export interface MatchedRoute {
   route: AppRoute;
   params: Record<string, readonly string[] | string>;
@@ -56,6 +80,9 @@ export interface RouteMatcher {
   match(pathname: string): MatchedRoute | undefined;
 }
 
+/**
+ * Scans an app directory and returns sorted app-router route definitions.
+ */
 export async function scanAppRoutes(
   options: ScanAppRoutesOptions,
 ): Promise<AppRoute[]> {
@@ -84,6 +111,9 @@ export async function scanAppRoutes(
     .sort(compareRouteListEntries);
 }
 
+/**
+ * Matches a request pathname against a route list.
+ */
 export function matchRoute(
   routes: readonly AppRoute[],
   pathname: string,

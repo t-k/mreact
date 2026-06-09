@@ -1,7 +1,16 @@
+/**
+ * Names the severity channel used for app-router structured logs.
+ */
 export type AppRouterLogLevel = "debug" | "info" | "warn" | "error";
 
+/**
+ * Names the runtime that handled an app-router request.
+ */
 export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 
+/**
+ * Receives structured app-router log events by severity.
+ */
 export interface AppRouterLogger {
   debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
   error?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
@@ -9,6 +18,9 @@ export interface AppRouterLogger {
   warn?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
 }
 
+/**
+ * Represents every structured log event emitted by the app router.
+ */
 export type AppRouterLogEvent =
   | AppRouterRequestStartLogEvent
   | AppRouterRequestEndLogEvent
@@ -17,6 +29,9 @@ export type AppRouterLogEvent =
   | AppRouterRenderTimingLogEvent
   | AppRouterCspInlineNonceWarningLogEvent;
 
+/**
+ * Logs the start of an app-router request.
+ */
 export interface AppRouterRequestStartLogEvent {
   method: string;
   path: string;
@@ -24,6 +39,9 @@ export interface AppRouterRequestStartLogEvent {
   type: "router:request:start";
 }
 
+/**
+ * Logs the successful completion of an app-router request.
+ */
 export interface AppRouterRequestEndLogEvent {
   durationMs: number;
   method: string;
@@ -33,6 +51,9 @@ export interface AppRouterRequestEndLogEvent {
   type: "router:request:end";
 }
 
+/**
+ * Logs a request that ended with an app-router error response.
+ */
 export interface AppRouterRequestErrorLogEvent {
   durationMs: number;
   error: AppRouterLogError;
@@ -42,6 +63,9 @@ export interface AppRouterRequestErrorLogEvent {
   type: "router:request:error";
 }
 
+/**
+ * Logs per-phase timings for a complete app-router request.
+ */
 export interface AppRouterRequestTimingLogEvent {
   durationMs: number;
   method: string;
@@ -52,6 +76,9 @@ export interface AppRouterRequestTimingLogEvent {
   type: "router:request:timing";
 }
 
+/**
+ * Logs per-phase timings for route rendering.
+ */
 export interface AppRouterRenderTimingLogEvent {
   method: string;
   path: string;
@@ -60,6 +87,9 @@ export interface AppRouterRenderTimingLogEvent {
   type: "router:render:timing";
 }
 
+/**
+ * Logs an inline CSP nonce warning emitted while rendering a route.
+ */
 export interface AppRouterCspInlineNonceWarningLogEvent {
   directive: "script-src" | "style-src";
   path: string;
@@ -67,6 +97,9 @@ export interface AppRouterCspInlineNonceWarningLogEvent {
   type: "router:csp:inline-nonce-warning";
 }
 
+/**
+ * Serializes an error for app-router structured logs.
+ */
 export interface AppRouterLogError {
   message: string;
   name: string;

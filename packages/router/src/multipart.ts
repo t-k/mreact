@@ -1,14 +1,23 @@
+/**
+ * Configures multipart stream parsing limits and field handling.
+ */
 export interface MultipartStreamParseOptions {
   fields?: Readonly<Record<string, MultipartStreamFieldOptions>>;
   maxParts?: number;
   maxBytes?: number;
 }
 
+/**
+ * Configures parsing behavior for a named multipart field.
+ */
 export interface MultipartStreamFieldOptions {
   type?: "stream" | "text";
   maxBytes?: number;
 }
 
+/**
+ * Represents one parsed multipart field or file part.
+ */
 export interface MultipartStreamPart {
   name: string;
   filename?: string;
@@ -21,6 +30,9 @@ export interface MultipartStreamPart {
   fixedLengthStream(length?: number | bigint): MultipartFixedLengthStream;
 }
 
+/**
+ * Couples a readable multipart part stream with a completion signal.
+ */
 export interface MultipartFixedLengthStream {
   readable: ReadableStream<Uint8Array<ArrayBufferLike>>;
   done: Promise<void>;
@@ -39,6 +51,9 @@ const maxHeaderBytes = 64 * 1024;
 export const defaultMultipartMaxBytes = 10 * 1024 * 1024;
 export const defaultMultipartMaxParts = 1_000;
 
+/**
+ * Parses a multipart request body as an async iterable of streamable parts.
+ */
 export function parseMultipartStream(
   request: Request,
   options: MultipartStreamParseOptions = {},

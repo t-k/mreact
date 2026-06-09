@@ -9,6 +9,9 @@ interface NativeEscapeModule {
 let nativeModule: NativeEscapeModule | false | undefined;
 let nativeRequire: ReturnType<typeof createRequire> | false | undefined;
 
+/**
+ * Escapes a batch of values as HTML text using the native helper when available.
+ */
 export function escapeHtmlBatch(values: readonly unknown[]): string[] {
   const strings = values.map((value) => String(value ?? ""));
   const native = loadNativeEscapeModule();

@@ -1,3 +1,6 @@
+/**
+ * Represents one resolved batch emitted by `streamList()`.
+ */
 export interface StreamListBatch<TItem> {
   index: number;
   items: TItem[];
@@ -5,6 +8,9 @@ export interface StreamListBatch<TItem> {
   start: number;
 }
 
+/**
+ * Represents one pending batch and its eventual loaded items.
+ */
 export interface StreamListPendingBatch<TItem> {
   index: number;
   size: number;
@@ -12,6 +18,9 @@ export interface StreamListPendingBatch<TItem> {
   value: Promise<StreamListBatch<TItem>>;
 }
 
+/**
+ * Configures how a list is divided into asynchronous batches.
+ */
 export interface StreamListOptions<TInput, TItem> {
   batchSize: number;
   loadBatch: (
@@ -20,6 +29,9 @@ export interface StreamListOptions<TInput, TItem> {
   ) => PromiseLike<readonly TItem[]> | readonly TItem[];
 }
 
+/**
+ * Splits an input list into pending batches that load their items asynchronously.
+ */
 export function streamList<TInput, TItem = TInput>(
   items: readonly TInput[],
   options: StreamListOptions<TInput, TItem>,

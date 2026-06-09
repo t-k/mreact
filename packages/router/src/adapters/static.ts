@@ -2,12 +2,18 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 
+/**
+ * Configures static export from a built app-router output directory.
+ */
 export interface StaticExportOptions {
   exportDir: string;
   outDir: string;
   paths?: readonly string[] | undefined;
 }
 
+/**
+ * Lists the routes written by a static app-router export.
+ */
 export interface StaticExportResult {
   routes: string[];
 }

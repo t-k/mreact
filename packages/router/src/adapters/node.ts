@@ -13,9 +13,12 @@ import {
   type AppRouterLogger,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
-import type { RouterInstrumentation } from "../trace.js";
+import type { RouterInstrumentation as BaseRouterInstrumentation } from "../trace.js";
 
-export type { RouterInstrumentation } from "../trace.js";
+/**
+ * Registers optional hooks for Node router request, middleware, and route instrumentation.
+ */
+export type RouterInstrumentation = BaseRouterInstrumentation;
 import {
   renderBuiltAppRequest,
   resolveRequestHost,
@@ -25,6 +28,9 @@ import {
   type ResponseSinkStrategy,
 } from "../serve.js";
 
+/**
+ * Configures a Node request handler for built app-router output.
+ */
 export interface NodeRequestHandlerOptions {
   allowedHosts?: readonly string[] | undefined;
   errorHandler?:
@@ -48,6 +54,9 @@ export interface NodeRequestHandlerOptions {
   sinkStrategy?: ResponseSinkStrategy | undefined;
 }
 
+/**
+ * Handles one Node HTTP request/response pair for built app-router output.
+ */
 export type NodeRequestHandler = (
   incoming: IncomingMessage,
   outgoing: ServerResponse,
