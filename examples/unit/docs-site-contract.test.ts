@@ -466,6 +466,56 @@ describe("docs-site example contract", () => {
     expect(cssAssets).toContain("[Cache Policy](/deployments/cache-policy/)");
   });
 
+  test("documents CSP metadata, nonces, overrides, inline warnings, external hosts, and rollout checks", async () => {
+    const csp = await readDocsSite("src/content/guides/csp.mdx");
+
+    expect(csp).toContain("## What CSP controls");
+    expect(csp).toContain("Content-Security-Policy");
+    expect(csp).toContain("default-src");
+    expect(csp).toContain("script-src");
+    expect(csp).toContain("style-src");
+    expect(csp).toContain("connect-src");
+    expect(csp).toContain("img-src");
+    expect(csp).toContain("frame-ancestors");
+    expect(csp).toContain("## Start with a route baseline");
+    expect(csp).toContain("export const metadata");
+    expect(csp).toContain("directives: {");
+    expect(csp).toContain('"base-uri": ["\'self\'"]');
+    expect(csp).toContain('"object-src": ["\'none\'"]');
+    expect(csp).toContain("satisfies RouteMetadata");
+    expect(csp).toContain("## Add nonces for route-owned inline code");
+    expect(csp).toContain("randomBytes(16).toString(\"base64url\")");
+    expect(csp).toContain("nonce: true");
+    expect(csp).toContain("window.dataLayer=window.dataLayer||[];");
+    expect(csp).toContain("'nonce-");
+    expect(csp).toContain("script-src");
+    expect(csp).toContain("style-src");
+    expect(csp).toContain("## Compose and override CSP");
+    expect(csp).toContain("replace: {");
+    expect(csp).toContain('"connect-src": ["\'self\'", "https://pay.example.test"]');
+    expect(csp).toContain("remove: [\"report-uri\"]");
+    expect(csp).toContain("disable: true");
+    expect(csp).toContain("## Inline scripts and styles");
+    expect(csp).toContain("router:csp:inline-nonce-warning");
+    expect(csp).toContain("inline <script> without a matching nonce");
+    expect(csp).toContain("inline <style> without a matching nonce");
+    expect(csp).toContain("Prefer external CSS");
+    expect(csp).toContain("## External services");
+    expect(csp).toContain("GTM");
+    expect(csp).toContain("GA4");
+    expect(csp).toContain("script-src");
+    expect(csp).toContain("connect-src");
+    expect(csp).toContain("img-src");
+    expect(csp).toContain("## Validate and roll out");
+    expect(csp).toContain("Report-Only");
+    expect(csp).toContain("Do not build directives from user input");
+    expect(csp).toContain("## Related pages");
+    expect(csp).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+    expect(csp).toContain("[External Scripts](/guides/external-scripts/)");
+    expect(csp).toContain("[CSS and Assets](/guides/css-and-assets/)");
+    expect(csp).toContain("[Production Checklist](/deployments/production-checklist/)");
+  });
+
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 

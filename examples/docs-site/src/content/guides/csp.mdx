@@ -1,8 +1,155 @@
 export const title = "CSP";
-export const description = "Configure Content Security Policy with metadata, nonces, inline scripts, and inline styles.";
+export const description = "Configure Content Security Policy with route metadata, nonces, inline descriptors, external hosts, and rollout checks.";
 
 # CSP
 
-Use `metadata.csp` to set route-specific Content Security Policy. A nonce can be generated in `generateMetadata()` and applied to `metadata.head` script or style descriptors with `nonce: true`.
+Content Security Policy limits which scripts, styles, images, frames, and network targets a page can use. In Mreact, route-owned CSP lives in `metadata.csp` so the policy is resolved with the same layout and page metadata that produces the document head.
 
-Be careful with `style-src`: adding a nonce to style policy changes how browsers treat inline styles. Prefer external CSS for strict production CSP.
+## What CSP controls
+
+Mreact serializes `metadata.csp` into the `Content-Security-Policy` response header. Common directives include `default-src`, `script-src`, `style-src`, `connect-src`, `img-src`, `font-src`, `frame-src`, `frame-ancestors`, `base-uri`, `form-action`, and `object-src`.
+
+Use CSP to reduce the blast radius of injected markup or unexpected third-party code. It is not a replacement for escaping, validation, authentication, CSRF checks, or dependency review.
+
+## Start with a route baseline
+
+Put a conservative baseline in a shared layout. Page metadata can then narrow or override it for routes that need payments, analytics, previews, or embeds.
+
+```tsx
+// src/app/layout.tsx
+import type { RouteMetadata } from "@reckona/mreact-router";
+
+export const metadata = {
+  csp: {
+    directives: {
+      "base-uri": ["'self'"],
+      "default-src": ["'self'"],
+      "font-src": ["'self'"],
+      "form-action": ["'self'"],
+      "frame-ancestors": ["'none'"],
+      "img-src": ["'self'", "data:"],
+      "object-src": ["'none'"],
+      "script-src": ["'self'"],
+      "style-src": ["'self'"],
+    },
+  },
+} satisfies RouteMetadata;
+```
+
+Start with the smallest policy the route can actually satisfy. Add hosts only after you know which browser request needs them.
+
+## Add nonces for route-owned inline code
+
+Use a per-request nonce when a route needs inline executable code or inline style descriptors. Generate the nonce in `generateMetadata()`, put it in `metadata.csp.nonce`, and use `nonce: true` on route-owned `metadata.head` script or style descriptors.
+
+```tsx
+// src/app/analytics/page.tsx
+import { randomBytes } from "node:crypto";
+import type {
+  GenerateMetadataContext,
+  RouteMetadata,
+} from "@reckona/mreact-router";
+
+function createNonce(): string {
+  return randomBytes(16).toString("base64url");
+}
+
+export function generateMetadata(
+  _context: GenerateMetadataContext,
+): RouteMetadata {
+  const nonce = createNonce();
+
+  return {
+    csp: {
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'"],
+        "style-src": ["'self'"],
+      },
+      nonce,
+    },
+    head: [
+      {
+        tag: "script",
+        nonce: true,
+        content: "window.dataLayer=window.dataLayer||[];",
+      },
+    ],
+  };
+}
+```
+
+Mreact appends the generated `'nonce-...'` source expression to `script-src` and `style-src`, and it writes the nonce attribute onto descriptors with `nonce: true`. The nonce value must use a base64 or base64url alphabet.
+
+## Compose and override CSP
+
+Layout and page CSP metadata compose. `directives` adds or overrides directive names, `replace` replaces inherited directive values, `remove` deletes inherited directives, and `disable: true` suppresses the route CSP header.
+
+```tsx
+// src/app/layout.tsx
+export const metadata = {
+  csp: {
+    directives: {
+      "default-src": ["'self'"],
+      "connect-src": ["'self'", "https://api.example.test"],
+      "report-uri": ["/csp-report"],
+    },
+  },
+};
+```
+
+```tsx
+// src/app/checkout/page.tsx
+export const metadata = {
+  csp: {
+    replace: {
+      "connect-src": ["'self'", "https://pay.example.test"],
+    },
+    remove: ["report-uri"],
+  },
+};
+```
+
+```tsx
+// src/app/oauth/callback/page.tsx
+export const metadata = {
+  csp: { disable: true },
+};
+```
+
+Use `disable: true` sparingly. It is usually better to narrow the inherited policy with `replace` and `remove` than to remove CSP for an entire route.
+
+## Inline scripts and styles
+
+A nonce on `script-src` or `style-src` changes which inline tags the browser accepts. If an inline `<script>` or `<style>` does not have a matching nonce, the browser can block it.
+
+Mreact warns in development through `router:csp:inline-nonce-warning` when route HTML contains blocked inline tags. The warning text includes `inline <script> without a matching nonce` or `inline <style> without a matching nonce` under a nonce-bearing directive.
+
+Prefer external CSS for strict production CSP. Add inline scripts or styles through `metadata.head` with `nonce: true`, move them to external assets, or remove the nonce-bearing directive for routes that cannot satisfy it yet.
+
+## External services
+
+Third-party integrations usually require more than one directive. GTM and GA4 can need `script-src` for loader scripts, `connect-src` for collection endpoints, `img-src` for beacon fallbacks, and sometimes `frame-src` for tag manager preview or embedded flows.
+
+Add only the exact production hosts you need. Do not add broad schemes or wildcard hosts because a vendor snippet failed once in development. For route-owned script examples, see [External Scripts](/guides/external-scripts/).
+
+## Validate and roll out
+
+Roll out CSP in stages:
+
+- Start with a narrow policy on a low-risk route.
+- Use browser DevTools and server logs to find blocked resources.
+- Test critical flows such as login, checkout, uploads, analytics, previews, and embeds.
+- Deploy a `Content-Security-Policy-Report-Only` header at the edge or server adapter when you need telemetry before enforcing a site-wide policy.
+- Move stable policy into `metadata.csp` or deployment headers once violations are understood.
+
+Do not build directives from user input. Mreact validates directive names, directive values, and nonce shape before serializing the header, but CSP should still be authored from trusted configuration.
+
+## Related pages
+
+- [Metadata and Head](/guides/metadata-and-head/)
+- [External Scripts](/guides/external-scripts/)
+- [CSS and Assets](/guides/css-and-assets/)
+- [Authentication](/guides/authentication/)
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
+- [Production Checklist](/deployments/production-checklist/)
