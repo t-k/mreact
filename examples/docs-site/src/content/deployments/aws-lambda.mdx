@@ -16,6 +16,12 @@ The package directory should contain the built `.mreact/` output, `mreact-handle
 
 With pnpm, install production dependencies into `.lambda` using a hoisted node linker and verify symlink count as well as byte size before upload.
 
+```bash
+pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted
+find .lambda -type l | wc -l
+du -sh .lambda
+```
+
 ## Generated handler
 
 The default generated handler uses `createPreloadedAwsLambdaRequestHandler()` so route runtime work can happen during Lambda initialization instead of racing the first user request.

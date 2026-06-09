@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "pnpm sync:api && mreact-router build --target=node && tsx scripts/export-static.ts && pagefind --site dist",
-    "dev": "pnpm sync:api && mreact-router dev",
+    "build": "pnpm sync:api && pnpm sync:benchmarks && mreact-router build --target=node && tsx scripts/export-static.ts && pagefind --site dist",
+    "dev": "pnpm sync:api && pnpm sync:benchmarks && mreact-router dev",
     "lint": "oxlint . --ignore-pattern .mreact --ignore-pattern dist",
     "start": "mreact-router start .mreact",
     "sync:api": "tsx scripts/sync-api-reference.ts",
+    "sync:benchmarks": "tsx scripts/sync-benchmark-results.ts",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "pnpm sync:api && tsc --noEmit"
+    "typecheck": "pnpm sync:api && pnpm sync:benchmarks && tsc --noEmit"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",

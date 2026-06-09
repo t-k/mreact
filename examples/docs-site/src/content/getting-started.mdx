@@ -29,6 +29,23 @@ The generator can also prompt for the package manager, template, `src/app` layou
 npx @reckona/create-mreact-app
 ```
 
+Choose a starter or deployment target when you already know the shape you want:
+
+```bash
+npx @reckona/create-mreact-app my-app --template tailwind --src-dir
+npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy cloudflare
+npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy container
+npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy aws-lambda
+npx @reckona/create-mreact-app my-dashboard --template dashboard
+```
+
+Upgrade an existing generated app with a dry run first:
+
+```bash
+npx @reckona/create-mreact-app upgrade --dry-run
+npx @reckona/create-mreact-app upgrade
+```
+
 ## What was generated
 
 With `--src-dir`, routes live in `src/app`, shared application code starts in `src/lib`, and public assets live in `public`. The basic template now starts with a small counter app:

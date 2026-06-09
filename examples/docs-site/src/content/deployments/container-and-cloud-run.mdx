@@ -3,7 +3,7 @@ export const description = "Run Mreact Node build output in containers, includin
 
 # Container and Cloud Run
 
-Container deployments run the Node server output. Build the app for Node, copy the production output into the image, bind to the platform port, and keep Host header policy explicit.
+Container deployments run the Node server output. Build the app for Node, copy the production output into the image, bind to the platform port, and keep Host header policy explicit. The same image shape works for Cloud Run, AWS App Runner, Fly.io, Render, and similar platforms that start an HTTP server from a container.
 
 ## Build target
 
@@ -42,11 +42,26 @@ CMD ["pnpm", "start"]
 
 Use your container builder of choice. For local checks with podman, publish the same port and pass the same environment variables you expect in production.
 
+```bash
+pnpm build
+podman build -t mreact-app .
+podman run --rm -p 8080:8080 \
+  -e HOST=0.0.0.0 \
+  -e PORT=8080 \
+  -e MREACT_ROUTER_HOST_POLICY=strict \
+  -e MREACT_ROUTER_ALLOWED_HOSTS=localhost \
+  mreact-app
+```
+
 ## Cloud Run
 
 Cloud Run injects `PORT` automatically. A common local default is `PORT=8080`, but the deployed service should read the platform value. Configure the service URL and custom domains in `MREACT_ROUTER_ALLOWED_HOSTS`, and use a simple health check path such as `/` or a lightweight route handler.
 
 Cloud Run can scale to multiple instances, so use durable session storage and a shared route cache when route HTML cache needs to survive across instances.
+
+## Other container platforms
+
+For AWS App Runner, Fly.io, Render, and similar hosts, keep the same production contract: expose the platform port, bind `HOST=0.0.0.0`, keep `MREACT_ROUTER_HOST_POLICY=strict`, and set `MREACT_ROUTER_ALLOWED_HOSTS` to the public service domain and custom domains. Prefer the platform health check path to be `/` or a lightweight route handler that does not require auth or database access.
 
 ## Assets and source maps
 
