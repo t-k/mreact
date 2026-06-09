@@ -3,6 +3,157 @@ export const description = "Server rendering, streaming routes, loading boundari
 
 # SSR and streaming
 
-Mreact renders pages on the server and can stream route shells before deferred work finishes. Use `<Await>` for route-local async boundaries, and collocate `loading.tsx` when a route needs a loading boundary.
+Mreact renders route HTML on the server. Routes can stream the shell first, then fill async boundaries as data resolves.
 
-Streaming is preserved on compatible runtimes. Buffered platforms such as standard Lambda proxy responses materialize the stream before returning the body.
+## SSR by default
+
+For a page request, Mreact resolves middleware, the matched loader, metadata, layouts, and the page on the server. The server output is optimized for HTML string or stream emission, while browser output is only needed when the route has client behavior.
+
+Use SSR for the primary document shape, critical data, metadata, and content that should be visible before hydration. Add streaming only when part of the page can arrive later without blocking the first shell.
+
+## Streaming routes
+
+Routes that render `<Await>` can stream. The route shell can flush with a placeholder, then the resolved fragment is sent when the awaited value finishes. `export const stream = true` is still available for routes that need streaming behavior without an `<Await>` boundary.
+
+```tsx
+export const stream = true;
+
+async function readFeed(): Promise<string[]> {
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  return ["Compiler output", "Streaming shell", "Out-of-order fragment"];
+}
+
+export default function Page() {
+  const feed = readFeed();
+
+  return (
+    <main>
+      <h1>Streaming</h1>
+      <Await value={feed} placeholder={<p>Loading feed...</p>}>
+        {(items) => (
+          <ul>
+            {items.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        )}
+      </Await>
+    </main>
+  );
+}
+```
+
+## Await boundaries
+
+Use `<Await>` for route-local async rendering. Add `placeholder` when the shell should keep moving before the value resolves, and use `placeholderAs="div"` when the placeholder root is block-level markup such as a list, table skeleton, or section skeleton.
+
+```tsx
+<Await
+  value={feed}
+  placeholderAs="div"
+  placeholder={<p>Loading feed...</p>}
+  catch={(error) => <p>Failed to load feed: {error.message}</p>}
+>
+  {(items) => <FeedList items={items} />}
+</Await>
+```
+
+If an `<Await>` has no placeholder, the render waits at that point. Use that for above-the-fold data where a placeholder would cause layout shift.
+
+## Deferred loader data
+
+Use `defer()` when a loader has critical data plus non-critical promises. Keep redirects, `notFound()`, and status-bearing `Response` results in the critical path before returning deferred data.
+
+```tsx
+import { defer, notFound, type LoaderContext } from "@reckona/mreact-router";
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  const user = await loadUser(context.params.id);
+
+  if (user === undefined) {
+    notFound();
+  }
+
+  return defer({
+    posts: loadRecentPosts(user.id),
+    user,
+  });
+}
+
+export default function UserPage(props: {
+  readonly data: { readonly posts: Promise<Post[]>; readonly user: User };
+}) {
+  return (
+    <main>
+      <h1>{props.data.user.name}</h1>
+      <Await value={props.data.posts} placeholder={<p>Loading posts...</p>}>
+        {(posts) => <PostList posts={posts} />}
+      </Await>
+    </main>
+  );
+}
+```
+
+Render every deferred promise through `<Await catch>` or otherwise observe it. `defer()` marks top-level promises as handled so early rejections can wait for the boundary handler.
+
+## loading.tsx
+
+Collocate `loading.tsx` when a route subtree needs loading UI while async route work resolves.
+
+```tsx
+// src/app/streaming/loading.tsx
+export default function Loading() {
+  return (
+    <main>
+      <h1>Streaming...</h1>
+      <p>Shell is flushed; waiting for async data.</p>
+    </main>
+  );
+}
+```
+
+Use `loading.tsx` for route-level waiting UI. Use `<Await>` placeholders for smaller regions inside a page.
+
+## Streaming lists
+
+Use `streamList()` for ordered progressive list batches. The helper creates batch promises and metadata; keep `<Await>` directly in the route JSX so the stream compiler can see each boundary.
+
+```tsx
+import { streamList } from "@reckona/mreact-router/stream-list";
+
+export default function Page() {
+  const batches = streamList(storyIds, {
+    batchSize: 5,
+    loadBatch: async (ids) => loadStories(ids),
+  });
+
+  return (
+    <main>
+      {batches.map((batch) => (
+        <Await
+          key={batch.index}
+          value={batch.value}
+          placeholderAs="div"
+          placeholder={<StorySkeleton start={batch.start + 1} count={batch.size} />}
+        >
+          {(resolved) => (
+            <StoryRows stories={resolved.items} start={resolved.start + 1} />
+          )}
+        </Await>
+      ))}
+    </main>
+  );
+}
+```
+
+## Runtime behavior
+
+Streaming is preserved on compatible runtimes. Cloudflare Workers can keep streamed HTML as a stream, and Mreact marks streamed responses with `Cache-Control: no-transform` so platform compression does not buffer the first shell before placeholders can paint.
+
+Some buffered platforms, such as standard Lambda proxy responses, materialize the stream before returning the body. Use the AWS Lambda streaming handler when a deployment path needs streaming response semantics.
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [Server and Client Model](/guides/server-and-client-model/)
+- [Cloudflare](/deployments/cloudflare/)
+- [AWS Lambda](/deployments/aws-lambda/)
+- [Route Module Exports](/reference/route-module-exports/)

@@ -290,6 +290,41 @@ describe("docs-site example contract", () => {
     expect(contentRegistry).not.toContain('page("guides/client-boundaries"');
   });
 
+  test("documents SSR, streaming boundaries, deferred data, and runtime behavior", async () => {
+    const ssrStreaming = await readDocsSite("src/content/guides/ssr-and-streaming.mdx");
+
+    expect(ssrStreaming).toContain("## SSR by default");
+    expect(ssrStreaming).toContain("loader");
+    expect(ssrStreaming).toContain("metadata");
+    expect(ssrStreaming).toContain("layout");
+    expect(ssrStreaming).toContain("## Streaming routes");
+    expect(ssrStreaming).toContain("shell");
+    expect(ssrStreaming).toContain("placeholder");
+    expect(ssrStreaming).toContain("export const stream = true");
+    expect(ssrStreaming).toContain("## Await boundaries");
+    expect(ssrStreaming).toContain("<Await");
+    expect(ssrStreaming).toContain('placeholderAs="div"');
+    expect(ssrStreaming).toContain("catch={(error)");
+    expect(ssrStreaming).toContain("## Deferred loader data");
+    expect(ssrStreaming).toContain("defer({");
+    expect(ssrStreaming).toContain("notFound()");
+    expect(ssrStreaming).toContain("## loading.tsx");
+    expect(ssrStreaming).toContain("// src/app/streaming/loading.tsx");
+    expect(ssrStreaming).toContain("## Streaming lists");
+    expect(ssrStreaming).toContain('import { streamList } from "@reckona/mreact-router/stream-list";');
+    expect(ssrStreaming).toContain("keep `<Await>` directly in the route JSX");
+    expect(ssrStreaming).toContain("## Runtime behavior");
+    expect(ssrStreaming).toContain("Cloudflare");
+    expect(ssrStreaming).toContain("no-transform");
+    expect(ssrStreaming).toContain("Lambda");
+    expect(ssrStreaming).toContain("buffered");
+    expect(ssrStreaming).toContain("[Data Loading](/guides/data-loading/)");
+    expect(ssrStreaming).toContain("[Server and Client Model](/guides/server-and-client-model/)");
+    expect(ssrStreaming).toContain("[Cloudflare](/deployments/cloudflare/)");
+    expect(ssrStreaming).toContain("[AWS Lambda](/deployments/aws-lambda/)");
+    expect(ssrStreaming).toContain("[Route Module Exports](/reference/route-module-exports/)");
+  });
+
   test("documents Link prefetch controls and configures syntax highlighting", async () => {
     const linkGuide = await readDocsSite("src/content/guides/link-and-navigation.mdx");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
