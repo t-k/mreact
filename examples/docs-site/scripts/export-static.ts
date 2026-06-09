@@ -156,6 +156,9 @@ function generatedApiIntegrationCss(): string {
   --mreact-docs-brand: oklch(0.47 0.12 52);
   --mreact-docs-brand-strong: oklch(0.4 0.11 41);
   --mreact-docs-accent: oklch(0.77 0.16 70);
+  --mreact-docs-code-bg: oklch(0.96 0.006 75);
+  --mreact-docs-code-border: var(--mreact-docs-border);
+  --mreact-docs-code-text: var(--mreact-docs-text);
   --color-scheme: light;
   --light-color-background: var(--mreact-docs-bg);
   --light-color-background-secondary: var(--mreact-docs-bg-soft);
@@ -327,6 +330,16 @@ body {
 code,
 pre {
   font-size: 1rem;
+}
+
+.tsd-typography :where(p, li, td, dd) > code,
+.tsd-comment :where(p, li, td, dd) > code {
+  background: var(--mreact-docs-code-bg);
+  border: 1px solid var(--mreact-docs-code-border);
+  border-radius: 4px;
+  color: var(--mreact-docs-code-text);
+  font-size: 1rem;
+  padding: 0.08rem 0.3rem;
 }
 
 @media (max-width: 52rem) {

@@ -465,6 +465,9 @@ describe("docs-site example contract", () => {
     expect(exportScript).toContain("--dark-color-background: var(--mreact-docs-bg)");
     expect(exportScript).toContain(':root[data-theme="dark"]');
     expect(exportScript).toContain("color-scheme: only light");
+    expect(exportScript).toContain("--mreact-docs-code-bg");
+    expect(exportScript).toContain("--mreact-docs-code-text");
+    expect(exportScript).toContain(":where(p, li, td, dd) > code");
     expect(generatedApiIndex).not.toContain('href="media/react-compat"');
     expect(generatedApiIndex).not.toContain('href="media/primitive"');
     expect(generatedApiIndex).not.toContain('href="media/app-router"');
