@@ -27,7 +27,6 @@ export const sidebar: readonly NavGroup[] = [
       { text: "Server and Client Model", slug: "guides/server-and-client-model" },
       { text: "SSR and Streaming", slug: "guides/ssr-and-streaming" },
       { text: "SSG and Static Export", slug: "guides/ssg-and-static-export" },
-      { text: "Client Boundaries", slug: "guides/client-boundaries" },
       { text: "Link and Navigation", slug: "guides/link-and-navigation" },
       { text: "Data Loading", slug: "guides/data-loading" },
       { text: "Environment Variables", slug: "guides/environment-variables" },

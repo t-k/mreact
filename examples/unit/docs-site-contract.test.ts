@@ -71,6 +71,7 @@ describe("docs-site example contract", () => {
       'text: "Getting Started",\n    items: [{ text: "Getting Started", slug: "getting-started" }]',
     );
     expect(nav).not.toContain('slug: "overview"');
+    expect(nav).not.toContain('slug: "guides/client-boundaries"');
   });
 
   test("uses official product branding while keeping package names lowercase", async () => {
@@ -258,6 +259,35 @@ describe("docs-site example contract", () => {
     expect(layouts).toContain("[App Router](/guides/app-router/)");
     expect(layouts).toContain("[Metadata and Head](/guides/metadata-and-head/)");
     expect(layouts).toContain("[Server and Client Model](/guides/server-and-client-model/)");
+  });
+
+  test("consolidates client boundaries into the server and client model guide", async () => {
+    const serverClientModel = await readDocsSite("src/content/guides/server-and-client-model.mdx");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+
+    expect(serverClientModel).toContain("## Server by default");
+    expect(serverClientModel).toContain("JavaScript-free");
+    expect(serverClientModel).toContain("navigation runtime");
+    expect(serverClientModel).toContain("## When a route becomes client-side");
+    expect(serverClientModel).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(serverClientModel).toContain("onClick");
+    expect(serverClientModel).toContain('## Client boundaries');
+    expect(serverClientModel).toContain("LikeButton.client.tsx");
+    expect(serverClientModel).toContain('import { LikeButton } from "./LikeButton.client";');
+    expect(serverClientModel).toContain("## Route-level \"use client\"");
+    expect(serverClientModel).toContain('"use client";');
+    expect(serverClientModel).toContain("## SSR fallback behavior");
+    expect(serverClientModel).toContain("server-renderable children");
+    expect(serverClientModel).toContain("placeholder-only boundary");
+    expect(serverClientModel).toContain("## Choosing the right boundary");
+    expect(serverClientModel).toContain("- **Static page**: server route.");
+    expect(serverClientModel).toContain("- **Small interactive widget**: `.client.tsx` boundary.");
+    expect(serverClientModel).toContain("[App Router](/guides/app-router/)");
+    expect(serverClientModel).toContain("[Link and Navigation](/guides/link-and-navigation/)");
+    expect(serverClientModel).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
+    expect(serverClientModel).toContain("[Route Module Exports](/reference/route-module-exports/)");
+    expect(contentRegistry).not.toContain("guidesClientBoundaries");
+    expect(contentRegistry).not.toContain('page("guides/client-boundaries"');
   });
 
   test("documents Link prefetch controls and configures syntax highlighting", async () => {

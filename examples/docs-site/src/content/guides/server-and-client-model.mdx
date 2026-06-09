@@ -3,6 +3,114 @@ export const description = "How Mreact decides what runs on the server and what 
 
 # Server and client model
 
-Server-rendered routes stay JavaScript-free by default. A route gets client output when route-level client behavior, a `.client.tsx` boundary, or explicit `"use client"` requires browser execution.
+Mreact renders routes on the server by default and only ships browser runtime when the route or one of its boundaries needs it. Use this page to decide whether a feature should stay server-only, become a small client island, or turn the whole route into a client route.
 
-Use `.client.tsx` for islands that hydrate independently. Use route-level `"use client"` only when the whole route is a client route.
+## Server by default
+
+A route with no client behavior can stay JavaScript-free in the browser. Loaders, route handlers, metadata functions, middleware, and server-rendered components run on the server side of the route graph.
+
+When a server-rendered route uses `Link` from `@reckona/mreact-router/link`, Mreact can still inject the navigation runtime so link prefetching, scroll behavior, and client navigation work without hydrating the whole route. Use `navigationRuntime` only when you need to override that automatic behavior.
+
+## When a route becomes client-side
+
+A route needs browser output when its render path reaches browser behavior such as reactive state, event handlers, browser globals, or a route-level `"use client"` directive.
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+export default function CounterPage() {
+  return (
+    <main>
+      <p>{count.get()}</p>
+      <button onClick={() => count.set((value) => value + 1)}>+1</button>
+    </main>
+  );
+}
+```
+
+Mreact infers common client needs from supported route shapes and app-local static imports. This is not a general semantic or TypeScript type-flow analyzer; use an explicit boundary when the browser work is hidden behind a dynamic registry, indirect dispatch, or another shape the analyzer cannot follow.
+
+## Client boundaries
+
+Use `.client.tsx` when only part of a server page needs to hydrate. The page remains server-rendered, while the imported component becomes a client boundary.
+
+```tsx
+// src/app/widgets/LikeButton.client.tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const likes = cell(0);
+
+export default function LikeButton() {
+  return (
+    <button onClick={() => likes.set((value) => value + 1)}>
+      {likes.get()} likes
+    </button>
+  );
+}
+```
+
+```tsx
+// src/app/widgets/page.tsx
+import { LikeButton } from "./LikeButton.client";
+
+export default function WidgetsPage() {
+  return (
+    <main>
+      <h1>Widgets</h1>
+      <p>This page shell stays server-rendered.</p>
+      <LikeButton />
+    </main>
+  );
+}
+```
+
+Use this pattern for counters, menus, analytics bridges, small controls, or isolated browser-only integrations inside an otherwise server-rendered page.
+
+## Route-level "use client"
+
+Use route-level `"use client"` when the whole page, layout, or template should hydrate as a client route.
+
+```tsx
+"use client";
+
+export default function EditorPage() {
+  return <main>{startClientOnlyEditor()}</main>;
+}
+```
+
+This is also the escape hatch when browser behavior is intentionally hidden behind dynamic dispatch and should not rely on inference.
+
+## SSR fallback behavior
+
+Client boundaries still participate in server rendering. Mreact emits a boundary marker and serialized props, and server-renderable children can remain visible in the initial HTML so the page can paint before hydration.
+
+Guard browser globals directly when a component should keep SSR fallback content:
+
+```tsx
+export function CurrentPath() {
+  if (typeof window === "undefined") {
+    return <span>Current path unavailable during SSR</span>;
+  }
+
+  return <span>{window.location.pathname}</span>;
+}
+```
+
+Unguarded browser access, or guards hidden behind aliases the analyzer cannot follow, can produce a placeholder-only boundary. Prefer direct `typeof window === "undefined"` guards for server-renderable fallback paths.
+
+## Choosing the right boundary
+
+- **Static page**: server route.
+- **Page with `Link` navigation only**: server route plus navigation runtime.
+- **Small interactive widget**: `.client.tsx` boundary.
+- **Whole page is interactive**: route-level `"use client"`.
+- **Browser behavior is hidden behind dynamic dispatch**: explicit `"use client"`.
+
+## Related pages
+
+- [App Router](/guides/app-router/)
+- [Link and Navigation](/guides/link-and-navigation/)
+- [SSR and Streaming](/guides/ssr-and-streaming/)
+- [Route Module Exports](/reference/route-module-exports/)

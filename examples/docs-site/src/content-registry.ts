@@ -6,7 +6,6 @@ import gettingStarted, * as gettingStartedMeta from "./content/getting-started.m
 import guidesAppRouter, * as guidesAppRouterMeta from "./content/guides/app-router.mdx";
 import guidesAuthentication, * as guidesAuthenticationMeta from "./content/guides/authentication.mdx";
 import guidesCacheAndRevalidation, * as guidesCacheAndRevalidationMeta from "./content/guides/cache-and-revalidation.mdx";
-import guidesClientBoundaries, * as guidesClientBoundariesMeta from "./content/guides/client-boundaries.mdx";
 import guidesCookiesAndSessions, * as guidesCookiesAndSessionsMeta from "./content/guides/cookies-and-sessions.mdx";
 import guidesCsp, * as guidesCspMeta from "./content/guides/csp.mdx";
 import guidesCssAndAssets, * as guidesCssAndAssetsMeta from "./content/guides/css-and-assets.mdx";
@@ -205,7 +204,6 @@ export const docsPages = [
   page("guides/server-and-client-model", guidesServerAndClientModel, guidesServerAndClientModelMeta),
   page("guides/ssr-and-streaming", guidesSsrAndStreaming, guidesSsrAndStreamingMeta),
   page("guides/ssg-and-static-export", guidesSsgAndStaticExport, guidesSsgAndStaticExportMeta),
-  page("guides/client-boundaries", guidesClientBoundaries, guidesClientBoundariesMeta),
   page("guides/link-and-navigation", guidesLinkAndNavigation, guidesLinkAndNavigationMeta),
   page("guides/data-loading", guidesDataLoading, guidesDataLoadingMeta),
   page("guides/http-apis", guidesHttpApis, guidesHttpApisMeta),
