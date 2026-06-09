@@ -1762,6 +1762,12 @@ async function prerenderStaticRoutes(options: {
       artifact,
     ]),
   );
+  const serverModuleCacheVersion = buildPrerenderServerModuleCacheVersion({
+    define: options.define,
+    project: options.project,
+    sourceAnalysis: options.sourceAnalysis,
+    vitePlugins: options.vitePlugins,
+  });
 
   const prerenderedEntries = await mapWithBuildConcurrency(
     options.routes.filter((route): route is AppRoute & { kind: "page" } => route.kind === "page"),
@@ -1783,6 +1789,7 @@ async function prerenderStaticRoutes(options: {
           define: options.define,
           importPolicy,
           request: new Request(`http://mreact.local${pathname}`),
+          serverModuleCacheVersion,
           serverModules: serverModuleMap,
           vitePlugins: options.vitePlugins,
         });
@@ -1811,6 +1818,28 @@ async function prerenderStaticRoutes(options: {
   }
 
   return prerendered;
+}
+
+function buildPrerenderServerModuleCacheVersion(options: {
+  define?: UserConfig["define"] | undefined;
+  project: ResolvedAppRouterProject;
+  sourceAnalysis: BuildSourceAnalysisScope;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): string {
+  const sourceHashes = Array.from(options.sourceAnalysis.byFile.entries())
+    .map(([file, analysis]) => [file, analysis.sourceHash] as const)
+    .sort(([left], [right]) => left.localeCompare(right));
+
+  return `build-prerender:${hashText(
+    JSON.stringify({
+      allowedSourceDirs: [...options.project.allowedSourceDirs].sort(),
+      projectRoot: options.project.projectRoot,
+      routesDir: options.project.routesDir,
+      sourceHashes,
+      viteDefine: viteDefineCacheKey(options.define),
+      vitePlugins: vitePluginsCacheKey(options.vitePlugins),
+    }),
+  ).slice(0, 16)}`;
 }
 
 async function prerenderPathsForRoute(

@@ -7664,6 +7664,46 @@ export default function Page(props) {
     );
   });
 
+  test("reuses prerender server modules across generated static params", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-module-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const counterKey = `__mreactPrerenderModuleEvaluations_${rootDir
+      .replaceAll(/[^A-Za-z0-9_$]/g, "_")}`;
+    await mkdir(join(appDir, "docs", "$slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "$slug", "page.tsx"),
+      `const counterKey = ${JSON.stringify(counterKey)};
+globalThis[counterKey] = (globalThis[counterKey] ?? 0) + 1;
+
+export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ slug: "one" }, { slug: "two" }, { slug: "three" }];
+}
+
+export default function Page(props) {
+  return <main>Doc {props.params.slug}</main>;
+}`,
+    );
+
+    try {
+      await buildApp({ appDir, outDir });
+      const manifest = JSON.parse(
+        await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+      ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+
+      expect(manifest.prerenderedRoutes?.["/docs/one"]?.html).toContain("<main>Doc one</main>");
+      expect(manifest.prerenderedRoutes?.["/docs/two"]?.html).toContain("<main>Doc two</main>");
+      expect(manifest.prerenderedRoutes?.["/docs/three"]?.html).toContain(
+        "<main>Doc three</main>",
+      );
+      expect((globalThis as Record<string, unknown>)[counterKey]).toBe(2);
+    } finally {
+      delete (globalThis as Record<string, unknown>)[counterKey];
+    }
+  });
+
   test("invalidates and lazily regenerates prerendered routes after server actions", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-revalidate-"));
     const appDir = join(rootDir, "app");
