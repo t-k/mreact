@@ -334,6 +334,12 @@ describe("docs-site example contract", () => {
     expect(query).toContain("createMutation");
     expect(query).toContain("loader");
     expect(query).toContain("staleTime");
+    expect(query).toContain("## SSR first render with browser revalidation");
+    expect(query).toContain("refetchOnWindowFocus: true");
+    expect(query).toContain("refetchOnReconnect: true");
+    expect(query).toContain("window.setInterval");
+    expect(query).toContain("observer.refetch()");
+    expect(query).toContain("SWR-style");
     expect(query).toContain("cancelQueries");
     expect(query).toContain("optimistic");
 

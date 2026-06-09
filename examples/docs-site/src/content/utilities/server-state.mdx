@@ -72,6 +72,97 @@ export async function loader(context: LoaderContext<{ id: string }>) {
 
 Each request gets its own query client. This dedupes repeated work during one render and avoids cross-request data leaks.
 
+## SSR first render with browser revalidation
+
+A common production shape is SSR for the first view, then SWR-style browser revalidation after the page is interactive. Use the route loader to fill the per-request query cache, then create a browser observer with the same `queryKey`. The observer reads the hydrated cache first and can refetch when the tab becomes active, when the network reconnects, or when your own polling timer calls `observer.refetch()`.
+
+```tsx
+// src/lib/dashboard-summary.ts
+export interface DashboardSummary {
+  openIncidents: number;
+  revenueToday: number;
+  updatedAt: string;
+}
+
+export const DASHBOARD_SUMMARY_KEY = ["dashboard", "summary"] as const;
+export const DASHBOARD_SUMMARY_STALE_TIME_MS = 30_000;
+```
+
+```tsx
+// src/app/dashboard/page.tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+import {
+  DASHBOARD_SUMMARY_KEY,
+  DASHBOARD_SUMMARY_STALE_TIME_MS,
+  type DashboardSummary,
+} from "../../lib/dashboard-summary.js";
+import { fetchDashboardSummary } from "../../lib/dashboard-summary.server.js";
+import { DashboardLiveSummary } from "./summary.client.js";
+
+export async function loader(context: LoaderContext): Promise<DashboardSummary> {
+  return context.queryClient.fetchQuery({
+    queryKey: DASHBOARD_SUMMARY_KEY,
+    staleTime: DASHBOARD_SUMMARY_STALE_TIME_MS,
+    queryFn: () => fetchDashboardSummary(),
+  });
+}
+
+export default function Page(props: { data: DashboardSummary }) {
+  return (
+    <main>
+      <h1>Dashboard</h1>
+      <DashboardLiveSummary initialSummary={props.data} />
+    </main>
+  );
+}
+```
+
+```tsx
+// src/app/dashboard/summary.client.tsx
+"use client";
+
+import { createQuery, getQueryClient } from "@reckona/mreact-query";
+import { useEffect } from "@reckona/mreact";
+import {
+  DASHBOARD_SUMMARY_KEY,
+  DASHBOARD_SUMMARY_STALE_TIME_MS,
+  type DashboardSummary,
+} from "../../lib/dashboard-summary.js";
+
+export function DashboardLiveSummary(props: { initialSummary: DashboardSummary }) {
+  const observer = createQuery<DashboardSummary>(getQueryClient(), {
+    queryKey: DASHBOARD_SUMMARY_KEY,
+    staleTime: DASHBOARD_SUMMARY_STALE_TIME_MS,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    queryFn: ({ signal }) => fetch("/api/dashboard/summary", { signal }).then((res) => res.json()),
+  });
+  const summary = observer.result.get().data ?? props.initialSummary;
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void observer.refetch();
+    }, 60_000);
+
+    return () => {
+      window.clearInterval(intervalId);
+      observer.dispose();
+    };
+  }, []);
+
+  return (
+    <section>
+      <p>Open incidents: {summary.openIncidents}</p>
+      <p>Revenue today: {summary.revenueToday}</p>
+      <p>Updated: {summary.updatedAt}</p>
+      {observer.result.get().isFetching ? <p>Refreshing...</p> : null}
+    </section>
+  );
+}
+```
+
+`refetchOnWindowFocus` listens for focus and visible-tab transitions. `refetchOnReconnect` listens for the browser `online` event. Mreact Query does not currently have a built-in `refetchInterval` option, so use a small client-side timer when the view needs periodic polling. Always dispose long-lived observers and timers when integrating outside a component cleanup lifecycle.
+
 ## Infinite queries
 
 Use `createInfiniteQuery()` for cursor timelines and feeds that should not hand-roll page state or concurrent next-page dedupe.
