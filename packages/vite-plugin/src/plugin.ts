@@ -8,6 +8,7 @@ import {
 import type { Plugin } from "vite";
 import { formatDiagnostic } from "./diagnostics.js";
 
+/** Configures mreact compilation behavior for the Vite transform plugin. */
 export interface ModularReactViteOptions {
   include?: RegExp;
   mode?: "reactive" | "compat";
@@ -23,6 +24,7 @@ export interface ModularReactViteOptions {
   ) => void;
 }
 
+/** Creates a Vite plugin that compiles mreact modules for client and server builds. */
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
   const include = options.include ?? /\.[cm]?[jt]sx$/;
 

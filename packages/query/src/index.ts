@@ -5,11 +5,19 @@ import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./quer
 
 export { hashQueryKey } from "./query-lifecycle.js";
 
+/** Represents the structured key used to identify cached query data. */
 export type QueryKey = readonly unknown[];
+
+/** Represents the lifecycle state of a query entry or observer result. */
 export type QueryStatus = "pending" | "success" | "error";
+
+/** Represents the lifecycle state of a mutation observer result. */
 export type MutationStatus = "idle" | "pending" | "success" | "error";
+
+/** Classifies why a query fetch failed. */
 export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
 
+/** Describes the reactive result exposed by a query observer. */
 export interface QueryResult<TData> {
   data: TData | undefined;
   error: unknown;
@@ -19,6 +27,7 @@ export interface QueryResult<TData> {
   updatedAt: number;
 }
 
+/** Describes the reactive result exposed by a mutation observer. */
 export interface MutationResult<TData> {
   data: TData | undefined;
   error: unknown;
@@ -26,21 +35,25 @@ export interface MutationResult<TData> {
   updatedAt: number;
 }
 
+/** Stores the cache metadata and result state for one query key. */
 export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
   queryHash: string;
   queryKey: QueryKey;
   stale: boolean;
 }
 
+/** Provides query key and cancellation signal data to a query function. */
 export interface QueryFunctionContext {
   queryKey: QueryKey;
   signal: AbortSignal;
 }
 
+/** Provides pagination parameters to an infinite query function. */
 export interface InfiniteQueryFunctionContext<TPageParam> extends QueryFunctionContext {
   pageParam: TPageParam;
 }
 
+/** Configures a direct query fetch through a query client. */
 export interface FetchQueryOptions<TData> {
   queryKey: QueryKey;
   queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
@@ -50,15 +63,18 @@ export interface FetchQueryOptions<TData> {
   staleTime?: number;
 }
 
+/** Configures cache subscription matching and idle garbage collection. */
 export interface QuerySubscriptionOptions {
   exact?: boolean | undefined;
   gcTime?: false | number | undefined;
 }
 
+/** Selects query entries for invalidation, cancellation, or removal. */
 export interface InvalidateQueriesOptions {
   queryKey?: QueryKey;
 }
 
+/** Provides cache reads, fetches, invalidation, removal, and subscriptions for queries. */
 export interface QueryClient {
   cancelQueries(options?: InvalidateQueriesOptions): void;
   fetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<TData>;
@@ -76,6 +92,7 @@ export interface QueryClient {
   entries(): QueryEntry[];
 }
 
+/** Configures a reactive query observer. */
 export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
   /**
    * Fetch when the observer is created and the cache does not already contain
@@ -99,17 +116,20 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
   refetchOnReconnect?: boolean | undefined;
 }
 
+/** Observes one query result and exposes refetch and disposal controls. */
 export interface QueryObserver<TData> {
   readonly result: ReadonlyCell<QueryResult<TData>>;
   dispose(): void;
   refetch(): Promise<QueryResult<TData>>;
 }
 
+/** Stores the pages and page parameters held by an infinite query. */
 export interface InfiniteQueryData<TPage, TPageParam> {
   pages: readonly TPage[];
   pageParams: readonly TPageParam[];
 }
 
+/** Describes the reactive result exposed by an infinite query observer. */
 export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryData<
   TPage,
   TPageParam
@@ -123,6 +143,7 @@ export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryDat
   updatedAt: number;
 }
 
+/** Configures a reactive infinite query observer. */
 export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
   FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>>,
   "queryFn"
@@ -143,6 +164,7 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
   refetchOnWindowFocus?: boolean | undefined;
 }
 
+/** Observes paginated query data and exposes next-page, refetch, and disposal controls. */
 export interface InfiniteQueryObserver<TPage, TPageParam> {
   readonly result: ReadonlyCell<InfiniteQueryResult<TPage, TPageParam>>;
   dispose(): void;
@@ -150,6 +172,7 @@ export interface InfiniteQueryObserver<TPage, TPageParam> {
   refetch(): Promise<InfiniteQueryResult<TPage, TPageParam>>;
 }
 
+/** Configures a mutation observer with lifecycle callbacks and invalidation keys. */
 export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
   invalidate?: readonly QueryKey[];
   mutationFn: (variables: TVariables) => Promise<TData> | TData;
@@ -171,11 +194,13 @@ export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
   onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
 }
 
+/** Observes mutation state and exposes the mutation trigger. */
 export interface MutationObserver<TVariables, TData> {
   readonly result: ReadonlyCell<MutationResult<TData>>;
   mutate(variables: TVariables): Promise<TData>;
 }
 
+/** Represents one successful query entry serialized for server-to-client hydration. */
 export interface DehydratedQuery {
   data: unknown;
   queryHash: string;
@@ -183,10 +208,12 @@ export interface DehydratedQuery {
   updatedAt: number;
 }
 
+/** Represents the serializable query cache payload embedded in server-rendered HTML. */
 export interface DehydratedQueryClient {
   queries: DehydratedQuery[];
 }
 
+/** Identifies the script element that carries dehydrated query state during hydration. */
 export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 
 const queryRuntimeStateKey = "__mreactQueryRuntimeState";
@@ -197,6 +224,7 @@ interface QueryRuntimeState {
   browserQueryClient?: QueryClient | undefined;
 }
 
+/** Provides the AsyncLocalStorage-compatible interface used for server-scoped query clients. */
 export interface QueryAsyncStorage<T> {
   getStore(): T | undefined;
   run<TResult>(store: T, callback: () => TResult): TResult;
@@ -254,16 +282,19 @@ export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T {
   return asyncStorage.run(client, fn);
 }
 
+/** Resets process-wide query runtime state for tests. */
 export function __resetQueryClientForTesting(): void {
   const state = queryRuntimeState();
   state.asyncStorage = undefined;
   state.browserQueryClient = undefined;
 }
 
+/** Installs custom async storage for server-scoped query clients. */
 export function installQueryAsyncStorage(storage: QueryAsyncStorage<QueryClient>): void {
   queryRuntimeState().asyncStorage = storage;
 }
 
+/** Checks whether an error came from missing server query-client async storage. */
 export function isQueryClientScopeUnavailableError(
   error: unknown,
 ): error is QueryClientScopeUnavailableError {

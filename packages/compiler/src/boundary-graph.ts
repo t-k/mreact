@@ -12,12 +12,14 @@ import type {
 } from "./internal.js";
 import type { Diagnostic } from "./types.js";
 
+/** Classifies the route role of a module used as a boundary graph entry. */
 export type BoundaryGraphEntryKind =
   | "module"
   | "route-layout"
   | "route-page"
   | "route-template";
 
+/** Classifies how a module or export participates in client, server, and shared execution. */
 export type BoundaryClassification =
   | "client-boundary"
   | "client-route"
@@ -27,11 +29,13 @@ export type BoundaryClassification =
   | "shared"
   | "unknown";
 
+/** Describes an entry module passed to boundary graph analysis. */
 export interface BoundaryGraphEntry {
   file: string;
   kind: BoundaryGraphEntryKind;
 }
 
+/** Supplies entry modules and module loading hooks for boundary graph analysis. */
 export interface BoundaryGraphInput {
   entries: readonly BoundaryGraphEntry[];
   readModule(file: string): Promise<string | undefined> | string | undefined;
@@ -41,17 +45,20 @@ export interface BoundaryGraphInput {
   }): Promise<string | undefined> | string | undefined;
 }
 
+/** Describes the boundary classification assigned to one named export. */
 export interface BoundaryGraphExport {
   classification: BoundaryClassification;
   name: string;
 }
 
+/** Describes one analyzed module and the classifications for its exports. */
 export interface BoundaryGraphModule {
   classification: BoundaryClassification;
   exports: BoundaryGraphExport[];
   file: string;
 }
 
+/** Describes an import that crosses from server-rendered code into a client boundary. */
 export interface BoundaryGraphClientBoundary {
   exportNames?: readonly string[];
   importerFile: string;
@@ -59,6 +66,7 @@ export interface BoundaryGraphClientBoundary {
   source: string;
 }
 
+/** Describes an inferred or explicit server action reference discovered in the graph. */
 export interface BoundaryGraphServerActionSite {
   end: number;
   exportName: string;
@@ -71,12 +79,14 @@ export interface BoundaryGraphServerActionSite {
   start: number;
 }
 
+/** Names the kind of boundary graph trace event. */
 export type BoundaryGraphTraceKind =
   | "client-boundary"
   | "export"
   | "module"
   | "server-action";
 
+/** Names the analysis reason attached to a boundary graph trace event. */
 export type BoundaryGraphTraceReason =
   | "client-runtime-export"
   | "module-classification"
@@ -89,6 +99,7 @@ export type BoundaryGraphTraceReason =
   | "unknown-module"
   | "use-server-directive";
 
+/** Records one decision made while classifying a boundary graph. */
 export interface BoundaryGraphTraceEvent {
   classification: BoundaryClassification;
   exportName?: string;
@@ -104,6 +115,7 @@ export interface BoundaryGraphTraceEvent {
   viaExportName?: string;
 }
 
+/** Contains modules, client boundaries, server actions, diagnostics, and trace events for a graph analysis run. */
 export interface BoundaryGraphResult {
   clientBoundaries: BoundaryGraphClientBoundary[];
   diagnostics: Diagnostic[];
@@ -118,6 +130,7 @@ interface ResolvedServerActionTarget {
   moduleFile: string;
 }
 
+/** Analyzes route modules and static imports to classify server, client, shared, and action boundaries. */
 export async function analyzeBoundaryGraph(
   input: BoundaryGraphInput,
 ): Promise<BoundaryGraphResult> {

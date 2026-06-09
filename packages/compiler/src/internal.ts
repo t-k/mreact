@@ -16,6 +16,7 @@ import type {
   Diagnostic,
 } from "./types.js";
 
+/** Configures source code, filename, target, and analysis options for IR generation. */
 export interface AnalyzeToIrInput {
   code: string;
   filename: string;
@@ -23,28 +24,33 @@ export interface AnalyzeToIrInput {
   options?: AnalyzeModuleOptions;
 }
 
+/** Contains the module IR and diagnostics produced by compiler analysis. */
 export interface AnalyzeToIrOutput {
   ir: ModuleIr;
   diagnostics: Diagnostic[];
   usedTypescriptFallback?: boolean;
 }
 
+/** Describes a static import declaration and the local names it introduces. */
 export interface StaticImportReference {
   localNames: string[];
   sideEffect: boolean;
   source: string;
 }
 
+/** Describes one specifier inside a static import declaration. */
 export interface StaticImportSpecifierReference {
   importedName: string;
   kind: "default" | "named" | "namespace";
   localName: string;
 }
 
+/** Describes a static import declaration with its individual specifiers. */
 export interface ClientRouteStaticImportReference extends StaticImportReference {
   specifiers: StaticImportSpecifierReference[];
 }
 
+/** Describes a static export declaration and the names it exports. */
 export interface StaticExportReference {
   exportedNames: string[];
   exportAll: boolean;
@@ -52,11 +58,13 @@ export interface StaticExportReference {
   source: string;
 }
 
+/** Describes one specifier inside a static export declaration. */
 export interface StaticExportSpecifierReference {
   exportedName: string;
   localName: string;
 }
 
+/** Describes render and client-runtime reachability for one top-level export. */
 export interface TopLevelExportRenderInfo {
   calledComponentRoots: string[];
   clientRuntime: boolean;
@@ -64,6 +72,7 @@ export interface TopLevelExportRenderInfo {
   renderedComponentRoots: string[];
 }
 
+/** Summarizes route-module imports, exports, directives, references, and reachable render roots. */
 export interface ClientRouteModuleAnalysis {
   clientRuntime: boolean;
   defaultExportIdentifier: string | undefined;
@@ -81,12 +90,14 @@ export interface ClientRouteModuleAnalysis {
   topLevelExportRenderInfo: TopLevelExportRenderInfo[];
 }
 
+/** Describes a named form action reference and its source span. */
 export interface FormActionReference {
   end: number;
   name: string;
   start: number;
 }
 
+/** Describes a form action expression reference and both wrapper and expression source spans. */
 export interface FormActionExpressionReference {
   end: number;
   expression: string;
@@ -100,10 +111,12 @@ interface ComponentAliasState {
   stringConstants: Map<string, string>;
 }
 
+/** Analyzes source code into compiler IR with diagnostics. */
 export function analyzeToIr(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeWithOxc(input);
 }
 
+/** Analyzes a pre-parsed compiler module context into compiler IR with diagnostics. */
 export function analyzeCompilerModuleContextToIr(
   context: CompilerModuleContext,
   input: Omit<AnalyzeToIrInput, "code" | "filename">,
@@ -111,6 +124,7 @@ export function analyzeCompilerModuleContextToIr(
   return analyzeCompilerModuleContextWithOxc(context, input);
 }
 
+/** Creates a compiler module context from source code and an optional filename. */
 export function createCompilerModuleContext(input: {
   code: string;
   filename?: string | undefined;
@@ -118,6 +132,7 @@ export function createCompilerModuleContext(input: {
   return createCompilerModuleContextWithOxc(input);
 }
 
+/** Checks whether a module declares any of the given names as top-level exports. */
 export function hasTopLevelExportDeclaration(input: {
   code: string;
   filename?: string | undefined;
@@ -131,10 +146,7 @@ export function hasTopLevelExportDeclaration(input: {
   );
 }
 
-// Reads the value of a top-level `export const <name> = <boolean literal>`
-// declaration. Returns `undefined` when the export is absent or not a boolean
-// literal. AST-based so commented-out or string-literal occurrences of the same
-// text are not mistaken for a real export.
+/** Reads a top-level exported boolean literal by name, ignoring comments and non-literal values. */
 export function readTopLevelBooleanExport(input: {
   code: string;
   filename?: string | undefined;
@@ -146,8 +158,7 @@ export function readTopLevelBooleanExport(input: {
   );
 }
 
-// Context-accepting variant so callers with a cached `CompilerModuleContext`
-// (e.g. the dev server) avoid re-parsing the module per request.
+/** Reads a top-level exported boolean literal from a cached compiler module context. */
 export function readTopLevelBooleanExportFromContext(
   context: CompilerModuleContext,
   name: string,
@@ -203,6 +214,7 @@ function booleanExpressionValue(node: Record<string, unknown> | undefined): bool
   return undefined;
 }
 
+/** Removes top-level export declarations for selected names while preserving their values where possible. */
 export function stripTopLevelExportDeclarations(input: {
   code: string;
   filename?: string | undefined;
@@ -223,6 +235,7 @@ export function stripTopLevelExportDeclarations(input: {
   return code;
 }
 
+/** Converts selected top-level export declarations into non-exported declarations. */
 export function demoteTopLevelExportDeclarations(input: {
   code: string;
   filename?: string | undefined;
@@ -243,6 +256,7 @@ export function demoteTopLevelExportDeclarations(input: {
   return code;
 }
 
+/** Removes unused static value imports while preserving side-effect and type-only imports. */
 export function stripUnusedStaticValueImports(input: {
   code: string;
   filename?: string | undefined;
@@ -264,6 +278,7 @@ export function stripUnusedStaticValueImports(input: {
   return code;
 }
 
+/** Collects module specifier strings from static import and export declarations. */
 export function collectStaticModuleSpecifiers(input: {
   code: string;
   filename?: string | undefined;
@@ -273,6 +288,7 @@ export function collectStaticModuleSpecifiers(input: {
   return programBody(parsed.program).flatMap(staticModuleSpecifier);
 }
 
+/** Collects static import declarations and their local binding names. */
 export function collectStaticImportReferences(input: {
   code: string;
   filename?: string | undefined;
@@ -282,6 +298,7 @@ export function collectStaticImportReferences(input: {
   return programBody(parsed.program).flatMap(staticImportReference);
 }
 
+/** Collects static export declarations and their exported names. */
 export function collectStaticExportReferences(input: {
   code: string;
   filename?: string | undefined;
@@ -291,6 +308,7 @@ export function collectStaticExportReferences(input: {
   return programBody(parsed.program).flatMap(staticExportReference);
 }
 
+/** Collects root component names referenced by JSX elements in a module. */
 export function collectJsxComponentRootNames(input: {
   code: string;
   filename?: string | undefined;
@@ -305,6 +323,7 @@ export function collectJsxComponentRootNames(input: {
   return Array.from(names).sort();
 }
 
+/** Collects identifier reference names from a module, excluding declarations. */
 export function collectIdentifierReferenceNames(input: {
   code: string;
   filename?: string | undefined;
@@ -316,15 +335,7 @@ export function collectIdentifierReferenceNames(input: {
   return Array.from(names).sort();
 }
 
-// Returns true when the module references a browser global (`window`,
-// `document`, `localStorage`) in a position that may execute during server
-// rendering. A reference is considered guarded -- and therefore server-safe --
-// when it can only evaluate behind a `typeof window !== "undefined"` style
-// check: the guarded branch of an if/ternary, the short-circuited side of a
-// logical expression, or statements following a guarded early exit. A guard on
-// any one browser global covers the others, matching how isomorphic modules
-// are written in practice. Alias-tracked guards (`const isBrowser = ...`) are
-// not followed; they conservatively report an unguarded reference.
+/** Checks whether browser globals may execute during server rendering without a guard. */
 export function hasUnguardedBrowserGlobalReference(input: {
   code: string;
   filename?: string | undefined;
@@ -334,6 +345,7 @@ export function hasUnguardedBrowserGlobalReference(input: {
   return hasUnguardedBrowserGlobalReferenceInNode(parsed.program, false);
 }
 
+/** Collects unique named form action references from a module. */
 export function collectFormActionReferenceNames(input: {
   code: string;
   filename?: string | undefined;
@@ -343,6 +355,7 @@ export function collectFormActionReferenceNames(input: {
   ).sort();
 }
 
+/** Collects named form action references and their source spans from a module. */
 export function collectFormActionReferences(input: {
   code: string;
   filename?: string | undefined;
@@ -356,6 +369,7 @@ export function collectFormActionReferences(input: {
   );
 }
 
+/** Collects form action expression references and their source spans from a module. */
 export function collectFormActionExpressionReferences(input: {
   code: string;
   filename?: string | undefined;
@@ -371,6 +385,7 @@ export function collectFormActionExpressionReferences(input: {
   );
 }
 
+/** Collects value export names declared at the top level of a module. */
 export function collectTopLevelValueExportNames(input: {
   code: string;
   filename?: string | undefined;
@@ -387,6 +402,7 @@ export function collectTopLevelValueExportNames(input: {
   return Array.from(names).sort();
 }
 
+/** Collects render reachability information for top-level exports in a module. */
 export function collectTopLevelExportRenderInfo(input: {
   code: string;
   filename?: string | undefined;
@@ -396,6 +412,7 @@ export function collectTopLevelExportRenderInfo(input: {
   return collectTopLevelExportRenderInfoFromProgram(parsed.program);
 }
 
+/** Analyzes a route module for directives, static imports, exports, references, and render reachability. */
 export function collectClientRouteModuleAnalysis(input: {
   code: string;
   filename?: string | undefined;
@@ -405,6 +422,7 @@ export function collectClientRouteModuleAnalysis(input: {
   return collectClientRouteModuleAnalysisFromContext(parsed);
 }
 
+/** Analyzes a cached compiler module context for route-module metadata. */
 export function collectClientRouteModuleAnalysisFromContext(
   context: CompilerModuleContext,
 ): ClientRouteModuleAnalysis {
@@ -1016,6 +1034,7 @@ function isNonComputedPropertyKey(node: Record<string, unknown>): boolean {
   );
 }
 
+/** Checks whether a module begins with a specific directive string. */
 export function hasModuleDirective(input: {
   code: string;
   directive: string;
@@ -1045,6 +1064,7 @@ function hasModuleDirectiveInProgram(program: unknown, expectedDirective: string
   return false;
 }
 
+/** Checks whether a module contains syntax that requires client runtime execution. */
 export function hasClientRuntimeSyntax(input: {
   code: string;
   filename?: string | undefined;

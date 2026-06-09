@@ -1,11 +1,16 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 
+/** Names the starter template used when scaffolding a new mreact app. */
 export type CreateMreactAppTemplate = "basic" | "tailwind" | "dashboard";
 
+/** Names the package manager used to write install and script commands. */
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
+
+/** Names the deployment target whose files are included in the generated app. */
 export type CreateMreactAppDeployTarget = "aws-lambda" | "cloudflare" | "container";
 
+/** Configures the project directory, template, package manager, and deploy target for app scaffolding. */
 export interface CreateMreactAppOptions {
   deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
@@ -15,6 +20,7 @@ export interface CreateMreactAppOptions {
   template?: CreateMreactAppTemplate | undefined;
 }
 
+/** Reports the generated app directory, files, package manager, template, and deploy target. */
 export interface CreateMreactAppResult {
   deploy?: CreateMreactAppDeployTarget | undefined;
   directory: string;
@@ -23,6 +29,7 @@ export interface CreateMreactAppResult {
   template: CreateMreactAppTemplate;
 }
 
+/** Configures an existing mreact app upgrade run. */
 export interface UpgradeMreactAppOptions {
   directory: string;
   dryRun?: boolean | undefined;
@@ -30,6 +37,7 @@ export interface UpgradeMreactAppOptions {
   targetVersion?: string | undefined;
 }
 
+/** Describes a package dependency version changed by an app upgrade run. */
 export interface UpgradeMreactAppDependencyUpdate {
   field: PackageDependencyField;
   from: string;
@@ -37,12 +45,14 @@ export interface UpgradeMreactAppDependencyUpdate {
   to: string;
 }
 
+/** Reports whether an upgrade codemod would be or was applied. */
 export interface UpgradeMreactAppCodemodResult {
   applied: boolean;
   description: string;
   id: string;
 }
 
+/** Reports the package file, dependency updates, codemods, and change flag for an upgrade run. */
 export interface UpgradeMreactAppResult {
   changed: boolean;
   codemods: UpgradeMreactAppCodemodResult[];
@@ -85,6 +95,7 @@ const cloudflareWorkersTypesVersion = "^4.20260522.1";
 const appRouterGlobalsType = "@reckona/mreact-router/app-router-globals";
 const pnpmOnlyBuiltDependencies = ["@parcel/watcher", "esbuild", "sharp", "workerd"] as const;
 
+/** Scaffolds a new mreact app by writing the selected template files into the target directory. */
 export async function createMreactApp(
   options: CreateMreactAppOptions,
 ): Promise<CreateMreactAppResult> {
@@ -118,6 +129,7 @@ export async function createMreactApp(
   };
 }
 
+/** Updates known mreact workspace dependencies and records version-gated codemods for an existing app. */
 export async function upgradeMreactApp(
   options: UpgradeMreactAppOptions,
 ): Promise<UpgradeMreactAppResult> {
@@ -179,18 +191,21 @@ export async function upgradeMreactApp(
   };
 }
 
+/** Lists the templates supported by `createMreactApp()`. */
 export const createMreactAppTemplates = [
   "basic",
   "tailwind",
   "dashboard",
 ] as const satisfies readonly CreateMreactAppTemplate[];
 
+/** Lists the deployment targets supported by `createMreactApp()`. */
 export const createMreactAppDeployTargets = [
   "cloudflare",
   "container",
   "aws-lambda",
 ] as const satisfies readonly CreateMreactAppDeployTarget[];
 
+/** Lists version-gated codemods reported by `upgradeMreactApp()`. */
 export const createMreactAppCodemods = [
   {
     description:
@@ -206,6 +221,7 @@ export const createMreactAppCodemods = [
   },
 ] as const;
 
+/** Names package.json dependency sections that can contain mreact workspace packages. */
 export type PackageDependencyField =
   | "dependencies"
   | "devDependencies"

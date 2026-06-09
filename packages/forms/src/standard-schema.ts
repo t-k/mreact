@@ -1,7 +1,9 @@
+/** Represents the Standard Schema v1 wrapper shape used by compatible validation libraries. */
 export interface StandardSchemaV1<Input = unknown, Output = Input> {
   readonly "~standard": StandardSchemaV1.Props<Input, Output>;
 }
 
+/** Contains the Standard Schema v1 protocol helper types. */
 export namespace StandardSchemaV1 {
   export interface Props<Input = unknown, Output = Input> {
     readonly version: 1;
@@ -43,6 +45,7 @@ export namespace StandardSchemaV1 {
   }
 }
 
+/** Infers the input value type accepted by a Standard Schema. */
 export type InferStandardSchemaInput<Schema> = Schema extends {
   readonly "~standard": { readonly types?: (infer Types) | undefined };
 }
@@ -51,6 +54,7 @@ export type InferStandardSchemaInput<Schema> = Schema extends {
     : never
   : never;
 
+/** Infers the output value type produced by a Standard Schema. */
 export type InferStandardSchemaOutput<Schema> = Schema extends {
   readonly "~standard": { readonly types?: (infer Types) | undefined };
 }
@@ -59,6 +63,7 @@ export type InferStandardSchemaOutput<Schema> = Schema extends {
     : never
   : never;
 
+/** Represents the normalized result returned after Standard Schema validation. */
 export type StandardSchemaValidationResult<Output> =
   | {
       success: true;
@@ -69,6 +74,7 @@ export type StandardSchemaValidationResult<Output> =
       success: false;
     };
 
+/** Validates an unknown value with a Standard Schema and normalizes success and issue results. */
 export async function validateStandardSchema<Schema extends StandardSchemaV1>(
   schema: Schema,
   value: unknown,

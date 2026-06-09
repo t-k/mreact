@@ -1,5 +1,6 @@
 import type { SourceLocation } from "./types.js";
 
+/** Represents the compiler intermediate representation for one module. */
 export interface ModuleIr {
   userImports: string[];
   moduleStatements: string[];
@@ -7,6 +8,7 @@ export interface ModuleIr {
   components: ComponentIr[];
 }
 
+/** Represents one component discovered and lowered by compiler analysis. */
 export interface ComponentIr {
   name: string;
   exportName: string;
@@ -19,6 +21,7 @@ export interface ComponentIr {
   root: JsxNodeIr;
 }
 
+/** Represents any JSX node shape supported by the compiler intermediate representation. */
 export type JsxNodeIr =
   | JsxElementIr
   | ComponentRefIr
@@ -29,6 +32,7 @@ export type JsxNodeIr =
   | ExprIr
   | AsyncBoundaryIr;
 
+/** Represents a lowered intrinsic JSX element. */
 export interface JsxElementIr {
   kind: "element";
   tagName: string;
@@ -37,6 +41,7 @@ export interface JsxElementIr {
   children: JsxNodeIr[];
 }
 
+/** Represents a lowered component reference and its props, children, and boundary metadata. */
 export interface ComponentRefIr {
   kind: "component";
   name: string;
@@ -49,20 +54,24 @@ export interface ComponentRefIr {
   children: JsxNodeIr[];
 }
 
+/** Represents a client module reference attached to a component in server output. */
 export interface ClientReferenceIr {
   moduleId: string;
   exportName: string;
   ssrFallback?: boolean;
 }
 
+/** Represents any prop shape supported by a component reference. */
 export type ComponentPropIr = ComponentNamedPropIr | ComponentRenderPropIr | ComponentSpreadPropIr;
 
+/** Represents a named component prop with expression code. */
 export interface ComponentNamedPropIr {
   kind: "prop";
   name: string;
   code: string;
 }
 
+/** Represents a render-prop child lowered into the component prop list. */
 export interface ComponentRenderPropIr {
   kind: "render-prop";
   name: string;
@@ -70,17 +79,20 @@ export interface ComponentRenderPropIr {
   children: JsxNodeIr[];
 }
 
+/** Represents a spread prop expression passed to a component reference. */
 export interface ComponentSpreadPropIr {
   kind: "spread-prop";
   code: string;
 }
 
+/** Represents a JSX fragment and its lowered children. */
 export interface JsxFragmentIr {
   kind: "fragment";
   bodyStatements?: string[];
   children: JsxNodeIr[];
 }
 
+/** Represents a conditional JSX expression with true and false branches. */
 export interface ConditionalIr {
   kind: "conditional";
   conditionCode: string;
@@ -89,6 +101,7 @@ export interface ConditionalIr {
   whenFalse: JsxNodeIr[];
 }
 
+/** Represents a JSX list rendering expression and its lowered item body. */
 export interface ListIr {
   kind: "list";
   itemsCode: string;
@@ -100,17 +113,20 @@ export interface ListIr {
   children: JsxNodeIr[];
 }
 
+/** Represents static text emitted from JSX. */
 export interface TextIr {
   kind: "text";
   value: string;
 }
 
+/** Represents a dynamic expression emitted from JSX. */
 export interface ExprIr {
   kind: "expr";
   code: string;
   renderMode?: "dynamic" | "html" | "react-node" | "stream-node";
 }
 
+/** Represents an async boundary lowered from an Await-style JSX construct. */
 export interface AsyncBoundaryIr {
   kind: "async-boundary";
   loc?: SourceLocation;
@@ -124,24 +140,28 @@ export interface AsyncBoundaryIr {
   awaitId?: string;
 }
 
+/** Represents any intrinsic attribute shape supported by the compiler IR. */
 export type AttributeIr =
   | StaticAttributeIr
   | DynamicAttributeIr
   | EventAttributeIr
   | SpreadAttributeIr;
 
+/** Represents a static intrinsic attribute. */
 export interface StaticAttributeIr {
   kind: "static-attr";
   name: string;
   value: string;
 }
 
+/** Represents a dynamic intrinsic attribute expression. */
 export interface DynamicAttributeIr {
   kind: "dynamic-attr";
   name: string;
   code: string;
 }
 
+/** Represents an event handler attribute emitted for client hydration. */
 export interface EventAttributeIr {
   kind: "event";
   name: string;
@@ -149,6 +169,7 @@ export interface EventAttributeIr {
   code: string;
 }
 
+/** Represents a spread attribute expression on an intrinsic element. */
 export interface SpreadAttributeIr {
   kind: "spread-attr";
   code: string;

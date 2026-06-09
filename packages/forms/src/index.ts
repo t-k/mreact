@@ -1,17 +1,27 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { type StandardSchemaV1, validateStandardSchema } from "./standard-schema.js";
 
+/** Represents the object shape managed by a form instance. */
 export type FormValues = Record<string, unknown>;
+
+/** Extracts string field names from a form value object. */
 export type FieldName<TValues extends FormValues> = Extract<keyof TValues, string>;
+
+/** Maps field names and the root form key to validation error messages. */
 export type FormErrors<TValues extends FormValues> = Partial<
   Record<FieldName<TValues> | "root", string[]>
 >;
+
+/** Validates one field value against the full form values object. */
 export type FieldValidator<TValue, TValues extends FormValues> = (
   value: TValue,
   values: TValues,
 ) => readonly string[] | string | undefined | Promise<readonly string[] | string | undefined>;
+
+/** Names the form events that can trigger validation. */
 export type FormValidateMode = "change" | "blur" | "submit";
 
+/** Describes the complete reactive state tracked by a form instance. */
 export interface FormState<TValues extends FormValues> {
   dirty: boolean;
   errors: FormErrors<TValues>;
@@ -24,6 +34,7 @@ export interface FormState<TValues extends FormValues> {
   values: TValues;
 }
 
+/** Describes the derived state for one form field. */
 export interface FieldState<TValue> {
   dirty: boolean;
   errors: string[];
@@ -32,6 +43,7 @@ export interface FieldState<TValue> {
   value: TValue;
 }
 
+/** Provides DOM event handlers and current value for binding a field to an input. */
 export interface FieldBinding<TValue> {
   onBlur(event: Event): Promise<void>;
   onChange(event: Event): Promise<void>;
@@ -39,10 +51,12 @@ export interface FieldBinding<TValue> {
   value: TValue;
 }
 
+/** Configures which DOM event updates a field binding. */
 export interface FieldBindingOptions {
   event?: "change" | "input" | undefined;
 }
 
+/** Exposes state, binding, blur, and value update controls for one field. */
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
   readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
   bind(options?: FieldBindingOptions): FieldBinding<TValues[Name]>;
@@ -60,20 +74,24 @@ interface BaseCreateFormOptions<TValues extends FormValues> {
   validateOn?: FormValidateMode | readonly FormValidateMode[] | undefined;
 }
 
+/** Configures form creation without schema-level submit value transformation. */
 export interface CreateFormOptionsWithoutSchema<TValues extends FormValues>
   extends BaseCreateFormOptions<TValues> {
   schema?: undefined;
 }
 
+/** Configures form creation with a Standard Schema validator that may transform submit values. */
 export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmitValues>
   extends BaseCreateFormOptions<TValues> {
   schema: StandardSchemaV1<TValues, TSubmitValues>;
 }
 
+/** Configures form creation with optional field validators and optional Standard Schema validation. */
 export type CreateFormOptions<TValues extends FormValues, TSubmitValues = TValues> =
   | CreateFormOptionsWithoutSchema<TValues>
   | CreateFormOptionsWithSchema<TValues, TSubmitValues>;
 
+/** Reports either successful normalized submit values or form validation errors. */
 export type FormValidationResult<TValues extends FormValues, TSubmitValues> =
   | {
       success: true;
@@ -84,6 +102,7 @@ export type FormValidationResult<TValues extends FormValues, TSubmitValues> =
       success: false;
     };
 
+/** Reports the result of a form submit handler after validation and error capture. */
 export type FormSubmitResult<TValues extends FormValues, TResult> =
   | {
       data: TResult;
@@ -98,11 +117,13 @@ export type FormSubmitResult<TValues extends FormValues, TResult> =
       status: "error";
     };
 
+/** Represents field and form errors returned by a server action. */
 export interface ServerActionErrors<TValues extends FormValues> {
   fieldErrors?: Partial<Record<FieldName<TValues>, readonly string[]>> | undefined;
   formErrors?: readonly string[] | undefined;
 }
 
+/** Provides reactive form state, field access, validation, submit, reset, and error controls. */
 export interface FormApi<TValues extends FormValues, TSubmitValues> {
   readonly state: ReadonlyCell<FormState<TValues>>;
   field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name>;
@@ -117,6 +138,7 @@ export interface FormApi<TValues extends FormValues, TSubmitValues> {
   validate(): Promise<FormValidationResult<TValues, TSubmitValues>>;
 }
 
+/** Creates a reactive form API from initial values, validators, and optional schema validation. */
 export function createForm<TValues extends FormValues>(
   options: CreateFormOptionsWithoutSchema<TValues>,
 ): FormApi<TValues, TValues>;
@@ -509,9 +531,14 @@ function cloneValues<TValues extends FormValues>(values: TValues): TValues {
   return { ...values };
 }
 
-export type {
-  InferStandardSchemaInput,
-  InferStandardSchemaOutput,
-  StandardSchemaV1,
-} from "./standard-schema.js";
+/** Infers the input value type accepted by a Standard Schema. */
+export type { InferStandardSchemaInput } from "./standard-schema.js";
+
+/** Infers the output value type produced by a Standard Schema. */
+export type { InferStandardSchemaOutput } from "./standard-schema.js";
+
+/** Represents a Standard Schema v1 validator accepted by form schema options. */
+export type { StandardSchemaV1 } from "./standard-schema.js";
+
+/** Validates an unknown value with a Standard Schema and normalizes the result shape. */
 export { validateStandardSchema } from "./standard-schema.js";

@@ -1,3 +1,4 @@
+/** Describes one event emitted to the shared mreact devtools bus. */
 export interface DevtoolsEvent {
   package: string;
   timestamp?: number;
@@ -5,14 +6,18 @@ export interface DevtoolsEvent {
   [key: string]: unknown;
 }
 
+/** Receives devtools events when subscribed to a devtools instance. */
 export type DevtoolsListener = (event: DevtoolsEvent) => void;
 
+/** Sets the default number of events retained by a devtools instance. */
 export const defaultDevtoolsMaxEvents = 1_000;
 
+/** Configures event retention for `createDevtools()`. */
 export interface CreateDevtoolsOptions {
   maxEvents?: number | undefined;
 }
 
+/** Provides event emission, subscription, history reads, and disposal for mreact devtools. */
 export interface Devtools {
   dispose(): void;
   emit(event: DevtoolsEvent): void;
@@ -20,6 +25,7 @@ export interface Devtools {
   subscribe(listener: DevtoolsListener): () => void;
 }
 
+/** Configures installation of a devtools instance on `globalThis`. */
 export interface InstallDevtoolsOptions {
   force?: boolean | undefined;
 }
@@ -29,6 +35,7 @@ declare global {
   var __mreactDevtools: Devtools | undefined;
 }
 
+/** Creates an in-memory devtools event bus. */
 export function createDevtools(options: CreateDevtoolsOptions = {}): Devtools {
   const maxEvents = normalizeMaxEvents(options.maxEvents);
   const recorded: DevtoolsEvent[] = [];
@@ -75,6 +82,7 @@ function normalizeMaxEvents(maxEvents: number | undefined): number {
   return Math.max(0, Math.floor(maxEvents));
 }
 
+/** Installs a devtools instance on `globalThis` unless production mode blocks installation. */
 export function installDevtools(
   devtools: Devtools = createDevtools(),
   options: InstallDevtoolsOptions = {},
@@ -94,10 +102,12 @@ function currentNodeEnv(): string | undefined {
   }).process?.env?.NODE_ENV;
 }
 
+/** Returns the devtools instance installed on `globalThis`, if one exists. */
 export function getInstalledDevtools(): Devtools | undefined {
   return globalThis.__mreactDevtools;
 }
 
+/** Emits a package-scoped devtools event to the installed global devtools instance. */
 export function emitMreactDevtoolsEvent(
   packageName: string,
   event: { type: string } & Record<string, unknown>,

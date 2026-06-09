@@ -1,5 +1,6 @@
 import type { Diagnostic, SourceLocation } from "./types.js";
 
+/** Formats a compiler diagnostic with filename, location, code, message, and suggestion details. */
 export function formatDiagnostic(
   filename: string,
   diagnostic: Diagnostic,

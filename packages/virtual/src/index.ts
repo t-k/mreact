@@ -1,7 +1,9 @@
 import { cell, computed, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 
+/** Identifies a virtualized item across measurements and scroll helpers. */
 export type VirtualKey = string | number;
 
+/** Configures fixed-size virtual range calculation for a list or grid. */
 export interface VirtualRangeOptions {
   columnCount?: number;
   itemCount: number;
@@ -11,6 +13,7 @@ export interface VirtualRangeOptions {
   viewportSize: number;
 }
 
+/** Describes visible and overscanned item bounds plus spacer sizes for a virtual range. */
 export interface VirtualRange {
   bottomSpacerPx: number;
   columnCount: number;
@@ -28,6 +31,7 @@ export interface VirtualRange {
   visibleStartRow: number;
 }
 
+/** Describes only the user-visible item and row bounds for a virtual range. */
 export interface VisibleRange {
   endIndex: number;
   endRow: number;
@@ -35,11 +39,13 @@ export interface VisibleRange {
   startRow: number;
 }
 
+/** Describes an item span used by span-aware virtual grids. */
 export interface VirtualItemSpan {
   colSpan?: number;
   rowSpan?: number;
 }
 
+/** Represents one rendered virtual item with its index, key, row, column, and span metadata. */
 export interface VirtualEntry<TItem> {
   colSpan?: number;
   column?: number;
@@ -50,6 +56,7 @@ export interface VirtualEntry<TItem> {
   rowSpan?: number;
 }
 
+/** Configures a reactive one-column virtual list. */
 export interface VirtualListOptions<TItem> {
   estimateItemSize: (index: number, item: TItem | undefined) => number;
   getKey: (item: TItem, index: number) => VirtualKey;
@@ -59,11 +66,13 @@ export interface VirtualListOptions<TItem> {
   viewportSize: () => number;
 }
 
+/** Configures a reactive virtual grid with optional row and column spans. */
 export interface VirtualGridOptions<TItem> extends VirtualListOptions<TItem> {
   getColumnCount: () => number;
   getItemSpan?: (item: TItem, index: number) => VirtualItemSpan;
 }
 
+/** Exposes reactive virtualizer outputs, measurement updates, refresh, and scroll offset helpers. */
 export interface Virtualizer<TItem> {
   readonly bottomSpacerPx: ReadonlyCell<number>;
   readonly entries: ReadonlyCell<readonly VirtualEntry<TItem>[]>;

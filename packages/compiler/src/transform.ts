@@ -15,6 +15,7 @@ import type {
   TransformOutput,
 } from "./types.js";
 
+/** Compiles one mreact source module into client or server JavaScript output. */
 export function transform(input: TransformInput): TransformOutput {
   return transformWithAnalyzer(input, (analyzeTarget, analyzeOptions) =>
     analyzeWithOxc({
@@ -26,6 +27,7 @@ export function transform(input: TransformInput): TransformOutput {
   );
 }
 
+/** Compiles a pre-parsed compiler module context into client or server JavaScript output. */
 export function transformCompilerModuleContext(
   input: TransformInput & { moduleContext: CompilerModuleContext },
 ): TransformOutput {

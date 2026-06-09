@@ -485,6 +485,7 @@ function createQueryAbortReason(queryKey: QueryKey): Error {
   return new Error(`Query canceled: ${hashQueryKey(queryKey)}`);
 }
 
+/** Creates the stable string hash used to index a query key in the cache. */
 export function hashQueryKey(queryKey: QueryKey): string {
   const cached = queryHashCache.get(queryKey);
   if (cached !== undefined) {

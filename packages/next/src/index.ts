@@ -2,21 +2,25 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 import { transform } from "@reckona/mreact-compiler";
 
+/** Configures the root directory scanned for `.mreact.tsx` component files. */
 export interface GenerateMreactComponentsOptions {
   rootDir: string;
 }
 
+/** Describes one source component and the wrapper and DOM modules generated for it. */
 export interface GeneratedMreactComponent {
   source: string;
   output: string;
   domOutput: string;
 }
 
+/** Contains the generated wrapper module code and browser DOM module code for a component file. */
 export interface CompiledMreactComponentModule {
   wrapperCode: string;
   domCode: string;
 }
 
+/** Generates wrapper and DOM modules for every `.mreact.tsx` component under a root directory. */
 export async function generateMreactComponents(
   options: GenerateMreactComponentsOptions,
 ): Promise<GeneratedMreactComponent[]> {
@@ -39,10 +43,12 @@ export async function generateMreactComponents(
   return generated;
 }
 
+/** Configures the import path from the wrapper module to the generated DOM module. */
 export interface CompileMreactComponentModuleOptions {
   domImportPath: string;
 }
 
+/** Compiles one `.mreact.tsx` component module into wrapper and DOM module source code. */
 export function compileMreactComponentModule(
   code: string,
   filename: string,
@@ -149,6 +155,7 @@ function hasCompiledExport(code: string, name: string, exportName: string): bool
   return code.includes(`${emitExportFunction(exportName, name)}(`);
 }
 
+/** Formats generated component paths as a human-readable CLI summary. */
 export function formatGeneratedMreactComponents(
   generated: readonly GeneratedMreactComponent[],
   rootDir: string,

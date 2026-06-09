@@ -4,9 +4,9 @@ import {
   destroySession as destroyRouterSession,
   getSession,
   rotateSession as rotateRouterSession,
-  type SessionCookieOptions,
-  type SessionRecord,
-  type SessionStore,
+  type SessionCookieOptions as RouterSessionCookieOptions,
+  type SessionRecord as RouterSessionRecord,
+  type SessionStore as RouterSessionStore,
 } from "@reckona/mreact-router/session";
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
 import { redirect } from "@reckona/mreact-router";
@@ -18,22 +18,34 @@ export {
   getSession,
   rotateRouterSession as rotateSession,
 };
-export type { SessionCookieOptions, SessionRecord, SessionStore };
 
+/** Configures the session cookie name, lifetime, path, same-site mode, and secure flag. */
+export type SessionCookieOptions = RouterSessionCookieOptions;
+
+/** Represents a stored session id, timestamps, and user-defined session data. */
+export type SessionRecord<TData = unknown> = RouterSessionRecord<TData>;
+
+/** Persists, reads, and deletes session records by id. */
+export type SessionStore<TData = unknown> = RouterSessionStore<TData>;
+
+/** Identifies the script element that carries serialized auth claims during hydration. */
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
 
+/** Contains serializable auth claims exposed to role and permission checks. */
 export interface AuthSessionClaims {
   [claim: string]: unknown;
   permissions?: readonly string[] | undefined;
   roles?: readonly string[] | undefined;
 }
 
+/** Configures redirects and requirement matching for auth guard helpers. */
 export interface AuthGuardOptions extends SessionCookieOptions {
   forbiddenTo?: string | undefined;
   mode?: AuthRequirementMode | undefined;
   redirectTo?: string | undefined;
 }
 
+/** Configures process-wide auth defaults for redirects and claim serialization. */
 export interface AuthConfig {
   forbiddenTo?: string | undefined;
   redirectTo?: string | undefined;
@@ -46,15 +58,22 @@ interface ResolvedAuthConfig {
   serializeClaims: AuthClaimsSerializer;
 }
 
+/** Names one required role or permission, or a set of acceptable values. */
 export type AuthRequirement = string | readonly string[];
+
+/** Controls whether all listed auth requirements or any one requirement must match. */
 export type AuthRequirementMode = "all" | "any";
+
+/** Converts raw session data into serializable claims for auth checks and hydration. */
 export type AuthClaimsSerializer = (data: unknown) => AuthSessionClaims | undefined;
 
+/** Describes role and permission claims required for authorization. */
 export interface AuthorizationPolicy {
   permissions?: readonly string[] | undefined;
   roles?: readonly string[] | undefined;
 }
 
+/** Reports whether claims satisfy an authorization policy and why they fail. */
 export type AuthorizationResult =
   | {
       authorized: true;
@@ -64,6 +83,7 @@ export type AuthorizationResult =
       reason: "missing-permission" | "missing-role";
     };
 
+/** Reports a session-bearing auth guard result without redirecting. */
 export type TryAuthResult<TData> =
   | {
       authorized: true;
@@ -321,6 +341,7 @@ export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionCl
   return state.browserClaims as TData | undefined;
 }
 
+/** Resets process-wide auth configuration and cached claims for tests. */
 export function __resetAuthForTesting(): void {
   authConfig = {
     forbiddenTo: "/forbidden",

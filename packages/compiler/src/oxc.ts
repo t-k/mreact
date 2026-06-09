@@ -89,6 +89,7 @@ import {
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
+/** Reports OXC analysis parity data used by compiler migration and diagnostics tests. */
 export interface OxcParityResult {
   matches: boolean;
   oxc: {
@@ -145,6 +146,7 @@ function createOxcChildAnalysisContext(
   };
 }
 
+/** Compares OXC component discovery and IR output against parity expectations for one module. */
 export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
   const oxc = parseSync(input.filename, input.code, {
     lang: "tsx",
@@ -176,6 +178,7 @@ export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult {
   };
 }
 
+/** Analyzes source code into compiler IR using OXC parsing and lowering. */
 export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   return analyzeCompilerModuleContextWithOxc(createCompilerModuleContextWithOxc(input), {
     target: input.target,
@@ -183,6 +186,7 @@ export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput {
   });
 }
 
+/** Analyzes a cached OXC compiler module context into compiler IR. */
 export function analyzeCompilerModuleContextWithOxc(
   context: CompilerModuleContext,
   input: Omit<AnalyzeToIrInput, "code" | "filename">,

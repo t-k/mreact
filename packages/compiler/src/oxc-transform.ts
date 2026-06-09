@@ -3,6 +3,7 @@ import { transformSync } from "oxc-transform";
 const stripTypeScriptCache = new Map<string, string>();
 const stripTypeScriptCacheLimit = 512;
 
+/** Removes TypeScript syntax from a snippet with OXC while preserving JSX. */
 export function stripTypeScriptWithOxc(source: string): string {
   if (!needsTypeScriptStripping(source)) {
     return source.trimEnd();

@@ -1,5 +1,6 @@
 import { parseSync } from "oxc-parser";
 
+/** Stores parsed OXC program data and parse errors for a compiler module. */
 export interface CompilerModuleContext {
   code: string;
   filename: string;
@@ -7,6 +8,7 @@ export interface CompilerModuleContext {
   program: unknown;
 }
 
+/** Parses source code with OXC and returns a compiler module context. */
 export function createCompilerModuleContextWithOxc(input: {
   code: string;
   filename?: string | undefined;

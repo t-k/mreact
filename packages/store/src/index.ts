@@ -2,27 +2,40 @@ import { cell, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core"
 import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { emitStoreDevtoolsEvent } from "./devtools.js";
 
+/** Receives the next and previous store state after a committed change. */
 export type StoreListener<T extends object> = (state: T, previous: T) => void;
+
+/** Represents a partial object patch applied to store state. */
 export type StorePatch<T extends object> = Partial<T>;
+
+/** Provides either a patch object or a patch-producing updater callback. */
 export type StoreSetter<T extends object> = StorePatch<T> | ((previous: T) => StorePatch<T> | T);
+
+/** Provides either a replacement object or a replacement-producing updater callback. */
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);
+
+/** Compares selected store values to decide whether subscribers should update. */
 export type StoreEquality<T> = (left: T, right: T) => boolean;
 
+/** Describes one store instrumentation event emitted after a state change. */
 export interface StoreInstrumentationEvent<T extends object> {
   previous: T;
   state: T;
   type: "replace" | "set" | "transaction";
 }
 
+/** Configures store instrumentation and persistence hooks. */
 export interface StoreOptions<T extends object> {
   instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
   persist?: ((state: T) => void | Promise<void>) | undefined;
 }
 
+/** Represents a selected reactive value that can be disposed manually. */
 export interface SelectedCell<T> extends ReadonlyCell<T> {
   dispose(): void;
 }
 
+/** Provides reactive state access, updates, transactions, selectors, and subscriptions. */
 export interface Store<T extends object> {
   readonly state: ReadonlyCell<T>;
   get(): T;

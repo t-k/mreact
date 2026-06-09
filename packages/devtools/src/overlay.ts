@@ -6,16 +6,26 @@ import {
   type DevtoolsEvent,
 } from "./index.js";
 
-export type { Devtools, DevtoolsEvent, DevtoolsListener } from "./index.js";
+/** Re-exports the devtools event bus used by the overlay. */
+export type { Devtools } from "./index.js";
 
+/** Re-exports the devtools event shape rendered by the overlay. */
+export type { DevtoolsEvent } from "./index.js";
+
+/** Re-exports the devtools listener callback used by overlay subscriptions. */
+export type { DevtoolsListener } from "./index.js";
+
+/** Names the event category tabs displayed by the devtools overlay. */
 export type DevtoolsOverlayTab = "query" | "reactive" | "router";
 
+/** Configures document ownership, event source, and event retention for the devtools overlay. */
 export interface DevtoolsOverlayOptions {
   devtools?: Devtools | undefined;
   document?: Document | undefined;
   maxEvents?: number | undefined;
 }
 
+/** Represents a mounted devtools overlay and its disposal handle. */
 export interface MountedDevtoolsOverlay {
   devtools: Devtools;
   dispose(): void;
@@ -35,6 +45,7 @@ const tabs: readonly TabDefinition[] = [
 
 const defaultMaxEvents = 200;
 
+/** Mounts a browser devtools overlay that groups recent mreact events by category. */
 export function mountDevtoolsOverlay(
   options: DevtoolsOverlayOptions = {},
 ): MountedDevtoolsOverlay {
