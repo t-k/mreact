@@ -164,7 +164,11 @@ describe("docs-site example contract", () => {
     expect(layout).toContain('src={sitePath("docs-theme.js")}');
     expect(layout).toContain('<meta name="color-scheme" content="light dark" />');
     expect(layout).toContain('localStorage.getItem("mreact:docs:theme")');
+    expect(layout).toContain('aria-label="GitHub repository"');
+    expect(layout).toContain('class="site-icon-control"');
     expect(layout).toContain('data-theme-toggle');
+    expect(layout).toContain('data-theme-icon="dark"');
+    expect(layout).toContain('data-theme-icon="light"');
     expect(layout).toContain("<search");
     expect(layout).toContain('type="search"');
     expect(layout).toContain('aria-label="Search documentation"');
@@ -205,6 +209,7 @@ describe("docs-site example contract", () => {
     expect(css).toContain('html[data-theme="light"]');
     expect(css).toContain('html[data-theme="dark"]');
     expect(css).toContain(":root:not([data-theme=\"light\"])");
+    expect(css).toContain(".site-icon-control");
     expect(css).toContain(".theme-toggle");
     expect(css).toContain("font-size: 1rem");
     expect(css).toContain("--bg: oklch(");
@@ -214,6 +219,8 @@ describe("docs-site example contract", () => {
     expect(themeScript).toContain('themeMediaQuery.addEventListener("change"');
     expect(themeScript).toContain("localStorage.setItem(themeStorageKey, theme)");
     expect(themeScript).toContain('colorSchemeMeta?.setAttribute("content", theme)');
+    expect(themeScript).toContain("themeToggle.dataset.themeNext = nextTheme");
+    expect(themeScript).not.toContain("textContent");
     expect(themeScript).not.toContain("innerHTML");
   });
 
@@ -1954,7 +1961,7 @@ describe("docs-site example contract", () => {
     expect(css).not.toContain("margin: 16px 0");
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
-    expect(css).toContain(".site-source-link");
+    expect(css).toContain(".site-icon-control");
   });
 
   test("has source content for the critical launch pages", async () => {

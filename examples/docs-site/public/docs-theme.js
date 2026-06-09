@@ -37,9 +37,9 @@ function updateToggle(theme) {
   }
 
   const activeTheme = resolvedTheme();
-  const nextTheme = activeTheme === "dark" ? "Light" : "Dark";
-  themeToggle.textContent = `Theme: ${nextTheme}`;
-  themeToggle.setAttribute("aria-label", `Switch to ${nextTheme.toLowerCase()} theme`);
+  const nextTheme = activeTheme === "dark" ? "light" : "dark";
+  themeToggle.dataset.themeNext = nextTheme;
+  themeToggle.setAttribute("aria-label", `Switch to ${nextTheme} theme`);
   themeToggle.setAttribute("aria-pressed", theme === undefined ? "false" : "true");
 }
 
