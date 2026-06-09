@@ -3,4 +3,14 @@ export const description = "Where generated API reference output is linked from 
 
 # Generated API
 
-Generated API reference output is published under `/api/` when the docs deployment copies TypeDoc output into the static artifact. Use the generated reference for exact exported symbols and type signatures.
+Generated API reference output is published under [/api/](/api/) when `docs/api` exists in the repository. The docs-site static export copies that TypeDoc output into `dist/api`, so package overview pages can stay short while exact exported symbols and type signatures remain generated.
+
+Use generated API reference when you need the precise signature for router helpers, adapters, query APIs, store APIs, virtualizer types, React compatibility exports, or lower-level runtime packages.
+
+Generate or refresh the API reference from the repository root:
+
+```bash
+pnpm docs:api
+```
+
+The generated files live under `docs/api/`. Public API reference under that directory is commit-eligible; the rest of `docs/` remains local project documentation unless explicitly generated.

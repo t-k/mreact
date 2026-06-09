@@ -20,6 +20,7 @@ import guidesLinkAndNavigation, * as guidesLinkAndNavigationMeta from "./content
 import guidesMetadataAndHead, * as guidesMetadataAndHeadMeta from "./content/guides/metadata-and-head.mdx";
 import guidesMiddleware, * as guidesMiddlewareMeta from "./content/guides/middleware.mdx";
 import guidesProjectStructure, * as guidesProjectStructureMeta from "./content/guides/project-structure.mdx";
+import guidesReactCompatibility, * as guidesReactCompatibilityMeta from "./content/guides/react-compatibility.mdx";
 import guidesRouting, * as guidesRoutingMeta from "./content/guides/routing.mdx";
 import guidesServerActions, * as guidesServerActionsMeta from "./content/guides/server-actions.mdx";
 import guidesServerAndClientModel, * as guidesServerAndClientModelMeta from "./content/guides/server-and-client-model.mdx";
@@ -47,6 +48,9 @@ import referenceConfig, * as referenceConfigMeta from "./content/reference/confi
 import referenceEnvironmentVariables, * as referenceEnvironmentVariablesMeta from "./content/reference/environment-variables.mdx";
 import referenceGeneratedApi, * as referenceGeneratedApiMeta from "./content/reference/generated-api.mdx";
 import referenceMetadataApi, * as referenceMetadataApiMeta from "./content/reference/metadata-api.mdx";
+import referencePackagesQuery, * as referencePackagesQueryMeta from "./content/reference/packages/query.mdx";
+import referencePackagesStore, * as referencePackagesStoreMeta from "./content/reference/packages/store.mdx";
+import referencePackagesVirtual, * as referencePackagesVirtualMeta from "./content/reference/packages/virtual.mdx";
 import referenceResponseHelpers, * as referenceResponseHelpersMeta from "./content/reference/response-helpers.mdx";
 import referenceRouteHandlerContext, * as referenceRouteHandlerContextMeta from "./content/reference/route-handler-context.mdx";
 import referenceRouteModuleExports, * as referenceRouteModuleExportsMeta from "./content/reference/route-module-exports.mdx";
@@ -201,6 +205,7 @@ export const docsPages = [
   page("guides/routing", guidesRouting, guidesRoutingMeta),
   page("guides/layouts-and-slots", guidesLayoutsAndSlots, guidesLayoutsAndSlotsMeta),
   page("guides/server-and-client-model", guidesServerAndClientModel, guidesServerAndClientModelMeta),
+  page("guides/react-compatibility", guidesReactCompatibility, guidesReactCompatibilityMeta),
   page("guides/ssr-and-streaming", guidesSsrAndStreaming, guidesSsrAndStreamingMeta),
   page("guides/ssg-and-static-export", guidesSsgAndStaticExport, guidesSsgAndStaticExportMeta),
   page("guides/link-and-navigation", guidesLinkAndNavigation, guidesLinkAndNavigationMeta),
@@ -236,6 +241,9 @@ export const docsPages = [
   page("deployments/static-hosting", deploymentsStaticHosting, deploymentsStaticHostingMeta),
   page("examples", examples, examplesMeta),
   page("reference/cli", referenceCli, referenceCliMeta),
+  page("reference/packages/virtual", referencePackagesVirtual, referencePackagesVirtualMeta),
+  page("reference/packages/store", referencePackagesStore, referencePackagesStoreMeta),
+  page("reference/packages/query", referencePackagesQuery, referencePackagesQueryMeta),
   page("reference/config", referenceConfig, referenceConfigMeta),
   page("reference/environment-variables", referenceEnvironmentVariables, referenceEnvironmentVariablesMeta),
   page("reference/route-module-exports", referenceRouteModuleExports, referenceRouteModuleExportsMeta),

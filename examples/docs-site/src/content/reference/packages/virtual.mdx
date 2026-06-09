@@ -1,0 +1,74 @@
+export const title = "Virtual";
+export const description = "Package overview for reactive list and grid virtualization primitives.";
+
+# @reckona/mreact-virtual
+
+`@reckona/mreact-virtual` provides reactive list and grid virtualization primitives for large lists, timelines, media grids, and scroll-restored views. Use it when rendering every item would be too expensive but you still want stable keys, bounded render entries, spacer sizes, visible ranges, and imperative scroll helpers.
+
+Source: [packages/virtual on GitHub](https://github.com/t-k/mreact/tree/main/packages/virtual).
+
+## Install
+
+```bash
+pnpm add @reckona/mreact-virtual
+```
+
+## Fixed lists
+
+Use `createVirtualList()` when every item occupies one row. Inputs such as `items`, `scrollOffset`, and `viewportSize` can read Mreact cells; when those cells change, entries and spacer cells recompute automatically.
+
+```ts
+import { createVirtualList } from "@reckona/mreact-virtual";
+
+const virtual = createVirtualList({
+  items: () => messages.get(),
+  getKey: (message) => message.id,
+  estimateItemSize: () => 48,
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+  overscan: 2,
+});
+
+virtual.topSpacerPx.get();
+virtual.entries.get();
+virtual.bottomSpacerPx.get();
+```
+
+Render the top spacer, the keyed `entries`, and the bottom spacer in order. `entries` includes overscan rows, while `visibleRange` reports only the viewport rows.
+
+## Grids and measured items
+
+Use `createVirtualGrid()` for responsive media grids. `getColumnCount()` is tracked like other input thunks, so cell-backed breakpoint changes update the virtual range.
+
+```ts
+import { createVirtualGrid } from "@reckona/mreact-virtual";
+
+const virtual = createVirtualGrid({
+  items: () => media.get(),
+  getKey: (item) => item.id,
+  estimateItemSize: () => 220,
+  getColumnCount: () => columnCount.get(),
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+});
+
+virtual.measureItem(photo.id, element.offsetHeight);
+```
+
+Use `measureItem()` when real item height becomes known after images or metadata load. `scrollToIndex()` and `scrollToKey()` help restore scroll positions after navigation.
+
+## API surface
+
+- `calculateVirtualRange()`
+- `createVirtualList()`
+- `createVirtualGrid()`
+- `Virtualizer.entries`
+- `Virtualizer.range`
+- `Virtualizer.visibleRange`
+- `Virtualizer.topSpacerPx`
+- `Virtualizer.bottomSpacerPx`
+- `Virtualizer.measureItem()`
+- `Virtualizer.scrollToIndex()`
+- `Virtualizer.scrollToKey()`
+
+For exact type signatures, use [Generated API](/reference/generated-api/).

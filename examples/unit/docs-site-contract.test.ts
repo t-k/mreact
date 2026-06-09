@@ -25,6 +25,10 @@ const requiredSlugs = [
   "deployments/static-hosting",
   "examples",
   "reference/cli",
+  "reference/packages/virtual",
+  "reference/packages/store",
+  "reference/packages/query",
+  "reference/generated-api",
   "reference/environment-variables",
 ] as const;
 
@@ -237,6 +241,54 @@ describe("docs-site example contract", () => {
     expect(examplesGuide).toContain("[Testing](/guides/testing/)");
     expect(examplesGuide).toContain("[Cloudflare](/deployments/cloudflare/)");
     expect(examplesGuide).toContain("[Static Hosting](/deployments/static-hosting/)");
+  });
+
+  test("documents companion packages without promoting the Next.js integration", async () => {
+    const nav = await readDocsSite("src/nav.config.ts");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const virtual = await readDocsSite("src/content/reference/packages/virtual.mdx");
+    const store = await readDocsSite("src/content/reference/packages/store.mdx");
+    const query = await readDocsSite("src/content/reference/packages/query.mdx");
+    const compat = await readDocsSite("src/content/guides/react-compatibility.mdx");
+
+    expect(nav).toContain('{ text: "Virtual", slug: "reference/packages/virtual" }');
+    expect(nav).toContain('{ text: "Store", slug: "reference/packages/store" }');
+    expect(nav).toContain('{ text: "Query", slug: "reference/packages/query" }');
+    expect(nav).toContain('{ text: "React Compatibility", slug: "guides/react-compatibility" }');
+    expect(nav).not.toContain("mreact-next");
+    expect(nav).not.toContain("Mreact Next");
+
+    expect(contentRegistry).toContain('page("reference/packages/virtual"');
+    expect(contentRegistry).toContain('page("reference/packages/store"');
+    expect(contentRegistry).toContain('page("reference/packages/query"');
+    expect(contentRegistry).toContain('page("guides/react-compatibility"');
+
+    expect(virtual).toContain("@reckona/mreact-virtual");
+    expect(virtual).toContain("createVirtualList");
+    expect(virtual).toContain("createVirtualGrid");
+    expect(virtual).toContain("measureItem");
+    expect(virtual).toContain("https://github.com/t-k/mreact/tree/main/packages/virtual");
+
+    expect(store).toContain("@reckona/mreact-store");
+    expect(store).toContain("createStore");
+    expect(store).toContain("createRequestStoreFactory");
+    expect(store).toContain("shallowEqual");
+    expect(store).toContain("@reckona/mreact-query");
+
+    expect(query).toContain("@reckona/mreact-query");
+    expect(query).toContain("createQueryClient");
+    expect(query).toContain("createQuery");
+    expect(query).toContain("createInfiniteQuery");
+    expect(query).toContain("createMutation");
+    expect(query).toContain("loader");
+
+    expect(compat).toContain("@reckona/mreact-compat");
+    expect(compat).toContain("React compatibility");
+    expect(compat).toContain("Most applications should import from `@reckona/mreact`");
+    expect(compat).toContain("React 19.2.6");
+    expect(compat).toContain("pnpm test:react-conformance");
+    expect(compat).toContain("examples/react-libraries");
+    expect(compat).not.toContain("@reckona/mreact-next");
   });
 
   test("documents project structure conventions for routes, params, 404s, and output", async () => {
@@ -1632,6 +1684,9 @@ describe("docs-site example contract", () => {
     const exportScript = await readDocsSite("scripts/export-static.ts");
     expect(exportScript).toContain("MREACT_DOCS_BASE_PATH");
     expect(exportScript).toContain("rewriteHtmlBasePaths");
+    expect(exportScript).toContain("copyGeneratedApiReference");
+    expect(exportScript).toContain('join(process.cwd(), "..", "..", "docs", "api")');
+    expect(exportScript).toContain('join(exportDir, "api")');
   });
 });
 

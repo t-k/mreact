@@ -1,0 +1,64 @@
+export const title = "Store";
+export const description = "Package overview for shared reactive application state.";
+
+# @reckona/mreact-store
+
+`@reckona/mreact-store` provides global and shared reactive state primitives for Mreact. Use it for application-wide UI state or domain state that should be updated through explicit actions, selectors, subscriptions, transactions, or persistence.
+
+Source: [packages/store on GitHub](https://github.com/t-k/mreact/tree/main/packages/store).
+
+## Install
+
+```bash
+pnpm add @reckona/mreact-store
+```
+
+## Basic usage
+
+```ts
+import { createStore, shallowEqual } from "@reckona/mreact-store";
+
+const counter = createStore({ count: 0, label: "counter" });
+
+const count = counter.select((state) => state.count);
+const labelSnapshot = counter.select((state) => ({ label: state.label }), shallowEqual);
+
+counter.set((state) => ({ count: state.count + 1 }));
+```
+
+`store.select()` returns a selected cell. Use `dispose()` for selectors created outside a framework cleanup lifecycle.
+
+## Request-isolated stores
+
+Use `createRequestStoreFactory()` when server code needs a fresh store per request instead of module-level shared state.
+
+```ts
+import { createRequestStoreFactory } from "@reckona/mreact-store";
+
+const createRequestStore = createRequestStoreFactory(() => ({
+  userId: undefined as string | undefined,
+  flash: undefined as string | undefined,
+}));
+
+export function requestStore() {
+  return createRequestStore();
+}
+```
+
+## Positioning
+
+Use `@reckona/mreact-store` for application state. Use `@reckona/mreact-query` for server state and async caches, and use form-specific helpers for form state.
+
+## API surface
+
+- `createStore()`
+- `store.get()`
+- `store.set()`
+- `store.replace()`
+- `store.select()`
+- `store.subscribe()`
+- `store.transaction()`
+- `createRequestStoreFactory()`
+- `shallowEqual()`
+
+For exact type signatures, use [Generated API](/reference/generated-api/).

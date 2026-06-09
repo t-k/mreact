@@ -25,6 +25,7 @@ export const sidebar: readonly NavGroup[] = [
       { text: "Routing", slug: "guides/routing" },
       { text: "Layouts and Slots", slug: "guides/layouts-and-slots" },
       { text: "Server and Client Model", slug: "guides/server-and-client-model" },
+      { text: "React Compatibility", slug: "guides/react-compatibility" },
       { text: "SSR and Streaming", slug: "guides/ssr-and-streaming" },
       { text: "Link and Navigation", slug: "guides/link-and-navigation" },
       { text: "Data Loading", slug: "guides/data-loading" },
@@ -75,6 +76,9 @@ export const sidebar: readonly NavGroup[] = [
     text: "Reference",
     items: [
       { text: "CLI", slug: "reference/cli" },
+      { text: "Virtual", slug: "reference/packages/virtual" },
+      { text: "Store", slug: "reference/packages/store" },
+      { text: "Query", slug: "reference/packages/query" },
       { text: "Config", slug: "reference/config" },
       { text: "Environment Variables", slug: "reference/environment-variables" },
       { text: "Route Module Exports", slug: "reference/route-module-exports" },

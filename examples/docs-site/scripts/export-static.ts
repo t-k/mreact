@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
 
@@ -20,6 +20,7 @@ if (basePath !== "") {
 await writeFile(join(exportDir, ".nojekyll"), "");
 await mkdir(join(exportDir, "404"), { recursive: true });
 await copyFile(join(exportDir, "404", "index.html"), join(exportDir, "404.html"));
+await copyGeneratedApiReference();
 
 function normalizeBasePath(value: string): string {
   const trimmed = value.trim();
@@ -50,4 +51,18 @@ async function rewriteHtmlBasePaths(directory: string, base: string): Promise<vo
       await writeFile(path, rewritten);
     }
   }
+}
+
+async function copyGeneratedApiReference(): Promise<void> {
+  const sourceDir = join(process.cwd(), "..", "..", "docs", "api");
+  const targetDir = join(exportDir, "api");
+
+  try {
+    await access(sourceDir);
+  } catch {
+    return;
+  }
+
+  await rm(targetDir, { recursive: true, force: true });
+  await cp(sourceDir, targetDir, { recursive: true });
 }

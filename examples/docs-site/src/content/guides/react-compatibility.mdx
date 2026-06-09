@@ -1,0 +1,55 @@
+export const title = "React Compatibility";
+export const description = "How Mreact's React-compatible runtime fits into app code, libraries, tests, and benchmarks.";
+
+# React Compatibility
+
+Mreact's primary app path is the compiled App Router model, but the workspace also includes `@reckona/mreact-compat` for React compatibility. Use it when you need React-like runtime behavior, when you are evaluating third-party React libraries, or when an integration needs React-style JSX runtimes, hooks, roots, scheduling, hydration, Suspense, or server rendering APIs.
+
+Most applications should import from `@reckona/mreact`:
+
+```ts
+import { createElement, useState } from "@reckona/mreact";
+```
+
+Importing `@reckona/mreact-compat` directly is mainly for tests, framework integration, compatibility experiments, and package-level debugging:
+
+```ts
+import ReactCompat, { createElement, useState } from "@reckona/mreact-compat";
+import { jsx } from "@reckona/mreact-compat/jsx-runtime";
+```
+
+## What it covers
+
+`@reckona/mreact-compat` implements React compatibility for element creation, fragments, refs, hooks, context, roots, scheduling, reconciliation, hydration, Suspense, server rendering, resource hints, JSX runtimes, and selected Flight integration surfaces.
+
+The compatibility gate tracks React 19.2.6 public export coverage for React, React DOM, React DOM client, and React DOM server. It is a compatibility runtime, not a byte-for-byte React reconciler, so use tests for the specific library behavior you depend on.
+
+## Library evaluation workflow
+
+Start with [examples/react-libraries on GitHub](https://github.com/t-k/mreact/tree/main/examples/react-libraries) when you want to evaluate ecosystem packages. That example exercises libraries such as Recharts, Lexical, Conform, Zod, and Radix UI through a real Mreact app.
+
+```bash
+pnpm --filter @reckona/example-react-libraries dev
+pnpm --filter @reckona/example-react-libraries build
+pnpm --filter @reckona/example-react-libraries test:e2e
+```
+
+If a package works in the compatibility example but fails in an App Router route, check whether the route should opt into a client boundary, whether the package imports browser-only modules during server render, and whether it expects React DOM behavior that is not part of the tested compatibility surface yet.
+
+## Focused conformance checks
+
+Run the focused compatibility suite when changing the runtime or validating a React-facing behavior:
+
+```bash
+pnpm test:react-conformance
+pnpm exec vitest run packages/react-compat/test/react-official-conformance.test.ts packages/react-compat/test/react-official-suite-gate.test.ts
+```
+
+For exact exported symbols and signatures, use the generated API reference from [Generated API](/reference/generated-api/).
+
+## Related pages
+
+- [Server and Client Model](/guides/server-and-client-model/)
+- [Testing](/guides/testing/)
+- [Examples](/examples/)
+- [Generated API](/reference/generated-api/)
