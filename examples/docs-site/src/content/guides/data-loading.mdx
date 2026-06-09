@@ -1,8 +1,212 @@
 export const title = "Data Loading";
-export const description = "Load route data with loaders and pass it into pages.";
+export const description = "Load route data with loaders, typed params, request data, metadata, redirects, and query cache hydration.";
 
 # Data loading
 
-Export `loader(context)` from a page module to load data before render. The context includes params, the current request, a per-request query client, and adapter environment when available.
+Use a route `loader` when a page needs data before render. A loader runs on the server, receives route context, and passes its return value to the page as `props.data`.
 
-Loaders may return data, throw `notFound()`, or return a `Response` for redirects and custom status handling.
+## Load data before render
+
+Export `loader(context)` from a page module. The router calls it before rendering the page, awaits the result, and gives the resolved value to the page component.
+
+```tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+
+interface UserData {
+  name: string;
+  role: string;
+}
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+): Promise<UserData> {
+  const user = await findUser(context.params.id);
+
+  return {
+    name: user.name,
+    role: user.role,
+  };
+}
+
+export default function Page(props: { data: UserData }) {
+  return (
+    <main>
+      <h1>{props.data.name}</h1>
+      <p>{props.data.role}</p>
+    </main>
+  );
+}
+```
+
+Loader code stays server-side. Put database calls, private API calls, secret environment reads, and filesystem work in the loader instead of in a client boundary.
+
+## Read params and request
+
+`LoaderContext<TParams>` lets you type dynamic route params. Static routes can use `LoaderContext` directly, and dynamic routes should pass the params shape they expect.
+
+```tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+
+type UserParams = {
+  id: string;
+};
+
+export async function loader(
+  context: LoaderContext<UserParams>,
+) {
+  const url = new URL(context.request.url);
+  const preview = url.searchParams.get("preview") === "1";
+
+  return {
+    id: context.params.id,
+    preview,
+    userAgent: context.request.headers.get("user-agent"),
+  };
+}
+```
+
+The context contains `params`, `request`, `queryClient`, and `env` when an adapter supplies platform environment data. Use `context.request` for URL search params, headers, cookies, method, and body reads.
+
+## Return typed data
+
+Keep the loader return type explicit when the route data becomes part of the page contract. This makes `props.data` readable and keeps metadata, client boundaries, and tests aligned with the same shape.
+
+```tsx
+interface UserData {
+  id: string;
+  name: string;
+  joinedAt: string;
+}
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+): Promise<UserData> {
+  const user = await findUser(context.params.id);
+
+  return {
+    id: user.id,
+    name: user.name,
+    joinedAt: user.joinedAt.toISOString(),
+  };
+}
+
+export default function Page(props: { data: UserData }) {
+  return <h1>{props.data.name}</h1>;
+}
+```
+
+Return plain serializable data when the page crosses into client interactivity. Server-rendered pages can consume richer values during render, but client boundaries should receive values that can be serialized into the route payload.
+
+## Handle missing data and redirects
+
+Use `notFound()` when a loader determines that the current route should render the nearest `not-found.tsx` boundary. Use a `Response` when the request should become a redirect or another custom HTTP response.
+
+```tsx
+import { notFound, type LoaderContext } from "@reckona/mreact-router";
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+) {
+  const user = await findUser(context.params.id);
+
+  if (user === undefined) {
+    notFound();
+  }
+
+  if (!user.canView) {
+    return Response.redirect(
+      new URL("/login", context.request.url),
+      302,
+    );
+  }
+
+  return { user };
+}
+```
+
+Prefer doing route-level existence checks in the loader instead of rendering a page that later decides it is a 404. That keeps status codes, metadata, and cache behavior consistent.
+
+## Use the per-request query client
+
+The loader receives a per-request query client. Use it when server data should also hydrate client-side query observers.
+
+```tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+
+const USER_QUERY_KEY = ["user"];
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+) {
+  return context.queryClient.fetchQuery({
+    queryKey: [...USER_QUERY_KEY, context.params.id],
+    staleTime: 30_000,
+    queryFn: () => findUser(context.params.id),
+  });
+}
+```
+
+After the route renders, Mreact can dehydrate the request query cache for client code that uses the same query key. Set a `staleTime` when the browser should reuse the server-fetched result during the initial mount instead of immediately revalidating it.
+
+## Use loader data in metadata
+
+`generateMetadata` can receive the loader result. Use this when the page title, description, Open Graph tags, or robots policy depend on the loaded record.
+
+```tsx
+import type { LoaderContext, RouteMetadata } from "@reckona/mreact-router";
+
+interface UserData {
+  name: string;
+  summary: string;
+}
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+): Promise<UserData> {
+  return await findUserProfile(context.params.id);
+}
+
+export function generateMetadata(
+  { data }: { data: UserData },
+): RouteMetadata {
+  return {
+    title: `${data.name} | Users`,
+    description: data.summary,
+  };
+}
+
+export default function Page(props: { data: UserData }) {
+  return <h1>{props.data.name}</h1>;
+}
+```
+
+Use this pattern when metadata needs the same authoritative data as the page. Keep metadata-only work in `generateMetadata` only when it does not need the page loader result.
+
+## Deferred data
+
+Use `defer()` when part of the route data can stream later behind an `<Await>` boundary. Keep the first paint data in the immediate object, and defer slower secondary data.
+
+```tsx
+import { defer, type LoaderContext } from "@reckona/mreact-router";
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+) {
+  const user = await findUser(context.params.id);
+
+  return defer({
+    user,
+    activity: loadRecentActivity(user.id),
+  });
+}
+```
+
+The streaming behavior, `<Await>` placement, placeholders, and error boundaries are covered in [SSR and Streaming](/guides/ssr-and-streaming/).
+
+## Related pages
+
+- [Routing](/guides/routing/)
+- [SSR and Streaming](/guides/ssr-and-streaming/)
+- [Route Handlers](/guides/route-handlers/)
+- [HTTP APIs](/guides/http-apis/)
+- [Route Module Exports](/reference/route-module-exports/)

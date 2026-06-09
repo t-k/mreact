@@ -396,6 +396,38 @@ describe("docs-site example contract", () => {
     expect(css).not.toContain("padding: 2.7rem 1rem 1rem");
   });
 
+  test("documents page data loading with loaders, params, request data, and metadata", async () => {
+    const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
+
+    expect(dataLoading).toContain("## Load data before render");
+    expect(dataLoading).toContain("export async function loader");
+    expect(dataLoading).toContain("type LoaderContext");
+    expect(dataLoading).toContain("props.data");
+    expect(dataLoading).toContain("## Read params and request");
+    expect(dataLoading).toContain("context.params.id");
+    expect(dataLoading).toContain("new URL(context.request.url)");
+    expect(dataLoading).toContain("searchParams");
+    expect(dataLoading).toContain("## Return typed data");
+    expect(dataLoading).toContain("interface UserData");
+    expect(dataLoading).toContain("Promise<UserData>");
+    expect(dataLoading).toContain("## Handle missing data and redirects");
+    expect(dataLoading).toContain("notFound()");
+    expect(dataLoading).toContain("Response.redirect");
+    expect(dataLoading).toContain("## Use the per-request query client");
+    expect(dataLoading).toContain("context.queryClient.fetchQuery");
+    expect(dataLoading).toContain("## Use loader data in metadata");
+    expect(dataLoading).toContain("generateMetadata");
+    expect(dataLoading).toContain("{ data }: { data: UserData }");
+    expect(dataLoading).toContain("RouteMetadata");
+    expect(dataLoading).toContain("## Deferred data");
+    expect(dataLoading).toContain("defer()");
+    expect(dataLoading).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
+    expect(dataLoading).toContain("[Routing](/guides/routing/)");
+    expect(dataLoading).toContain("[Route Handlers](/guides/route-handlers/)");
+    expect(dataLoading).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(dataLoading).toContain("[Route Module Exports](/reference/route-module-exports/)");
+  });
+
   test("renders readable document lists and the latest benchmark run", async () => {
     const css = await readDocsSite("src/app/globals.css");
     const benchmarks = await readDocsSite("src/content/benchmarks.mdx");
