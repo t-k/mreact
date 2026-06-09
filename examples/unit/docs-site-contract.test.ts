@@ -119,8 +119,7 @@ describe("docs-site example contract", () => {
     expect(nav).not.toContain("Production Checklist");
     expect(nav).not.toContain('slug: "deployments/production-checklist"');
     expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
-    expect(nav).toContain('{ text: "Full API Reference", slug: "api" }');
-    expect(nav.indexOf('slug: "reference/api"')).toBeLessThan(nav.indexOf('slug: "api"'));
+    expect(nav).not.toContain('{ text: "Full API Reference", slug: "api" }');
     expect(nav).not.toContain("Generated API");
     expect(nav.indexOf('slug: "deployments/host-policy-and-proxies"')).toBeLessThan(
       nav.indexOf('slug: "deployments/source-maps"'),
@@ -162,6 +161,10 @@ describe("docs-site example contract", () => {
     expect(layout).toContain('src={sitePath("docs-sidebar.js")}');
     expect(layout).toContain('src={sitePath("docs-copy.js")}');
     expect(layout).toContain('src={sitePath("docs-search.js")}');
+    expect(layout).toContain('src={sitePath("docs-theme.js")}');
+    expect(layout).toContain('<meta name="color-scheme" content="light dark" />');
+    expect(layout).toContain('localStorage.getItem("mreact:docs:theme")');
+    expect(layout).toContain('data-theme-toggle');
     expect(layout).toContain("<search");
     expect(layout).toContain('type="search"');
     expect(layout).toContain('aria-label="Search documentation"');
@@ -194,9 +197,29 @@ describe("docs-site example contract", () => {
     expect(sidebarScript).not.toContain("innerHTML");
   });
 
+  test("supports a persisted light and dark theme toggle", async () => {
+    const css = await readDocsSite("src/app/globals.css");
+    const themeScript = await readDocsSite("public/docs-theme.js");
+
+    expect(css).toContain("color-scheme: light dark");
+    expect(css).toContain('html[data-theme="light"]');
+    expect(css).toContain('html[data-theme="dark"]');
+    expect(css).toContain(":root:not([data-theme=\"light\"])");
+    expect(css).toContain(".theme-toggle");
+    expect(css).toContain("font-size: 1rem");
+    expect(css).toContain("--bg: oklch(");
+    expect(css).toContain("--brand: oklch(");
+    expect(themeScript).toContain('const themeStorageKey = "mreact:docs:theme"');
+    expect(themeScript).toContain('window.matchMedia("(prefers-color-scheme: dark)")');
+    expect(themeScript).toContain('themeMediaQuery.addEventListener("change"');
+    expect(themeScript).toContain("localStorage.setItem(themeStorageKey, theme)");
+    expect(themeScript).toContain('colorSchemeMeta?.setAttribute("content", theme)');
+    expect(themeScript).not.toContain("innerHTML");
+  });
+
   test("restores the sidebar position and marks the current page in the browser", async () => {
     const sidebarScript = await readDocsSite("public/docs-sidebar.js");
-    const window = new Window({ url: "https://docs.example.com/api/" });
+    const window = new Window({ url: "https://docs.example.com/reference/api/" });
 
     try {
       window.document.body.innerHTML = `
@@ -204,7 +227,6 @@ describe("docs-site example contract", () => {
           <a class="nav-link" href="/">Overview</a>
           <a class="nav-link" href="/guides/app-router/">App Router</a>
           <a class="nav-link" href="/reference/api/">API Reference</a>
-          <a class="nav-link" href="/api/">Full API Reference</a>
         </aside>
       `;
       window.sessionStorage.setItem("mreact:docs:sidebar-scroll", "240");
@@ -215,7 +237,7 @@ describe("docs-site example contract", () => {
       });
 
       const sidebar = window.document.querySelector(".site-sidebar");
-      const currentLink = window.document.querySelector('a[href="/api/"]');
+      const currentLink = window.document.querySelector('a[href="/reference/api/"]');
 
       expect(sidebar).toBeInstanceOf(window.HTMLElement);
       expect(sidebar?.scrollTop).toBe(240);

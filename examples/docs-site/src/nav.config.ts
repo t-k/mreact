@@ -94,7 +94,6 @@ export const sidebar: readonly NavGroup[] = [
       { text: "Auth API", slug: "reference/auth-api" },
       { text: "Cache API", slug: "reference/cache-api" },
       { text: "API Reference", slug: "reference/api" },
-      { text: "Full API Reference", slug: "api" },
     ],
   },
 ] as const;

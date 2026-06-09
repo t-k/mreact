@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --bg: oklch(0.985 0.002 106);
   --bg-soft: oklch(0.949 0.006 75);
   --text: oklch(0.216 0.006 56);
@@ -21,6 +21,26 @@
   --tree-dir: oklch(0.828 0.189 84.429);
   --tree-file: oklch(0.929 0.013 255.508);
   --tree-param: oklch(0.865 0.127 207.078);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: oklch(0.17 0.03 270);
+  --bg-soft: oklch(0.23 0.035 265);
+  --text: oklch(0.94 0.018 264);
+  --text-2: oklch(0.76 0.033 264);
+  --text-3: oklch(0.62 0.04 265);
+  --border: oklch(0.28 0.04 265);
+  --brand: oklch(0.785 0.115 274.713);
+  --brand-strong: oklch(0.87 0.065 274.039);
+  --accent: oklch(0.746 0.16 232.661);
+  --code-bg: oklch(0.16 0.03 265);
+  --code-panel-bg: oklch(0.129 0.042 264.695);
+  --code-panel-border: oklch(0.21 0.034 264.665);
 }
 
 html {
@@ -86,10 +106,10 @@ a:hover {
 }
 
 .site-sidebar-header {
-  align-items: baseline;
+  align-items: center;
   display: flex;
   gap: 0.75rem;
-  justify-content: space-between;
+  flex-wrap: wrap;
   margin-bottom: 1.35rem;
 }
 
@@ -112,6 +132,30 @@ a:hover {
 .site-source-link:hover {
   color: var(--brand-strong);
   text-decoration: underline;
+}
+
+.theme-toggle {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 999rem;
+  color: var(--text-2);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 0.38rem 0.65rem;
+}
+
+.theme-toggle:hover {
+  border-color: color-mix(in oklch, var(--brand) 42%, var(--border));
+  color: var(--brand-strong);
+}
+
+.theme-toggle[aria-pressed="true"] {
+  background: color-mix(in oklch, var(--brand) 14%, var(--bg-soft));
+  color: var(--brand-strong);
 }
 
 .site-search {
@@ -922,7 +966,7 @@ a:hover {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: oklch(0.17 0.03 270);
     --bg-soft: oklch(0.23 0.035 265);

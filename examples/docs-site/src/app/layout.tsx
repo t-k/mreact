@@ -12,11 +12,19 @@ export default function RootLayout() {
     <html lang="en">
       <head>
         <meta charset="utf-8" />
+        <meta name="color-scheme" content="light dark" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{const theme=localStorage.getItem("mreact:docs:theme");if(theme==="light"||theme==="dark"){document.documentElement.dataset.theme=theme;const meta=document.querySelector(\'meta[name="color-scheme"]\');if(meta)meta.setAttribute("content",theme);}}catch{}}',
+          }}
+        ></script>
         <script src={sitePath("docs-sidebar.js")} defer></script>
         <script src={sitePath("docs-copy.js")} defer></script>
         <script src={sitePath("docs-search.js")} defer></script>
         <script src={sitePath("docs-benchmarks.js")} defer></script>
+        <script src={sitePath("docs-theme.js")} defer></script>
       </head>
       <body>
         <a class="skip-link" href="#content">
@@ -31,6 +39,9 @@ export default function RootLayout() {
               <a class="site-source-link" href="https://github.com/t-k/mreact">
                 GitHub
               </a>
+              <button class="theme-toggle" type="button" data-theme-toggle aria-pressed="false">
+                Theme: System
+              </button>
             </div>
             <search class="site-search" aria-label="Search documentation">
               <label class="site-search-label" for="site-search-input">
