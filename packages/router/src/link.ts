@@ -3,6 +3,13 @@ import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
 import type { AppRouteLinkHref } from "./typed-routes.js";
+export type {
+  AppRouteLinkHref,
+  AppRouteLinkHrefSuffix,
+  AppRouteLinkPathname,
+  AppRouteLinkSegment,
+  AppRouteLinkSegments,
+} from "./typed-routes.js";
 
 const TRUSTED_LINK_HTML = Symbol.for("modular.react.router.trusted_link_html");
 
@@ -48,7 +55,7 @@ export function linkProps(options: LinkOptions<string>): Record<string, string> 
   };
 }
 
-type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never]
+export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never]
   ? unknown
   : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`>
     ? { readonly __mreactRoutePatternHrefError__: never }

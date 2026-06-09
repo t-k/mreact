@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-compat",
-  "version": "0.0.150",
+  "version": "0.0.151",
   "description": "React-compatible runtime implementation for mreact.",
   "keywords": [
     "compatibility",

@@ -9,18 +9,45 @@ import type { ReactCompatElement } from '@reckona/mreact-compat';
 import type { ReactCompatNode } from '@reckona/mreact-compat';
 
 // @public (undocumented)
-export function Link(props: LinkProps): ReactCompatElement;
+export interface AppRouteDeclarations {
+}
 
 // @public (undocumented)
-export function Link(sink: HtmlSink, props: LinkProps): void;
+export type AppRouteLinkHref<Path extends `/${string}`> = `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
+
+// @public (undocumented)
+export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
+
+// @public (undocumented)
+export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/" ? "/" : Path extends `/${infer Segments}` ? `/${AppRouteLinkSegments<Segments>}` : never;
+
+// @public (undocumented)
+export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}` ? string : Segment;
+
+// @public (undocumented)
+export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}` ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}` : AppRouteLinkSegment<Segments>;
+
+// @public (undocumented)
+export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {
+    readonly __mreactRoutePatternHrefError__: never;
+} : unknown;
+
+// @public (undocumented)
+export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
+
+// @public (undocumented)
+export function Link(sink: HtmlSink, props: LinkProps<string>): void;
 
 // @public (undocumented)
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
 // @public (undocumented)
-export interface LinkOptions {
+export type LinkHref = [RegisteredAppRoutePath] extends [never] ? string : AppRouteLinkHref<RegisteredAppRoutePath>;
+
+// @public (undocumented)
+export interface LinkOptions<Href extends string = LinkHref> {
     // (undocumented)
-    href: string;
+    href: Href;
     // (undocumented)
     prefetch?: LinkPrefetch | undefined;
     // (undocumented)
@@ -35,7 +62,7 @@ export interface LinkOptions {
 export type LinkPrefetch = "intent" | "viewport" | "none" | false;
 
 // @public (undocumented)
-export interface LinkProps extends LinkOptions {
+export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
     // (undocumented)
     [attribute: string]: unknown;
     // (undocumented)
@@ -43,13 +70,18 @@ export interface LinkProps extends LinkOptions {
 }
 
 // @public (undocumented)
-export function linkProps(options: LinkOptions): Record<string, string>;
+export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
 // @public (undocumented)
 export type LinkScroll = "top" | "preserve";
 
 // @public (undocumented)
 export type LinkTransition = "auto" | "none" | false;
+
+// @public (undocumented)
+export type RegisteredAppRoutePath = AppRouteDeclarations extends {
+    readonly path: infer Path;
+} ? Extract<Path, `/${string}`> : never;
 
 // @public (undocumented)
 export type TrustedLinkHtml = {
