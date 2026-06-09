@@ -16,8 +16,8 @@
   },
   "devDependencies": {
     "@mdx-js/rollup": "^3.1.1",
+    "@shikijs/rehype": "^4.2.0",
     "@tailwindcss/vite": "4.3.0",
-    "rehype-highlight": "^7.0.2",
     "rehype-slug": "^6.0.0",
     "remark-frontmatter": "^5.0.0",
     "remark-mdx-frontmatter": "^5.2.0",

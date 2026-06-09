@@ -18,13 +18,6 @@
   --code-copy-bg: oklch(0.21 0.034 264.665);
   --code-copy-border: oklch(0.372 0.044 257.287);
   --code-copy-bg-hover: oklch(0.279 0.041 260.031);
-  --syntax-keyword: oklch(0.809 0.105 251.813);
-  --syntax-string: oklch(0.871 0.15 154.449);
-  --syntax-title: oklch(0.828 0.189 84.429);
-  --syntax-attr: oklch(0.865 0.127 207.078);
-  --syntax-comment: oklch(0.704 0.04 256.788);
-  --syntax-number: oklch(0.833 0.145 321.434);
-  --syntax-type: oklch(0.811 0.111 293.571);
   --tree-dir: oklch(0.828 0.189 84.429);
   --tree-file: oklch(0.929 0.013 255.508);
   --tree-param: oklch(0.865 0.127 207.078);
@@ -266,6 +259,14 @@ a:hover {
   scrollbar-color: var(--text-3) var(--code-panel-bg);
 }
 
+.doc-article .shiki {
+  background: var(--code-panel-bg) !important;
+}
+
+.doc-article .shiki code {
+  background: transparent;
+}
+
 .doc-article .code-block pre code {
   background: transparent;
   border: 0;
@@ -313,44 +314,6 @@ a:hover {
   background: color-mix(in oklch, var(--tree-param) 14%, transparent);
   color: var(--tree-param);
   font-weight: 700;
-}
-
-.doc-article .hljs-keyword,
-.doc-article .hljs-selector-tag {
-  color: var(--syntax-keyword);
-}
-
-.doc-article .hljs-string,
-.doc-article .hljs-template-string {
-  color: var(--syntax-string);
-}
-
-.doc-article .hljs-title,
-.doc-article .hljs-title.function_,
-.doc-article .hljs-built_in {
-  color: var(--syntax-title);
-}
-
-.doc-article .hljs-attr,
-.doc-article .hljs-attribute,
-.doc-article .hljs-property {
-  color: var(--syntax-attr);
-}
-
-.doc-article .hljs-comment {
-  color: var(--syntax-comment);
-  font-style: italic;
-}
-
-.doc-article .hljs-number,
-.doc-article .hljs-literal {
-  color: var(--syntax-number);
-}
-
-.doc-article .hljs-type,
-.doc-article .hljs-variable,
-.doc-article .hljs-params {
-  color: var(--syntax-type);
 }
 
 .doc-footer {

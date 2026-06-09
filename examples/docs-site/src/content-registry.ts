@@ -89,12 +89,12 @@ function applyHtmlReplacements(html: string, replacements: readonly HtmlReplacem
 }
 
 function enhanceCodeBlocks(html: string): string {
-  return html.replaceAll(/<pre>([\s\S]*?)<\/pre>/g, (_match, preBody: string) => {
+  return html.replaceAll(/<pre\b([^>]*)>([\s\S]*?)<\/pre>/g, (_match, preAttributes: string, preBody: string) => {
     const highlightedPreBody = highlightFileTreeCodeBlock(preBody);
     const fileTreeBlockClass = "code-block is-file-tree";
     const blockClass = highlightedPreBody === preBody ? "code-block" : fileTreeBlockClass;
 
-    return `<div class="${blockClass}"><button class="code-copy" type="button">Copy</button><pre>${highlightedPreBody}</pre></div>`;
+    return `<div class="${blockClass}"><button class="code-copy" type="button">Copy</button><pre${preAttributes}>${highlightedPreBody}</pre></div>`;
   });
 }
 
@@ -110,7 +110,16 @@ function highlightFileTreeCodeBlock(preBody: string): string {
     return preBody;
   }
 
-  if (!attributes.includes("language-text") || !isFileTree(codeBody)) {
+  if (!attributes.includes("language-text")) {
+    return preBody;
+  }
+
+  const highlightedShikiCodeBody = highlightShikiFileTreeCodeBlock(codeBody);
+  if (highlightedShikiCodeBody !== undefined) {
+    return `<code${attributes}>${highlightedShikiCodeBody}</code>`;
+  }
+
+  if (!isFileTree(codeBody)) {
     return preBody;
   }
 
@@ -118,6 +127,22 @@ function highlightFileTreeCodeBlock(preBody: string): string {
     .split("\n")
     .map((line) => highlightFileTreeLine(line))
     .join("\n")}</code>`;
+}
+
+function highlightShikiFileTreeCodeBlock(codeBody: string): string | undefined {
+  const lineMatches = [...codeBody.matchAll(/<span class="line"><span>(.*?)<\/span><\/span>/g)];
+  if (lineMatches.length === 0) {
+    return undefined;
+  }
+
+  const lines = lineMatches.map((match) => match[1] ?? "");
+  if (!isFileTree(lines.join("\n"))) {
+    return undefined;
+  }
+
+  return codeBody.replaceAll(/<span class="line"><span>(.*?)<\/span><\/span>/g, (_match, line: string) => {
+    return `<span class="line">${highlightFileTreeLine(line)}</span>`;
+  });
 }
 
 function isFileTree(codeBody: string): boolean {

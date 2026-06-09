@@ -1,7 +1,7 @@
 import mdx from "@mdx-js/rollup";
+import rehypeShiki from "@shikijs/rehype";
 import tailwindcss from "@tailwindcss/vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
-import rehypeHighlight from "rehype-highlight";
 import rehypeSlug from "rehype-slug";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
@@ -15,7 +15,7 @@ export default defineConfig({
     mdx({
       jsxImportSource: "@reckona/mreact",
       jsxRuntime: "automatic",
-      rehypePlugins: [rehypeSlug, rehypeHighlight],
+      rehypePlugins: [rehypeSlug, [rehypeShiki, { addLanguageClass: true, theme: "github-dark" }]],
       remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
     }),
     tailwindcss(),
