@@ -13,7 +13,7 @@ Export `loader(context)` from a page module. The router calls it before renderin
 
 ```tsx
 // src/app/users/$id/page.tsx
-import type { LoaderContext } from "@reckona/mreact-router";
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
 
 interface UserData {
   name: string;
@@ -31,14 +31,14 @@ export async function loader(
   };
 }
 
-export default function Page(props: { data: UserData }) {
+export default definePage<typeof loader>(function Page(props) {
   return (
     <main>
       <h1>{props.data.name}</h1>
       <p>{props.data.role}</p>
     </main>
   );
-}
+});
 ```
 
 Loader code stays server-side. Put database calls, private API calls, secret environment reads, and filesystem work in the loader instead of in a client boundary.
@@ -72,9 +72,11 @@ The context contains `params`, `request`, `queryClient`, and `env` when an adapt
 
 ## Return typed data
 
-Keep the loader return type explicit when the route data becomes part of the page contract. This makes `props.data` readable and keeps metadata, client boundaries, and tests aligned with the same shape.
+Keep the loader return type explicit when the route data becomes part of the page contract. This makes the route data shape readable and keeps metadata, client boundaries, and tests aligned with the same value.
 
 ```tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+
 interface UserData {
   id: string;
   name: string;
@@ -93,19 +95,51 @@ export async function loader(
   };
 }
 
-export default function Page(props: { data: UserData }) {
-  return <h1>{props.data.name}</h1>;
-}
 ```
 
 Return plain serializable data when the page crosses into client interactivity. Server-rendered pages can consume richer values during render, but client boundaries should receive values that can be serialized into the route payload.
 
-## Handle missing data and redirects
+## Infer page props from the loader
 
-Use `notFound()` when a loader determines that the current route should render the nearest `not-found.tsx` boundary. Use a `Response` when the request should become a redirect or another custom HTTP response.
+Use `definePage<typeof loader>()` when the page component lives in the same route module as the loader. The helper infers `props.data` from the loader return type and `props.params` from `LoaderContext`, so the page does not need to repeat the loader data shape.
 
 ```tsx
-import { notFound, type LoaderContext } from "@reckona/mreact-router";
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+
+interface UserData {
+  id: string;
+  name: string;
+  joinedAt: string;
+}
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+): Promise<UserData> {
+  const user = await findUser(context.params.id);
+
+  return {
+    id: user.id,
+    name: user.name,
+    joinedAt: user.joinedAt.toISOString(),
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  return (
+    <main>
+      <h1>{props.data.name}</h1>
+      <p>Route param: {props.params.id}</p>
+    </main>
+  );
+});
+```
+
+## Handle missing data and redirects
+
+Use `throwNotFound()` when a loader determines that the current route should render the nearest `not-found.tsx` boundary. It is the explicit alias of `notFound()` and makes the non-returning control flow clear in code examples. Use a `Response` when the request should become a redirect or another custom HTTP response.
+
+```tsx
+import { throwNotFound, type LoaderContext } from "@reckona/mreact-router";
 
 export async function loader(
   context: LoaderContext<{ id: string }>,
@@ -113,7 +147,7 @@ export async function loader(
   const user = await findUser(context.params.id);
 
   if (user === undefined) {
-    notFound();
+    throwNotFound();
   }
 
   if (!user.canView) {

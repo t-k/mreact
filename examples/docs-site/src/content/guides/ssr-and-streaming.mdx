@@ -60,16 +60,16 @@ If an `<Await>` has no placeholder, the render waits at that point. Use that for
 
 ## Deferred loader data
 
-Use `defer()` when a loader has critical data plus non-critical promises. Keep redirects, `notFound()`, and status-bearing `Response` results in the critical path before returning deferred data.
+Use `defer()` when a loader has critical data plus non-critical promises. Keep redirects, `throwNotFound()`, and status-bearing `Response` results in the critical path before returning deferred data.
 
 ```tsx
-import { defer, notFound, type LoaderContext } from "@reckona/mreact-router";
+import { defer, definePage, throwNotFound, type LoaderContext } from "@reckona/mreact-router";
 
 export async function loader(context: LoaderContext<{ id: string }>) {
   const user = await loadUser(context.params.id);
 
   if (user === undefined) {
-    notFound();
+    throwNotFound();
   }
 
   return defer({
@@ -78,9 +78,7 @@ export async function loader(context: LoaderContext<{ id: string }>) {
   });
 }
 
-export default function UserPage(props: {
-  readonly data: { readonly posts: Promise<Post[]>; readonly user: User };
-}) {
+export default definePage<typeof loader>(function UserPage(props) {
   return (
     <main>
       <h1>{props.data.user.name}</h1>
@@ -89,7 +87,7 @@ export default function UserPage(props: {
       </Await>
     </main>
   );
-}
+});
 ```
 
 Render every deferred promise through `<Await catch>` or otherwise observe it. `defer()` marks top-level promises as handled so early rejections can wait for the boundary handler.

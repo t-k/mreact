@@ -338,7 +338,8 @@ describe("docs-site example contract", () => {
     expect(ssrStreaming).toContain("catch={(error)");
     expect(ssrStreaming).toContain("## Deferred loader data");
     expect(ssrStreaming).toContain("defer({");
-    expect(ssrStreaming).toContain("notFound()");
+    expect(ssrStreaming).toContain("throwNotFound()");
+    expect(ssrStreaming).toContain("definePage<typeof loader>");
     expect(ssrStreaming).toContain("## loading.tsx");
     expect(ssrStreaming).toContain("// src/app/streaming/loading.tsx");
     expect(ssrStreaming).toContain("## Streaming lists");
@@ -423,6 +424,7 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("The `$id` directory segment becomes `context.params.id`");
     expect(dataLoading).toContain("export async function loader");
     expect(dataLoading).toContain("type LoaderContext");
+    expect(dataLoading).toContain("definePage<typeof loader>");
     expect(dataLoading).toContain("props.data");
     expect(dataLoading).toContain("## Read params and request");
     expect(dataLoading).toContain("context.params.id");
@@ -431,8 +433,10 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("## Return typed data");
     expect(dataLoading).toContain("interface UserData");
     expect(dataLoading).toContain("Promise<UserData>");
+    expect(dataLoading).toContain("## Infer page props from the loader");
+    expect(dataLoading).toContain("props.params.id");
     expect(dataLoading).toContain("## Handle missing data and redirects");
-    expect(dataLoading).toContain("notFound()");
+    expect(dataLoading).toContain("throwNotFound()");
     expect(dataLoading).toContain("Response.redirect");
     expect(dataLoading).toContain("## Use the per-request query client");
     expect(dataLoading).toContain("context.queryClient.fetchQuery");
@@ -449,6 +453,33 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("[Routing](/guides/routing/)");
     expect(dataLoading).toContain("[HTTP APIs](/guides/http-apis/)");
     expect(dataLoading).toContain("[Route Module Exports](/reference/route-module-exports/)");
+  });
+
+  test("documents middleware matchers, control flow, rewrites, and route-local skips", async () => {
+    const middleware = await readDocsSite("src/content/guides/middleware.mdx");
+
+    expect(middleware).toContain("## Add middleware");
+    expect(middleware).toContain("src/app/middleware.ts");
+    expect(middleware).toContain('export const config = { matcher: ["/admin/:path*", "/blocked"] };');
+    expect(middleware).toContain("return next();");
+    expect(middleware).toContain("return new Response");
+    expect(middleware).toContain("redirect(\"/login\")");
+    expect(middleware).toContain("## Use matchers to avoid unnecessary imports");
+    expect(middleware).toContain("middleware module itself is not imported");
+    expect(middleware).toContain("## Rewrite without changing the browser URL");
+    expect(middleware).toContain("rewrite(\"/login\")");
+    expect(middleware).toContain("## Read headers, cookies, and URL data");
+    expect(middleware).toContain("cookies(request)");
+    expect(middleware).toContain("headers(request)");
+    expect(middleware).toContain("## Skip middleware for a route");
+    expect(middleware).toContain("export const middleware = { skip: true };");
+    expect(middleware).toContain('export const config = { id: "auth", matcher: "/admin/:path*" };');
+    expect(middleware).toContain('export const middleware = { skip: ["auth"] };');
+    expect(middleware).toContain("## When not to use middleware");
+    expect(middleware).toContain("[Authentication](/guides/authentication/)");
+    expect(middleware).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
+    expect(middleware).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(middleware).toContain("[Host Policy and Proxies](/deployments/host-policy-and-proxies/)");
   });
 
   test("documents SSG prerendering and static export constraints", async () => {

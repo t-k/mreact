@@ -1,8 +1,136 @@
 export const title = "Middleware";
-export const description = "Short-circuit requests, redirect users, and skip middleware per route.";
+export const description = "Short-circuit requests, redirect users, rewrite pages, and skip middleware per route.";
 
 # Middleware
 
-Middleware can return a `Response` to stop rendering or return `undefined` to continue. Use static `config.matcher` values to avoid running middleware on unrelated paths.
+Middleware runs before page rendering for requests that match its static config. Use it for coarse request policy such as auth redirects, blocked paths, simple rewrites, and route-independent response decisions.
 
-Middleware is a good place for coarse auth redirects, request gating, and route-independent response decisions.
+## Add middleware
+
+Create `src/app/middleware.ts` and export a `middleware(request)` function. Return a `Response` to stop rendering, or return `undefined`/`next()` to continue to the matched route.
+
+```ts
+// src/app/middleware.ts
+import { next, redirect } from "@reckona/mreact-router";
+
+export const config = { matcher: ["/admin/:path*", "/blocked"] };
+
+export async function middleware(request: Request): Promise<Response | undefined> {
+  const url = new URL(request.url);
+
+  if (url.pathname === "/blocked") {
+    return new Response("Blocked", { status: 451 });
+  }
+
+  const session = await readSession(request);
+  if (session === undefined) {
+    redirect("/login");
+  }
+
+  return next();
+}
+```
+
+`redirect("/login")` throws router-recognized control flow, so it does not need `return`. Use `return new Response(...)` when the middleware itself should produce the final HTTP response.
+
+## Use matchers to avoid unnecessary imports
+
+Always add a static `config.matcher` when middleware only applies to part of the app. If a request does not match a statically readable matcher, the middleware module itself is not imported.
+
+```ts
+export const config = { matcher: "/admin/:path*" };
+```
+
+Matchers accept exact paths, `:path*` subtree patterns, trailing `*` prefix patterns, or an array of string patterns. Keep matcher values literal so the build and runtime can read them without evaluating application code.
+
+## Rewrite without changing the browser URL
+
+Use `rewrite()` when the browser should keep the original URL while Mreact renders another route. This is useful for auth gates that should show a login page without turning the request into a browser redirect.
+
+```ts
+import { next, rewrite } from "@reckona/mreact-router";
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware(request: Request) {
+  const url = new URL(request.url);
+
+  if (url.searchParams.get("preview") === "1") {
+    return next();
+  }
+
+  return rewrite("/login");
+}
+```
+
+Use redirects when the canonical browser URL should change. Use rewrites when the request should be handled by a different route while preserving the requested URL.
+
+## Read headers, cookies, and URL data
+
+Middleware receives a standard `Request`. Use `new URL(request.url)` for pathname and query checks, and use Mreact helpers when you want the same header and cookie access style as other server-side route code.
+
+```ts
+import { cookies, headers, next, rewrite } from "@reckona/mreact-router";
+
+export const config = { matcher: "/admin/:path*" };
+
+export function middleware(request: Request) {
+  const requestHeaders = headers(request);
+  const requestCookies = cookies(request);
+
+  if (requestHeaders.get("x-allow-admin") === "1" || requestCookies.get("allow") === "1") {
+    return next();
+  }
+
+  return rewrite("/login");
+}
+```
+
+Keep expensive data fetching out of middleware unless the decision must happen before route selection. Prefer loaders for page data, HTTP APIs for endpoints, and server actions for framework-handled mutations.
+
+## Skip middleware for a route
+
+Use route-local middleware controls when a subtree normally matches middleware but a specific page or layout should bypass it. `skip: true` skips all app middleware for that route.
+
+```tsx
+// src/app/health/page.tsx
+export const middleware = { skip: true };
+
+export default function Page() {
+  return <main>ok</main>;
+}
+```
+
+When an app has multiple middleware policies, give the middleware an `id` and skip only that policy from the route module.
+
+```ts
+// src/app/middleware.ts
+export const config = { id: "auth", matcher: "/admin/:path*" };
+
+export function middleware() {
+  return new Response("Unauthorized", { status: 401 });
+}
+```
+
+```tsx
+// src/app/admin/webhook/page.tsx
+export const middleware = { skip: ["auth"] };
+
+export default function Page() {
+  return <main>Webhook receiver</main>;
+}
+```
+
+## When not to use middleware
+
+Do not use middleware as a general data-loading layer. Middleware is best for request-level allow/deny/rewrite decisions. Use a page loader when the data is needed to render a page, an HTTP API route when another client needs an endpoint, and auth/session helpers when the decision depends on user identity.
+
+## Related pages
+
+- [App Router](/guides/app-router/)
+- [Routing](/guides/routing/)
+- [Data Loading](/guides/data-loading/)
+- [HTTP APIs](/guides/http-apis/)
+- [Authentication](/guides/authentication/)
+- [Cookies and Sessions](/guides/cookies-and-sessions/)
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
