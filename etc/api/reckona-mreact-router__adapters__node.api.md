@@ -10,13 +10,13 @@ import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
 import type { ServerResponse } from 'node:http';
 
-// @public (undocumented)
+// @public
 export function createNodeRequestHandler(options: NodeRequestHandlerOptions): NodeRequestHandler;
 
-// @public (undocumented)
+// @public
 export type NodeRequestHandler = (incoming: IncomingMessage, outgoing: ServerResponse) => Promise<void>;
 
-// @public (undocumented)
+// @public
 export interface NodeRequestHandlerOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
@@ -68,33 +68,10 @@ export interface NodeRequestHandlerOptions {
     sinkStrategy?: ResponseSinkStrategy | undefined;
 }
 
-// @public (undocumented)
-export interface RouterInstrumentation {
-    // Warning: (ae-forgotten-export) The symbol "RouterRouteEndInstrumentationEvent" needs to be exported by the entry point node.d.ts
-    //
-    // (undocumented)
-    onLoaderEnd?: (event: RouterRouteEndInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterRouteInstrumentationEvent" needs to be exported by the entry point node.d.ts
-    //
-    // (undocumented)
-    onLoaderStart?: (event: RouterRouteInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterMiddlewareEndInstrumentationEvent" needs to be exported by the entry point node.d.ts
-    //
-    // (undocumented)
-    onMiddlewareEnd?: (event: RouterMiddlewareEndInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterMiddlewareInstrumentationEvent" needs to be exported by the entry point node.d.ts
-    //
-    // (undocumented)
-    onMiddlewareStart?: (event: RouterMiddlewareInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterRequestEndInstrumentationEvent" needs to be exported by the entry point node.d.ts
-    //
-    // (undocumented)
-    onRequestEnd?: (event: RouterRequestEndInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterRequestInstrumentationEvent" needs to be exported by the entry point node.d.ts
-    //
-    // (undocumented)
-    onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
-}
+// Warning: (ae-forgotten-export) The symbol "RouterInstrumentation_2" needs to be exported by the entry point node.d.ts
+//
+// @public
+export type RouterInstrumentation = RouterInstrumentation_2;
 
 // (No @packageDocumentation comment for this package)
 

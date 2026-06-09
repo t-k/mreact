@@ -6,16 +6,16 @@
 
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
-// @public (undocumented)
+// @public
 export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 
-// @public (undocumented)
+// @public
 export function __resetQueryClientForTesting(): void;
 
-// @public (undocumented)
+// @public
 export function createInfiniteQuery<TPage, TPageParam>(client: QueryClient, options: CreateInfiniteQueryOptions<TPage, TPageParam>): InfiniteQueryObserver<TPage, TPageParam>;
 
-// @public (undocumented)
+// @public
 export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<FetchQueryOptions<InfiniteQueryData<TPage, TPageParam>>, "queryFn"> {
     autoFetch?: boolean | undefined;
     // (undocumented)
@@ -32,10 +32,10 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<Fetc
     refetchOnWindowFocus?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function createMutation<TVariables = void, TData = unknown, TContext = unknown>(client: QueryClient, options: CreateMutationOptions<TVariables, TData, TContext>): MutationObserver_2<TVariables, TData>;
 
-// @public (undocumented)
+// @public
 export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
     // (undocumented)
     invalidate?: readonly QueryKey[];
@@ -57,13 +57,13 @@ export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
     onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function createQuery<TData>(client: QueryClient, options: CreateQueryOptions<TData>): QueryObserver<TData>;
 
-// @public (undocumented)
+// @public
 export function createQueryClient(): QueryClient;
 
-// @public (undocumented)
+// @public
 export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
     autoFetch?: boolean | undefined;
     gcTime?: false | number | undefined;
@@ -71,10 +71,10 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
     refetchOnWindowFocus?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function dehydrate(client: QueryClient): DehydratedQueryClient;
 
-// @public (undocumented)
+// @public
 export interface DehydratedQuery {
     // (undocumented)
     data: unknown;
@@ -86,13 +86,13 @@ export interface DehydratedQuery {
     updatedAt: number;
 }
 
-// @public (undocumented)
+// @public
 export interface DehydratedQueryClient {
     // (undocumented)
     queries: DehydratedQuery[];
 }
 
-// @public (undocumented)
+// @public
 export interface FetchQueryOptions<TData> {
     // (undocumented)
     queryFn: (context: QueryFunctionContext) => Promise<TData> | TData;
@@ -108,16 +108,16 @@ export interface FetchQueryOptions<TData> {
     staleTime?: number;
 }
 
-// @public (undocumented)
+// @public
 export function getQueryClient(): QueryClient;
 
-// @public (undocumented)
+// @public
 export function hashQueryKey(queryKey: QueryKey): string;
 
-// @public (undocumented)
+// @public
 export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient): void;
 
-// @public (undocumented)
+// @public
 export interface InfiniteQueryData<TPage, TPageParam> {
     // (undocumented)
     pageParams: readonly TPageParam[];
@@ -125,13 +125,13 @@ export interface InfiniteQueryData<TPage, TPageParam> {
     pages: readonly TPage[];
 }
 
-// @public (undocumented)
+// @public
 export interface InfiniteQueryFunctionContext<TPageParam> extends QueryFunctionContext {
     // (undocumented)
     pageParam: TPageParam;
 }
 
-// @public (undocumented)
+// @public
 export interface InfiniteQueryObserver<TPage, TPageParam> {
     // (undocumented)
     dispose(): void;
@@ -143,7 +143,7 @@ export interface InfiniteQueryObserver<TPage, TPageParam> {
     readonly result: ReadonlyCell<InfiniteQueryResult<TPage, TPageParam>>;
 }
 
-// @public (undocumented)
+// @public
 export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryData<TPage, TPageParam> {
     // (undocumented)
     error: unknown;
@@ -161,10 +161,10 @@ export interface InfiniteQueryResult<TPage, TPageParam> extends InfiniteQueryDat
     updatedAt: number;
 }
 
-// @public (undocumented)
+// @public
 export function installQueryAsyncStorage(storage: QueryAsyncStorage<QueryClient>): void;
 
-// @public (undocumented)
+// @public
 export interface InvalidateQueriesOptions {
     // (undocumented)
     queryKey?: QueryKey;
@@ -172,10 +172,10 @@ export interface InvalidateQueriesOptions {
 
 // Warning: (ae-forgotten-export) The symbol "QueryClientScopeUnavailableError" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function isQueryClientScopeUnavailableError(error: unknown): error is QueryClientScopeUnavailableError;
 
-// @public (undocumented)
+// @public
 interface MutationObserver_2<TVariables, TData> {
     // (undocumented)
     mutate(variables: TVariables): Promise<TData>;
@@ -184,7 +184,7 @@ interface MutationObserver_2<TVariables, TData> {
 }
 export { MutationObserver_2 as MutationObserver }
 
-// @public (undocumented)
+// @public
 export interface MutationResult<TData> {
     // (undocumented)
     data: TData | undefined;
@@ -196,10 +196,10 @@ export interface MutationResult<TData> {
     updatedAt: number;
 }
 
-// @public (undocumented)
+// @public
 export type MutationStatus = "idle" | "pending" | "success" | "error";
 
-// @public (undocumented)
+// @public
 export interface QueryAsyncStorage<T> {
     // (undocumented)
     getStore(): T | undefined;
@@ -207,7 +207,7 @@ export interface QueryAsyncStorage<T> {
     run<TResult>(store: T, callback: () => TResult): TResult;
 }
 
-// @public (undocumented)
+// @public
 export interface QueryClient {
     // (undocumented)
     cancelQueries(options?: InvalidateQueriesOptions): void;
@@ -231,7 +231,7 @@ export interface QueryClient {
     subscribe<TData = unknown>(queryKey: QueryKey, listener: (entry: QueryEntry<TData>) => void, options?: QuerySubscriptionOptions): () => void;
 }
 
-// @public (undocumented)
+// @public
 export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
     // (undocumented)
     queryHash: string;
@@ -241,10 +241,10 @@ export interface QueryEntry<TData = unknown> extends QueryResult<TData> {
     stale: boolean;
 }
 
-// @public (undocumented)
+// @public
 export type QueryErrorReason = "aborted" | "retry-exhausted" | "network" | "unknown";
 
-// @public (undocumented)
+// @public
 export interface QueryFunctionContext {
     // (undocumented)
     queryKey: QueryKey;
@@ -252,10 +252,10 @@ export interface QueryFunctionContext {
     signal: AbortSignal;
 }
 
-// @public (undocumented)
+// @public
 export type QueryKey = readonly unknown[];
 
-// @public (undocumented)
+// @public
 export interface QueryObserver<TData> {
     // (undocumented)
     dispose(): void;
@@ -265,7 +265,7 @@ export interface QueryObserver<TData> {
     readonly result: ReadonlyCell<QueryResult<TData>>;
 }
 
-// @public (undocumented)
+// @public
 export interface QueryResult<TData> {
     // (undocumented)
     data: TData | undefined;
@@ -281,10 +281,10 @@ export interface QueryResult<TData> {
     updatedAt: number;
 }
 
-// @public (undocumented)
+// @public
 export type QueryStatus = "pending" | "success" | "error";
 
-// @public (undocumented)
+// @public
 export interface QuerySubscriptionOptions {
     // (undocumented)
     exact?: boolean | undefined;
@@ -292,7 +292,7 @@ export interface QuerySubscriptionOptions {
     gcTime?: false | number | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T;
 
 // (No @packageDocumentation comment for this package)

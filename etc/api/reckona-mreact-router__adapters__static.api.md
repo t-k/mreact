@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function exportStaticApp(options: StaticExportOptions): Promise<StaticExportResult>;
 
-// @public (undocumented)
+// @public
 export interface StaticExportOptions {
     // (undocumented)
     exportDir: string;
@@ -17,7 +17,7 @@ export interface StaticExportOptions {
     paths?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface StaticExportResult {
     // (undocumented)
     routes: string[];

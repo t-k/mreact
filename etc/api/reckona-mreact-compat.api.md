@@ -4,25 +4,25 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void;
 
-// @public (undocumented)
+// @public
 export const Activity: unique symbol;
 
-// @public (undocumented)
+// @public
 export function applyStreamingHydrationFragments(root?: ParentNode): void;
 
-// @public (undocumented)
+// @public
 export function cache<TArgs extends unknown[], TResult>(callback: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
 
-// @public (undocumented)
+// @public
 export function cacheSignal(): AbortSignal | null;
 
-// @public (undocumented)
+// @public
 export function captureOwnerStack(): string | null;
 
-// @public (undocumented)
+// @public
 export const Children: {
     map<T>(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => T): T[] | null;
     forEach(children: ReactCompatNode, fn: (child: Exclude<ReactCompatNode, null | undefined | boolean>, index: number) => void): void;
@@ -31,10 +31,10 @@ export const Children: {
     only(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>;
 };
 
-// @public (undocumented)
+// @public
 export function cloneElement<P extends Record<string, unknown>>(element: ReactCompatElement<P>, props: Partial<P> | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
-// @public (undocumented)
+// @public
 export interface Component<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> {
     // (undocumented)
     forceUpdate(callback?: () => void): void;
@@ -50,38 +50,38 @@ export interface Component<P extends Record<string, unknown> = Record<string, un
 
 // Warning: (ae-forgotten-export) The symbol "ComponentConstructor" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export const Component: ComponentConstructor;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatContext" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function createContext<T>(defaultValue: T): ReactCompatContext<T>;
 
 // Warning: (ae-forgotten-export) The symbol "ReactReservedProps" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function createElement<P extends Record<string, unknown>>(type: ElementType<P>, config: (P & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
-// @public (undocumented)
+// @public
 export function createErrorBoundary(options: ErrorBoundaryOptions, children: ReactCompatNode): ReactCompatElement<ErrorBoundaryOptions & {
     children: ReactCompatNode;
 }>;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatPortal" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function createPortal(children: ReactCompatNode, container: Element, key?: unknown): ReactCompatPortal;
 
-// @public (undocumented)
+// @public
 export function createRef<T>(): {
     current: T | null;
 };
 
-// @public (undocumented)
+// @public
 export function createRoot(container: Element, options?: RootOptions): Root;
 
-// @public (undocumented)
+// @public
 export function createStreamingHydrationRoot(container: Element, options?: StreamingHydrationRootOptions): StreamingHydrationRoot;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatContextProviderShorthand" needs to be exported by the entry point index.d.ts
@@ -90,20 +90,20 @@ export function createStreamingHydrationRoot(container: Element, options?: Strea
 // Warning: (ae-forgotten-export) The symbol "MemoType" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "LazyType" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
     render(): ReactCompatNode;
 });
 
 // Warning: (ae-forgotten-export) The symbol "HydrationEventReplayOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function enableEventHydrationManifestReplay(container: Element, manifest: EventHydrationManifest | undefined, options?: HydrationEventReplayOptions): () => void;
 
-// @public (undocumented)
+// @public
 export function enableHydrationEventReplay(container: Element): () => void;
 
-// @public (undocumented)
+// @public
 export interface ErrorBoundaryOptions {
     // (undocumented)
     fallback: (error: Error) => ReactCompatNode;
@@ -111,7 +111,7 @@ export interface ErrorBoundaryOptions {
     onError?: (error: Error) => void;
 }
 
-// @public (undocumented)
+// @public
 export interface EventHydrationManifest {
     // (undocumented)
     events: EventHydrationManifestEntry[];
@@ -119,7 +119,7 @@ export interface EventHydrationManifest {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export interface EventHydrationManifestEntry {
     // (undocumented)
     event: string;
@@ -129,29 +129,33 @@ export interface EventHydrationManifestEntry {
     id: string;
 }
 
-// @public (undocumented)
+// @public
 export function flushSync<T>(callback: () => T): T;
 
-// @public (undocumented)
-export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
+// Warning: (ae-forgotten-export) The symbol "FormEvent_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type FormEvent<TCurrentTarget extends EventTarget = Element> = FormEvent_2<TCurrentTarget>;
 
-// @public (undocumented)
-export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<TCurrentTarget, SubmitEvent>;
+// Warning: (ae-forgotten-export) The symbol "FormEventHandler_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = FormEventHandler_2<TCurrentTarget>;
 
-// @public (undocumented)
+// @public
 export function forwardRef<P, T>(render: (props: P, ref: {
     current: T | null;
 } | ((value: T | null) => void) | null) => ReactCompatNode): ForwardRefType<P & {
     ref?: unknown;
 }>;
 
-// @public (undocumented)
+// @public
 export const Fragment: unique symbol;
 
-// @public (undocumented)
+// @public
 export function hydrateRoot(container: Element, element: ReactCompatNode, options?: HydrateRootOptions): Root;
 
-// @public (undocumented)
+// @public
 export interface HydrateRootOptions {
     // (undocumented)
     consumeResumeMarkers?: boolean;
@@ -163,7 +167,7 @@ export interface HydrateRootOptions {
     resumeId?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface HydrationRecoverableErrorInfo {
     // (undocumented)
     componentStack?: string;
@@ -175,29 +179,31 @@ export interface HydrationRecoverableErrorInfo {
 
 // Warning: (ae-forgotten-export) The symbol "isReactCompatElement" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export const isValidElement: typeof isReactCompatElement;
 
-// @public (undocumented)
-export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
-    readonly currentTarget: TCurrentTarget;
-};
+// Warning: (ae-forgotten-export) The symbol "JSXEvent_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = JSXEvent_2<TCurrentTarget, TEvent>;
 
-// @public (undocumented)
-export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
+// Warning: (ae-forgotten-export) The symbol "JSXEventHandler_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = JSXEventHandler_2<TCurrentTarget, TEvent>;
 
-// @public (undocumented)
+// @public
 export function lazy<P>(load: () => Promise<{
     default: ElementType<P>;
 }>): LazyType<P>;
 
-// @public (undocumented)
+// @public
 export function memo<P>(type: ElementType<P>, compare?: (previous: P, next: P) => boolean): MemoType<P>;
 
-// @public (undocumented)
+// @public
 export const Profiler: unique symbol;
 
-// @public (undocumented)
+// @public
 export interface PureComponent<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> extends Component<P, S> {
     // (undocumented)
     shouldComponentUpdate(nextProps: P, nextState: S): boolean;
@@ -205,13 +211,13 @@ export interface PureComponent<P extends Record<string, unknown> = Record<string
 
 // Warning: (ae-forgotten-export) The symbol "PureComponentConstructor" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export const PureComponent: PureComponentConstructor;
 
-// @public (undocumented)
+// @public
 export function queueHydrationEvent(container: Element, event: Event, target: EventTarget): void;
 
-// @public (undocumented)
+// @public
 const ReactCompat: {
     readonly Component: ComponentConstructor;
     readonly PureComponent: PureComponentConstructor;
@@ -281,7 +287,7 @@ const ReactCompat: {
 };
 export default ReactCompat;
 
-// @public (undocumented)
+// @public
 export interface ReactCompatElement<P = Record<string, unknown>> {
     // (undocumented)
     $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
@@ -297,33 +303,33 @@ export interface ReactCompatElement<P = Record<string, unknown>> {
     type: ElementType<P>;
 }
 
-// @public (undocumented)
+// @public
 export type ReactCompatNode = ReactCompatElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
 
-// @public (undocumented)
+// @public
 export function readEventHydrationManifest(root?: ParentNode): EventHydrationManifest | undefined;
 
-// @public (undocumented)
+// @public
 export function render(element: ReactCompatNode, container: Element): void;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatConsumer" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function renderContextConsumerToString<T>(consumer: ReactCompatConsumer<T>, render: (value: T) => string): string;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatProvider" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function renderContextProviderToString<T>(provider: ReactCompatProvider<T>, value: T, render: () => string): string;
 
 // Warning: (ae-forgotten-export) The symbol "RootRuntimeOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function renderToString<TProps>(component: ((props: TProps) => ReactCompatNode) | (new (props: TProps) => {
     render(): ReactCompatNode;
 }), props?: TProps, options?: RootRuntimeOptions): string;
 
-// @public (undocumented)
+// @public
 export interface Root {
     // (undocumented)
     render(element: ReactCompatNode): void;
@@ -331,13 +337,13 @@ export interface Root {
     unmount(): void;
 }
 
-// @public (undocumented)
+// @public
 export interface RootOptions {
     // (undocumented)
     identifierPrefix?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface SelectiveHydrationBoundary {
     // (undocumented)
     element: ReactCompatNode;
@@ -345,7 +351,7 @@ export interface SelectiveHydrationBoundary {
     options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
 }
 
-// @public (undocumented)
+// @public
 export interface SelectiveHydrationOptions {
     // (undocumented)
     boundaries?: Record<string, SelectiveHydrationBoundary>;
@@ -355,13 +361,13 @@ export interface SelectiveHydrationOptions {
     options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
 }
 
-// @public (undocumented)
+// @public
 export type StartTransition = (scope: TransitionScope) => void;
 
-// @public (undocumented)
+// @public
 export function startTransition(scope: TransitionScope): void;
 
-// @public (undocumented)
+// @public
 export interface StreamingHydrationRoot {
     // (undocumented)
     dispose(): void;
@@ -369,7 +375,7 @@ export interface StreamingHydrationRoot {
     hydrate(element: ReactCompatNode, options?: HydrateRootOptions): Root;
 }
 
-// @public (undocumented)
+// @public
 export interface StreamingHydrationRootOptions {
     // (undocumented)
     applyOutOfOrderFragments?: boolean;
@@ -385,88 +391,88 @@ export interface StreamingHydrationRootOptions {
     selectiveHydration?: SelectiveHydrationOptions;
 }
 
-// @public (undocumented)
+// @public
 export const StrictMode: symbol;
 
-// @public (undocumented)
+// @public
 export const Suspense: unique symbol;
 
-// @public (undocumented)
+// @public
 export const SuspenseList: unique symbol;
 
-// @public (undocumented)
+// @public
 export type TransitionScope = () => void;
 
-// @public (undocumented)
+// @public
 export function unmountComponentAtNode(container: Element): boolean;
 
-// @public (undocumented)
+// @public
 export function unstable_useCacheRefresh(): () => void;
 
-// @public (undocumented)
+// @public
 export function use<T>(usable: PromiseLike<T> | unknown): T;
 
-// @public (undocumented)
+// @public
 export function useActionState<TState, TPayload>(action: (previousState: TState, payload: TPayload) => TState | Promise<TState>, initialState: TState): [TState, (payload: TPayload) => void, boolean];
 
-// @public (undocumented)
+// @public
 export function useCallback<T extends (...args: never[]) => unknown>(callback: T, deps?: readonly unknown[]): T;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatContextLike" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function useContext<T>(context: ReactCompatContextLike<T>): T;
 
-// @public (undocumented)
+// @public
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void;
 
-// @public (undocumented)
+// @public
 export function useDeferredValue<T>(value: T, initialValue?: T): T;
 
 // Warning: (ae-forgotten-export) The symbol "EffectCallback" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function useEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useEffectEvent<TArgs extends unknown[], TResult>(callback: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
 
-// @public (undocumented)
+// @public
 export function useId(): string;
 
-// @public (undocumented)
+// @public
 export function useImperativeHandle<T>(ref: unknown, create: () => T, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useInsertionEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useLayoutEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T;
 
-// @public (undocumented)
+// @public
 export function useOptimistic<TState, TPayload>(state: TState, update?: (state: TState, payload: TPayload) => TState): [TState, (payload: TPayload) => void];
 
-// @public (undocumented)
+// @public
 export function useReducer<TState, TAction, TInitial = TState>(reducer: (state: TState, action: TAction) => TState, initialArg: TInitial, init?: (initialArg: TInitial) => TState): [TState, (action: TAction) => void];
 
-// @public (undocumented)
+// @public
 export function useRef<T>(initial: T): {
     current: T;
 };
 
-// @public (undocumented)
+// @public
 export function useState<T>(initial: T | (() => T)): [T, (value: T | ((previous: T) => T)) => void];
 
-// @public (undocumented)
+// @public
 export function useSyncExternalStore<T>(subscribe: (listener: () => void) => () => void, getSnapshot: () => T, getServerSnapshot?: () => T): T;
 
-// @public (undocumented)
+// @public
 export function useTransition(): [boolean, StartTransition];
 
-// @public (undocumented)
+// @public
 export const version = "19.2.6";
 
 // (No @packageDocumentation comment for this package)

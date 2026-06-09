@@ -6,22 +6,22 @@
 
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
-// @public (undocumented)
+// @public
 export function createRequestStoreFactory<T extends object>(initial: () => T, options?: StoreOptions<T> | undefined): () => Store<T>;
 
-// @public (undocumented)
+// @public
 export function createStore<T extends object>(initial: T, options?: StoreOptions<T>): Store<T>;
 
-// @public (undocumented)
+// @public
 export interface SelectedCell<T> extends ReadonlyCell<T> {
     // (undocumented)
     dispose(): void;
 }
 
-// @public (undocumented)
+// @public
 export function shallowEqual<T>(left: T, right: T): boolean;
 
-// @public (undocumented)
+// @public
 export interface Store<T extends object> {
     // (undocumented)
     get(): T;
@@ -41,10 +41,10 @@ export interface Store<T extends object> {
     update(updater: (previous: T) => StorePatch<T> | T): void;
 }
 
-// @public (undocumented)
+// @public
 export type StoreEquality<T> = (left: T, right: T) => boolean;
 
-// @public (undocumented)
+// @public
 export interface StoreInstrumentationEvent<T extends object> {
     // (undocumented)
     previous: T;
@@ -54,10 +54,10 @@ export interface StoreInstrumentationEvent<T extends object> {
     type: "replace" | "set" | "transaction";
 }
 
-// @public (undocumented)
+// @public
 export type StoreListener<T extends object> = (state: T, previous: T) => void;
 
-// @public (undocumented)
+// @public
 export interface StoreOptions<T extends object> {
     // (undocumented)
     instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
@@ -65,13 +65,13 @@ export interface StoreOptions<T extends object> {
     persist?: ((state: T) => void | Promise<void>) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type StorePatch<T extends object> = Partial<T>;
 
-// @public (undocumented)
+// @public
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);
 
-// @public (undocumented)
+// @public
 export type StoreSetter<T extends object> = StorePatch<T> | ((previous: T) => StorePatch<T> | T);
 
 // (No @packageDocumentation comment for this package)

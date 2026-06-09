@@ -4,13 +4,13 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function escapeHtmlAttribute(value: unknown): string;
 
-// @public (undocumented)
+// @public
 export function escapeHtmlQuotedAttribute(value: unknown): string;
 
-// @public (undocumented)
+// @public
 export function escapeHtmlText(value: unknown): string;
 
 // (No @packageDocumentation comment for this package)

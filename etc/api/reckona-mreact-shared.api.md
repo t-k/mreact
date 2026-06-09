@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export interface ClientReferenceMetadata {
     // (undocumented)
     exportName: string;
@@ -14,10 +14,10 @@ export interface ClientReferenceMetadata {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export type CompilerFrontend = "oxc";
 
-// @public (undocumented)
+// @public
 export interface CompilerMetadata {
     // (undocumented)
     frontend: CompilerFrontend;
@@ -25,13 +25,13 @@ export interface CompilerMetadata {
     typescriptFallback: boolean;
 }
 
-// @public (undocumented)
+// @public
 export const compilerOutputContractVersion = 1;
 
-// @public (undocumented)
+// @public
 export type CompileTarget = "client" | "server";
 
-// @public (undocumented)
+// @public
 export interface ComponentMetadata {
     // (undocumented)
     exportName: string;
@@ -39,7 +39,7 @@ export interface ComponentMetadata {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface Diagnostic {
     // (undocumented)
     code: string;
@@ -53,7 +53,7 @@ export interface Diagnostic {
     suggestion?: DiagnosticSuggestion;
 }
 
-// @public (undocumented)
+// @public
 export interface DiagnosticSuggestion {
     // (undocumented)
     link?: string;
@@ -63,16 +63,16 @@ export interface DiagnosticSuggestion {
     title: string;
 }
 
-// @public (undocumented)
+// @public
 export function escapeHtmlAttribute(value: unknown): string;
 
-// @public (undocumented)
+// @public
 export function escapeHtmlQuotedAttribute(value: unknown): string;
 
-// @public (undocumented)
+// @public
 export function escapeHtmlText(value: unknown): string;
 
-// @public (undocumented)
+// @public
 export interface EventHydrationEntryMetadata {
     // (undocumented)
     event: string;
@@ -82,7 +82,7 @@ export interface EventHydrationEntryMetadata {
     id: string;
 }
 
-// @public (undocumented)
+// @public
 export interface EventHydrationManifestMetadata {
     // (undocumented)
     events: EventHydrationEntryMetadata[];
@@ -90,7 +90,7 @@ export interface EventHydrationManifestMetadata {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export interface HtmlSink {
     // (undocumented)
     append(chunk: string): void;
@@ -102,30 +102,30 @@ export interface HtmlSink {
     signal?: AbortSignal;
 }
 
-// @public (undocumented)
+// @public
 export function isDangerousHtmlAttribute(name: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isDangerousHtmlOptIn(value: unknown): value is {
     __html: string;
 };
 
-// @public (undocumented)
+// @public
 export function isSrcsetAttribute(name: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isUnsafeMetaRefreshContent(httpEquiv: string, content: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isUnsafeUrlAttribute(name: string, value: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isUrlAttribute(name: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isVoidHtmlElement(tagName: string): boolean;
 
-// @public (undocumented)
+// @public
 export interface ModuleMetadata {
     // (undocumented)
     clientReferenceManifest?: ClientReferenceMetadata[];
@@ -159,7 +159,7 @@ export interface ModuleMetadata {
     target: CompileTarget;
 }
 
-// @public (undocumented)
+// @public
 export interface RuntimeImport {
     // (undocumented)
     source: string;
@@ -167,16 +167,16 @@ export interface RuntimeImport {
     specifiers: string[];
 }
 
-// @public (undocumented)
+// @public
 export function safeUrlAttributeValue(name: string, value: string): string | undefined;
 
-// @public (undocumented)
+// @public
 export type ServerBootstrapMode = "none" | "out-of-order-reorder";
 
-// @public (undocumented)
+// @public
 export type ServerOutputMode = "string" | "stream";
 
-// @public (undocumented)
+// @public
 export interface SourceLocation {
     // (undocumented)
     column: number;
@@ -184,7 +184,7 @@ export interface SourceLocation {
     line: number;
 }
 
-// @public (undocumented)
+// @public
 export interface TransformOutput {
     // (undocumented)
     code: string;

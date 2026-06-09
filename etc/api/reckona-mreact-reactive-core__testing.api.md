@@ -4,16 +4,16 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createReactiveTestRuntime(): ReactiveTestRuntime;
 
-// @public (undocumented)
+// @public
 export function flushEffects(): Promise<void>;
 
-// @public (undocumented)
+// @public
 export function flushMicrotasks(): Promise<void>;
 
-// @public (undocumented)
+// @public
 export interface ReactiveTestRuntime {
     // (undocumented)
     dispose(): void;

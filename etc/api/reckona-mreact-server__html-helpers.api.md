@@ -6,10 +6,10 @@
 
 import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 
-// @public (undocumented)
+// @public
 export function createEventHydrationManifest(events: readonly EventHydrationEntry[]): EventHydrationManifest;
 
-// @public (undocumented)
+// @public
 export interface EventHydrationEntry {
     // (undocumented)
     event: string;
@@ -19,7 +19,7 @@ export interface EventHydrationEntry {
     id: string;
 }
 
-// @public (undocumented)
+// @public
 export interface EventHydrationManifest {
     // (undocumented)
     events: EventHydrationEntry[];
@@ -27,10 +27,10 @@ export interface EventHydrationManifest {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export function html(node: unknown, options?: HtmlResponseOptions): Response;
 
-// @public (undocumented)
+// @public
 export interface HtmlResponseOptions {
     // (undocumented)
     headers?: HeadersInit;
@@ -42,24 +42,24 @@ export interface HtmlResponseOptions {
 
 // Warning: (ae-forgotten-export) The symbol "HydrationScriptOptions" needs to be exported by the entry point html-helpers.d.ts
 //
-// @public (undocumented)
+// @public
 export function renderEventHydrationManifest(sink: HtmlSink, manifest: EventHydrationManifest, options?: HydrationScriptOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderReactNodeToString(node: unknown): Promise<string>;
 
-// @public (undocumented)
+// @public
 export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderSsrState(sink: HtmlSink, value: unknown, options?: HydrationScriptOptions): void;
 
 // Warning: (ae-forgotten-export) The symbol "StreamRender" needs to be exported by the entry point html-helpers.d.ts
 //
-// @public (undocumented)
+// @public
 export function renderToString(render: StreamRender): Promise<string>;
 
-// @public (undocumented)
+// @public
 export interface ScriptAssetOptions {
     // (undocumented)
     crossOrigin?: "anonymous" | "use-credentials";
@@ -71,7 +71,7 @@ export interface ScriptAssetOptions {
     src: string;
 }
 
-// @public (undocumented)
+// @public
 export function serializeSsrState(value: unknown): string;
 
 // (No @packageDocumentation comment for this package)

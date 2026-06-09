@@ -54,7 +54,7 @@ export type TrustedLinkHtml = { readonly [TRUSTED_LINK_HTML]: string };
  */
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 /**
- * Allows applications to augment the set of statically registered app route paths.
+ * Allows applications to augment statically registered app route paths through `@reckona/mreact-router/link`.
  */
 export interface AppRouteDeclarations {}
 /**

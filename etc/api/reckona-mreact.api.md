@@ -10,23 +10,20 @@ import * as ReactCompat from '@reckona/mreact-compat';
 import type { ReactCompatElement } from '@reckona/mreact-compat';
 import type { ReactCompatNode } from '@reckona/mreact-compat';
 
-// @public (undocumented)
+// @public
 export type ComponentType<P = object> = FunctionComponent<P>;
 
-// @public (undocumented)
+// @public
 export type FC<P = object> = FunctionComponent<P>;
 
-// @public (undocumented)
+// @public
 export type FunctionComponent<P = object> = (props: P) => ReactElement | null;
 
-// @public (undocumented)
+// @public
 namespace JSX_2 {
-    // (undocumented)
     type Element = JSX_3.Element;
-    // (undocumented)
     interface IntrinsicAttributes extends JSX_3.IntrinsicAttributes {
     }
-    // (undocumented)
     interface IntrinsicElements extends JSX_3.IntrinsicElements {
     }
 }
@@ -34,13 +31,13 @@ export { JSX_2 as JSX }
 
 export default ReactCompat;
 
-// @public (undocumented)
+// @public
 export type ReactElement<P = unknown, T extends ElementType = ElementType> = ReactCompatElement & {
     props: P;
     type: T;
 };
 
-// @public (undocumented)
+// @public
 export type ReactNode = ReactCompatNode;
 
 

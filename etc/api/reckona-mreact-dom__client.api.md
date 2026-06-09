@@ -20,7 +20,7 @@ export { Root }
 
 export { RootOptions }
 
-// @public (undocumented)
+// @public
 export const version = "19.2.6";
 
 // (No @packageDocumentation comment for this package)

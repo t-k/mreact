@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export type InferStandardSchemaInput<Schema> = Schema extends {
     readonly "~standard": {
         readonly types?: (infer Types) | undefined;
@@ -13,7 +13,7 @@ export type InferStandardSchemaInput<Schema> = Schema extends {
     readonly input: infer Input;
 } ? Input : never : never;
 
-// @public (undocumented)
+// @public
 export type InferStandardSchemaOutput<Schema> = Schema extends {
     readonly "~standard": {
         readonly types?: (infer Types) | undefined;
@@ -22,13 +22,13 @@ export type InferStandardSchemaOutput<Schema> = Schema extends {
     readonly output: infer Output;
 } ? Output : never : never;
 
-// @public (undocumented)
+// @public
 export interface StandardSchemaV1<Input = unknown, Output = Input> {
     // (undocumented)
     readonly "~standard": StandardSchemaV1.Props<Input, Output>;
 }
 
-// @public (undocumented)
+// @public
 export namespace StandardSchemaV1 {
     // (undocumented)
     export interface FailureResult {
@@ -81,7 +81,7 @@ export namespace StandardSchemaV1 {
     }
 }
 
-// @public (undocumented)
+// @public
 export type StandardSchemaValidationResult<Output> = {
     success: true;
     value: Output;
@@ -90,7 +90,7 @@ export type StandardSchemaValidationResult<Output> = {
     success: false;
 };
 
-// @public (undocumented)
+// @public
 export function validateStandardSchema<Schema extends StandardSchemaV1>(schema: Schema, value: unknown): Promise<StandardSchemaValidationResult<InferStandardSchemaOutput<Schema>>>;
 
 // (No @packageDocumentation comment for this package)

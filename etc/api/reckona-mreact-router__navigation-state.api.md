@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export interface AppRouterNavigationState {
     // (undocumented)
     from: string | null;
@@ -16,16 +16,16 @@ export interface AppRouterNavigationState {
     type: AppRouterNavigationType | null;
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterNavigationStateListener = (state: AppRouterNavigationState) => void;
 
-// @public (undocumented)
+// @public
 export type AppRouterNavigationType = "push" | "replace" | "pop" | "refresh";
 
-// @public (undocumented)
+// @public
 export function getNavigationState(): AppRouterNavigationState;
 
-// @public (undocumented)
+// @public
 export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
 
 // (No @packageDocumentation comment for this package)

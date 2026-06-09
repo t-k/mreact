@@ -9,10 +9,10 @@ import type { Plugin as Plugin_2 } from 'vite';
 import { ServerBootstrapMode } from '@reckona/mreact-compiler';
 import { ServerOutputMode } from '@reckona/mreact-compiler';
 
-// @public (undocumented)
+// @public
 export function modularReact(options?: ModularReactViteOptions): Plugin_2;
 
-// @public (undocumented)
+// @public
 export interface ModularReactViteOptions {
     // (undocumented)
     include?: RegExp;

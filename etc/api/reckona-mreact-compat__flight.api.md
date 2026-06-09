@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createFetchServerReferenceCaller(endpoint: string, options?: FetchServerReferenceCallerOptions): NonNullable<DecodeFlightOptions["callServerReference"]>;
 
-// @public (undocumented)
+// @public
 export interface DecodeFlightOptions {
     // (undocumented)
     callServerReference?(reference: FlightServerReference, args: unknown[]): unknown | Promise<unknown>;
@@ -19,10 +19,10 @@ export interface DecodeFlightOptions {
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point flight.d.ts
 //
-// @public (undocumented)
+// @public
 export function decodeFlightResponse(response: FlightResponse, options: DecodeFlightOptions): ReactCompatNode;
 
-// @public (undocumented)
+// @public
 export interface FetchServerReferenceCallerOptions {
     // (undocumented)
     credentials?: RequestCredentials;
@@ -40,7 +40,7 @@ export interface FetchServerReferenceCallerOptions {
     nonceHeaderName?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightArrayBufferModel {
     // (undocumented)
     bytes: number[];
@@ -48,7 +48,7 @@ export interface FlightArrayBufferModel {
     kind: "array-buffer";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightBigIntModel {
     // (undocumented)
     kind: "bigint";
@@ -56,7 +56,7 @@ export interface FlightBigIntModel {
     value: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReference {
     // (undocumented)
     chunks?: string[];
@@ -68,7 +68,7 @@ export interface FlightClientReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReferenceModel {
     // (undocumented)
     id: number;
@@ -76,7 +76,7 @@ export interface FlightClientReferenceModel {
     kind: "client-reference";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightDataViewModel {
     // (undocumented)
     bytes: number[];
@@ -84,7 +84,7 @@ export interface FlightDataViewModel {
     kind: "data-view";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightDateModel {
     // (undocumented)
     kind: "date";
@@ -92,7 +92,7 @@ export interface FlightDateModel {
     value: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightElementModel {
     // (undocumented)
     key: string | null;
@@ -106,7 +106,7 @@ export interface FlightElementModel {
     };
 }
 
-// @public (undocumented)
+// @public
 export interface FlightErrorModel {
     // (undocumented)
     digest?: string;
@@ -118,7 +118,7 @@ export interface FlightErrorModel {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightFormDataModel {
     // (undocumented)
     entries: [string, FlightModel][];
@@ -126,7 +126,7 @@ export interface FlightFormDataModel {
     kind: "form-data";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightIterableModel {
     // (undocumented)
     kind: "iterable";
@@ -134,7 +134,7 @@ export interface FlightIterableModel {
     values: FlightModel[];
 }
 
-// @public (undocumented)
+// @public
 export interface FlightMapModel {
     // (undocumented)
     entries: [FlightModel, FlightModel][];
@@ -144,12 +144,12 @@ export interface FlightMapModel {
 
 // Warning: (ae-forgotten-export) The symbol "FlightObjectModel" needs to be exported by the entry point flight.d.ts
 //
-// @public (undocumented)
+// @public
 export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
 };
 
-// @public (undocumented)
+// @public
 export interface FlightNumberModel {
     // (undocumented)
     kind: "number";
@@ -157,7 +157,7 @@ export interface FlightNumberModel {
     value: "Infinity" | "-Infinity" | "NaN" | "-0";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightPromiseModel {
     // (undocumented)
     id: number;
@@ -165,7 +165,7 @@ export interface FlightPromiseModel {
     kind: "promise";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightResponse {
     // (undocumented)
     clientReferences: FlightClientReference[];
@@ -177,7 +177,7 @@ export interface FlightResponse {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightServerReference {
     // (undocumented)
     bound?: FlightModel[];
@@ -189,7 +189,7 @@ export interface FlightServerReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightServerReferenceModel {
     // (undocumented)
     id: number;
@@ -197,7 +197,7 @@ export interface FlightServerReferenceModel {
     kind: "server-reference";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightSetModel {
     // (undocumented)
     kind: "set";
@@ -205,7 +205,7 @@ export interface FlightSetModel {
     values: FlightModel[];
 }
 
-// @public (undocumented)
+// @public
 export interface FlightSymbolModel {
     // (undocumented)
     kind: "symbol";
@@ -213,7 +213,7 @@ export interface FlightSymbolModel {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightTypedArrayModel {
     // (undocumented)
     arrayType: FlightTypedArrayName;
@@ -223,13 +223,13 @@ export interface FlightTypedArrayModel {
     kind: "typed-array";
 }
 
-// @public (undocumented)
+// @public
 export type FlightTypedArrayName = "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" | "BigUint64Array";
 
-// @public (undocumented)
+// @public
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage;
 
-// @public (undocumented)
+// @public
 export interface HydrateFlightOptions extends DecodeFlightOptions {
     // Warning: (ae-forgotten-export) The symbol "HydrateRootOptions" needs to be exported by the entry point flight.d.ts
     //
@@ -239,13 +239,13 @@ export interface HydrateFlightOptions extends DecodeFlightOptions {
 
 // Warning: (ae-forgotten-export) The symbol "hydrateRoot" needs to be exported by the entry point flight.d.ts
 //
-// @public (undocumented)
+// @public
 export function hydrateFlightResponse(container: Element, response: FlightResponse, options: HydrateFlightOptions): ReturnType<hydrateRoot>;
 
-// @public (undocumented)
+// @public
 export function parseFlightResponse(payload: string | ArrayBuffer | Uint8Array): FlightResponse;
 
-// @public (undocumented)
+// @public
 export interface ReactFlightProtocolCoverage {
     // (undocumented)
     binaryRowTags: string[];
@@ -255,7 +255,7 @@ export interface ReactFlightProtocolCoverage {
     rowTags: string[];
 }
 
-// @public (undocumented)
+// @public
 export function readFlightResponse(root: Document | ParentNode, id?: string): FlightResponse;
 
 // (No @packageDocumentation comment for this package)

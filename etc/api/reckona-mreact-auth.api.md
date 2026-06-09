@@ -9,20 +9,20 @@ import { createSession } from '@reckona/mreact-router/session';
 import { destroySession } from '@reckona/mreact-router/session';
 import { getSession } from '@reckona/mreact-router/session';
 import { rotateSession } from '@reckona/mreact-router/session';
-import { SessionCookieOptions } from '@reckona/mreact-router/session';
-import { SessionRecord } from '@reckona/mreact-router/session';
-import { SessionStore } from '@reckona/mreact-router/session';
+import { SessionCookieOptions as SessionCookieOptions_2 } from '@reckona/mreact-router/session';
+import { SessionRecord as SessionRecord_2 } from '@reckona/mreact-router/session';
+import { SessionStore as SessionStore_2 } from '@reckona/mreact-router/session';
 
-// @public (undocumented)
+// @public
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
 
-// @public (undocumented)
+// @public
 export function __resetAuthForTesting(): void;
 
-// @public (undocumented)
+// @public
 export type AuthClaimsSerializer = (data: unknown) => AuthSessionClaims | undefined;
 
-// @public (undocumented)
+// @public
 export interface AuthConfig {
     // (undocumented)
     forbiddenTo?: string | undefined;
@@ -32,7 +32,7 @@ export interface AuthConfig {
     serializeClaims?: AuthClaimsSerializer | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AuthGuardOptions extends SessionCookieOptions {
     // (undocumented)
     forbiddenTo?: string | undefined;
@@ -42,7 +42,7 @@ export interface AuthGuardOptions extends SessionCookieOptions {
     redirectTo?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AuthorizationPolicy {
     // (undocumented)
     permissions?: readonly string[] | undefined;
@@ -50,7 +50,7 @@ export interface AuthorizationPolicy {
     roles?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type AuthorizationResult = {
     authorized: true;
 } | {
@@ -58,16 +58,16 @@ export type AuthorizationResult = {
     reason: "missing-permission" | "missing-role";
 };
 
-// @public (undocumented)
+// @public
 export function authorizeSession<TData extends AuthSessionClaims>(data: TData, policy: AuthorizationPolicy): AuthorizationResult;
 
-// @public (undocumented)
+// @public
 export type AuthRequirement = string | readonly string[];
 
-// @public (undocumented)
+// @public
 export type AuthRequirementMode = "all" | "any";
 
-// @public (undocumented)
+// @public
 export interface AuthSessionClaims {
     // (undocumented)
     [claim: string]: unknown;
@@ -77,7 +77,7 @@ export interface AuthSessionClaims {
     roles?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function configureAuth(config: AuthConfig): void;
 
 export { createMemorySessionStore }
@@ -86,41 +86,44 @@ export { createSession }
 
 export { destroySession }
 
-// @public (undocumented)
+// @public
 export function getCurrentSession<TData>(request: Request, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
 export { getSession }
 
-// @public (undocumented)
+// @public
 export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionClaims>(): TData | undefined;
 
-// @public (undocumented)
+// @public
 export function refreshSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
-// @public (undocumented)
+// @public
 export function requirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function requireRole<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, role: AuthRequirement, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function requireSession<TData>(request: Request, store: SessionStore<TData>, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function revokeCurrentSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<void>;
 
 export { rotateSession }
 
-// @public (undocumented)
+// @public
 export function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>>;
 
-export { SessionCookieOptions }
+// @public
+export type SessionCookieOptions = SessionCookieOptions_2;
 
-export { SessionRecord }
+// @public
+export type SessionRecord<TData = unknown> = SessionRecord_2<TData>;
 
-export { SessionStore }
+// @public
+export type SessionStore<TData = unknown> = SessionStore_2<TData>;
 
-// @public (undocumented)
+// @public
 export type TryAuthResult<TData> = {
     authorized: true;
     session: SessionRecord<TData>;
@@ -129,10 +132,10 @@ export type TryAuthResult<TData> = {
     reason: "missing-permission" | "missing-role" | "missing-session";
 };
 
-// @public (undocumented)
+// @public
 export function tryRequirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: Pick<AuthGuardOptions, "mode">): Promise<TryAuthResult<TData>>;
 
-// @public (undocumented)
+// @public
 export function tryRequireRole<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, role: AuthRequirement, options?: Pick<AuthGuardOptions, "mode">): Promise<TryAuthResult<TData>>;
 
 // (No @packageDocumentation comment for this package)

@@ -6,16 +6,16 @@
 
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
-// @public (undocumented)
+// @public
 export function calculateVirtualRange(options: VirtualRangeOptions): VirtualRange;
 
-// @public (undocumented)
+// @public
 export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem>;
 
-// @public (undocumented)
+// @public
 export function createVirtualList<TItem>(options: VirtualListOptions<TItem>): Virtualizer<TItem>;
 
-// @public (undocumented)
+// @public
 export interface VirtualEntry<TItem> {
     // (undocumented)
     colSpan?: number;
@@ -33,7 +33,7 @@ export interface VirtualEntry<TItem> {
     rowSpan?: number;
 }
 
-// @public (undocumented)
+// @public
 export interface VirtualGridOptions<TItem> extends VirtualListOptions<TItem> {
     // (undocumented)
     getColumnCount: () => number;
@@ -41,7 +41,7 @@ export interface VirtualGridOptions<TItem> extends VirtualListOptions<TItem> {
     getItemSpan?: (item: TItem, index: number) => VirtualItemSpan;
 }
 
-// @public (undocumented)
+// @public
 export interface VirtualItemSpan {
     // (undocumented)
     colSpan?: number;
@@ -49,7 +49,7 @@ export interface VirtualItemSpan {
     rowSpan?: number;
 }
 
-// @public (undocumented)
+// @public
 export interface Virtualizer<TItem> {
     // (undocumented)
     readonly bottomSpacerPx: ReadonlyCell<number>;
@@ -73,10 +73,10 @@ export interface Virtualizer<TItem> {
     readonly visibleRange: ReadonlyCell<VisibleRange>;
 }
 
-// @public (undocumented)
+// @public
 export type VirtualKey = string | number;
 
-// @public (undocumented)
+// @public
 export interface VirtualListOptions<TItem> {
     // (undocumented)
     estimateItemSize: (index: number, item: TItem | undefined) => number;
@@ -92,7 +92,7 @@ export interface VirtualListOptions<TItem> {
     viewportSize: () => number;
 }
 
-// @public (undocumented)
+// @public
 export interface VirtualRange {
     // (undocumented)
     bottomSpacerPx: number;
@@ -124,7 +124,7 @@ export interface VirtualRange {
     visibleStartRow: number;
 }
 
-// @public (undocumented)
+// @public
 export interface VirtualRangeOptions {
     // (undocumented)
     columnCount?: number;
@@ -140,7 +140,7 @@ export interface VirtualRangeOptions {
     viewportSize: number;
 }
 
-// @public (undocumented)
+// @public
 export interface VisibleRange {
     // (undocumented)
     endIndex: number;

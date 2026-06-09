@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export interface BufferSink {
     // Warning: (ae-forgotten-export) The symbol "NodeBuffer" needs to be exported by the entry point buffer-sink.d.ts
     //
@@ -18,16 +18,16 @@ export interface BufferSink {
     toString(): string;
 }
 
-// @public (undocumented)
+// @public
 export interface BufferSinkOptions {
     growthFactor?: number;
     initialSize?: number;
 }
 
-// @public (undocumented)
+// @public
 export function createBufferSink(options?: BufferSinkOptions): BufferSink;
 
-// @public (undocumented)
+// @public
 export function createStreamingBufferSink(options: StreamingBufferSinkOptions): StreamingBufferSink;
 
 // @public
@@ -40,7 +40,7 @@ export interface StreamingBufferSink {
     size(): number;
 }
 
-// @public (undocumented)
+// @public
 export interface StreamingBufferSinkOptions {
     flushThreshold?: number;
     initialSize?: number;

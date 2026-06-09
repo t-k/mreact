@@ -8,43 +8,53 @@ import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 import type { ReactCompatElement } from '@reckona/mreact-compat';
 import type { ReactCompatNode } from '@reckona/mreact-compat';
 
-// @public (undocumented)
+// @public
 export interface AppRouteDeclarations {
 }
 
-// @public (undocumented)
-export type AppRouteLinkHref<Path extends `/${string}`> = `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
+// Warning: (ae-forgotten-export) The symbol "AppRouteLinkHref_2" needs to be exported by the entry point link.d.ts
+//
+// @public
+export type AppRouteLinkHref<Path extends `/${string}`> = AppRouteLinkHref_2<Path>;
 
-// @public (undocumented)
-export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
+// Warning: (ae-forgotten-export) The symbol "AppRouteLinkHrefSuffix_2" needs to be exported by the entry point link.d.ts
+//
+// @public
+export type AppRouteLinkHrefSuffix = AppRouteLinkHrefSuffix_2;
 
-// @public (undocumented)
-export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/" ? "/" : Path extends `/${infer Segments}` ? `/${AppRouteLinkSegments<Segments>}` : never;
+// Warning: (ae-forgotten-export) The symbol "AppRouteLinkPathname_2" needs to be exported by the entry point link.d.ts
+//
+// @public
+export type AppRouteLinkPathname<Path extends `/${string}`> = AppRouteLinkPathname_2<Path>;
 
-// @public (undocumented)
-export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}` ? string : Segment;
+// Warning: (ae-forgotten-export) The symbol "AppRouteLinkSegment_2" needs to be exported by the entry point link.d.ts
+//
+// @public
+export type AppRouteLinkSegment<Segment extends string> = AppRouteLinkSegment_2<Segment>;
 
-// @public (undocumented)
-export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}` ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}` : AppRouteLinkSegment<Segments>;
+// Warning: (ae-forgotten-export) The symbol "AppRouteLinkSegments_2" needs to be exported by the entry point link.d.ts
+//
+// @public
+export type AppRouteLinkSegments<Segments extends string> = AppRouteLinkSegments_2<Segments>;
 
-// @public (undocumented)
+// @public
 export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {
     readonly __mreactRoutePatternHrefError__: never;
 } : unknown;
 
-// @public (undocumented)
+// @public
 export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
 // @public (undocumented)
 export function Link(sink: HtmlSink, props: LinkProps<string>): void;
 
-// @public (undocumented)
+// @public
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
-// @public (undocumented)
+// @public
 export type LinkHref = [RegisteredAppRoutePath] extends [never] ? string : AppRouteLinkHref<RegisteredAppRoutePath>;
 
-// @public (undocumented)
+// @public
 export interface LinkOptions<Href extends string = LinkHref> {
     // (undocumented)
     href: Href;
@@ -58,10 +68,10 @@ export interface LinkOptions<Href extends string = LinkHref> {
     transition?: LinkTransition | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type LinkPrefetch = "intent" | "viewport" | "none" | false;
 
-// @public (undocumented)
+// @public
 export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
     // (undocumented)
     [attribute: string]: unknown;
@@ -69,21 +79,21 @@ export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<H
     children?: LinkChild;
 }
 
-// @public (undocumented)
+// @public
 export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
-// @public (undocumented)
+// @public
 export type LinkScroll = "top" | "preserve";
 
-// @public (undocumented)
+// @public
 export type LinkTransition = "auto" | "none" | false;
 
-// @public (undocumented)
+// @public
 export type RegisteredAppRoutePath = AppRouteDeclarations extends {
     readonly path: infer Path;
 } ? Extract<Path, `/${string}`> : never;
 
-// @public (undocumented)
+// @public
 export type TrustedLinkHtml = {
     readonly [TRUSTED_LINK_HTML]: string;
 };

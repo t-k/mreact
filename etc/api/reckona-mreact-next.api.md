@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export interface CompiledMreactComponentModule {
     // (undocumented)
     domCode: string;
@@ -12,19 +12,19 @@ export interface CompiledMreactComponentModule {
     wrapperCode: string;
 }
 
-// @public (undocumented)
+// @public
 export function compileMreactComponentModule(code: string, filename: string, options: CompileMreactComponentModuleOptions): CompiledMreactComponentModule;
 
-// @public (undocumented)
+// @public
 export interface CompileMreactComponentModuleOptions {
     // (undocumented)
     domImportPath: string;
 }
 
-// @public (undocumented)
+// @public
 export function formatGeneratedMreactComponents(generated: readonly GeneratedMreactComponent[], rootDir: string): string;
 
-// @public (undocumented)
+// @public
 export interface GeneratedMreactComponent {
     // (undocumented)
     domOutput: string;
@@ -34,10 +34,10 @@ export interface GeneratedMreactComponent {
     source: string;
 }
 
-// @public (undocumented)
+// @public
 export function generateMreactComponents(options: GenerateMreactComponentsOptions): Promise<GeneratedMreactComponent[]>;
 
-// @public (undocumented)
+// @public
 export interface GenerateMreactComponentsOptions {
     // (undocumented)
     rootDir: string;

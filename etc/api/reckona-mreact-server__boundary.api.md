@@ -6,7 +6,7 @@
 
 import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 
-// @public (undocumented)
+// @public
 export interface AsyncBoundaryOptions {
     // (undocumented)
     catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
@@ -14,16 +14,16 @@ export interface AsyncBoundaryOptions {
     hydrationAwaitId?: string;
 }
 
-// @public (undocumented)
+// @public
 export type AsyncBoundaryRender<T> = (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export interface HydrationScriptOptions {
     // (undocumented)
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
     // (undocumented)
     hydration?: boolean;
@@ -33,7 +33,7 @@ export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
     placeholderTag?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface OutOfOrderReorderScriptOptions {
     // (undocumented)
     nonce?: string;
@@ -41,7 +41,7 @@ export interface OutOfOrderReorderScriptOptions {
     src?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
     // (undocumented)
     fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
@@ -49,7 +49,7 @@ export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface ReactSuspenseClientRenderOptions {
     // (undocumented)
     message?: string;
@@ -57,10 +57,10 @@ export interface ReactSuspenseClientRenderOptions {
     stack?: string;
 }
 
-// @public (undocumented)
+// @public
 export const reactSuspenseRevealExternalScript = "(()=>{(self.$RC=self.$RC||function(bid,sid){var b=document.getElementById(bid);var s=document.getElementById(sid);if(!b||!s)return;var p=b.parentNode;var e=b.nextSibling;var d=0;var r=[];for(var n=e;n;n=n.nextSibling){if(n.nodeType===8){if(n.data===\"$\"||n.data===\"$?\"||n.data===\"$!\")d++;else if(n.data===\"/$\"){if(d===0){e=n;break;}d--;}}r.push(n);}for(var i=0;r[i];i++)p.removeChild(r[i]);while(s.firstChild)p.insertBefore(s.firstChild,e);s.remove();b.data=\"$\";});var s=document.currentScript;if(!s)return;var b=s.getAttribute(\"data-boundary-id\");var seg=s.getAttribute(\"data-segment-id\");if(b!==null&&seg!==null)self.$RC(b,seg);})();";
 
-// @public (undocumented)
+// @public
 export interface ReactSuspenseScriptOptions {
     // (undocumented)
     nonce?: string;
@@ -68,25 +68,25 @@ export interface ReactSuspenseScriptOptions {
     src?: string;
 }
 
-// @public (undocumented)
+// @public
 export function renderAsyncBoundary<T>(sink: HtmlSink, value: T, render: AsyncBoundaryRender<T>, options?: AsyncBoundaryOptions): Promise<void>;
 
-// @public (undocumented)
+// @public
 export function renderHydrationBoundary(sink: HtmlSink, id: string, render: (sink: HtmlSink) => void | PromiseLike<void>): void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export function renderOutOfOrderBoundary<T>(sink: HtmlSink, id: string, value: T, render: AsyncBoundaryRender<T>, options?: OutOfOrderBoundaryOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderOutOfOrderReorderScript(sink: HtmlSink, options?: OutOfOrderReorderScriptOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderReactSuspenseBoundary(sink: HtmlSink, render: (sink: HtmlSink) => void | PromiseLike<void>): void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export function renderReactSuspenseClientRenderBoundary(sink: HtmlSink, fallback: (sink: HtmlSink) => void | PromiseLike<void>, options?: ReactSuspenseClientRenderOptions): void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export function renderReactSuspenseOutOfOrderBoundary<T>(sink: HtmlSink, boundaryId: string, segmentId: string, value: T, render: AsyncBoundaryRender<T>, options?: ReactSuspenseBoundaryOptions): void;
 
 // (No @packageDocumentation comment for this package)

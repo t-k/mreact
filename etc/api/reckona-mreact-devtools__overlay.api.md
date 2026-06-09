@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export interface Devtools {
     // (undocumented)
     dispose(): void;
@@ -16,7 +16,7 @@ export interface Devtools {
     subscribe(listener: DevtoolsListener): () => void;
 }
 
-// @public (undocumented)
+// @public
 export interface DevtoolsEvent {
     // (undocumented)
     [key: string]: unknown;
@@ -28,10 +28,10 @@ export interface DevtoolsEvent {
     type: string;
 }
 
-// @public (undocumented)
+// @public
 export type DevtoolsListener = (event: DevtoolsEvent) => void;
 
-// @public (undocumented)
+// @public
 export interface DevtoolsOverlayOptions {
     // (undocumented)
     devtools?: Devtools | undefined;
@@ -41,13 +41,13 @@ export interface DevtoolsOverlayOptions {
     maxEvents?: number | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type DevtoolsOverlayTab = "query" | "reactive" | "router";
 
-// @public (undocumented)
+// @public
 export function mountDevtoolsOverlay(options?: DevtoolsOverlayOptions): MountedDevtoolsOverlay;
 
-// @public (undocumented)
+// @public
 export interface MountedDevtoolsOverlay {
     // (undocumented)
     devtools: Devtools;

@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export type EventPriority = "discrete" | "continuous" | "default";
 
-// @public (undocumented)
+// @public
 export function runWithEventPriority<T>(priority: EventPriority, callback: () => T): T;
 
 // (No @packageDocumentation comment for this package)

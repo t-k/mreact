@@ -9,10 +9,10 @@ import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 import { RenderAppRequestOptions } from '@reckona/mreact-router';
 import { RenderValue } from '@reckona/mreact-reactive-dom';
 
-// @public (undocumented)
+// @public
 export function act<T>(fn: () => Promise<T> | T): Promise<T>;
 
-// @public (undocumented)
+// @public
 export interface AppFixture {
     // (undocumented)
     readonly appDir: string;
@@ -22,22 +22,22 @@ export interface AppFixture {
     write(path: string, contents: string): Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export type AppFixtureRenderOptions = Omit<RenderAppRequestOptions, "appDir" | "request"> & {
     request?: RequestInit | undefined;
     origin?: string | undefined;
 };
 
-// @public (undocumented)
+// @public
 export type ComponentRenderInput = RenderValue | (() => RenderValue);
 
-// @public (undocumented)
+// @public
 export interface ComponentRenderOptions {
     // (undocumented)
     container?: HTMLElement | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface ComponentRenderResult {
     // (undocumented)
     readonly container: HTMLElement;
@@ -47,16 +47,16 @@ export interface ComponentRenderResult {
     unmount(): void;
 }
 
-// @public (undocumented)
+// @public
 export function createAppFixture(prefix?: string): Promise<AppFixture>;
 
-// @public (undocumented)
+// @public
 export function createCellMock<T>(initial: T): Cell<T>;
 
-// @public (undocumented)
+// @public
 export function createComputedMock<T>(fn: () => T): ReadonlyCell<T>;
 
-// @public (undocumented)
+// @public
 export interface DehydratedQueryState {
     // (undocumented)
     queries: Array<{
@@ -67,22 +67,22 @@ export interface DehydratedQueryState {
     }>;
 }
 
-// @public (undocumented)
+// @public
 export function flushReactive(): Promise<void>;
 
-// @public (undocumented)
+// @public
 export function invokeRouteHandler<TContext = undefined>(handler: RouteHandler<TContext>, request: Request, context?: TContext): Promise<Response>;
 
-// @public (undocumented)
+// @public
 export function readQueryState(html: string): DehydratedQueryState | undefined;
 
-// @public (undocumented)
+// @public
 export function render(value: ComponentRenderInput, options?: ComponentRenderOptions): ComponentRenderResult;
 
-// @public (undocumented)
+// @public
 export function responseText(response: Response): Promise<string>;
 
-// @public (undocumented)
+// @public
 export type RouteHandler<TContext = undefined> = (request: Request, context: TContext) => Response | Promise<Response>;
 
 // (No @packageDocumentation comment for this package)

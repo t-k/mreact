@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function getServerRuntimeState<TState extends object>(key: string, create: () => TState): TState;
 
 // (No @packageDocumentation comment for this package)

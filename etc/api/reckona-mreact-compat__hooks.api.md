@@ -4,77 +4,77 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export type StartTransition = (scope: TransitionScope) => void;
 
-// @public (undocumented)
+// @public
 export function startTransition(scope: TransitionScope): void;
 
-// @public (undocumented)
+// @public
 export type TransitionScope = () => void;
 
-// @public (undocumented)
+// @public
 export function unstable_useCacheRefresh(): () => void;
 
-// @public (undocumented)
+// @public
 export function use<T>(usable: PromiseLike<T> | unknown): T;
 
-// @public (undocumented)
+// @public
 export function useActionState<TState, TPayload>(action: (previousState: TState, payload: TPayload) => TState | Promise<TState>, initialState: TState): [TState, (payload: TPayload) => void, boolean];
 
-// @public (undocumented)
+// @public
 export function useCallback<T extends (...args: never[]) => unknown>(callback: T, deps?: readonly unknown[]): T;
 
-// @public (undocumented)
+// @public
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void;
 
-// @public (undocumented)
+// @public
 export function useDeferredValue<T>(value: T, initialValue?: T): T;
 
 // Warning: (ae-forgotten-export) The symbol "EffectCallback" needs to be exported by the entry point hooks-entry.d.ts
 //
-// @public (undocumented)
+// @public
 export function useEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useEffectEvent<TArgs extends unknown[], TResult>(callback: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
 
-// @public (undocumented)
+// @public
 export function useId(): string;
 
-// @public (undocumented)
+// @public
 export function useImperativeHandle<T>(ref: unknown, create: () => T, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useInsertionEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useLayoutEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 
-// @public (undocumented)
+// @public
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T;
 
-// @public (undocumented)
+// @public
 export function useOptimistic<TState, TPayload>(state: TState, update?: (state: TState, payload: TPayload) => TState): [TState, (payload: TPayload) => void];
 
-// @public (undocumented)
+// @public
 export function useReducer<TState, TAction, TInitial = TState>(reducer: (state: TState, action: TAction) => TState, initialArg: TInitial, init?: (initialArg: TInitial) => TState): [TState, (action: TAction) => void];
 
-// @public (undocumented)
+// @public
 export function useRef<T>(initial: T): {
     current: T;
 };
 
-// @public (undocumented)
+// @public
 export function useState<T>(initial: T | (() => T)): [T, (value: T | ((previous: T) => T)) => void];
 
-// @public (undocumented)
+// @public
 export function useSyncExternalStore<T>(subscribe: (listener: () => void) => () => void, getSnapshot: () => T, getServerSnapshot?: () => T): T;
 
-// @public (undocumented)
+// @public
 export function useTransition(): [boolean, StartTransition];
 
-// @public (undocumented)
+// @public
 export const version = "19.2.6";
 
 // (No @packageDocumentation comment for this package)

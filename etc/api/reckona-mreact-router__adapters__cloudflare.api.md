@@ -8,25 +8,25 @@ import type { ClientReferenceMetadata } from '@reckona/mreact-shared/compiler-co
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import { QueryClient } from '@reckona/mreact-query';
 
-// @public (undocumented)
+// @public
 export interface CloudflareAssetBinding {
     // (undocumented)
     fetch(request: Request): Response | Promise<Response>;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareAssetLoader<Env = unknown> {
     // (undocumented)
     fetch?: ((pathname: string, request: Request, env: Env, context: CloudflareExecutionContext) => Response | Promise<Response | undefined> | undefined) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omit<CloudflareRequestHandlerOptions<Env>, "render"> {
     // (undocumented)
     renderRoute?: ((request: Request, context: CloudflareBuiltRouteRenderContext<Env>) => Response | Promise<Response>) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareBuiltRouteRenderContext<Env = unknown> extends CloudflareRenderContext<Env> {
     // (undocumented)
     params: Record<string, readonly string[] | string>;
@@ -36,7 +36,7 @@ export interface CloudflareBuiltRouteRenderContext<Env = unknown> extends Cloudf
     route: AppRoute;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareCache {
     // (undocumented)
     delete(request: Request | string): boolean | Promise<boolean>;
@@ -46,13 +46,13 @@ export interface CloudflareCache {
     put(request: Request | string, response: Response): void | Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export function cloudflareClientAssetPaths(manifest: CloudflareClientManifest, options?: {
     extraPaths?: readonly string[] | undefined;
     prefix?: string | undefined;
 }): Set<string>;
 
-// @public (undocumented)
+// @public
 export interface CloudflareClientManifest {
     // (undocumented)
     assets?: readonly string[] | undefined;
@@ -64,7 +64,7 @@ export interface CloudflareClientManifest {
     routes: ClientRouteManifestEntry[];
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareExecutionContext {
     // (undocumented)
     passThroughOnException(): void;
@@ -72,7 +72,7 @@ export interface CloudflareExecutionContext {
     waitUntil(promise: Promise<unknown>): void;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareMetadataRouteContext {
     // (undocumented)
     baseUrl: string;
@@ -84,13 +84,13 @@ export interface CloudflareMetadataRouteContext {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareMetadataRouteModule {
     // (undocumented)
     default?: ((context: CloudflareMetadataRouteContext) => unknown | PromiseLike<unknown>) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflarePrerenderStoreOptions {
     // (undocumented)
     cache: CloudflareCache;
@@ -100,7 +100,7 @@ export interface CloudflarePrerenderStoreOptions {
     keyPrefix?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareRenderContext<Env = unknown> {
     // (undocumented)
     clientManifest: CloudflareClientManifest;
@@ -114,13 +114,13 @@ export interface CloudflareRenderContext<Env = unknown> {
     serverManifest: BuiltServerManifest;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareRequestHandler<Env = unknown> {
     // (undocumented)
     fetch(request: Request, env: Env, context: CloudflareExecutionContext): Promise<Response>;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareRequestHandlerOptions<Env = unknown> {
     // (undocumented)
     assets?: CloudflareAssetLoader<Env> | undefined;
@@ -142,7 +142,7 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
     serverManifest: BuiltServerManifest;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     // (undocumented)
     App?: CloudflareRouteModuleComponent<Data, Env> | undefined;
@@ -161,10 +161,10 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     metadata?: RouteMetadata | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type CloudflareRouteModuleComponent<Data = unknown, Env = unknown> = (props: CloudflareRouteModuleComponentProps<Data, Env>) => Response | string | PromiseLike<Response | string>;
 
-// @public (undocumented)
+// @public
 export interface CloudflareRouteModuleComponentProps<Data = unknown, Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
     // (undocumented)
     data: Data;
@@ -174,10 +174,10 @@ export interface CloudflareRouteModuleComponentProps<Data = unknown, Env = unkno
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export type CloudflareRouteModuleGlob<Env = unknown> = Record<string, CloudflareRouteModuleRegistryEntry<Env> | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)>;
 
-// @public (undocumented)
+// @public
 export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
     // (undocumented)
     queryClient: QueryClient;
@@ -185,13 +185,13 @@ export interface CloudflareRouteModuleLoaderContext<Env = unknown> extends Cloud
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<string, CloudflareRouteModuleRegistryEntry<Env> | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)>;
 
-// @public (undocumented)
+// @public
 export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteModule<unknown, Env> | CloudflareMetadataRouteModule | CloudflareServerRouteModule<Env>;
 
-// @public (undocumented)
+// @public
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
     // (undocumented)
     document?: ((context: CloudflareRouteModuleComponentProps<unknown, Env> & {
@@ -202,16 +202,16 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
     modules: CloudflareRouteModuleRegistry<Env>;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareServerRouteContext<Env = unknown> extends CloudflareBuiltRouteRenderContext<Env> {
     // (undocumented)
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export type CloudflareServerRouteHandler<Env = unknown> = (request: Request, context: CloudflareServerRouteContext<Env>) => unknown | PromiseLike<unknown>;
 
-// @public (undocumented)
+// @public
 export interface CloudflareServerRouteModule<Env = unknown> {
     // (undocumented)
     ALL?: CloudflareServerRouteHandler<Env> | undefined;
@@ -233,7 +233,7 @@ export interface CloudflareServerRouteModule<Env = unknown> {
     PUT?: CloudflareServerRouteHandler<Env> | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflareStaticAssetLoaderOptions<Env = unknown> {
     // (undocumented)
     binding: CloudflareAssetBinding | ((env: Env) => CloudflareAssetBinding | Promise<CloudflareAssetBinding | undefined> | undefined);
@@ -245,30 +245,30 @@ export interface CloudflareStaticAssetLoaderOptions<Env = unknown> {
     prefix?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function collectCloudflareRouteModules<Env = unknown>(glob: CloudflareRouteModuleGlob<Env>, options: CollectCloudflareRouteModulesOptions): CloudflareRouteModuleRegistry<Env>;
 
-// @public (undocumented)
+// @public
 export interface CollectCloudflareRouteModulesOptions {
     // (undocumented)
     manifest: BuiltServerManifest;
 }
 
-// @public (undocumented)
+// @public
 export function createCloudflareBuiltRequestHandler<Env = unknown>(options: CloudflareBuiltRequestHandlerOptions<Env>): CloudflareRequestHandler<Env>;
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point cloudflare.d.ts
 //
-// @public (undocumented)
+// @public
 export function createCloudflarePrerenderStore(options: CloudflarePrerenderStoreOptions): AppRouterPrerenderStore;
 
-// @public (undocumented)
+// @public
 export function createCloudflareRequestHandler<Env = unknown>(options: CloudflareRequestHandlerOptions<Env>): CloudflareRequestHandler<Env>;
 
-// @public (undocumented)
+// @public
 export function createCloudflareRouteModuleRenderer<Env = unknown>(options: CloudflareRouteModuleRendererOptions<Env>): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]>;
 
-// @public (undocumented)
+// @public
 export function createCloudflareStaticAssetLoader<Env = unknown>(options: CloudflareStaticAssetLoaderOptions<Env>): CloudflareAssetLoader<Env>;
 
 // (No @packageDocumentation comment for this package)

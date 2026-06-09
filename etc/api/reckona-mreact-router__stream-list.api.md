@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function streamList<TInput, TItem = TInput>(items: readonly TInput[], options: StreamListOptions<TInput, TItem>): Array<StreamListPendingBatch<TItem>>;
 
-// @public (undocumented)
+// @public
 export interface StreamListBatch<TItem> {
     // (undocumented)
     index: number;
@@ -19,7 +19,7 @@ export interface StreamListBatch<TItem> {
     start: number;
 }
 
-// @public (undocumented)
+// @public
 export interface StreamListOptions<TInput, TItem> {
     // (undocumented)
     batchSize: number;
@@ -31,7 +31,7 @@ export interface StreamListOptions<TInput, TItem> {
     }) => PromiseLike<readonly TItem[]> | readonly TItem[];
 }
 
-// @public (undocumented)
+// @public
 export interface StreamListPendingBatch<TItem> {
     // (undocumented)
     index: number;

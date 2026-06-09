@@ -4,19 +4,19 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createMemorySessionStore<TData>(options?: MemorySessionStoreOptions): SessionStore<TData>;
 
-// @public (undocumented)
+// @public
 export function createSession<TData>(response: Response, store: SessionStore<TData>, data: TData, options?: SessionCookieOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function destroySession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<void>;
 
-// @public (undocumented)
+// @public
 export function getSession<TData>(request: Request, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
-// @public (undocumented)
+// @public
 export interface MemorySessionStoreOptions {
     // (undocumented)
     maxEntries?: number;
@@ -24,10 +24,10 @@ export interface MemorySessionStoreOptions {
     sweepIntervalMs?: number;
 }
 
-// @public (undocumented)
+// @public
 export function rotateSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
-// @public (undocumented)
+// @public
 export interface SessionCookieOptions {
     // (undocumented)
     cookieName?: string;
@@ -41,7 +41,7 @@ export interface SessionCookieOptions {
     secure?: boolean;
 }
 
-// @public (undocumented)
+// @public
 export interface SessionRecord<TData = unknown> {
     // (undocumented)
     createdAt: number;
@@ -55,7 +55,7 @@ export interface SessionRecord<TData = unknown> {
     rotatedAt?: number;
 }
 
-// @public (undocumented)
+// @public
 export interface SessionStore<TData = unknown> {
     // (undocumented)
     delete(id: string): void | Promise<void>;

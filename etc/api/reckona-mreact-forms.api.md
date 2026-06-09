@@ -6,30 +6,30 @@
 
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
-// @public (undocumented)
+// @public
 export function createForm<TValues extends FormValues>(options: CreateFormOptionsWithoutSchema<TValues>): FormApi<TValues, TValues>;
 
 // @public (undocumented)
 export function createForm<TValues extends FormValues, TSubmitValues>(options: CreateFormOptionsWithSchema<TValues, TSubmitValues>): FormApi<TValues, TSubmitValues>;
 
-// @public (undocumented)
+// @public
 export type CreateFormOptions<TValues extends FormValues, TSubmitValues = TValues> = CreateFormOptionsWithoutSchema<TValues> | CreateFormOptionsWithSchema<TValues, TSubmitValues>;
 
 // Warning: (ae-forgotten-export) The symbol "BaseCreateFormOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export interface CreateFormOptionsWithoutSchema<TValues extends FormValues> extends BaseCreateFormOptions<TValues> {
     // (undocumented)
     schema?: undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmitValues> extends BaseCreateFormOptions<TValues> {
     // (undocumented)
     schema: StandardSchemaV1<TValues, TSubmitValues>;
 }
 
-// @public (undocumented)
+// @public
 export interface FieldApi<TValues extends FormValues, Name extends FieldName<TValues>> {
     // (undocumented)
     bind(options?: FieldBindingOptions): FieldBinding<TValues[Name]>;
@@ -41,7 +41,7 @@ export interface FieldApi<TValues extends FormValues, Name extends FieldName<TVa
     readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
 }
 
-// @public (undocumented)
+// @public
 export interface FieldBinding<TValue> {
     // (undocumented)
     onBlur(event: Event): Promise<void>;
@@ -53,16 +53,16 @@ export interface FieldBinding<TValue> {
     value: TValue;
 }
 
-// @public (undocumented)
+// @public
 export interface FieldBindingOptions {
     // (undocumented)
     event?: "change" | "input" | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type FieldName<TValues extends FormValues> = Extract<keyof TValues, string>;
 
-// @public (undocumented)
+// @public
 export interface FieldState<TValue> {
     // (undocumented)
     dirty: boolean;
@@ -76,10 +76,10 @@ export interface FieldState<TValue> {
     value: TValue;
 }
 
-// @public (undocumented)
+// @public
 export type FieldValidator<TValue, TValues extends FormValues> = (value: TValue, values: TValues) => readonly string[] | string | undefined | Promise<readonly string[] | string | undefined>;
 
-// @public (undocumented)
+// @public
 export interface FormApi<TValues extends FormValues, TSubmitValues> {
     // (undocumented)
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name>;
@@ -101,10 +101,10 @@ export interface FormApi<TValues extends FormValues, TSubmitValues> {
     validate(): Promise<FormValidationResult<TValues, TSubmitValues>>;
 }
 
-// @public (undocumented)
+// @public
 export type FormErrors<TValues extends FormValues> = Partial<Record<FieldName<TValues> | "root", string[]>>;
 
-// @public (undocumented)
+// @public
 export interface FormState<TValues extends FormValues> {
     // (undocumented)
     dirty: boolean;
@@ -126,7 +126,7 @@ export interface FormState<TValues extends FormValues> {
     values: TValues;
 }
 
-// @public (undocumented)
+// @public
 export type FormSubmitResult<TValues extends FormValues, TResult> = {
     data: TResult;
     status: "success";
@@ -138,10 +138,10 @@ export type FormSubmitResult<TValues extends FormValues, TResult> = {
     status: "error";
 };
 
-// @public (undocumented)
+// @public
 export type FormValidateMode = "change" | "blur" | "submit";
 
-// @public (undocumented)
+// @public
 export type FormValidationResult<TValues extends FormValues, TSubmitValues> = {
     success: true;
     value: TSubmitValues;
@@ -150,10 +150,10 @@ export type FormValidationResult<TValues extends FormValues, TSubmitValues> = {
     success: false;
 };
 
-// @public (undocumented)
+// @public
 export type FormValues = Record<string, unknown>;
 
-// @public (undocumented)
+// @public
 export type InferStandardSchemaInput<Schema> = Schema extends {
     readonly "~standard": {
         readonly types?: (infer Types) | undefined;
@@ -162,7 +162,7 @@ export type InferStandardSchemaInput<Schema> = Schema extends {
     readonly input: infer Input;
 } ? Input : never : never;
 
-// @public (undocumented)
+// @public
 export type InferStandardSchemaOutput<Schema> = Schema extends {
     readonly "~standard": {
         readonly types?: (infer Types) | undefined;
@@ -171,7 +171,7 @@ export type InferStandardSchemaOutput<Schema> = Schema extends {
     readonly output: infer Output;
 } ? Output : never : never;
 
-// @public (undocumented)
+// @public
 export interface ServerActionErrors<TValues extends FormValues> {
     // (undocumented)
     fieldErrors?: Partial<Record<FieldName<TValues>, readonly string[]>> | undefined;
@@ -179,13 +179,13 @@ export interface ServerActionErrors<TValues extends FormValues> {
     formErrors?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface StandardSchemaV1<Input = unknown, Output = Input> {
     // (undocumented)
     readonly "~standard": StandardSchemaV1.Props<Input, Output>;
 }
 
-// @public (undocumented)
+// @public
 export namespace StandardSchemaV1 {
     // (undocumented)
     export interface FailureResult {
@@ -240,7 +240,7 @@ export namespace StandardSchemaV1 {
 
 // Warning: (ae-forgotten-export) The symbol "StandardSchemaValidationResult" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function validateStandardSchema<Schema extends StandardSchemaV1>(schema: Schema, value: unknown): Promise<StandardSchemaValidationResult<InferStandardSchemaOutput<Schema>>>;
 
 // (No @packageDocumentation comment for this package)

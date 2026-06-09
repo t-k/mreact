@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createMreactApp(options: CreateMreactAppOptions): Promise<CreateMreactAppResult>;
 
-// @public (undocumented)
+// @public
 export const createMreactAppCodemods: readonly [{
     readonly description: "Normalize app-router import policy examples after the 0.0.16 adapter template changes.";
     readonly id: "0.0.16-import-policy-normalize";
@@ -18,13 +18,13 @@ export const createMreactAppCodemods: readonly [{
     readonly version: "0.0.16";
 }];
 
-// @public (undocumented)
+// @public
 export type CreateMreactAppDeployTarget = "aws-lambda" | "cloudflare" | "container";
 
-// @public (undocumented)
+// @public
 export const createMreactAppDeployTargets: readonly ["cloudflare", "container", "aws-lambda"];
 
-// @public (undocumented)
+// @public
 export interface CreateMreactAppOptions {
     // (undocumented)
     deploy?: CreateMreactAppDeployTarget | undefined;
@@ -40,10 +40,10 @@ export interface CreateMreactAppOptions {
     template?: CreateMreactAppTemplate | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type CreateMreactAppPackageManager = "pnpm" | "npm" | "bun";
 
-// @public (undocumented)
+// @public
 export interface CreateMreactAppResult {
     // (undocumented)
     deploy?: CreateMreactAppDeployTarget | undefined;
@@ -57,19 +57,19 @@ export interface CreateMreactAppResult {
     template: CreateMreactAppTemplate;
 }
 
-// @public (undocumented)
+// @public
 export type CreateMreactAppTemplate = "basic" | "tailwind" | "dashboard";
 
-// @public (undocumented)
+// @public
 export const createMreactAppTemplates: readonly ["basic", "tailwind", "dashboard"];
 
-// @public (undocumented)
+// @public
 export type PackageDependencyField = "dependencies" | "devDependencies" | "peerDependencies" | "optionalDependencies";
 
-// @public (undocumented)
+// @public
 export function upgradeMreactApp(options: UpgradeMreactAppOptions): Promise<UpgradeMreactAppResult>;
 
-// @public (undocumented)
+// @public
 export interface UpgradeMreactAppCodemodResult {
     // (undocumented)
     applied: boolean;
@@ -79,7 +79,7 @@ export interface UpgradeMreactAppCodemodResult {
     id: string;
 }
 
-// @public (undocumented)
+// @public
 export interface UpgradeMreactAppDependencyUpdate {
     // (undocumented)
     field: PackageDependencyField;
@@ -91,7 +91,7 @@ export interface UpgradeMreactAppDependencyUpdate {
     to: string;
 }
 
-// @public (undocumented)
+// @public
 export interface UpgradeMreactAppOptions {
     // (undocumented)
     directory: string;
@@ -103,7 +103,7 @@ export interface UpgradeMreactAppOptions {
     targetVersion?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface UpgradeMreactAppResult {
     // (undocumented)
     changed: boolean;

@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function applyOutOfOrderFragments(root?: ParentNode): void;
 
 // (No @packageDocumentation comment for this package)

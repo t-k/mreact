@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export const CLIENT_REFERENCE_TYPE: unique symbol;
 
-// @public (undocumented)
+// @public
 export interface ClientReference {
     // (undocumented)
     $$typeof: typeof CLIENT_REFERENCE_TYPE;
@@ -19,19 +19,19 @@ export interface ClientReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export function createClientReference(moduleId: string, exportName?: string, chunks?: string[]): ClientReference;
 
-// @public (undocumented)
+// @public
 export function createFlightClientManifest(references: readonly FlightClientReferenceInput[], resolveChunks: (reference: FlightClientReferenceInput) => string[]): FlightClientManifestEntry[];
 
-// @public (undocumented)
+// @public
 export function createServerActionHandler(actions: ServerActionRegistry, options?: ServerActionHandlerOptions): (request: Request) => Promise<Response>;
 
-// @public (undocumented)
+// @public
 export function createServerReference(moduleId: string, exportName?: string, bound?: unknown[]): ServerReference;
 
-// @public (undocumented)
+// @public
 export interface FlightArrayBufferModel {
     // (undocumented)
     bytes: number[];
@@ -39,7 +39,7 @@ export interface FlightArrayBufferModel {
     kind: "array-buffer";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightBigIntModel {
     // (undocumented)
     kind: "bigint";
@@ -47,13 +47,13 @@ export interface FlightBigIntModel {
     value: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientManifestEntry extends FlightClientReferenceInput {
     // (undocumented)
     chunks: string[];
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReference {
     // (undocumented)
     chunks?: string[];
@@ -65,7 +65,7 @@ export interface FlightClientReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReferenceInput {
     // (undocumented)
     exportName: string;
@@ -75,7 +75,7 @@ export interface FlightClientReferenceInput {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReferenceModel {
     // (undocumented)
     id: number;
@@ -83,7 +83,7 @@ export interface FlightClientReferenceModel {
     kind: "client-reference";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightDataViewModel {
     // (undocumented)
     bytes: number[];
@@ -91,7 +91,7 @@ export interface FlightDataViewModel {
     kind: "data-view";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightDateModel {
     // (undocumented)
     kind: "date";
@@ -99,7 +99,7 @@ export interface FlightDateModel {
     value: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightElementModel {
     // (undocumented)
     key: string | null;
@@ -113,7 +113,7 @@ export interface FlightElementModel {
     };
 }
 
-// @public (undocumented)
+// @public
 export interface FlightErrorModel {
     // (undocumented)
     digest?: string;
@@ -125,7 +125,7 @@ export interface FlightErrorModel {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightFormDataModel {
     // (undocumented)
     entries: [string, FlightModel][];
@@ -133,7 +133,7 @@ export interface FlightFormDataModel {
     kind: "form-data";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightIterableModel {
     // (undocumented)
     kind: "iterable";
@@ -141,7 +141,7 @@ export interface FlightIterableModel {
     values: FlightModel[];
 }
 
-// @public (undocumented)
+// @public
 export interface FlightMapModel {
     // (undocumented)
     entries: [FlightModel, FlightModel][];
@@ -149,12 +149,12 @@ export interface FlightMapModel {
     kind: "map";
 }
 
-// @public (undocumented)
+// @public
 export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
 };
 
-// @public (undocumented)
+// @public
 export interface FlightNumberModel {
     // (undocumented)
     kind: "number";
@@ -162,7 +162,7 @@ export interface FlightNumberModel {
     value: "Infinity" | "-Infinity" | "NaN" | "-0";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightObjectModel {
     // (undocumented)
     [key: string]: FlightModel | undefined;
@@ -170,7 +170,7 @@ export interface FlightObjectModel {
     kind?: never;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightPromiseModel {
     // (undocumented)
     id: number;
@@ -178,7 +178,7 @@ export interface FlightPromiseModel {
     kind: "promise";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightResponse {
     // (undocumented)
     clientReferences: FlightClientReference[];
@@ -190,7 +190,7 @@ export interface FlightResponse {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightScriptOptions {
     // (undocumented)
     id?: string;
@@ -198,7 +198,7 @@ export interface FlightScriptOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightServerReference {
     // (undocumented)
     bound?: FlightModel[];
@@ -210,7 +210,7 @@ export interface FlightServerReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightServerReferenceModel {
     // (undocumented)
     id: number;
@@ -218,7 +218,7 @@ export interface FlightServerReferenceModel {
     kind: "server-reference";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightSetModel {
     // (undocumented)
     kind: "set";
@@ -226,7 +226,7 @@ export interface FlightSetModel {
     values: FlightModel[];
 }
 
-// @public (undocumented)
+// @public
 export interface FlightSymbolModel {
     // (undocumented)
     kind: "symbol";
@@ -234,7 +234,7 @@ export interface FlightSymbolModel {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightTypedArrayModel {
     // (undocumented)
     arrayType: FlightTypedArrayName;
@@ -244,25 +244,25 @@ export interface FlightTypedArrayModel {
     kind: "typed-array";
 }
 
-// @public (undocumented)
+// @public
 export type FlightTypedArrayName = "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" | "BigUint64Array";
 
-// @public (undocumented)
+// @public
 export function fromReactFlightRows(rows: string): FlightResponse;
 
-// @public (undocumented)
+// @public
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage;
 
-// @public (undocumented)
+// @public
 export function isClientReference(value: unknown): value is ClientReference;
 
-// @public (undocumented)
+// @public
 export function isServerReference(value: unknown): value is ServerReference;
 
-// @public (undocumented)
+// @public
 export function mergeReactFlightRows(response: FlightResponse, rows: string): FlightResponse;
 
-// @public (undocumented)
+// @public
 export interface ReactFlightProtocolCoverage {
     // (undocumented)
     binaryRowTags: string[];
@@ -272,24 +272,24 @@ export interface ReactFlightProtocolCoverage {
     rowTags: string[];
 }
 
-// @public (undocumented)
+// @public
 export function renderFlightPreloadLinks(response: FlightResponse, options?: {
     nonce?: string;
 }): string;
 
-// @public (undocumented)
+// @public
 export function renderFlightResponseScript(response: FlightResponse, options?: FlightScriptOptions): string;
 
-// @public (undocumented)
+// @public
 export function renderToFlightResponse<P extends Record<string, unknown>>(renderable: ((props: P) => unknown) | unknown, props?: P): Promise<FlightResponse>;
 
-// @public (undocumented)
+// @public
 export const SERVER_REFERENCE_TYPE: unique symbol;
 
-// @public (undocumented)
+// @public
 export type ServerAction = (...args: unknown[]) => unknown | Promise<unknown>;
 
-// @public (undocumented)
+// @public
 export interface ServerActionDescriptor {
     // (undocumented)
     action: ServerAction;
@@ -297,7 +297,7 @@ export interface ServerActionDescriptor {
     validateArgs?: (args: unknown[]) => ServerActionValidationResult;
 }
 
-// @public (undocumented)
+// @public
 export interface ServerActionHandlerOptions {
     // (undocumented)
     allowedActions?: readonly ServerActionRequestReference[];
@@ -319,10 +319,10 @@ export interface ServerActionHandlerOptions {
     };
 }
 
-// @public (undocumented)
+// @public
 export type ServerActionRegistry = Record<string, ServerAction | ServerActionDescriptor>;
 
-// @public (undocumented)
+// @public
 export interface ServerActionReplayStore {
     // (undocumented)
     add(value: string): void;
@@ -330,7 +330,7 @@ export interface ServerActionReplayStore {
     has(value: string): boolean;
 }
 
-// @public (undocumented)
+// @public
 export interface ServerActionRequestReference {
     // (undocumented)
     exportName: string;
@@ -338,10 +338,10 @@ export interface ServerActionRequestReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export type ServerActionValidationResult = boolean | string;
 
-// @public (undocumented)
+// @public
 export interface ServerReference {
     // (undocumented)
     $$typeof: typeof SERVER_REFERENCE_TYPE;
@@ -353,10 +353,10 @@ export interface ServerReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export function stringifyFlightResponse(response: FlightResponse): string;
 
-// @public (undocumented)
+// @public
 export function toReactFlightRows(response: FlightResponse): string;
 
 // (No @packageDocumentation comment for this package)

@@ -4,43 +4,43 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function batch<T>(fn: () => T): T;
 
-// @public (undocumented)
+// @public
 export function batchAsync<T>(fn: () => Promise<T> | T): Promise<T>;
 
-// @public (undocumented)
+// @public
 export interface Cell<T> extends ReadonlyCell<T> {
     // (undocumented)
     set(value: T | ((prev: T) => T)): void;
 }
 
-// @public (undocumented)
+// @public
 export function cell<T>(initial: T): Cell<T>;
 
-// @public (undocumented)
+// @public
 export function computed<T>(fn: () => T, options?: ComputedOptions<T> | ComputedEquality<T>): ReadonlyCell<T>;
 
-// @public (undocumented)
+// @public
 export type ComputedEquality<T> = (previous: T, next: T) => boolean;
 
-// @public (undocumented)
+// @public
 export interface ComputedOptions<T> {
     // (undocumented)
     equals?: ComputedEquality<T> | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function effect(fn: () => void | (() => void)): () => void;
 
-// @public (undocumented)
+// @public
 export interface ReadonlyCell<T> {
     // (undocumented)
     get(): T;
 }
 
-// @public (undocumented)
+// @public
 export function untrack<T>(fn: () => T): T;
 
 // (No @packageDocumentation comment for this package)

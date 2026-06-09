@@ -21,10 +21,10 @@ export { createRoot }
 
 export { flushSync }
 
-// @public (undocumented)
+// @public
 export type FormStatus = FormStatusPending | FormStatusNotPending;
 
-// @public (undocumented)
+// @public
 export interface FormStatusNotPending {
     // (undocumented)
     action: null;
@@ -36,7 +36,7 @@ export interface FormStatusNotPending {
     pending: false;
 }
 
-// @public (undocumented)
+// @public
 export interface FormStatusPending {
     // (undocumented)
     action: string | ((formData: FormData) => void | Promise<void>);
@@ -52,25 +52,25 @@ export { hydrateRoot }
 
 export { HydrateRootOptions }
 
-// @public (undocumented)
+// @public
 export function preconnect(href: string, options?: PreconnectOptions): void;
 
-// @public (undocumented)
+// @public
 export interface PreconnectOptions {
     // (undocumented)
     crossOrigin?: "anonymous" | "use-credentials" | "";
 }
 
-// @public (undocumented)
+// @public
 export function prefetchDNS(href: string): void;
 
-// @public (undocumented)
+// @public
 export function preinit(href: string, options: PreinitOptions): void;
 
-// @public (undocumented)
+// @public
 export function preinitModule(href: string, options?: PreinitModuleOptions): void;
 
-// @public (undocumented)
+// @public
 export interface PreinitModuleOptions {
     // (undocumented)
     as?: "script";
@@ -82,7 +82,7 @@ export interface PreinitModuleOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface PreinitOptions {
     // (undocumented)
     as: "script" | "style";
@@ -98,16 +98,16 @@ export interface PreinitOptions {
     precedence?: string;
 }
 
-// @public (undocumented)
+// @public
 export function preload(href: string, options: PreloadOptions): void;
 
-// @public (undocumented)
+// @public
 export type PreloadAs = "audio" | "document" | "embed" | "fetch" | "font" | "image" | "object" | "track" | "script" | "style" | "video" | "worker";
 
-// @public (undocumented)
+// @public
 export function preloadModule(href: string, options?: PreloadModuleOptions): void;
 
-// @public (undocumented)
+// @public
 export interface PreloadModuleOptions {
     // (undocumented)
     as?: RequestDestination;
@@ -119,7 +119,7 @@ export interface PreloadModuleOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface PreloadOptions {
     // (undocumented)
     as: PreloadAs;
@@ -143,7 +143,7 @@ export interface PreloadOptions {
     type?: string;
 }
 
-// @public (undocumented)
+// @public
 const ReactDOM_2: {
     readonly createPortal: typeof createPortal;
     readonly flushSync: typeof flushSync;
@@ -167,7 +167,7 @@ export default ReactDOM_2;
 
 export { render }
 
-// @public (undocumented)
+// @public
 export function requestFormReset(form: HTMLFormElement): void;
 
 export { Root }
@@ -176,7 +176,7 @@ export { RootOptions }
 
 export { unmountComponentAtNode }
 
-// @public (undocumented)
+// @public
 export function unstable_batchedUpdates<T>(callback: () => T): T;
 
 // @public (undocumented)
@@ -184,10 +184,10 @@ export function unstable_batchedUpdates<TArgument, TResult>(callback: (argument:
 
 export { useFormState }
 
-// @public (undocumented)
+// @public
 export function useFormStatus(): FormStatus;
 
-// @public (undocumented)
+// @public
 export const version = "19.2.6";
 
 // (No @packageDocumentation comment for this package)

@@ -4,13 +4,13 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): EdgeRequestHandler;
 
-// @public (undocumented)
+// @public
 export type EdgeRequestHandler = (request: Request) => Response | Promise<Response>;
 
-// @public (undocumented)
+// @public
 export interface EdgeRequestHandlerOptions {
     // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point edge.d.ts
     //

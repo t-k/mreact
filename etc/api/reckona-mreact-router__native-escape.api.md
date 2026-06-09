@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function escapeHtmlBatch(values: readonly unknown[]): string[];
 
 // (No @packageDocumentation comment for this package)

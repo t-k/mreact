@@ -14,7 +14,7 @@ import { UserConfig } from 'vite';
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point vite.d.ts
 //
-// @public (undocumented)
+// @public
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
@@ -40,7 +40,7 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
     vitePlugins?: readonly PluginOption[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
@@ -54,21 +54,21 @@ export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
     serverActions?: AppRouterServerActionOptions | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function createAppRouterViteMiddleware(options: AppRouterViteMiddlewareOptions): Connect.NextHandleFunction;
 
-// @public (undocumented)
+// @public
 export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): Plugin_2;
 
-// @public (undocumented)
+// @public
 export const mreactRouter: typeof createAppRouterVitePlugin;
 
 // Warning: (ae-forgotten-export) The symbol "ResolvedAppRouterProject" needs to be exported by the entry point vite.d.ts
 //
-// @public (undocumented)
+// @public
 export function mreactRouterConfigFromPlugins(plugins: readonly unknown[]): ResolvedAppRouterProject | undefined;
 
-// @public (undocumented)
+// @public
 export function renderAppRouterClientAsset(appDir: string, pathname: string, options?: {
     dev?: boolean;
     vitePlugins?: readonly PluginOption[] | undefined;

@@ -4,27 +4,27 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function isDangerousHtmlAttribute(name: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isDangerousHtmlOptIn(value: unknown): value is {
     __html: string;
 };
 
-// @public (undocumented)
+// @public
 export function isSrcsetAttribute(name: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isUnsafeMetaRefreshContent(httpEquiv: string, content: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isUnsafeUrlAttribute(name: string, value: string): boolean;
 
-// @public (undocumented)
+// @public
 export function isUrlAttribute(name: string): boolean;
 
-// @public (undocumented)
+// @public
 export function safeUrlAttributeValue(name: string, value: string): string | undefined;
 
 // (No @packageDocumentation comment for this package)

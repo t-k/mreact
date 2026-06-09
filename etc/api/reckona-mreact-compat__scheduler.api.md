@@ -4,54 +4,54 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export type unstable_Callback = (didTimeout: boolean) => unstable_Callback | null | void;
 
 // Warning: (ae-forgotten-export) The symbol "SchedulerTask" needs to be exported by the entry point scheduler.d.ts
 //
-// @public (undocumented)
+// @public
 export type unstable_CallbackNode = SchedulerTask;
 
-// @public (undocumented)
+// @public
 export function unstable_cancelCallback(task: unstable_CallbackNode): void;
 
-// @public (undocumented)
+// @public
 export function unstable_continueExecution(): void;
 
-// @public (undocumented)
+// @public
 export function unstable_forceFrameRate(fps: number): void;
 
-// @public (undocumented)
+// @public
 export function unstable_getCurrentPriorityLevel(): unstable_PriorityLevel;
 
-// @public (undocumented)
+// @public
 export function unstable_getFirstCallbackNode(): unstable_CallbackNode | null;
 
-// @public (undocumented)
+// @public
 export const unstable_IdlePriority = 5;
 
-// @public (undocumented)
+// @public
 export const unstable_ImmediatePriority = 1;
 
-// @public (undocumented)
+// @public
 export const unstable_LowPriority = 4;
 
-// @public (undocumented)
+// @public
 export function unstable_next<T>(callback: () => T): T;
 
-// @public (undocumented)
+// @public
 export const unstable_NormalPriority = 3;
 
-// @public (undocumented)
+// @public
 export function unstable_now(): number;
 
-// @public (undocumented)
+// @public
 export function unstable_pauseExecution(): void;
 
-// @public (undocumented)
+// @public
 export type unstable_PriorityLevel = 1 | 2 | 3 | 4 | 5;
 
-// @public (undocumented)
+// @public
 export const unstable_Profiling: {
     startLoggingProfilingEvents: typeof startLoggingSchedulerProfilingEvents;
     stopLoggingProfilingEvents: typeof stopLoggingSchedulerProfilingEvents;
@@ -59,33 +59,33 @@ export const unstable_Profiling: {
 
 // Warning: (ae-forgotten-export) The symbol "SchedulerProfilingEvent" needs to be exported by the entry point scheduler.d.ts
 //
-// @public (undocumented)
+// @public
 export type unstable_ProfilingEvent = SchedulerProfilingEvent;
 
-// @public (undocumented)
+// @public
 export function unstable_requestPaint(): void;
 
-// @public (undocumented)
+// @public
 export function unstable_runWithPriority<T>(priorityLevel: unstable_PriorityLevel, callback: () => T): T;
 
-// @public (undocumented)
+// @public
 export function unstable_scheduleCallback(priorityLevel: unstable_PriorityLevel, callback: unstable_Callback, options?: {
     delay?: number;
 }): unstable_CallbackNode;
 
-// @public (undocumented)
+// @public
 export function unstable_shouldYield(): boolean;
 
-// @public (undocumented)
+// @public
 export const unstable_UserBlockingPriority = 2;
 
-// @public (undocumented)
+// @public
 export function unstable_wrapCallback<TArgs extends unknown[], TResult>(callback: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
 
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/scheduler.ts:28:32 - (ae-forgotten-export) The symbol "startLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
-// packages/react-compat/src/scheduler.ts:28:32 - (ae-forgotten-export) The symbol "stopLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
+// packages/react-compat/src/scheduler.ts:37:32 - (ae-forgotten-export) The symbol "startLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
+// packages/react-compat/src/scheduler.ts:37:32 - (ae-forgotten-export) The symbol "stopLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
 
 // (No @packageDocumentation comment for this package)
 

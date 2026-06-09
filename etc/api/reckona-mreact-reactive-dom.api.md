@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function bindEvent<K extends keyof HTMLElementEventMap>(element: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: BindEventOptions): Dispose;
 
-// @public (undocumented)
+// @public
 export interface BindEventOptions {
     // (undocumented)
     direct?: boolean;
@@ -15,42 +15,42 @@ export interface BindEventOptions {
 
 // Warning: (ae-forgotten-export) The symbol "BindListOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function bindList<T>(parent: ParentNode, marker: ChildNode, items: () => readonly T[], renderItem: (item: T, index: number, items: readonly T[]) => RenderValue, options?: BindListOptions<T>): Dispose;
 
-// @public (undocumented)
+// @public
 export function bindProp(element: Element, name: string, value: () => unknown): Dispose;
 
-// @public (undocumented)
+// @public
 export function bindSpreadProps(element: HTMLElement, props: () => Record<string, unknown> | null | undefined): Dispose;
 
-// @public (undocumented)
+// @public
 export function bindText(node: Text, value: () => unknown): Dispose;
 
 // Warning: (ae-forgotten-export) The symbol "BindTextBatchOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function bindTextBatch(nodes: readonly Text[], value: () => unknown, options?: BindTextBatchOptions): Dispose;
 
-// @public (undocumented)
+// @public
 export function createList<T>(items: () => readonly T[], renderItem: (item: T, index: number, items: readonly T[]) => RenderValue, options?: ListRenderValue<T>["options"]): ListRenderValue<T>;
 
-// @public (undocumented)
+// @public
 export function createRoot(container: ParentNode, render: () => RenderValue): Dispose;
 
-// @public (undocumented)
+// @public
 export function createTemplate(html: string): () => DocumentFragment;
 
-// @public (undocumented)
+// @public
 export type Dispose = () => void;
 
-// @public (undocumented)
+// @public
 export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () => RenderValue): Dispose;
 
-// @public (undocumented)
+// @public
 export const LIST_RENDER_VALUE: unique symbol;
 
-// @public (undocumented)
+// @public
 export interface ListRenderValue<T = unknown> {
     // (undocumented)
     readonly [LIST_RENDER_VALUE]: true;
@@ -65,7 +65,7 @@ export interface ListRenderValue<T = unknown> {
     readonly renderItem: (item: T, index: number, items: readonly T[]) => RenderValue;
 }
 
-// @public (undocumented)
+// @public
 export type RenderValue = Node | string | number | boolean | null | undefined | ListRenderValue | readonly RenderValue[];
 
 // (No @packageDocumentation comment for this package)

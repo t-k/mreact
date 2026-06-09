@@ -4,26 +4,26 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
 
-// @public (undocumented)
+// @public
 export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<TCurrentTarget, SubmitEvent>;
 
-// @public (undocumented)
+// @public
 export const Fragment: unique symbol;
 
 // Warning: (ae-forgotten-export) The symbol "ElementType" needs to be exported by the entry point jsx-runtime.d.ts
 // Warning: (ae-forgotten-export) The symbol "ReactCompatElement" needs to be exported by the entry point jsx-runtime.d.ts
 //
-// @public (undocumented)
+// @public
 export function jsx<P extends Record<string, unknown>>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
 }) | null, key?: unknown): ReactCompatElement<P>;
 
-// @public (undocumented)
+// @public
 namespace JSX_2 {
     // (undocumented)
     interface Element extends ReactCompatElement {
@@ -37,7 +37,7 @@ namespace JSX_2 {
 }
 export { JSX_2 as JSX }
 
-// @public (undocumented)
+// @public
 export interface JSXDOMAttributes<TElement extends EventTarget> {
     // (undocumented)
     children?: ReactCompatNode;
@@ -51,21 +51,21 @@ export interface JSXDOMAttributes<TElement extends EventTarget> {
     onSubmit?: JSXEventHandler<TElement, SubmitEvent>;
 }
 
-// @public (undocumented)
+// @public
 export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
     readonly currentTarget: TCurrentTarget;
 };
 
-// @public (undocumented)
+// @public
 export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
 
-// @public (undocumented)
+// @public
 export interface JSXHTMLAttributes<TElement extends HTMLElement> extends JSXDOMAttributes<TElement> {
     // (undocumented)
     [attributeName: string]: unknown;
 }
 
-// @public (undocumented)
+// @public
 export interface JSXIntrinsicAttributes {
     // (undocumented)
     key?: unknown;
@@ -73,7 +73,7 @@ export interface JSXIntrinsicAttributes {
     ref?: unknown;
 }
 
-// @public (undocumented)
+// @public
 export interface JSXIntrinsicElements {
     // (undocumented)
     [elementName: string]: Record<string, unknown>;
@@ -103,19 +103,19 @@ export interface JSXIntrinsicElements {
     textarea: JSXHTMLAttributes<HTMLTextAreaElement>;
 }
 
-// @public (undocumented)
+// @public
 export function jsxs<P extends Record<string, unknown>>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
 }) | null, key?: unknown): ReactCompatElement<P>;
 
-// @public (undocumented)
+// @public
 export const REACTIVE_TEXT_BINDING_META: unique symbol;
 
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/jsx-runtime.ts:88:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
+// packages/react-compat/src/jsx-runtime.ts:100:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
 
 // (No @packageDocumentation comment for this package)
 

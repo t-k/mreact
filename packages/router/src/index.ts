@@ -58,7 +58,6 @@ import type {
   SessionStore as SessionStoreInternal,
 } from "./session.js";
 import type {
-  AppRouteDeclarations as LinkAppRouteDeclarations,
   ConcreteLinkHrefGuard as LinkConcreteLinkHrefGuard,
   LinkChild as LinkChildInternal,
   LinkHref as LinkHrefInternal,
@@ -203,10 +202,7 @@ export type {
 } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
-/**
- * Allows applications to augment the set of statically registered app route paths.
- */
-export interface AppRouteDeclarations extends LinkAppRouteDeclarations {}
+export type { AppRouteDeclarations } from "./link.js";
 /**
  * Produces a compile-time error shape when a typed Link receives an unresolved route pattern.
  */

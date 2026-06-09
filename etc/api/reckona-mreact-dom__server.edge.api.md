@@ -6,7 +6,7 @@
 
 import { ReactCompatNode } from '@reckona/mreact-compat';
 
-// @public (undocumented)
+// @public
 export interface BootstrapScriptDescriptor {
     // (undocumented)
     crossOrigin?: string;
@@ -16,7 +16,7 @@ export interface BootstrapScriptDescriptor {
     src: string;
 }
 
-// @public (undocumented)
+// @public
 export interface PipeableStream {
     // (undocumented)
     abort(reason?: unknown): void;
@@ -24,7 +24,7 @@ export interface PipeableStream {
     pipe<TDestination extends PipeableStreamDestination>(destination: TDestination): TDestination;
 }
 
-// @public (undocumented)
+// @public
 export interface PipeableStreamDestination {
     // (undocumented)
     destroy?(error?: unknown): unknown;
@@ -34,16 +34,16 @@ export interface PipeableStreamDestination {
     write(chunk: string | Uint8Array): unknown;
 }
 
-// @public (undocumented)
+// @public
 export type PostponedState = unknown;
 
-// @public (undocumented)
+// @public
 export interface ReactDOMServerReadableStream extends ReadableStream<Uint8Array> {
     // (undocumented)
     allReady: Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export interface ReactImportMap {
     // (undocumented)
     imports?: Record<string, string>;
@@ -53,7 +53,7 @@ export interface ReactImportMap {
     scopes?: Record<string, Record<string, string>>;
 }
 
-// @public (undocumented)
+// @public
 export interface RenderBootstrapOptions {
     // (undocumented)
     bootstrapModules?: Array<string | BootstrapScriptDescriptor>;
@@ -67,10 +67,10 @@ export interface RenderBootstrapOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export function renderToPipeableStream(element: ReactCompatNode, options?: RenderToPipeableStreamOptions): PipeableStream;
 
-// @public (undocumented)
+// @public
 export interface RenderToPipeableStreamOptions {
     // (undocumented)
     bootstrapModules?: Array<string | BootstrapScriptDescriptor>;
@@ -106,10 +106,10 @@ export interface RenderToPipeableStreamOptions {
     progressiveChunkSize?: number;
 }
 
-// @public (undocumented)
+// @public
 export function renderToReadableStream(element: ReactCompatNode, options?: RenderToReadableStreamOptions): Promise<ReactDOMServerReadableStream>;
 
-// @public (undocumented)
+// @public
 export interface RenderToReadableStreamOptions {
     // (undocumented)
     bootstrapModules?: Array<string | BootstrapScriptDescriptor>;
@@ -141,28 +141,28 @@ export interface RenderToReadableStreamOptions {
     signal?: AbortSignal;
 }
 
-// @public (undocumented)
+// @public
 export function renderToStaticMarkup(element: ReactCompatNode, options?: ServerOptions): string;
 
-// @public (undocumented)
+// @public
 export function renderToString(element: ReactCompatNode, _options?: ServerOptions): string;
 
-// @public (undocumented)
+// @public
 export function resume(element: ReactCompatNode, _postponedState: PostponedState, options?: ResumeOptions): Promise<ReactDOMServerReadableStream>;
 
-// @public (undocumented)
+// @public
 export type ResumeOptions = RenderToReadableStreamOptions & RenderToPipeableStreamOptions;
 
-// @public (undocumented)
+// @public
 export function resumeToPipeableStream(element: ReactCompatNode, _postponedState: PostponedState, options?: ResumeOptions): Promise<PipeableStream>;
 
-// @public (undocumented)
+// @public
 export interface ServerOptions {
     // (undocumented)
     identifierPrefix?: string;
 }
 
-// @public (undocumented)
+// @public
 export const version = "19.2.6";
 
 // (No @packageDocumentation comment for this package)

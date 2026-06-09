@@ -4,19 +4,19 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createDevtools(options?: CreateDevtoolsOptions): Devtools;
 
-// @public (undocumented)
+// @public
 export interface CreateDevtoolsOptions {
     // (undocumented)
     maxEvents?: number | undefined;
 }
 
-// @public (undocumented)
+// @public
 export const defaultDevtoolsMaxEvents = 1000;
 
-// @public (undocumented)
+// @public
 export interface Devtools {
     // (undocumented)
     dispose(): void;
@@ -28,7 +28,7 @@ export interface Devtools {
     subscribe(listener: DevtoolsListener): () => void;
 }
 
-// @public (undocumented)
+// @public
 export interface DevtoolsEvent {
     // (undocumented)
     [key: string]: unknown;
@@ -40,21 +40,21 @@ export interface DevtoolsEvent {
     type: string;
 }
 
-// @public (undocumented)
+// @public
 export type DevtoolsListener = (event: DevtoolsEvent) => void;
 
-// @public (undocumented)
+// @public
 export function emitMreactDevtoolsEvent(packageName: string, event: {
     type: string;
 } & Record<string, unknown>): void;
 
-// @public (undocumented)
+// @public
 export function getInstalledDevtools(): Devtools | undefined;
 
-// @public (undocumented)
+// @public
 export function installDevtools(devtools?: Devtools, options?: InstallDevtoolsOptions): Devtools;
 
-// @public (undocumented)
+// @public
 export interface InstallDevtoolsOptions {
     // (undocumented)
     force?: boolean | undefined;

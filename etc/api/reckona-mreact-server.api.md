@@ -8,7 +8,7 @@ import { Fragment } from '@reckona/mreact-compat';
 import { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 import { ReactCompatNode } from '@reckona/mreact-compat';
 
-// @public (undocumented)
+// @public
 export interface AsyncBoundaryOptions {
     // (undocumented)
     catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
@@ -16,13 +16,13 @@ export interface AsyncBoundaryOptions {
     hydrationAwaitId?: string;
 }
 
-// @public (undocumented)
+// @public
 export type AsyncBoundaryRender<T> = (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export const CLIENT_REFERENCE_TYPE: unique symbol;
 
-// @public (undocumented)
+// @public
 export interface ClientReference {
     // (undocumented)
     $$typeof: typeof CLIENT_REFERENCE_TYPE;
@@ -34,25 +34,25 @@ export interface ClientReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export function createClientReference(moduleId: string, exportName?: string, chunks?: string[]): ClientReference;
 
-// @public (undocumented)
+// @public
 export function createEventHydrationManifest(events: readonly EventHydrationEntry[]): EventHydrationManifest;
 
-// @public (undocumented)
+// @public
 export function createFlightClientManifest(references: readonly FlightClientReferenceInput[], resolveChunks: (reference: FlightClientReferenceInput) => string[]): FlightClientManifestEntry[];
 
-// @public (undocumented)
+// @public
 export function createServerActionHandler(actions: ServerActionRegistry, options?: ServerActionHandlerOptions): (request: Request) => Promise<Response>;
 
-// @public (undocumented)
+// @public
 export function createServerReference(moduleId: string, exportName?: string, bound?: unknown[]): ServerReference;
 
-// @public (undocumented)
+// @public
 export function createStringSink(options?: StringSinkOptions): StringHtmlSink;
 
-// @public (undocumented)
+// @public
 export interface EventHydrationEntry {
     // (undocumented)
     event: string;
@@ -62,7 +62,7 @@ export interface EventHydrationEntry {
     id: string;
 }
 
-// @public (undocumented)
+// @public
 export interface EventHydrationManifest {
     // (undocumented)
     events: EventHydrationEntry[];
@@ -70,7 +70,7 @@ export interface EventHydrationManifest {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightArrayBufferModel {
     // (undocumented)
     bytes: number[];
@@ -78,13 +78,13 @@ export interface FlightArrayBufferModel {
     kind: "array-buffer";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientManifestEntry extends FlightClientReferenceInput {
     // (undocumented)
     chunks: string[];
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReference {
     // (undocumented)
     chunks?: string[];
@@ -96,7 +96,7 @@ export interface FlightClientReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReferenceInput {
     // (undocumented)
     exportName: string;
@@ -106,7 +106,7 @@ export interface FlightClientReferenceInput {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightClientReferenceModel {
     // (undocumented)
     id: number;
@@ -114,7 +114,7 @@ export interface FlightClientReferenceModel {
     kind: "client-reference";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightDataViewModel {
     // (undocumented)
     bytes: number[];
@@ -122,7 +122,7 @@ export interface FlightDataViewModel {
     kind: "data-view";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightElementModel {
     // (undocumented)
     key: string | null;
@@ -136,7 +136,7 @@ export interface FlightElementModel {
     };
 }
 
-// @public (undocumented)
+// @public
 export interface FlightFormDataModel {
     // (undocumented)
     entries: [string, FlightModel][];
@@ -144,7 +144,7 @@ export interface FlightFormDataModel {
     kind: "form-data";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightIterableModel {
     // (undocumented)
     kind: "iterable";
@@ -162,12 +162,12 @@ export interface FlightIterableModel {
 // Warning: (ae-forgotten-export) The symbol "FlightErrorModel" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "FlightPromiseModel" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
 };
 
-// @public (undocumented)
+// @public
 export interface FlightResponse {
     // (undocumented)
     clientReferences: FlightClientReference[];
@@ -179,7 +179,7 @@ export interface FlightResponse {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightScriptOptions {
     // (undocumented)
     id?: string;
@@ -187,7 +187,7 @@ export interface FlightScriptOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightServerReference {
     // (undocumented)
     bound?: FlightModel[];
@@ -199,7 +199,7 @@ export interface FlightServerReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export interface FlightServerReferenceModel {
     // (undocumented)
     id: number;
@@ -207,7 +207,7 @@ export interface FlightServerReferenceModel {
     kind: "server-reference";
 }
 
-// @public (undocumented)
+// @public
 export interface FlightTypedArrayModel {
     // (undocumented)
     arrayType: FlightTypedArrayName;
@@ -217,23 +217,23 @@ export interface FlightTypedArrayModel {
     kind: "typed-array";
 }
 
-// @public (undocumented)
+// @public
 export type FlightTypedArrayName = "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" | "BigUint64Array";
 
 export { Fragment }
 
-// @public (undocumented)
+// @public
 export function fromReactFlightRows(rows: string): FlightResponse;
 
 // Warning: (ae-forgotten-export) The symbol "ReactFlightProtocolCoverage" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage;
 
-// @public (undocumented)
+// @public
 export function html(node: unknown, options?: HtmlResponseOptions): Response;
 
-// @public (undocumented)
+// @public
 export interface HtmlResponseOptions {
     // (undocumented)
     headers?: HeadersInit;
@@ -245,22 +245,22 @@ export interface HtmlResponseOptions {
 
 export { HtmlSink }
 
-// @public (undocumented)
+// @public
 export interface HydrationScriptOptions {
     // (undocumented)
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export function isClientReference(value: unknown): value is ClientReference;
 
-// @public (undocumented)
+// @public
 export function isServerReference(value: unknown): value is ServerReference;
 
-// @public (undocumented)
+// @public
 export function mergeReactFlightRows(response: FlightResponse, rows: string): FlightResponse;
 
-// @public (undocumented)
+// @public
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
     // (undocumented)
     hydration?: boolean;
@@ -270,7 +270,7 @@ export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
     placeholderTag?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface OutOfOrderReorderScriptOptions {
     // (undocumented)
     nonce?: string;
@@ -280,7 +280,7 @@ export interface OutOfOrderReorderScriptOptions {
 
 export { ReactCompatNode }
 
-// @public (undocumented)
+// @public
 export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
     // (undocumented)
     fallback?: (sink: HtmlSink) => void | PromiseLike<void>;
@@ -288,7 +288,7 @@ export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
     nonce?: string;
 }
 
-// @public (undocumented)
+// @public
 export interface ReactSuspenseClientRenderOptions {
     // (undocumented)
     message?: string;
@@ -296,10 +296,10 @@ export interface ReactSuspenseClientRenderOptions {
     stack?: string;
 }
 
-// @public (undocumented)
+// @public
 export const reactSuspenseRevealExternalScript = "(()=>{(self.$RC=self.$RC||function(bid,sid){var b=document.getElementById(bid);var s=document.getElementById(sid);if(!b||!s)return;var p=b.parentNode;var e=b.nextSibling;var d=0;var r=[];for(var n=e;n;n=n.nextSibling){if(n.nodeType===8){if(n.data===\"$\"||n.data===\"$?\"||n.data===\"$!\")d++;else if(n.data===\"/$\"){if(d===0){e=n;break;}d--;}}r.push(n);}for(var i=0;r[i];i++)p.removeChild(r[i]);while(s.firstChild)p.insertBefore(s.firstChild,e);s.remove();b.data=\"$\";});var s=document.currentScript;if(!s)return;var b=s.getAttribute(\"data-boundary-id\");var seg=s.getAttribute(\"data-segment-id\");if(b!==null&&seg!==null)self.$RC(b,seg);})();";
 
-// @public (undocumented)
+// @public
 export interface ReactSuspenseScriptOptions {
     // (undocumented)
     nonce?: string;
@@ -307,63 +307,63 @@ export interface ReactSuspenseScriptOptions {
     src?: string;
 }
 
-// @public (undocumented)
+// @public
 export function renderAsyncBoundary<T>(sink: HtmlSink, value: T, render: AsyncBoundaryRender<T>, options?: AsyncBoundaryOptions): Promise<void>;
 
-// @public (undocumented)
+// @public
 export function renderEventHydrationManifest(sink: HtmlSink, manifest: EventHydrationManifest, options?: HydrationScriptOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderFlightPreloadLinks(response: FlightResponse, options?: {
     nonce?: string;
 }): string;
 
-// @public (undocumented)
+// @public
 export function renderFlightResponseScript(response: FlightResponse, options?: FlightScriptOptions): string;
 
-// @public (undocumented)
+// @public
 export function renderHydrationBoundary(sink: HtmlSink, id: string, render: (sink: HtmlSink) => void | PromiseLike<void>): void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export function renderOutOfOrderBoundary<T>(sink: HtmlSink, id: string, value: T, render: AsyncBoundaryRender<T>, options?: OutOfOrderBoundaryOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderOutOfOrderReorderScript(sink: HtmlSink, options?: OutOfOrderReorderScriptOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderReactNodeToString(node: unknown): Promise<string>;
 
-// @public (undocumented)
+// @public
 export function renderReactSuspenseBoundary(sink: HtmlSink, render: (sink: HtmlSink) => void | PromiseLike<void>): void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export function renderReactSuspenseClientRenderBoundary(sink: HtmlSink, fallback: (sink: HtmlSink) => void | PromiseLike<void>, options?: ReactSuspenseClientRenderOptions): void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export function renderReactSuspenseOutOfOrderBoundary<T>(sink: HtmlSink, boundaryId: string, segmentId: string, value: T, render: AsyncBoundaryRender<T>, options?: ReactSuspenseBoundaryOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderSsrState(sink: HtmlSink, value: unknown, options?: HydrationScriptOptions): void;
 
-// @public (undocumented)
+// @public
 export function renderToFlightResponse<P extends Record<string, unknown>>(renderable: ((props: P) => unknown) | unknown, props?: P): Promise<FlightResponse>;
 
-// @public (undocumented)
+// @public
 export function renderToReadableStream(render: StreamRender, options?: RenderToReadableStreamOptions): ReadableStream<Uint8Array>;
 
-// @public (undocumented)
+// @public
 export interface RenderToReadableStreamOptions {
     // (undocumented)
     logAbortedDeferredErrors?: boolean;
 }
 
-// @public (undocumented)
+// @public
 export function renderToString(render: StreamRender): Promise<string>;
 
-// @public (undocumented)
+// @public
 export interface ScriptAssetOptions {
     // (undocumented)
     crossOrigin?: "anonymous" | "use-credentials";
@@ -375,16 +375,16 @@ export interface ScriptAssetOptions {
     src: string;
 }
 
-// @public (undocumented)
+// @public
 export function serializeSsrState(value: unknown): string;
 
-// @public (undocumented)
+// @public
 export const SERVER_REFERENCE_TYPE: unique symbol;
 
-// @public (undocumented)
+// @public
 export type ServerAction = (...args: unknown[]) => unknown | Promise<unknown>;
 
-// @public (undocumented)
+// @public
 export interface ServerActionDescriptor {
     // (undocumented)
     action: ServerAction;
@@ -392,7 +392,7 @@ export interface ServerActionDescriptor {
     validateArgs?: (args: unknown[]) => ServerActionValidationResult;
 }
 
-// @public (undocumented)
+// @public
 export interface ServerActionHandlerOptions {
     // (undocumented)
     allowedActions?: readonly ServerActionRequestReference[];
@@ -414,10 +414,10 @@ export interface ServerActionHandlerOptions {
     };
 }
 
-// @public (undocumented)
+// @public
 export type ServerActionRegistry = Record<string, ServerAction | ServerActionDescriptor>;
 
-// @public (undocumented)
+// @public
 export interface ServerActionReplayStore {
     // (undocumented)
     add(value: string): void;
@@ -425,7 +425,7 @@ export interface ServerActionReplayStore {
     has(value: string): boolean;
 }
 
-// @public (undocumented)
+// @public
 export interface ServerActionRequestReference {
     // (undocumented)
     exportName: string;
@@ -433,10 +433,10 @@ export interface ServerActionRequestReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export type ServerActionValidationResult = boolean | string;
 
-// @public (undocumented)
+// @public
 export interface ServerReference {
     // (undocumented)
     $$typeof: typeof SERVER_REFERENCE_TYPE;
@@ -448,10 +448,10 @@ export interface ServerReference {
     moduleId: string;
 }
 
-// @public (undocumented)
+// @public
 export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
-// @public (undocumented)
+// @public
 export interface StringHtmlSink extends HtmlSink {
     // (undocumented)
     bufferStrategy(): StringSinkBufferStrategy;
@@ -461,13 +461,13 @@ export interface StringHtmlSink extends HtmlSink {
     toString(): string;
 }
 
-// @public (undocumented)
+// @public
 export function stringifyFlightResponse(response: FlightResponse): string;
 
-// @public (undocumented)
+// @public
 export type StringSinkBufferStrategy = "concat" | "array-join";
 
-// @public (undocumented)
+// @public
 export interface StringSinkOptions {
     // (undocumented)
     arrayJoinThreshold?: number;
@@ -475,10 +475,10 @@ export interface StringSinkOptions {
     strategy?: StringSinkBufferStrategy | "auto";
 }
 
-// @public (undocumented)
+// @public
 export function Suspense(props: SuspenseProps): never;
 
-// @public (undocumented)
+// @public
 export interface SuspenseProps extends Record<string, unknown> {
     // (undocumented)
     children?: unknown;
@@ -486,7 +486,7 @@ export interface SuspenseProps extends Record<string, unknown> {
     fallback?: unknown;
 }
 
-// @public (undocumented)
+// @public
 export function toReactFlightRows(response: FlightResponse): string;
 
 // (No @packageDocumentation comment for this package)

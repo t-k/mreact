@@ -20,7 +20,7 @@ import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
 import { UserConfig } from 'vite';
 
-// @public (undocumented)
+// @public
 export interface AppAssetRoute {
     // (undocumented)
     convention: AppFileConvention;
@@ -34,10 +34,10 @@ export interface AppAssetRoute {
     segments: RouteSegment[];
 }
 
-// @public (undocumented)
+// @public
 export type AppFileConvention = "apple-icon" | "icon" | "manifest" | "opengraph-image" | "robots" | "sitemap";
 
-// @public (undocumented)
+// @public
 export interface AppMetadataRoute {
     // (undocumented)
     convention: AppFileConvention;
@@ -51,41 +51,41 @@ export interface AppMetadataRoute {
     segments: RouteSegment[];
 }
 
-// @public (undocumented)
+// @public
 export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
-// @public (undocumented)
+// @public
 export interface AppRouteDeclarations {
 }
 
-// @public (undocumented)
+// @public
 export type AppRouteHref<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never ? (options?: StaticHrefOptions) => string : (options: DynamicHrefOptions<Path>) => string;
 
-// @public (undocumented)
+// @public
 export type AppRouteLinkHref<Path extends `/${string}`> = `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
 
-// @public (undocumented)
+// @public
 export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
 
-// @public (undocumented)
+// @public
 export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/" ? "/" : Path extends `/${infer Segments}` ? `/${AppRouteLinkSegments<Segments>}` : never;
 
-// @public (undocumented)
+// @public
 export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}` ? string : Segment;
 
-// @public (undocumented)
+// @public
 export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}` ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}` : AppRouteLinkSegment<Segments>;
 
-// @public (undocumented)
+// @public
 export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
     // (undocumented)
     inferred?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
 
-// @public (undocumented)
+// @public
 export interface AppRouterCache {
     // (undocumented)
     deleteByPath(path: string): void | Promise<void>;
@@ -95,7 +95,7 @@ export interface AppRouterCache {
     set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterCacheEntry {
     // (undocumented)
     body: string;
@@ -109,16 +109,16 @@ export interface AppRouterCacheEntry {
     status: number;
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterClientConsoleMethod = "debug" | "error" | "info" | "log" | "trace" | "warn";
 
-// @public (undocumented)
+// @public
 export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
 
-// @public (undocumented)
+// @public
 export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
 
-// @public (undocumented)
+// @public
 export interface AppRouterCspInlineNonceWarningLogEvent {
     // (undocumented)
     directive: "script-src" | "style-src";
@@ -130,7 +130,7 @@ export interface AppRouterCspInlineNonceWarningLogEvent {
     type: "router:csp:inline-nonce-warning";
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterImportPolicy {
     // (undocumented)
     allowedPackages?: readonly string[] | undefined;
@@ -140,7 +140,7 @@ export interface AppRouterImportPolicy {
     projectRoot?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterLogError {
     // (undocumented)
     message: string;
@@ -148,10 +148,10 @@ export interface AppRouterLogError {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
 
-// @public (undocumented)
+// @public
 export interface AppRouterLogger {
     // (undocumented)
     debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
@@ -163,28 +163,25 @@ export interface AppRouterLogger {
     warn?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterLogLevel = "debug" | "info" | "warn" | "error";
 
-// @public (undocumented)
-export interface AppRouterNavigationState {
-    // (undocumented)
-    from: string | null;
-    // (undocumented)
-    pending: boolean;
-    // (undocumented)
-    to: string | null;
-    // (undocumented)
-    type: AppRouterNavigationType | null;
-}
+// Warning: (ae-forgotten-export) The symbol "AppRouterNavigationState_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type AppRouterNavigationState = AppRouterNavigationState_2;
 
-// @public (undocumented)
-export type AppRouterNavigationStateListener = (state: AppRouterNavigationState) => void;
+// Warning: (ae-forgotten-export) The symbol "AppRouterNavigationStateListener_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type AppRouterNavigationStateListener = AppRouterNavigationStateListener_2;
 
-// @public (undocumented)
-export type AppRouterNavigationType = "push" | "replace" | "pop" | "refresh";
+// Warning: (ae-forgotten-export) The symbol "AppRouterNavigationType_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type AppRouterNavigationType = AppRouterNavigationType_2;
 
-// @public (undocumented)
+// @public
 export interface AppRouterPrerenderStore {
     // (undocumented)
     delete(path: string): void | Promise<void>;
@@ -198,13 +195,13 @@ export interface AppRouterPrerenderStore {
     withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterProductionOptions {
     // (undocumented)
     dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterRenderTimingLogEvent {
     // (undocumented)
     method: string;
@@ -218,7 +215,7 @@ export interface AppRouterRenderTimingLogEvent {
     type: "router:render:timing";
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterRequestEndLogEvent {
     // (undocumented)
     durationMs: number;
@@ -234,7 +231,7 @@ export interface AppRouterRequestEndLogEvent {
     type: "router:request:end";
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterRequestErrorLogEvent {
     // (undocumented)
     durationMs: number;
@@ -250,7 +247,7 @@ export interface AppRouterRequestErrorLogEvent {
     type: "router:request:error";
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterRequestStartLogEvent {
     // (undocumented)
     method: string;
@@ -262,7 +259,7 @@ export interface AppRouterRequestStartLogEvent {
     type: "router:request:start";
 }
 
-// @public (undocumented)
+// @public
 export interface AppRouterRequestTimingLogEvent {
     // (undocumented)
     durationMs: number;
@@ -280,19 +277,19 @@ export interface AppRouterRequestTimingLogEvent {
     type: "router:request:timing";
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterResponseHook = (response: Response, context: AppRouterResponseHookContext) => Response | undefined | void | Promise<Response | undefined | void>;
 
-// @public (undocumented)
+// @public
 export interface AppRouterResponseHookContext {
     // (undocumented)
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 
-// @public (undocumented)
+// @public
 export interface AppRouterServerActionOptions {
     // (undocumented)
     allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
@@ -306,16 +303,16 @@ export interface AppRouterServerActionOptions {
     replayStore?: ServerActionReplayStore | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AssetHelperOptions {
     // (undocumented)
     base?: string;
 }
 
-// @public (undocumented)
+// @public
 export function assetHref(manifest: AssetManifest, key: string, options?: AssetHelperOptions): string;
 
-// @public (undocumented)
+// @public
 export interface AssetLinkDescriptor {
     // (undocumented)
     attrs: Record<string, string>;
@@ -323,10 +320,10 @@ export interface AssetLinkDescriptor {
     tag: "link";
 }
 
-// @public (undocumented)
+// @public
 export type AssetManifest = Readonly<Record<string, AssetManifestEntry>>;
 
-// @public (undocumented)
+// @public
 export interface AssetManifestEntry {
     // (undocumented)
     assets?: readonly string[];
@@ -338,10 +335,10 @@ export interface AssetManifestEntry {
     imports?: readonly string[];
 }
 
-// @public (undocumented)
+// @public
 export function assetPreloadLinks(manifest: AssetManifest, keys: readonly string[] | string, options?: AssetHelperOptions): AssetLinkDescriptor[];
 
-// @public (undocumented)
+// @public
 export interface AwsLambdaArtifactManifest {
     // (undocumented)
     files: Array<{
@@ -358,12 +355,12 @@ export interface AwsLambdaArtifactManifest {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export interface BuildAppOptions extends AppRouterProjectOptions {
     // (undocumented)
     onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
@@ -377,10 +374,10 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
     viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type BuildAppPhase = "scan" | "collectFiles" | "analyzeSources" | "validate" | "prepareOutput" | "publicAssets" | "serverActionManifest" | "serverModules" | "importPolicy" | "serverModuleArtifacts" | "clientBundles" | "navigationRuntime" | "prerender" | "cloudflare" | "writeManifests" | "adapterArtifacts";
 
-// @public (undocumented)
+// @public
 export interface BuildAppPhaseTiming {
     // (undocumented)
     ms: number;
@@ -388,7 +385,7 @@ export interface BuildAppPhaseTiming {
     phase: BuildAppPhase;
 }
 
-// @public (undocumented)
+// @public
 export type BuildAppProgressEvent = {
     kind: "phase-start";
     phase: BuildAppPhase;
@@ -401,16 +398,16 @@ export type BuildAppProgressEvent = {
     kind: "routes-discovered";
 };
 
-// @public (undocumented)
+// @public
 export interface BuildAppResult {
     // (undocumented)
     routes: AppRoute[];
 }
 
-// @public (undocumented)
+// @public
 export type BuiltAppRuntimePreloadMode = "all" | "hot-route-requests" | "hot-routes" | "middleware" | "none";
 
-// @public (undocumented)
+// @public
 export interface BuiltAppRuntimePreloadStrategy {
     // (undocumented)
     mode: BuiltAppRuntimePreloadMode;
@@ -418,7 +415,7 @@ export interface BuiltAppRuntimePreloadStrategy {
     routes?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface BuiltImportPolicyArtifact {
     // (undocumented)
     byRoute: Record<string, string[]>;
@@ -428,10 +425,10 @@ export interface BuiltImportPolicyArtifact {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export function cacheControl(options: CacheControlOptions): void;
 
-// @public (undocumented)
+// @public
 export interface CacheControlOptions {
     // (undocumented)
     maxAge?: number | undefined;
@@ -441,7 +438,7 @@ export interface CacheControlOptions {
     staleWhileRevalidate?: boolean | number | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface CloudflarePagesArtifactManifest {
     // (undocumented)
     files: Array<{
@@ -458,12 +455,12 @@ export interface CloudflarePagesArtifactManifest {
     worker: "_worker.js";
 }
 
-// @public (undocumented)
-export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {
-    readonly __mreactRoutePatternHrefError__: never;
-} : unknown;
+// Warning: (ae-forgotten-export) The symbol "ConcreteLinkHrefGuard_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type ConcreteLinkHrefGuard<Href extends string> = ConcreteLinkHrefGuard_2<Href>;
 
-// @public (undocumented)
+// @public
 export interface CookieOptions {
     // (undocumented)
     domain?: string;
@@ -483,57 +480,57 @@ export interface CookieOptions {
 
 // Warning: (ae-forgotten-export) The symbol "RequestCookies" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function cookies(request: Request): RequestCookies;
 
-// @public (undocumented)
+// @public
 export function createFileSystemPrerenderStore(options: FileSystemPrerenderStoreOptions): AppRouterPrerenderStore;
 
-// @public (undocumented)
+// @public
 export function createFormCsrfToken(request?: Request | undefined): string;
 
-// @public (undocumented)
+// @public
 export function createKeyValuePrerenderStore(options: KeyValuePrerenderStoreOptions): AppRouterPrerenderStore;
 
-// @public (undocumented)
+// @public
 export function createMemoryPrerenderStore(options?: MemoryPrerenderStoreOptions): AppRouterPrerenderStore;
 
-// @public (undocumented)
+// @public
 export function createMemoryRouteCache(options?: MemoryRouteCacheOptions): AppRouterCache;
 
 // Warning: (ae-forgotten-export) The symbol "createMemorySessionStore_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export const createMemorySessionStore: typeof createMemorySessionStore_2;
 
 // Warning: (ae-forgotten-export) The symbol "createSession_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export const createSession: typeof createSession_2;
 
-// @public (undocumented)
+// @public
 export function defer<TData extends Record<string, unknown>>(data: TData): DeferredLoaderData<TData>;
 
-// @public (undocumented)
+// @public
 export type DeferredLoaderData<TData extends Record<string, unknown>> = TData & {
     readonly [deferredLoaderDataSymbol]: true;
 };
 
-// @public (undocumented)
+// @public
 export function defineMessages<const Messages extends MessageTree>(messages: Messages): Messages;
 
-// @public (undocumented)
+// @public
 export function definePage<TLoader extends RouteLoader>(component: PageComponent<TLoader>): PageComponent<TLoader>;
 
-// @public (undocumented)
+// @public
 export function deleteCookie(response: Response, name: string, options?: Pick<CookieOptions, "domain" | "path" | "sameSite" | "secure">): Response;
 
 // Warning: (ae-forgotten-export) The symbol "destroySession_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export const destroySession: typeof destroySession_2;
 
-// @public (undocumented)
+// @public
 export interface DetectedLocale<Locale extends string = string> {
     // (undocumented)
     locale: Locale;
@@ -543,16 +540,16 @@ export interface DetectedLocale<Locale extends string = string> {
     source: "accept-language" | "default" | "path";
 }
 
-// @public (undocumented)
+// @public
 export function detectLocale<Locale extends string>(request: Request, options: LocaleRoutingOptions<Locale>): DetectedLocale<Locale>;
 
-// @public (undocumented)
+// @public
 export interface DynamicHrefOptions<Path extends `/${string}`> extends StaticHrefOptions {
     // (undocumented)
     params: RouteParamsFor<Path>;
 }
 
-// @public (undocumented)
+// @public
 export interface FileSystemPrerenderStoreOptions {
     // (undocumented)
     directory: string;
@@ -564,13 +561,13 @@ export interface FileSystemPrerenderStoreOptions {
     namespace?: string;
 }
 
-// @public (undocumented)
+// @public
 export function formCsrfCookie(csrfToken: string): string;
 
-// @public (undocumented)
+// @public
 export const formCsrfFieldName = "__mreact_csrf";
 
-// @public (undocumented)
+// @public
 export interface GenerateMetadataContext<TData = unknown, TParams extends RouteParams = RouteParams> {
     // (undocumented)
     data: TData;
@@ -580,58 +577,62 @@ export interface GenerateMetadataContext<TData = unknown, TParams extends RouteP
     request: Request;
 }
 
-// @public (undocumented)
-export function getNavigationState(): AppRouterNavigationState;
+// Warning: (ae-forgotten-export) The symbol "getNavigationState_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const getNavigationState: typeof getNavigationState_2;
 
-// @public (undocumented)
+// @public
 export function getRouterRuntimeCacheStats(): RouterRuntimeCacheStat[];
 
-// @public (undocumented)
-export function getServerRuntimeState<TState extends object>(key: string, create: () => TState): TState;
+// Warning: (ae-forgotten-export) The symbol "getServerRuntimeState_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const getServerRuntimeState: typeof getServerRuntimeState_2;
 
 // Warning: (ae-forgotten-export) The symbol "getSession_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export const getSession: typeof getSession_2;
 
-// @public (undocumented)
+// @public
 export function headers(request: Request): Headers;
 
 // Warning: (ae-forgotten-export) The symbol "HasRouteParams" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function href<const Path extends `/${string}`>(path: Path, ...args: HasRouteParams<Path> extends true ? [options: DynamicHrefOptions<Path>] : [options?: StaticHrefOptions]): string;
 
-// @public (undocumented)
+// @public
 export function html(value: string, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export type HttpUpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
-// @public (undocumented)
+// @public
 export type InferLoaderData<TLoader extends RouteLoader> = Awaited<ReturnType<TLoader>>;
 
-// @public (undocumented)
+// @public
 export type InferLoaderParams<TLoader extends RouteLoader> = TLoader extends (context: infer TContext, ...args: never[]) => unknown ? TContext extends {
     params: infer TParams;
 } ? TParams extends RouteParams ? TParams : RouteParams : RouteParams : RouteParams;
 
-// @public (undocumented)
+// @public
 export function isDeferredLoaderData(value: unknown): value is DeferredLoaderData<Record<string, unknown>>;
 
-// @public (undocumented)
+// @public
 export function isNotFoundError(error: unknown): boolean;
 
-// @public (undocumented)
+// @public
 export function isRedirectError(error: unknown): error is Error & {
     location: string;
     status: number;
 };
 
-// @public (undocumented)
+// @public
 export function json(value: unknown, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export interface KeyValuePrerenderStoreAdapter {
     // (undocumented)
     delete(key: string): void | Promise<void>;
@@ -645,7 +646,7 @@ export interface KeyValuePrerenderStoreAdapter {
     withLock?<T>(key: string, task: (token: string) => Promise<T>): Promise<T>;
 }
 
-// @public (undocumented)
+// @public
 export interface KeyValuePrerenderStoreOptions {
     // (undocumented)
     adapter: KeyValuePrerenderStoreAdapter;
@@ -655,7 +656,7 @@ export interface KeyValuePrerenderStoreOptions {
     ttlMs?: number;
 }
 
-// @public (undocumented)
+// @public
 export interface LayoutProps<TParams extends RouteParams = RouteParams> {
     // (undocumented)
     children: ReactCompatNode;
@@ -665,53 +666,52 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
     request: Request;
 }
 
-// @public (undocumented)
-export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
+// Warning: (ae-forgotten-export) The symbol "Link_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const Link: typeof Link_2;
 
-// @public (undocumented)
-export function Link(sink: HtmlSink, props: LinkProps<string>): void;
+// Warning: (ae-forgotten-export) The symbol "LinkChild_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkChild = LinkChild_2;
 
-// @public (undocumented)
-export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
+// Warning: (ae-forgotten-export) The symbol "LinkHref_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkHref = LinkHref_2;
 
-// @public (undocumented)
-export type LinkHref = [RegisteredAppRoutePath] extends [never] ? string : AppRouteLinkHref<RegisteredAppRoutePath>;
+// Warning: (ae-forgotten-export) The symbol "LinkOptions_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkOptions<Href extends string = LinkHref> = LinkOptions_2<Href>;
 
-// @public (undocumented)
-export interface LinkOptions<Href extends string = LinkHref> {
-    // (undocumented)
-    href: Href;
-    // (undocumented)
-    prefetch?: LinkPrefetch | undefined;
-    // (undocumented)
-    reload?: boolean | undefined;
-    // (undocumented)
-    scroll?: LinkScroll | undefined;
-    // (undocumented)
-    transition?: LinkTransition | undefined;
-}
+// Warning: (ae-forgotten-export) The symbol "LinkPrefetch_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkPrefetch = LinkPrefetch_2;
 
-// @public (undocumented)
-export type LinkPrefetch = "intent" | "viewport" | "none" | false;
+// Warning: (ae-forgotten-export) The symbol "LinkProps_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkProps<Href extends string = LinkHref> = LinkProps_2<Href>;
 
-// @public (undocumented)
-export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
-    // (undocumented)
-    [attribute: string]: unknown;
-    // (undocumented)
-    children?: LinkChild;
-}
+// Warning: (ae-forgotten-export) The symbol "linkProps_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const linkProps: typeof linkProps_2;
 
-// @public (undocumented)
-export function linkProps(options: LinkOptions<string>): Record<string, string>;
+// Warning: (ae-forgotten-export) The symbol "LinkScroll_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkScroll = LinkScroll_2;
 
-// @public (undocumented)
-export type LinkScroll = "top" | "preserve";
+// Warning: (ae-forgotten-export) The symbol "LinkTransition_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type LinkTransition = LinkTransition_2;
 
-// @public (undocumented)
-export type LinkTransition = "auto" | "none" | false;
-
-// @public (undocumented)
+// @public
 export interface LoaderContext<TParams extends RouteParams = RouteParams> {
     // (undocumented)
     env?: unknown;
@@ -723,7 +723,7 @@ export interface LoaderContext<TParams extends RouteParams = RouteParams> {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface LocaleRoutingOptions<Locale extends string = string> {
     // (undocumented)
     defaultLocale: Locale;
@@ -731,7 +731,7 @@ export interface LocaleRoutingOptions<Locale extends string = string> {
     locales: readonly Locale[];
 }
 
-// @public (undocumented)
+// @public
 export interface ManifestContext {
     // (undocumented)
     baseUrl: string;
@@ -741,10 +741,10 @@ export interface ManifestContext {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export type ManifestDescriptor = Record<string, unknown>;
 
-// @public (undocumented)
+// @public
 export interface MatchedRoute {
     // (undocumented)
     params: Record<string, readonly string[] | string>;
@@ -752,10 +752,10 @@ export interface MatchedRoute {
     route: AppRoute;
 }
 
-// @public (undocumented)
+// @public
 export function matchRoute(routes: readonly AppRoute[], pathname: string): MatchedRoute | undefined;
 
-// @public (undocumented)
+// @public
 export interface MemoryPrerenderStoreOptions {
     // Warning: (ae-forgotten-export) The symbol "MemoryPrerenderStoreEntry" needs to be exported by the entry point index.d.ts
     //
@@ -771,7 +771,7 @@ export interface MemoryPrerenderStoreOptions {
     ttlMs?: number;
 }
 
-// @public (undocumented)
+// @public
 export interface MemoryRouteCacheOptions {
     // (undocumented)
     maxEntries?: number;
@@ -779,20 +779,17 @@ export interface MemoryRouteCacheOptions {
     sweepIntervalMs?: number;
 }
 
-// @public (undocumented)
-export interface MemorySessionStoreOptions {
-    // (undocumented)
-    maxEntries?: number;
-    // (undocumented)
-    sweepIntervalMs?: number;
-}
+// Warning: (ae-forgotten-export) The symbol "MemorySessionStoreOptions_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type MemorySessionStoreOptions = MemorySessionStoreOptions_2;
 
-// @public (undocumented)
+// @public
 export type MessageTree = {
     readonly [key: string]: MessageTree | string;
 };
 
-// @public (undocumented)
+// @public
 export interface MetadataImage {
     // (undocumented)
     alt?: MetadataScalar;
@@ -806,10 +803,10 @@ export interface MetadataImage {
     width?: MetadataScalar;
 }
 
-// @public (undocumented)
+// @public
 export type MetadataScalar = boolean | number | string;
 
-// @public (undocumented)
+// @public
 export interface MetadataThemeColor {
     // (undocumented)
     color?: MetadataScalar;
@@ -817,13 +814,13 @@ export interface MetadataThemeColor {
     media?: MetadataScalar;
 }
 
-// @public (undocumented)
+// @public
 export type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
 
-// @public (undocumented)
+// @public
 export type MReactNode = ReactCompatNode;
 
-// @public (undocumented)
+// @public
 export interface MultipartFixedLengthStream {
     // (undocumented)
     done: Promise<void>;
@@ -831,7 +828,7 @@ export interface MultipartFixedLengthStream {
     readable: ReadableStream<Uint8Array<ArrayBufferLike>>;
 }
 
-// @public (undocumented)
+// @public
 export interface MultipartStreamFieldOptions {
     // (undocumented)
     maxBytes?: number;
@@ -839,7 +836,7 @@ export interface MultipartStreamFieldOptions {
     type?: "stream" | "text";
 }
 
-// @public (undocumented)
+// @public
 export interface MultipartStreamParseOptions {
     // (undocumented)
     fields?: Readonly<Record<string, MultipartStreamFieldOptions>>;
@@ -849,7 +846,7 @@ export interface MultipartStreamParseOptions {
     maxParts?: number;
 }
 
-// @public (undocumented)
+// @public
 export interface MultipartStreamPart {
     // (undocumented)
     arrayBuffer(): Promise<ArrayBuffer>;
@@ -873,16 +870,16 @@ export interface MultipartStreamPart {
 
 // Warning: (ae-forgotten-export) The symbol "MiddlewareNext" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function next(): MiddlewareNext;
 
-// @public (undocumented)
+// @public
 export function notFound(): never;
 
-// @public (undocumented)
+// @public
 export function packageAwsLambdaArtifact(options: PackageAwsLambdaArtifactOptions): Promise<AwsLambdaArtifactManifest>;
 
-// @public (undocumented)
+// @public
 export interface PackageAwsLambdaArtifactOptions {
     // (undocumented)
     fromDir: string;
@@ -894,10 +891,10 @@ export interface PackageAwsLambdaArtifactOptions {
     skipRuntimeDependencyCheck?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function packageCloudflarePagesArtifact(options: PackageCloudflarePagesArtifactOptions): Promise<CloudflarePagesArtifactManifest>;
 
-// @public (undocumented)
+// @public
 export interface PackageCloudflarePagesArtifactOptions {
     // (undocumented)
     fromDir: string;
@@ -905,10 +902,10 @@ export interface PackageCloudflarePagesArtifactOptions {
     outDir: string;
 }
 
-// @public (undocumented)
+// @public
 export type PageComponent<TLoader extends RouteLoader> = (props: PageProps<InferLoaderData<TLoader>, InferLoaderParams<TLoader>>) => ReactCompatNode;
 
-// @public (undocumented)
+// @public
 export interface PageProps<TData = unknown, TParams extends RouteParams = RouteParams> {
     // (undocumented)
     data: TData;
@@ -918,7 +915,7 @@ export interface PageProps<TData = unknown, TParams extends RouteParams = RouteP
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface PageRoute {
     // (undocumented)
     file: string;
@@ -930,28 +927,28 @@ export interface PageRoute {
     segments: RouteSegment[];
 }
 
-// @public (undocumented)
+// @public
 export function parseCookieHeader(cookieHeader: string | null | undefined): Map<string, string>;
 
-// @public (undocumented)
+// @public
 export function parseForm(request: Request): Promise<FormData>;
 
 // @public (undocumented)
 export function parseForm<T>(request: Request, schema: ParseSchema<T>): Promise<T>;
 
-// @public (undocumented)
+// @public
 export function parseMultipartStream(request: Request, options?: MultipartStreamParseOptions): AsyncIterable<MultipartStreamPart>;
 
-// @public (undocumented)
+// @public
 export interface ParseSchema<T> {
     // (undocumented)
     parse(value: FormData): T;
 }
 
-// @public (undocumented)
+// @public
 export function parseTraceContext(traceparent: string | null | undefined, tracestate: string | null | undefined): RouterTraceContext | undefined;
 
-// @public (undocumented)
+// @public
 export function preloadBuiltAppRuntime(options: {
     importPolicy?: AppRouterImportPolicy | undefined;
     outDir: string;
@@ -959,7 +956,7 @@ export function preloadBuiltAppRuntime(options: {
     runtimeDir?: string | undefined;
 }): Promise<void>;
 
-// @public (undocumented)
+// @public
 export interface PreparedFormActionReference {
     // (undocumented)
     end: number;
@@ -983,24 +980,24 @@ export interface PreparedFormActionReference {
 
 // Warning: (ae-forgotten-export) The symbol "RedirectOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function redirect(location: string, options?: RedirectOptions): never;
 
-// @public (undocumented)
+// @public
 export function redirect303(location: string, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export function redirectExternal(location: string, options?: RedirectOptions): never;
 
-// @public (undocumented)
-export type RegisteredAppRoutePath = AppRouteDeclarations extends {
-    readonly path: infer Path;
-} ? Extract<Path, `/${string}`> : never;
+// Warning: (ae-forgotten-export) The symbol "RegisteredAppRoutePath_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type RegisteredAppRoutePath = RegisteredAppRoutePath_2;
 
-// @public (undocumented)
+// @public
 export function renderAppRequest(options: RenderAppRequestOptions): Promise<Response>;
 
-// @public (undocumented)
+// @public
 export interface RenderAppRequestOptions {
     // (undocumented)
     appDir: string;
@@ -1068,10 +1065,10 @@ export interface RenderAppRequestOptions {
     vitePlugins?: readonly PluginOption[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function renderBuiltAppRequest(options: RenderBuiltAppRequestOptions): Promise<Response>;
 
-// @public (undocumented)
+// @public
 export interface RenderBuiltAppRequestOptions {
     // (undocumented)
     immutableRuntime?: boolean | undefined;
@@ -1103,16 +1100,16 @@ export interface RenderBuiltAppRequestOptions {
     sinkStrategy?: ResponseSinkStrategy;
 }
 
-// @public (undocumented)
+// @public
 export type RequestHostPolicy = "strict" | "trusted-proxy";
 
-// @public (undocumented)
+// @public
 export function revalidatePath(path: string): void;
 
-// @public (undocumented)
+// @public
 export function rewrite(location: string, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export interface RobotsContext {
     // (undocumented)
     baseUrl: string;
@@ -1122,7 +1119,7 @@ export interface RobotsContext {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface RobotsManifest {
     // (undocumented)
     host?: string | undefined;
@@ -1132,7 +1129,7 @@ export interface RobotsManifest {
     sitemap?: string | readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface RobotsRule {
     // (undocumented)
     allow?: string | readonly string[] | undefined;
@@ -1144,10 +1141,10 @@ export interface RobotsRule {
 
 // Warning: (ae-forgotten-export) The symbol "rotateSession_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export const rotateSession: typeof rotateSession_2;
 
-// @public (undocumented)
+// @public
 export interface RouteCachePolicy {
     // (undocumented)
     cacheControl: string;
@@ -1155,7 +1152,7 @@ export interface RouteCachePolicy {
     revalidateSeconds: number;
 }
 
-// @public (undocumented)
+// @public
 export interface RouteHandlerContext<TParams extends RouteParams = RouteParams> {
     // (undocumented)
     params: TParams;
@@ -1163,7 +1160,7 @@ export interface RouteHandlerContext<TParams extends RouteParams = RouteParams> 
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface RouteHeadDescriptor {
     // (undocumented)
     attrs?: Record<string, boolean | number | string | undefined>;
@@ -1175,10 +1172,10 @@ export interface RouteHeadDescriptor {
     tag: "base" | "link" | "meta" | "script" | "style";
 }
 
-// @public (undocumented)
+// @public
 export type RouteLoader = (...args: never[]) => unknown;
 
-// @public (undocumented)
+// @public
 export interface RouteMetadata {
     // (undocumented)
     alternates?: {
@@ -1225,16 +1222,16 @@ export interface RouteMetadata {
     viewport?: MetadataScalar | MetadataViewport;
 }
 
-// @public (undocumented)
+// @public
 export type RouteParams = Record<string, readonly string[] | string>;
 
 // Warning: (ae-forgotten-export) The symbol "Simplify" needs to be exported by the entry point index.d.ts
 // Warning: (ae-forgotten-export) The symbol "ExtractRouteParams" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export type RouteParamsFor<Path extends `/${string}`> = Simplify<ExtractRouteParams<Path>>;
 
-// @public (undocumented)
+// @public
 export interface RouterInstrumentation {
     // (undocumented)
     onLoaderEnd?: (event: RouterRouteEndInstrumentationEvent) => void | Promise<void>;
@@ -1250,25 +1247,25 @@ export interface RouterInstrumentation {
     onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export interface RouterMiddlewareEndInstrumentationEvent extends RouterMiddlewareInstrumentationEvent {
     // (undocumented)
     error?: unknown;
 }
 
-// @public (undocumented)
+// @public
 export interface RouterMiddlewareInstrumentationEvent extends RouterRequestInstrumentationEvent {
     // (undocumented)
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface RouterRequestEndInstrumentationEvent extends RouterRequestInstrumentationEvent {
     // (undocumented)
     status: number;
 }
 
-// @public (undocumented)
+// @public
 export interface RouterRequestInstrumentationEvent {
     // (undocumented)
     method: string;
@@ -1280,13 +1277,13 @@ export interface RouterRequestInstrumentationEvent {
     trace?: RouterTraceContext;
 }
 
-// @public (undocumented)
+// @public
 export interface RouterRouteEndInstrumentationEvent extends RouterRouteInstrumentationEvent {
     // (undocumented)
     error?: unknown;
 }
 
-// @public (undocumented)
+// @public
 export interface RouterRouteInstrumentationEvent extends RouterRequestInstrumentationEvent {
     // (undocumented)
     routeId: string;
@@ -1294,23 +1291,12 @@ export interface RouterRouteInstrumentationEvent extends RouterRequestInstrument
     routePath: string;
 }
 
-// @public (undocumented)
-export interface RouterRuntimeCacheStat {
-    // (undocumented)
-    evictions: number;
-    // (undocumented)
-    hits: number;
-    // (undocumented)
-    maxEntries: number;
-    // (undocumented)
-    misses: number;
-    // (undocumented)
-    name: string;
-    // (undocumented)
-    size: number;
-}
+// Warning: (ae-forgotten-export) The symbol "RouterRuntimeCacheStat_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type RouterRuntimeCacheStat = RouterRuntimeCacheStat_2;
 
-// @public (undocumented)
+// @public
 export interface RouterTraceContext {
     // (undocumented)
     parentSpanId: string;
@@ -1324,13 +1310,13 @@ export interface RouterTraceContext {
     tracestate?: string;
 }
 
-// @public (undocumented)
+// @public
 export type RouteSearchParams = Record<string, RouteSearchValue | readonly RouteSearchValue[]>;
 
-// @public (undocumented)
+// @public
 export type RouteSearchValue = boolean | number | string | null | undefined;
 
-// @public (undocumented)
+// @public
 export interface RouteSecurityHeaders {
     // (undocumented)
     contentTypeOptions?: "nosniff" | null | undefined;
@@ -1344,7 +1330,7 @@ export interface RouteSecurityHeaders {
     referrerPolicy?: string | null | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type RouteSegment = {
     kind: "static";
     value: string;
@@ -1356,7 +1342,7 @@ export type RouteSegment = {
     name: string;
 };
 
-// @public (undocumented)
+// @public
 export interface RouteStrictTransportSecurity {
     // (undocumented)
     includeSubDomains?: boolean | undefined;
@@ -1368,13 +1354,13 @@ export interface RouteStrictTransportSecurity {
 
 // Warning: (ae-forgotten-export) The symbol "ScanAppRoutesOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function scanAppRoutes(options: ScanAppRoutesOptions): Promise<AppRoute[]>;
 
-// @public (undocumented)
+// @public
 export function serializeCookie(name: string, value: string, options?: CookieOptions): string;
 
-// @public (undocumented)
+// @public
 export interface ServerActionContext {
     // (undocumented)
     clientIp?: string | undefined;
@@ -1386,7 +1372,7 @@ export interface ServerActionContext {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface ServerRoute {
     // (undocumented)
     file: string;
@@ -1400,23 +1386,23 @@ export interface ServerRoute {
 
 // Warning: (ae-forgotten-export) The symbol "SessionCookieOptions_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export type SessionCookieOptions = SessionCookieOptions_2;
 
 // Warning: (ae-forgotten-export) The symbol "SessionRecord_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export type SessionRecord<TData = unknown> = SessionRecord_2<TData>;
 
 // Warning: (ae-forgotten-export) The symbol "SessionStore_2" needs to be exported by the entry point index.d.ts
 //
-// @public @deprecated (undocumented)
+// @public @deprecated
 export type SessionStore<TData = unknown> = SessionStore_2<TData>;
 
-// @public (undocumented)
+// @public
 export function setCookie(response: Response, name: string, value: string, options?: CookieOptions): Response;
 
-// @public (undocumented)
+// @public
 export interface SitemapContext {
     // (undocumented)
     baseUrl: string;
@@ -1426,7 +1412,7 @@ export interface SitemapContext {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export interface SitemapEntry {
     // (undocumented)
     changeFrequency?: string | undefined;
@@ -1438,14 +1424,14 @@ export interface SitemapEntry {
     url: string;
 }
 
-// @public (undocumented)
+// @public
 export function startDevServer(options: StartDevServerOptions): Promise<{
     close(): Promise<void>;
     server: Server;
     url: string;
 }>;
 
-// @public (undocumented)
+// @public
 export interface StartDevServerOptions extends AppRouterProjectOptions {
     // (undocumented)
     hostname?: string;
@@ -1467,14 +1453,14 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     viteConfig?: UserConfig | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function startServer(options: StartServerOptions): Promise<{
     close(): Promise<void>;
     server: Server;
     url: string;
 }>;
 
-// @public (undocumented)
+// @public
 export interface StartServerOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
@@ -1512,7 +1498,7 @@ export interface StartServerOptions {
     sinkStrategy?: ResponseSinkStrategy;
 }
 
-// @public (undocumented)
+// @public
 export interface StaticHrefOptions {
     // (undocumented)
     hash?: string | undefined;
@@ -1520,24 +1506,26 @@ export interface StaticHrefOptions {
     search?: RouteSearchParams | undefined;
 }
 
-// @public (undocumented)
-export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
+// Warning: (ae-forgotten-export) The symbol "subscribeNavigationState_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export const subscribeNavigationState: typeof subscribeNavigationState_2;
 
-// @public (undocumented)
+// @public
 export function textError(message: string, status?: number, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export function throwNotFound(): never;
 
-// @public (undocumented)
+// @public
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;
 
-// @public (undocumented)
-export type TrustedLinkHtml = {
-    readonly [TRUSTED_LINK_HTML]: string;
-};
+// Warning: (ae-forgotten-export) The symbol "TrustedLinkHtml_2" needs to be exported by the entry point index.d.ts
+//
+// @public
+export type TrustedLinkHtml = TrustedLinkHtml_2;
 
-// @public (undocumented)
+// @public
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;
 
 // (No @packageDocumentation comment for this package)
