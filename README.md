@@ -372,11 +372,11 @@ The client runtime also exposes `getNavigationState()` and `subscribeNavigationS
 
 ### Dynamic Routes, Loaders, and 404s
 
-Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader()` runs before render and passes its return value as `props.data`. Loader context includes `params`, `queryClient`, the current `request`, and the adapter `env` object when one is provided to the renderer or deployment adapter.
+Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader()` runs before render and passes its return value as `props.data`. Loader context includes `params`, `queryClient`, the current `request`, and the adapter `env` object when one is provided to the renderer or deployment adapter. `notFound()` and its explicit alias `throwNotFound()` both throw the router-recognized 404 control-flow error.
 
 ```tsx
 // src/app/users/$id/page.tsx
-import { notFound, type LoaderContext } from "@reckona/mreact-router";
+import { definePage, throwNotFound, type LoaderContext } from "@reckona/mreact-router";
 
 const users = new Map([
   ["ada", { name: "Ada Lovelace", role: "admin" }],
@@ -391,21 +391,18 @@ export async function generateStaticParams() {
 
 export async function loader(context: LoaderContext<{ id: string }>) {
   const user = users.get(context.params.id);
-  if (user === undefined) notFound();
+  if (user === undefined) throwNotFound();
   return user;
 }
 
-export default function UserPage(props: {
-  params: { id: string };
-  data: { name: string; role: string };
-}) {
+export default definePage<typeof loader>(function UserPage(props) {
   return (
     <main>
       <h1>{props.data.name}</h1>
       <p>Role: {props.data.role}</p>
     </main>
   );
-}
+});
 ```
 
 `generateStaticParams()` runs through the same app-router source module bundler as prerendered pages, so configured Vite plugins can transform content modules imported by the page before path generation.

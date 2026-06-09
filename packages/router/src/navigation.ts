@@ -133,6 +133,10 @@ export function notFound(): never {
   });
 }
 
+export function throwNotFound(): never {
+  return notFound();
+}
+
 export function next(): MiddlewareNext {
   return undefined;
 }

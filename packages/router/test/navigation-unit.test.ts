@@ -15,6 +15,7 @@ import {
   rewrite,
   rewriteLocation,
   textError,
+  throwNotFound,
 } from "../src/navigation.js";
 
 describe("router navigation helpers", () => {
@@ -103,6 +104,17 @@ describe("router navigation helpers", () => {
       return;
     }
     throw new Error("expected notFound to throw");
+  });
+
+  test("throwNotFound() throws the same NotFound error shape as notFound()", () => {
+    try {
+      throwNotFound();
+    } catch (error) {
+      expect(isNotFoundError(error)).toBe(true);
+      expect((error as Error & { status: number }).status).toBe(404);
+      return;
+    }
+    throw new Error("expected throwNotFound to throw");
   });
 
   test("next() returns undefined to let the middleware pipeline continue", () => {

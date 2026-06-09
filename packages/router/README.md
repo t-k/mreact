@@ -99,7 +99,7 @@ client-only code. Navigation observers are available from
 
 ## Route Module Exports
 
-- `loader(context)` returns data passed to the page component, or may return or throw a `Response` for redirects and custom responses. The context includes `params`, `queryClient`, `request`, and adapter `env` when one is provided.
+- `loader(context)` returns data passed to the page component, or may return or throw a `Response` for redirects and custom responses. The context includes `params`, `queryClient`, `request`, and adapter `env` when one is provided. `notFound()` and its explicit alias `throwNotFound()` both throw the router-recognized 404 control-flow error.
 - `metadata` injects title, OpenGraph, viewport, and related head tags. Use `RouteMetadata` to type the object; `openGraph.image` and `openGraph.images` accept URL scalars or Next-style image objects with a required `url` field.
 - `generateMetadata(context)` may compute route metadata from resolved loader data, params, and the current request. Static `metadata` is still used as the fallback and base object.
 - `generateStaticParams()` returns dynamic route params to prerender and can import modules transformed by configured Vite plugins.
@@ -176,6 +176,25 @@ const instrumentation: RouterInstrumentation = {
     console.log(event.routeId, event.trace?.traceId);
   },
 };
+```
+
+Use `definePage<typeof loader>()` when a route page should infer `props.data` and `props.params` from its sibling loader without repeating the loader data shape in the page props annotation:
+
+```tsx
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+
+interface UserData {
+  id: string;
+  name: string;
+}
+
+export async function loader(context: LoaderContext<{ id: string }>): Promise<UserData> {
+  return { id: context.params.id, name: "Ada" };
+}
+
+export default definePage<typeof loader>(function UserPage(props) {
+  return <h1>{props.params.id}: {props.data.name}</h1>;
+});
 ```
 
 Use `InferLoaderData<typeof loader>` when sibling modules need the exact data shape returned by a route loader:

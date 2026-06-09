@@ -5,6 +5,7 @@ export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./c
 export { defineMessages, detectLocale } from "./i18n.js";
 export { defer, isDeferredLoaderData } from "./deferred.js";
 export type { DeferredLoaderData } from "./deferred.js";
+export { definePage } from "./types.js";
 export { Link, linkProps } from "./link.js";
 export { href } from "./typed-routes.js";
 export { parseMultipartStream } from "./multipart.js";
@@ -32,6 +33,7 @@ export {
   redirectExternal,
   rewrite,
   textError,
+  throwNotFound,
 } from "./navigation.js";
 export type { ParseSchema } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
@@ -93,6 +95,7 @@ export type {
 } from "./typed-routes.js";
 export type {
   InferLoaderData,
+  InferLoaderParams,
   LayoutProps,
   LoaderContext,
   GenerateMetadataContext,
@@ -104,11 +107,13 @@ export type {
   MetadataViewport,
   MReactNode,
   PageProps,
+  PageComponent,
   RobotsContext,
   RobotsManifest,
   RobotsRule,
   RouteHeadDescriptor,
   RouteHandlerContext,
+  RouteLoader,
   RouteMetadata,
   RouteParams,
   RouteSecurityHeaders,
