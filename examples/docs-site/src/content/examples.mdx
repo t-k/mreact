@@ -1,13 +1,118 @@
 export const title = "Examples";
-export const description = "A map of example projects and what each one demonstrates.";
+export const description = "Choose runnable Mreact examples by goal, deployment target, and feature surface.";
 
 # Examples
 
-Use examples to copy working project shapes rather than isolated snippets.
+Use examples to copy working project shapes rather than isolated snippets. Start with the project that matches the thing you are trying to learn, then follow the related guide when you want the API details.
 
-- `examples/app-router`: router tour with layouts, metadata, client boundaries, streaming, actions, cache, handlers, middleware, auth, i18n, and analytics.
-- `examples/hacker-news`: read-only app-router example deployed to Cloudflare Workers.
-- `examples/reactive-primitives`: low-level reactive primitive examples.
-- `examples/store`: store selectors, transactions, and subscriptions.
-- `examples/ssr-streaming`: SSR primitives without the app router.
-- `examples/docs-site`: this documentation site, including MDX content and GitHub Pages static export.
+## Which example should I use?
+
+- Use `examples/app-router` when you want the broad router tour: layouts, metadata, client boundaries, streaming, actions, cache, handlers, middleware, auth, i18n, analytics, static export, and Node serving.
+- Use `examples/hacker-news` when you want a Cloudflare-shaped app with external API SSR, dynamic routes, Tailwind output, worker smoke tests, and a live deployment: [mreact-hacker-news.t-kaniwa-e16.workers.dev](https://mreact-hacker-news.t-kaniwa-e16.workers.dev/).
+- Use `examples/react-libraries` when you want to check React compatibility with real ecosystem libraries such as Recharts, Lexical, Conform, Zod, and Radix UI.
+- Use `examples/docs-site` when you want MDX docs, Shiki highlighting, benchmark data rendering, GitHub Pages static export, and a larger content-site shape.
+- Use the lower-level examples when you want to study reactivity, stores, virtual lists, streaming primitives, or React compatibility without the app router.
+
+## Featured examples
+
+### `examples/app-router`
+
+What it demonstrates: the main App Router surface, including `layout.tsx`, `page.tsx`, dynamic params, catch-all params, route groups, nested layouts, named slots, metadata, route handlers, middleware, `Link`, loaders, server actions, route cache, forms, auth, i18n, CSP, analytics, static export, and Node serving.
+
+Source: [examples/app-router on GitHub](https://github.com/t-k/mreact/tree/main/examples/app-router).
+
+How to run it:
+
+```bash
+pnpm --filter @reckona/example-app-router dev
+pnpm --filter @reckona/example-app-router build
+pnpm --filter @reckona/example-app-router start
+pnpm --filter @reckona/example-app-router test
+```
+
+Read this example when you want to see feature interactions rather than a single isolated API.
+
+### `examples/hacker-news`
+
+What it demonstrates: a read-only Hacker News style app with external API data, server-rendered dynamic routes, Tailwind-generated CSS, Cloudflare Worker output, Pages advanced-mode packaging, and live API-dependent E2E coverage.
+
+Source: [examples/hacker-news on GitHub](https://github.com/t-k/mreact/tree/main/examples/hacker-news).
+
+Live demo: [https://mreact-hacker-news.t-kaniwa-e16.workers.dev](https://mreact-hacker-news.t-kaniwa-e16.workers.dev/).
+
+How to run it:
+
+```bash
+pnpm --filter @reckona/example-hacker-news dev
+pnpm --filter @reckona/example-hacker-news build
+pnpm --filter @reckona/example-hacker-news worker:check
+pnpm --filter @reckona/example-hacker-news pages:package
+```
+
+Use this example when you are preparing a Cloudflare deployment or want to see route handlers and server-rendered pages running through Worker artifacts.
+
+### `examples/react-libraries`
+
+What it demonstrates: React compatibility with third-party libraries that exercise charts, rich text editing, form libraries, validation, dialogs, and client interactivity.
+
+Source: [examples/react-libraries on GitHub](https://github.com/t-k/mreact/tree/main/examples/react-libraries).
+
+How to run it:
+
+```bash
+pnpm --filter @reckona/example-react-libraries dev
+pnpm --filter @reckona/example-react-libraries build
+pnpm --filter @reckona/example-react-libraries test:e2e
+```
+
+Use this example when you need to evaluate whether a React-oriented package can run through Mreact compatibility APIs.
+
+### `examples/docs-site`
+
+What it demonstrates: this documentation site, including MDX content, frontmatter exports, Shiki syntax highlighting, generated code-block copy buttons, benchmark result rendering, static export, GitHub Pages base paths, and docs navigation.
+
+Source: [examples/docs-site on GitHub](https://github.com/t-k/mreact/tree/main/examples/docs-site).
+
+How to run it:
+
+```bash
+pnpm --filter @reckona/example-docs-site dev
+pnpm --filter @reckona/example-docs-site lint
+pnpm --filter @reckona/example-docs-site typecheck
+pnpm --filter @reckona/example-docs-site build
+```
+
+Use this example when you want a content-heavy site with mostly static pages and a static hosting workflow.
+
+## Lower-level examples
+
+- `examples/reactive-primitives`: low-level signals, effects, DOM binding, and reactive update behavior without the app router. [GitHub](https://github.com/t-k/mreact/tree/main/examples/reactive-primitives)
+- `examples/store`: store selectors, transactions, subscriptions, and application state patterns. [GitHub](https://github.com/t-k/mreact/tree/main/examples/store)
+- `examples/virtual-grid`: virtualized grid behavior using `@reckona/mreact-virtual`. [GitHub](https://github.com/t-k/mreact/tree/main/examples/virtual-grid)
+- `examples/ssr-streaming`: string rendering, streaming rendering, and await/out-of-order SSR primitives without the app router. [GitHub](https://github.com/t-k/mreact/tree/main/examples/ssr-streaming)
+- `examples/react-compat`: React compatibility through Vite without an app-router server. [GitHub](https://github.com/t-k/mreact/tree/main/examples/react-compat)
+- `examples/selective-hydration`: server-side rendering with selective hydration primitives. [GitHub](https://github.com/t-k/mreact/tree/main/examples/selective-hydration)
+
+These examples are useful when you are debugging a package-level behavior or want to understand the runtime underneath the app router.
+
+## How to run examples
+
+Install dependencies and build the workspace packages once from the repo root:
+
+```bash
+pnpm install
+pnpm -r --filter "./packages/*" build
+```
+
+Then run the example package you care about with `pnpm --filter <package-name> <script>`. Example package names are listed in each `examples/*/package.json`.
+
+Some examples use live services or browser automation. For E2E checks, read the matching script before running it so you know whether it starts a dev server, a Worker preview, Playwright, or live API requests.
+
+## Related pages
+
+- [Getting Started](/getting-started/)
+- [App Router](/guides/app-router/)
+- [Testing](/guides/testing/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Static Hosting](/deployments/static-hosting/)
+- [Vite Plugin Integration](/guides/advanced/vite-plugin-integration/)

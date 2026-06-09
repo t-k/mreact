@@ -197,6 +197,48 @@ describe("docs-site example contract", () => {
     expect(gettingStarted).toContain("[App Router](/guides/app-router/)");
   });
 
+  test("keeps Examples useful as a purpose-driven map of runnable projects", async () => {
+    const examplesGuide = await readDocsSite("src/content/examples.mdx");
+
+    expect(examplesGuide).toContain("## Which example should I use?");
+    expect(examplesGuide).toContain("examples/app-router");
+    expect(examplesGuide).toContain("https://github.com/t-k/mreact/tree/main/examples/app-router");
+    expect(examplesGuide).toContain("examples/hacker-news");
+    expect(examplesGuide).toContain("https://github.com/t-k/mreact/tree/main/examples/hacker-news");
+    expect(examplesGuide).toContain("https://mreact-hacker-news.t-kaniwa-e16.workers.dev");
+    expect(examplesGuide).toContain("examples/react-libraries");
+    expect(examplesGuide).toContain(
+      "https://github.com/t-k/mreact/tree/main/examples/react-libraries",
+    );
+    expect(examplesGuide).toContain("examples/docs-site");
+    expect(examplesGuide).toContain("https://github.com/t-k/mreact/tree/main/examples/docs-site");
+    expect(examplesGuide).toContain("## Featured examples");
+    expect(examplesGuide).toContain("What it demonstrates");
+    expect(examplesGuide).toContain("How to run it");
+    expect(examplesGuide).toContain("pnpm --filter @reckona/example-app-router dev");
+    expect(examplesGuide).toContain("pnpm --filter @reckona/example-hacker-news dev");
+    expect(examplesGuide).toContain("pnpm --filter @reckona/example-react-libraries test:e2e");
+    expect(examplesGuide).toContain("## Lower-level examples");
+    expect(examplesGuide).toContain("examples/reactive-primitives");
+    expect(examplesGuide).toContain(
+      "https://github.com/t-k/mreact/tree/main/examples/reactive-primitives",
+    );
+    expect(examplesGuide).toContain("examples/store");
+    expect(examplesGuide).toContain("examples/virtual-grid");
+    expect(examplesGuide).toContain("examples/ssr-streaming");
+    expect(examplesGuide).toContain("examples/react-compat");
+    expect(examplesGuide).toContain("examples/selective-hydration");
+    expect(examplesGuide).toContain("## How to run examples");
+    expect(examplesGuide).toContain("pnpm install");
+    expect(examplesGuide).toContain("pnpm -r --filter \"./packages/*\" build");
+    expect(examplesGuide).toContain("## Related pages");
+    expect(examplesGuide).toContain("[Getting Started](/getting-started/)");
+    expect(examplesGuide).toContain("[App Router](/guides/app-router/)");
+    expect(examplesGuide).toContain("[Testing](/guides/testing/)");
+    expect(examplesGuide).toContain("[Cloudflare](/deployments/cloudflare/)");
+    expect(examplesGuide).toContain("[Static Hosting](/deployments/static-hosting/)");
+  });
+
   test("documents project structure conventions for routes, params, 404s, and output", async () => {
     const projectStructure = await readDocsSite("src/content/guides/project-structure.mdx");
 
