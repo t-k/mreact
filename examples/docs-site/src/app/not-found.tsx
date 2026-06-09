@@ -1,3 +1,5 @@
+import { sitePath } from "../site-path.js";
+
 export default function NotFound() {
   return (
     <article class="doc-article">
@@ -5,7 +7,7 @@ export default function NotFound() {
       <h1>Page not found</h1>
       <p>The page you requested does not exist. Use the navigation to return to the docs.</p>
       <p>
-        <a href="/">Go to overview</a>
+        <a href={sitePath()}>Go to overview</a>
       </p>
     </article>
   );

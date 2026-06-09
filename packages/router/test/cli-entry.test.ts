@@ -181,20 +181,30 @@ describe("router CLI entry", () => {
     }
   });
 
-  test("passes the dev port option to startDevServer", async () => {
+  test("passes the dev host and port options to startDevServer", async () => {
     const startDevServer = vi.fn(async () => ({
       close: async () => undefined,
       server: {},
-      url: "http://localhost:15174",
+      url: "http://0.0.0.0:15174",
     }));
     vi.doMock("../src/dev-server.js", () => ({ startDevServer }));
-    process.argv = [process.argv[0]!, "cli.ts", "dev", appDir, "--port", "15174"];
+    process.argv = [
+      process.argv[0]!,
+      "cli.ts",
+      "dev",
+      appDir,
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "15174",
+    ];
     const previousExitCode = process.exitCode;
     try {
       await import("../src/cli.ts");
       expect(startDevServer).toHaveBeenCalledWith(
         expect.objectContaining({
           appDir,
+          hostname: "0.0.0.0",
           port: 15174,
         }),
       );

@@ -264,6 +264,18 @@ describe("docs-site example contract", () => {
     expect(exportScript).toContain("rm(exportDir");
   });
 
+  test("keeps runtime not-found links compatible with docs base paths", async () => {
+    const runtimeNotFound = await readDocsSite("src/app/not-found.tsx");
+    const staticNotFound = await readDocsSite("src/app/404/page.tsx");
+
+    expect(runtimeNotFound).toContain('import { sitePath } from "../site-path.js";');
+    expect(runtimeNotFound).toContain('href={sitePath()}');
+    expect(runtimeNotFound).not.toContain('href="/"');
+    expect(staticNotFound).toContain('import { sitePath } from "../../site-path.js";');
+    expect(staticNotFound).toContain('href={sitePath()}');
+    expect(staticNotFound).not.toContain('href="/"');
+  });
+
   test("keeps Getting Started actionable for a first app", async () => {
     const gettingStarted = await readDocsSite("src/content/getting-started.mdx");
 
@@ -276,6 +288,8 @@ describe("docs-site example contract", () => {
     expect(gettingStarted).not.toContain("bun");
     expect(gettingStarted).not.toContain("A terminal that can run `npx`");
     expect(gettingStarted).toContain("Open the local URL printed by the dev server");
+    expect(gettingStarted).toContain("http://127.0.0.1:3001");
+    expect(gettingStarted).not.toContain("http://localhost:3000");
     expect(gettingStarted).toContain("src/app/page.tsx");
     expect(gettingStarted).toContain("src/lib/app-info.ts");
     expect(gettingStarted).toContain("counter starter");
@@ -424,6 +438,7 @@ describe("docs-site example contract", () => {
     const nav = await readDocsSite("src/nav.config.ts");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
     const apiReference = await readDocsSite("src/content/reference/api.mdx");
+    const generatedApiIndex = await readFile(join(root, "docs", "api", "index.html"), "utf8");
     const exportScript = await readDocsSite("scripts/export-static.ts");
 
     expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
@@ -446,6 +461,16 @@ describe("docs-site example contract", () => {
     expect(exportScript).toContain("writeGeneratedApiIntegrationStyles");
     expect(exportScript).toContain("data-mreact-docs-api-shell");
     expect(exportScript).toContain("docs-api.css");
+    expect(exportScript).toContain("rewriteGeneratedApiRepositoryLinks");
+    expect(exportScript).toContain("--dark-color-background: var(--mreact-docs-bg)");
+    expect(exportScript).toContain(':root[data-theme="dark"]');
+    expect(exportScript).toContain("color-scheme: only light");
+    expect(generatedApiIndex).not.toContain('href="media/react-compat"');
+    expect(generatedApiIndex).not.toContain('href="media/primitive"');
+    expect(generatedApiIndex).not.toContain('href="media/app-router"');
+    expect(generatedApiIndex).toContain(
+      'href="https://github.com/t-k/mreact/tree/main/examples/react-compat"',
+    );
   });
 
   test("keeps every Reference page practical and connected to generated API details", async () => {
@@ -457,7 +482,7 @@ describe("docs-site example contract", () => {
       ["src/content/reference/route-handler-context.mdx", ["## Dynamic params", "RouteHandlerContext<{ id: string }>", "context.params.id", "Response.json", "context.request", "/api/interfaces/_reckona_mreact-router..RouteHandlerContext.html"]],
       ["src/content/reference/response-helpers.mdx", ["## Redirects and 404s", "throwNotFound()", "redirectExternal", "parseForm", "createFormCsrfToken", "/api/functions/_reckona_mreact-router..throwNotFound.html"]],
       ["src/content/reference/adapters.mdx", ["## Adapter imports", "createNodeRequestHandler", "createCloudflareRequestHandler", "createAwsLambdaRequestHandler", "exportStaticApp", "/api/modules/_reckona_mreact-router.adapters_static.html"]],
-      ["src/content/reference/metadata-api.mdx", ["## Static metadata", "generateMetadata", "contentSecurityPolicy", "security", "RouteHeadDescriptor", "/api/interfaces/_reckona_mreact-router..RouteMetadata.html"]],
+      ["src/content/reference/metadata-api.mdx", ["## Static metadata", "generateMetadata", "csp: {", "security", "RouteHeadDescriptor", "/api/interfaces/_reckona_mreact-router..RouteMetadata.html"]],
       ["src/content/reference/auth-api.mdx", ["## Configure auth", "configureAuth", "runWithAuthRequest", "requirePermission", "tryRequireRole", "/api/modules/_reckona_mreact-auth.html"]],
       ["src/content/reference/cache-api.mdx", ["## Route HTML cache", "cacheControl({", "revalidatePath", "createMemoryRouteCache", "x-mreact-revalidate", "/api/interfaces/_reckona_mreact-router..CacheControlOptions.html"]],
       ["src/content/reference/api.mdx", ["## Framework and router", "## Deployment adapters", "## Utilities", "## Compatibility and rendering", "## Forms and authentication", "Generated TypeDoc"]],
@@ -475,6 +500,10 @@ describe("docs-site example contract", () => {
         expect(page).toContain(snippet);
       }
     }
+
+    const metadataApi = await readDocsSite("src/content/reference/metadata-api.mdx");
+    expect(metadataApi).not.toContain("@reckona/mreact-router/csp");
+    expect(metadataApi).not.toContain("contentSecurityPolicy");
   });
 
   test("documents project structure conventions for routes, params, 404s, and output", async () => {
@@ -788,6 +817,8 @@ describe("docs-site example contract", () => {
     expect(csp).toContain('"base-uri": ["\'self\'"]');
     expect(csp).toContain('"object-src": ["\'none\'"]');
     expect(csp).toContain("satisfies RouteMetadata");
+    expect(csp).toContain("Do not add `style-src: [\"'self'\"]`");
+    expect(csp).toContain("nonce-backed or external");
     expect(csp).toContain("## Add nonces for route-owned inline code");
     expect(csp).toContain("randomBytes(16).toString(\"base64url\")");
     expect(csp).toContain("nonce: true");
@@ -997,6 +1028,8 @@ describe("docs-site example contract", () => {
     expect(i18nGuide).toContain("Prefer locale prefixes");
     expect(i18nGuide).toContain("## Client boundaries");
     expect(i18nGuide).toContain(".client.tsx");
+    expect(i18nGuide).toContain('import { cell } from "@reckona/mreact-reactive-core";');
+    expect(i18nGuide).not.toContain('import { cell } from "@reckona/mreact";');
     expect(i18nGuide).toContain("serializable");
     expect(i18nGuide).toContain("## Related pages");
     expect(i18nGuide).toContain("[Routing](/guides/routing/)");
@@ -1641,6 +1674,7 @@ describe("docs-site example contract", () => {
     expect(hostPolicy).toContain("Host header");
     expect(hostPolicy).toContain("allowedHosts");
     expect(hostPolicy).toContain('hostPolicy: "strict"');
+    expect(hostPolicy).toContain("port: Number(process.env.PORT ?? 3001)");
     expect(hostPolicy).toContain("MREACT_ROUTER_ALLOWED_HOSTS");
     expect(hostPolicy).toContain("trusted-proxy");
     expect(hostPolicy).toContain("X-Forwarded-Host");
@@ -1665,6 +1699,7 @@ describe("docs-site example contract", () => {
     expect(logging).toContain("Do not log cookies");
     expect(logging).toContain("traceparent");
     expect(logging).toContain("instrumentation");
+    expect(logging).toContain("port: Number(process.env.PORT ?? 3001)");
     expect(logging).toContain("AWS Lambda");
     expect(logging).toContain("[Testing](/guides/testing/)");
 
@@ -1771,6 +1806,8 @@ describe("docs-site example contract", () => {
     );
     expect(benchmarkResults).toContain("benchmark-ranking-grid");
     expect(benchmarkResults).toContain("githubUrlForRunPath");
+    expect(benchmarkResults).toContain("benchmarkRunLabel(latestBenchmarkRun.path)");
+    expect(benchmarkResults).not.toContain("Run 2026-06-07/002");
     expect(benchmarkResults).toContain("View run on GitHub");
     expect(benchmarkResults).toContain("View source on GitHub");
     expect(benchmarkResults).toContain("BenchmarkRankingPanel");

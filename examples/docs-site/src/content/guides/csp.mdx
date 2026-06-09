@@ -30,13 +30,14 @@ export const metadata = {
       "img-src": ["'self'", "data:"],
       "object-src": ["'none'"],
       "script-src": ["'self'"],
-      "style-src": ["'self'"],
     },
   },
 } satisfies RouteMetadata;
 ```
 
 Start with the smallest policy the route can actually satisfy. Add hosts only after you know which browser request needs them.
+
+Do not add `style-src: ["'self'"]` until you know every inline style on the route is nonce-backed or external. Route-owned inline `<style>` descriptors should use `metadata.csp.nonce` with `nonce: true`, otherwise the browser will block them under a strict `style-src`.
 
 ## Add nonces for route-owned inline code
 

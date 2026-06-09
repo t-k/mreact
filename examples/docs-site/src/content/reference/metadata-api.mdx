@@ -33,7 +33,6 @@ export const metadata: RouteMetadata = {
 
 ```ts
 import type { GenerateMetadataContext, RouteMetadata } from "@reckona/mreact-router";
-import { contentSecurityPolicy } from "@reckona/mreact-router/csp";
 
 export function generateMetadata(
   context: GenerateMetadataContext<{ title: string }, { id: string }>,
@@ -41,10 +40,10 @@ export function generateMetadata(
   return {
     title: context.data.title,
     csp: {
-      directives: contentSecurityPolicy({
-        "default-src": "'self'",
+      directives: {
+        "default-src": ["'self'"],
         "script-src": ["'self'"],
-      }),
+      },
     },
     security: {
       contentTypeOptions: "nosniff",

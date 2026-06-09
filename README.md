@@ -71,7 +71,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-See [Deployment](docs/deploy/index.md) for Node/container, AWS Lambda, Cloudflare Workers, Cloudflare Pages, CDN asset, and source map guidance.
+See [Deployment](https://github.com/t-k/mreact/blob/main/docs/deploy/index.md) for Node/container, AWS Lambda, Cloudflare Workers, Cloudflare Pages, CDN asset, and source map guidance.
 
 Build and run production output:
 
@@ -972,23 +972,23 @@ The router provides adapters for common deployment shapes:
 - `@reckona/mreact-router/adapters/cloudflare`
 - `@reckona/mreact-router/adapters/static`
 
-For public deployments, set `allowedHosts` to the exact hosts your app serves, use `hostPolicy: "strict"` unless a trusted proxy normalizes Host headers, and use `onResponse` for cross-cutting response headers. See [Deployment](docs/deploy/index.md) for deployment target details.
+For public deployments, set `allowedHosts` to the exact hosts your app serves, use `hostPolicy: "strict"` unless a trusted proxy normalizes Host headers, and use `onResponse` for cross-cutting response headers. See [Deployment](https://github.com/t-k/mreact/blob/main/docs/deploy/index.md) for deployment target details.
 
 ### Container Deploy
 
-`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and `docs/deploy/container.md`. See [Container Deployment](docs/deploy/container.md) for Cloud Run, AWS App Runner, Fly.io, Render, and CDN asset notes.
+`create-mreact-app --deploy container` generates a vendor-neutral `Dockerfile`, `.dockerignore`, and `docs/deploy/container.md`. See [Container Deployment](https://github.com/t-k/mreact/blob/main/docs/deploy/container.md) for Cloud Run, AWS App Runner, Fly.io, Render, and CDN asset notes.
 
 ### AWS Lambda Deploy
 
-`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` as a custom-handler starting point and `docs/deploy/aws-lambda.md`. Package custom handlers with `mreact-router package aws-lambda --from .mreact --out .lambda --handler src/lambda.ts` when you need adapter options such as `serverActions.authorize`, `onResponse`, `errorHandler`, or `allowedHosts`; the package command bundles app-local TypeScript imports into `.lambda/mreact-handler.mjs` while leaving package imports external. See [AWS Lambda Deployment](docs/deploy/aws-lambda.md) for generated handlers, packaging, import policy, preload tuning, timing diagnostics, and streaming response notes.
+`create-mreact-app --deploy aws-lambda` generates `src/lambda.ts` as a custom-handler starting point and `docs/deploy/aws-lambda.md`. Package custom handlers with `mreact-router package aws-lambda --from .mreact --out .lambda --handler src/lambda.ts` when you need adapter options such as `serverActions.authorize`, `onResponse`, `errorHandler`, or `allowedHosts`; the package command bundles app-local TypeScript imports into `.lambda/mreact-handler.mjs` while leaving package imports external. See [AWS Lambda Deployment](https://github.com/t-k/mreact/blob/main/docs/deploy/aws-lambda.md) for generated handlers, packaging, import policy, preload tuning, timing diagnostics, and streaming response notes.
 
 ### Cloudflare Deploy
 
-Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` when deploying to Cloudflare Pages advanced mode. See [Cloudflare Deployment](docs/deploy/cloudflare.md) for generated Worker, route module, streaming, client navigation, and asset security details.
+Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `mreact-router package cloudflare-pages --from .mreact --out .mreact/pages` when deploying to Cloudflare Pages advanced mode. See [Cloudflare Deployment](https://github.com/t-k/mreact/blob/main/docs/deploy/cloudflare.md) for generated Worker, route module, streaming, client navigation, and asset security details.
 
 ### CDN Asset Base URLs and Source Maps
 
-Built client route assets are written to `.mreact/client`, and public files are copied from `public/` to `.mreact/client/public`. See [CDN Assets](docs/deploy/assets.md) for `assetBaseUrl`, `publicAssetBaseUrl`, cache policy, and `clientSourceMaps` modes.
+Built client route assets are written to `.mreact/client`, and public files are copied from `public/` to `.mreact/client/public`. See [CDN Assets](https://github.com/t-k/mreact/blob/main/docs/deploy/assets.md) for `assetBaseUrl`, `publicAssetBaseUrl`, cache policy, and `clientSourceMaps` modes.
 
 `mreact-router build` defaults to Node-compatible server/client artifacts. Build with `--target=cloudflare`, `--target=aws-lambda`, or `--target=all` when adapter-specific artifacts are needed. The build also writes `.mreact/routes.d.ts`; include that declaration in your TypeScript program to type-check concrete `<Link href="...">` values against discovered routes without importing a route map at runtime. Import `href()` from `@reckona/mreact-router` only when you need runtime URL construction from route patterns such as `"/users/:id"` and `"/files/:...path"`.
 
@@ -1092,7 +1092,7 @@ function App() {
 createRoot(document.getElementById("root")!).render(<App />);
 ```
 
-For source that imports `react` and `react-dom`, configure your bundler to resolve those specifiers to the mreact shim packages or use the workspace example in [examples/react-compat](examples/react-compat). The `@reckona/mreact` and `@reckona/mreact-compat` main entrypoints also provide a React-style default namespace export for libraries that import React as an object.
+For source that imports `react` and `react-dom`, configure your bundler to resolve those specifiers to the mreact shim packages or use the workspace example in [examples/react-compat](https://github.com/t-k/mreact/tree/main/examples/react-compat). The `@reckona/mreact` and `@reckona/mreact-compat` main entrypoints also provide a React-style default namespace export for libraries that import React as an object.
 
 Compatibility scope:
 
@@ -1141,8 +1141,8 @@ await Page({
 
 The repository contains two benchmark suites:
 
-- [benchmarks/primitive](benchmarks/primitive): primitive UI/reactivity comparisons across mreact, React, Solid, Svelte, Qwik, Marko, and beta variants where available.
-- [benchmarks/router](benchmarks/router): app-router comparisons across mreact app router, Next.js App Router, Qwik City, SolidStart, TanStack Start, Marko Run, and beta variants where available.
+- [benchmarks/primitive](https://github.com/t-k/mreact/tree/main/benchmarks/primitive): primitive UI/reactivity comparisons across mreact, React, Solid, Svelte, Qwik, Marko, and beta variants where available.
+- [benchmarks/router](https://github.com/t-k/mreact/tree/main/benchmarks/router): app-router comparisons across mreact app router, Next.js App Router, Qwik City, SolidStart, TanStack Start, Marko Run, and beta variants where available.
 
 Some compared frameworks, especially Qwik and Marko, are designed around
 resumability or partial client activation rather than React-style full hydration.
@@ -1176,7 +1176,7 @@ pnpm bench:all
 ```
 
 Curated benchmark results are committed under
-[benchmarks/results](benchmarks/results). The
+[benchmarks/results](https://github.com/t-k/mreact/tree/main/benchmarks/results). The
 [Benchmarks workflow page](https://github.com/t-k/mreact/actions/workflows/benchmarks.yml?query=branch%3Amain)
 runs benchmarks on GitHub-hosted runners, writes a job summary, and commits
 changed `benchmarks/results/<date>/<run>/` outputs back to the selected branch.
@@ -1187,15 +1187,15 @@ The `examples/` directory contains focused applications:
 
 | Example | What it demonstrates |
 | --- | --- |
-| [examples/app-router](examples/app-router) | Full app-router tour: layouts, metadata, client boundaries (route-level `cell` inference and imported `.client.tsx` islands), streaming, server actions, cache, route handlers, middleware, auth, query, forms, i18n, deployment adapters |
-| [examples/hacker-news](examples/hacker-news) | Read-only Hacker News clone using App Router streaming, Tailwind CSS, router `Link` navigation, and Cloudflare Workers deployment; live demo: <https://mreact-hacker-news.t-kaniwa-e16.workers.dev> |
-| [examples/reactive-primitives](examples/reactive-primitives) | `cell`, `computed`, `effect`, and DOM updates |
-| [examples/store](examples/store) | Shared store, selectors, transactions, and subscriptions |
-| [examples/virtual-grid](examples/virtual-grid) | Responsive grid virtualization with bounded DOM cards, spacer telemetry, and jump controls |
-| [examples/ssr-streaming](examples/ssr-streaming) | String rendering, streaming rendering, and async boundaries |
-| [examples/react-compat](examples/react-compat) | React-like hooks, Suspense, lazy, and DOM root entry points |
-| [examples/react-libraries](examples/react-libraries) | Real React-ecosystem libraries running unmodified on mreact through `.compat.tsx` boundaries: Recharts charts (SQLite-backed), a Lexical rich-text editor, a conform + Zod form, and a Radix UI dialog, with SPA navigation |
-| [examples/selective-hydration](examples/selective-hydration) | Selective hydration without the app router |
+| [examples/app-router](https://github.com/t-k/mreact/tree/main/examples/app-router) | Full app-router tour: layouts, metadata, client boundaries (route-level `cell` inference and imported `.client.tsx` islands), streaming, server actions, cache, route handlers, middleware, auth, query, forms, i18n, deployment adapters |
+| [examples/hacker-news](https://github.com/t-k/mreact/tree/main/examples/hacker-news) | Read-only Hacker News clone using App Router streaming, Tailwind CSS, router `Link` navigation, and Cloudflare Workers deployment; live demo: <https://mreact-hacker-news.t-kaniwa-e16.workers.dev> |
+| [examples/reactive-primitives](https://github.com/t-k/mreact/tree/main/examples/reactive-primitives) | `cell`, `computed`, `effect`, and DOM updates |
+| [examples/store](https://github.com/t-k/mreact/tree/main/examples/store) | Shared store, selectors, transactions, and subscriptions |
+| [examples/virtual-grid](https://github.com/t-k/mreact/tree/main/examples/virtual-grid) | Responsive grid virtualization with bounded DOM cards, spacer telemetry, and jump controls |
+| [examples/ssr-streaming](https://github.com/t-k/mreact/tree/main/examples/ssr-streaming) | String rendering, streaming rendering, and async boundaries |
+| [examples/react-compat](https://github.com/t-k/mreact/tree/main/examples/react-compat) | React-like hooks, Suspense, lazy, and DOM root entry points |
+| [examples/react-libraries](https://github.com/t-k/mreact/tree/main/examples/react-libraries) | Real React-ecosystem libraries running unmodified on mreact through `.compat.tsx` boundaries: Recharts charts (SQLite-backed), a Lexical rich-text editor, a conform + Zod form, and a Radix UI dialog, with SPA navigation |
+| [examples/selective-hydration](https://github.com/t-k/mreact/tree/main/examples/selective-hydration) | Selective hydration without the app router |
 
 ## Packages
 
@@ -1263,7 +1263,7 @@ pnpm api:report
 pnpm api:report:check
 ```
 
-[docs/api](docs/api) contains the generated TypeDoc HTML reference and is intentionally committed. [etc/api](etc/api) contains API Extractor reports used to review public API signature changes.
+[docs/api](https://github.com/t-k/mreact/tree/main/docs/api) contains the generated TypeDoc HTML reference and is intentionally committed. [etc/api](https://github.com/t-k/mreact/tree/main/etc/api) contains API Extractor reports used to review public API signature changes.
 
 ## License
 

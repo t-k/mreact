@@ -136,6 +136,9 @@ describe("router CLI options", () => {
     expect(startHelp).toContain("0.0.0.0");
 
     const devHelp = formatCliHelp("dev");
+    expect(devHelp).toContain("--host <host>");
+    expect(devHelp).toContain("0.0.0.0");
+    expect(devHelp).toContain("HOST");
     expect(devHelp).toContain("--port <port>");
     expect(devHelp).toContain("PORT");
   });

@@ -256,11 +256,13 @@ export function formatCliHelp(command?: string | undefined): string {
       "Start the mreact app router development server.",
       "",
       "Options:",
+      "  --host <host>  Bind address. Default: 127.0.0.1. Use 0.0.0.0 for LAN or device testing.",
       "  --port <port>  TCP port. Overrides PORT and vite.config.ts server.port.",
       "  --log=requests  Print request summaries.",
       "  -h, --help      Show this help message.",
       "",
       "Environment:",
+      "  HOST            Bind address when --host is not set.",
       "  PORT            TCP port when --port is not set.",
     ].join("\n");
   }

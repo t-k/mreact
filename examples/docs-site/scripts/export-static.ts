@@ -97,24 +97,41 @@ async function postprocessGeneratedApiReference(directory: string): Promise<void
 
 async function postprocessGeneratedApiHtml(path: string): Promise<void> {
   const html = await readFile(path, "utf8");
-
-  if (html.includes("data-mreact-docs-api-shell")) {
-    return;
-  }
+  const withRepositoryLinks = rewriteGeneratedApiRepositoryLinks(html);
 
   const apiBase = apiBasePath(html);
-  const withStyles = html.replace(
-    "</head>",
-    `<link rel="stylesheet" href="${apiBase}assets/docs-api.css"/></head>`,
-  );
-  const withShell = withStyles.replace(
-    /(<body><script>[\s\S]*?<\/script>)/,
-    `$1${generatedApiShell(apiBase)}`,
-  );
+  const withStyles = withRepositoryLinks.includes("docs-api.css")
+    ? withRepositoryLinks
+    : withRepositoryLinks.replace(
+        "</head>",
+        `<link rel="stylesheet" href="${apiBase}assets/docs-api.css"/></head>`,
+      );
+  const withShell = withStyles.includes("data-mreact-docs-api-shell")
+    ? withStyles
+    : withStyles.replace(
+        /(<body><script>[\s\S]*?<\/script>)/,
+        `$1${generatedApiShell(apiBase)}`,
+      );
 
   if (withShell !== html) {
     await writeFile(path, withShell);
   }
+}
+
+function rewriteGeneratedApiRepositoryLinks(html: string): string {
+  return html
+    .replaceAll(
+      'href="media/react-compat"',
+      'href="https://github.com/t-k/mreact/tree/main/examples/react-compat"',
+    )
+    .replaceAll(
+      'href="media/primitive"',
+      'href="https://github.com/t-k/mreact/tree/main/benchmarks/primitive"',
+    )
+    .replaceAll(
+      'href="media/app-router"',
+      'href="https://github.com/t-k/mreact/tree/main/examples/app-router"',
+    );
 }
 
 function apiBasePath(html: string): string {
@@ -139,6 +156,7 @@ function generatedApiIntegrationCss(): string {
   --mreact-docs-brand: oklch(0.47 0.12 52);
   --mreact-docs-brand-strong: oklch(0.4 0.11 41);
   --mreact-docs-accent: oklch(0.77 0.16 70);
+  --color-scheme: light;
   --light-color-background: var(--mreact-docs-bg);
   --light-color-background-secondary: var(--mreact-docs-bg-soft);
   --light-color-background-active: oklch(0.91 0.011 73);
@@ -147,7 +165,52 @@ function generatedApiIntegrationCss(): string {
   --light-color-text-aside: var(--mreact-docs-text-muted);
   --light-color-link: var(--mreact-docs-brand);
   --light-color-focus-outline: var(--mreact-docs-accent);
+  --dark-color-background: var(--mreact-docs-bg);
+  --dark-color-background-secondary: var(--mreact-docs-bg-soft);
+  --dark-color-background-active: oklch(0.91 0.011 73);
+  --dark-color-accent: var(--mreact-docs-border);
+  --dark-color-active-menu-item: oklch(0.91 0.011 73);
+  --dark-color-text: var(--mreact-docs-text);
+  --dark-color-contrast-text: oklch(0.18 0.006 56);
+  --dark-color-text-aside: var(--mreact-docs-text-muted);
+  --dark-color-icon-background: var(--mreact-docs-bg-soft);
+  --dark-color-icon-text: var(--mreact-docs-text);
+  --dark-color-comment-tag: var(--mreact-docs-bg-soft);
+  --dark-color-comment-tag-text: var(--mreact-docs-text);
+  --dark-color-link: var(--mreact-docs-brand);
+  --dark-color-focus-outline: var(--mreact-docs-accent);
+  --dark-color-document: var(--mreact-docs-text);
+  --color-background: var(--mreact-docs-bg);
+  --color-background-secondary: var(--mreact-docs-bg-soft);
+  --color-background-active: oklch(0.91 0.011 73);
+  --color-accent: var(--mreact-docs-border);
+  --color-text: var(--mreact-docs-text);
+  --color-contrast-text: oklch(0.18 0.006 56);
+  --color-text-aside: var(--mreact-docs-text-muted);
+  --color-link: var(--mreact-docs-brand);
+  --color-focus-outline: var(--mreact-docs-accent);
   --font-size: 1rem;
+  color-scheme: only light;
+}
+
+:root[data-theme="dark"],
+:root[data-theme="os"] {
+  --color-background: var(--mreact-docs-bg);
+  --color-background-secondary: var(--mreact-docs-bg-soft);
+  --color-background-active: oklch(0.91 0.011 73);
+  --color-accent: var(--mreact-docs-border);
+  --color-active-menu-item: oklch(0.91 0.011 73);
+  --color-text: var(--mreact-docs-text);
+  --color-contrast-text: oklch(0.18 0.006 56);
+  --color-text-aside: var(--mreact-docs-text-muted);
+  --color-icon-background: var(--mreact-docs-bg-soft);
+  --color-icon-text: var(--mreact-docs-text);
+  --color-comment-tag: var(--mreact-docs-bg-soft);
+  --color-comment-tag-text: var(--mreact-docs-text);
+  --color-link: var(--mreact-docs-brand);
+  --color-focus-outline: var(--mreact-docs-accent);
+  --color-document: var(--mreact-docs-text);
+  color-scheme: only light;
 }
 
 body {

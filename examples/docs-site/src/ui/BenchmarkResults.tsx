@@ -68,7 +68,7 @@ export function BenchmarkResults() {
     <section class="benchmark-results" aria-labelledby="latest-benchmark-results">
       <div class="benchmark-meta">
         <div>
-          <h3 id="latest-benchmark-results">Run 2026-06-07/002</h3>
+          <h3 id="latest-benchmark-results">{benchmarkRunLabel(latestBenchmarkRun.path)}</h3>
           <p>
             Complete ranking cards from the latest benchmark Markdown reports. These cards mirror
             the ranking sections in the repository artifacts without trimming the result set.
@@ -174,6 +174,10 @@ function benchmarkFilterLabels(): readonly BenchmarkBadgeLabel[] {
 
 function githubUrlForRunPath(path: string): string {
   return `https://github.com/t-k/mreact/tree/${latestBenchmarkRun.gitCommit}/${path}`;
+}
+
+function benchmarkRunLabel(path: string): string {
+  return `Run ${path.replace(/^benchmarks\/results\//, "")}`;
 }
 
 function githubUrlForFilePath(path: string): string {

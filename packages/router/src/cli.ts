@@ -119,6 +119,7 @@ if (parsed !== undefined) {
               };
         const server = await startDevServer({
           ...loaded.project,
+          hostname: resolveCliHost(parsed.host, process.env),
           logger,
           port: resolveCliDevPort(parsed.port, process.env, loaded.serverPort),
           viteConfig: loaded.viteConfig,
