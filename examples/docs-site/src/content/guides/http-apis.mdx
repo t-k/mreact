@@ -3,14 +3,36 @@ export const description = "Write ordinary JSON APIs with route.ts files, valida
 
 # HTTP APIs
 
-Use `route.ts` when you want ordinary HTTP endpoints for client components, forms, webhooks, admin tools, or external integrations.
+Use `route.ts` when you want ordinary HTTP endpoints for client components, forms, webhooks, admin tools, or external integrations. Route handlers return standard `Response` objects and run on the server.
 
-## JSON GET endpoint
+## Create an API route
+
+Place a `route.ts` file in the app route tree. `src/app/api/users/route.ts` handles `/api/users/`, and `src/app/api/users/$id/route.ts` handles `/api/users/:id`.
+
+Export one function per HTTP method:
 
 ```ts
+// src/app/api/users/route.ts
+export async function GET(): Promise<Response> {
+  const users = await listUsers();
+
+  return Response.json({ users });
+}
+```
+
+Use `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, or `ALL`. `ALL` is a fallback for methods that do not have a more specific export.
+
+## Read params and query
+
+Use `RouteHandlerContext<TParams>` to type dynamic params. Use the standard `URL` API for query strings.
+
+```ts
+// src/app/api/users/$id/route.ts
+import type { RouteHandlerContext } from "@reckona/mreact-router";
+
 export async function GET(
   request: Request,
-  context: { params: { id: string } },
+  context: RouteHandlerContext<{ id: string }>,
 ): Promise<Response> {
   const url = new URL(request.url);
   const includePosts = url.searchParams.get("include") === "posts";
@@ -24,7 +46,35 @@ export async function GET(
 }
 ```
 
-## JSON POST endpoint
+Route params are decoded before they reach the handler. Catch-all segments use the same route param shape described in [Routing](/guides/routing/).
+
+## Return JSON
+
+Use `Response.json()` for ordinary JSON responses. Return expected failures with explicit status codes and stable response shapes.
+
+```ts
+export async function GET(
+  _request: Request,
+  context: RouteHandlerContext<{ id: string }>,
+): Promise<Response> {
+  const user = await loadUser(context.params.id);
+
+  if (user === undefined) {
+    return Response.json(
+      { error: "User not found" },
+      { status: 404 },
+    );
+  }
+
+  return Response.json({ user });
+}
+```
+
+For small response helpers such as `json()`, `textError()`, and `redirect303()`, see [Response Helpers](/reference/response-helpers/).
+
+## Validate request bodies
+
+Treat request bodies as untrusted input. Parse JSON once, validate it at the boundary, and return `422` for a syntactically valid request with invalid application data.
 
 ```ts
 export async function POST(request: Request): Promise<Response> {
@@ -32,18 +82,152 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = parseCreateUser(body);
 
   if (!parsed.ok) {
-    return Response.json({ error: "Invalid request" }, { status: 422 });
+    return Response.json(
+      { error: "Invalid request", issues: parsed.issues },
+      { status: 422 },
+    );
   }
 
   const user = await createUser(parsed.value);
+
   return Response.json({ user }, { status: 201 });
 }
 ```
 
-## Production checklist
+Keep validators next to API-specific code or in `src/lib` when they are shared by multiple endpoints.
 
-- Validate request bodies before using them.
-- Return specific status codes for expected failures.
-- Add auth guards before reading private data.
-- Add CSRF protection for cookie-authenticated browser mutations.
-- Configure CORS explicitly when non-same-origin clients call the API.
+## Form and redirect-after-post
+
+For URL-encoded or multipart form posts, use standard `request.formData()` or the router's `parseForm()` helper. Use `redirect303()` when a successful mutation should redirect the browser with the post-redirect-get pattern.
+
+```ts
+import { parseForm, redirect303, textError } from "@reckona/mreact-router";
+
+export async function POST(request: Request): Promise<Response> {
+  const parsed = await parseForm(request, {
+    parse(form) {
+      const title = form.get("title");
+
+      if (typeof title !== "string" || title.trim() === "") {
+        throw new Error("Title is required.");
+      }
+
+      return { title };
+    },
+  }).catch(() => undefined);
+
+  if (parsed === undefined) {
+    return textError("Invalid form data.", 422);
+  }
+
+  await createPost(parsed);
+
+  return redirect303("/posts");
+}
+```
+
+If the form is part of your Mreact UI and does not need a public HTTP API, [Server Actions](/guides/server-actions/) may be a better fit.
+
+## Auth and server-only data
+
+Route handlers are server-only code. They can read secrets, connect to databases, and call private APIs. Put auth guards at the top of the handler before reading or returning private data.
+
+```ts
+import { readRequiredEnv } from "../../../lib/server-env";
+import { requireUser } from "../../../lib/session";
+
+export async function GET(request: Request): Promise<Response> {
+  const sessionUser = await requireUser(request);
+
+  if (sessionUser === undefined) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const databaseUrl = readRequiredEnv("DATABASE_URL");
+  const auditEvents = await loadAuditEvents(databaseUrl, sessionUser.id);
+
+  return Response.json({ auditEvents });
+}
+```
+
+Cookie-authenticated browser mutations need CSRF protection. Plain `route.ts` handlers do not automatically get the server-action CSRF guard.
+
+## CORS and OPTIONS
+
+Same-origin browser clients usually do not need CORS. External clients do. For cross-origin APIs, return a controlled `OPTIONS` response and add CORS headers only for origins you allow.
+
+```ts
+const allowedOrigin = "https://admin.example.com";
+
+function corsHeaders(request: Request): HeadersInit {
+  const origin = request.headers.get("origin");
+
+  if (origin !== allowedOrigin) {
+    return {};
+  }
+
+  return {
+    "access-control-allow-origin": allowedOrigin,
+    "access-control-allow-methods": "GET, POST, OPTIONS",
+    "access-control-allow-headers": "content-type, authorization",
+  };
+}
+
+export function OPTIONS(request: Request): Response {
+  return new Response(null, {
+    headers: corsHeaders(request),
+    status: 204,
+  });
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const result = await handleExternalRequest(request);
+
+  return Response.json(result, {
+    headers: corsHeaders(request),
+  });
+}
+```
+
+Avoid reflecting arbitrary origins. Keep the allowed origin list explicit.
+
+## Method behavior
+
+Use page routes for rendered HTML and `route.ts` for HTTP methods beyond page navigation. Page routes handle ordinary document navigation, while API routes dispatch method exports.
+
+```ts
+export async function DELETE(
+  _request: Request,
+  context: RouteHandlerContext<{ id: string }>,
+): Promise<Response> {
+  await deleteUser(context.params.id);
+
+  return new Response(null, { status: 204 });
+}
+
+export function ALL(request: Request): Response {
+  return Response.json(
+    { error: `Method ${request.method} is not supported.` },
+    { status: 405, headers: { allow: "DELETE" } },
+  );
+}
+```
+
+Export only the methods your API supports. Use `ALL` when you want a custom fallback response for unsupported methods.
+
+## When to use HTTP APIs
+
+Use HTTP APIs when a client component needs to `fetch()` data, an external webhook calls your app, an admin tool needs a stable endpoint, or another service integrates with your application.
+
+Use a page `loader` instead when the data is only needed to render a page. Use server actions when a form is part of your Mreact UI and should get the framework's form-action behavior.
+
+## Related pages
+
+- [Route Handlers](/guides/route-handlers/)
+- [Data Loading](/guides/data-loading/)
+- [Environment Variables](/guides/environment-variables/)
+- [Authentication](/guides/authentication/)
+- [Cookies and Sessions](/guides/cookies-and-sessions/)
+- [File Uploads and CSRF](/guides/file-uploads-and-csrf/)
+- [Response Helpers](/reference/response-helpers/)
+- [Route Handler Context](/reference/route-handler-context/)

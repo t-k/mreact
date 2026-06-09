@@ -506,6 +506,51 @@ describe("docs-site example contract", () => {
     expect(envGuide).toContain("[Environment Variables Reference](/reference/environment-variables/)");
   });
 
+  test("documents HTTP API route recipes for JSON, validation, auth, and CORS", async () => {
+    const httpApis = await readDocsSite("src/content/guides/http-apis.mdx");
+
+    expect(httpApis).toContain("## Create an API route");
+    expect(httpApis).toContain("src/app/api/users/route.ts");
+    expect(httpApis).toContain("/api/users/");
+    expect(httpApis).toContain("src/app/api/users/$id/route.ts");
+    expect(httpApis).toContain("/api/users/:id");
+    expect(httpApis).toContain("export async function GET");
+    expect(httpApis).toContain("## Read params and query");
+    expect(httpApis).toContain("RouteHandlerContext");
+    expect(httpApis).toContain("context.params.id");
+    expect(httpApis).toContain("searchParams");
+    expect(httpApis).toContain("## Return JSON");
+    expect(httpApis).toContain("Response.json({ user })");
+    expect(httpApis).toContain("{ status: 404 }");
+    expect(httpApis).toContain("## Validate request bodies");
+    expect(httpApis).toContain("await request.json()");
+    expect(httpApis).toContain("parseCreateUser");
+    expect(httpApis).toContain("{ status: 422 }");
+    expect(httpApis).toContain("## Form and redirect-after-post");
+    expect(httpApis).toContain("parseForm");
+    expect(httpApis).toContain("redirect303");
+    expect(httpApis).toContain("## Auth and server-only data");
+    expect(httpApis).toContain("readRequiredEnv");
+    expect(httpApis).toContain("CSRF");
+    expect(httpApis).toContain("## CORS and OPTIONS");
+    expect(httpApis).toContain("export function OPTIONS");
+    expect(httpApis).toContain("access-control-allow-origin");
+    expect(httpApis).toContain("## Method behavior");
+    expect(httpApis).toContain("ALL");
+    expect(httpApis).toContain("## When to use HTTP APIs");
+    expect(httpApis).toContain("client component");
+    expect(httpApis).toContain("webhook");
+    expect(httpApis).toContain("loader");
+    expect(httpApis).toContain("[Route Handlers](/guides/route-handlers/)");
+    expect(httpApis).toContain("[Data Loading](/guides/data-loading/)");
+    expect(httpApis).toContain("[Environment Variables](/guides/environment-variables/)");
+    expect(httpApis).toContain("[Authentication](/guides/authentication/)");
+    expect(httpApis).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
+    expect(httpApis).toContain("[File Uploads and CSRF](/guides/file-uploads-and-csrf/)");
+    expect(httpApis).toContain("[Response Helpers](/reference/response-helpers/)");
+    expect(httpApis).toContain("[Route Handler Context](/reference/route-handler-context/)");
+  });
+
   test("renders readable document lists and the latest benchmark run", async () => {
     const css = await readDocsSite("src/app/globals.css");
     const benchmarks = await readDocsSite("src/content/benchmarks.mdx");
