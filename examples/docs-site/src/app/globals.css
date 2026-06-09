@@ -114,6 +114,84 @@ a:hover {
   text-decoration: underline;
 }
 
+.site-search {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1.25rem;
+  padding: 0 0 1.25rem;
+}
+
+.site-search-label {
+  color: var(--text-3);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-search-input {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.4;
+  padding: 0.55rem 0.65rem;
+  width: 100%;
+}
+
+.site-search-input::placeholder {
+  color: var(--text-3);
+}
+
+.site-search-status {
+  color: var(--text-3);
+  font-size: 1rem;
+  margin: 0;
+  min-height: 1.6rem;
+}
+
+.site-search-results {
+  display: grid;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0;
+  scrollbar-color: var(--text-3) var(--bg);
+}
+
+.site-search-result a {
+  background: color-mix(in oklch, var(--bg-soft) 72%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.58rem 0.65rem;
+  text-decoration: none;
+}
+
+.site-search-result a:hover {
+  border-color: color-mix(in oklch, var(--brand) 42%, var(--border));
+  color: var(--brand-strong);
+}
+
+.site-search-result-title {
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.site-search-result-excerpt {
+  color: var(--text-2);
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
 .nav-group {
   margin: 0 0 1.35rem;
 }

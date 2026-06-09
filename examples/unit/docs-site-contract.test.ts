@@ -35,6 +35,7 @@ const requiredSlugs = [
 describe("docs-site example contract", () => {
   test("declares a private docs-site package with build, static export, and verification scripts", async () => {
     const packageJson = JSON.parse(await readDocsSite("package.json")) as {
+      devDependencies?: Record<string, string>;
       name?: string;
       private?: boolean;
       scripts?: Record<string, string>;
@@ -46,8 +47,10 @@ describe("docs-site example contract", () => {
     });
     expect(packageJson.scripts?.build).toContain("mreact-router build");
     expect(packageJson.scripts?.build).toContain("export-static");
+    expect(packageJson.scripts?.build).toContain("pagefind --site dist");
     expect(packageJson.scripts?.typecheck).toBe("tsc --noEmit");
     expect(packageJson.scripts?.test).toContain("vitest run");
+    expect(packageJson.devDependencies?.pagefind).toBeDefined();
   });
 
   test("keeps the navigation aligned with the approved information architecture", async () => {
@@ -141,6 +144,12 @@ describe("docs-site example contract", () => {
     );
     expect(layout).toContain("https://github.com/t-k/mreact");
     expect(layout).toContain('src={sitePath("docs-copy.js")}');
+    expect(layout).toContain('src={sitePath("docs-search.js")}');
+    expect(layout).toContain("<search");
+    expect(layout).toContain('type="search"');
+    expect(layout).toContain('aria-label="Search documentation"');
+    expect(layout).toContain('class="site-search-results"');
+    expect(layout).toContain("data-pagefind-body");
     expect(overview).toContain("# Mreact");
     expect(overview).toContain("Mreact is a [React](https://react.dev/)-flavored framework");
     expect(overview).toContain("## Motivations");
@@ -149,6 +158,24 @@ describe("docs-site example contract", () => {
     expect(overview).toContain("## Performance");
     expect(overview).toContain("[Benchmarks](/benchmarks/)");
     expect(await readDocsSite("package.json")).toContain("@reckona/example-docs-site");
+  });
+
+  test("adds static Pagefind search as progressive enhancement", async () => {
+    const searchScript = await readDocsSite("public/docs-search.js");
+    const css = await readDocsSite("src/app/globals.css");
+
+    expect(searchScript).toContain("pagefind/pagefind.js");
+    expect(searchScript).toContain("import(pagefindModuleUrl.href)");
+    expect(searchScript).toContain("pagefind.search");
+    expect(searchScript).toContain("site-search-result");
+    expect(searchScript).toContain("Search is available after the static docs build.");
+    expect(searchScript).not.toContain("innerHTML");
+
+    expect(css).toContain(".site-search");
+    expect(css).toContain(".site-search-input");
+    expect(css).toContain(".site-search-results");
+    expect(css).toContain(".site-search-result");
+    expect(css).not.toMatch(/font-size:\s*0\./);
   });
 
   test("serves Overview only at the root route and keeps Benchmarks as the next page", async () => {
