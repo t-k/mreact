@@ -27,7 +27,7 @@ const requiredSlugs = [
   "utilities/virtualized-lists",
   "utilities/store",
   "utilities/server-state",
-  "reference/generated-api",
+  "reference/api",
   "reference/cli",
   "reference/environment-variables",
 ] as const;
@@ -106,6 +106,8 @@ describe("docs-site example contract", () => {
     expect(nav).not.toContain('slug: "guides/client-boundaries"');
     expect(nav).not.toContain("Production Checklist");
     expect(nav).not.toContain('slug: "deployments/production-checklist"');
+    expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
+    expect(nav).not.toContain("Generated API");
     expect(nav.indexOf('slug: "deployments/host-policy-and-proxies"')).toBeLessThan(
       nav.indexOf('slug: "deployments/source-maps"'),
     );
@@ -296,6 +298,9 @@ describe("docs-site example contract", () => {
     expect(virtual).toContain('export const title = "Virtualized Lists"');
     expect(virtual).toContain("# Virtualized Lists");
     expect(virtual).toContain("@reckona/mreact-virtual");
+    expect(virtual).toContain("API reference:");
+    expect(virtual).toContain("/api/modules/_reckona_mreact-virtual.html");
+    expect(virtual).toContain("/api/functions/_reckona_mreact-virtual.createVirtualList.html");
     expect(virtual).toContain("createVirtualList");
     expect(virtual).toContain("createVirtualGrid");
     expect(virtual).toContain("measureItem");
@@ -305,6 +310,9 @@ describe("docs-site example contract", () => {
     expect(virtual).toContain("https://github.com/t-k/mreact/tree/main/packages/virtual");
 
     expect(store).toContain("@reckona/mreact-store");
+    expect(store).toContain("API reference:");
+    expect(store).toContain("/api/modules/_reckona_mreact-store.html");
+    expect(store).toContain("/api/functions/_reckona_mreact-store.createStore.html");
     expect(store).toContain("createStore");
     expect(store).toContain("createRequestStoreFactory");
     expect(store).toContain("shallowEqual");
@@ -316,6 +324,10 @@ describe("docs-site example contract", () => {
     expect(query).toContain('export const title = "Server State"');
     expect(query).toContain("# Server State");
     expect(query).toContain("@reckona/mreact-query");
+    expect(query).toContain("API reference:");
+    expect(query).toContain("/api/modules/_reckona_mreact-query.html");
+    expect(query).toContain("/api/functions/_reckona_mreact-query.createQuery.html");
+    expect(query).toContain("/api/interfaces/_reckona_mreact-query.QueryClient.html");
     expect(query).toContain("createQueryClient");
     expect(query).toContain("createQuery");
     expect(query).toContain("createInfiniteQuery");
@@ -331,10 +343,35 @@ describe("docs-site example contract", () => {
     expect(compat).toContain("## Vite configuration");
     expect(compat).toContain("optimizeDeps");
     expect(compat).toContain("mreactRouter");
+    expect(compat).toContain("/api/modules/_reckona_mreact-compat.html");
     expect(compat).toContain("React 19.2.6");
     expect(compat).toContain("pnpm test:react-conformance");
     expect(compat).toContain("examples/react-libraries");
     expect(compat).not.toContain("@reckona/mreact-next");
+  });
+
+  test("links directly to the generated TypeDoc API reference inside the docs site", async () => {
+    const nav = await readDocsSite("src/nav.config.ts");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const apiReference = await readDocsSite("src/content/reference/api.mdx");
+    const exportScript = await readDocsSite("scripts/export-static.ts");
+
+    expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
+    expect(nav).not.toContain("Generated API");
+    expect(contentRegistry).toContain("referenceApi");
+    expect(contentRegistry).toContain('page("reference/api", referenceApi, referenceApiMeta)');
+    expect(contentRegistry).not.toContain("generated-api.mdx");
+    expect(apiReference).toContain('export const title = "API Reference"');
+    expect(apiReference).toContain("[Open the full API Reference](/api/)");
+    expect(apiReference).toContain("[@reckona/mreact-router](/api/modules/_reckona_mreact-router.html)");
+    expect(apiReference).toContain("[@reckona/mreact-query](/api/modules/_reckona_mreact-query.html)");
+    expect(apiReference).toContain("[@reckona/mreact-store](/api/modules/_reckona_mreact-store.html)");
+    expect(apiReference).toContain("[@reckona/mreact-virtual](/api/modules/_reckona_mreact-virtual.html)");
+    expect(apiReference).toContain("[LoaderContext](/api/interfaces/_reckona_mreact-router..LoaderContext.html)");
+    expect(apiReference).not.toContain("pnpm docs:api");
+    expect(apiReference).not.toContain("Generate or refresh");
+    expect(exportScript).toContain("copyGeneratedApiReference");
+    expect(exportScript).toContain('join(exportDir, "api")');
   });
 
   test("documents project structure conventions for routes, params, 404s, and output", async () => {

@@ -46,7 +46,7 @@ import referenceCacheApi, * as referenceCacheApiMeta from "./content/reference/c
 import referenceCli, * as referenceCliMeta from "./content/reference/cli.mdx";
 import referenceConfig, * as referenceConfigMeta from "./content/reference/config.mdx";
 import referenceEnvironmentVariables, * as referenceEnvironmentVariablesMeta from "./content/reference/environment-variables.mdx";
-import referenceGeneratedApi, * as referenceGeneratedApiMeta from "./content/reference/generated-api.mdx";
+import referenceApi, * as referenceApiMeta from "./content/reference/api.mdx";
 import referenceMetadataApi, * as referenceMetadataApiMeta from "./content/reference/metadata-api.mdx";
 import referenceResponseHelpers, * as referenceResponseHelpersMeta from "./content/reference/response-helpers.mdx";
 import referenceRouteHandlerContext, * as referenceRouteHandlerContextMeta from "./content/reference/route-handler-context.mdx";
@@ -253,7 +253,7 @@ export const docsPages = [
   page("reference/metadata-api", referenceMetadataApi, referenceMetadataApiMeta),
   page("reference/auth-api", referenceAuthApi, referenceAuthApiMeta),
   page("reference/cache-api", referenceCacheApi, referenceCacheApiMeta),
-  page("reference/generated-api", referenceGeneratedApi, referenceGeneratedApiMeta),
+  page("reference/api", referenceApi, referenceApiMeta),
 ] as const satisfies readonly DocsPage[];
 
 export function pageForSlug(slug: string): DocsPage | undefined {
