@@ -97,6 +97,11 @@ let authConfig: ResolvedAuthConfig = {
   serializeClaims: defaultSerializeSessionClaims,
 };
 
+/**
+ * Updates the process-wide auth defaults used by the guard helpers.
+ *
+ * Configure redirect targets and claim serialization before handling requests that call `requireSession()`, `requireRole()`, or `requirePermission()`.
+ */
 export function configureAuth(config: AuthConfig): void {
   authConfig = {
     forbiddenTo: config.forbiddenTo ?? authConfig.forbiddenTo,
@@ -105,12 +110,20 @@ export function configureAuth(config: AuthConfig): void {
   };
 }
 
+/**
+ * Runs server-side auth work inside an AsyncLocalStorage-backed request scope.
+ *
+ * Use this around custom server rendering or tests so `getSessionClaims()` can read request-local claims.
+ */
 export async function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>> {
   const storage = await authRequestStorage();
 
   return await storage.run({}, fn);
 }
 
+/**
+ * Reads the current session and stores serialized claims for the active auth request scope.
+ */
 export async function getCurrentSession<TData>(
   request: Request,
   store: SessionStore<TData>,
@@ -123,6 +136,9 @@ export async function getCurrentSession<TData>(
   return session;
 }
 
+/**
+ * Requires an active session or redirects to the configured login route.
+ */
 export async function requireSession<TData>(
   request: Request,
   store: SessionStore<TData>,
@@ -137,6 +153,9 @@ export async function requireSession<TData>(
   return session;
 }
 
+/**
+ * Requires an active session with the requested role or redirects to the configured forbidden route.
+ */
 export async function requireRole<TData extends AuthSessionClaims>(
   request: Request,
   store: SessionStore<TData>,
@@ -153,6 +172,9 @@ export async function requireRole<TData extends AuthSessionClaims>(
   return session;
 }
 
+/**
+ * Requires an active session with the requested permission or redirects to the configured forbidden route.
+ */
 export async function requirePermission<TData extends AuthSessionClaims>(
   request: Request,
   store: SessionStore<TData>,
@@ -174,6 +196,9 @@ export async function requirePermission<TData extends AuthSessionClaims>(
   return session;
 }
 
+/**
+ * Checks for a role without redirecting, returning a discriminated authorization result.
+ */
 export async function tryRequireRole<TData extends AuthSessionClaims>(
   request: Request,
   store: SessionStore<TData>,
@@ -191,6 +216,9 @@ export async function tryRequireRole<TData extends AuthSessionClaims>(
   return result.authorized ? { authorized: true, session } : result;
 }
 
+/**
+ * Checks for a permission without redirecting, returning a discriminated authorization result.
+ */
 export async function tryRequirePermission<TData extends AuthSessionClaims>(
   request: Request,
   store: SessionStore<TData>,
@@ -213,6 +241,9 @@ export async function tryRequirePermission<TData extends AuthSessionClaims>(
   return result.authorized ? { authorized: true, session } : result;
 }
 
+/**
+ * Evaluates session claims against required roles and permissions without reading cookies or redirecting.
+ */
 export function authorizeSession<TData extends AuthSessionClaims>(
   data: TData,
   policy: AuthorizationPolicy,
@@ -234,6 +265,9 @@ export function authorizeSession<TData extends AuthSessionClaims>(
   return { authorized: true };
 }
 
+/**
+ * Rotates the current session id and refreshes request-local claims.
+ */
 export async function refreshSession<TData>(
   request: Request,
   response: Response,
@@ -247,6 +281,9 @@ export async function refreshSession<TData>(
   return session;
 }
 
+/**
+ * Destroys the current session and clears request-local claims.
+ */
 export async function revokeCurrentSession<TData>(
   request: Request,
   response: Response,
@@ -257,6 +294,11 @@ export async function revokeCurrentSession<TData>(
   setSessionClaims(undefined);
 }
 
+/**
+ * Returns the claims captured by `getCurrentSession()` for the current request or hydrated browser document.
+ *
+ * Server code should call it inside `runWithAuthRequest()` so concurrent requests do not share claim state.
+ */
 export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionClaims>():
   | TData
   | undefined {

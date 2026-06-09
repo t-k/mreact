@@ -61,6 +61,11 @@ function throwUnsafeRewrite(location: string): never {
   throw new TypeError(`unsafe rewrite target: ${JSON.stringify(location)}`);
 }
 
+/**
+ * Throws an internal redirect for loaders, middleware, route handlers, or server actions.
+ *
+ * The target must be same-origin or relative; use `redirectExternal()` for trusted `http` or `https` destinations. The default status is `303`.
+ */
 export function redirect(location: string, options: RedirectOptions = {}): never {
   if (!isSafeInternalRedirect(location)) {
     throwUnsafeRedirect(location);
@@ -72,6 +77,11 @@ export function redirect(location: string, options: RedirectOptions = {}): never
   });
 }
 
+/**
+ * Throws an external redirect for trusted `http` or `https` destinations.
+ *
+ * This helper is intentionally separate from `redirect()` so off-site navigation is explicit. The default status is `307`.
+ */
 export function redirectExternal(
   location: string,
   options: RedirectOptions = {},
@@ -86,6 +96,11 @@ export function redirectExternal(
   });
 }
 
+/**
+ * Creates a same-origin `303 See Other` redirect response.
+ *
+ * Use this from route handlers when returning a `Response` is more convenient than throwing through the app-router control flow.
+ */
 export function redirect303(location: string, init: ResponseInit = {}): Response {
   if (!isSafeInternalRedirect(location)) {
     throwUnsafeRedirect(location);
@@ -101,6 +116,9 @@ export function redirect303(location: string, init: ResponseInit = {}): Response
   });
 }
 
+/**
+ * Creates a plain-text error response with a default `text/plain` content type.
+ */
 export function textError(message: string, status = 400, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
 
@@ -115,6 +133,11 @@ export function textError(message: string, status = 400, init: ResponseInit = {}
   });
 }
 
+/**
+ * Reads `request.formData()` and optionally validates it with a schema-like parser.
+ *
+ * Pass a schema object with `parse(FormData)` when a route handler or server action should receive typed form data.
+ */
 export async function parseForm(request: Request): Promise<FormData>;
 export async function parseForm<T>(request: Request, schema: ParseSchema<T>): Promise<T>;
 export async function parseForm<T>(
@@ -126,6 +149,11 @@ export async function parseForm<T>(
   return schema === undefined ? form : schema.parse(form);
 }
 
+/**
+ * Throws a route-level 404 control error.
+ *
+ * Use this from loaders, metadata, middleware, or route handlers when the matched route is valid but the requested resource is absent.
+ */
 export function notFound(): never {
   throw Object.assign(new Error("Not Found"), {
     name: notFoundErrorName,
@@ -133,14 +161,25 @@ export function notFound(): never {
   });
 }
 
+/**
+ * Alias for `notFound()` for codebases that prefer an explicit throwing helper name.
+ */
 export function throwNotFound(): never {
   return notFound();
 }
 
+/**
+ * Continues middleware processing without changing the request.
+ */
 export function next(): MiddlewareNext {
   return undefined;
 }
 
+/**
+ * Creates an internal rewrite response consumed by app-router middleware.
+ *
+ * The target must be a same-origin route path, query, hash, or relative URL; protocol-relative, external, and control-character targets are rejected.
+ */
 export function rewrite(location: string, init: ResponseInit = {}): Response {
   if (!isSafeInternalRedirect(location)) {
     throwUnsafeRewrite(location);
@@ -160,10 +199,16 @@ export function rewrite(location: string, init: ResponseInit = {}): Response {
   return response;
 }
 
+/**
+ * Creates a JSON response using the platform `Response.json()` implementation.
+ */
 export function json(value: unknown, init?: ResponseInit): Response {
   return Response.json(value, init);
 }
 
+/**
+ * Creates an HTML response and defaults the content type to `text/html; charset=utf-8`.
+ */
 export function html(value: string, init: ResponseInit = {}): Response {
   if (init.headers === undefined) {
     return new Response(value, {
@@ -184,6 +229,9 @@ export function html(value: string, init: ResponseInit = {}): Response {
   });
 }
 
+/**
+ * Returns the request headers object for route code that follows app-router helper naming.
+ */
 export function headers(request: Request): Headers {
   return request.headers;
 }
@@ -194,6 +242,11 @@ export interface RequestCookies {
   has(name: string): boolean;
 }
 
+/**
+ * Parses request cookies into a small read-only helper.
+ *
+ * Values are decoded with `decodeURIComponent`; malformed encoded values are ignored rather than throwing during request handling.
+ */
 export function cookies(request: Request): RequestCookies {
   let values: ReadonlyMap<string, string> | undefined;
   const cookieValues = () => {

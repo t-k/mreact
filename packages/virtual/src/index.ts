@@ -96,6 +96,11 @@ interface MeasuredRowLayout<TItem> {
   totalSizePx: number;
 }
 
+/**
+ * Calculates the visible and overscanned range for a fixed-size virtual list or grid.
+ *
+ * The result includes spacer sizes, visible row/index bounds, overscanned row/index bounds, and total scroll size.
+ */
 export function calculateVirtualRange(options: VirtualRangeOptions): VirtualRange {
   const itemCount = clampInteger(options.itemCount, 0);
   const columnCount = clampInteger(options.columnCount ?? 1, 1);
@@ -137,6 +142,11 @@ export function calculateVirtualRange(options: VirtualRangeOptions): VirtualRang
   };
 }
 
+/**
+ * Creates a one-column reactive virtualizer for scrollable lists.
+ *
+ * Inputs are read through callbacks so cell-backed item, viewport, and scroll values update the computed range automatically.
+ */
 export function createVirtualList<TItem>(options: VirtualListOptions<TItem>): Virtualizer<TItem> {
   return createVirtualizer({
     ...options,
@@ -144,6 +154,9 @@ export function createVirtualList<TItem>(options: VirtualListOptions<TItem>): Vi
   });
 }
 
+/**
+ * Creates a reactive virtualizer for grid layouts with optional item row and column spans.
+ */
 export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem> {
   return createVirtualizer(options);
 }

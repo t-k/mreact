@@ -206,10 +206,18 @@ interface QueryClientScopeUnavailableError extends Error {
   [queryClientScopeUnavailableErrorKey]: true;
 }
 
+/**
+ * Creates an isolated query client for cache reads, fetches, mutations, hydration, and subscriptions.
+ */
 export function createQueryClient(): QueryClient {
   return createQueryLifecycle();
 }
 
+/**
+ * Returns the current scoped query client on the server or the shared browser query client in the browser.
+ *
+ * Browser calls automatically hydrate from the mreact query state script when present.
+ */
 export function getQueryClient(): QueryClient {
   const state = queryRuntimeState();
   const scopedClient = queryAsyncStorage(state)?.getStore();
@@ -230,6 +238,11 @@ export function getQueryClient(): QueryClient {
   return state.browserQueryClient;
 }
 
+/**
+ * Runs a callback with a server-scoped query client.
+ *
+ * Node runtimes need `AsyncLocalStorage` support or a custom storage installed with `installQueryAsyncStorage()`.
+ */
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T {
   const state = queryRuntimeState();
   const asyncStorage = queryAsyncStorage(state);
@@ -261,6 +274,11 @@ export function isQueryClientScopeUnavailableError(
   );
 }
 
+/**
+ * Creates a reactive query observer backed by a `QueryClient`.
+ *
+ * The observer exposes a `ReadonlyCell` result, subscribes to exact cache updates, can auto-fetch in the browser, and must be disposed when the consuming scope ends.
+ */
 export function createQuery<TData>(
   client: QueryClient,
   options: CreateQueryOptions<TData>,
@@ -300,6 +318,11 @@ export function createQuery<TData>(
   };
 }
 
+/**
+ * Creates a reactive infinite-query observer backed by a `QueryClient`.
+ *
+ * It stores pages in the main query entry, fetches extra pages with derived page keys, and reports `isFetchingNextPage` while pagination is in progress.
+ */
 export function createInfiniteQuery<TPage, TPageParam>(
   client: QueryClient,
   options: CreateInfiniteQueryOptions<TPage, TPageParam>,
@@ -429,6 +452,9 @@ export function createInfiniteQuery<TPage, TPageParam>(
   };
 }
 
+/**
+ * Creates a mutation observer with lifecycle hooks and optional query invalidation.
+ */
 export function createMutation<TVariables = void, TData = unknown, TContext = unknown>(
   client: QueryClient,
   options: CreateMutationOptions<TVariables, TData, TContext>,
@@ -486,6 +512,9 @@ export function createMutation<TVariables = void, TData = unknown, TContext = un
   };
 }
 
+/**
+ * Serializes successful query entries so they can be embedded in server-rendered HTML.
+ */
 export function dehydrate(client: QueryClient): DehydratedQueryClient {
   return {
     queries: client
@@ -500,6 +529,9 @@ export function dehydrate(client: QueryClient): DehydratedQueryClient {
   };
 }
 
+/**
+ * Restores dehydrated query entries into a query client before observers read them.
+ */
 export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient): void {
   const hydratableClient = client as QueryClient & Partial<HydratableQueryClient>;
 

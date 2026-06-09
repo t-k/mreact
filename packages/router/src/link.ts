@@ -39,6 +39,11 @@ export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<H
   [attribute: string]: unknown;
 }
 
+/**
+ * Converts router link options into anchor attributes consumed by the client navigation runtime.
+ *
+ * Use this when rendering a custom anchor component that should still opt into mreact prefetch, scroll, reload, or transition behavior.
+ */
 export function linkProps(options: LinkOptions<string>): Record<string, string> {
   return {
     href: options.href,
@@ -61,6 +66,11 @@ export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath
     ? { readonly __mreactRoutePatternHrefError__: never }
     : unknown;
 
+/**
+ * Renders an app-router anchor with typed `href` support and navigation runtime attributes.
+ *
+ * In JSX it returns an anchor element compatible with the mreact runtime; during server streaming it can also write directly to an `HtmlSink`. Unsafe URL attribute values are dropped during rendering.
+ */
 export function Link<const Href extends LinkHref>(
   props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>,
 ): ReactCompatElement;

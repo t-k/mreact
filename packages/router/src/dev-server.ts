@@ -33,6 +33,11 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
   onUpgrade?: HttpUpgradeHandler | undefined;
 }
 
+/**
+ * Starts the local app-router development server with Vite middleware and route compilation.
+ *
+ * The server trusts only the configured host settings, merges declared application packages into the development import policy, and returns a `close()` method that should be awaited by tests and scripts.
+ */
 export async function startDevServer(
   options: StartDevServerOptions,
 ): Promise<{ close(): Promise<void>; server: Server; url: string }> {

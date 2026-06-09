@@ -334,6 +334,11 @@ export interface BuiltPrerenderedRoute {
 
 type StaticParams = Record<string, string | number | boolean | readonly string[]>;
 
+/**
+ * Builds an app-router project into server, client, and optional deployment-target artifacts.
+ *
+ * Use this from custom build scripts when the CLI is too coarse-grained; the returned manifest paths describe the files written under `outDir`. The build reads route files, loaders, middleware, metadata, server actions, and client references, so callers should pass the same project root and source allow-list they expect to deploy.
+ */
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
   const timingSink = options.onBuildPhaseTiming;
   const progressSink = options.onBuildProgress;
@@ -5612,6 +5617,11 @@ async function writeCloudflareWorkerArtifact(options: {
   );
 }
 
+/**
+ * Packages a built app-router output directory into the minimal AWS Lambda artifact layout.
+ *
+ * The package contains `.mreact`, a Lambda handler, project package metadata, production dependencies, and `mreact-lambda-artifact.json`; it intentionally excludes source files and development tooling that are not needed at runtime.
+ */
 export async function packageAwsLambdaArtifact(
   options: PackageAwsLambdaArtifactOptions,
 ): Promise<AwsLambdaArtifactManifest> {
@@ -5719,6 +5729,11 @@ async function assertAwsLambdaRuntimeDependencies(outDir: string): Promise<void>
   );
 }
 
+/**
+ * Packages a Cloudflare-target build for Cloudflare Pages advanced mode.
+ *
+ * The package writes `_worker.js`, generated client assets, public assets, and `mreact-cloudflare-pages-artifact.json`; deploy the output directory rather than the raw `.mreact` build tree.
+ */
 export async function packageCloudflarePagesArtifact(
   options: PackageCloudflarePagesArtifactOptions,
 ): Promise<CloudflarePagesArtifactManifest> {

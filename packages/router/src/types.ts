@@ -25,6 +25,11 @@ export interface LoaderContext<TParams extends RouteParams = RouteParams> {
   request: Request;
 }
 
+/**
+ * Context passed to a route `generateMetadata` export.
+ *
+ * Metadata is evaluated on the server after loader data is available, so it can derive head tags, robots data, sitemap entries, and security header directives from the same request and route params as the page.
+ */
 export interface GenerateMetadataContext<
   TData = unknown,
   TParams extends RouteParams = RouteParams,
@@ -49,6 +54,11 @@ export type PageComponent<TLoader extends RouteLoader> = (
   props: PageProps<InferLoaderData<TLoader>, InferLoaderParams<TLoader>>,
 ) => ReactCompatNode;
 
+/**
+ * Preserves the relationship between a page component and its loader when authoring route files.
+ *
+ * Wrap a default page export with `definePage<typeof loader>(...)` to infer `data` and `params` props from the route loader without changing runtime behavior.
+ */
 export function definePage<TLoader extends RouteLoader>(
   component: PageComponent<TLoader>,
 ): PageComponent<TLoader> {
@@ -73,6 +83,11 @@ export interface MetadataImage {
   width?: MetadataScalar;
 }
 
+/**
+ * Declarative metadata returned by route metadata exports.
+ *
+ * Values are rendered into the document head and response headers by the app router; use `generateMetadata` when the values depend on loader data, params, or the current request.
+ */
 export interface RouteMetadata {
   alternates?: {
     canonical?: MetadataScalar;

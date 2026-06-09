@@ -54,6 +54,11 @@ export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${st
   ? string
   : Segment;
 
+/**
+ * Builds an internal app-route URL from a route pattern and typed params/search options.
+ *
+ * Dynamic `:param` and `:...catchAll` segments are URL-encoded, search values are serialized with `URLSearchParams`, and protocol-relative or external paths are rejected.
+ */
 export function href<const Path extends `/${string}`>(
   path: Path,
   ...args: HasRouteParams<Path> extends true

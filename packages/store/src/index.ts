@@ -34,6 +34,11 @@ export interface Store<T extends object> {
   subscribe(listener: StoreListener<T>): () => void;
 }
 
+/**
+ * Creates a reactive object store with patch updates, replacement, transactions, selectors, subscriptions, and optional instrumentation.
+ *
+ * The store keeps state in a `ReadonlyCell`; selectors should be disposed when their consumer scope ends.
+ */
 export function createStore<T extends object>(initial: T, options: StoreOptions<T> = {}): Store<T> {
   const state = cell(initial);
   const listeners = new Set<StoreListener<T>>();
@@ -133,6 +138,11 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   };
 }
 
+/**
+ * Creates a factory for per-request stores from an initial-state callback.
+ *
+ * Use this when SSR or server actions need isolated store instances instead of sharing process-global state.
+ */
 export function createRequestStoreFactory<T extends object>(
   initial: () => T,
   options?: StoreOptions<T> | undefined,
@@ -140,6 +150,9 @@ export function createRequestStoreFactory<T extends object>(
   return () => createStore(initial(), options);
 }
 
+/**
+ * Compares two plain objects by own enumerable keys with `Object.is` value equality.
+ */
 export function shallowEqual<T>(left: T, right: T): boolean {
   if (Object.is(left, right)) {
     return true;
