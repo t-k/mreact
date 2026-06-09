@@ -482,6 +482,44 @@ describe("docs-site example contract", () => {
     expect(middleware).toContain("[Host Policy and Proxies](/deployments/host-policy-and-proxies/)");
   });
 
+  test("documents server actions for form mutations, revalidation, production dispatch, and limits", async () => {
+    const serverActions = await readDocsSite("src/content/guides/server-actions.mdx");
+
+    expect(serverActions).toContain("## What server actions are for");
+    expect(serverActions).toContain("form-first mutations");
+    expect(serverActions).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(serverActions).toContain("## Create a form action");
+    expect(serverActions).toContain("src/app/notes/actions.ts");
+    expect(serverActions).toContain('"use server";');
+    expect(serverActions).toContain("FormData");
+    expect(serverActions).toContain('action={saveNote}');
+    expect(serverActions).toContain("## Use request context");
+    expect(serverActions).toContain("ServerActionContext");
+    expect(serverActions).toContain("context.cookies.get");
+    expect(serverActions).toContain("context.headers.get");
+    expect(serverActions).toContain("## Revalidate cached routes");
+    expect(serverActions).toContain("revalidatePath(\"/notes\")");
+    expect(serverActions).toContain("export const revalidate = 60");
+    expect(serverActions).toContain("## How actions are inferred");
+    expect(serverActions).toContain("actions.save");
+    expect(serverActions).toContain("production client bundles");
+    expect(serverActions).toContain("## Production dispatch and manifests");
+    expect(serverActions).toContain("fail-closed");
+    expect(serverActions).toContain('serverActions: { allowedActions: "any" }');
+    expect(serverActions).toContain("## Limits and security");
+    expect(serverActions).toContain("10 MiB");
+    expect(serverActions).toContain("maxBodyBytes");
+    expect(serverActions).toContain("maxFormFields");
+    expect(serverActions).toContain("MREACT_SERVER_ACTION_SECRET");
+    expect(serverActions).toContain("CSRF");
+    expect(serverActions).toContain("## When not to use server actions");
+    expect(serverActions).toContain("[Forms and Validation](/guides/forms-and-validation/)");
+    expect(serverActions).toContain("[Cache and Revalidation](/guides/cache-and-revalidation/)");
+    expect(serverActions).toContain("[Environment Variables](/guides/environment-variables/)");
+    expect(serverActions).toContain("[Production Checklist](/deployments/production-checklist/)");
+    expect(serverActions).toContain("[Route Module Exports](/reference/route-module-exports/)");
+  });
+
   test("documents SSG prerendering and static export constraints", async () => {
     const ssg = await readDocsSite("src/content/guides/ssg-and-static-export.mdx");
 

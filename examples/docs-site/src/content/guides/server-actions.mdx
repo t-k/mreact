@@ -1,8 +1,178 @@
 export const title = "Server Actions";
-export const description = "Use form actions, CSRF-bound tokens, body limits, and revalidation.";
+export const description = "Use form actions, request context, cache revalidation, production manifests, and action limits.";
 
 # Server actions
 
-Server actions are inferred when an imported function is passed to `<form action={action}>`. The action implementation stays in the server graph and production client bundles only receive an action reference.
+Server actions are server-side mutation functions that Mreact can bind to rendered forms. The browser receives an action reference, while the action implementation stays in the server graph and is stripped from production client bundles.
 
-Set `MREACT_SERVER_ACTION_SECRET` consistently across multi-instance deployments so forms rendered on one instance can submit to another.
+## What server actions are for
+
+Use server actions for form-first mutations inside your Mreact UI: create a record, update settings, save a draft, delete an item, or submit a workflow step. Use a page loader when the work is only data for rendering a page, and use [HTTP APIs](/guides/http-apis/) when external clients, webhooks, or custom fetch callers need a stable endpoint.
+
+Server actions pair well with route cache invalidation because the mutation and the route that should be refreshed usually live in the same app surface.
+
+## Create a form action
+
+Put the action in a server-side module and import it into the route that renders the form. The action receives the submitted `FormData`.
+
+```ts
+// src/app/notes/actions.ts
+"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+import { createNote } from "../../lib/notes.js";
+
+export async function saveNote(formData: FormData): Promise<void> {
+  const text = String(formData.get("text") ?? "").trim();
+
+  if (text.length === 0) {
+    return;
+  }
+
+  await createNote({ text });
+  revalidatePath("/notes");
+}
+```
+
+```tsx
+// src/app/notes/page.tsx
+import { saveNote } from "./actions.js";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Notes</h1>
+      <form method="post" action={saveNote}>
+        <label>
+          Note
+          <input name="text" required />
+        </label>
+        <button type="submit">Save</button>
+      </form>
+    </main>
+  );
+}
+```
+
+Imported functions passed to `<form action={...}>` are inferred as server actions. A top-level `"use server"` directive is still supported and is a clear marker that exported functions in that module are server actions.
+
+## Use request context
+
+An inferred form action can accept `ServerActionContext` as its second argument. Use it when the mutation needs request metadata such as cookies, headers, the original `Request`, or the best available client IP.
+
+```ts
+"use server";
+
+import type { ServerActionContext } from "@reckona/mreact-router";
+
+export async function saveNote(
+  formData: FormData,
+  context: ServerActionContext,
+) {
+  const session = context.cookies.get("session");
+  const requestId = context.headers.get("x-request-id");
+  const text = String(formData.get("text") ?? "");
+
+  await saveAuditLog({
+    requestId,
+    session,
+    text,
+    url: context.request.url,
+  });
+}
+```
+
+Keep authorization and validation in the action or in helpers called by the action. The form reference proves that the user submitted a rendered form, but it does not replace application-level permission checks.
+
+## Revalidate cached routes
+
+Call `revalidatePath()` after a mutation changes data used by cached route HTML. Without explicit invalidation, a route with `revalidate` can keep serving the old snapshot until its timer expires.
+
+```tsx
+// src/app/notes/page.tsx
+export const revalidate = 60;
+```
+
+```ts
+// src/app/notes/actions.ts
+"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export async function saveNote(formData: FormData) {
+  await createNote({
+    text: String(formData.get("text") ?? ""),
+  });
+
+  revalidatePath("/notes");
+}
+```
+
+Use the same path users navigate to. If the mutation affects multiple cached pages, revalidate each route that depends on the changed data.
+
+## How actions are inferred
+
+Mreact follows supported static form action references, including direct imported functions and registry-style member expressions such as `actions.save`.
+
+```tsx
+import * as actions from "./actions.js";
+
+export default function Page() {
+  return (
+    <form method="post" action={actions.save}>
+      <input name="title" required />
+      <button type="submit">Save</button>
+    </form>
+  );
+}
+```
+
+The router lowers the form to a server action reference and registers only the referenced export in generated production manifests. Dynamic action selection is intentionally limited; pass a concrete action function or supported member reference so the compiler can tell which action is exposed.
+
+## Production dispatch and manifests
+
+Production server action dispatch is fail-closed when no generated or explicit action manifest is present. Built app-router deployments pass the generated manifest automatically, so normal `mreact-router build` outputs do not need manual allowlists.
+
+Direct production integrations that intentionally expose every registered action must opt in with `serverActions: { allowedActions: "any" }`. Otherwise pass the generated `allowedActions` array so the dispatcher only accepts known actions.
+
+```ts
+startServer({
+  outDir: ".mreact",
+  serverActions: {
+    allowedActions: "any",
+  },
+});
+```
+
+Use `"any"` only when the integration is deliberately exposing all registered actions. For most production paths, prefer the generated manifest.
+
+## Limits and security
+
+Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Configure the limit when your app has a real need for larger submissions.
+
+```ts
+startServer({
+  outDir: ".mreact",
+  serverActions: {
+    maxBodyBytes: 2 * 1024 * 1024,
+    maxFormFields: 100,
+  },
+});
+```
+
+Rendered form actions include a CSRF-bound action reference token and nonce. Single-process deployments can use the automatically generated process secret, but multi-instance deployments should set the same `MREACT_SERVER_ACTION_SECRET` value on every instance so a form rendered by one instance can submit to another.
+
+Use server actions for same-site rendered forms. Use HTTP APIs plus explicit authentication, CSRF, and request validation when another client needs to call the mutation directly.
+
+## When not to use server actions
+
+Do not use server actions for public webhooks, mobile API endpoints, third-party integrations, or arbitrary JSON APIs. Use [HTTP APIs](/guides/http-apis/) for those cases. Do not use them for read-only page data either; use [Data Loading](/guides/data-loading/) so status codes, metadata, and route caching stay tied to the page render.
+
+## Related pages
+
+- [Forms and Validation](/guides/forms-and-validation/)
+- [Cache and Revalidation](/guides/cache-and-revalidation/)
+- [Environment Variables](/guides/environment-variables/)
+- [HTTP APIs](/guides/http-apis/)
+- [Production Checklist](/deployments/production-checklist/)
+- [Route Module Exports](/reference/route-module-exports/)
