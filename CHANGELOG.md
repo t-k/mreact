@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.152 - 2026-06-09
+
+### Fixed
+
+- Fixed App Router production builds for content-heavy prerendered sites so generated static params reuse the build-time server module cache instead of re-evaluating the same server component bundles for every generated path, avoiding default Node heap OOMs and reducing build memory use.
+- Fixed production route CSS builds so Tailwind source-root filtering is injected before user CSS plugins transform route stylesheets, matching development CSS filtering and preventing route bundle builds from scanning unrelated project files.
+
 ## 0.0.151 - 2026-06-09
 
 ### Fixed
