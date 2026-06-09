@@ -500,6 +500,14 @@ describe("docs-site example contract", () => {
     expect(serverActions).toContain("## Revalidate cached routes");
     expect(serverActions).toContain("revalidatePath(\"/notes\")");
     expect(serverActions).toContain("export const revalidate = 60");
+    expect(serverActions).toContain("## Single-flight mutations");
+    expect(serverActions).toContain("Server action nonce replay protection");
+    expect(serverActions).toContain("mutationKey");
+    expect(serverActions).toContain("const inFlight = new Map<string, Promise<void>>();");
+    expect(serverActions).toContain("context.cookies.get(\"session\")");
+    expect(serverActions).toContain("inFlight.delete(key)");
+    expect(serverActions).toContain("durable store");
+    expect(serverActions).toContain("database unique constraint");
     expect(serverActions).toContain("## How actions are inferred");
     expect(serverActions).toContain("actions.save");
     expect(serverActions).toContain("production client bundles");

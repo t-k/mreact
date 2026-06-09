@@ -110,6 +110,72 @@ export async function saveNote(formData: FormData) {
 
 Use the same path users navigate to. If the mutation affects multiple cached pages, revalidate each route that depends on the changed data.
 
+## Single-flight mutations
+
+Server action nonce replay protection prevents the same rendered action nonce from being accepted twice. That protects the action transport from replay, but it is not a full business-level idempotency system. If two different rendered forms can submit the same logical mutation, or if a user can retry from another tab, add an application-level mutation key.
+
+For a single Node process, a small in-flight map is enough to demonstrate the pattern. Use a durable store, queue, database unique constraint, Redis lock, Cloudflare Durable Object, or another shared primitive when the app runs on multiple instances.
+
+```tsx
+// src/app/notes/page.tsx
+import { saveNote } from "./actions.js";
+
+export default function Page() {
+  const mutationKey = crypto.randomUUID();
+
+  return (
+    <form method="post" action={saveNote}>
+      <input type="hidden" name="mutationKey" value={mutationKey} />
+      <input name="text" required />
+      <button type="submit">Save</button>
+    </form>
+  );
+}
+```
+
+```ts
+// src/app/notes/actions.ts
+"use server";
+
+import { revalidatePath, type ServerActionContext } from "@reckona/mreact-router";
+
+const inFlight = new Map<string, Promise<void>>();
+
+export async function saveNote(
+  formData: FormData,
+  context: ServerActionContext,
+): Promise<void> {
+  const session = context.cookies.get("session") ?? "anonymous";
+  const mutationKey = String(formData.get("mutationKey") ?? "");
+  const text = String(formData.get("text") ?? "").trim();
+  const key = `${session}:${mutationKey}`;
+
+  if (mutationKey === "" || text === "") {
+    return;
+  }
+
+  const existing = inFlight.get(key);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const operation = (async () => {
+    await createNoteOnce({ mutationKey, session, text });
+    revalidatePath("/notes");
+  })();
+
+  inFlight.set(key, operation);
+
+  try {
+    await operation;
+  } finally {
+    inFlight.delete(key);
+  }
+}
+```
+
+The example coalesces concurrent submissions in one process. It does not stop a duplicate after the first operation has completed. For durable idempotency, store `mutationKey` with the created record and enforce a database unique constraint, or use a shared idempotency table before doing side effects.
+
 ## How actions are inferred
 
 Mreact follows supported static form action references, including direct imported functions and registry-style member expressions such as `actions.save`.
