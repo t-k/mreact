@@ -10,12 +10,14 @@ Layouts wrap a route subtree. Use them for persistent shells such as document st
 A `layout.tsx` file renders around every matching child route. Put the child route where `<Slot />` appears.
 
 ```tsx
+import { Link } from "@reckona/mreact-router/link";
+
 export default function RootLayout() {
   return (
     <html lang="en">
       <body>
         <header>
-          <a href="/">Mreact Docs</a>
+          <Link href="/">Mreact Docs</Link>
         </header>
         <Slot />
       </body>

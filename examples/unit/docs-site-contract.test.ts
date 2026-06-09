@@ -230,6 +230,8 @@ describe("docs-site example contract", () => {
     const layouts = await readDocsSite("src/content/guides/layouts-and-slots.mdx");
 
     expect(layouts).toContain("## Basic layout");
+    expect(layouts).toContain('<Link href="/">Mreact Docs</Link>');
+    expect(layouts).not.toContain('<a href="/">Mreact Docs</a>');
     expect(layouts).toContain("export default function RootLayout()");
     expect(layouts).toContain("<Slot />");
     expect(layouts).toContain("## Nested layouts");
