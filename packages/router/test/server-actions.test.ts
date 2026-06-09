@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import type { AppRouterCache } from "../src/cache.js";
+import { dispatchServerActionRequest } from "../src/actions.js";
 import { renderAppRequest } from "../src/render.js";
 
 describe("mreact app server actions", () => {
@@ -1616,6 +1617,116 @@ export default function Page(props) {
     expect(await cached.text()).toContain("<main>calls: 1</main>");
     expect(action.status).toBe(200);
     expect(await afterRevalidate.text()).toContain("<main>calls: 2</main>");
+  });
+
+  test("form action single-flight responses include fresh same-route navigation HTML", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-single-flight-"));
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export function save(formData: FormData) {
+  const state = globalThis as { __mreactSingleFlightTitle?: string };
+  state.__mreactSingleFlightTitle = String(formData.get("title"));
+  revalidatePath("/");
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { save } from "./actions";
+
+export const revalidate = 60;
+
+export function loader() {
+  const state = globalThis as { __mreactSingleFlightTitle?: string };
+  return { title: state.__mreactSingleFlightTitle ?? "Draft" };
+}
+
+export default function Page(props) {
+  return <main><h1>{props.data.title}</h1><form action={save}><input name="title" value="Published" /><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await first.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const token = extractInputValue(html, "__mreact_action_token");
+    const cookie = first.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const action = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_action_token: token,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "Published",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+          referer: "http://local.test/",
+          "x-mreact-action-single-flight": "1",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(action.status).toBe(200);
+    expect(action.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(action.headers.get("x-mreact-revalidate")).toBe("/");
+    expect(await action.text()).toContain("<h1>Published</h1>");
+  });
+
+  test("unsupported form action requests do not start single-flight navigation rendering", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-single-flight-unsupported-"));
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+}`,
+    );
+
+    let rendered = false;
+    const response = await dispatchServerActionRequest({
+      appDir,
+      renderSingleFlightNavigation: async () => {
+        rendered = true;
+        throw new Error("unsupported action request should not render navigation HTML");
+      },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: "nonce-unsupported",
+          __mreact_csrf: "csrf-unsupported",
+          __mreact_export_name: "invalidateHome",
+          __mreact_module_id: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: "mreact.csrf=csrf-unsupported",
+          referer: "http://local.test/",
+        },
+        method: "POST",
+      }),
+      serverActions: { allowedActions: "any" },
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("x-mreact-revalidate")).toBe("/");
+    expect(rendered).toBe(false);
   });
 
   test("server action revalidation uses the injected route cache adapter", async () => {

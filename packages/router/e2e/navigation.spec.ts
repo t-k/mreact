@@ -157,14 +157,11 @@ export function save(formData: FormData) {
   const state = globalThis as { __mreactE2eTitle?: string };
   state.__mreactE2eTitle = title;
   revalidatePath("/");
-  return new Response("<!DOCTYPE html><div data-mreact-route-id=\\"index\\"><main><h1>Saved</h1><a href=\\"/\\">Home</a></main></div>", {
-    headers: { "content-type": "text/html; charset=utf-8" },
-    status: 200,
-  });
 }`,
     "page.tsx": `import { save } from "./actions";
 
 export const revalidate = 60;
+export const navigationRuntime = true;
 
 export function loader() {
   const state = globalThis as { __mreactE2eTitle?: string };
@@ -177,12 +174,28 @@ export default function Page(props) {
   });
 
   try {
+    const formRequests: Array<{ method: string; pathname: string; singleFlight: string | undefined }> = [];
+    page.on("request", (request) => {
+      const requestUrl = new URL(request.url());
+
+      if (requestUrl.pathname === "/" || requestUrl.pathname === "/_mreact/actions") {
+        formRequests.push({
+          method: request.method(),
+          pathname: requestUrl.pathname,
+          singleFlight: request.headers()["x-mreact-action-single-flight"],
+        });
+      }
+    });
     await page.goto(url);
     await expect(page.getByRole("heading", { name: "Draft" })).toBeVisible();
+    await page.waitForFunction(() => globalThis.__mreactNavigationState?.installed === true);
     await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("heading", { name: "Saved" })).toBeVisible();
-    await page.getByRole("link", { name: "Home" }).click();
     await expect(page.getByRole("heading", { name: "Published" })).toBeVisible();
+    await expect(page).toHaveURL(`${url}/`);
+    expect(formRequests).toEqual([
+      { method: "GET", pathname: "/", singleFlight: undefined },
+      { method: "POST", pathname: "/_mreact/actions", singleFlight: "1" },
+    ]);
   } finally {
     await close();
   }

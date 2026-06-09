@@ -812,6 +812,16 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       appDir: options.appDir,
       importPolicy: options.importPolicy,
       request: options.request,
+      renderSingleFlightNavigation: async (singleFlight) =>
+        renderAppRequestInternal({
+          ...options,
+          matchedRoute: undefined,
+          request: singleFlightNavigationRequest({
+            path: singleFlight.path,
+            request: singleFlight.request,
+          }),
+          requestUrl: undefined,
+        }),
       routeCache: options.routeCache,
       ...(options.serverModuleCacheVersion === undefined
         ? {}
@@ -1670,6 +1680,25 @@ function isNavigationRouteCacheReloadRequest(request: Request): boolean {
   return (
     isNavigationRequest(request) && request.headers.get("x-mreact-navigation-cache") === "reload"
   );
+}
+
+function singleFlightNavigationRequest(options: { path: string; request: Request }): Request {
+  const actionUrl = new URL(options.request.url);
+  const targetUrl = new URL(options.path, actionUrl);
+  const headers = new Headers();
+  const cookie = options.request.headers.get("cookie");
+
+  if (cookie !== null) {
+    headers.set("cookie", cookie);
+  }
+
+  headers.set("x-mreact-navigation", "1");
+  headers.set("x-mreact-navigation-cache", "reload");
+
+  return new Request(targetUrl, {
+    headers,
+    method: "GET",
+  });
 }
 
 async function nearestBoundaryFileForPage(options: {

@@ -286,6 +286,11 @@ export async function dispatchServerActionRequest(options: {
   appDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   request: Request;
+  renderSingleFlightNavigation?: ((options: {
+    path: string;
+    request: Request;
+    revalidatedPaths: readonly string[];
+  }) => Promise<Response | undefined>) | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActionCacheVersion?: string | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
@@ -293,8 +298,14 @@ export async function dispatchServerActionRequest(options: {
   const { revalidatedPaths, value } = await withRouteCacheContext(options.routeCache, () =>
     dispatchServerActionRequestWithoutCacheContext(options),
   );
+  const singleFlight = await renderSingleFlightActionResponse({
+    render: options.renderSingleFlightNavigation,
+    request: options.request,
+    response: value,
+    revalidatedPaths,
+  });
 
-  return withRevalidationHeader(value, revalidatedPaths);
+  return withRevalidationHeader(singleFlight ?? value, revalidatedPaths);
 }
 
 async function dispatchServerActionRequestWithoutCacheContext(options: {
@@ -568,6 +579,70 @@ function redirectToFormReferer(request: Request): Response {
   });
 }
 
+async function renderSingleFlightActionResponse(options: {
+  render:
+    | ((options: {
+      path: string;
+      request: Request;
+      revalidatedPaths: readonly string[];
+    }) => Promise<Response | undefined>)
+    | undefined;
+  request: Request;
+  response: Response;
+  revalidatedPaths: readonly string[];
+}): Promise<Response | undefined> {
+  if (
+    options.render === undefined ||
+    options.revalidatedPaths.length === 0 ||
+    options.request.headers.get("x-mreact-action-single-flight") !== "1" ||
+    !isFormActionRedirectResponse(options.response)
+  ) {
+    return undefined;
+  }
+
+  const path = sameOriginResponseLocationPath(options.request, options.response);
+
+  if (path === undefined || !options.revalidatedPaths.includes(normalizeActionPath(path))) {
+    return undefined;
+  }
+
+  const rendered = await options.render({
+    path,
+    request: options.request,
+    revalidatedPaths: options.revalidatedPaths,
+  });
+
+  if (rendered === undefined) {
+    return undefined;
+  }
+
+  rendered.headers.set("x-mreact-action-single-flight", "1");
+  return rendered;
+}
+
+function isFormActionRedirectResponse(response: Response): boolean {
+  return response.status >= 300 && response.status < 400 && response.headers.has("location");
+}
+
+function sameOriginResponseLocationPath(request: Request, response: Response): string | undefined {
+  const location = response.headers.get("location");
+
+  if (location === null) {
+    return undefined;
+  }
+
+  try {
+    const requestUrl = new URL(request.url);
+    const locationUrl = new URL(location, requestUrl);
+
+    return locationUrl.origin === requestUrl.origin
+      ? `${locationUrl.pathname}${locationUrl.search}`
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function sameOriginRefererPath(request: Request): string | undefined {
   const referer = request.headers.get("referer");
 
@@ -585,6 +660,13 @@ function sameOriginRefererPath(request: Request): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function normalizeActionPath(path: string): string {
+  const pathname = path.startsWith("/") ? path : `/${path}`;
+  const withoutTrailing = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+
+  return withoutTrailing === "" ? "/" : withoutTrailing;
 }
 
 function withRevalidationHeader(response: Response, paths: string[]): Response {
