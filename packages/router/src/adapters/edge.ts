@@ -16,6 +16,11 @@ export interface EdgeRequestHandlerOptions {
   render: EdgeRequestHandler;
 }
 
+/**
+ * Wraps a Web `Request` renderer with edge-runtime logging and error handling.
+ *
+ * Use this for environments that already provide standard `Request` and `Response` objects and do not need Node or Cloudflare-specific adapters.
+ */
 export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): EdgeRequestHandler {
   return async (request) => {
     const startedAt = logNow();

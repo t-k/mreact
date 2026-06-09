@@ -25,6 +25,7 @@
     "packages/vite-plugin"
   ],
   "out": "docs/api",
+  "json": "docs/api/index.json",
   "readme": "README.md",
   "excludeInternal": true,
   "excludePrivate": true,

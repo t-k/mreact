@@ -72,6 +72,11 @@ function createSessionId(): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/**
+ * Creates a process-local session store backed by an in-memory LRU-like map.
+ *
+ * Use it for development, tests, or single-process deployments; production multi-instance deployments should provide a shared `SessionStore`.
+ */
 export function createMemorySessionStore<TData>(
   options: MemorySessionStoreOptions = {},
 ): SessionStore<TData> {
@@ -152,6 +157,9 @@ function nonNegativeIntegerOrDefault(value: number | undefined, fallback: number
   return value === undefined || !Number.isInteger(value) || value < 0 ? fallback : value;
 }
 
+/**
+ * Reads the current session cookie, loads the matching session record, and deletes expired records.
+ */
 export async function getSession<TData>(
   request: Request,
   store: SessionStore<TData>,
@@ -177,6 +185,9 @@ export async function getSession<TData>(
   return record;
 }
 
+/**
+ * Creates a new session record, stores it, and appends the session cookie to the response.
+ */
 export async function createSession<TData>(
   response: Response,
   store: SessionStore<TData>,
@@ -200,6 +211,9 @@ export async function createSession<TData>(
   return record;
 }
 
+/**
+ * Deletes the current session record when present and appends an expiring session cookie to the response.
+ */
 export async function destroySession<TData>(
   request: Request,
   response: Response,
@@ -219,6 +233,11 @@ export async function destroySession<TData>(
   });
 }
 
+/**
+ * Replaces the current session id while preserving the stored session data.
+ *
+ * Use this after authentication or privilege changes to reduce session fixation risk.
+ */
 export async function rotateSession<TData>(
   request: Request,
   response: Response,

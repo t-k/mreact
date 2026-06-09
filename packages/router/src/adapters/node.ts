@@ -53,6 +53,11 @@ export type NodeRequestHandler = (
   outgoing: ServerResponse,
 ) => Promise<void>;
 
+/**
+ * Creates a Node `IncomingMessage`/`ServerResponse` handler for built app-router output.
+ *
+ * The handler converts Node requests to Web `Request` objects, enforces configured host trust, applies the built renderer, and writes the Web `Response` back to the Node socket.
+ */
 export function createNodeRequestHandler(options: NodeRequestHandlerOptions): NodeRequestHandler {
   warnIfImplicitHostTrust(options);
 

@@ -239,6 +239,11 @@ const clientPrefix = "/_mreact/client/";
 const defaultPrerenderCacheOrigin = "https://mreact.local";
 const defaultPrerenderCachePrefix = "/_mreact/prerender";
 
+/**
+ * Creates a Cloudflare Worker `fetch` handler from manifests, asset loading, and an optional renderer.
+ *
+ * The handler serves generated client assets and prerendered routes before calling `render`, preserves streamed HTML responses, and routes errors through `onError` when provided.
+ */
 export function createCloudflareRequestHandler<Env = unknown>(
   options: CloudflareRequestHandlerOptions<Env>,
 ): CloudflareRequestHandler<Env> {
@@ -276,6 +281,11 @@ export function createCloudflareRequestHandler<Env = unknown>(
   };
 }
 
+/**
+ * Creates a Cloudflare Worker handler that matches built app-router routes before rendering.
+ *
+ * Pair it with `createCloudflareRouteModuleRenderer()` and the generated route module registry from Cloudflare-target builds.
+ */
 export function createCloudflareBuiltRequestHandler<Env = unknown>(
   options: CloudflareBuiltRequestHandlerOptions<Env>,
 ): CloudflareRequestHandler<Env> {
@@ -302,6 +312,11 @@ export function createCloudflareBuiltRequestHandler<Env = unknown>(
   });
 }
 
+/**
+ * Creates the renderer used by the generated Cloudflare Worker route registry.
+ *
+ * It loads matched route modules, dispatches server route handlers, evaluates loaders and metadata, and renders page routes with Cloudflare request context.
+ */
 export function createCloudflareRouteModuleRenderer<Env = unknown>(
   options: CloudflareRouteModuleRendererOptions<Env>,
 ): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
@@ -723,6 +738,11 @@ function withDefaultSecurityHeaders(
   });
 }
 
+/**
+ * Validates and normalizes a Vite `import.meta.glob` map into a Cloudflare route module registry.
+ *
+ * Every manifest route that needs a module must be present, and extra glob entries are rejected to catch stale generated workers.
+ */
 export function collectCloudflareRouteModules<Env = unknown>(
   glob: CloudflareRouteModuleGlob<Env>,
   options: CollectCloudflareRouteModulesOptions,
@@ -756,6 +776,11 @@ export function collectCloudflareRouteModules<Env = unknown>(
   return modules;
 }
 
+/**
+ * Creates a Cloudflare asset loader that forwards only manifest-listed client and public asset paths.
+ *
+ * This keeps the Worker from passing arbitrary paths to the `ASSETS` binding while still serving generated route scripts, CSS, imports, source maps, and allowed public files.
+ */
 export function createCloudflareStaticAssetLoader<Env = unknown>(
   options: CloudflareStaticAssetLoaderOptions<Env>,
 ): CloudflareAssetLoader<Env> {
@@ -787,6 +812,9 @@ export function createCloudflareStaticAssetLoader<Env = unknown>(
   };
 }
 
+/**
+ * Returns the set of client and public asset paths a Cloudflare Worker is allowed to serve.
+ */
 export function cloudflareClientAssetPaths(
   manifest: CloudflareClientManifest,
   options: { extraPaths?: readonly string[] | undefined; prefix?: string | undefined } = {},
@@ -845,6 +873,11 @@ function safePublicAssetPath(asset: string): string | undefined {
   return asset;
 }
 
+/**
+ * Creates an app-router prerender store backed by the Cloudflare Cache API.
+ *
+ * Keys are represented as synthetic requests so Workers cache entries can be shared by path and optional key prefix.
+ */
 export function createCloudflarePrerenderStore(
   options: CloudflarePrerenderStoreOptions,
 ): AppRouterPrerenderStore {

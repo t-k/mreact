@@ -67,6 +67,11 @@ const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_ACTION_FORM_MAX_FIELDS = 1_000;
 let warnedUnrestrictedServerActions = false;
 
+/**
+ * Request context passed to authorized server actions.
+ *
+ * It exposes normalized cookies, headers, the original `Request`, and an optional client IP so authorization hooks can make request-aware decisions.
+ */
 export interface ServerActionContext {
   clientIp?: string | undefined;
   cookies: RequestCookies;
@@ -145,6 +150,11 @@ export function __readDefaultReplayStore(): BoundedReplayStore {
   return usedFormActionNonces;
 }
 
+/**
+ * Configures app-router server action dispatch, authorization, body limits, and replay protection.
+ *
+ * Production multi-instance deployments should provide a shared `replayStore` and a stable `MREACT_SERVER_ACTION_SECRET`.
+ */
 export interface AppRouterServerActionOptions {
   allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
   authorize?: ServerActionHandlerOptions["authorize"] | undefined;

@@ -56,6 +56,11 @@ const cacheState = ((
 });
 cacheState.storage ??= new AsyncLocalStorage<RouteCacheContext>();
 
+/**
+ * Creates an in-memory route response cache for app-router rendering.
+ *
+ * The cache is process-local, evicts expired entries during reads/writes, and is suitable for development, tests, or single-process deployments that do not need shared invalidation.
+ */
 export function createMemoryRouteCache(options: MemoryRouteCacheOptions = {}): AppRouterCache {
   const maxEntries = positiveIntegerOrDefault(options.maxEntries, 10_000);
   const sweepIntervalMs = nonNegativeIntegerOrDefault(options.sweepIntervalMs, 60_000);
@@ -192,6 +197,11 @@ export function routeCachePolicyFromSource(code: string): RouteCachePolicy | und
   };
 }
 
+/**
+ * Sets the cache policy for the current app-router render.
+ *
+ * Call this during a loader or route render to override the response `Cache-Control` policy; it throws outside an active app-router request.
+ */
 export function cacheControl(options: CacheControlOptions): void {
   const activeContext = activeRouteCacheContext();
 
@@ -326,6 +336,11 @@ function requestCarriesCredentials(request: Request | undefined): boolean {
   return request.headers.has("authorization") || request.headers.has("cookie");
 }
 
+/**
+ * Invalidates cached route responses for a normalized app-router path.
+ *
+ * During a request the invalidation is scoped to that route cache context; outside a request it is queued for the next cache access.
+ */
 export function revalidatePath(path: string): void {
   const normalizedPath = normalizeRevalidationPath(path);
   const activeContext = activeRouteCacheContext();

@@ -577,6 +577,11 @@ async function materializeResponseAsBuffer(response: Response): Promise<Response
   });
 }
 
+/**
+ * Starts a Node HTTP server for an already built app-router output directory.
+ *
+ * Use this for production-like local serving or custom Node deployments. It loads `.mreact/server` artifacts, applies the generated import policy when configured, enforces host trust options, and returns a `close()` method for orderly shutdown.
+ */
 export async function startServer(
   options: StartServerOptions,
 ): Promise<{ close(): Promise<void>; server: Server; url: string }> {

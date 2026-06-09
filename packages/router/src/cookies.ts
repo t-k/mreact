@@ -22,6 +22,11 @@ function assertAttributeValue(value: string): void {
   }
 }
 
+/**
+ * Parses a raw `Cookie` header into decoded name/value pairs.
+ *
+ * Malformed percent-encoded values are skipped so one bad cookie does not abort request handling.
+ */
 export function parseCookieHeader(
   cookieHeader: string | null | undefined,
 ): Map<string, string> {
@@ -50,6 +55,11 @@ export function parseCookieHeader(
   return values;
 }
 
+/**
+ * Serializes a cookie name, value, and attributes for a `Set-Cookie` header.
+ *
+ * Cookie names and attribute values are validated, and `SameSite=None` requires `Secure`.
+ */
 export function serializeCookie(
   name: string,
   value: string,
@@ -91,6 +101,9 @@ export function serializeCookie(
   return parts.join("; ");
 }
 
+/**
+ * Appends a serialized cookie to a response's `Set-Cookie` headers and returns the same response.
+ */
 export function setCookie(
   response: Response,
   name: string,
@@ -101,6 +114,9 @@ export function setCookie(
   return response;
 }
 
+/**
+ * Appends an expiring `Set-Cookie` header that removes a cookie in the browser.
+ */
 export function deleteCookie(
   response: Response,
   name: string,

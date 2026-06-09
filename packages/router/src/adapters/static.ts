@@ -12,6 +12,11 @@ export interface StaticExportResult {
   routes: string[];
 }
 
+/**
+ * Exports prerendered app-router routes and client assets to a static filesystem directory.
+ *
+ * Only routes present in the built prerender manifest can be exported; the export directory is removed and recreated, and route paths are checked to prevent traversal outside it.
+ */
 export async function exportStaticApp(options: StaticExportOptions): Promise<StaticExportResult> {
   const manifest = JSON.parse(
     await readFile(join(options.outDir, "server", "manifest.json"), "utf8"),

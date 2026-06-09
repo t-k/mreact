@@ -127,6 +127,11 @@ export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (
   context: TContext,
 ) => Promise<void>;
 
+/**
+ * Creates a buffered AWS Lambda HTTP API v2 handler for built app-router output.
+ *
+ * The handler materializes runtime files under `/tmp` by default, starts middleware-focused background preload, applies the generated import policy when requested, and returns API Gateway v2 response objects.
+ */
 export function createAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaRequestHandler {
@@ -147,6 +152,11 @@ export function createAwsLambdaRequestHandler(
   );
 }
 
+/**
+ * Creates a buffered AWS Lambda handler after eagerly preparing and preloading the built runtime.
+ *
+ * Use this when startup code can await preload work before the first request instead of letting the first invocation share that cost.
+ */
 export async function createPreloadedAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): Promise<AwsLambdaRequestHandler> {
@@ -249,6 +259,11 @@ function createAwsLambdaRequestHandlerFromRuntime(
   };
 }
 
+/**
+ * Creates an AWS Lambda streaming response handler for built app-router output.
+ *
+ * Use this with Lambda response streaming runtimes when HTML or route responses should be written progressively instead of buffered into an API Gateway result.
+ */
 export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaStreamingRequestHandler<TContext> {
@@ -271,6 +286,9 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   );
 }
 
+/**
+ * Creates a streaming AWS Lambda handler after eagerly preparing and preloading the built runtime.
+ */
 export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
 ): Promise<AwsLambdaStreamingRequestHandler<TContext>> {
