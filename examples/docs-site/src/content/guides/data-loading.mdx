@@ -9,7 +9,10 @@ Use a route `loader` when a page needs data before render. A loader runs on the 
 
 Export `loader(context)` from a page module. The router calls it before rendering the page, awaits the result, and gives the resolved value to the page component.
 
+`src/app/users/$id/page.tsx` is the route file for `/users/:id`. The `$id` directory segment becomes `context.params.id`.
+
 ```tsx
+// src/app/users/$id/page.tsx
 import type { LoaderContext } from "@reckona/mreact-router";
 
 interface UserData {

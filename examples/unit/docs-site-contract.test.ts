@@ -400,6 +400,8 @@ describe("docs-site example contract", () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 
     expect(dataLoading).toContain("## Load data before render");
+    expect(dataLoading).toContain("src/app/users/$id/page.tsx");
+    expect(dataLoading).toContain("The `$id` directory segment becomes `context.params.id`");
     expect(dataLoading).toContain("export async function loader");
     expect(dataLoading).toContain("type LoaderContext");
     expect(dataLoading).toContain("props.data");
