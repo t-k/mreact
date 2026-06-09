@@ -1495,6 +1495,9 @@ export function subscribeNavigationState(listener: AppRouterNavigationStateListe
 export function textError(message: string, status?: number, init?: ResponseInit): Response;
 
 // @public (undocumented)
+export function throwNotFound(): never;
+
+// @public (undocumented)
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;
 
 // @public (undocumented)

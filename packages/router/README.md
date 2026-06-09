@@ -99,7 +99,7 @@ client-only code. Navigation observers are available from
 
 ## Route Module Exports
 
-- `loader(context)` returns data passed to the page component, or may return or throw a `Response` for redirects and custom responses. The context includes `params`, `queryClient`, `request`, and adapter `env` when one is provided.
+- `loader(context)` returns data passed to the page component, or may return or throw a `Response` for redirects and custom responses. The context includes `params`, `queryClient`, `request`, and adapter `env` when one is provided. `notFound()` and its explicit alias `throwNotFound()` both throw the router-recognized 404 control-flow error.
 - `metadata` injects title, OpenGraph, viewport, and related head tags. Use `RouteMetadata` to type the object; `openGraph.image` and `openGraph.images` accept URL scalars or Next-style image objects with a required `url` field.
 - `generateMetadata(context)` may compute route metadata from resolved loader data, params, and the current request. Static `metadata` is still used as the fallback and base object.
 - `generateStaticParams()` returns dynamic route params to prerender and can import modules transformed by configured Vite plugins.

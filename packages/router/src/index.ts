@@ -33,6 +33,7 @@ export {
   redirectExternal,
   rewrite,
   textError,
+  throwNotFound,
 } from "./navigation.js";
 export type { ParseSchema } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";

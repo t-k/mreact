@@ -4909,7 +4909,7 @@ export { defer, isDeferredLoaderData } from ${JSON.stringify(routerDeferredPath)
 export { defineMessages, detectLocale } from ${JSON.stringify(routerI18nPath)};
 export { Link, linkProps } from ${JSON.stringify(routerLinkPath)};
 export { parseMultipartStream } from ${JSON.stringify(routerMultipartPath)};
-export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite } from ${JSON.stringify(routerNavigationPath)};
+export { cookies, headers, html, json, next, notFound, redirect, redirectExternal, rewrite, throwNotFound } from ${JSON.stringify(routerNavigationPath)};
 export { getServerRuntimeState } from ${JSON.stringify(routerRuntimeStatePath)};`,
         loader: "js",
         resolveDir: dirname(routerNavigationPath),
