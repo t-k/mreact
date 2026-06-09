@@ -3,6 +3,264 @@ export const description = "Cookie helpers, session stores, secure defaults, and
 
 # Cookies and sessions
 
-Use cookie helpers for low-level HTTP cookie handling and `@reckona/mreact-auth` session helpers for session lifecycle. Production session cookies use secure defaults such as `HttpOnly`, `SameSite=Lax`, and secure names when `NODE_ENV=production`.
+Use cookies for small request-scoped browser preferences and use sessions when the server must remember identity or authorization state across requests. Mreact exposes low-level cookie helpers through the router package and session lifecycle helpers through `@reckona/mreact-auth`.
 
-Use a durable session store for real production deployments.
+## Cookies vs sessions
+
+`cookies(request)` reads the incoming `Cookie` header. `setCookie()` and `deleteCookie()` append `Set-Cookie` headers to a response. These helpers are useful for values such as theme, locale, preview mode, or short-lived coordination tokens.
+
+Sessions are different. A session stores an opaque session ID in an `HttpOnly` cookie, then stores the actual session data in a server-side `SessionStore`. The browser does not receive the session payload unless you explicitly expose safe claims through the auth claims handoff.
+
+## Read request cookies
+
+Use `cookies(request)` in loaders, middleware, and route handlers when you only need to inspect the request cookie values.
+
+```ts
+// src/app/account/page.tsx
+import { cookies } from "@reckona/mreact-router";
+
+export function loader({ request }: { request: Request }) {
+  const cookieStore = cookies(request);
+  const theme = cookieStore.get("theme") ?? "system";
+
+  return { theme };
+}
+```
+
+Cookie values are decoded before they are returned. Malformed percent-encoded values are treated as absent for that request.
+
+## Write and clear cookies
+
+Create a `Response`, then add cookies before returning it. Use explicit attributes so browser behavior does not depend on defaults.
+
+The smallest write looks like `setCookie(response, "theme", "dark", { path: "/", sameSite: "Lax" })`; real handlers usually validate the incoming value first.
+
+```ts
+// src/app/api/preferences/route.ts
+import { deleteCookie, setCookie } from "@reckona/mreact-router";
+
+export async function POST(request: Request): Promise<Response> {
+  const form = await request.formData();
+  const theme = form.get("theme");
+  const response = new Response(null, { status: 204 });
+
+  if (theme === "dark" || theme === "light" || theme === "system") {
+    setCookie(response, "theme", theme, {
+      maxAge: 60 * 60 * 24 * 365,
+      path: "/",
+      sameSite: "Lax",
+    });
+
+    return response;
+  }
+
+  deleteCookie(response, "theme", { path: "/", sameSite: "Lax" });
+  return response;
+}
+```
+
+SameSite=None requires `Secure`. The helper throws when that combination is unsafe, which catches the common mistake before a browser silently rejects the cookie.
+
+## Create a session store
+
+Create one shared `SessionStore` for the process, then pass it to session helpers. `createMemorySessionStore()` is useful for local development, examples, and single-process demos.
+
+```ts
+// src/app/session-store.ts
+import {
+  createMemorySessionStore,
+  type AuthSessionClaims,
+} from "@reckona/mreact-auth";
+
+export interface AppSessionData extends AuthSessionClaims {
+  userId: string;
+}
+
+const globalKey = "__appSessions";
+const globalStore = globalThis as {
+  [globalKey]?: ReturnType<typeof createMemorySessionStore<AppSessionData>>;
+};
+
+export const sessions =
+  globalStore[globalKey] ??= createMemorySessionStore<AppSessionData>();
+```
+
+Use a durable session store for production. Implement `SessionStore<TData>` with Redis, a database, Cloudflare KV/D1, or another deployment-appropriate backend so a restart, a new container, or another region does not invalidate every active user.
+
+## Create and destroy sessions
+
+Login routes usually validate credentials, create a redirect response, attach a session cookie, and return the response.
+
+```ts
+// src/app/api/login/route.ts
+import { createSession } from "@reckona/mreact-auth";
+import { redirect303, textError } from "@reckona/mreact-router";
+import { sessions } from "../../session-store";
+
+export async function POST(request: Request): Promise<Response> {
+  const form = await request.formData();
+  const email = form.get("email");
+  const password = form.get("password");
+  const user = await verifyPassword(email, password);
+
+  if (user === undefined) {
+    return textError("Invalid credentials.", 401);
+  }
+
+  const response = redirect303("/account");
+
+  await createSession(response, sessions, {
+    userId: user.id,
+    roles: user.roles,
+    permissions: user.permissions,
+  });
+
+  return response;
+}
+```
+
+Logout routes should delete the server-side record and emit an expired cookie.
+
+```ts
+// src/app/api/logout/route.ts
+import { destroySession } from "@reckona/mreact-auth";
+import { redirect303 } from "@reckona/mreact-router";
+import { sessions } from "../../session-store";
+
+export async function POST(request: Request): Promise<Response> {
+  const response = redirect303("/login");
+
+  await destroySession(request, response, sessions);
+
+  return response;
+}
+```
+
+In production, the default session cookie name is `__Host-mreact.session`. The helper sets `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/` by default. In development, the default name is `mreact.session` and `Secure` follows the options you pass.
+
+## Read sessions in middleware and loaders
+
+Use `getSession(request, sessions)` when you need to check whether a session exists without forcing a redirect policy.
+
+```ts
+// src/app/middleware.ts
+import { getSession } from "@reckona/mreact-auth";
+import { next, redirect } from "@reckona/mreact-router";
+import { sessions } from "./session-store";
+
+export const config = { matcher: "/account/:path*" };
+
+export async function middleware(request: Request): Promise<Response | undefined> {
+  const session = await getSession(request, sessions);
+
+  if (session === undefined) {
+    redirect("/login");
+  }
+
+  return next();
+}
+```
+
+Use `getCurrentSession()` when a loader needs session data and should also make browser-safe claims available to the current render. Use `requireSession()`, `requireRole()`, and `requirePermission()` when missing or unauthorized users should follow the configured auth redirects.
+
+```tsx
+// src/app/admin/page.tsx
+import {
+  getCurrentSession,
+  getSessionClaims,
+  requireRole,
+} from "@reckona/mreact-auth";
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+import { sessions } from "../session-store";
+
+export const auth = "include-claims";
+
+export async function loader(context: LoaderContext) {
+  await requireRole(context.request, sessions, "admin");
+  const session = await getCurrentSession(context.request, sessions);
+
+  return {
+    userId: session?.data.userId,
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  const claims = getSessionClaims();
+
+  return (
+    <main>
+      <h1>Admin</h1>
+      <p>User: {props.data.userId}</p>
+      <p>Roles: {claims?.roles?.join(", ") ?? "none"}</p>
+    </main>
+  );
+});
+```
+
+## Refresh, rotate, and revoke
+
+Use `rotateSession()` when you want a new session ID while keeping the same session data. This is useful after login, privilege changes, or sensitive account changes.
+
+`refreshSession()` rotates the router session and syncs the request-local auth claims for the current render. Use it when the session data has changed and the page should see the refreshed claims in the same request.
+
+`revokeCurrentSession()` is the auth-layer logout helper. It deletes the server-side session, emits the expired cookie, and clears request-local claims.
+
+## Client claims handoff
+
+Session data is server-only by default. To expose browser-safe claims to client code, opt in from the route module and keep the serialized data intentionally small.
+
+```tsx
+// src/app/account/page.tsx
+import { getSessionClaims } from "@reckona/mreact-auth";
+
+export const auth = "include-claims";
+
+export default function Page() {
+  const claims = getSessionClaims();
+
+  return <p>Roles: {claims?.roles?.join(", ") ?? "none"}</p>;
+}
+```
+
+Customize the exposed shape with `configureAuth({ serializeClaims })`. Do not include secrets, access tokens, refresh tokens, email verification tokens, internal audit data, or database records in browser claims.
+
+```ts
+// src/app/auth-config.ts
+import { configureAuth } from "@reckona/mreact-auth";
+
+configureAuth({
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null) {
+      return undefined;
+    }
+
+    const session = data as {
+      permissions?: readonly string[];
+      roles?: readonly string[];
+    };
+
+    return {
+      permissions: session.permissions,
+      roles: session.roles,
+    };
+  },
+});
+```
+
+## Production notes
+
+- Use a durable session store. Memory sessions disappear on process restart and do not work across multiple containers, workers, or regions.
+- Keep session cookies `HttpOnly`, `Secure`, and `SameSite=Lax` unless you have a specific cross-site requirement.
+- Treat every cookie-authenticated POST, `PUT`, `PATCH`, and `DELETE` route as needing CSRF protection unless it is handled by server actions with their own CSRF guard.
+- Return `private, no-store` for personalized HTML and API responses. Do not cache pages or API responses that depend on `Cookie`, `Authorization`, or session state.
+- Store only the minimum session data needed for the next request. Keep secrets and provider tokens in server-only storage.
+- Rotate or refresh sessions after login and privilege changes, and revoke sessions on logout.
+
+## Related pages
+
+- [Authentication](/guides/authentication/)
+- [Middleware](/guides/middleware/)
+- [HTTP APIs](/guides/http-apis/)
+- [Server Actions](/guides/server-actions/)
+- [Cache and Revalidation](/guides/cache-and-revalidation/)
+- [Environment Variables](/guides/environment-variables/)

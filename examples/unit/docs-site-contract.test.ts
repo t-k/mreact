@@ -568,6 +568,54 @@ describe("docs-site example contract", () => {
     expect(cacheGuide).toContain("[Production Checklist](/deployments/production-checklist/)");
   });
 
+  test("documents cookies, sessions, auth claims handoff, and production session constraints", async () => {
+    const cookiesGuide = await readDocsSite("src/content/guides/cookies-and-sessions.mdx");
+
+    expect(cookiesGuide).toContain("## Cookies vs sessions");
+    expect(cookiesGuide).toContain("cookies(request)");
+    expect(cookiesGuide).toContain("setCookie");
+    expect(cookiesGuide).toContain("deleteCookie");
+    expect(cookiesGuide).toContain("opaque session ID");
+    expect(cookiesGuide).toContain("SessionStore");
+    expect(cookiesGuide).toContain("## Read request cookies");
+    expect(cookiesGuide).toContain('theme = cookieStore.get("theme")');
+    expect(cookiesGuide).toContain("## Write and clear cookies");
+    expect(cookiesGuide).toContain('setCookie(response, "theme", "dark"');
+    expect(cookiesGuide).toContain("SameSite=None requires `Secure`");
+    expect(cookiesGuide).toContain("## Create a session store");
+    expect(cookiesGuide).toContain("createMemorySessionStore");
+    expect(cookiesGuide).toContain("durable session store");
+    expect(cookiesGuide).toContain("## Create and destroy sessions");
+    expect(cookiesGuide).toContain("src/app/api/login/route.ts");
+    expect(cookiesGuide).toContain("createSession(response, sessions");
+    expect(cookiesGuide).toContain("redirect303");
+    expect(cookiesGuide).toContain("destroySession(request, response, sessions");
+    expect(cookiesGuide).toContain("__Host-mreact.session");
+    expect(cookiesGuide).toContain("HttpOnly");
+    expect(cookiesGuide).toContain("Secure");
+    expect(cookiesGuide).toContain("SameSite=Lax");
+    expect(cookiesGuide).toContain("## Read sessions in middleware and loaders");
+    expect(cookiesGuide).toContain("getSession(request, sessions)");
+    expect(cookiesGuide).toContain("getCurrentSession");
+    expect(cookiesGuide).toContain("requireRole");
+    expect(cookiesGuide).toContain("## Refresh, rotate, and revoke");
+    expect(cookiesGuide).toContain("rotateSession");
+    expect(cookiesGuide).toContain("refreshSession");
+    expect(cookiesGuide).toContain("revokeCurrentSession");
+    expect(cookiesGuide).toContain("## Client claims handoff");
+    expect(cookiesGuide).toContain('export const auth = "include-claims"');
+    expect(cookiesGuide).toContain("getSessionClaims");
+    expect(cookiesGuide).toContain("serializeClaims");
+    expect(cookiesGuide).toContain("## Production notes");
+    expect(cookiesGuide).toContain("cookie-authenticated POST");
+    expect(cookiesGuide).toContain("CSRF");
+    expect(cookiesGuide).toContain("private, no-store");
+    expect(cookiesGuide).toContain("[Authentication](/guides/authentication/)");
+    expect(cookiesGuide).toContain("[Middleware](/guides/middleware/)");
+    expect(cookiesGuide).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(cookiesGuide).toContain("[Cache and Revalidation](/guides/cache-and-revalidation/)");
+  });
+
   test("documents SSG prerendering and static export constraints", async () => {
     const ssg = await readDocsSite("src/content/guides/ssg-and-static-export.mdx");
 
