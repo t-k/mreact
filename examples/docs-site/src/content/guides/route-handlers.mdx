@@ -1,8 +1,0 @@
-export const title = "Route Handlers";
-export const description = "The route.ts convention, method exports, context, and Response behavior.";
-
-# Route handlers
-
-`route.ts` files expose HTTP method functions such as `GET`, `POST`, `PUT`, `DELETE`, and `ALL`. Handlers return standard `Response` objects and can receive decoded route params as the second argument.
-
-Throwing a `Response` is useful for guard helpers that need to stop execution immediately.

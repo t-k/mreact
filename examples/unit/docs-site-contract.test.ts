@@ -86,6 +86,25 @@ describe("docs-site example contract", () => {
     expect(nav).not.toContain('slug: "guides/client-boundaries"');
   });
 
+  test("removes the standalone Route Handlers guide from the public docs", async () => {
+    const nav = await readDocsSite("src/nav.config.ts");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const routing = await readDocsSite("src/content/guides/routing.mdx");
+    const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
+    const httpApis = await readDocsSite("src/content/guides/http-apis.mdx");
+
+    expect(nav).not.toContain("Route Handlers");
+    expect(nav).not.toContain('slug: "guides/route-handlers"');
+    expect(contentRegistry).not.toContain("route-handlers.mdx");
+    expect(contentRegistry).not.toContain('page("guides/route-handlers"');
+    expect(routing).not.toContain("[Route Handlers](/guides/route-handlers/)");
+    expect(dataLoading).not.toContain("[Route Handlers](/guides/route-handlers/)");
+    expect(httpApis).not.toContain("[Route Handlers](/guides/route-handlers/)");
+    await expect(
+      access(join(docsSiteRoot, "src", "content", "guides", "route-handlers.mdx")),
+    ).rejects.toThrow();
+  });
+
   test("uses official product branding while keeping package names lowercase", async () => {
     const layout = await readDocsSite("src/app/layout.tsx");
     const overview = await readDocsSite("src/content/overview.mdx");
@@ -234,7 +253,7 @@ describe("docs-site example contract", () => {
     expect(routing).toContain("notFound()");
     expect(routing).toContain("[Project Structure](/guides/project-structure/)");
     expect(routing).toContain("[Data Loading](/guides/data-loading/)");
-    expect(routing).toContain("[Route Handlers](/guides/route-handlers/)");
+    expect(routing).toContain("[HTTP APIs](/guides/http-apis/)");
     expect(routing).toContain("[SSG and Static Export](/guides/ssg-and-static-export/)");
     expect(routing).toContain("[Link and Navigation](/guides/link-and-navigation/)");
   });
@@ -428,7 +447,6 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("defer()");
     expect(dataLoading).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
     expect(dataLoading).toContain("[Routing](/guides/routing/)");
-    expect(dataLoading).toContain("[Route Handlers](/guides/route-handlers/)");
     expect(dataLoading).toContain("[HTTP APIs](/guides/http-apis/)");
     expect(dataLoading).toContain("[Route Module Exports](/reference/route-module-exports/)");
   });
@@ -541,7 +559,6 @@ describe("docs-site example contract", () => {
     expect(httpApis).toContain("client component");
     expect(httpApis).toContain("webhook");
     expect(httpApis).toContain("loader");
-    expect(httpApis).toContain("[Route Handlers](/guides/route-handlers/)");
     expect(httpApis).toContain("[Data Loading](/guides/data-loading/)");
     expect(httpApis).toContain("[Environment Variables](/guides/environment-variables/)");
     expect(httpApis).toContain("[Authentication](/guides/authentication/)");

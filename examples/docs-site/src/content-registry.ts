@@ -20,7 +20,6 @@ import guidesLinkAndNavigation, * as guidesLinkAndNavigationMeta from "./content
 import guidesMetadataAndHead, * as guidesMetadataAndHeadMeta from "./content/guides/metadata-and-head.mdx";
 import guidesMiddleware, * as guidesMiddlewareMeta from "./content/guides/middleware.mdx";
 import guidesProjectStructure, * as guidesProjectStructureMeta from "./content/guides/project-structure.mdx";
-import guidesRouteHandlers, * as guidesRouteHandlersMeta from "./content/guides/route-handlers.mdx";
 import guidesRouting, * as guidesRoutingMeta from "./content/guides/routing.mdx";
 import guidesServerActions, * as guidesServerActionsMeta from "./content/guides/server-actions.mdx";
 import guidesServerAndClientModel, * as guidesServerAndClientModelMeta from "./content/guides/server-and-client-model.mdx";
@@ -207,7 +206,6 @@ export const docsPages = [
   page("guides/link-and-navigation", guidesLinkAndNavigation, guidesLinkAndNavigationMeta),
   page("guides/data-loading", guidesDataLoading, guidesDataLoadingMeta),
   page("guides/http-apis", guidesHttpApis, guidesHttpApisMeta),
-  page("guides/route-handlers", guidesRouteHandlers, guidesRouteHandlersMeta),
   page("guides/middleware", guidesMiddleware, guidesMiddlewareMeta),
   page("guides/server-actions", guidesServerActions, guidesServerActionsMeta),
   page("guides/cache-and-revalidation", guidesCacheAndRevalidation, guidesCacheAndRevalidationMeta),

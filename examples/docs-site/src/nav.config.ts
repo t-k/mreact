@@ -31,7 +31,6 @@ export const sidebar: readonly NavGroup[] = [
       { text: "SSG and Static Export", slug: "guides/ssg-and-static-export" },
       { text: "Environment Variables", slug: "guides/environment-variables" },
       { text: "HTTP APIs", slug: "guides/http-apis" },
-      { text: "Route Handlers", slug: "guides/route-handlers" },
       { text: "Middleware", slug: "guides/middleware" },
       { text: "Server Actions", slug: "guides/server-actions" },
       { text: "Cache and Revalidation", slug: "guides/cache-and-revalidation" },
