@@ -131,7 +131,7 @@ Prefer doing route-level existence checks in the loader instead of rendering a p
 
 ## Use the per-request query client
 
-The loader receives a per-request query client. Use it when server data should also hydrate client-side query observers.
+The loader receives a QueryClient that lives only for the current request. Use it to dedupe repeated query work during one server render and to dehydrate the fetched query state for client-side query observers.
 
 ```tsx
 import type { LoaderContext } from "@reckona/mreact-router";
@@ -150,6 +150,8 @@ export async function loader(
 ```
 
 After the route renders, Mreact can dehydrate the request query cache for client code that uses the same query key. Set a `staleTime` when the browser should reuse the server-fetched result during the initial mount instead of immediately revalidating it.
+
+This is not a cross-request server cache. Each incoming request gets its own QueryClient. Use route cache or application-level caching when data should be reused across requests.
 
 ## Use loader data in metadata
 

@@ -417,6 +417,9 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("Response.redirect");
     expect(dataLoading).toContain("## Use the per-request query client");
     expect(dataLoading).toContain("context.queryClient.fetchQuery");
+    expect(dataLoading).toContain("lives only for the current request");
+    expect(dataLoading).toContain("This is not a cross-request server cache");
+    expect(dataLoading).toContain("Each incoming request gets its own QueryClient");
     expect(dataLoading).toContain("## Use loader data in metadata");
     expect(dataLoading).toContain("generateMetadata");
     expect(dataLoading).toContain("{ data }: { data: UserData }");
