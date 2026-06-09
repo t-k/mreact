@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { dirname, relative, sep } from "node:path";
+import { dirname } from "node:path";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
 import {
   createCompilerModuleContext,
@@ -49,6 +49,7 @@ import {
 import { createRouteMatcher, scanAppRoutes, type AppRoute } from "./routes.js";
 import { resolveRequestHost, type RequestHostPolicy } from "./serve.js";
 import { hasJsxSyntax } from "./source-jsx.js";
+import { prependTailwindSourceDirectives } from "./tailwind-source.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
@@ -743,47 +744,11 @@ async function loadDevCssSourceModule(options: {
 }): Promise<string | undefined> {
   const code = await readFile(options.cssFile, "utf8");
 
-  return prependDevTailwindSourceDirectives({
+  return prependTailwindSourceDirectives({
     code,
     cssFile: options.cssFile,
     sourceDirs: options.sourceDirs,
   });
-}
-
-function prependDevTailwindSourceDirectives(options: {
-  code: string;
-  cssFile: string;
-  sourceDirs: readonly string[];
-}): string {
-  if (!isTailwindCssEntry(options.code)) {
-    return options.code;
-  }
-
-  const cssDir = dirname(options.cssFile);
-  const directives = [...new Set(options.sourceDirs)]
-    .map((sourceDir) => `${devTailwindSourceDirective(cssDir, sourceDir)}\n`)
-    .join("");
-
-  return directives.length === 0 ? options.code : `${directives}${options.code}`;
-}
-
-function isTailwindCssEntry(code: string): boolean {
-  return (
-    /@import\s+(?:url\()?["']tailwindcss(?:\/[^"']*)?["']\)?/u.test(code) ||
-    /@tailwind\s+(?:base|components|utilities)\b/u.test(code)
-  );
-}
-
-function devTailwindSourceDirective(cssDir: string, sourceDir: string): string {
-  const relativeSourceDir = relative(cssDir, sourceDir).split(sep).join("/");
-  const normalizedSourceDir =
-    relativeSourceDir === ""
-      ? "."
-      : relativeSourceDir.startsWith(".")
-        ? relativeSourceDir
-        : `./${relativeSourceDir}`;
-
-  return `@source ${JSON.stringify(`${normalizedSourceDir}/**/*.{js,jsx,ts,tsx,mdx}`)};`;
 }
 
 function importerInRuntimePackage(

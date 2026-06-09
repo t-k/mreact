@@ -90,12 +90,13 @@ import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
+import { prependTailwindSourceDirectives } from "./tailwind-source.js";
 import {
   parseRouteMiddlewareControl,
   parseStaticMiddlewareConfig,
   validateRouteMiddlewareControl,
 } from "./middleware.js";
-import type { PluginOption, UserConfig } from "vite";
+import type { Plugin, PluginOption, UserConfig } from "vite";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -530,6 +531,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           sourceAnalysis,
           sourceMapDir: join(options.outDir, "source-maps", "client"),
           sourceMaps: project.clientSourceMaps,
+          sourceDirs: project.allowedSourceDirs,
           vitePlugins,
         })
       : timeBuildPhase(timingSink, progressSink, "clientBundles", () =>
@@ -544,6 +546,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             sourceAnalysis,
             sourceMapDir: join(options.outDir, "source-maps", "client"),
             sourceMaps: project.clientSourceMaps,
+            sourceDirs: project.allowedSourceDirs,
             vitePlugins,
           }),
         ),
@@ -5012,6 +5015,7 @@ async function writeClientRouteBundles(options: {
   sourceAnalysis: BuildSourceAnalysisScope;
   sourceMapDir: string;
   sourceMaps: AppRouterClientSourceMapMode;
+  sourceDirs: readonly string[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<ClientRouteBundleManifest> {
   type PreparedClientRouteEntry = {
@@ -5033,6 +5037,7 @@ async function writeClientRouteBundles(options: {
     pageRoutes,
     projectRoot: options.projectRoot,
     sourceAnalysis: options.sourceAnalysis,
+    sourceDirs: options.sourceDirs,
     vitePlugins: options.vitePlugins,
   });
   const specialCssAssets = await writeSpecialRouteCssAssetBatches({
@@ -5042,6 +5047,7 @@ async function writeClientRouteBundles(options: {
     clientDir: options.clientDir,
     projectRoot: options.projectRoot,
     sourceAnalysis: options.sourceAnalysis,
+    sourceDirs: options.sourceDirs,
     vitePlugins: options.vitePlugins,
   });
   const entries: PreparedRouteEntry[] = await Promise.all(
@@ -5271,6 +5277,7 @@ async function writeSpecialRouteCssAssetBatches(options: {
   clientDir: string;
   projectRoot: string;
   sourceAnalysis: BuildSourceAnalysisScope;
+  sourceDirs: readonly string[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<{ assets: string[]; styles: ClientStyleManifestEntry[] }> {
   const boundaryFiles = await collectSpecialBoundaryFiles(options.appDir);
@@ -5295,6 +5302,7 @@ async function writeSpecialRouteCssAssetBatches(options: {
       pageFile: file,
       projectRoot: options.projectRoot,
       routeIds: [specialBoundaryRouteId(options.appDir, file)],
+      sourceDirs: options.sourceDirs,
       vitePlugins: options.vitePlugins,
     });
 
@@ -5335,6 +5343,7 @@ async function writeRouteCssAssetBatches(options: {
   pageRoutes: readonly (AppRoute & { kind: "page" })[];
   projectRoot: string;
   sourceAnalysis: BuildSourceAnalysisScope;
+  sourceDirs: readonly string[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<{ assets: string[]; byRoute: Map<string, string[]> }> {
   const cssInputs = await mapWithBuildConcurrency(options.pageRoutes, async (route) => {
@@ -5378,6 +5387,7 @@ async function writeRouteCssAssetBatches(options: {
           pageFile: group.routeFiles[0] ?? options.appDir,
           projectRoot: options.projectRoot,
           routeIds: group.routeIds,
+          sourceDirs: options.sourceDirs,
           vitePlugins: options.vitePlugins,
         }),
       ] as const,
@@ -5410,6 +5420,7 @@ async function writeRouteCssAssetsForFiles(options: {
   pageFile: string;
   projectRoot: string;
   routeIds: readonly string[];
+  sourceDirs: readonly string[];
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteCssAssetBatch> {
   const cssFiles = [...options.cssFiles];
@@ -5429,7 +5440,13 @@ async function writeRouteCssAssetsForFiles(options: {
     minify: true,
     platform: "browser",
     root: options.projectRoot,
-    vitePlugins: options.vitePlugins,
+    vitePlugins: [
+      productionRouteCssTailwindSourcePlugin({
+        cssFiles,
+        sourceDirs: options.sourceDirs,
+      }),
+      ...(options.vitePlugins ?? []),
+    ],
   });
   const cssAssets = (output.assets ?? []).filter((asset) => asset.fileName.endsWith(".css"));
   const nonCssAssets = (output.assets ?? []).filter((asset) => !asset.fileName.endsWith(".css"));
@@ -5461,6 +5478,31 @@ async function writeRouteCssAssetsForFiles(options: {
   }
 
   return { assets: writtenAssets.sort(), css: written };
+}
+
+function productionRouteCssTailwindSourcePlugin(options: {
+  cssFiles: readonly string[];
+  sourceDirs: readonly string[];
+}): Plugin {
+  const cssFiles = new Set(options.cssFiles);
+
+  return {
+    name: "mreact-production-route-css-tailwind-source",
+    enforce: "pre",
+    transform(code, id) {
+      const [filename] = id.split(/[?#]/, 1);
+
+      if (filename === undefined || !cssFiles.has(filename)) {
+        return;
+      }
+
+      return prependTailwindSourceDirectives({
+        code,
+        cssFile: filename,
+        sourceDirs: options.sourceDirs,
+      });
+    },
+  };
 }
 
 function applyClientSourceMapReference(options: {

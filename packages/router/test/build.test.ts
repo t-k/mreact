@@ -442,6 +442,72 @@ describe("mreact app build", () => {
     );
   });
 
+  test("injects source-root directives before production route CSS plugins transform Tailwind entries", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-tailwind-source-"));
+    const appDir = join(rootDir, "src", "app");
+    const stylesDir = join(rootDir, "src", "styles");
+    const outDir = join(rootDir, ".mreact");
+    const transformedCssSources: string[] = [];
+    await mkdir(appDir, { recursive: true });
+    await mkdir(stylesDir, { recursive: true });
+    await writeFile(
+      join(stylesDir, "global.css"),
+      `@import "tailwindcss";
+`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import "../styles/global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main className="fixture-production-utility">Styled</main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-tailwind-like-production-source-scan",
+            enforce: "pre" as const,
+            transform(code, id) {
+              if (!id.includes("global.css")) {
+                return;
+              }
+
+              transformedCssSources.push(code);
+              return code.includes("@source ")
+                ? ".fixture-production-utility { color: rgb(12 34 56); }"
+                : ".fixture-production-missing-source { color: rgb(65 43 21); }";
+            },
+          },
+        ],
+      },
+    });
+    const clientFiles = await readTextFileTree(join(outDir, "client"));
+    const clientCss = Object.entries(clientFiles)
+      .filter(([file]) => file.endsWith(".css"))
+      .map(([, source]) => source)
+      .join("\n");
+
+    expect(transformedCssSources).toHaveLength(1);
+    expect(transformedCssSources[0]).toContain(
+      '@source "../**/*.{js,jsx,ts,tsx,mdx}";',
+    );
+    expect(clientCss).toContain(".fixture-production-utility");
+    expect(clientCss).not.toContain(".fixture-production-missing-source");
+  });
+
   test("build concurrency helper overlaps independent tasks while preserving input order", async () => {
     let active = 0;
     let maxActive = 0;
