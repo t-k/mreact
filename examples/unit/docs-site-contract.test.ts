@@ -234,6 +234,11 @@ describe("docs-site example contract", () => {
     expect(layouts).toContain("<Slot />");
     expect(layouts).toContain("## Nested layouts");
     expect(layouts).toContain("src/app/docs/layout.tsx");
+    expect(layouts).toContain('import { Link } from "@reckona/mreact-router/link";');
+    expect(layouts).toContain('<Link href="/docs/">Overview</Link>');
+    expect(layouts).toContain('<Link href="/docs/routing/">Routing</Link>');
+    expect(layouts).not.toContain('<a href="/docs/">Overview</a>');
+    expect(layouts).not.toContain('<a href="/docs/routing/">Routing</a>');
     expect(layouts).toContain("wrapped by both layouts");
     expect(layouts).toContain("## Named slots");
     expect(layouts).toContain('<Slot name="aside" />');

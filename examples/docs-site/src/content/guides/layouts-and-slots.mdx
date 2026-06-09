@@ -39,13 +39,15 @@ src/app/
 ```
 
 ```tsx
+import { Link } from "@reckona/mreact-router/link";
+
 export default function DocsLayout() {
   return (
     <section class="docs-layout">
       <aside>
         <nav>
-          <a href="/docs/">Overview</a>
-          <a href="/docs/routing/">Routing</a>
+          <Link href="/docs/">Overview</Link>
+          <Link href="/docs/routing/">Routing</Link>
         </nav>
       </aside>
       <article>
@@ -65,13 +67,15 @@ Named slots let a child page fill a specific region of a parent layout. They are
 In the layout, render a named slot where the page-specific region should appear.
 
 ```tsx
+import { Link } from "@reckona/mreact-router/link";
+
 export default function DocsLayout() {
   return (
     <section class="docs-layout">
       <aside>
         <nav>
-          <a href="/docs/">Overview</a>
-          <a href="/docs/routing/">Routing</a>
+          <Link href="/docs/">Overview</Link>
+          <Link href="/docs/routing/">Routing</Link>
         </nav>
         <Slot name="aside" />
       </aside>
