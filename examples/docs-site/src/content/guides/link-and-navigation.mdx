@@ -19,43 +19,70 @@ export default function Page() {
 
 ## Typed route hrefs
 
-Use `href()` from `@reckona/mreact-router` when a link points at a dynamic route. It accepts Mreact route patterns such as `/users/:id` and `/files/:...path`, requires matching params at compile time, and encodes params, search values, and hashes at runtime.
+Since `0.0.151`, concrete `Link` hrefs can be typed directly. Build output includes `.mreact/routes.d.ts`, which declares discovered app route patterns and augments `@reckona/mreact-router/link`. Include that declaration in your TypeScript program, and `Link` will type-check internal href strings without importing any generated runtime module.
+
+The generated file contains `declare module "@reckona/mreact-router/link"` so the public `Link` type learns your app's route union at type-check time.
+
+```json
+{
+  "include": ["src", ".mreact/routes.d.ts"]
+}
+```
+
+For dynamic routes, pass a concrete URL to `Link`. The generated declaration checks that the URL matches a discovered route shape, so dynamic params are required at compile time as path segments, unknown route shapes are rejected, and external URLs stay outside the internal route type.
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export function UserLink(props: { user: { id: string; name: string } }) {
+  return (
+    <Link href={`/users/${encodeURIComponent(props.user.id)}?tab=activity#profile`}>
+      {props.user.name}
+    </Link>
+  );
+}
+```
+
+For catch-all routes, encode each decoded segment and join them into the concrete URL:
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export function FileLink(props: { path: readonly string[] }) {
+  const encodedPath = props.path.map(encodeURIComponent).join("/");
+
+  return (
+    <Link href={`/files/${encodedPath}`}>
+      Open file
+    </Link>
+  );
+}
+```
+
+## Use href() only for runtime construction
+
+Use `href()` from `@reckona/mreact-router` when code needs runtime URL construction from Mreact route patterns, especially when you want one helper to encode params, search values, and hashes. It remains public and safe to use, but it is no longer required just to get typed `Link` hrefs.
 
 ```tsx
 import { href } from "@reckona/mreact-router";
 import { Link } from "@reckona/mreact-router/link";
 
 export function UserLink(props: { user: { id: string; name: string } }) {
-  const profileHref = href("/users/:id", {
-    hash: "profile",
-    params: { id: props.user.id },
-    search: { tab: "activity" },
-  });
-
-  return <Link href={profileHref}>{props.user.name}</Link>;
-}
-```
-
-Catch-all params are arrays of decoded path segments:
-
-```tsx
-import { href } from "@reckona/mreact-router";
-import { Link } from "@reckona/mreact-router/link";
-
-export function FileLink() {
   return (
     <Link
-      href={href("/files/:...path", {
-        params: { path: ["notes", "day 1"] },
+      href={href("/users/:id", {
+        hash: "profile",
+        params: { id: props.user.id },
+        search: { tab: "activity" },
       })}
     >
-      Day 1 notes
+      {props.user.name}
     </Link>
   );
 }
 ```
 
-Build output includes `.mreact/routes.d.ts`, which declares `AppRoutePath` and the discovered page and route-handler patterns. The generated declarations mean dynamic params are required at compile time, unknown params are rejected, and internal route patterns stay separate from external URLs.
+Importing `href()` into a client route includes the URL-building helper in that route's client bundle. For ordinary links with already-constructed strings, prefer `Link href` directly.
 
 ## Prefetch, not preload
 
