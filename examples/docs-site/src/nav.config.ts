@@ -55,6 +55,14 @@ export const sidebar: readonly NavGroup[] = [
     ],
   },
   {
+    text: "Utilities",
+    items: [
+      { text: "Virtualized Lists", slug: "utilities/virtualized-lists" },
+      { text: "Store", slug: "utilities/store" },
+      { text: "Server State", slug: "utilities/server-state" },
+    ],
+  },
+  {
     text: "Deployments",
     items: [
       { text: "Host Policy and Proxies", slug: "deployments/host-policy-and-proxies" },
@@ -76,9 +84,6 @@ export const sidebar: readonly NavGroup[] = [
     text: "Reference",
     items: [
       { text: "CLI", slug: "reference/cli" },
-      { text: "Virtual", slug: "reference/packages/virtual" },
-      { text: "Store", slug: "reference/packages/store" },
-      { text: "Query", slug: "reference/packages/query" },
       { text: "Config", slug: "reference/config" },
       { text: "Environment Variables", slug: "reference/environment-variables" },
       { text: "Route Module Exports", slug: "reference/route-module-exports" },

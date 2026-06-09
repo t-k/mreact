@@ -48,12 +48,12 @@ import referenceConfig, * as referenceConfigMeta from "./content/reference/confi
 import referenceEnvironmentVariables, * as referenceEnvironmentVariablesMeta from "./content/reference/environment-variables.mdx";
 import referenceGeneratedApi, * as referenceGeneratedApiMeta from "./content/reference/generated-api.mdx";
 import referenceMetadataApi, * as referenceMetadataApiMeta from "./content/reference/metadata-api.mdx";
-import referencePackagesQuery, * as referencePackagesQueryMeta from "./content/reference/packages/query.mdx";
-import referencePackagesStore, * as referencePackagesStoreMeta from "./content/reference/packages/store.mdx";
-import referencePackagesVirtual, * as referencePackagesVirtualMeta from "./content/reference/packages/virtual.mdx";
 import referenceResponseHelpers, * as referenceResponseHelpersMeta from "./content/reference/response-helpers.mdx";
 import referenceRouteHandlerContext, * as referenceRouteHandlerContextMeta from "./content/reference/route-handler-context.mdx";
 import referenceRouteModuleExports, * as referenceRouteModuleExportsMeta from "./content/reference/route-module-exports.mdx";
+import utilitiesServerState, * as utilitiesServerStateMeta from "./content/utilities/server-state.mdx";
+import utilitiesStore, * as utilitiesStoreMeta from "./content/utilities/store.mdx";
+import utilitiesVirtualizedLists, * as utilitiesVirtualizedListsMeta from "./content/utilities/virtualized-lists.mdx";
 import { BenchmarkResults } from "./ui/BenchmarkResults.js";
 
 export interface DocsPage {
@@ -240,10 +240,10 @@ export const docsPages = [
   page("deployments/container-and-cloud-run", deploymentsContainerAndCloudRun, deploymentsContainerAndCloudRunMeta),
   page("deployments/static-hosting", deploymentsStaticHosting, deploymentsStaticHostingMeta),
   page("examples", examples, examplesMeta),
+  page("utilities/virtualized-lists", utilitiesVirtualizedLists, utilitiesVirtualizedListsMeta),
+  page("utilities/store", utilitiesStore, utilitiesStoreMeta),
+  page("utilities/server-state", utilitiesServerState, utilitiesServerStateMeta),
   page("reference/cli", referenceCli, referenceCliMeta),
-  page("reference/packages/virtual", referencePackagesVirtual, referencePackagesVirtualMeta),
-  page("reference/packages/store", referencePackagesStore, referencePackagesStoreMeta),
-  page("reference/packages/query", referencePackagesQuery, referencePackagesQueryMeta),
   page("reference/config", referenceConfig, referenceConfigMeta),
   page("reference/environment-variables", referenceEnvironmentVariables, referenceEnvironmentVariablesMeta),
   page("reference/route-module-exports", referenceRouteModuleExports, referenceRouteModuleExportsMeta),

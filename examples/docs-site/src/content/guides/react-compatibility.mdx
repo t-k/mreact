@@ -18,6 +18,43 @@ import ReactCompat, { createElement, useState } from "@reckona/mreact-compat";
 import { jsx } from "@reckona/mreact-compat/jsx-runtime";
 ```
 
+## Vite configuration
+
+You usually do not need a separate Vite alias just to use Mreact's app router. The `mreactRouter()` plugin wires the framework runtime, and most route code should import from `@reckona/mreact`.
+
+When you evaluate React ecosystem libraries, the Vite configuration may still matter for normal Vite reasons. The [react-libraries example](https://github.com/t-k/mreact/tree/main/examples/react-libraries) pre-bundles browser-side React ecosystem packages with `optimizeDeps.include` so the dev server does not discover them after the page is already interactive and trigger a full reload. It also excludes server-only packages such as `better-sqlite3` from dependency optimization and allows that package through the router import policy for server modules.
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  optimizeDeps: {
+    exclude: ["better-sqlite3"],
+    include: [
+      "recharts",
+      "lexical",
+      "@lexical/react/LexicalComposer",
+      "@conform-to/react",
+      "@conform-to/zod",
+      "zod",
+      "@radix-ui/react-dialog",
+    ],
+  },
+  plugins: [
+    mreactRouter({
+      routesDir: "app",
+      importPolicy: {
+        allowedPackages: ["better-sqlite3"],
+      },
+    }),
+  ],
+});
+```
+
+Treat `optimizeDeps.include` as a dev-experience tool, not a compatibility switch. If a library imports browser globals during server render, move that usage behind a client boundary or isolate the browser-only code in a `.compat.tsx` component.
+
 ## What it covers
 
 `@reckona/mreact-compat` implements React compatibility for element creation, fragments, refs, hooks, context, roots, scheduling, reconciliation, hydration, Suspense, server rendering, resource hints, JSX runtimes, and selected Flight integration surfaces.

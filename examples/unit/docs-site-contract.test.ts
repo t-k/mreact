@@ -24,11 +24,11 @@ const requiredSlugs = [
   "deployments/container-and-cloud-run",
   "deployments/static-hosting",
   "examples",
-  "reference/cli",
-  "reference/packages/virtual",
-  "reference/packages/store",
-  "reference/packages/query",
+  "utilities/virtualized-lists",
+  "utilities/store",
+  "utilities/server-state",
   "reference/generated-api",
+  "reference/cli",
   "reference/environment-variables",
 ] as const;
 
@@ -56,7 +56,7 @@ describe("docs-site example contract", () => {
   test("keeps the navigation aligned with the approved information architecture", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
 
-    for (const section of ["Overview", "Guides", "Deployments", "Examples", "Reference"]) {
+    for (const section of ["Overview", "Guides", "Utilities", "Deployments", "Examples", "Reference"]) {
       expect(nav).toContain(`text: "${section}"`);
     }
 
@@ -273,45 +273,64 @@ describe("docs-site example contract", () => {
   test("documents companion packages without promoting the Next.js integration", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
-    const virtual = await readDocsSite("src/content/reference/packages/virtual.mdx");
-    const store = await readDocsSite("src/content/reference/packages/store.mdx");
-    const query = await readDocsSite("src/content/reference/packages/query.mdx");
+    const virtual = await readDocsSite("src/content/utilities/virtualized-lists.mdx");
+    const store = await readDocsSite("src/content/utilities/store.mdx");
+    const query = await readDocsSite("src/content/utilities/server-state.mdx");
     const compat = await readDocsSite("src/content/guides/react-compatibility.mdx");
 
-    expect(nav).toContain('{ text: "Virtual", slug: "reference/packages/virtual" }');
-    expect(nav).toContain('{ text: "Store", slug: "reference/packages/store" }');
-    expect(nav).toContain('{ text: "Query", slug: "reference/packages/query" }');
+    expect(nav).toContain('text: "Utilities"');
+    expect(nav).toContain('{ text: "Virtualized Lists", slug: "utilities/virtualized-lists" }');
+    expect(nav).toContain('{ text: "Store", slug: "utilities/store" }');
+    expect(nav).toContain('{ text: "Server State", slug: "utilities/server-state" }');
     expect(nav).toContain('{ text: "React Compatibility", slug: "guides/react-compatibility" }');
     expect(nav).not.toContain("mreact-next");
     expect(nav).not.toContain("Mreact Next");
 
-    expect(contentRegistry).toContain('page("reference/packages/virtual"');
-    expect(contentRegistry).toContain('page("reference/packages/store"');
-    expect(contentRegistry).toContain('page("reference/packages/query"');
+    expect(contentRegistry).toContain('page("utilities/virtualized-lists"');
+    expect(contentRegistry).toContain('page("utilities/store"');
+    expect(contentRegistry).toContain('page("utilities/server-state"');
+    expect(contentRegistry).not.toContain('page("reference/packages/virtual"');
+    expect(contentRegistry).not.toContain('page("reference/packages/query"');
     expect(contentRegistry).toContain('page("guides/react-compatibility"');
 
+    expect(virtual).toContain('export const title = "Virtualized Lists"');
+    expect(virtual).toContain("# Virtualized Lists");
     expect(virtual).toContain("@reckona/mreact-virtual");
     expect(virtual).toContain("createVirtualList");
     expect(virtual).toContain("createVirtualGrid");
     expect(virtual).toContain("measureItem");
+    expect(virtual).toContain("scrollToKey");
+    expect(virtual).toContain("quilt-style grids");
+    expect(virtual).toContain("examples/virtual-grid");
     expect(virtual).toContain("https://github.com/t-k/mreact/tree/main/packages/virtual");
 
     expect(store).toContain("@reckona/mreact-store");
     expect(store).toContain("createStore");
     expect(store).toContain("createRequestStoreFactory");
     expect(store).toContain("shallowEqual");
+    expect(store).toContain("transaction");
+    expect(store).toContain("persist");
+    expect(store).toContain("request-isolated");
     expect(store).toContain("@reckona/mreact-query");
 
+    expect(query).toContain('export const title = "Server State"');
+    expect(query).toContain("# Server State");
     expect(query).toContain("@reckona/mreact-query");
     expect(query).toContain("createQueryClient");
     expect(query).toContain("createQuery");
     expect(query).toContain("createInfiniteQuery");
     expect(query).toContain("createMutation");
     expect(query).toContain("loader");
+    expect(query).toContain("staleTime");
+    expect(query).toContain("cancelQueries");
+    expect(query).toContain("optimistic");
 
     expect(compat).toContain("@reckona/mreact-compat");
     expect(compat).toContain("React compatibility");
     expect(compat).toContain("Most applications should import from `@reckona/mreact`");
+    expect(compat).toContain("## Vite configuration");
+    expect(compat).toContain("optimizeDeps");
+    expect(compat).toContain("mreactRouter");
     expect(compat).toContain("React 19.2.6");
     expect(compat).toContain("pnpm test:react-conformance");
     expect(compat).toContain("examples/react-libraries");

@@ -1,0 +1,143 @@
+export const title = "Virtualized Lists";
+export const description = "Render large reactive lists and grids with bounded DOM work.";
+
+# Virtualized Lists
+
+`@reckona/mreact-virtual` provides reactive list and grid virtualization primitives for large timelines, tables, feeds, media grids, and scroll-restored views. Use it when rendering every item would be too expensive but you still need stable keys, bounded render entries, spacer sizes, visible ranges, and scroll helpers.
+
+Source: [packages/virtual on GitHub](https://github.com/t-k/mreact/tree/main/packages/virtual). Example: [examples/virtual-grid](https://github.com/t-k/mreact/tree/main/examples/virtual-grid).
+
+## Install
+
+```bash
+pnpm add @reckona/mreact-virtual
+```
+
+## When to use it
+
+Use a virtualizer when the item count can grow large enough that DOM size, layout work, or image decoding becomes the bottleneck. Typical cases are message history, audit logs, search results, media pickers, and dashboards with long rows.
+
+Do not use virtualization for short static lists. A normal `map()` is easier to reason about when the list is small, always visible, or needs native find-in-page across every item.
+
+## Fixed-height list
+
+`createVirtualList()` is the starting point when each item occupies one row. Inputs such as `items`, `scrollOffset`, and `viewportSize` can read Mreact cells. When those cells change, `entries`, `range`, `visibleRange`, and spacer cells recompute automatically.
+
+```ts
+import { cell } from "@reckona/mreact-reactive-core";
+import { createVirtualList } from "@reckona/mreact-virtual";
+
+const messages = cell([
+  { id: "m1", text: "Hello" },
+  { id: "m2", text: "Welcome back" },
+]);
+const scrollTop = cell(0);
+const viewportHeight = cell(480);
+
+const virtual = createVirtualList({
+  items: () => messages.get(),
+  getKey: (message) => message.id,
+  estimateItemSize: () => 48,
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+  overscan: 3,
+});
+
+const rows = virtual.entries.get();
+```
+
+Render the top spacer, the keyed `entries`, and the bottom spacer in order. `entries` includes overscan rows, while `visibleRange` reports only the viewport rows.
+
+```tsx
+export function MessageList() {
+  return (
+    <div class="scroller" onScroll={(event) => scrollTop.set(event.currentTarget.scrollTop)}>
+      <div style={`height: ${virtual.topSpacerPx.get()}px`} />
+      {virtual.entries.get().map((entry) => (
+        <article key={entry.key} data-index={entry.index}>
+          {entry.item.text}
+        </article>
+      ))}
+      <div style={`height: ${virtual.bottomSpacerPx.get()}px`} />
+    </div>
+  );
+}
+```
+
+## Responsive grids
+
+Use `createVirtualGrid()` when items flow into columns. `getColumnCount()` is tracked like other input thunks, so cell-backed breakpoint changes update the virtual range.
+
+```ts
+import { createVirtualGrid } from "@reckona/mreact-virtual";
+
+const virtual = createVirtualGrid({
+  items: () => media.get(),
+  getKey: (item) => item.id,
+  estimateItemSize: () => 220,
+  getColumnCount: () => columnCount.get(),
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+  overscan: 2,
+});
+```
+
+`visibleRange` is useful for image prefetching. Read it after scroll and viewport updates, then prefetch assets for visible and near-visible media.
+
+## Variable measurements
+
+Use `measureItem()` when the real item height becomes known after images, fonts, or metadata load. Measuring an item recomputes the range and notifies subscribers whose values changed.
+
+```ts
+virtual.measureItem(photo.id, element.offsetHeight);
+```
+
+For grids, a measured row uses the largest measured item in that row. Unmeasured rows use `estimateItemSize()`.
+
+## Span-aware grids
+
+Pass `getItemSpan()` for quilt-style grids where selected cards occupy multiple tracks. Span-aware grids expose `column`, `colSpan`, and `rowSpan` on entries.
+
+```ts
+const quilt = createVirtualGrid({
+  items: () => media.get(),
+  getKey: (item) => item.id,
+  estimateItemSize: () => 220,
+  getColumnCount: () => columnCount.get(),
+  getItemSpan: (item) => (item.featured ? { colSpan: 2, rowSpan: 2 } : { colSpan: 1, rowSpan: 1 }),
+  scrollOffset: () => scrollTop.get(),
+  viewportSize: () => viewportHeight.get(),
+});
+```
+
+The span model is deterministic row-major placement. It covers common `1x1`, `2x1`, `1x2`, and `2x2` cards, but it does not emulate masonry packing, `grid-auto-flow: dense`, manually positioned CSS grid lines, or browser collision rules.
+
+## Scroll restoration
+
+Use stable keys for entries and restore scroll from a selected item key when returning from a detail page.
+
+```ts
+const nextOffset = virtual.scrollToKey(selectedId);
+
+if (nextOffset !== undefined) {
+  scroller.scrollTop = nextOffset;
+}
+```
+
+`scrollToIndex()` is useful when a list is ordered by index and the item key is not available yet.
+
+## API surface
+
+- `calculateVirtualRange()`
+- `createVirtualList()`
+- `createVirtualGrid()`
+- `Virtualizer.entries`
+- `Virtualizer.range`
+- `Virtualizer.visibleRange`
+- `Virtualizer.topSpacerPx`
+- `Virtualizer.bottomSpacerPx`
+- `Virtualizer.measureItem()`
+- `Virtualizer.scrollToIndex()`
+- `Virtualizer.scrollToKey()`
+
+For exact type signatures, use [Generated API](/reference/generated-api/).

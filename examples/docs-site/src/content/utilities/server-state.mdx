@@ -1,0 +1,135 @@
+export const title = "Server State";
+export const description = "Fetch, hydrate, invalidate, and mutate remote data with Mreact Query.";
+
+# Server State
+
+`@reckona/mreact-query` provides server state and async cache primitives for Mreact. Use it when data belongs to a remote source, needs request dedupe, should hydrate from a server loader, or should be invalidated after a mutation.
+
+Source: [packages/query on GitHub](https://github.com/t-k/mreact/tree/main/packages/query).
+
+## Install
+
+```bash
+pnpm add @reckona/mreact-query
+```
+
+## When to use it
+
+Use `@reckona/mreact-query` for data fetched from HTTP APIs, databases behind loaders, paginated feeds, search results, mutations, and invalidation. It is server state: your app observes and caches it, but the source of truth lives elsewhere.
+
+Use `@reckona/mreact-store` for application state that your app owns, such as open panels, local selections, and shared UI state.
+
+## Query clients and hydration
+
+Create a query client, prefetch server data, dehydrate it, then hydrate the browser client so observers can reuse the result.
+
+```ts
+import {
+  createQuery,
+  createQueryClient,
+  dehydrate,
+  getQueryClient,
+  hydrate,
+} from "@reckona/mreact-query";
+
+const queryClient = createQueryClient();
+
+await queryClient.prefetchQuery({
+  queryKey: ["profile"],
+  retry: 2,
+  retryDelay: 100,
+  queryFn: ({ signal }) => fetch("/api/profile", { signal }).then((res) => res.json()),
+});
+
+const state = dehydrate(queryClient);
+hydrate(getQueryClient(), state);
+
+const profile = createQuery(getQueryClient(), {
+  queryKey: ["profile"],
+  queryFn: ({ signal }) => fetch("/api/profile", { signal }).then((res) => res.json()),
+  staleTime: 30_000,
+});
+```
+
+Set `staleTime` when browser observers should reuse server-fetched data during initial mount instead of immediately revalidating.
+
+## Router loaders
+
+Inside Mreact Router, prefer the request-scoped query client from the route `loader` context when server data should also hydrate client-side observers.
+
+```ts
+// src/app/users/$id/page.tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  return context.queryClient.fetchQuery({
+    queryKey: ["user", context.params.id],
+    staleTime: 30_000,
+    queryFn: () => findUser(context.params.id),
+  });
+}
+```
+
+Each request gets its own query client. This dedupes repeated work during one render and avoids cross-request data leaks.
+
+## Infinite queries
+
+Use `createInfiniteQuery()` for cursor timelines and feeds that should not hand-roll page state or concurrent next-page dedupe.
+
+```ts
+const feed = createInfiniteQuery(getQueryClient(), {
+  queryKey: ["timeline"],
+  initialPageParam: null as string | null,
+  queryFn: ({ pageParam, signal }) =>
+    fetch(`/api/timeline?cursor=${pageParam ?? ""}`, { signal }).then((res) => res.json()),
+  getNextPageParam: (lastPage) => lastPage.nextCursor,
+});
+
+await feed.fetchNextPage();
+const items = feed.result.get().pages.flatMap((page) => page.items);
+```
+
+## Mutations and invalidation
+
+Use `createMutation()` when a client action changes server state. Keep query keys stable so successful mutations can invalidate or refetch the affected data.
+
+```ts
+const saveProfile = createMutation<{ name: string }, Profile>({
+  mutationFn: (values) =>
+    fetch("/api/profile", {
+      method: "POST",
+      body: JSON.stringify(values),
+    }).then((res) => res.json()),
+  onSuccess: () => {
+    getQueryClient().invalidateQueries({ queryKey: ["profile"] });
+  },
+});
+```
+
+For optimistic updates, return rollback context from `onMutate`; `onError` and `onSettled` receive that value so failed mutations can restore the previous cache state.
+
+## Cancellation and cleanup
+
+Query functions receive an `AbortSignal`. Pass it to `fetch()` so `cancelQueries()` can abort in-flight work.
+
+```ts
+await queryClient.cancelQueries({ queryKey: ["search"] });
+queryClient.removeQueries({ queryKey: ["search"] });
+```
+
+Use `gcTime` on short-lived browser views when idle cache entries should be evicted after observers dispose.
+
+## API surface
+
+- `createQueryClient()`
+- `getQueryClient()`
+- `runWithQueryClient()`
+- `installQueryAsyncStorage()`
+- `createQuery()`
+- `createInfiniteQuery()`
+- `createMutation()`
+- `dehydrate()`
+- `hydrate()`
+- `hashQueryKey()`
+
+For exact type signatures, use [Generated API](/reference/generated-api/).
