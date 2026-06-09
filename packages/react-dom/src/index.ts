@@ -8,17 +8,16 @@ import {
 import { runWithEventPriority } from "@reckona/mreact-compat/event-priority";
 import { createRoot, hydrateRoot } from "./client.js";
 
-/** Creates a portal that renders children into a DOM container outside the current tree. */
-export { createPortal };
-/** Runs a callback synchronously while flushing pending DOM work. */
-export { flushSync };
-/** Renders an element into a DOM container using the legacy React DOM API. */
-export { render };
-/** Unmounts a legacy React DOM tree from a container. */
-export { unmountComponentAtNode };
-/** Alias for useActionState exposed through the React DOM form API surface. */
-export { useFormState };
-export { createRoot, hydrateRoot };
+/** Re-exports the React DOM rendering helpers exposed by the root entrypoint. */
+export {
+  createPortal,
+  flushSync,
+  render,
+  unmountComponentAtNode,
+  useFormState,
+  createRoot,
+  hydrateRoot,
+};
 export type { HydrateRootOptions, Root, RootOptions } from "./client.js";
 
 /** React DOM-compatible package version. */

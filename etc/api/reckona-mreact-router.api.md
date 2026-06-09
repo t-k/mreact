@@ -166,20 +166,23 @@ export interface AppRouterLogger {
 // @public
 export type AppRouterLogLevel = "debug" | "info" | "warn" | "error";
 
-// Warning: (ae-forgotten-export) The symbol "AppRouterNavigationState_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type AppRouterNavigationState = AppRouterNavigationState_2;
+export interface AppRouterNavigationState {
+    // (undocumented)
+    from: string | null;
+    // (undocumented)
+    pending: boolean;
+    // (undocumented)
+    to: string | null;
+    // (undocumented)
+    type: AppRouterNavigationType | null;
+}
 
-// Warning: (ae-forgotten-export) The symbol "AppRouterNavigationStateListener_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type AppRouterNavigationStateListener = AppRouterNavigationStateListener_2;
+export type AppRouterNavigationStateListener = (state: AppRouterNavigationState) => void;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouterNavigationType_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type AppRouterNavigationType = AppRouterNavigationType_2;
+export type AppRouterNavigationType = "push" | "replace" | "pop" | "refresh";
 
 // @public
 export interface AppRouterPrerenderStore {
@@ -455,10 +458,10 @@ export interface CloudflarePagesArtifactManifest {
     worker: "_worker.js";
 }
 
-// Warning: (ae-forgotten-export) The symbol "ConcreteLinkHrefGuard_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type ConcreteLinkHrefGuard<Href extends string> = ConcreteLinkHrefGuard_2<Href>;
+export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {
+    readonly __mreactRoutePatternHrefError__: never;
+} : unknown;
 
 // @public
 export interface CookieOptions {
@@ -577,18 +580,14 @@ export interface GenerateMetadataContext<TData = unknown, TParams extends RouteP
     request: Request;
 }
 
-// Warning: (ae-forgotten-export) The symbol "getNavigationState_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export const getNavigationState: typeof getNavigationState_2;
+export function getNavigationState(): AppRouterNavigationState;
 
 // @public
 export function getRouterRuntimeCacheStats(): RouterRuntimeCacheStat[];
 
-// Warning: (ae-forgotten-export) The symbol "getServerRuntimeState_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export const getServerRuntimeState: typeof getServerRuntimeState_2;
+export function getServerRuntimeState<TState extends object>(key: string, create: () => TState): TState;
 
 // Warning: (ae-forgotten-export) The symbol "getSession_2" needs to be exported by the entry point index.d.ts
 //
@@ -666,50 +665,51 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
     request: Request;
 }
 
-// Warning: (ae-forgotten-export) The symbol "Link_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export const Link: typeof Link_2;
+export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
-// Warning: (ae-forgotten-export) The symbol "LinkChild_2" needs to be exported by the entry point index.d.ts
-//
-// @public
-export type LinkChild = LinkChild_2;
+// @public (undocumented)
+export function Link(sink: HtmlSink, props: LinkProps<string>): void;
 
-// Warning: (ae-forgotten-export) The symbol "LinkHref_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type LinkHref = LinkHref_2;
+export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
-// Warning: (ae-forgotten-export) The symbol "LinkOptions_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type LinkOptions<Href extends string = LinkHref> = LinkOptions_2<Href>;
+export type LinkHref = [RegisteredAppRoutePath] extends [never] ? string : AppRouteLinkHref<RegisteredAppRoutePath>;
 
-// Warning: (ae-forgotten-export) The symbol "LinkPrefetch_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type LinkPrefetch = LinkPrefetch_2;
+export interface LinkOptions<Href extends string = LinkHref> {
+    // (undocumented)
+    href: Href;
+    // (undocumented)
+    prefetch?: LinkPrefetch | undefined;
+    // (undocumented)
+    reload?: boolean | undefined;
+    // (undocumented)
+    scroll?: LinkScroll | undefined;
+    // (undocumented)
+    transition?: LinkTransition | undefined;
+}
 
-// Warning: (ae-forgotten-export) The symbol "LinkProps_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type LinkProps<Href extends string = LinkHref> = LinkProps_2<Href>;
+export type LinkPrefetch = "intent" | "viewport" | "none" | false;
 
-// Warning: (ae-forgotten-export) The symbol "linkProps_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export const linkProps: typeof linkProps_2;
+export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
+    // (undocumented)
+    [attribute: string]: unknown;
+    // (undocumented)
+    children?: LinkChild;
+}
 
-// Warning: (ae-forgotten-export) The symbol "LinkScroll_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type LinkScroll = LinkScroll_2;
+export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
-// Warning: (ae-forgotten-export) The symbol "LinkTransition_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type LinkTransition = LinkTransition_2;
+export type LinkScroll = "top" | "preserve";
+
+// @public
+export type LinkTransition = "auto" | "none" | false;
 
 // @public
 export interface LoaderContext<TParams extends RouteParams = RouteParams> {
@@ -779,10 +779,13 @@ export interface MemoryRouteCacheOptions {
     sweepIntervalMs?: number;
 }
 
-// Warning: (ae-forgotten-export) The symbol "MemorySessionStoreOptions_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type MemorySessionStoreOptions = MemorySessionStoreOptions_2;
+export interface MemorySessionStoreOptions {
+    // (undocumented)
+    maxEntries?: number;
+    // (undocumented)
+    sweepIntervalMs?: number;
+}
 
 // @public
 export type MessageTree = {
@@ -989,10 +992,10 @@ export function redirect303(location: string, init?: ResponseInit): Response;
 // @public
 export function redirectExternal(location: string, options?: RedirectOptions): never;
 
-// Warning: (ae-forgotten-export) The symbol "RegisteredAppRoutePath_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type RegisteredAppRoutePath = RegisteredAppRoutePath_2;
+export type RegisteredAppRoutePath = AppRouteDeclarations extends {
+    readonly path: infer Path;
+} ? Extract<Path, `/${string}`> : never;
 
 // @public
 export function renderAppRequest(options: RenderAppRequestOptions): Promise<Response>;
@@ -1291,10 +1294,21 @@ export interface RouterRouteInstrumentationEvent extends RouterRequestInstrument
     routePath: string;
 }
 
-// Warning: (ae-forgotten-export) The symbol "RouterRuntimeCacheStat_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type RouterRuntimeCacheStat = RouterRuntimeCacheStat_2;
+export interface RouterRuntimeCacheStat {
+    // (undocumented)
+    evictions: number;
+    // (undocumented)
+    hits: number;
+    // (undocumented)
+    maxEntries: number;
+    // (undocumented)
+    misses: number;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    size: number;
+}
 
 // @public
 export interface RouterTraceContext {
@@ -1506,10 +1520,8 @@ export interface StaticHrefOptions {
     search?: RouteSearchParams | undefined;
 }
 
-// Warning: (ae-forgotten-export) The symbol "subscribeNavigationState_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export const subscribeNavigationState: typeof subscribeNavigationState_2;
+export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
 
 // @public
 export function textError(message: string, status?: number, init?: ResponseInit): Response;
@@ -1520,10 +1532,10 @@ export function throwNotFound(): never;
 // @public
 export function traceContextFromRequest(request: Request): RouterTraceContext | undefined;
 
-// Warning: (ae-forgotten-export) The symbol "TrustedLinkHtml_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type TrustedLinkHtml = TrustedLinkHtml_2;
+export type TrustedLinkHtml = {
+    readonly [TRUSTED_LINK_HTML]: string;
+};
 
 // @public
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;

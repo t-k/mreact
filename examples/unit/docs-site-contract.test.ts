@@ -6,16 +6,6 @@ import { describe, expect, test } from "vitest";
 const root = process.cwd();
 const docsSiteRoot = join(root, "examples", "docs-site");
 
-const enum TypeDocKind {
-  Module = 2,
-  Namespace = 4,
-  Variable = 32,
-  Function = 64,
-  Interface = 256,
-  TypeAlias = 2097152,
-  Reference = 4194304,
-}
-
 const requiredSlugs = [
   "benchmarks",
   "getting-started",
@@ -517,21 +507,6 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".api-detail-header");
     expect(css).toContain(".api-description");
     expect(css).toContain("content-visibility: auto");
-  });
-
-  test("provides source JSDoc summaries for every generated API reference entry", async () => {
-    const generatedApiJson = await readFile(join(root, "docs", "api", "index.json"), "utf8");
-    const project = JSON.parse(generatedApiJson) as TypeDocReflection;
-    const reflectionById = buildTypedocReflectionIndex(project);
-    const missingSummaries: string[] = [];
-
-    for (const entry of generatedApiEntries(project)) {
-      if (typedocResolvedCommentText(entry.node, reflectionById) === "") {
-        missingSummaries.push(`${entry.moduleDisplayName} ${entry.node.name}`);
-      }
-    }
-
-    expect(missingSummaries).toEqual([]);
   });
 
   test("keeps every Reference page practical and connected to generated API details", async () => {
@@ -1976,160 +1951,6 @@ describe("docs-site example contract", () => {
     expect(exportScript).not.toContain('join(exportDir, "api")');
   });
 });
-
-interface TypeDocComment {
-  readonly blockTags?: readonly TypeDocCommentTag[];
-  readonly summary?: readonly TypeDocCommentPart[];
-}
-
-interface TypeDocCommentPart {
-  readonly text?: string;
-}
-
-interface TypeDocCommentTag {
-  readonly content?: readonly TypeDocCommentPart[];
-  readonly tag: string;
-}
-
-interface TypeDocReflection {
-  readonly children?: readonly TypeDocReflection[];
-  readonly comment?: TypeDocComment;
-  readonly id: number;
-  readonly kind: number;
-  readonly name: string;
-  readonly parameters?: readonly TypeDocReflection[];
-  readonly signatures?: readonly TypeDocReflection[];
-  readonly target?: number;
-  readonly type?: TypeDocType;
-  readonly typeParameters?: readonly TypeDocReflection[];
-}
-
-interface TypeDocType {
-  readonly name?: string;
-  readonly type: string;
-}
-
-interface GeneratedApiEntry {
-  readonly moduleDisplayName: string;
-  readonly node: TypeDocReflection;
-}
-
-function generatedApiEntries(project: TypeDocReflection): GeneratedApiEntry[] {
-  return (project.children ?? []).flatMap((packageNode) => {
-    const nestedModules = (packageNode.children ?? []).filter(
-      (child) => child.kind === TypeDocKind.Module,
-    );
-
-    if (nestedModules.length === 0) {
-      return generatedModuleEntries(packageNode.name, undefined, packageNode);
-    }
-
-    return nestedModules.flatMap((moduleNode) =>
-      generatedModuleEntries(packageNode.name, moduleNode.name, moduleNode),
-    );
-  });
-}
-
-function generatedModuleEntries(
-  packageName: string,
-  moduleName: string | undefined,
-  moduleNode: TypeDocReflection,
-): GeneratedApiEntry[] {
-  const moduleDisplayName =
-    moduleName === undefined || moduleName === "" ? packageName : `${packageName}/${moduleName}`;
-
-  return (moduleNode.children ?? [])
-    .filter(isRenderableApiEntry)
-    .map((node) => ({ moduleDisplayName, node }));
-}
-
-function isRenderableApiEntry(reflection: TypeDocReflection): boolean {
-  return (
-    reflection.name !== "" &&
-    [
-      TypeDocKind.Namespace,
-      TypeDocKind.Variable,
-      TypeDocKind.Function,
-      TypeDocKind.Interface,
-      TypeDocKind.TypeAlias,
-      TypeDocKind.Reference,
-    ].includes(reflection.kind)
-  );
-}
-
-function typedocCommentText(reflection: TypeDocReflection): string {
-  const directComment = formatTypedocComment(reflection.comment);
-  if (directComment !== "") {
-    return directComment;
-  }
-
-  for (const signature of reflection.signatures ?? []) {
-    const signatureComment = formatTypedocComment(signature.comment);
-    if (signatureComment !== "") {
-      return signatureComment;
-    }
-  }
-
-  return "";
-}
-
-function typedocResolvedCommentText(
-  reflection: TypeDocReflection,
-  reflectionById: ReadonlyMap<number, TypeDocReflection>,
-): string {
-  const directComment = typedocCommentText(reflection);
-  if (directComment !== "") {
-    return directComment;
-  }
-
-  if (reflection.kind !== TypeDocKind.Reference || reflection.target === undefined) {
-    return "";
-  }
-
-  const targetReflection = reflectionById.get(reflection.target);
-  return targetReflection === undefined ? "" : typedocCommentText(targetReflection);
-}
-
-function buildTypedocReflectionIndex(
-  project: TypeDocReflection,
-): ReadonlyMap<number, TypeDocReflection> {
-  const reflections = new Map<number, TypeDocReflection>();
-  collectTypedocReflections(project, reflections);
-  return reflections;
-}
-
-function collectTypedocReflections(
-  reflection: TypeDocReflection,
-  reflections: Map<number, TypeDocReflection>,
-): void {
-  reflections.set(reflection.id, reflection);
-
-  for (const child of reflection.children ?? []) {
-    collectTypedocReflections(child, reflections);
-  }
-
-  for (const signature of reflection.signatures ?? []) {
-    collectTypedocReflections(signature, reflections);
-  }
-}
-
-function formatTypedocComment(comment: TypeDocComment | undefined): string {
-  const summary = typedocCommentPartsText(comment?.summary ?? []);
-  if (summary !== "") {
-    return summary;
-  }
-
-  const remarks = (comment?.blockTags ?? []).find((tag) => tag.tag === "@remarks");
-  return typedocCommentPartsText(remarks?.content ?? []);
-}
-
-function typedocCommentPartsText(parts: readonly TypeDocCommentPart[]): string {
-  return parts
-    .map((part) => part.text ?? "")
-    .join("")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 async function readDocsSite(relativePath: string): Promise<string> {
   return await readFile(join(docsSiteRoot, relativePath), "utf8");

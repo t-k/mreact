@@ -132,15 +132,11 @@ export interface EventHydrationManifestEntry {
 // @public
 export function flushSync<T>(callback: () => T): T;
 
-// Warning: (ae-forgotten-export) The symbol "FormEvent_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type FormEvent<TCurrentTarget extends EventTarget = Element> = FormEvent_2<TCurrentTarget>;
+export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
 
-// Warning: (ae-forgotten-export) The symbol "FormEventHandler_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = FormEventHandler_2<TCurrentTarget>;
+export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<TCurrentTarget, SubmitEvent>;
 
 // @public
 export function forwardRef<P, T>(render: (props: P, ref: {
@@ -182,15 +178,13 @@ export interface HydrationRecoverableErrorInfo {
 // @public
 export const isValidElement: typeof isReactCompatElement;
 
-// Warning: (ae-forgotten-export) The symbol "JSXEvent_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = JSXEvent_2<TCurrentTarget, TEvent>;
+export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
+    readonly currentTarget: TCurrentTarget;
+};
 
-// Warning: (ae-forgotten-export) The symbol "JSXEventHandler_2" needs to be exported by the entry point index.d.ts
-//
 // @public
-export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = JSXEventHandler_2<TCurrentTarget, TEvent>;
+export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
 
 // @public
 export function lazy<P>(load: () => Promise<{

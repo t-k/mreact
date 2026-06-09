@@ -12,30 +12,20 @@ import type { ReactCompatNode } from '@reckona/mreact-compat';
 export interface AppRouteDeclarations {
 }
 
-// Warning: (ae-forgotten-export) The symbol "AppRouteLinkHref_2" needs to be exported by the entry point link.d.ts
-//
 // @public
-export type AppRouteLinkHref<Path extends `/${string}`> = AppRouteLinkHref_2<Path>;
+export type AppRouteLinkHref<Path extends `/${string}`> = `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouteLinkHrefSuffix_2" needs to be exported by the entry point link.d.ts
-//
 // @public
-export type AppRouteLinkHrefSuffix = AppRouteLinkHrefSuffix_2;
+export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouteLinkPathname_2" needs to be exported by the entry point link.d.ts
-//
 // @public
-export type AppRouteLinkPathname<Path extends `/${string}`> = AppRouteLinkPathname_2<Path>;
+export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/" ? "/" : Path extends `/${infer Segments}` ? `/${AppRouteLinkSegments<Segments>}` : never;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouteLinkSegment_2" needs to be exported by the entry point link.d.ts
-//
 // @public
-export type AppRouteLinkSegment<Segment extends string> = AppRouteLinkSegment_2<Segment>;
+export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}` ? string : Segment;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouteLinkSegments_2" needs to be exported by the entry point link.d.ts
-//
 // @public
-export type AppRouteLinkSegments<Segments extends string> = AppRouteLinkSegments_2<Segments>;
+export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}` ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}` : AppRouteLinkSegment<Segments>;
 
 // @public
 export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {

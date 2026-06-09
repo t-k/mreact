@@ -9,9 +9,9 @@ import { createSession } from '@reckona/mreact-router/session';
 import { destroySession } from '@reckona/mreact-router/session';
 import { getSession } from '@reckona/mreact-router/session';
 import { rotateSession } from '@reckona/mreact-router/session';
-import { SessionCookieOptions as SessionCookieOptions_2 } from '@reckona/mreact-router/session';
-import { SessionRecord as SessionRecord_2 } from '@reckona/mreact-router/session';
-import { SessionStore as SessionStore_2 } from '@reckona/mreact-router/session';
+import { SessionCookieOptions } from '@reckona/mreact-router/session';
+import { SessionRecord } from '@reckona/mreact-router/session';
+import { SessionStore } from '@reckona/mreact-router/session';
 
 // @public
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
@@ -114,14 +114,11 @@ export { rotateSession }
 // @public
 export function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>>;
 
-// @public
-export type SessionCookieOptions = SessionCookieOptions_2;
+export { SessionCookieOptions }
 
-// @public
-export type SessionRecord<TData = unknown> = SessionRecord_2<TData>;
+export { SessionRecord }
 
-// @public
-export type SessionStore<TData = unknown> = SessionStore_2<TData>;
+export { SessionStore }
 
 // @public
 export type TryAuthResult<TData> = {

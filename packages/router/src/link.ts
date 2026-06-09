@@ -2,34 +2,15 @@ import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
-import type {
-  AppRouteLinkHref as RouterAppRouteLinkHref,
-  AppRouteLinkHrefSuffix as RouterAppRouteLinkHrefSuffix,
-  AppRouteLinkPathname as RouterAppRouteLinkPathname,
-  AppRouteLinkSegment as RouterAppRouteLinkSegment,
-  AppRouteLinkSegments as RouterAppRouteLinkSegments,
+import type { AppRouteLinkHref } from "./typed-routes.js";
+/** Re-exports typed route href helper types used by Link. */
+export type {
+  AppRouteLinkHref,
+  AppRouteLinkHrefSuffix,
+  AppRouteLinkPathname,
+  AppRouteLinkSegment,
+  AppRouteLinkSegments,
 } from "./typed-routes.js";
-
-/**
- * Builds the Link `href` string type accepted for a specific app route path.
- */
-export type AppRouteLinkHref<Path extends `/${string}`> = RouterAppRouteLinkHref<Path>;
-/**
- * Represents the search and hash suffix portion of a typed route href.
- */
-export type AppRouteLinkHrefSuffix = RouterAppRouteLinkHrefSuffix;
-/**
- * Builds the pathname string type for a typed route href.
- */
-export type AppRouteLinkPathname<Path extends `/${string}`> = RouterAppRouteLinkPathname<Path>;
-/**
- * Builds the string type for one static or dynamic route segment.
- */
-export type AppRouteLinkSegment<Segment extends string> = RouterAppRouteLinkSegment<Segment>;
-/**
- * Builds the joined path segment string type for a typed route href.
- */
-export type AppRouteLinkSegments<Segments extends string> = RouterAppRouteLinkSegments<Segments>;
 
 const TRUSTED_LINK_HTML = Symbol.for("modular.react.router.trusted_link_html");
 

@@ -1,10 +1,3 @@
-import type {
-  FormEvent as JSXRuntimeFormEvent,
-  FormEventHandler as JSXRuntimeFormEventHandler,
-  JSXEvent as JSXRuntimeEvent,
-  JSXEventHandler as JSXRuntimeEventHandler,
-} from "./jsx-runtime.js";
-
 export {
   Component,
   PureComponent,
@@ -34,23 +27,13 @@ export type {
   ReactCompatElement,
   ReactCompatNode,
 } from "./element.js";
-
-/** DOM event type with a narrowed currentTarget. */
-export type JSXEvent<
-  TCurrentTarget extends EventTarget,
-  TEvent extends Event = Event,
-> = JSXRuntimeEvent<TCurrentTarget, TEvent>;
-/** Event handler type used by JSX DOM attributes. */
-export type JSXEventHandler<
-  TCurrentTarget extends EventTarget,
-  TEvent extends Event = Event,
-> = JSXRuntimeEventHandler<TCurrentTarget, TEvent>;
-/** Submit event type used by form-related JSX attributes. */
-export type FormEvent<TCurrentTarget extends EventTarget = Element> =
-  JSXRuntimeFormEvent<TCurrentTarget>;
-/** Submit event handler type used by form-related JSX attributes. */
-export type FormEventHandler<TCurrentTarget extends EventTarget = Element> =
-  JSXRuntimeFormEventHandler<TCurrentTarget>;
+/** DOM and form event types exported by the JSX runtime. */
+export type {
+  FormEvent,
+  FormEventHandler,
+  JSXEvent,
+  JSXEventHandler,
+} from "./jsx-runtime.js";
 
 export {
   createContext,

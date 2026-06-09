@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AppRouterServerActionOptions } from "../actions.js";
 import type { AppRouterCache } from "../cache.js";
-import type { AppRouterImportPolicy as BaseAppRouterImportPolicy } from "../import-policy.js";
+import type { AppRouterImportPolicy } from "../import-policy.js";
 import {
   normalizeBuiltAppRuntimePreloadStrategy,
   type NormalizedBuiltAppRuntimePreloadStrategy,
@@ -20,16 +20,12 @@ import {
   type RouterRequestLogFields,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
-import type { RouterInstrumentation as BaseRouterInstrumentation } from "../trace.js";
+import type { RouterInstrumentation } from "../trace.js";
 
-/**
- * Registers optional hooks for AWS Lambda router request, middleware, and route instrumentation.
- */
-export type RouterInstrumentation = BaseRouterInstrumentation;
-/**
- * Controls which source roots and runtime packages an AWS Lambda handler may import.
- */
-export type AppRouterImportPolicy = BaseAppRouterImportPolicy;
+/** Re-exports router instrumentation hooks for AWS Lambda handlers. */
+export type { RouterInstrumentation } from "../trace.js";
+/** Re-exports app-router import policy controls for AWS Lambda handlers. */
+export type { AppRouterImportPolicy } from "../import-policy.js";
 import {
   createBuiltRequestRuntime,
   preloadBuiltAppRuntime,

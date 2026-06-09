@@ -146,7 +146,6 @@ interface ApiEntryGroup {
 }
 
 const apiProject = apiProjectJson as TypeDocProject;
-const apiReflectionById = buildApiReflectionIndex(apiProject);
 const apiModules = buildApiModules(apiProject);
 const apiEntries = apiModules.flatMap((module) => module.entries);
 const apiPagesByPath = new Map<string, ApiPage>([
@@ -250,7 +249,7 @@ function ApiModuleView(props: { readonly page: Extract<ApiPage, { readonly kind:
           <h2>{group.title}</h2>
           <div class="api-entry-list">
             {group.entries.map((entry) => {
-              const comment = commentTextForResolved(entry.node);
+              const comment = commentTextFor(entry.node);
 
               return (
                 <a class="api-entry-row" href={apiLinkForEntry(entry)} key={entry.path.join("/")}>
@@ -276,7 +275,7 @@ function ApiEntryView(props: { readonly page: Extract<ApiPage, { readonly kind: 
   const entry = props.page.entry;
   const source = sourceFor(entry.node);
   const members = membersFor(entry.node);
-  const comment = commentTextForResolved(entry.node);
+  const comment = commentTextFor(entry.node);
 
   return (
     <>
@@ -494,41 +493,6 @@ function commentTextFor(reflection: TypeDocReflection): string {
   }
 
   return "";
-}
-
-function commentTextForResolved(reflection: TypeDocReflection): string {
-  const directComment = commentTextFor(reflection);
-  if (directComment !== "") {
-    return directComment;
-  }
-
-  if (reflection.kind !== TypeDocKind.Reference || reflection.target === undefined) {
-    return "";
-  }
-
-  const targetReflection = apiReflectionById.get(reflection.target);
-  return targetReflection === undefined ? "" : commentTextFor(targetReflection);
-}
-
-function buildApiReflectionIndex(project: TypeDocProject): ReadonlyMap<number, TypeDocReflection> {
-  const reflections = new Map<number, TypeDocReflection>();
-  collectApiReflections(project, reflections);
-  return reflections;
-}
-
-function collectApiReflections(
-  reflection: TypeDocReflection,
-  reflections: Map<number, TypeDocReflection>,
-): void {
-  reflections.set(reflection.id, reflection);
-
-  for (const child of reflection.children ?? []) {
-    collectApiReflections(child, reflections);
-  }
-
-  for (const signature of reflection.signatures ?? []) {
-    collectApiReflections(signature, reflections);
-  }
 }
 
 function formatComment(comment: TypeDocComment | undefined): string {

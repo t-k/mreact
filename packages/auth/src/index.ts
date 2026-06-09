@@ -4,9 +4,9 @@ import {
   destroySession as destroyRouterSession,
   getSession,
   rotateSession as rotateRouterSession,
-  type SessionCookieOptions as RouterSessionCookieOptions,
-  type SessionRecord as RouterSessionRecord,
-  type SessionStore as RouterSessionStore,
+  type SessionCookieOptions,
+  type SessionRecord,
+  type SessionStore,
 } from "@reckona/mreact-router/session";
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
 import { redirect } from "@reckona/mreact-router";
@@ -18,15 +18,8 @@ export {
   getSession,
   rotateRouterSession as rotateSession,
 };
-
-/** Configures the session cookie name, lifetime, path, same-site mode, and secure flag. */
-export type SessionCookieOptions = RouterSessionCookieOptions;
-
-/** Represents a stored session id, timestamps, and user-defined session data. */
-export type SessionRecord<TData = unknown> = RouterSessionRecord<TData>;
-
-/** Persists, reads, and deletes session records by id. */
-export type SessionStore<TData = unknown> = RouterSessionStore<TData>;
+/** Re-exports router session cookie, record, and store types for auth helpers. */
+export type { SessionCookieOptions, SessionRecord, SessionStore };
 
 /** Identifies the script element that carries serialized auth claims during hydration. */
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";

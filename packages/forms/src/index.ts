@@ -531,14 +531,11 @@ function cloneValues<TValues extends FormValues>(values: TValues): TValues {
   return { ...values };
 }
 
-/** Infers the input value type accepted by a Standard Schema. */
-export type { InferStandardSchemaInput } from "./standard-schema.js";
-
-/** Infers the output value type produced by a Standard Schema. */
-export type { InferStandardSchemaOutput } from "./standard-schema.js";
-
-/** Represents a Standard Schema v1 validator accepted by form schema options. */
-export type { StandardSchemaV1 } from "./standard-schema.js";
-
+/** Re-exports Standard Schema types used by form schema options. */
+export type {
+  InferStandardSchemaInput,
+  InferStandardSchemaOutput,
+  StandardSchemaV1,
+} from "./standard-schema.js";
 /** Validates an unknown value with a Standard Schema and normalizes the result shape. */
 export { validateStandardSchema } from "./standard-schema.js";

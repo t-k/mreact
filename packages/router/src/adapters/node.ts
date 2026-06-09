@@ -13,12 +13,10 @@ import {
   type AppRouterLogger,
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
-import type { RouterInstrumentation as BaseRouterInstrumentation } from "../trace.js";
+import type { RouterInstrumentation } from "../trace.js";
 
-/**
- * Registers optional hooks for Node router request, middleware, and route instrumentation.
- */
-export type RouterInstrumentation = BaseRouterInstrumentation;
+/** Re-exports router instrumentation hooks for Node handlers. */
+export type { RouterInstrumentation } from "../trace.js";
 import {
   renderBuiltAppRequest,
   resolveRequestHost,

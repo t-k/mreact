@@ -92,12 +92,12 @@
       "default": "./dist/stream-list.js"
     },
     "./internal/native-escape": {
-      "types": "./dist/internal/native-escape.d.ts",
-      "default": "./dist/internal/native-escape.js"
+      "types": "./dist/native-escape.d.ts",
+      "default": "./dist/native-escape.js"
     },
     "./internal/session": {
-      "types": "./dist/internal/session.d.ts",
-      "default": "./dist/internal/session.js"
+      "types": "./dist/session.d.ts",
+      "default": "./dist/session.js"
     }
   },
   "publishConfig": {

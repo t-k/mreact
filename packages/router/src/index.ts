@@ -6,6 +6,7 @@ export { defineMessages, detectLocale } from "./i18n.js";
 export { defer, isDeferredLoaderData } from "./deferred.js";
 export type { DeferredLoaderData } from "./deferred.js";
 export { definePage } from "./types.js";
+export { Link, linkProps } from "./link.js";
 export { href } from "./typed-routes.js";
 export { parseMultipartStream } from "./multipart.js";
 export type {
@@ -14,6 +15,7 @@ export type {
   MultipartStreamParseOptions,
   MultipartStreamPart,
 } from "./multipart.js";
+export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
 export { getRouterRuntimeCacheStats } from "./runtime-cache.js";
 export type { HttpUpgradeHandler } from "./upgrade.js";
 export {
@@ -35,15 +37,7 @@ export {
 } from "./navigation.js";
 export type { ParseSchema } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
-import {
-  Link as LinkInternal,
-  linkProps as linkPropsInternal,
-} from "./link.js";
-import {
-  getNavigationState as getNavigationStateInternal,
-  subscribeNavigationState as subscribeNavigationStateInternal,
-} from "./navigation-state.js";
-import { getServerRuntimeState as getServerRuntimeStateInternal } from "./runtime-state.js";
+export { getServerRuntimeState } from "./runtime-state.js";
 import {
   createMemorySessionStore as createMemorySessionStoreInternal,
   createSession as createSessionInternal,
@@ -57,44 +51,6 @@ import type {
   SessionRecord as SessionRecordInternal,
   SessionStore as SessionStoreInternal,
 } from "./session.js";
-import type {
-  ConcreteLinkHrefGuard as LinkConcreteLinkHrefGuard,
-  LinkChild as LinkChildInternal,
-  LinkHref as LinkHrefInternal,
-  LinkOptions as LinkOptionsInternal,
-  LinkPrefetch as LinkPrefetchInternal,
-  LinkProps as LinkPropsInternal,
-  LinkScroll as LinkScrollInternal,
-  LinkTransition as LinkTransitionInternal,
-  RegisteredAppRoutePath as RegisteredAppRoutePathInternal,
-  TrustedLinkHtml as TrustedLinkHtmlInternal,
-} from "./link.js";
-import type {
-  AppRouterNavigationState as AppRouterNavigationStateInternal,
-  AppRouterNavigationStateListener as AppRouterNavigationStateListenerInternal,
-  AppRouterNavigationType as AppRouterNavigationTypeInternal,
-} from "./navigation-state.js";
-
-/**
- * Renders an app-router anchor with typed `href` support and navigation runtime attributes.
- */
-export const Link = LinkInternal;
-/**
- * Converts router link options into anchor attributes consumed by the client navigation runtime.
- */
-export const linkProps = linkPropsInternal;
-/**
- * Reads the current client navigation state snapshot.
- */
-export const getNavigationState = getNavigationStateInternal;
-/**
- * Subscribes to app-router client navigation state changes.
- */
-export const subscribeNavigationState = subscribeNavigationStateInternal;
-/**
- * Reads or initializes shared server runtime state stored on `globalThis`.
- */
-export const getServerRuntimeState = getServerRuntimeStateInternal;
 
 /**
  * Creates a deprecated process-local session store alias.
@@ -202,64 +158,29 @@ export type {
 } from "./cache.js";
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
-export type { AppRouteDeclarations } from "./link.js";
-/**
- * Produces a compile-time error shape when a typed Link receives an unresolved route pattern.
- */
-export type ConcreteLinkHrefGuard<Href extends string> = LinkConcreteLinkHrefGuard<Href>;
-/**
- * Represents children accepted by the app-router Link renderer.
- */
-export type LinkChild = LinkChildInternal;
-/**
- * Resolves the accepted `href` type for app-router links.
- */
-export type LinkHref = LinkHrefInternal;
-/**
- * Configures client navigation behavior for a router link.
- */
-export type LinkOptions<Href extends string = LinkHref> = LinkOptionsInternal<Href>;
-/**
- * Selects when the app router should prefetch a linked route.
- */
-export type LinkPrefetch = LinkPrefetchInternal;
-/**
- * Combines router link options with anchor attributes and children.
- */
-export type LinkProps<Href extends string = LinkHref> = LinkPropsInternal<Href>;
-/**
- * Extracts registered route paths from `AppRouteDeclarations`.
- */
-export type RegisteredAppRoutePath = RegisteredAppRoutePathInternal;
-/**
- * Controls scroll restoration behavior after client navigation.
- */
-export type LinkScroll = LinkScrollInternal;
-/**
- * Controls whether client navigation participates in view transitions.
- */
-export type LinkTransition = LinkTransitionInternal;
-/**
- * Wraps pre-escaped HTML that can be used as trusted link children.
- */
-export type TrustedLinkHtml = TrustedLinkHtmlInternal;
-/**
- * Describes the latest client-side app-router navigation state.
- */
-export type AppRouterNavigationState = AppRouterNavigationStateInternal;
-/**
- * Receives app-router client navigation state updates.
- */
-export type AppRouterNavigationStateListener = AppRouterNavigationStateListenerInternal;
-/**
- * Names the client navigation operation that produced the current router state.
- */
-export type AppRouterNavigationType = AppRouterNavigationTypeInternal;
+/** Re-exports link types used by the router root entrypoint. */
+export type {
+  AppRouteDeclarations,
+  ConcreteLinkHrefGuard,
+  LinkChild,
+  LinkHref,
+  LinkOptions,
+  LinkPrefetch,
+  LinkProps,
+  RegisteredAppRoutePath,
+  LinkScroll,
+  LinkTransition,
+  TrustedLinkHtml,
+} from "./link.js";
+/** Re-exports client navigation state types used by the router root entrypoint. */
+export type {
+  AppRouterNavigationState,
+  AppRouterNavigationStateListener,
+  AppRouterNavigationType,
+} from "./navigation-state.js";
 export type { RouterRuntimeCacheStat } from "./runtime-cache.js";
-/**
- * Configures the deprecated router memory session store alias.
- */
-export type MemorySessionStoreOptions = MemorySessionStoreOptionsInternal;
+/** Configures the deprecated router memory session store alias. */
+export type { MemorySessionStoreOptionsInternal as MemorySessionStoreOptions };
 export type {
   AppRouterCspInlineNonceWarningLogEvent,
   AppRouterLogError,

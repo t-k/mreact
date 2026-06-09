@@ -6,14 +6,8 @@ import {
   type DevtoolsEvent,
 } from "./index.js";
 
-/** Re-exports the devtools event bus used by the overlay. */
-export type { Devtools } from "./index.js";
-
-/** Re-exports the devtools event shape rendered by the overlay. */
-export type { DevtoolsEvent } from "./index.js";
-
-/** Re-exports the devtools listener callback used by overlay subscriptions. */
-export type { DevtoolsListener } from "./index.js";
+/** Re-exports devtools types used by the overlay. */
+export type { Devtools, DevtoolsEvent, DevtoolsListener } from "./index.js";
 
 /** Names the event category tabs displayed by the devtools overlay. */
 export type DevtoolsOverlayTab = "query" | "reactive" | "router";
