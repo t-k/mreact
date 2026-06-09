@@ -116,6 +116,8 @@ describe("docs-site example contract", () => {
     expect(nav).not.toContain("Production Checklist");
     expect(nav).not.toContain('slug: "deployments/production-checklist"');
     expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
+    expect(nav).toContain('{ text: "Full API Reference", slug: "api" }');
+    expect(nav.indexOf('slug: "reference/api"')).toBeLessThan(nav.indexOf('slug: "api"'));
     expect(nav).not.toContain("Generated API");
     expect(nav.indexOf('slug: "deployments/host-policy-and-proxies"')).toBeLessThan(
       nav.indexOf('slug: "deployments/source-maps"'),
@@ -191,7 +193,7 @@ describe("docs-site example contract", () => {
 
   test("restores the sidebar position and marks the current page in the browser", async () => {
     const sidebarScript = await readDocsSite("public/docs-sidebar.js");
-    const window = new Window({ url: "https://docs.example.com/reference/api/" });
+    const window = new Window({ url: "https://docs.example.com/api/" });
 
     try {
       window.document.body.innerHTML = `
@@ -199,6 +201,7 @@ describe("docs-site example contract", () => {
           <a class="nav-link" href="/">Overview</a>
           <a class="nav-link" href="/guides/app-router/">App Router</a>
           <a class="nav-link" href="/reference/api/">API Reference</a>
+          <a class="nav-link" href="/api/">Full API Reference</a>
         </aside>
       `;
       window.sessionStorage.setItem("mreact:docs:sidebar-scroll", "240");
@@ -209,7 +212,7 @@ describe("docs-site example contract", () => {
       });
 
       const sidebar = window.document.querySelector(".site-sidebar");
-      const currentLink = window.document.querySelector('a[href="/reference/api/"]');
+      const currentLink = window.document.querySelector('a[href="/api/"]');
 
       expect(sidebar).toBeInstanceOf(window.HTMLElement);
       expect(sidebar?.scrollTop).toBe(240);
