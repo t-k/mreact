@@ -54,10 +54,27 @@ export interface AppMetadataRoute {
 // @public (undocumented)
 export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
 
-// Warning: (ae-forgotten-export) The symbol "HasRouteParams" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
-export type AppRouteHref<Path extends `/${string}`> = HasRouteParams<Path> extends true ? (options: DynamicHrefOptions<Path>) => string : (options?: StaticHrefOptions) => string;
+export interface AppRouteDeclarations {
+}
+
+// @public (undocumented)
+export type AppRouteHref<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never ? (options?: StaticHrefOptions) => string : (options: DynamicHrefOptions<Path>) => string;
+
+// @public (undocumented)
+export type AppRouteLinkHref<Path extends `/${string}`> = `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
+
+// @public (undocumented)
+export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
+
+// @public (undocumented)
+export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/" ? "/" : Path extends `/${infer Segments}` ? `/${AppRouteLinkSegments<Segments>}` : never;
+
+// @public (undocumented)
+export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}` ? string : Segment;
+
+// @public (undocumented)
+export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}` ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}` : AppRouteLinkSegment<Segments>;
 
 // @public (undocumented)
 export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
@@ -442,6 +459,11 @@ export interface CloudflarePagesArtifactManifest {
 }
 
 // @public (undocumented)
+export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never] ? unknown : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`> ? {
+    readonly __mreactRoutePatternHrefError__: never;
+} : unknown;
+
+// @public (undocumented)
 export interface CookieOptions {
     // (undocumented)
     domain?: string;
@@ -575,6 +597,8 @@ export const getSession: typeof getSession_2;
 // @public (undocumented)
 export function headers(request: Request): Headers;
 
+// Warning: (ae-forgotten-export) The symbol "HasRouteParams" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
 export function href<const Path extends `/${string}`>(path: Path, ...args: HasRouteParams<Path> extends true ? [options: DynamicHrefOptions<Path>] : [options?: StaticHrefOptions]): string;
 
@@ -642,18 +666,21 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
 }
 
 // @public (undocumented)
-export function Link(props: LinkProps): ReactCompatElement;
+export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
 // @public (undocumented)
-export function Link(sink: HtmlSink, props: LinkProps): void;
+export function Link(sink: HtmlSink, props: LinkProps<string>): void;
 
 // @public (undocumented)
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
 
 // @public (undocumented)
-export interface LinkOptions {
+export type LinkHref = [RegisteredAppRoutePath] extends [never] ? string : AppRouteLinkHref<RegisteredAppRoutePath>;
+
+// @public (undocumented)
+export interface LinkOptions<Href extends string = LinkHref> {
     // (undocumented)
-    href: string;
+    href: Href;
     // (undocumented)
     prefetch?: LinkPrefetch | undefined;
     // (undocumented)
@@ -668,7 +695,7 @@ export interface LinkOptions {
 export type LinkPrefetch = "intent" | "viewport" | "none" | false;
 
 // @public (undocumented)
-export interface LinkProps extends LinkOptions {
+export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
     // (undocumented)
     [attribute: string]: unknown;
     // (undocumented)
@@ -676,7 +703,7 @@ export interface LinkProps extends LinkOptions {
 }
 
 // @public (undocumented)
-export function linkProps(options: LinkOptions): Record<string, string>;
+export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
 // @public (undocumented)
 export type LinkScroll = "top" | "preserve";
@@ -964,6 +991,11 @@ export function redirect303(location: string, init?: ResponseInit): Response;
 
 // @public (undocumented)
 export function redirectExternal(location: string, options?: RedirectOptions): never;
+
+// @public (undocumented)
+export type RegisteredAppRoutePath = AppRouteDeclarations extends {
+    readonly path: infer Path;
+} ? Extract<Path, `/${string}`> : never;
 
 // @public (undocumented)
 export function renderAppRequest(options: RenderAppRequestOptions): Promise<Response>;

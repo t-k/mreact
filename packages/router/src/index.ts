@@ -87,6 +87,11 @@ export type {
 export type { ServerActionContext } from "./actions.js";
 export type {
   AppRouteHref,
+  AppRouteLinkHref,
+  AppRouteLinkHrefSuffix,
+  AppRouteLinkPathname,
+  AppRouteLinkSegment,
+  AppRouteLinkSegments,
   DynamicHrefOptions,
   RouteParamsFor,
   RouteSearchParams,
@@ -144,10 +149,14 @@ export type {
 export type { CookieOptions } from "./cookies.js";
 export type { AppRouterImportPolicy } from "./import-policy.js";
 export type {
+  AppRouteDeclarations,
+  ConcreteLinkHrefGuard,
   LinkChild,
+  LinkHref,
   LinkOptions,
   LinkPrefetch,
   LinkProps,
+  RegisteredAppRoutePath,
   LinkScroll,
   LinkTransition,
   TrustedLinkHtml,

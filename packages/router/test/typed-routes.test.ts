@@ -41,7 +41,9 @@ describe("typed routes", () => {
     const declarations = await readFile(join(outDir, "routes.d.ts"), "utf8");
 
     expect(declarations).toContain('export type AppRoutePath = "/" | "/users/:id/files/:...path";');
-    expect(declarations).toContain("export declare const routes");
+    expect(declarations).not.toContain("export declare const routes");
+    expect(declarations).toContain('declare module "@reckona/mreact-router/link"');
+    expect(declarations).toContain("readonly path: AppRoutePath;");
     expect(declarations).toContain('"/users/:id/files/:...path"');
   });
 });

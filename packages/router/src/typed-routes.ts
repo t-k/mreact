@@ -6,9 +6,12 @@ export type RouteSearchParams = Record<
 
 export type RouteParamsFor<Path extends `/${string}`> = Simplify<ExtractRouteParams<Path>>;
 
-export type AppRouteHref<Path extends `/${string}`> = HasRouteParams<Path> extends true
-  ? (options: DynamicHrefOptions<Path>) => string
-  : (options?: StaticHrefOptions) => string;
+export type AppRouteHref<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never
+  ? (options?: StaticHrefOptions) => string
+  : (options: DynamicHrefOptions<Path>) => string;
+
+export type AppRouteLinkHref<Path extends `/${string}`> =
+  `${AppRouteLinkPathname<Path>}${AppRouteLinkHrefSuffix}`;
 
 export interface StaticHrefOptions {
   hash?: string | undefined;
@@ -34,6 +37,22 @@ type SegmentRouteParam<Segment extends string> = Segment extends `:...${infer Na
     : Record<never, never>;
 
 type Simplify<T> = { [Key in keyof T]: T[Key] } & {};
+
+export type AppRouteLinkHrefSuffix = "" | `?${string}` | `#${string}` | `?${string}#${string}`;
+
+export type AppRouteLinkPathname<Path extends `/${string}`> = Path extends "/"
+  ? "/"
+  : Path extends `/${infer Segments}`
+    ? `/${AppRouteLinkSegments<Segments>}`
+    : never;
+
+export type AppRouteLinkSegments<Segments extends string> = Segments extends `${infer Segment}/${infer Rest}`
+  ? `${AppRouteLinkSegment<Segment>}/${AppRouteLinkSegments<Rest>}`
+  : AppRouteLinkSegment<Segments>;
+
+export type AppRouteLinkSegment<Segment extends string> = Segment extends `:${string}`
+  ? string
+  : Segment;
 
 export function href<const Path extends `/${string}`>(
   path: Path,

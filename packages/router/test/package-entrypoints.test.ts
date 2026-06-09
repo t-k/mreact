@@ -561,6 +561,103 @@ options.serverActionReferencesByFile = new Map([["page.tsx", [reference]]]);
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  test("generated route declarations type-check Link href without a runtime helper import", () => {
+    const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-link-routes-"));
+    const routesFilename = join(directory, "routes.d.ts");
+    const filename = join(directory, "link-routes.tsx");
+
+    writeFileSync(
+      routesFilename,
+      `
+export type AppRoutePath = "/" | "/docs" | "/users/:id" | "/files/:...path";
+
+declare module "@reckona/mreact-router/link" {
+  interface AppRouteDeclarations {
+    readonly path: AppRoutePath;
+  }
+}
+`,
+    );
+    writeFileSync(
+      filename,
+      `
+import { Link } from "@reckona/mreact-router/link";
+
+export function Navigation() {
+  return (
+    <nav>
+      <Link href="/">Home</Link>
+      <Link href="/docs">Docs</Link>
+      <Link href="/users/ada?tab=files#top">User</Link>
+      <Link href="/files/notes/day-1">Files</Link>
+      {/* @ts-expect-error unknown generated routes are rejected. */}
+      <Link href="/missing">Missing</Link>
+      {/* @ts-expect-error Link href expects a concrete URL, not a route pattern. */}
+      <Link href="/users/:id">Pattern</Link>
+    </nav>
+  );
+}
+`,
+    );
+
+    try {
+      const program = ts.createProgram({
+        rootNames: [
+          routesFilename,
+          filename,
+          join(process.cwd(), "packages", "router", "src", "link.ts"),
+        ],
+        options: {
+          baseUrl: process.cwd(),
+          jsx: ts.JsxEmit.ReactJSX,
+          jsxImportSource: "@reckona/mreact",
+          ignoreDeprecations: "6.0",
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          noEmit: true,
+          paths: {
+            "@reckona/mreact": ["packages/react/src/index.ts"],
+            "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+            "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+            "@reckona/mreact-router": ["packages/router/src/index.ts"],
+            "@reckona/mreact-router/link": ["packages/router/src/link.ts"],
+            "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
+            "@reckona/mreact-compat/jsx-runtime": [
+              "packages/react-compat/src/jsx-runtime.ts",
+            ],
+            "@reckona/mreact-compat/jsx-dev-runtime": [
+              "packages/react-compat/src/jsx-dev-runtime.ts",
+            ],
+            "@reckona/mreact-compiler": ["packages/compiler/src/index.ts"],
+            "@reckona/mreact-devtools": ["packages/devtools/src/index.ts"],
+            "@reckona/mreact-query": ["packages/query/src/index.ts"],
+            "@reckona/mreact-reactive-core": ["packages/reactive-core/src/index.ts"],
+            "@reckona/mreact-reactive-core/runtime-state": [
+              "packages/reactive-core/src/runtime-state-public.ts",
+            ],
+            "@reckona/mreact-server": ["packages/server/src/index.ts"],
+            "@reckona/mreact-shared": ["packages/shared/src/index.ts"],
+            "@reckona/mreact-shared/compiler-contract": [
+              "packages/shared/src/compiler-contract.ts",
+            ],
+            "@reckona/mreact-shared/html-escape": ["packages/shared/src/html-escape.ts"],
+            "@reckona/mreact-shared/url-safety": ["packages/shared/src/url-safety.ts"],
+          },
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+          types: [],
+        },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) => flattenDiagnostic(diagnostic));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  }, 10_000);
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.151 - 2026-06-09
+
+### Fixed
+
+- Fixed generated `.mreact/routes.d.ts` so it no longer declares a non-existent runtime `routes` value. The generated declaration now registers discovered route paths with the router `Link` types, allowing concrete `<Link href="...">` values to be checked without importing a generated runtime module.
+
 ## 0.0.150 - 2026-06-09
 
 ### Added
@@ -69,7 +75,7 @@
 
 ### Added
 
-- Added typed route URL helpers for the App Router: `href()` builds encoded internal route URLs from patterns such as `"/users/:id"` and build output now writes `.mreact/routes.d.ts` with the discovered route path union and typed route map.
+- Added typed route URL helpers for the App Router: `href()` builds encoded internal route URLs from patterns such as `"/users/:id"` and build output now writes `.mreact/routes.d.ts` with the discovered route path union.
 
 ### Changed
 

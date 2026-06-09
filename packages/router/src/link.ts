@@ -2,6 +2,14 @@ import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html
 import type { HtmlSink } from "@reckona/mreact-shared/compiler-contract";
 import type { ReactCompatElement, ReactCompatNode } from "@reckona/mreact-compat";
 import { safeUrlAttributeValue } from "@reckona/mreact-shared/url-safety";
+import type { AppRouteLinkHref } from "./typed-routes.js";
+export type {
+  AppRouteLinkHref,
+  AppRouteLinkHrefSuffix,
+  AppRouteLinkPathname,
+  AppRouteLinkSegment,
+  AppRouteLinkSegments,
+} from "./typed-routes.js";
 
 const TRUSTED_LINK_HTML = Symbol.for("modular.react.router.trusted_link_html");
 
@@ -10,21 +18,28 @@ export type LinkScroll = "top" | "preserve";
 export type LinkTransition = "auto" | "none" | false;
 export type TrustedLinkHtml = { readonly [TRUSTED_LINK_HTML]: string };
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
+export interface AppRouteDeclarations {}
+export type RegisteredAppRoutePath = AppRouteDeclarations extends { readonly path: infer Path }
+  ? Extract<Path, `/${string}`>
+  : never;
+export type LinkHref = [RegisteredAppRoutePath] extends [never]
+  ? string
+  : AppRouteLinkHref<RegisteredAppRoutePath>;
 
-export interface LinkOptions {
-  href: string;
+export interface LinkOptions<Href extends string = LinkHref> {
+  href: Href;
   prefetch?: LinkPrefetch | undefined;
   reload?: boolean | undefined;
   scroll?: LinkScroll | undefined;
   transition?: LinkTransition | undefined;
 }
 
-export interface LinkProps extends LinkOptions {
+export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<Href> {
   children?: LinkChild;
   [attribute: string]: unknown;
 }
 
-export function linkProps(options: LinkOptions): Record<string, string> {
+export function linkProps(options: LinkOptions<string>): Record<string, string> {
   return {
     href: options.href,
     ...(options.prefetch === undefined || options.prefetch === "intent"
@@ -40,11 +55,19 @@ export function linkProps(options: LinkOptions): Record<string, string> {
   };
 }
 
-export function Link(props: LinkProps): ReactCompatElement;
-export function Link(sink: HtmlSink, props: LinkProps): void;
+export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath] extends [never]
+  ? unknown
+  : Href extends Extract<RegisteredAppRoutePath, `${string}:${string}`>
+    ? { readonly __mreactRoutePatternHrefError__: never }
+    : unknown;
+
+export function Link<const Href extends LinkHref>(
+  props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>,
+): ReactCompatElement;
+export function Link(sink: HtmlSink, props: LinkProps<string>): void;
 export function Link(
-  sinkOrProps: HtmlSink | LinkProps,
-  maybeProps?: LinkProps,
+  sinkOrProps: HtmlSink | LinkProps<string>,
+  maybeProps?: LinkProps<string>,
 ): ReactCompatElement | string | HTMLAnchorElement | void {
   if (maybeProps !== undefined) {
     (sinkOrProps as HtmlSink).append(renderLinkString(maybeProps));
@@ -60,7 +83,7 @@ export function Link(
   [TRUSTED_LINK_HTML]: html,
 });
 
-function renderLink(props: LinkProps): string | HTMLAnchorElement {
+function renderLink(props: LinkProps<string>): string | HTMLAnchorElement {
   const { href, prefetch, reload, scroll, transition, ...rest } = props;
   const propsWithLinkAttrs = {
     ...rest,
@@ -74,7 +97,7 @@ function renderLink(props: LinkProps): string | HTMLAnchorElement {
   return renderAnchorString(propsWithLinkAttrs);
 }
 
-function renderLinkString(props: LinkProps): string {
+function renderLinkString(props: LinkProps<string>): string {
   const { href, prefetch, reload, scroll, transition, ...rest } = props;
 
   return renderAnchorString({
