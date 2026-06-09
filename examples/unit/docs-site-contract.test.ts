@@ -470,6 +470,42 @@ describe("docs-site example contract", () => {
     expect(ssg).toContain("[Container and Cloud Run](/deployments/container-and-cloud-run/)");
   });
 
+  test("documents server-only and client-exposed environment variables", async () => {
+    const envGuide = await readDocsSite("src/content/guides/environment-variables.mdx");
+
+    expect(envGuide).toContain("## Server-only values");
+    expect(envGuide).toContain("readRequiredEnv");
+    expect(envGuide).toContain("process.env.DATABASE_URL");
+    expect(envGuide).toContain("server-only module");
+    expect(envGuide).toContain(".client.tsx");
+    expect(envGuide).toContain("## Platform runtime values");
+    expect(envGuide).toContain("Cloudflare");
+    expect(envGuide).toContain("context.env");
+    expect(envGuide).toContain("type Env");
+    expect(envGuide).toContain("## Expose safe values to the client");
+    expect(envGuide).toContain("PUBLIC_");
+    expect(envGuide).toContain("not a security boundary");
+    expect(envGuide).toContain("GTM container ID");
+    expect(envGuide).toContain("props.data.publicConfig");
+    expect(envGuide).toContain("## Build-time values");
+    expect(envGuide).toContain("define");
+    expect(envGuide).toContain("import.meta.env");
+    expect(envGuide).toContain("build-time snapshot");
+    expect(envGuide).toContain("## Deployment variables");
+    expect(envGuide).toContain("PORT");
+    expect(envGuide).toContain("HOST");
+    expect(envGuide).toContain("MREACT_ROUTER_HOST_POLICY");
+    expect(envGuide).toContain("MREACT_ROUTER_ALLOWED_HOSTS");
+    expect(envGuide).toContain("MREACT_SERVER_ACTION_SECRET");
+    expect(envGuide).toContain("[Data Loading](/guides/data-loading/)");
+    expect(envGuide).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(envGuide).toContain("[Middleware](/guides/middleware/)");
+    expect(envGuide).toContain("[External Scripts](/guides/external-scripts/)");
+    expect(envGuide).toContain("[Container and Cloud Run](/deployments/container-and-cloud-run/)");
+    expect(envGuide).toContain("[Cloudflare](/deployments/cloudflare/)");
+    expect(envGuide).toContain("[Environment Variables Reference](/reference/environment-variables/)");
+  });
+
   test("renders readable document lists and the latest benchmark run", async () => {
     const css = await readDocsSite("src/app/globals.css");
     const benchmarks = await readDocsSite("src/content/benchmarks.mdx");

@@ -3,34 +3,135 @@ export const description = "How to read server-only values, expose safe client v
 
 # Environment variables
 
-Environment variables have two different jobs in an Mreact app: runtime configuration that only server code can read, and public values that are intentionally bundled or serialized for the browser.
+Environment variables have two different jobs in an Mreact app: server-only runtime configuration and public values that you intentionally expose to the browser. Keep those paths explicit.
 
 ## Server-only values
 
 Read secrets in server-only code paths such as loaders, middleware, route handlers, server actions, and `generateMetadata`. Good examples are database URLs, OIDC client secrets, private API tokens, session secrets, and webhook secrets.
 
+Keep secret reads in a server-only module. Do not import that module from `.client.tsx` files or route-level client code.
+
 ```ts
-export async function loader() {
-  const databaseUrl = process.env.DATABASE_URL;
-  if (databaseUrl === undefined) {
-    throw new Error("DATABASE_URL is required.");
+// src/lib/server-env.ts
+export function readRequiredEnv(name: string): string {
+  const value = process.env[name];
+
+  if (value === undefined || value === "") {
+    throw new Error(`${name} is required.`);
   }
-  return { ready: true };
+
+  return value;
 }
 ```
 
-Do not import a module that reads secrets from `.client.tsx` files or route-level client code.
+```tsx
+// src/app/users/page.tsx
+import { readRequiredEnv } from "../../lib/server-env";
 
-## Client-exposed values
+export async function loader() {
+  const databaseUrl = readRequiredEnv("DATABASE_URL");
 
-Only expose values that are safe for every visitor to see, such as a public API origin, GTM container ID, or browser Sentry DSN. Pass them through page data, metadata, or a small client config object. Use a clear prefix in your app convention, for example `PUBLIC_`, even though the prefix itself is not a security boundary.
+  return {
+    ready: databaseUrl.length > 0,
+  };
+}
+```
 
-## Build-time versus runtime
+`process.env.DATABASE_URL` is available to server runtime code on Node-based deployments. It must not be serialized into page data, metadata, or client config unless the value is intentionally public.
 
-Values read by Vite `define` or client transforms are build-time values. Values read inside server request handlers are runtime values. Cloudflare bindings, Lambda environment variables, and container environment variables should be handled as runtime inputs when the value can differ between deployments.
+## Platform runtime values
 
-## Deployment differences
+Runtime environment values depend on the deployment target. Containers, Cloud Run, and AWS Lambda usually expose values through `process.env`. Cloudflare Workers expose bindings and secrets through `context.env`.
 
-- Containers and Cloud Run inject process environment variables into the Node server.
-- AWS Lambda exposes configured environment variables to the handler process.
-- Cloudflare Workers should prefer `context.env` bindings inside loaders and route handlers for Worker-specific resources and secrets.
+```tsx
+import type { LoaderContext } from "@reckona/mreact-router";
+
+type Env = {
+  readonly USERS_API_ORIGIN: string;
+};
+
+export async function loader(
+  context: LoaderContext<{ id: string }> & { env: Env },
+) {
+  const response = await fetch(
+    `${context.env.USERS_API_ORIGIN}/users/${context.params.id}`,
+  );
+
+  return {
+    user: await response.json(),
+  };
+}
+```
+
+Use `context.env` for Cloudflare-specific resources such as KV, R2, D1, Queues, Durable Objects, and Worker secrets. Use `process.env` for Node, Lambda, and container runtime configuration.
+
+## Expose safe values to the client
+
+Only expose values that are safe for every visitor to see, such as a public API origin, GTM container ID, or browser Sentry DSN. A `PUBLIC_` prefix is a useful application convention, but it is not a security boundary by itself.
+
+Pass public values through page data or a deliberately shaped config object. That makes the exposure easy to review.
+
+```tsx
+interface PublicConfig {
+  apiOrigin: string;
+  gtmContainerId?: string;
+}
+
+export async function loader(): Promise<{ publicConfig: PublicConfig }> {
+  return {
+    publicConfig: {
+      apiOrigin: readRequiredEnv("PUBLIC_API_ORIGIN"),
+      gtmContainerId: process.env.PUBLIC_GTM_CONTAINER_ID,
+    },
+  };
+}
+
+export default function Page(props: { data: { publicConfig: PublicConfig } }) {
+  return (
+    <main data-api-origin={props.data.publicConfig.apiOrigin}>
+      <h1>Users</h1>
+    </main>
+  );
+}
+```
+
+Client code can read `props.data.publicConfig` after the route payload includes it. Never include database URLs, signing secrets, private API tokens, or session secrets in that object.
+
+## Build-time values
+
+Values read by Vite `define`, `import.meta.env`, or client transforms are build-time values. They are fixed when the app is built and are not a good fit for deployment-specific runtime secrets.
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.APP_VERSION ?? "dev"),
+  },
+});
+```
+
+Build-time values are also a build-time snapshot for SSG and static export. If a public value should differ between staging and production without rebuilding, pass it from the server runtime instead of baking it into the client bundle.
+
+## Deployment variables
+
+Mreact also reads framework-level deployment variables:
+
+- `PORT`: TCP port for the Node server.
+- `HOST`: bind address for local or container servers.
+- `MREACT_ROUTER_HOST_POLICY`: host header policy.
+- `MREACT_ROUTER_ALLOWED_HOSTS`: comma-separated allowed hosts for strict host policy.
+- `MREACT_SERVER_ACTION_SECRET`: signing secret for server action tokens.
+
+Application-specific variables belong to the app. Document them with the deployment, keep secrets server-only, and expose public values intentionally.
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [HTTP APIs](/guides/http-apis/)
+- [Middleware](/guides/middleware/)
+- [External Scripts](/guides/external-scripts/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Environment Variables Reference](/reference/environment-variables/)
