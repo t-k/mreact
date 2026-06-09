@@ -528,6 +528,46 @@ describe("docs-site example contract", () => {
     expect(serverActions).toContain("[Route Module Exports](/reference/route-module-exports/)");
   });
 
+  test("documents route HTML cache, runtime cache control, invalidation, and shared cache adapters", async () => {
+    const cacheGuide = await readDocsSite("src/content/guides/cache-and-revalidation.mdx");
+
+    expect(cacheGuide).toContain("## What Mreact caches");
+    expect(cacheGuide).toContain("route HTML");
+    expect(cacheGuide).toContain("not a loader data cache");
+    expect(cacheGuide).toContain("per-request QueryClient");
+    expect(cacheGuide).toContain("Authorization");
+    expect(cacheGuide).toContain("Set-Cookie");
+    expect(cacheGuide).toContain("private, no-store");
+    expect(cacheGuide).toContain("## Cache route HTML with revalidate");
+    expect(cacheGuide).toContain("export const revalidate = 60");
+    expect(cacheGuide).toContain("s-maxage=60, stale-while-revalidate");
+    expect(cacheGuide).toContain("export const revalidate = 0");
+    expect(cacheGuide).toContain("no-store");
+    expect(cacheGuide).toContain("## Set cache policy at runtime");
+    expect(cacheGuide).toContain("cacheControl({");
+    expect(cacheGuide).toContain("maxAge");
+    expect(cacheGuide).toContain("sMaxAge");
+    expect(cacheGuide).toContain("staleWhileRevalidate");
+    expect(cacheGuide).toContain("## Invalidate after mutations");
+    expect(cacheGuide).toContain("revalidatePath(\"/notes\")");
+    expect(cacheGuide).toContain("x-mreact-revalidate");
+    expect(cacheGuide).toContain("## Client navigation cache");
+    expect(cacheGuide).toContain("prefetched navigation HTML");
+    expect(cacheGuide).toContain("does not yet attach refreshed route payloads to the server action response");
+    expect(cacheGuide).toContain("## Use a shared route cache");
+    expect(cacheGuide).toContain("createMemoryRouteCache");
+    expect(cacheGuide).toContain("AppRouterCache");
+    expect(cacheGuide).toContain("deleteByPath(path)");
+    expect(cacheGuide).toContain("routeCache");
+    expect(cacheGuide).toContain("## Avoid accidental caching");
+    expect(cacheGuide).toContain("Host is not part of the route cache key");
+    expect(cacheGuide).toContain("[Data Loading](/guides/data-loading/)");
+    expect(cacheGuide).toContain("[Server Actions](/guides/server-actions/)");
+    expect(cacheGuide).toContain("[Cache API](/reference/cache-api/)");
+    expect(cacheGuide).toContain("[Cache Policy](/deployments/cache-policy/)");
+    expect(cacheGuide).toContain("[Production Checklist](/deployments/production-checklist/)");
+  });
+
   test("documents SSG prerendering and static export constraints", async () => {
     const ssg = await readDocsSite("src/content/guides/ssg-and-static-export.mdx");
 

@@ -1,8 +1,153 @@
 export const title = "Cache and Revalidation";
-export const description = "Route HTML cache, cacheControl, revalidate, and client navigation invalidation.";
+export const description = "Route HTML cache, runtime cache policy, mutation invalidation, navigation cache, and shared cache storage.";
 
 # Cache and revalidation
 
-Use `export const revalidate = N` for route-level cached HTML. Use `cacheControl()` when policy depends on request data. Use `revalidatePath()` after mutations to invalidate cached route HTML.
+Mreact's route cache stores rendered route HTML. Use it when a page can safely reuse the same server-rendered document across requests, and invalidate it when mutations change the data behind that document.
 
-Shared route cache storage is opt-in through `sMaxAge`.
+## What Mreact caches
+
+The route cache stores route HTML responses. It is not a loader data cache, not a database cache, and not the per-request QueryClient described in [Data Loading](/guides/data-loading/). A loader still runs when the route HTML is not in cache or when the cache entry has expired.
+
+Mreact avoids shared route caching for credentialed requests. Requests with `Authorization` or `Cookie` headers bypass route cache reads, and responses with `Set-Cookie` are returned with `private, no-store` instead of being stored in the shared route cache.
+
+Use route cache for public or safely shared pages. Keep user-specific pages, session-dependent pages, and admin pages uncached unless you have a route-specific private caching strategy outside Mreact's shared route cache.
+
+## Cache route HTML with revalidate
+
+Export `revalidate` from a page module when the route can reuse rendered HTML for a fixed number of seconds.
+
+```tsx
+// src/app/news/page.tsx
+export const revalidate = 60;
+
+export async function loader() {
+  return {
+    articles: await listLatestArticles(),
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+export default function Page(props: { data: Awaited<ReturnType<typeof loader>> }) {
+  return (
+    <main>
+      <h1>News</h1>
+      <p>Generated at {props.data.generatedAt}</p>
+    </main>
+  );
+}
+```
+
+`export const revalidate = 60` emits `Cache-Control: s-maxage=60, stale-while-revalidate` and stores the rendered HTML in the route cache for 60 seconds. `export const revalidate = 0` emits `Cache-Control: no-store`.
+
+## Set cache policy at runtime
+
+Use `cacheControl()` when the policy depends on request data, loaded content, or application rules. Call it during an app router request, usually inside the loader.
+
+```tsx
+// src/app/products/$id/page.tsx
+import { cacheControl, type LoaderContext } from "@reckona/mreact-router";
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  const product = await findProduct(context.params.id);
+
+  if (product.preview) {
+    cacheControl({ maxAge: 0 });
+  } else {
+    cacheControl({
+      maxAge: 30,
+      sMaxAge: 300,
+      staleWhileRevalidate: 900,
+    });
+  }
+
+  return { product };
+}
+```
+
+`maxAge` is for browser-facing `Cache-Control`. `sMaxAge` enables shared route cache storage and shared-cache headers. `staleWhileRevalidate` can be `true` or a number of seconds. Calling `cacheControl()` without at least one directive throws.
+
+## Invalidate after mutations
+
+Call `revalidatePath()` after a mutation changes data used by cached route HTML. Server actions are the most common place to do this, but any server-side app router code running in a route cache context can invalidate a path.
+
+```ts
+// src/app/notes/actions.ts
+"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export async function saveNote(formData: FormData) {
+  await createNote({
+    text: String(formData.get("text") ?? ""),
+  });
+
+  revalidatePath("/notes");
+}
+```
+
+When a server action revalidates paths, Mreact deletes matching route cache entries and sends an `x-mreact-revalidate` header so the browser navigation runtime can drop matching client-side navigation cache entries too.
+
+## Client navigation cache
+
+The browser navigation runtime can keep prefetched navigation HTML so link-based navigation can avoid a request. After successful non-GET/HEAD mutations, Mreact clears affected cached navigation HTML so the next navigation re-requests loader-rendered pages.
+
+For server actions today, revalidation can invalidate the cached route HTML and the client navigation cache. Mreact does not yet attach refreshed route payloads to the server action response, so unsupported flows can still need a follow-up navigation or data request after the mutation response.
+
+## Use a shared route cache
+
+The default route cache is an in-memory process cache. It is useful for local development and single-process deployments. Multi-instance deployments should pass a shared `routeCache` adapter to the server, adapter, or custom handler.
+
+```ts
+import type { AppRouterCache, AppRouterCacheEntry } from "@reckona/mreact-router";
+
+export function createKvRouteCache(kv: RouteCacheKv): AppRouterCache {
+  return {
+    async get(key: string, now = Date.now()): Promise<AppRouterCacheEntry | undefined> {
+      const entry = await kv.get<AppRouterCacheEntry>(key);
+      if (entry === undefined || entry.expiresAt <= now) {
+        return undefined;
+      }
+
+      return entry;
+    },
+    async set(key: string, entry: AppRouterCacheEntry): Promise<void> {
+      await kv.set(key, entry, {
+        ttlSeconds: Math.max(1, Math.ceil((entry.expiresAt - Date.now()) / 1000)),
+      });
+    },
+    async deleteByPath(path: string): Promise<void> {
+      await kv.deleteByPath(path);
+    },
+  };
+}
+```
+
+```ts
+import { createMemoryRouteCache, startServer } from "@reckona/mreact-router";
+
+startServer({
+  outDir: ".mreact",
+  routeCache: createMemoryRouteCache({ maxEntries: 5_000 }),
+});
+```
+
+The adapter must support `get(key)`, `set(key, entry)`, and `deleteByPath(path)`. `deleteByPath(path)` is what makes `revalidatePath("/notes")` remove every cached variant for that route path.
+
+## Avoid accidental caching
+
+Do not cache pages that depend on cookies, bearer tokens, per-user headers, or request-specific secrets. Mreact will skip shared route cache for requests with `Authorization` or `Cookie`, and it will avoid storing responses that set cookies, but the safest design is to keep auth/session pages uncached.
+
+Host is not part of the route cache key. The cache key is scoped by app directory, route path, request pathname, and search params. If one process serves multiple virtual hosts, keep host separation in the reverse proxy, CDN, or custom cache adapter.
+
+`cacheControl()` must run during an app router request. Do not call it at module top level or from unrelated background jobs.
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [Server Actions](/guides/server-actions/)
+- [HTTP APIs](/guides/http-apis/)
+- [Cache API](/reference/cache-api/)
+- [Cache Policy](/deployments/cache-policy/)
+- [CDN Assets](/deployments/cdn-assets/)
+- [Production Checklist](/deployments/production-checklist/)
