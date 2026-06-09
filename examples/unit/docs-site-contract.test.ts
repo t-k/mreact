@@ -557,6 +557,56 @@ describe("docs-site example contract", () => {
     expect(externalScripts).toContain("[Metadata and Head](/guides/metadata-and-head/)");
   });
 
+  test("documents file upload choices, server action CSRF, route handler CSRF, validation, storage names, and size limits", async () => {
+    const uploads = await readDocsSite("src/content/guides/file-uploads-and-csrf.mdx");
+
+    expect(uploads).toContain("## Choose an upload path");
+    expect(uploads).toContain("Server Actions");
+    expect(uploads).toContain("HTTP APIs");
+    expect(uploads).toContain("route handlers");
+    expect(uploads).toContain("presigned upload");
+    expect(uploads).toContain("## Server action uploads");
+    expect(uploads).toContain('encType="multipart/form-data"');
+    expect(uploads).toContain("action={uploadAvatar}");
+    expect(uploads).toContain("FormData");
+    expect(uploads).toContain("File");
+    expect(uploads).toContain("ServerActionContext");
+    expect(uploads).toContain("context.cookies.get");
+    expect(uploads).toContain("CSRF-bound action reference");
+    expect(uploads).toContain("mreact.csrf");
+    expect(uploads).toContain("__mreact_csrf");
+    expect(uploads).toContain("maxBodyBytes");
+    expect(uploads).toContain("maxFormFields");
+    expect(uploads).toContain("## HTTP API uploads and CSRF");
+    expect(uploads).toContain("src/app/api/uploads/route.ts");
+    expect(uploads).toContain("request.formData()");
+    expect(uploads).toContain("verifyCsrfToken");
+    expect(uploads).toContain("SameSite=Lax");
+    expect(uploads).toContain("double-submit");
+    expect(uploads).toContain("## Validate files before storage");
+    expect(uploads).toContain("file.size");
+    expect(uploads).toContain("file.type");
+    expect(uploads).toContain("magic bytes");
+    expect(uploads).toContain("Do not trust");
+    expect(uploads).toContain("## Storage-safe filenames");
+    expect(uploads).toContain("crypto.randomUUID()");
+    expect(uploads).toContain("path traversal");
+    expect(uploads).toContain("original filename");
+    expect(uploads).toContain("## Streaming and direct-to-storage uploads");
+    expect(uploads).toContain("bounded multipart");
+    expect(uploads).toContain("presigned");
+    expect(uploads).toContain("Cloudflare R2");
+    expect(uploads).toContain("S3");
+    expect(uploads).toContain("## Security checklist");
+    expect(uploads).toContain("authentication");
+    expect(uploads).toContain("authorization");
+    expect(uploads).toContain("virus scanning");
+    expect(uploads).toContain("[Server Actions](/guides/server-actions/)");
+    expect(uploads).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(uploads).toContain("[Forms and Validation](/guides/forms-and-validation/)");
+    expect(uploads).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
+  });
+
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 

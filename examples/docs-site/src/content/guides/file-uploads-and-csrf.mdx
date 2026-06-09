@@ -1,8 +1,204 @@
 export const title = "File Uploads and CSRF";
-export const description = "Handle multipart uploads, bounded streams, filenames, and CSRF for cookie-authenticated forms.";
+export const description = "Handle multipart upload forms, server action CSRF, HTTP API CSRF, validation, safe filenames, and direct storage uploads.";
 
 # File uploads and CSRF
 
-Plain multipart route handlers do not automatically get the server-action CSRF guard. For cookie-authenticated upload forms, render a CSRF field and validate it before consuming large file parts.
+File uploads are mutating requests. Treat them like account changes or payments: authenticate the user, authorize the target object, limit the request body, validate the file before storage, and apply CSRF protection for cookie-authenticated browser submissions.
 
-Use bounded multipart parsing and storage-safe filenames when accepting user uploads.
+## Choose an upload path
+
+Use Server Actions for same-site forms rendered by Mreact. The form action stays in the server graph, and Mreact-rendered action forms include a CSRF-bound action reference plus the `mreact.csrf` cookie and `__mreact_csrf` hidden field.
+
+Use HTTP APIs and route handlers when a client component calls `fetch()`, a mobile client uploads a file, an external tool needs a stable endpoint, or you are building a custom upload protocol. Plain route handlers do not get the server-action CSRF guard automatically, so the handler must verify authentication, authorization, CSRF, request size, and file shape itself.
+
+Use a presigned upload when files are large or when the runtime should not buffer multipart bodies. A server action or HTTP API can authenticate the user, verify CSRF, mint a short-lived presigned upload URL, and record metadata after the browser uploads directly to storage.
+
+## Server action uploads
+
+For an upload form that lives inside your Mreact UI, keep the mutation as a server action. The action receives the submitted `FormData` and can use `ServerActionContext` to read cookies, headers, and the original request.
+
+```ts
+// src/app/account/actions.ts
+"use server";
+
+import { revalidatePath, type ServerActionContext } from "@reckona/mreact-router";
+import { requireUserId } from "../../lib/session.js";
+import { storeAvatar } from "../../lib/storage.js";
+
+const maxAvatarBytes = 2 * 1024 * 1024;
+const allowedAvatarTypes = new Set(["image/jpeg", "image/png"]);
+
+export async function uploadAvatar(
+  formData: FormData,
+  context: ServerActionContext,
+): Promise<void> {
+  const session = context.cookies.get("session");
+  const userId = await requireUserId(session);
+  const value = formData.get("avatar");
+
+  if (!(value instanceof File)) {
+    return;
+  }
+
+  if (value.size > maxAvatarBytes || !allowedAvatarTypes.has(value.type)) {
+    return;
+  }
+
+  await storeAvatar({
+    bytes: await value.arrayBuffer(),
+    contentType: value.type,
+    key: storageNameForUpload(value),
+    userId,
+  });
+
+  revalidatePath("/account");
+}
+```
+
+```tsx
+// src/app/account/page.tsx
+import { uploadAvatar } from "./actions.js";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Account</h1>
+      <form method="post" encType="multipart/form-data" action={uploadAvatar}>
+        <label>
+          Avatar
+          <input
+            type="file"
+            name="avatar"
+            accept="image/png,image/jpeg"
+            required
+          />
+        </label>
+        <button type="submit">Upload avatar</button>
+      </form>
+    </main>
+  );
+}
+```
+
+Server action requests reject `Content-Length` values over `10 MiB` by default and reject forms with more than `1,000` fields by default. Configure tighter limits for upload actions that only accept a small number of fields.
+
+```ts
+startServer({
+  outDir: ".mreact",
+  serverActions: {
+    maxBodyBytes: 8 * 1024 * 1024,
+    maxFormFields: 50,
+  },
+});
+```
+
+The server action CSRF guard applies to rendered server action forms, not to arbitrary multipart endpoints. If you expose `/api/uploads/`, treat it as an HTTP API and add explicit CSRF verification.
+
+## HTTP API uploads and CSRF
+
+Plain multipart route handlers are useful for custom upload clients, but they must protect themselves. For cookie-authenticated browser uploads, use a double-submit token or a server-stored token and verify it before trusting the mutation. `SameSite=Lax` cookies reduce ambient cross-site submission risk, but they are not a complete substitute for an anti-CSRF token on unsafe methods.
+
+```ts
+// src/app/api/uploads/route.ts
+import { textError } from "@reckona/mreact-router";
+import { requireUser } from "../../../lib/session.js";
+import { storeUpload } from "../../../lib/storage.js";
+import { verifyCsrfToken } from "../../../lib/csrf.js";
+
+export async function POST(request: Request): Promise<Response> {
+  const user = await requireUser(request);
+
+  if (user === undefined) {
+    return textError("Unauthorized.", 401);
+  }
+
+  if (!verifyCsrfToken(request)) {
+    return textError("Invalid CSRF token.", 403);
+  }
+
+  const formData = await request.formData();
+  const value = formData.get("file");
+
+  if (!(value instanceof File)) {
+    return textError("File is required.", 422);
+  }
+
+  if (value.size > 8 * 1024 * 1024) {
+    return textError("File is too large.", 413);
+  }
+
+  const upload = await storeUpload({
+    bytes: await value.arrayBuffer(),
+    contentType: value.type,
+    key: storageNameForUpload(value),
+    ownerId: user.id,
+  });
+
+  return Response.json({ upload });
+}
+```
+
+For small uploads, a CSRF token in a header such as `x-csrf-token` works well because the handler can check it before calling `request.formData()`. If the CSRF token is inside the multipart body, enforce a request-size limit before parsing and keep the form bounded. For large files, prefer a bounded multipart parser or a presigned flow so the app can reject unauthenticated or CSRF-invalid requests before it consumes the file stream.
+
+## Validate files before storage
+
+Do not trust `file.name`, `file.type`, the file extension, or the browser `accept` attribute. They are useful hints, not security boundaries.
+
+Validate `file.size` before reading the whole file into memory. Allowlist `file.type`, but also inspect magic bytes or decode the file with a trusted library when the stored file type matters. For public downloads, consider virus scanning, image re-encoding, quarantine, or a manual review queue before serving user-provided content.
+
+Keep validation close to the upload boundary. The storage layer should receive a validated content type, a generated storage key, the authenticated owner, and any metadata that downstream pages are allowed to display.
+
+## Storage-safe filenames
+
+Never use the original filename as the storage key. User-controlled names can contain confusing Unicode, path traversal such as `../`, executable-looking names, collisions, or object-key tricks that make later authorization checks hard to reason about.
+
+Generate the object name with `crypto.randomUUID()` and derive only a safe extension from validated content type. Keep the original filename as escaped display metadata if the product needs to show it later.
+
+```ts
+function storageNameForUpload(file: File): string {
+  const extension = extensionForContentType(file.type);
+  return `uploads/${crypto.randomUUID()}${extension}`;
+}
+
+function extensionForContentType(contentType: string): string {
+  switch (contentType) {
+    case "image/jpeg":
+      return ".jpg";
+    case "image/png":
+      return ".png";
+    default:
+      return "";
+  }
+}
+```
+
+Serve user uploads with explicit `Content-Type` and `Content-Disposition` headers. For high-risk content, use a separate upload host or CDN origin instead of serving arbitrary user files from the same origin that holds privileged cookies.
+
+## Streaming and direct-to-storage uploads
+
+The examples above use `request.formData()` and `FormData`, which is the simplest path for manageable files. It is not the right tool for every workload because some runtimes buffer multipart bodies.
+
+For large files, use a bounded multipart parser that enforces per-file and total request limits while streaming, or move the bytes out of your app server with a presigned upload. A common flow is: the browser asks your Server Action or HTTP API for permission, the server authenticates the user and validates CSRF, the server returns a short-lived presigned URL for S3 or Cloudflare R2, the browser uploads directly to storage, and the server verifies the completed object before attaching it to application data.
+
+Keep presigned URLs short-lived, scoped to one object key, restricted to the expected content type and size where the storage provider supports it, and unusable for overwriting objects the user does not own.
+
+## Security checklist
+
+- Require authentication before accepting uploads.
+- Check authorization for the target object, folder, account, or tenant.
+- Add CSRF protection to every cookie-authenticated browser upload that is not a Mreact-rendered server action form.
+- Reject unsupported methods and content types early.
+- Enforce a body size limit and a per-file size limit.
+- Validate `file.size`, `file.type`, extension policy, and magic bytes before storage.
+- Generate storage keys; keep the original filename only as display metadata.
+- Use virus scanning, quarantine, or re-encoding for untrusted files that other users can download.
+- Serve uploads from a controlled host with explicit response headers and no secret-bearing cookies.
+- Log upload decisions without logging file contents or sensitive metadata.
+
+## Related pages
+
+- [Server Actions](/guides/server-actions/)
+- [HTTP APIs](/guides/http-apis/)
+- [Forms and Validation](/guides/forms-and-validation/)
+- [Cookies and Sessions](/guides/cookies-and-sessions/)
+- [Authentication](/guides/authentication/)
