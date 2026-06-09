@@ -226,6 +226,33 @@ describe("docs-site example contract", () => {
     expect(routing).toContain("[Link and Navigation](/guides/link-and-navigation/)");
   });
 
+  test("documents layouts, named slots, templates, and slot rules", async () => {
+    const layouts = await readDocsSite("src/content/guides/layouts-and-slots.mdx");
+
+    expect(layouts).toContain("## Basic layout");
+    expect(layouts).toContain("export default function RootLayout()");
+    expect(layouts).toContain("<Slot />");
+    expect(layouts).toContain("## Nested layouts");
+    expect(layouts).toContain("src/app/docs/layout.tsx");
+    expect(layouts).toContain("wrapped by both layouts");
+    expect(layouts).toContain("## Named slots");
+    expect(layouts).toContain('<Slot name="aside" />');
+    expect(layouts).toContain("function DocsAside()");
+    expect(layouts).toContain("export const slots = {");
+    expect(layouts).toContain("aside: DocsAside");
+    expect(layouts).toContain("## Templates");
+    expect(layouts).toContain("template.tsx");
+    expect(layouts).toContain("remounts on navigation");
+    expect(layouts).toContain("## Slot rules");
+    expect(layouts).toContain("default slot");
+    expect(layouts).toContain("named slot");
+    expect(layouts).toContain("@reckona/mreact-router/app-router-globals");
+    expect(layouts).toContain("[Routing](/guides/routing/)");
+    expect(layouts).toContain("[App Router](/guides/app-router/)");
+    expect(layouts).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+    expect(layouts).toContain("[Server and Client Model](/guides/server-and-client-model/)");
+  });
+
   test("documents Link prefetch controls and configures syntax highlighting", async () => {
     const linkGuide = await readDocsSite("src/content/guides/link-and-navigation.mdx");
     const contentRegistry = await readDocsSite("src/content-registry.ts");

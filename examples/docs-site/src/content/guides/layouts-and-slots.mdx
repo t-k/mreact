@@ -3,12 +3,142 @@ export const description = "How layouts wrap child routes and named slots fill l
 
 # Layouts and slots
 
-Layouts wrap child routes with `<Slot />`. Named slots let a page fill a specific region of a parent layout without turning the whole tree into client code.
+Layouts wrap a route subtree. Use them for persistent shells such as document structure, navigation, sidebars, and providers.
+
+## Basic layout
+
+A `layout.tsx` file renders around every matching child route. Put the child route where `<Slot />` appears.
 
 ```tsx
-export default function DocsLayout() {
-  return <section><aside><Slot name="aside" /></aside><article><Slot /></article></section>;
+export default function RootLayout() {
+  return (
+    <html lang="en">
+      <body>
+        <header>
+          <a href="/">Mreact Docs</a>
+        </header>
+        <Slot />
+      </body>
+    </html>
+  );
 }
 ```
 
-Use layouts for persistent shells and templates for route changes that should remount.
+Root layouts usually define the document shell. Nested layouts usually define section shells, navigation, sidebars, or providers for one part of the app.
+
+## Nested layouts
+
+Layouts compose from the root down to the page. A page at `src/app/docs/page.tsx` is wrapped by `src/app/layout.tsx` and then by `src/app/docs/layout.tsx`.
+
+```text
+src/app/
+  layout.tsx
+  docs/
+    layout.tsx
+    page.tsx
+```
+
+```tsx
+export default function DocsLayout() {
+  return (
+    <section class="docs-layout">
+      <aside>
+        <nav>
+          <a href="/docs/">Overview</a>
+          <a href="/docs/routing/">Routing</a>
+        </nav>
+      </aside>
+      <article>
+        <Slot />
+      </article>
+    </section>
+  );
+}
+```
+
+The rendered page is wrapped by both layouts. Use this when a section needs stable surrounding UI while child pages change.
+
+## Named slots
+
+Named slots let a child page fill a specific region of a parent layout. They are useful for sidebars, page actions, secondary navigation, or contextual help.
+
+In the layout, render a named slot where the page-specific region should appear.
+
+```tsx
+export default function DocsLayout() {
+  return (
+    <section class="docs-layout">
+      <aside>
+        <nav>
+          <a href="/docs/">Overview</a>
+          <a href="/docs/routing/">Routing</a>
+        </nav>
+        <Slot name="aside" />
+      </aside>
+      <article>
+        <Slot />
+      </article>
+    </section>
+  );
+}
+```
+
+In the page, export a `slots` record. The key matches the slot name and the value is the component rendered in that slot.
+
+```tsx
+function DocsAside() {
+  return (
+    <aside>
+      <h2>Tip</h2>
+      <p>Read the routing guide after this page.</p>
+    </aside>
+  );
+}
+
+export const slots = {
+  aside: DocsAside,
+};
+
+export default function DocsPage() {
+  return (
+    <main>
+      <h1>Docs</h1>
+      <p>This content fills the default slot.</p>
+    </main>
+  );
+}
+```
+
+Each page under the layout can provide a different `aside` component. A page that does not export `slots.aside` leaves `<Slot name="aside" />` empty.
+
+## Templates
+
+A `template.tsx` file is composed like a layout, but it remounts on navigation. Use layouts for persistent shells and use templates for route-local shells that should reset, such as entry animations, focus scopes, or per-page state.
+
+```tsx
+export default function DocsTemplate() {
+  return (
+    <article data-template="docs">
+      <Slot />
+    </article>
+  );
+}
+```
+
+The composition order is layout, then template, then page.
+
+## Slot rules
+
+- `<Slot />` renders the default slot for the matched child route.
+- `<Slot name="aside" />` renders a named slot.
+- `export const slots = { aside: DocsAside }` fills the matching named slot.
+- A missing named slot stays empty.
+- A page can still render its normal body while also exporting named slots.
+- TypeScript apps should include `@reckona/mreact-router/app-router-globals` in `compilerOptions.types` so route files can use `<Slot />` without a local import.
+
+## Related pages
+
+- [Routing](/guides/routing/)
+- [App Router](/guides/app-router/)
+- [Metadata and Head](/guides/metadata-and-head/)
+- [Server and Client Model](/guides/server-and-client-model/)
