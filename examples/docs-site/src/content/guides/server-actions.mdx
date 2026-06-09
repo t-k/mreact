@@ -13,7 +13,11 @@ Server actions pair well with route cache invalidation because the mutation and 
 
 ## Create a form action
 
-Put the action in a server-side module and import it into the route that renders the form. The action receives the submitted `FormData`.
+Put the action in a server-side module and import it into the route that renders the form. The action receives the submitted `FormData`, and imported functions passed to `<form action={...}>` are inferred as server actions. A top-level `"use server"` directive is still supported and is a clear marker that exported functions in that module are server actions.
+
+## Refresh a list after creating a record
+
+A common pattern is to render the list with a page loader, submit a small form, invalidate the list route, and let the current route refresh. This keeps the page useful before and after the mutation instead of showing a form-only example.
 
 ```ts
 // src/app/notes/actions.ts
@@ -36,12 +40,32 @@ export async function saveNote(formData: FormData): Promise<void> {
 
 ```tsx
 // src/app/notes/page.tsx
+import { definePage } from "@reckona/mreact-router";
+import { Link } from "@reckona/mreact-router/link";
+import { listNotes } from "../../lib/notes.js";
 import { saveNote } from "./actions.js";
 
-export default function Page() {
+export async function loader() {
+  return {
+    notes: await listNotes(),
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  const notes = props.data.notes;
+
   return (
     <main>
       <h1>Notes</h1>
+
+      <ul>
+        {notes.map((note) => (
+          <li key={note.id}>
+            <Link href={`/notes/${note.id}`}>{note.title}</Link>
+          </li>
+        ))}
+      </ul>
+
       <form method="post" action={saveNote}>
         <label>
           Note
@@ -51,10 +75,38 @@ export default function Page() {
       </form>
     </main>
   );
+});
+```
+
+When the enhanced browser runtime handles this form, `revalidatePath("/notes")` can refresh the visible list with a single-flight mutation response. Without the enhanced runtime, the same action still invalidates the route cache and falls back to normal navigation behavior.
+
+## Redirect to the created record
+
+If the next useful screen is the new note detail page, create the record and redirect to it from the action. Revalidate both the list route and the detail route when both pages can be cached.
+
+```ts
+// src/app/notes/actions.ts
+"use server";
+
+import { redirect, revalidatePath } from "@reckona/mreact-router";
+import { createNote } from "../../lib/notes.js";
+
+export async function saveNote(formData: FormData): Promise<void> {
+  const text = String(formData.get("text") ?? "").trim();
+
+  if (text.length === 0) {
+    return;
+  }
+
+  const note = await createNote({ text });
+
+  revalidatePath("/notes");
+  revalidatePath(`/notes/${note.id}`);
+  redirect(`/notes/${note.id}`);
 }
 ```
 
-Imported functions passed to `<form action={...}>` are inferred as server actions. A top-level `"use server"` directive is still supported and is a clear marker that exported functions in that module are server actions.
+The browser follows the redirect to the detail route. That is different from the current-route single-flight refresh: use single-flight when the user should stay on the same route with fresh HTML, and use `redirect()` when the mutation should move the user to another route.
 
 ## Use request context
 
@@ -112,7 +164,7 @@ Use the same path users navigate to. If the mutation affects multiple cached pag
 
 ## Single-flight mutation responses
 
-Browser-enhanced server action forms can update the visible route with a single-flight mutation response. When an action mutates data, calls `revalidatePath()` for the current route, and completes through the normal form redirect flow, Mreact can render fresh navigation HTML into the action POST response and mark it with `x-mreact-action-single-flight`.
+Browser-enhanced server action forms can update the visible route with a single-flight mutation response. When an action mutates data, calls `revalidatePath()` for the current route, and returns normally, Mreact can render fresh navigation HTML into the action POST response and mark it with `x-mreact-action-single-flight`.
 
 The browser applies that HTML to the current route without a second GET. Mreact still sends `x-mreact-revalidate` so unsupported flows can fall back to client navigation cache invalidation, a redirect, or a follow-up navigation.
 
