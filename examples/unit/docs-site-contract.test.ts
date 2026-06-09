@@ -616,6 +616,55 @@ describe("docs-site example contract", () => {
     expect(cookiesGuide).toContain("[Cache and Revalidation](/guides/cache-and-revalidation/)");
   });
 
+  test("documents authentication guards, authorization policies, client claims, and API behavior", async () => {
+    const authGuide = await readDocsSite("src/content/guides/authentication.mdx");
+
+    expect(authGuide).toContain("## What authentication covers");
+    expect(authGuide).toContain("@reckona/mreact-auth");
+    expect(authGuide).toContain("does not provide a login provider");
+    expect(authGuide).toContain("session store");
+    expect(authGuide).toContain("## Configure auth defaults");
+    expect(authGuide).toContain("configureAuth({");
+    expect(authGuide).toContain('redirectTo: "/login"');
+    expect(authGuide).toContain('forbiddenTo: "/forbidden"');
+    expect(authGuide).toContain("serializeClaims");
+    expect(authGuide).toContain("## Create sessions during login");
+    expect(authGuide).toContain("createSession(response, sessions");
+    expect(authGuide).toContain("roles");
+    expect(authGuide).toContain("permissions");
+    expect(authGuide).toContain("## Require a signed-in user");
+    expect(authGuide).toContain("requireSession(context.request, sessions)");
+    expect(authGuide).toContain("redirects to the configured login route");
+    expect(authGuide).toContain("## Require roles and permissions");
+    expect(authGuide).toContain("requireRole(context.request, sessions, \"admin\")");
+    expect(authGuide).toContain("requirePermission(");
+    expect(authGuide).toContain("\"billing:read\"");
+    expect(authGuide).toContain("\"invoice:export\"");
+    expect(authGuide).toContain('mode: "all"');
+    expect(authGuide).toContain("## Render different UI without redirecting");
+    expect(authGuide).toContain("tryRequireRole");
+    expect(authGuide).toContain("tryRequirePermission");
+    expect(authGuide).toContain("missing-session");
+    expect(authGuide).toContain("## Expose safe claims to client code");
+    expect(authGuide).toContain('export const auth = "include-claims"');
+    expect(authGuide).toContain("getSessionClaims");
+    expect(authGuide).toContain("Do not expose access tokens");
+    expect(authGuide).toContain("## Use auth in HTTP APIs");
+    expect(authGuide).toContain("authorizeSession");
+    expect(authGuide).toContain("Response.json({ error: \"Unauthorized\" }, { status: 401 })");
+    expect(authGuide).toContain("Response.json({ error: \"Forbidden\" }, { status: 403 })");
+    expect(authGuide).toContain("## Production checklist");
+    expect(authGuide).toContain("durable session store");
+    expect(authGuide).toContain("CSRF");
+    expect(authGuide).toContain("Never rely on client-only checks");
+    expect(authGuide).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
+    expect(authGuide).toContain("[Middleware](/guides/middleware/)");
+    expect(authGuide).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(authGuide).toContain("[Server Actions](/guides/server-actions/)");
+    expect(authGuide).toContain("[Environment Variables](/guides/environment-variables/)");
+    expect(authGuide).toContain("[Production Checklist](/deployments/production-checklist/)");
+  });
+
   test("documents SSG prerendering and static export constraints", async () => {
     const ssg = await readDocsSite("src/content/guides/ssg-and-static-export.mdx");
 

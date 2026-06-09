@@ -3,6 +3,244 @@ export const description = "Auth guards, roles, permissions, sessions, and produ
 
 # Authentication
 
-`@reckona/mreact-auth` builds on router sessions and adds role and permission guards. Use `requireSession`, `requireRole`, or `requirePermission` inside loaders and route handlers.
+`@reckona/mreact-auth` builds on Mreact router sessions and gives application code a small set of authentication and authorization helpers. Use this page after you understand the session lifecycle in [Cookies and Sessions](/guides/cookies-and-sessions/).
 
-The examples use memory sessions and demo credentials. Production apps should replace those with a durable store, real password or OIDC flow, rotation policy, and deployment-managed secrets.
+## What authentication covers
+
+`@reckona/mreact-auth` does not provide a login provider, password database, OAuth flow, or OIDC client. It assumes your app has already verified the user and can write session data into a session store.
+
+The package adds guard helpers for signed-in users, roles, permissions, redirects, and browser-safe claims handoff. The session cookie and `SessionStore` still come from the router session model.
+
+## Configure auth defaults
+
+Configure redirect targets and the browser claims serializer once in server-side application setup. The defaults are `/login` for missing sessions and `/forbidden` for failed authorization.
+
+```ts
+// src/app/auth-config.ts
+import { configureAuth } from "@reckona/mreact-auth";
+
+configureAuth({
+  redirectTo: "/login",
+  forbiddenTo: "/forbidden",
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null) {
+      return undefined;
+    }
+
+    const session = data as {
+      permissions?: readonly string[];
+      roles?: readonly string[];
+      userId?: string;
+    };
+
+    return {
+      permissions: session.permissions,
+      roles: session.roles,
+      userId: session.userId,
+    };
+  },
+});
+```
+
+Import this setup from a server-loaded module such as the root layout or another app bootstrap file. Keep `serializeClaims` conservative because its return value can be embedded in HTML when a page opts in.
+
+## Create sessions during login
+
+Authentication starts after your app has verified the credentials or identity provider result. Store the user id plus the authorization claims your guards need on later requests.
+
+```ts
+// src/app/api/login/route.ts
+import { createSession } from "@reckona/mreact-auth";
+import { redirect303, textError } from "@reckona/mreact-router";
+import { sessions } from "../../session-store";
+
+export async function POST(request: Request): Promise<Response> {
+  const form = await request.formData();
+  const user = await verifyCredentials(form);
+
+  if (user === undefined) {
+    return textError("Invalid credentials.", 401);
+  }
+
+  const response = redirect303("/account");
+
+  await createSession(response, sessions, {
+    userId: user.id,
+    roles: user.roles,
+    permissions: user.permissions,
+  });
+
+  return response;
+}
+```
+
+See [Cookies and Sessions](/guides/cookies-and-sessions/) for session store setup, logout, rotation, and cookie defaults.
+
+## Require a signed-in user
+
+Use `requireSession()` when a page or route handler should only run for signed-in users. Missing sessions redirect to the configured login route, so the code after the guard can treat the session as present.
+
+```tsx
+// src/app/account/page.tsx
+import { requireSession } from "@reckona/mreact-auth";
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+import { sessions } from "../session-store";
+
+export async function loader(context: LoaderContext) {
+  const session = await requireSession(context.request, sessions);
+
+  return {
+    userId: session.data.userId,
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  return <h1>Account {props.data.userId}</h1>;
+});
+```
+
+`requireSession(context.request, sessions)` redirects to the configured login route when the request has no valid session. Use `getSession()` instead when you want to branch manually.
+
+## Require roles and permissions
+
+Use `requireRole()` and `requirePermission()` for pages that need authorization policy, not just identity. A missing session redirects to `redirectTo`; an authenticated but unauthorized session redirects to `forbiddenTo`.
+
+```tsx
+// src/app/admin/page.tsx
+import { requirePermission, requireRole } from "@reckona/mreact-auth";
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+import { sessions } from "../session-store";
+
+export async function loader(context: LoaderContext) {
+  await requireRole(context.request, sessions, "admin");
+  await requirePermission(
+    context.request,
+    sessions,
+    ["billing:read", "invoice:export"],
+    { mode: "all" },
+  );
+
+  return {
+    invoices: await listInvoices(),
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  return <InvoiceTable invoices={props.data.invoices} />;
+});
+```
+
+The requirement can be one string or an array. The default `mode` is `"any"` for arrays. Use `mode: "all"` when the session must contain every listed role or permission.
+
+## Render different UI without redirecting
+
+Use `tryRequireRole()` and `tryRequirePermission()` when the page should render for everyone but show different actions to authorized users. These helpers return an authorization result instead of redirecting.
+
+```tsx
+// src/app/projects/$id/page.tsx
+import { tryRequirePermission } from "@reckona/mreact-auth";
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+import { sessions } from "../../session-store";
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  const project = await loadProject(context.params.id);
+  const editAccess = await tryRequirePermission(
+    context.request,
+    sessions,
+    "project:write",
+  );
+
+  return {
+    project,
+    canEdit: editAccess.authorized,
+    authReason: editAccess.authorized ? undefined : editAccess.reason,
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  return (
+    <main>
+      <h1>{props.data.project.name}</h1>
+      {props.data.canEdit ? <EditProjectButton /> : null}
+      {props.data.authReason === "missing-session" ? <SignInPrompt /> : null}
+    </main>
+  );
+});
+```
+
+`tryRequireRole()` has the same shape and is useful for optional role-gated controls. Possible failure reasons are `missing-session`, `missing-role`, and `missing-permission`.
+
+## Expose safe claims to client code
+
+Session data stays server-only unless the route opts in to claims handoff. Add `export const auth = "include-claims"` when client code on that page needs roles, permissions, or another intentionally public field.
+
+```tsx
+// src/app/admin/page.tsx
+import { getSessionClaims } from "@reckona/mreact-auth";
+
+export const auth = "include-claims";
+
+export default function Page() {
+  const claims = getSessionClaims<{
+    permissions?: readonly string[];
+    roles?: readonly string[];
+    userId?: string;
+  }>();
+
+  return <p>Roles: {claims?.roles?.join(", ") ?? "none"}</p>;
+}
+```
+
+The default serializer includes `roles` and `permissions`. Use `configureAuth({ serializeClaims })` to expose additional browser-safe fields such as a public user id. Do not expose access tokens, refresh tokens, provider profiles, internal audit data, or anything that should remain server-only.
+
+## Use auth in HTTP APIs
+
+Redirecting guards are convenient for pages, but JSON APIs often need explicit `401` and `403` responses. For APIs, read the session and authorize it directly when the caller expects JSON.
+
+```ts
+// src/app/api/billing/route.ts
+import { authorizeSession, getSession } from "@reckona/mreact-auth";
+import { sessions } from "../../session-store";
+
+export async function GET(request: Request): Promise<Response> {
+  const session = await getSession(request, sessions);
+
+  if (session === undefined) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const authorization = authorizeSession(session.data, {
+    permissions: ["billing:read"],
+  });
+
+  if (!authorization.authorized) {
+    return Response.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  return Response.json({
+    invoices: await listInvoices(session.data.userId),
+  });
+}
+```
+
+Use `requireSession()`, `requireRole()`, or `requirePermission()` in route handlers only when redirect responses are the desired HTTP behavior.
+
+## Production checklist
+
+- Use a durable session store. Memory sessions are for local development and demos.
+- Replace demo credentials with a real password flow, passkey flow, OAuth/OIDC flow, or another audited identity provider integration.
+- Protect cookie-authenticated mutations from CSRF. Server actions have framework CSRF checks; ordinary HTTP APIs need their own policy.
+- Keep auth secrets in deployment-managed environment variables and never serialize them through `serializeClaims`.
+- Keep browser claims small and non-sensitive. Roles, permissions, and public ids are usually enough.
+- Never rely on client-only checks. Enforce authorization in loaders, route handlers, server actions, and server-side mutation code.
+- Return `private, no-store` for personalized pages and APIs that depend on user identity.
+- Rotate or refresh sessions after login and privilege changes, and revoke sessions on logout.
+
+## Related pages
+
+- [Cookies and Sessions](/guides/cookies-and-sessions/)
+- [Middleware](/guides/middleware/)
+- [HTTP APIs](/guides/http-apis/)
+- [Server Actions](/guides/server-actions/)
+- [Environment Variables](/guides/environment-variables/)
+- [Production Checklist](/deployments/production-checklist/)
