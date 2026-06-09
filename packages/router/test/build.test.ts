@@ -442,6 +442,72 @@ describe("mreact app build", () => {
     );
   });
 
+  test("injects source-root directives before production route CSS plugins transform Tailwind entries", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-tailwind-source-"));
+    const appDir = join(rootDir, "src", "app");
+    const stylesDir = join(rootDir, "src", "styles");
+    const outDir = join(rootDir, ".mreact");
+    const transformedCssSources: string[] = [];
+    await mkdir(appDir, { recursive: true });
+    await mkdir(stylesDir, { recursive: true });
+    await writeFile(
+      join(stylesDir, "global.css"),
+      `@import "tailwindcss";
+`,
+    );
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `import "../styles/global.css";
+
+export default function Layout(props) {
+  return <html><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main className="fixture-production-utility">Styled</main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["src"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-tailwind-like-production-source-scan",
+            enforce: "pre" as const,
+            transform(code, id) {
+              if (!id.includes("global.css")) {
+                return;
+              }
+
+              transformedCssSources.push(code);
+              return code.includes("@source ")
+                ? ".fixture-production-utility { color: rgb(12 34 56); }"
+                : ".fixture-production-missing-source { color: rgb(65 43 21); }";
+            },
+          },
+        ],
+      },
+    });
+    const clientFiles = await readTextFileTree(join(outDir, "client"));
+    const clientCss = Object.entries(clientFiles)
+      .filter(([file]) => file.endsWith(".css"))
+      .map(([, source]) => source)
+      .join("\n");
+
+    expect(transformedCssSources).toHaveLength(1);
+    expect(transformedCssSources[0]).toContain(
+      '@source "../**/*.{js,jsx,ts,tsx,mdx}";',
+    );
+    expect(clientCss).toContain(".fixture-production-utility");
+    expect(clientCss).not.toContain(".fixture-production-missing-source");
+  });
+
   test("build concurrency helper overlaps independent tasks while preserving input order", async () => {
     let active = 0;
     let maxActive = 0;
@@ -7596,6 +7662,46 @@ export default function Page(props) {
     expect(manifest.prerenderedRoutes?.["/users/grace%20hopper"]?.html).toContain(
       "<main>User grace hopper</main>",
     );
+  });
+
+  test("reuses prerender server modules across generated static params", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-module-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const counterKey = `__mreactPrerenderModuleEvaluations_${rootDir
+      .replaceAll(/[^A-Za-z0-9_$]/g, "_")}`;
+    await mkdir(join(appDir, "docs", "$slug"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "$slug", "page.tsx"),
+      `const counterKey = ${JSON.stringify(counterKey)};
+globalThis[counterKey] = (globalThis[counterKey] ?? 0) + 1;
+
+export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ slug: "one" }, { slug: "two" }, { slug: "three" }];
+}
+
+export default function Page(props) {
+  return <main>Doc {props.params.slug}</main>;
+}`,
+    );
+
+    try {
+      await buildApp({ appDir, outDir });
+      const manifest = JSON.parse(
+        await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+      ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+
+      expect(manifest.prerenderedRoutes?.["/docs/one"]?.html).toContain("<main>Doc one</main>");
+      expect(manifest.prerenderedRoutes?.["/docs/two"]?.html).toContain("<main>Doc two</main>");
+      expect(manifest.prerenderedRoutes?.["/docs/three"]?.html).toContain(
+        "<main>Doc three</main>",
+      );
+      expect((globalThis as Record<string, unknown>)[counterKey]).toBe(2);
+    } finally {
+      delete (globalThis as Record<string, unknown>)[counterKey];
+    }
   });
 
   test("invalidates and lazily regenerates prerendered routes after server actions", async () => {
