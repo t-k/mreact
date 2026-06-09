@@ -744,17 +744,17 @@ function typedRoutesDeclaration(routes: readonly AppRoute[]): string {
     return left.localeCompare(right);
   });
   const routeUnion = routePaths.map((routePath) => JSON.stringify(routePath)).join(" | ");
-  const routesObject = routePaths
-    .map((routePath) => `  readonly ${JSON.stringify(routePath)}: AppRouteHref<${JSON.stringify(routePath)}>;`)
-    .join("\n");
-
   return [
-    `import type { AppRouteHref } from "@reckona/mreact-router";`,
+    `import type { AppRouteLinkHref as MreactAppRouteLinkHref } from "@reckona/mreact-router";`,
     ``,
     `export type AppRoutePath = ${routeUnion === "" ? "never" : routeUnion};`,
-    `export declare const routes: {`,
-    routesObject,
-    `};`,
+    `export type AppRouteHref = MreactAppRouteLinkHref<AppRoutePath>;`,
+    ``,
+    `declare module "@reckona/mreact-router/link" {`,
+    `  interface AppRouteDeclarations {`,
+    `    readonly path: AppRoutePath;`,
+    `  }`,
+    `}`,
     ``,
   ].join("\n");
 }

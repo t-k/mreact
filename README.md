@@ -990,7 +990,7 @@ Use `mreact-router build --target=cloudflare` for Workers artifacts, then use `m
 
 Built client route assets are written to `.mreact/client`, and public files are copied from `public/` to `.mreact/client/public`. See [CDN Assets](docs/deploy/assets.md) for `assetBaseUrl`, `publicAssetBaseUrl`, cache policy, and `clientSourceMaps` modes.
 
-`mreact-router build` defaults to Node-compatible server/client artifacts. Build with `--target=cloudflare`, `--target=aws-lambda`, or `--target=all` when adapter-specific artifacts are needed. The build also writes `.mreact/routes.d.ts`; import `href()` from `@reckona/mreact-router` to build encoded URLs from typed route patterns such as `"/users/:id"` and `"/files/:...path"`.
+`mreact-router build` defaults to Node-compatible server/client artifacts. Build with `--target=cloudflare`, `--target=aws-lambda`, or `--target=all` when adapter-specific artifacts are needed. The build also writes `.mreact/routes.d.ts`; include that declaration in your TypeScript program to type-check concrete `<Link href="...">` values against discovered routes without importing a route map at runtime. Import `href()` from `@reckona/mreact-router` only when you need runtime URL construction from route patterns such as `"/users/:id"` and `"/files/:...path"`.
 
 ## Reactive Primitives
 

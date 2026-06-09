@@ -49,7 +49,7 @@ Production client source maps are disabled by default. Set `clientSourceMaps: "l
 
 Production client route bundles can drop selected browser logging calls with `production.dropClientConsole`. Set it to `true` to remove `console.debug`, `console.info`, and `console.log` while preserving `console.warn` and `console.error`, or pass an array such as `["log"]` to choose specific methods.
 
-Build output includes `.mreact/routes.d.ts`, which declares `AppRoutePath` and a typed `routes` map for discovered page and route-handler paths. The public `href()` helper accepts mreact route patterns such as `"/users/:id"` and `"/files/:...path"`, requires the matching params at compile time, and encodes params, search values, and hashes at runtime.
+Build output includes `.mreact/routes.d.ts`, which declares the discovered `AppRoutePath` union and augments `@reckona/mreact-router/link` so concrete `<Link href="...">` values are type-checked without importing any generated runtime module. The public `href()` helper remains available when code needs runtime URL construction from mreact route patterns such as `"/users/:id"` and `"/files/:...path"`; importing it into a client route includes that URL-building helper in the client bundle.
 
 `mreact-router dev` reads the same config, preserves route-agnostic Vite plugins and CSS settings, and uses `server.port` from `vite.config.ts` when neither `--port` nor `PORT` is set. Use `mreact-router dev --port 15174` for one-off E2E or local port overrides without creating a separate Vite config. This keeps Vite CSS transforms, Playwright `webServer` setups, and local dev commands on the same configured port.
 

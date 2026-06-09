@@ -6,6 +6,10 @@
 
 - Added single-flight mutation responses for browser-enhanced App Router server action forms: when an action mutates data, calls `revalidatePath()` for the current route, and returns normally, the POST response can carry fresh navigation HTML marked with `x-mreact-action-single-flight`, allowing the browser to update the visible route without a second GET while preserving the existing `x-mreact-revalidate` fallback for unsupported flows.
 
+### Fixed
+
+- Fixed generated `.mreact/routes.d.ts` so it no longer declares a non-existent runtime `routes` value. The generated declaration now registers discovered route paths with the router `Link` types, allowing concrete `<Link href="...">` values to be checked without importing a generated runtime module.
+
 ## 0.0.149 - 2026-06-09
 
 ### Added
@@ -69,7 +73,7 @@
 
 ### Added
 
-- Added typed route URL helpers for the App Router: `href()` builds encoded internal route URLs from patterns such as `"/users/:id"` and build output now writes `.mreact/routes.d.ts` with the discovered route path union and typed route map.
+- Added typed route URL helpers for the App Router: `href()` builds encoded internal route URLs from patterns such as `"/users/:id"` and build output now writes `.mreact/routes.d.ts` with the discovered route path union.
 
 ### Changed
 

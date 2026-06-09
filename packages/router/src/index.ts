@@ -87,6 +87,7 @@ export type {
 export type { ServerActionContext } from "./actions.js";
 export type {
   AppRouteHref,
+  AppRouteLinkHref,
   DynamicHrefOptions,
   RouteParamsFor,
   RouteSearchParams,
