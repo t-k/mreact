@@ -60,6 +60,18 @@ describe("docs-site example contract", () => {
     expect(nav.indexOf('slug: "guides/app-router"')).toBeLessThan(
       nav.indexOf('slug: "guides/routing"'),
     );
+    expect(nav.indexOf('slug: "guides/ssr-and-streaming"')).toBeLessThan(
+      nav.indexOf('slug: "guides/link-and-navigation"'),
+    );
+    expect(nav.indexOf('slug: "guides/link-and-navigation"')).toBeLessThan(
+      nav.indexOf('slug: "guides/data-loading"'),
+    );
+    expect(nav.indexOf('slug: "guides/data-loading"')).toBeLessThan(
+      nav.indexOf('slug: "guides/ssg-and-static-export"'),
+    );
+    expect(nav.indexOf('slug: "guides/ssg-and-static-export"')).toBeLessThan(
+      nav.indexOf('slug: "guides/environment-variables"'),
+    );
     expect(nav.indexOf('slug: "guides/environment-variables"')).toBeGreaterThan(
       nav.indexOf('slug: "guides/data-loading"'),
     );
@@ -332,10 +344,27 @@ describe("docs-site example contract", () => {
     const viteConfig = await readDocsSite("vite.config.ts");
     const css = await readDocsSite("src/app/globals.css");
 
+    expect(linkGuide).toContain("## Use Link for app navigation");
+    expect(linkGuide).toContain('import { Link } from "@reckona/mreact-router/link";');
+    expect(linkGuide).toContain('<Link href="/docs">Docs</Link>');
+    expect(linkGuide).toContain("## Prefetch, not preload");
     expect(linkGuide).toContain("The API is named `prefetch`, not `preload`");
     expect(linkGuide).toContain('prefetch="intent"');
     expect(linkGuide).toContain('prefetch="viewport"');
     expect(linkGuide).toContain('prefetch="none"');
+    expect(linkGuide).toContain("## Scroll and document reloads");
+    expect(linkGuide).toContain('scroll="preserve"');
+    expect(linkGuide).toContain("reload");
+    expect(linkGuide).toContain("## Navigation runtime");
+    expect(linkGuide).toContain("navigationRuntime");
+    expect(linkGuide).toContain("Server-only routes");
+    expect(linkGuide).toContain("## Same-origin navigation");
+    expect(linkGuide).toContain("same-origin");
+    expect(linkGuide).toContain("External URLs");
+    expect(linkGuide).toContain("[Server and Client Model](/guides/server-and-client-model/)");
+    expect(linkGuide).toContain("[Routing](/guides/routing/)");
+    expect(linkGuide).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
+    expect(linkGuide).toContain("[SSG and Static Export](/guides/ssg-and-static-export/)");
     expect(contentRegistry).toContain("enhanceCodeBlocks");
     expect(contentRegistry).toContain('class="code-copy"');
     expect(contentRegistry).toContain("<pre${preAttributes}>");

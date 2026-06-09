@@ -3,13 +3,17 @@ export const description = "Use Link, prefetch controls, scroll behavior, and na
 
 # Link and navigation
 
-Use `Link` from `@reckona/mreact-router/link` when a route needs explicit navigation behavior such as viewport prefetch, preserved scroll, or a forced document reload.
+Use `Link` for app navigation that should participate in Mreact's client navigation runtime. It gives you route-aware prefetching, scroll behavior, and controlled document reloads without turning a server-rendered route into a hydrated client route.
+
+## Use Link for app navigation
+
+Use `Link` from `@reckona/mreact-router/link` for internal app links. Raw anchors are still valid for plain HTML and external destinations, but `Link` is the right default when you want route navigation behavior.
 
 ```tsx
 import { Link } from "@reckona/mreact-router/link";
 
 export default function Page() {
-  return <Link href="/docs" prefetch="viewport">Docs</Link>;
+  return <Link href="/docs">Docs</Link>;
 }
 ```
 
@@ -33,4 +37,44 @@ export function Navigation() {
 
 `prefetch="intent"` is the default behavior for likely user intent. `prefetch="viewport"` prepares links when they enter the viewport. `prefetch="none"` disables route prefetch for links where eager work would be wasteful or surprising.
 
-Server-only routes can get the lightweight navigation runtime without becoming hydrated client routes.
+## Scroll and document reloads
+
+Use `scroll="preserve"` when the current scroll position should survive navigation, such as editor panes or long virtualized views. Use `reload` when a link should force a full document navigation instead of app navigation.
+
+```tsx
+import { Link } from "@reckona/mreact-router/link";
+
+export function ToolbarLinks() {
+  return (
+    <nav>
+      <Link href="/editor" scroll="preserve">Editor</Link>
+      <Link href="/legacy" reload>Legacy page</Link>
+    </nav>
+  );
+}
+```
+
+## Navigation runtime
+
+Server-only routes can get the lightweight navigation runtime without becoming hydrated client routes. When Mreact can see a rendered `Link` in the server-rendered route tree, it injects the navigation runtime automatically.
+
+Use `navigationRuntime` only to override automatic detection:
+
+```tsx
+export const navigationRuntime = false;
+```
+
+Set it to `false` when a route must stay JavaScript-free even though it renders `Link`. Set it to `true` when navigation links are hidden behind a pattern the analyzer cannot see, such as a render prop, higher-order component, or runtime `props` value.
+
+## Same-origin navigation
+
+Mreact intercepts same-origin app navigation and updates the changed route payload without a full document reload. During client navigation, it keeps route data, metadata, scroll restoration, and client route scripts synchronized.
+
+External URLs use normal document navigation. Use `reload` for an internal URL when the browser should also perform a normal document navigation.
+
+## Related pages
+
+- [Server and Client Model](/guides/server-and-client-model/)
+- [Routing](/guides/routing/)
+- [SSR and Streaming](/guides/ssr-and-streaming/)
+- [SSG and Static Export](/guides/ssg-and-static-export/)
