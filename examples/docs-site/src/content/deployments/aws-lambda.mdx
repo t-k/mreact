@@ -1,13 +1,54 @@
 export const title = "AWS Lambda";
-export const description = "Build, package, preload, and diagnose AWS Lambda handlers.";
+export const description = "Build, package, preload, and diagnose Mreact AWS Lambda handlers.";
 
 # AWS Lambda
 
-Use the AWS Lambda target for API Gateway HTTP API v2 or Lambda Function URL payload format 2.0:
+Use the AWS Lambda target for API Gateway HTTP API v2 or Lambda Function URL payload format 2.0. The target emits Lambda-specific artifacts and avoids generating Cloudflare modules for Node-only server dependencies.
+
+## Build and package
 
 ```bash
 mreact-router build --target=aws-lambda
 mreact-router package aws-lambda --from .mreact --out .lambda
 ```
 
-Use preloaded handlers when first-request latency matters, and keep deployment artifacts minimal: `.mreact`, the handler, lockfiles, package metadata, and production dependencies.
+The package directory should contain the built `.mreact/` output, `mreact-handler.mjs`, package metadata, lockfiles, and production `node_modules`. Do not deploy the full project checkout with `src/`, tests, browser tooling, build caches, and dev dependencies. AWS has a 250 MB unzipped package limit, so keep the asset minimal.
+
+With pnpm, install production dependencies into `.lambda` using a hoisted node linker and verify symlink count as well as byte size before upload.
+
+## Generated handler
+
+The default generated handler uses `createPreloadedAwsLambdaRequestHandler()` so route runtime work can happen during Lambda initialization instead of racing the first user request.
+
+```ts
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = await createPreloadedAwsLambdaRequestHandler({
+  importPolicy: "generated",
+  outDir: ".mreact",
+});
+```
+
+Use a custom handler when you need adapter options such as `allowedHosts`, `serverActions.authorize`, `onResponse`, or a custom error handler. Package it with `mreact-router package aws-lambda --handler src/lambda.ts`.
+
+## Cold start and preload
+
+Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. Use `createPreloadedAwsLambdaRequestHandler()` when first-hit latency matters and you accept more initialization work.
+
+Measure before changing preload. Compare cold start, first request, and warm request timings for the same route and Lambda memory size.
+
+## Production settings
+
+- Set `MREACT_SERVER_ACTION_SECRET` consistently across every function instance when server action forms can be rendered by one instance and submitted to another.
+- Configure `allowedHosts` or the equivalent custom-domain policy when absolute URLs, redirects, metadata, or auth callbacks depend on the public origin.
+- Keep database clients, SDKs, and secrets in server-only modules.
+- Upload hidden source maps from CI when client stack traces need symbolication.
+- Use [Logging and Diagnostics](/deployments/logging-and-diagnostics/) temporarily for adapter timings while diagnosing latency.
+
+## Related pages
+
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
+- [Logging and Diagnostics](/deployments/logging-and-diagnostics/)
+- [Source Maps](/deployments/source-maps/)
+- [Environment Variables](/guides/environment-variables/)
+- [Server Actions](/guides/server-actions/)

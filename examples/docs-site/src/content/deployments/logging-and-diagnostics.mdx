@@ -1,9 +1,13 @@
 export const title = "Logging and Diagnostics";
-export const description = "Use request logs, Lambda timings, instrumentation hooks, and trace context safely.";
+export const description = "Use request logs, trace context, adapter timings, and safe diagnostics in production.";
 
 # Logging and diagnostics
 
-Use compact request logs for local and production smoke diagnosis:
+Production diagnostics should answer which route failed, how long it took, and which adapter path handled it without leaking user data.
+
+## Request logs
+
+Use compact request logs for local smoke checks and production request summaries.
 
 ```bash
 mreact-router dev --log=requests
@@ -11,6 +15,49 @@ mreact-router start .mreact --log=requests
 MREACT_ROUTER_LOG=requests mreact-router start .mreact
 ```
 
-Request summaries include method, path, status, duration, and runtime. They intentionally omit query strings, headers, cookies, and bodies.
+Each line includes method, path, status, duration, and runtime. Request logs intentionally omit query strings, headers, cookies, and bodies. Do not log cookies, authorization headers, form bodies, uploaded file names, access tokens, session IDs, CSRF tokens, or raw search params that may contain private data.
 
-For AWS Lambda latency work, enable adapter timings temporarily and inspect request normalization, runtime materialization, loader, middleware, render, and response conversion phases.
+## Trace context and instrumentation
+
+Mreact accepts W3C `traceparent` and `tracestate` headers and forwards parsed trace context to router instrumentation hooks. Use instrumentation when you need request start/end, route timing, middleware timing, loader timing, or adapter-specific spans.
+
+```ts
+import { startServer } from "@reckona/mreact-router";
+
+await startServer({
+  instrumentation: {
+    onRequestStart(event) {
+      recordSpanStart(event.trace);
+    },
+    onRequestEnd(event) {
+      recordSpanEnd({
+        path: event.path,
+        status: event.status,
+        trace: event.trace,
+      });
+    },
+  },
+  outDir: ".mreact",
+});
+```
+
+Keep instrumentation payloads structured and small. If a log line needs request data, record stable IDs and route paths rather than full URLs or headers.
+
+## AWS Lambda timings
+
+For AWS Lambda latency work, enable adapter timings temporarily and inspect request conversion, runtime materialization, middleware, loader, render, and response conversion phases. AWS Lambda cold starts are sensitive to route preload choices, so compare the same route and the same memory size before and after changing preload.
+
+## Deployment smoke checks
+
+- Verify 200, redirect, 404, and error responses through the deployed origin.
+- Confirm request logs include runtime and status but no sensitive request data.
+- Confirm `traceparent` propagation when an upstream gateway or observability platform injects it.
+- Capture failed route path, status, adapter runtime, and release identifier.
+- Pair release identifiers with [Source Maps](/deployments/source-maps/) for client stack trace symbolication.
+
+## Related pages
+
+- [Testing](/guides/testing/)
+- [Source Maps](/deployments/source-maps/)
+- [AWS Lambda](/deployments/aws-lambda/)
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)

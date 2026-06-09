@@ -36,7 +36,6 @@ import deploymentsCloudflare, * as deploymentsCloudflareMeta from "./content/dep
 import deploymentsContainerAndCloudRun, * as deploymentsContainerAndCloudRunMeta from "./content/deployments/container-and-cloud-run.mdx";
 import deploymentsHostPolicyAndProxies, * as deploymentsHostPolicyAndProxiesMeta from "./content/deployments/host-policy-and-proxies.mdx";
 import deploymentsLoggingAndDiagnostics, * as deploymentsLoggingAndDiagnosticsMeta from "./content/deployments/logging-and-diagnostics.mdx";
-import deploymentsProductionChecklist, * as deploymentsProductionChecklistMeta from "./content/deployments/production-checklist.mdx";
 import deploymentsSourceMaps, * as deploymentsSourceMapsMeta from "./content/deployments/source-maps.mdx";
 import deploymentsStaticHosting, * as deploymentsStaticHostingMeta from "./content/deployments/static-hosting.mdx";
 import examples, * as examplesMeta from "./content/examples.mdx";
@@ -226,7 +225,6 @@ export const docsPages = [
     guidesAdvancedVitePluginIntegration,
     guidesAdvancedVitePluginIntegrationMeta,
   ),
-  page("deployments/production-checklist", deploymentsProductionChecklist, deploymentsProductionChecklistMeta),
   page("deployments/host-policy-and-proxies", deploymentsHostPolicyAndProxies, deploymentsHostPolicyAndProxiesMeta),
   page("deployments/source-maps", deploymentsSourceMaps, deploymentsSourceMapsMeta),
   page("deployments/logging-and-diagnostics", deploymentsLoggingAndDiagnostics, deploymentsLoggingAndDiagnosticsMeta),

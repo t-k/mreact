@@ -1,8 +1,61 @@
 export const title = "Container and Cloud Run";
-export const description = "Run Node build output in containers, including Cloud Run.";
+export const description = "Run Mreact Node build output in containers, including Cloud Run.";
 
 # Container and Cloud Run
 
-Container deployments run the Node server output. Bind to `0.0.0.0`, use the platform-provided `PORT`, set strict host policy, and configure allowed hosts for public origins.
+Container deployments run the Node server output. Build the app for Node, copy the production output into the image, bind to the platform port, and keep Host header policy explicit.
 
-Cloud Run injects `PORT` automatically. A typical container should start `mreact-router start .mreact`.
+## Build target
+
+```bash
+mreact-router build --target=node
+mreact-router start .mreact
+```
+
+The server reads `HOST` and `PORT`. In a container, use `HOST=0.0.0.0` so the platform can reach the process, set `PORT` to the platform port, and use `MREACT_ROUTER_HOST_POLICY=strict` with `MREACT_ROUTER_ALLOWED_HOSTS` for public hostnames.
+
+```bash
+HOST=0.0.0.0 \
+PORT=8080 \
+MREACT_ROUTER_HOST_POLICY=strict \
+MREACT_ROUTER_ALLOWED_HOSTS=app.example.com \
+mreact-router start .mreact
+```
+
+## Containerfile shape
+
+Keep the runtime image focused on production files: package metadata, lockfile, production dependencies, and `.mreact`. The exact package-manager commands depend on your app, but the final command should serve the built output.
+
+```dockerfile
+FROM node:24-bookworm-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV MREACT_ROUTER_HOST_POLICY=strict
+ENV PORT=8080
+COPY package.json pnpm-lock.yaml ./
+COPY node_modules ./node_modules
+COPY .mreact ./.mreact
+EXPOSE 8080
+CMD ["pnpm", "start"]
+```
+
+Use your container builder of choice. For local checks with podman, publish the same port and pass the same environment variables you expect in production.
+
+## Cloud Run
+
+Cloud Run injects `PORT` automatically. A common local default is `PORT=8080`, but the deployed service should read the platform value. Configure the service URL and custom domains in `MREACT_ROUTER_ALLOWED_HOSTS`, and use a simple health check path such as `/` or a lightweight route handler.
+
+Cloud Run can scale to multiple instances, so use durable session storage and a shared route cache when route HTML cache needs to survive across instances.
+
+## Assets and source maps
+
+You can serve `.mreact/client` from the container, but larger deployments usually upload it to a CDN and configure `assetBaseUrl`. Use hidden source maps when you upload maps to an error service, and do not copy `.mreact/source-maps` into a public image layer or static asset host.
+
+## Related pages
+
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
+- [CDN Assets](/deployments/cdn-assets/)
+- [Cache Policy](/deployments/cache-policy/)
+- [Source Maps](/deployments/source-maps/)
+- [Cookies and Sessions](/guides/cookies-and-sessions/)

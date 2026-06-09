@@ -1,12 +1,65 @@
 export const title = "Cloudflare";
-export const description = "Build and deploy Mreact apps to Cloudflare Workers or Pages advanced mode.";
+export const description = "Build and deploy Mreact apps to Cloudflare Workers or Cloudflare Pages advanced mode.";
 
 # Cloudflare
 
-Build Workers artifacts with the Cloudflare target:
+Use the Cloudflare target when route handlers, loaders, middleware, metadata, or server-rendered pages should run on Cloudflare Workers runtime.
+
+## Build artifacts
 
 ```bash
 mreact-router build --target=cloudflare
 ```
 
-The build emits `.mreact/cloudflare/worker.mjs`, route modules, server route modules, and `.mreact/client` assets. Cloudflare Pages advanced mode can package the output with `mreact-router package cloudflare-pages`.
+The build emits `.mreact/cloudflare/worker.mjs`, route modules, server route modules, and `.mreact/client` assets. Generated server route modules dispatch `GET`, `POST`, and `ALL` exports with decoded params and `context.env`, so route handlers can use Worker bindings.
+
+## Cloudflare Pages advanced mode
+
+For Pages advanced mode, package the generated worker and static assets, then deploy the packaged directory.
+
+```bash
+mreact-router package cloudflare-pages --from .mreact --out .mreact/pages
+wrangler pages deploy .mreact/pages
+```
+
+Pages provides the `ASSETS` binding to `_worker.js`. Mreact serves only allowed manifest assets, route-linked CSS, generated client assets, and copied public files from that binding, which keeps traversal-style asset requests out of the static asset path.
+
+## Workers deployment
+
+For Workers, point the Worker entry to `.mreact/cloudflare/worker.mjs` and bind static assets from `.mreact/client` according to your Cloudflare deployment shape. Use the Pages package path when you want Mreact to assemble the advanced-mode output directory.
+
+## Environment bindings
+
+Cloudflare bindings are not `process.env`. Read them from loader, middleware, and route handler context via `context.env`.
+
+```ts
+import type { RouteHandlerContext } from "@reckona/mreact-router";
+
+interface Env {
+  DB: D1Database;
+}
+
+export async function GET(
+  _request: Request,
+  context: RouteHandlerContext & { env: Env },
+): Promise<Response> {
+  const result = await context.env.DB.prepare("select 1").first();
+
+  return Response.json({ result });
+}
+```
+
+## Production notes
+
+- Use `clientSourceMaps: "hidden"` and upload `.mreact/source-maps/client/` from CI when you need Sentry symbolication.
+- Configure `nodejs_compat` only when your packaged Worker graph needs Cloudflare's Node.js compatibility runtime.
+- Keep CSP, cache headers, and host behavior explicit because Cloudflare can also add edge headers.
+- Test route handlers, streaming pages, 404s, static assets, and server action forms after deployment.
+
+## Related pages
+
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
+- [Source Maps](/deployments/source-maps/)
+- [Cache Policy](/deployments/cache-policy/)
+- [HTTP APIs](/guides/http-apis/)
+- [Environment Variables](/guides/environment-variables/)

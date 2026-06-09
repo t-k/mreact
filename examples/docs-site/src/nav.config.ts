@@ -56,7 +56,6 @@ export const sidebar: readonly NavGroup[] = [
   {
     text: "Deployments",
     items: [
-      { text: "Production Checklist", slug: "deployments/production-checklist" },
       { text: "Host Policy and Proxies", slug: "deployments/host-policy-and-proxies" },
       { text: "Source Maps", slug: "deployments/source-maps" },
       { text: "Logging and Diagnostics", slug: "deployments/logging-and-diagnostics" },

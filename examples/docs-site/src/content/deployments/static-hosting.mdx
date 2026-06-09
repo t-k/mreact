@@ -1,8 +1,48 @@
 export const title = "Static Hosting";
-export const description = "Export prerendered routes for GitHub Pages and other static hosts.";
+export const description = "Export prerendered Mreact routes for GitHub Pages and other static hosts.";
 
 # Static hosting
 
-Static hosts serve prerendered route HTML and copied client assets. Use `exportStaticApp()` after `mreact-router build`, write `.nojekyll` for GitHub Pages, and provide a root-level `404.html` when the host supports it.
+Static hosts serve prerendered route HTML and copied client assets. Use this path for documentation, marketing pages, and apps where every exported route can be known at build time.
 
-Only prerendered routes are exported. Dynamic runtime APIs need a server, Worker, or Lambda target.
+## Export prerendered routes
+
+Run a Node build, then call `exportStaticApp()` from a small script.
+
+```bash
+mreact-router build --target=node
+tsx scripts/export-static.ts
+```
+
+```ts
+import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
+
+await exportStaticApp({
+  exportDir: "dist",
+  outDir: ".mreact",
+});
+```
+
+`exportStaticApp()` writes one `index.html` per prerendered route and copies generated client assets into the export directory. Only prerendered routes are exported. Dynamic runtime APIs, route handlers, request-time auth, cookies, and middleware decisions need a server, Worker, or Lambda target.
+
+## GitHub Pages
+
+For GitHub Pages, write `.nojekyll` so `_mreact` assets are served normally. Add a root-level `404.html` when you want the static host to serve a custom not-found page.
+
+If the site is published under a repository path, configure the base path used by your app and asset URLs. This docs site uses `MREACT_DOCS_BASE_PATH` in CI so links and assets work under the GitHub Pages path.
+
+## Cache and release behavior
+
+Generated assets can use long cache headers when the host supports them. Static HTML should be cached conservatively because it embeds links to the current asset set. When the static host has no programmable invalidation, keep filenames versioned and avoid deleting old assets immediately after deploy.
+
+## When not to use static hosting
+
+Do not use static hosting for pages that require request-time auth, per-user cookies, server actions, ordinary HTTP APIs, route handlers, webhooks, or middleware rewrites. You can still statically export public routes and deploy the dynamic app separately, but that becomes a multi-origin architecture.
+
+## Related pages
+
+- [SSG and Static Export](/guides/ssg-and-static-export/)
+- [CDN Assets](/deployments/cdn-assets/)
+- [Cache Policy](/deployments/cache-policy/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)

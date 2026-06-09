@@ -1,8 +1,60 @@
 export const title = "Host Policy and Proxies";
-export const description = "Configure allowed hosts, strict host policy, and trusted proxy behavior.";
+export const description = "Configure allowed hosts, strict Host header handling, and trusted proxy behavior for production deployments.";
 
 # Host policy and proxies
 
-For public deployments, configure exact `allowedHosts` and prefer `hostPolicy: "strict"`. Use trusted proxy mode only when your reverse proxy normalizes forwarded host and proto headers before traffic reaches Mreact.
+Host policy is a production boundary. Configure it before a public deployment because the Host header influences absolute URLs, redirects, cache keys, metadata routes, auth callbacks, CSP reports, and same-origin security decisions.
 
-Host policy affects absolute URLs, redirects, cache keys, metadata routes, and security-sensitive origin decisions.
+## What host policy protects
+
+Attackers can send arbitrary `Host` headers to many public HTTP endpoints. If an app trusts that value when building redirects, canonical URLs, password reset links, OAuth callbacks, or cache keys, the app can generate attacker-controlled origins.
+
+Prefer a strict allow-list in production. Use trusted proxy mode only when a reverse proxy or platform normalizes `Host`, `X-Forwarded-Host`, and `X-Forwarded-Proto` before the request reaches Mreact.
+
+## Configure strict hosts
+
+Set exact public hosts on the Node server, container process, or adapter. Include every hostname users can legitimately request, and keep staging hosts separate from production hosts.
+
+```bash
+HOST=0.0.0.0 \
+MREACT_ROUTER_HOST_POLICY=strict \
+MREACT_ROUTER_ALLOWED_HOSTS=app.example.com,www.example.com \
+mreact-router start .mreact
+```
+
+```ts
+import { startServer } from "@reckona/mreact-router";
+
+await startServer({
+  allowedHosts: ["app.example.com", "www.example.com"],
+  hostPolicy: "strict",
+  hostname: "0.0.0.0",
+  outDir: ".mreact",
+});
+```
+
+Use `hostPolicy: "strict"` when your app is directly reachable from the internet or when you want the app server to reject unknown hosts even behind a load balancer.
+
+## Use trusted proxy intentionally
+
+Use `hostPolicy: "trusted-proxy"` only when the platform-provided proxy is the only public entrypoint and it overwrites forwarded host/proto headers. Do not enable it for traffic that can reach the Node server directly.
+
+Cloud Run and many managed load balancers terminate TLS before the container. In that shape, the container normally binds `HOST=0.0.0.0`, receives the platform `PORT`, and uses a strict allowed host list for the public service URL. Use trusted proxy mode only after verifying how the platform sets forwarded headers.
+
+AWS Lambda adapters receive normalized event data from API Gateway HTTP API v2 or Lambda Function URL payload format 2.0. Keep an allowed host list when the function is exposed through a custom domain, and avoid deriving user-facing origins from unvalidated headers.
+
+## Reverse proxy checklist
+
+- Publish only the reverse proxy or platform endpoint, not the internal Node port.
+- Normalize or overwrite `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-Port`.
+- Reject unknown hosts at the edge before requests reach the app when the platform supports it.
+- Keep `allowedHosts` synchronized with DNS and custom domains.
+- Test redirects, metadata routes, canonical links, auth callbacks, and CSP report URLs through the public hostname.
+
+## Related pages
+
+- [Environment Variables](/guides/environment-variables/)
+- [Authentication](/guides/authentication/)
+- [Middleware](/guides/middleware/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)
+- [AWS Lambda](/deployments/aws-lambda/)

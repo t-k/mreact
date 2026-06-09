@@ -14,9 +14,15 @@ const requiredSlugs = [
   "guides/http-apis",
   "guides/testing",
   "guides/advanced/mdx",
-  "deployments/production-checklist",
+  "deployments/host-policy-and-proxies",
   "deployments/source-maps",
   "deployments/logging-and-diagnostics",
+  "deployments/cdn-assets",
+  "deployments/cache-policy",
+  "deployments/cloudflare",
+  "deployments/aws-lambda",
+  "deployments/container-and-cloud-run",
+  "deployments/static-hosting",
   "examples",
   "reference/cli",
   "reference/environment-variables",
@@ -91,6 +97,14 @@ describe("docs-site example contract", () => {
     );
     expect(nav).not.toContain('slug: "overview"');
     expect(nav).not.toContain('slug: "guides/client-boundaries"');
+    expect(nav).not.toContain("Production Checklist");
+    expect(nav).not.toContain('slug: "deployments/production-checklist"');
+    expect(nav.indexOf('slug: "deployments/host-policy-and-proxies"')).toBeLessThan(
+      nav.indexOf('slug: "deployments/source-maps"'),
+    );
+    expect(nav.indexOf('slug: "deployments/source-maps"')).toBeLessThan(
+      nav.indexOf('slug: "deployments/logging-and-diagnostics"'),
+    );
   });
 
   test("removes the standalone Route Handlers guide from the public docs", async () => {
@@ -524,7 +538,8 @@ describe("docs-site example contract", () => {
     expect(csp).toContain("[Metadata and Head](/guides/metadata-and-head/)");
     expect(csp).toContain("[External Scripts](/guides/external-scripts/)");
     expect(csp).toContain("[CSS and Assets](/guides/css-and-assets/)");
-    expect(csp).toContain("[Production Checklist](/deployments/production-checklist/)");
+    expect(csp).toContain("[Host Policy and Proxies](/deployments/host-policy-and-proxies/)");
+    expect(csp).toContain("[Logging and Diagnostics](/deployments/logging-and-diagnostics/)");
   });
 
   test("documents external scripts with metadata head, CSP nonces, JSON-LD, noscript, SPA page views, and performance limits", async () => {
@@ -890,7 +905,7 @@ describe("docs-site example contract", () => {
     expect(serverActions).toContain("[Forms and Validation](/guides/forms-and-validation/)");
     expect(serverActions).toContain("[Cache and Revalidation](/guides/cache-and-revalidation/)");
     expect(serverActions).toContain("[Environment Variables](/guides/environment-variables/)");
-    expect(serverActions).toContain("[Production Checklist](/deployments/production-checklist/)");
+    expect(serverActions).toContain("[Logging and Diagnostics](/deployments/logging-and-diagnostics/)");
     expect(serverActions).toContain("[Route Module Exports](/reference/route-module-exports/)");
   });
 
@@ -935,7 +950,7 @@ describe("docs-site example contract", () => {
     expect(cacheGuide).toContain("[Server Actions](/guides/server-actions/)");
     expect(cacheGuide).toContain("[Cache API](/reference/cache-api/)");
     expect(cacheGuide).toContain("[Cache Policy](/deployments/cache-policy/)");
-    expect(cacheGuide).toContain("[Production Checklist](/deployments/production-checklist/)");
+    expect(cacheGuide).toContain("[Logging and Diagnostics](/deployments/logging-and-diagnostics/)");
   });
 
   test("documents cookies, sessions, auth claims handoff, and production session constraints", async () => {
@@ -1032,7 +1047,8 @@ describe("docs-site example contract", () => {
     expect(authGuide).toContain("[HTTP APIs](/guides/http-apis/)");
     expect(authGuide).toContain("[Server Actions](/guides/server-actions/)");
     expect(authGuide).toContain("[Environment Variables](/guides/environment-variables/)");
-    expect(authGuide).toContain("[Production Checklist](/deployments/production-checklist/)");
+    expect(authGuide).toContain("[Host Policy and Proxies](/deployments/host-policy-and-proxies/)");
+    expect(authGuide).toContain("[Logging and Diagnostics](/deployments/logging-and-diagnostics/)");
   });
 
   test("documents reactive forms, validation modes, server errors, schema output, and mutation choices", async () => {
@@ -1319,6 +1335,117 @@ describe("docs-site example contract", () => {
     expect(httpApis).toContain("[File Uploads and CSRF](/guides/file-uploads-and-csrf/)");
     expect(httpApis).toContain("[Response Helpers](/reference/response-helpers/)");
     expect(httpApis).toContain("[Route Handler Context](/reference/route-handler-context/)");
+  });
+
+  test("documents deployment operations without a standalone production checklist page", async () => {
+    const nav = await readDocsSite("src/nav.config.ts");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const hostPolicy = await readDocsSite("src/content/deployments/host-policy-and-proxies.mdx");
+    const sourceMaps = await readDocsSite("src/content/deployments/source-maps.mdx");
+    const logging = await readDocsSite("src/content/deployments/logging-and-diagnostics.mdx");
+    const cdnAssets = await readDocsSite("src/content/deployments/cdn-assets.mdx");
+    const cachePolicy = await readDocsSite("src/content/deployments/cache-policy.mdx");
+    const cloudflare = await readDocsSite("src/content/deployments/cloudflare.mdx");
+    const awsLambda = await readDocsSite("src/content/deployments/aws-lambda.mdx");
+    const container = await readDocsSite("src/content/deployments/container-and-cloud-run.mdx");
+    const staticHosting = await readDocsSite("src/content/deployments/static-hosting.mdx");
+
+    expect(nav).not.toContain("Production Checklist");
+    expect(contentRegistry).not.toContain("production-checklist.mdx");
+    expect(contentRegistry).not.toContain('page("deployments/production-checklist"');
+    await expect(
+      access(join(docsSiteRoot, "src", "content", "deployments", "production-checklist.mdx")),
+    ).rejects.toThrow();
+
+    expect(hostPolicy).toContain("## What host policy protects");
+    expect(hostPolicy).toContain("Host header");
+    expect(hostPolicy).toContain("allowedHosts");
+    expect(hostPolicy).toContain('hostPolicy: "strict"');
+    expect(hostPolicy).toContain("MREACT_ROUTER_ALLOWED_HOSTS");
+    expect(hostPolicy).toContain("trusted-proxy");
+    expect(hostPolicy).toContain("X-Forwarded-Host");
+    expect(hostPolicy).toContain("Cloud Run");
+    expect(hostPolicy).toContain("AWS Lambda");
+    expect(hostPolicy).toContain("[Environment Variables](/guides/environment-variables/)");
+    expect(hostPolicy).toContain("[Authentication](/guides/authentication/)");
+
+    expect(sourceMaps).toContain("Production client source maps are disabled by default");
+    expect(sourceMaps).toContain('clientSourceMaps: "hidden"');
+    expect(sourceMaps).toContain("mreact-router build --client-source-maps=hidden");
+    expect(sourceMaps).toContain(".mreact/source-maps/client/");
+    expect(sourceMaps).toContain("Sentry");
+    expect(sourceMaps).toContain("release");
+    expect(sourceMaps).toContain("Do not copy `.mreact/source-maps`");
+    expect(sourceMaps).toContain("[Logging and Diagnostics](/deployments/logging-and-diagnostics/)");
+
+    expect(logging).toContain("## Request logs");
+    expect(logging).toContain("mreact-router start .mreact --log=requests");
+    expect(logging).toContain("MREACT_ROUTER_LOG=requests");
+    expect(logging).toContain("method, path, status, duration");
+    expect(logging).toContain("Do not log cookies");
+    expect(logging).toContain("traceparent");
+    expect(logging).toContain("instrumentation");
+    expect(logging).toContain("AWS Lambda");
+    expect(logging).toContain("[Testing](/guides/testing/)");
+
+    expect(cdnAssets).toContain("## What moves to the CDN");
+    expect(cdnAssets).toContain("assetBaseUrl");
+    expect(cdnAssets).toContain("publicAssetBaseUrl");
+    expect(cdnAssets).toContain(".mreact/client/");
+    expect(cdnAssets).toContain("same release transaction");
+    expect(cdnAssets).toContain("Cache-Control: public, max-age=31536000, immutable");
+    expect(cdnAssets).toContain("HTML routes still come from the app origin");
+    expect(cdnAssets).toContain("[Cache Policy](/deployments/cache-policy/)");
+
+    expect(cachePolicy).toContain("## Route HTML");
+    expect(cachePolicy).toContain("cacheControl()");
+    expect(cachePolicy).toContain("revalidatePath");
+    expect(cachePolicy).toContain("Authorization");
+    expect(cachePolicy).toContain("Set-Cookie");
+    expect(cachePolicy).toContain("## Hashed client assets");
+    expect(cachePolicy).toContain("immutable");
+    expect(cachePolicy).toContain("## Public assets");
+    expect(cachePolicy).toContain("## Release order");
+    expect(cachePolicy).toContain("[CDN Assets](/deployments/cdn-assets/)");
+
+    expect(cloudflare).toContain("mreact-router build --target=cloudflare");
+    expect(cloudflare).toContain("mreact-router package cloudflare-pages --from .mreact --out .mreact/pages");
+    expect(cloudflare).toContain("wrangler pages deploy .mreact/pages");
+    expect(cloudflare).toContain("context.env");
+    expect(cloudflare).toContain("ASSETS");
+    expect(cloudflare).toContain("allowed manifest assets");
+    expect(cloudflare).toContain("clientSourceMaps: \"hidden\"");
+    expect(cloudflare).toContain("[Host Policy and Proxies](/deployments/host-policy-and-proxies/)");
+
+    expect(awsLambda).toContain("mreact-router build --target=aws-lambda");
+    expect(awsLambda).toContain("mreact-router package aws-lambda --from .mreact --out .lambda");
+    expect(awsLambda).toContain("API Gateway HTTP API v2");
+    expect(awsLambda).toContain("Lambda Function URL");
+    expect(awsLambda).toContain("createPreloadedAwsLambdaRequestHandler");
+    expect(awsLambda).toContain("/tmp");
+    expect(awsLambda).toContain("250 MB");
+    expect(awsLambda).toContain("MREACT_SERVER_ACTION_SECRET");
+    expect(awsLambda).toContain("[Logging and Diagnostics](/deployments/logging-and-diagnostics/)");
+
+    expect(container).toContain("mreact-router build --target=node");
+    expect(container).toContain("mreact-router start .mreact");
+    expect(container).toContain("HOST=0.0.0.0");
+    expect(container).toContain("PORT");
+    expect(container).toContain("MREACT_ROUTER_HOST_POLICY=strict");
+    expect(container).toContain("Cloud Run injects `PORT`");
+    expect(container).toContain("health check");
+    expect(container).toContain("Containerfile");
+    expect(container).toContain("[CDN Assets](/deployments/cdn-assets/)");
+
+    expect(staticHosting).toContain("exportStaticApp");
+    expect(staticHosting).toContain("mreact-router build --target=node");
+    expect(staticHosting).toContain(".nojekyll");
+    expect(staticHosting).toContain("404.html");
+    expect(staticHosting).toContain("base path");
+    expect(staticHosting).toContain("GitHub Pages");
+    expect(staticHosting).toContain("Only prerendered routes");
+    expect(staticHosting).toContain("route handlers");
+    expect(staticHosting).toContain("[SSG and Static Export](/guides/ssg-and-static-export/)");
   });
 
   test("renders readable document lists and the latest benchmark run", async () => {

@@ -1,9 +1,9 @@
 export const title = "Source Maps";
-export const description = "Disable production client source maps, emit hidden upload-only maps, and upload to Sentry-style services.";
+export const description = "Disable production client source maps, emit hidden upload-only maps, and upload them to Sentry-style services.";
 
 # Source maps
 
-Production client source maps are disabled by default. Keep that default when you do not need browser stack trace symbolication.
+Production client source maps are disabled by default. Keep that default unless your error reporting workflow needs browser stack trace symbolication.
 
 ## Hidden upload-only maps
 
@@ -17,15 +17,29 @@ mreactRouter({
 });
 ```
 
+```bash
+mreact-router build --client-source-maps=hidden
+```
+
 Hidden maps are written under `.mreact/source-maps/client/`. Upload those files during CI after `mreact-router build`, then deploy `.mreact/client` without the hidden map directory.
-
-## Linked maps
-
-Use `clientSourceMaps: "linked"` only for debugging environments where public `.js.map` files are acceptable.
 
 ## Sentry-style upload flow
 
-1. Build with `clientSourceMaps: "hidden"` or `mreact-router build --client-source-maps=hidden`.
-2. Upload `.mreact/source-maps/client/**/*.map` with the release identifier used by your deployment.
-3. Deploy `.mreact/client` and server output.
-4. Do not copy `.mreact/source-maps` to the public static asset host.
+1. Choose a release identifier before the build, for example the Git commit SHA.
+2. Build with `clientSourceMaps: "hidden"` or `mreact-router build --client-source-maps=hidden`.
+3. Upload `.mreact/source-maps/client/**/*.map` to Sentry or another symbolication service using the same release identifier.
+4. Deploy server output and `.mreact/client`.
+5. Do not copy `.mreact/source-maps` to the public static asset host.
+
+Use the same release identifier in server logs and client error events so uploaded maps can be matched to minified stack traces.
+
+## Linked maps
+
+Use `clientSourceMaps: "linked"` only for debugging environments where public `.js.map` files are acceptable. Linked maps are discoverable by visitors because JavaScript files include public source map references.
+
+## Related pages
+
+- [Logging and Diagnostics](/deployments/logging-and-diagnostics/)
+- [CDN Assets](/deployments/cdn-assets/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)

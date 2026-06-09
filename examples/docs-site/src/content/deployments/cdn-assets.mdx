@@ -1,9 +1,13 @@
 export const title = "CDN Assets";
-export const description = "Host only built assets on a CDN while application routes remain on the app origin.";
+export const description = "Host built route assets on a CDN while application HTML stays on the app origin.";
 
 # CDN assets
 
-Upload `.mreact/client` to a static origin and configure base URLs for generated asset references.
+Use a CDN for generated client assets when the app server should keep rendering HTML but static scripts, stylesheets, and copied public files should come from a static origin.
+
+## What moves to the CDN
+
+Upload `.mreact/client/` to the CDN origin. This directory contains hashed route scripts, shared chunks, route CSS, copied public files, and the client manifest.
 
 ```ts
 mreactRouter({
@@ -14,4 +18,31 @@ mreactRouter({
 });
 ```
 
-`assetBaseUrl` changes route scripts, modulepreload links, dynamic import preload helpers, and route stylesheet assets. It does not move application routes to the CDN; HTML routes still come from the app origin unless you use a static export workflow.
+`assetBaseUrl` changes route scripts, modulepreload links, dynamic import preload helpers, navigation runtime assets, and route stylesheet assets. `publicAssetBaseUrl` is for router-generated public asset URLs in integrations that use the manifest. Root-relative URLs you write manually, such as `<img src="/logo.svg">`, remain the literal URL you wrote.
+
+HTML routes still come from the app origin unless you use a static export workflow. The CDN asset host should not serve application routes, server actions, route handlers, or API endpoints.
+
+## Release order
+
+Deploy CDN assets and server output in the same release transaction:
+
+1. Build the app.
+2. Upload `.mreact/client/` to the CDN path for the release.
+3. Verify the client manifest and at least one route script exist on the CDN.
+4. Deploy server output that references that CDN path.
+5. Roll back server output before deleting CDN assets from the previous release.
+
+This order prevents HTML from pointing at missing scripts or stylesheets. Keep old CDN assets long enough for users with open tabs, cached HTML, or slow edge propagation.
+
+## Cache headers
+
+Hashed generated assets can use `Cache-Control: public, max-age=31536000, immutable`. Manifest files, non-fingerprinted public assets, and release marker files should use shorter cache or revalidation.
+
+Do not give long immutable cache to HTML routes. Route HTML and API responses belong to [Cache Policy](/deployments/cache-policy/), not the CDN asset policy.
+
+## Related pages
+
+- [CSS and Assets](/guides/css-and-assets/)
+- [Cache Policy](/deployments/cache-policy/)
+- [Source Maps](/deployments/source-maps/)
+- [Static Hosting](/deployments/static-hosting/)
