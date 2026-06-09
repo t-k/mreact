@@ -607,6 +607,51 @@ describe("docs-site example contract", () => {
     expect(uploads).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
   });
 
+  test("documents MDX setup, content registries, frontmatter metadata, SSG, and runtime boundaries", async () => {
+    const mdxGuide = await readDocsSite("src/content/guides/advanced/mdx.mdx");
+
+    expect(mdxGuide).toContain("## What Mreact expects");
+    expect(mdxGuide).toContain("Vite plugin");
+    expect(mdxGuide).toContain("@mdx-js/rollup");
+    expect(mdxGuide).toContain("Native `page.mdx` route files");
+    expect(mdxGuide).toContain("## Configure MDX in Vite");
+    expect(mdxGuide).toContain("jsxImportSource: \"@reckona/mreact\"");
+    expect(mdxGuide).toContain("jsxRuntime: \"automatic\"");
+    expect(mdxGuide).toContain("remark-frontmatter");
+    expect(mdxGuide).toContain("remark-mdx-frontmatter");
+    expect(mdxGuide).toContain("rehypeSlug");
+    expect(mdxGuide).toContain("rehypeShiki");
+    expect(mdxGuide).toContain("mreactRouter");
+    expect(mdxGuide).toContain("## Add MDX module types");
+    expect(mdxGuide).toContain("declare module \"*.mdx\"");
+    expect(mdxGuide).toContain("RouteMetadata");
+    expect(mdxGuide).toContain("## Import content from a registry");
+    expect(mdxGuide).toContain("import.meta.glob");
+    expect(mdxGuide).toContain("{ eager: true }");
+    expect(mdxGuide).toContain("frontmatter");
+    expect(mdxGuide).toContain("## Render MDX through a route");
+    expect(mdxGuide).toContain("src/app/docs/$...slug/page.tsx");
+    expect(mdxGuide).toContain("LoaderContext<{ slug: readonly string[] }>");
+    expect(mdxGuide).toContain("notFound()");
+    expect(mdxGuide).toContain("<Content />");
+    expect(mdxGuide).toContain("## Generate metadata from frontmatter");
+    expect(mdxGuide).toContain("generateMetadata");
+    expect(mdxGuide).toContain("title");
+    expect(mdxGuide).toContain("description");
+    expect(mdxGuide).toContain("## Prerender MDX pages");
+    expect(mdxGuide).toContain("export const prerender = true");
+    expect(mdxGuide).toContain("generateStaticParams");
+    expect(mdxGuide).toContain("## Server and client boundaries");
+    expect(mdxGuide).toContain(".client.tsx");
+    expect(mdxGuide).toContain("server-rendered content");
+    expect(mdxGuide).toContain("## Content authoring notes");
+    expect(mdxGuide).toContain("Do not execute untrusted MDX");
+    expect(mdxGuide).toContain("## Related pages");
+    expect(mdxGuide).toContain("[Vite Plugin Integration](/guides/advanced/vite-plugin-integration/)");
+    expect(mdxGuide).toContain("[SSG and Static Export](/guides/ssg-and-static-export/)");
+    expect(mdxGuide).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+  });
+
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 

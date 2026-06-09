@@ -1,8 +1,217 @@
 export const title = "MDX";
-export const description = "Use MDX through Vite plugins for docs and content sites.";
+export const description = "Use MDX through Vite plugins, content registries, frontmatter metadata, and prerendered routes.";
 
 # MDX
 
-Mreact supports MDX-style content through Vite plugins. Import `.mdx` files from TypeScript route modules or registries, then prerender the route output. Native `page.mdx` route files are not the expected convention.
+Mreact can render MDX content when your Vite config turns `.mdx` files into components. The usual pattern is to keep routes in `page.tsx` files, import MDX from a content directory, and render the selected content from a registry.
 
-This docs site uses MDX content files plus a catch-all route that imports a registry of available pages.
+## What Mreact expects
+
+Native `page.mdx` route files are not the main convention. Use a Vite plugin such as `@mdx-js/rollup` to compile MDX, then import the compiled component from TypeScript route modules, loaders, registries, or generated content indexes.
+
+This keeps routing, metadata, data loading, and static params in ordinary route modules while letting content authors write Markdown and JSX in `.mdx` files.
+
+## Configure MDX in Vite
+
+Install the MDX and remark/rehype packages with your package manager, then add the MDX plugin to `vite.config.ts`. Put the MDX transform in the same Vite config as `mreactRouter()` so server, client, Cloudflare, and prerender builds all see the same transformed modules.
+
+```ts
+// vite.config.ts
+import mdx from "@mdx-js/rollup";
+import rehypeShiki from "@shikijs/rehype";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+import rehypeSlug from "rehype-slug";
+import remarkFrontmatter from "remark-frontmatter";
+import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    mdx({
+      jsxImportSource: "@reckona/mreact",
+      jsxRuntime: "automatic",
+      remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter],
+      rehypePlugins: [
+        rehypeSlug,
+        [rehypeShiki, { addLanguageClass: true, theme: "github-dark" }],
+      ],
+    }),
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+      publicDir: "public",
+      allowedSourceDirs: ["src"],
+    }),
+  ],
+});
+```
+
+`remark-frontmatter` parses YAML frontmatter blocks. `remark-mdx-frontmatter` turns those values into named exports such as `frontmatter`, which lets loaders and metadata functions read content metadata without parsing Markdown at request time. `rehypeSlug` and `rehypeShiki` are optional examples for heading IDs and server-side syntax highlighting.
+
+## Add MDX module types
+
+TypeScript needs a module declaration for `.mdx` files. Keep it near your app source, for example `src/mdx.d.ts`.
+
+```ts
+// src/mdx.d.ts
+declare module "*.mdx" {
+  import type { ReactElement } from "@reckona/mreact";
+  import type { RouteMetadata } from "@reckona/mreact-router";
+
+  export const frontmatter: {
+    description?: string;
+    title?: string;
+  };
+  export const metadata: RouteMetadata | undefined;
+  const Content: () => ReactElement | null;
+  export default Content;
+}
+```
+
+Adjust the named exports to match the plugins and conventions your content pipeline uses. This docs site exports `title` and `description` directly from many MDX files, while YAML frontmatter pipelines commonly export a `frontmatter` object.
+
+## Import content from a registry
+
+A content registry makes MDX routing explicit. For small sites, direct imports are easy to read. For larger sites, use `import.meta.glob` with `{ eager: true }` so the route can build a static map during bundling.
+
+```ts
+// src/content-registry.ts
+import type { ReactElement } from "@reckona/mreact";
+
+interface MdxModule {
+  default: () => ReactElement | null;
+  frontmatter?: {
+    description?: string;
+    title?: string;
+  };
+}
+
+const modules = import.meta.glob<MdxModule>("./content/**/*.mdx", {
+  eager: true,
+});
+
+export interface ContentPage {
+  Content: () => ReactElement | null;
+  description?: string;
+  slug: string;
+  title: string;
+}
+
+export const pages: Record<string, ContentPage> = Object.fromEntries(
+  Object.entries(modules).map(([path, mod]) => {
+    const slug = path.replace("./content/", "").replace(/\.mdx$/, "");
+    return [
+      slug,
+      {
+        Content: mod.default,
+        description: mod.frontmatter?.description,
+        slug,
+        title: mod.frontmatter?.title ?? slug,
+      },
+    ];
+  }),
+);
+```
+
+Use eager imports when the content should be available during SSR or SSG without a runtime network boundary. If your content set is very large, generate a registry file as part of your content build instead of hand-maintaining imports.
+
+## Render MDX through a route
+
+Use a catch-all route when the URL maps to content slugs. The route reads the decoded slug params, looks up the content entry, and calls `notFound()` when no page exists.
+
+```tsx
+// src/app/docs/$...slug/page.tsx
+import { definePage, notFound, type LoaderContext } from "@reckona/mreact-router";
+import { pages } from "../../../content-registry.js";
+
+interface PageData {
+  slug: string;
+}
+
+export function loader(
+  context: LoaderContext<{ slug: readonly string[] }>,
+): PageData {
+  const slug = (context.params.slug ?? []).join("/");
+
+  if (pages[slug] === undefined) {
+    notFound();
+  }
+
+  return { slug };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  const page = pages[props.data.slug];
+  const Content = page.Content;
+
+  return (
+    <main>
+      <h1>{page.title}</h1>
+      <Content />
+    </main>
+  );
+});
+```
+
+The route is still a normal Mreact route. You can use layouts, middleware, loaders, route cache settings, metadata, and deployment adapters in the same way as TSX pages.
+
+## Generate metadata from frontmatter
+
+Frontmatter is useful for route metadata because it is available as a module export after the MDX transform.
+
+```ts
+// src/app/docs/$...slug/page.tsx
+import type { RouteMetadata } from "@reckona/mreact-router";
+import { pages } from "../../../content-registry.js";
+
+export function generateMetadata(
+  props: { data: { slug: string } },
+): RouteMetadata {
+  const page = pages[props.data.slug];
+
+  return {
+    title: page.title,
+    ...(page.description ? { description: page.description } : {}),
+  };
+}
+```
+
+Keep metadata values plain and trusted. Do not interpolate unsanitized user content into `<head>` output.
+
+## Prerender MDX pages
+
+Content sites usually pair MDX with SSG. Export `prerender = true`, return one static param object per content slug, and keep the registry deterministic at build time.
+
+```ts
+// src/app/docs/$...slug/page.tsx
+import { pages } from "../../../content-registry.js";
+
+export const prerender = true;
+
+export function generateStaticParams(): Array<{ slug: string[] }> {
+  return Object.keys(pages).map((slug) => ({
+    slug: slug.split("/"),
+  }));
+}
+```
+
+When you statically export the app, the generated HTML already contains the rendered MDX and highlighted code blocks if your rehype plugins run during the Vite build.
+
+## Server and client boundaries
+
+Treat MDX as server-rendered content by default. Markdown, headings, tables, and code blocks should not require a browser bundle.
+
+If a page needs interactive islands, import explicit `.client.tsx` components from MDX or from the wrapping route. Keep those components small and pass serializable props from the MDX content or loader data. Avoid putting data fetching, secrets, or server-only helpers inside client components.
+
+## Content authoring notes
+
+Do not execute untrusted MDX. MDX can contain JSX and imports, so it is source code, not a safe user-generated text format.
+
+Prefer frontmatter for title, description, date, tags, and draft flags. Keep heavy content transforms in Vite plugins or a build-time content step, not in request-time loaders. Use stable slugs, check broken links in CI, and keep image imports or public asset paths consistent with the [CSS and Assets](/guides/css-and-assets/) guide.
+
+## Related pages
+
+- [Vite Plugin Integration](/guides/advanced/vite-plugin-integration/)
+- [SSG and Static Export](/guides/ssg-and-static-export/)
+- [Metadata and Head](/guides/metadata-and-head/)
+- [Routing](/guides/routing/)
