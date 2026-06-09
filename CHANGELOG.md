@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.149 - 2026-06-09
+
+### Added
+
+- Added `definePage<typeof loader>()` to `@reckona/mreact-router` so route pages can infer `props.data` from the sibling loader return type and `props.params` from the loader context without repeating the data shape in the page props annotation.
+- Added `throwNotFound()` as an explicit alias for `notFound()` in `@reckona/mreact-router`, preserving the existing 404 control-flow behavior while making non-returning loader branches easier to read.
+
 ## 0.0.148 - 2026-06-08
 
 ### Added
