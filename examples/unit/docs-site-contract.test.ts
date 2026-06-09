@@ -471,6 +471,15 @@ describe("docs-site example contract", () => {
     expect(apiData).toContain("allApiPagePaths");
     expect(apiData).toContain("ApiReferencePage");
     expect(apiData).toContain("apiLinkForEntry");
+    expect(apiData).toContain("commentTextFor");
+    expect(apiData).toContain("TypeDocComment");
+    expect(apiData).toContain('class="api-package-list"');
+    expect(apiData).toContain('class="api-module-row"');
+    expect(apiData).toContain('class="api-entry-list"');
+    expect(apiData).toContain('class="api-entry-row"');
+    expect(apiData).toContain('class="api-detail-header"');
+    expect(apiData).toContain('class="api-description"');
+    expect(apiData).toContain("comment === \"\" ? undefined");
     expect(apiData).toContain("escapeCodeText");
     expect(apiData).toContain("<code>{escapeCodeText(signaturePreview(entry.node))}</code>");
     expect(apiData).toContain("<code>{escapeCodeText(signatureBlock(entry.node))}</code>");
@@ -490,6 +499,14 @@ describe("docs-site example contract", () => {
     expect(exportScript).not.toContain("writeGeneratedApiIntegrationStyles");
     expect(exportScript).not.toContain("data-mreact-docs-api-shell");
     expect(exportScript).not.toContain("docs-api.css");
+    const css = await readDocsSite("src/app/globals.css");
+    expect(css).toContain(".api-package-list");
+    expect(css).toContain(".api-module-row");
+    expect(css).toContain(".api-entry-list");
+    expect(css).toContain(".api-entry-row");
+    expect(css).toContain(".api-detail-header");
+    expect(css).toContain(".api-description");
+    expect(css).toContain("content-visibility: auto");
   });
 
   test("keeps every Reference page practical and connected to generated API details", async () => {

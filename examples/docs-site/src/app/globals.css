@@ -413,64 +413,122 @@ a:hover {
   max-width: none;
 }
 
-.api-summary-grid,
-.api-entry-grid {
+.api-package-list {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
-  margin: 1.25rem 0 2rem;
+  margin: 1.5rem 0 2rem;
 }
 
-.api-summary-card,
-.api-entry-card {
+.api-package-section,
+.api-entry-list,
+.api-detail-header,
+.api-member-list {
   background: var(--bg-soft);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  color: var(--text);
-  display: grid;
-  gap: 0.55rem;
-  padding: 1rem;
-  text-decoration: none;
 }
 
-.api-summary-card {
-  align-content: start;
+.api-package-section {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 9rem;
+  overflow: hidden;
 }
 
-.api-summary-card h2 {
+.api-package-heading {
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  justify-content: space-between;
+  padding: 0.9rem 1rem;
+}
+
+.api-package-heading h2 {
+  border-top: 0;
   font-size: 1.2rem;
   margin: 0;
+  padding-top: 0;
 }
 
-.api-summary-card p {
+.api-package-heading p {
   color: var(--text-2);
   margin: 0;
 }
 
-.api-summary-card ul {
-  margin: 0.25rem 0 0;
+.api-module-list,
+.api-entry-list {
+  display: grid;
 }
 
-.api-entry-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 8rem;
+.api-module-row,
+.api-entry-row {
+  color: var(--text);
+  text-decoration: none;
 }
 
-.api-entry-card:hover {
-  border-color: color-mix(in oklch, var(--brand) 45%, var(--border));
+.api-module-row {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 0.75rem 1rem;
+}
+
+.api-module-row + .api-module-row,
+.api-entry-row + .api-entry-row {
+  border-top: 1px solid var(--border);
+}
+
+.api-module-row span:last-child {
+  color: var(--text-2);
+  font-weight: 650;
+}
+
+.api-module-row:hover,
+.api-entry-row:hover {
+  background: color-mix(in oklch, var(--bg-soft) 82%, var(--brand));
   color: var(--text);
 }
 
-.api-entry-card strong {
-  font-size: 1.1rem;
+.api-entry-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 6rem;
+  display: grid;
+  gap: 0.45rem 1rem;
+  grid-template-columns: minmax(10rem, 0.42fr) minmax(14rem, 1fr);
+  padding: 0.85rem 1rem;
 }
 
-.api-entry-card code {
+.api-entry-row-main {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.api-entry-row strong {
+  font-size: 1.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.api-entry-row code {
+  background: transparent;
+  border: 0;
+  color: var(--text-2);
   display: block;
+  font-size: 1rem;
   max-width: 100%;
   overflow: hidden;
+  padding: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.api-entry-summary {
+  color: var(--text-2);
+  grid-column: 2;
+  overflow-wrap: anywhere;
 }
 
 .api-entry-kind,
@@ -482,6 +540,27 @@ a:hover {
 
 .api-entry-group {
   margin: 2rem 0;
+}
+
+.api-entry-group h2,
+.api-signature-section h2 {
+  font-size: 1.25rem;
+}
+
+.api-detail-header {
+  margin: 1rem 0 1.5rem;
+  padding: 1.25rem;
+}
+
+.api-detail-header h1 {
+  margin-bottom: 0;
+}
+
+.api-description {
+  color: var(--text-2);
+  margin: 1rem 0 0;
+  max-width: 72rem;
+  text-wrap: pretty;
 }
 
 .api-breadcrumbs,
@@ -500,10 +579,8 @@ a:hover {
   gap: 0.5rem;
 }
 
-.api-member-list {
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  overflow: hidden;
+.api-signature-section {
+  margin: 1.5rem 0;
 }
 
 .api-member-row {
@@ -888,6 +965,15 @@ a:hover {
   .benchmark-meta,
   .benchmark-bar-row {
     grid-template-columns: 1fr;
+  }
+
+  .api-entry-row,
+  .api-module-row {
+    grid-template-columns: 1fr;
+  }
+
+  .api-entry-summary {
+    grid-column: 1;
   }
 
   .benchmark-panel-heading {

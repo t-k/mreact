@@ -33,6 +33,7 @@ interface TypeDocReflection {
   readonly id: number;
   readonly kind: number;
   readonly name: string;
+  readonly comment?: TypeDocComment;
   readonly parameters?: readonly TypeDocReflection[];
   readonly readme?: readonly TypeDocCommentPart[];
   readonly signatures?: readonly TypeDocReflection[];
@@ -56,6 +57,16 @@ interface TypeDocSource {
 interface TypeDocCommentPart {
   readonly kind?: string;
   readonly text?: string;
+}
+
+interface TypeDocComment {
+  readonly blockTags?: readonly TypeDocCommentTag[];
+  readonly summary?: readonly TypeDocCommentPart[];
+}
+
+interface TypeDocCommentTag {
+  readonly content?: readonly TypeDocCommentPart[];
+  readonly tag: string;
 }
 
 interface TypeDocType {
@@ -197,21 +208,26 @@ function ApiIndex(props: { readonly page: Extract<ApiPage, { readonly kind: "ind
         Browse exported APIs by package. Use these pages when you need exact function signatures,
         option shapes, return types, or source links.
       </p>
-      <div class="api-summary-grid">
+      <div class="api-package-list">
         {props.page.packageSummaries.map((summary) => (
-          <section class="api-summary-card" key={summary.name}>
-            <h2>{summary.name}</h2>
-            <p>
-              {summary.entryCount} exports across {summary.modules.length}{" "}
-              {summary.modules.length === 1 ? "module" : "modules"}.
-            </p>
-            <ul>
-              {summary.modules.slice(0, 8).map((module) => (
-                <li key={module.slug}>
-                  <a href={sitePath(`api/${module.path.join("/")}`)}>{module.displayName}</a>
-                </li>
+          <section class="api-package-section" key={summary.name}>
+            <header class="api-package-heading">
+              <h2>{summary.name}</h2>
+              <p>
+                {summary.entryCount} exports across {summary.modules.length}{" "}
+                {summary.modules.length === 1 ? "module" : "modules"}.
+              </p>
+            </header>
+            <div class="api-module-list">
+              {summary.modules.map((module) => (
+                <a class="api-module-row" href={sitePath(`api/${module.path.join("/")}`)} key={module.slug}>
+                  <span>{module.displayName}</span>
+                  <span>
+                    {module.entries.length} {module.entries.length === 1 ? "export" : "exports"}
+                  </span>
+                </a>
               ))}
-            </ul>
+            </div>
           </section>
         ))}
       </div>
@@ -231,14 +247,23 @@ function ApiModuleView(props: { readonly page: Extract<ApiPage, { readonly kind:
       {props.page.entryGroups.map((group) => (
         <section class="api-entry-group" key={`${props.page.module.slug}-${group.title}`}>
           <h2>{group.title}</h2>
-          <div class="api-entry-grid">
-            {group.entries.map((entry) => (
-              <a class="api-entry-card" href={apiLinkForEntry(entry)} key={entry.path.join("/")}>
-                <span class="api-entry-kind">{entry.kindLabel}</span>
-                <strong>{entry.node.name}</strong>
-                <code>{escapeCodeText(signaturePreview(entry.node))}</code>
-              </a>
-            ))}
+          <div class="api-entry-list">
+            {group.entries.map((entry) => {
+              const comment = commentTextFor(entry.node);
+
+              return (
+                <a class="api-entry-row" href={apiLinkForEntry(entry)} key={entry.path.join("/")}>
+                  <span class="api-entry-row-main">
+                    <span class="api-entry-kind">{entry.kindLabel}</span>
+                    <strong>{entry.node.name}</strong>
+                  </span>
+                  <code>{escapeCodeText(signaturePreview(entry.node))}</code>
+                  {comment === "" ? undefined : (
+                    <span class="api-entry-summary">{escapeCodeText(comment)}</span>
+                  )}
+                </a>
+              );
+            })}
           </div>
         </section>
       ))}
@@ -250,6 +275,7 @@ function ApiEntryView(props: { readonly page: Extract<ApiPage, { readonly kind: 
   const entry = props.page.entry;
   const source = sourceFor(entry.node);
   const members = membersFor(entry.node);
+  const comment = commentTextFor(entry.node);
 
   return (
     <>
@@ -260,21 +286,27 @@ function ApiEntryView(props: { readonly page: Extract<ApiPage, { readonly kind: 
         ]}
         current={entry.node.name}
       />
-      <h1>{entry.node.name}</h1>
-      <p class="api-entry-meta">
-        <span>{entry.kindLabel}</span>
-        <span>{entry.module.displayName}</span>
-        {source === "" ? undefined : (
-          <a href={source} rel="noreferrer">
-            Source
-          </a>
-        )}
-      </p>
-      <div class="code-block">
-        <pre>
-          <code>{escapeCodeText(signatureBlock(entry.node))}</code>
-        </pre>
-      </div>
+      <header class="api-detail-header">
+        <p class="api-entry-meta">
+          <span>{entry.kindLabel}</span>
+          <span>{entry.module.displayName}</span>
+          {source === "" ? undefined : (
+            <a href={source} rel="noreferrer">
+              Source
+            </a>
+          )}
+        </p>
+        <h1>{entry.node.name}</h1>
+        {comment === "" ? undefined : <p class="api-description">{escapeCodeText(comment)}</p>}
+      </header>
+      <section class="api-signature-section">
+        <h2>Signature</h2>
+        <div class="code-block">
+          <pre>
+            <code>{escapeCodeText(signatureBlock(entry.node))}</code>
+          </pre>
+        </div>
+      </section>
       {members.length === 0 ? undefined : (
         <section class="api-entry-group">
           <h2>Members</h2>
@@ -445,6 +477,40 @@ function kindLabelFor(kind: number): string {
 
 function signaturePreview(reflection: TypeDocReflection): string {
   return signatureBlock(reflection).replaceAll("\n", " ");
+}
+
+function commentTextFor(reflection: TypeDocReflection): string {
+  const directComment = formatComment(reflection.comment);
+  if (directComment !== "") {
+    return directComment;
+  }
+
+  for (const signature of reflection.signatures ?? []) {
+    const signatureComment = formatComment(signature.comment);
+    if (signatureComment !== "") {
+      return signatureComment;
+    }
+  }
+
+  return "";
+}
+
+function formatComment(comment: TypeDocComment | undefined): string {
+  const summary = commentPartsText(comment?.summary ?? []);
+  if (summary !== "") {
+    return summary;
+  }
+
+  const remarks = (comment?.blockTags ?? []).find((tag) => tag.tag === "@remarks");
+  return commentPartsText(remarks?.content ?? []);
+}
+
+function commentPartsText(parts: readonly TypeDocCommentPart[]): string {
+  return parts
+    .map((part) => part.text ?? "")
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function escapeCodeText(value: string): string {
