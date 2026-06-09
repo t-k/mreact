@@ -4,6 +4,7 @@ import {
   type RenderValue,
 } from "./types.js";
 
+/** Creates a list render value for dynamic insertion. */
 export function createList<T>(
   items: () => readonly T[],
   renderItem: (item: T, index: number, items: readonly T[]) => RenderValue,

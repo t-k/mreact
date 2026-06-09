@@ -13,8 +13,11 @@ import type {
   JSXIntrinsicElements,
 } from "./jsx-runtime.js";
 
+/** Fragment marker used by the development JSX runtime. */
 export { Fragment };
+/** Metadata key used by compiled JSX for reactive text bindings. */
 export { REACTIVE_TEXT_BINDING_META };
+/** JSX event and attribute types re-exported by the development JSX runtime. */
 export type {
   FormEvent,
   FormEventHandler,
@@ -25,6 +28,7 @@ export type {
   JSXIntrinsicElements,
 } from "./jsx-runtime.js";
 
+/** JSX namespace exported by the development JSX runtime. */
 export namespace JSX {
   export interface Element extends ReactCompatElement {}
 
@@ -33,6 +37,7 @@ export namespace JSX {
   export interface IntrinsicElements extends JSXIntrinsicElements {}
 }
 
+/** Creates a JSX element with development metadata arguments. */
 export function jsxDEV<P extends Record<string, unknown>>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,

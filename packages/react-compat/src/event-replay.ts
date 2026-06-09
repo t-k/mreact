@@ -2,11 +2,13 @@ const queuedHydrationEvents = new WeakMap<Element, QueuedHydrationEvent[]>();
 const replayedEvents = new WeakSet<Event>();
 const allowedReplayEventTypes = new Set(["click", "input", "change", "submit"]);
 
+/** Serialized map of server-rendered event handlers used for hydration replay. */
 export interface EventHydrationManifest {
   version: 1;
   events: EventHydrationManifestEntry[];
 }
 
+/** Single event handler entry in a hydration replay manifest. */
 export interface EventHydrationManifestEntry {
   id: string;
   event: string;
@@ -22,6 +24,7 @@ export interface HydrationEventReplayOptions {
   onCapturedEvent?: (event: Event, target: EventTarget) => void;
 }
 
+/** Queues a captured event so it can be replayed after hydration. */
 export function queueHydrationEvent(
   container: Element,
   event: Event,
@@ -40,10 +43,12 @@ export function queueHydrationEvent(
   queuedHydrationEvents.set(container, events);
 }
 
+/** Captures supported events on a container until hydration can replay them. */
 export function enableHydrationEventReplay(container: Element): () => void {
   return enableHydrationEventReplayForTypes(container, allowedReplayEventTypes);
 }
 
+/** Reads an event hydration manifest script from a document or parent node. */
 export function readEventHydrationManifest(
   root: ParentNode = document,
 ): EventHydrationManifest | undefined {
@@ -64,6 +69,7 @@ export function readEventHydrationManifest(
   return value;
 }
 
+/** Captures only the event types declared by a hydration manifest. */
 export function enableEventHydrationManifestReplay(
   container: Element,
   manifest: EventHydrationManifest | undefined,

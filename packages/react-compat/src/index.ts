@@ -1,3 +1,10 @@
+import type {
+  FormEvent as JSXRuntimeFormEvent,
+  FormEventHandler as JSXRuntimeFormEventHandler,
+  JSXEvent as JSXRuntimeEvent,
+  JSXEventHandler as JSXRuntimeEventHandler,
+} from "./jsx-runtime.js";
+
 export {
   Component,
   PureComponent,
@@ -20,18 +27,30 @@ export {
   lazy,
   memo,
 } from "./element.js";
+/** Element and node types exported by the React-compatible root entrypoint. */
 export type {
   ErrorBoundaryOptions,
   ElementType,
   ReactCompatElement,
   ReactCompatNode,
 } from "./element.js";
-export type {
-  FormEvent,
-  FormEventHandler,
-  JSXEvent,
-  JSXEventHandler,
-} from "./jsx-runtime.js";
+
+/** DOM event type with a narrowed currentTarget. */
+export type JSXEvent<
+  TCurrentTarget extends EventTarget,
+  TEvent extends Event = Event,
+> = JSXRuntimeEvent<TCurrentTarget, TEvent>;
+/** Event handler type used by JSX DOM attributes. */
+export type JSXEventHandler<
+  TCurrentTarget extends EventTarget,
+  TEvent extends Event = Event,
+> = JSXRuntimeEventHandler<TCurrentTarget, TEvent>;
+/** Submit event type used by form-related JSX attributes. */
+export type FormEvent<TCurrentTarget extends EventTarget = Element> =
+  JSXRuntimeFormEvent<TCurrentTarget>;
+/** Submit event handler type used by form-related JSX attributes. */
+export type FormEventHandler<TCurrentTarget extends EventTarget = Element> =
+  JSXRuntimeFormEventHandler<TCurrentTarget>;
 
 export {
   createContext,
@@ -93,4 +112,5 @@ export {
 } from "./hooks.js";
 export { renderToString } from "./server-render.js";
 export type { StartTransition, TransitionScope } from "./hooks.js";
+/** Default React-compatible namespace export. */
 export { default } from "./react-default.js";

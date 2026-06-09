@@ -1,3 +1,4 @@
+/** React-compatible hook and transition APIs for the hooks subpath. */
 export {
   useCallback,
   useDebugValue,
@@ -21,4 +22,5 @@ export {
   useTransition,
   version,
 } from "./hooks.js";
+/** Transition function types for the hooks subpath. */
 export type { StartTransition, TransitionScope } from "./hooks.js";

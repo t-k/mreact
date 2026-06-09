@@ -20,6 +20,7 @@ function normalizeText(value: unknown): string {
   return value == null ? "" : String(value);
 }
 
+/** Binds a text node to a reactive value. */
 export function bindText(node: Text, value: () => unknown): Dispose {
   const reactiveText = node as Text & { __mreactReactiveText?: true };
 
@@ -31,6 +32,7 @@ export function bindText(node: Text, value: () => unknown): Dispose {
   return registerDispose(dispose);
 }
 
+/** Binds multiple text nodes to the same reactive value. */
 export function bindTextBatch(
   nodes: readonly Text[],
   value: () => unknown,

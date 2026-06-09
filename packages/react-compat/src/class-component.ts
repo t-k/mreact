@@ -48,6 +48,7 @@ export interface ClassComponentType {
   getDerivedStateFromError?: (error: Error) => Record<string, unknown> | null;
 }
 
+/** Base class-style component contract with state updates and render lifecycle. */
 export interface Component<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
@@ -79,6 +80,7 @@ export interface ComponentConstructor {
   prototype: Component<any, any>;
 }
 
+/** Base class-style component constructor for React-compatible class components. */
 export const Component: ComponentConstructor = function Component<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
@@ -117,6 +119,7 @@ Component.prototype.render = function render(): ReactCompatNode {
   return null;
 };
 
+/** Class-style component contract that skips updates for shallow-equal props and state. */
 export interface PureComponent<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,
@@ -136,6 +139,7 @@ export interface PureComponentConstructor {
   prototype: PureComponent<any, any>;
 }
 
+/** Class-style component constructor with shallow prop and state comparison. */
 export const PureComponent: PureComponentConstructor = function PureComponent<
   P extends Record<string, unknown> = Record<string, unknown>,
   S extends Record<string, unknown> = Record<string, unknown>,

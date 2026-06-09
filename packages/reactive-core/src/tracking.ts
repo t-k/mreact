@@ -223,6 +223,7 @@ export function notifySubscribers(source: Source): void {
   }
 }
 
+/** Flushes computed values that were dirtied during batched notifications. */
 export function flushPendingComputed(): void {
   if (runtimeState.flushingComputed) {
     return;

@@ -91,6 +91,7 @@ interface ExternalStoreCheck {
   value: unknown;
 }
 
+/** Cache scope that stores memoized cache() results and cancellation state. */
 export interface CacheScope {
   functionCaches: WeakMap<(...args: never[]) => unknown, CacheTrieNode>;
   controller: AbortController;
@@ -194,6 +195,7 @@ const strictMemoObjectOwnerIds = new WeakMap<object, number>();
 const strictMemoPrimitiveOwnerIds = new Map<unknown, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
+/** React version string matched by the compatibility layer. */
 export const version = "19.2.6";
 
 export interface ReactiveTextBinding {
@@ -204,6 +206,7 @@ export interface ReactiveTextBinding {
 const reactiveTextBindingsByNode = new WeakMap<Text, ReactiveTextBinding>();
 const hydratedIdsByRuntime = new WeakMap<RootRuntime, Map<string, string>>();
 
+/** Flushes React-compatible updates produced inside a test interaction. */
 export function act<T>(callback: () => T): T extends PromiseLike<unknown> ? Promise<void> : void {
   const previousPriority = currentEventPriority;
   currentEventPriority = "discrete";
@@ -267,6 +270,7 @@ function flushActWork(): void {
   flushEffectFlushRerenders();
 }
 
+/** Priority category used while batching an event callback. */
 export type EventPriority = "discrete" | "continuous" | "default";
 export type RenderPriority = "sync" | "transition" | "continuous";
 
@@ -401,6 +405,7 @@ export function createRootRuntime(
   };
 }
 
+/** Creates an isolated cache scope for cache() and cacheSignal(). */
 export function createCacheScope(): CacheScope {
   return {
     functionCaches: new WeakMap(),
@@ -409,12 +414,14 @@ export function createCacheScope(): CacheScope {
   };
 }
 
+/** Clears a cache scope and aborts work tied to its previous signal. */
 export function refreshCacheScope(scope: CacheScope): void {
   scope.controller.abort();
   scope.functionCaches = new WeakMap();
   scope.controller = new AbortController();
 }
 
+/** Runs a callback with a cache scope active for nested cache() calls. */
 export function runWithCacheScope<T>(scope: CacheScope, callback: () => T): T {
   const previousScope = hookRenderState.currentCacheScope;
   const previousGlobalScope = getGlobalCacheScope();
@@ -749,6 +756,7 @@ function clonePortalNodes(source: Map<Element, Set<Node>>): Map<Element, Set<Nod
   return clone;
 }
 
+/** Stores component-local state and returns the current value with an updater. */
 export function useState<T>(
   initial: T | (() => T),
 ): [T, (value: T | ((previous: T) => T)) => void] {
@@ -897,6 +905,7 @@ function isReactiveTextBinding(value: unknown): value is ReactiveTextBinding {
   );
 }
 
+/** Stores reducer-managed component state and returns the current state with a dispatch function. */
 export function useReducer<TState, TAction, TInitial = TState>(
   reducer: (state: TState, action: TAction) => TState,
   initialArg: TInitial,
@@ -929,6 +938,7 @@ export function useReducer<TState, TAction, TInitial = TState>(
   return [state, dispatchRef.current];
 }
 
+/** Returns a stable mutable ref object for the component instance. */
 export function useRef<T>(initial: T): { current: T } {
   const instance = requireInstance();
   const index = instance.hookIndex;
@@ -953,6 +963,7 @@ export function useRef<T>(initial: T): { current: T } {
   return slot.value as { current: T };
 }
 
+/** Returns a stable id string that matches server and client rendering. */
 export function useId(): string {
   const runtime = requireRuntime();
   const instance = requireInstance();
@@ -989,6 +1000,7 @@ export function useId(): string {
   return idRef.current;
 }
 
+/** Assigns a custom imperative handle to a forwarded ref. */
 export function useImperativeHandle<T>(
   ref: unknown,
   create: () => T,
@@ -1008,6 +1020,7 @@ export function useImperativeHandle<T>(
     : { kind: "imperative-handle", deps });
 }
 
+/** Memoizes a computed value until its dependency list changes. */
 export function useMemo<T>(factory: () => T, deps?: readonly unknown[]): T {
   const runtime = requireRuntime();
   const instance = requireInstance();
@@ -1142,6 +1155,7 @@ function runWithoutDevToolsHookTracking<T>(callback: () => T): T {
   }
 }
 
+/** Memoizes a callback reference until its dependency list changes. */
 export function useCallback<T extends (...args: never[]) => unknown>(
   callback: T,
   deps?: readonly unknown[],
@@ -1153,6 +1167,7 @@ export function useCallback<T extends (...args: never[]) => unknown>(
   return value;
 }
 
+/** Records a value for React DevTools hook inspection. */
 export function useDebugValue(_value: unknown, _format?: (value: unknown) => unknown): void {
   const instance = requireInstance();
   const index = instance.hookIndex;
@@ -1182,6 +1197,7 @@ export function useDebugValue(_value: unknown, _format?: (value: unknown) => unk
   });
 }
 
+/** Creates a stable event callback that always calls the latest implementation. */
 export function useEffectEvent<TArgs extends unknown[], TResult>(
   callback: (...args: TArgs) => TResult,
 ): (...args: TArgs) => TResult {
@@ -1199,6 +1215,7 @@ export function useEffectEvent<TArgs extends unknown[], TResult>(
   return event;
 }
 
+/** Runs an effect after the rendered output has been committed. */
 export function useEffect(
   callback: EffectCallback,
   deps?: readonly unknown[],
@@ -1209,6 +1226,7 @@ export function useEffect(
     : { kind: "effect", effectKind: "normal", deps });
 }
 
+/** Runs an insertion effect before layout effects are flushed. */
 export function useInsertionEffect(
   callback: EffectCallback,
   deps?: readonly unknown[],
@@ -1219,6 +1237,7 @@ export function useInsertionEffect(
     : { kind: "effect", effectKind: "insertion", deps });
 }
 
+/** Runs a layout effect after DOM mutations and before normal effects. */
 export function useLayoutEffect(
   callback: EffectCallback,
   deps?: readonly unknown[],
@@ -1229,6 +1248,7 @@ export function useLayoutEffect(
     : { kind: "effect", effectKind: "layout", deps });
 }
 
+/** Subscribes to an external store with snapshot checks for consistent rendering. */
 export function useSyncExternalStore<T>(
   subscribe: (listener: () => void) => () => void,
   getSnapshot: () => T,
@@ -1304,6 +1324,7 @@ export function useSyncExternalStore<T>(
   return slot.value as T;
 }
 
+/** Tracks state and pending status for an action that receives the previous state. */
 export function useActionState<TState, TPayload>(
   action: (previousState: TState, payload: TPayload) => TState | Promise<TState>,
   initialState: TState,
@@ -1352,6 +1373,7 @@ export function useActionState<TState, TPayload>(
   ];
 }
 
+/** Returns an optimistic state value and dispatcher layered on top of a base state. */
 export function useOptimistic<TState, TPayload>(
   state: TState,
   update?: (state: TState, payload: TPayload) => TState,
@@ -1402,6 +1424,7 @@ export function useOptimistic<TState, TPayload>(
   return [slot.optimisticState as TState, slot.dispatch as (payload: TPayload) => void];
 }
 
+/** Reads a context-like value or suspends on a thenable until it resolves. */
 export function use<T>(usable: PromiseLike<T> | unknown): T {
   if (isReactCompatContext(usable)) {
     return useContext(usable) as T;
@@ -1414,6 +1437,7 @@ export function use<T>(usable: PromiseLike<T> | unknown): T {
   return usable as T;
 }
 
+/** Memoizes a function within the currently active cache scope. */
 export function cache<TArgs extends unknown[], TResult>(
   callback: (...args: TArgs) => TResult,
 ): (...args: TArgs) => TResult {
@@ -1447,15 +1471,18 @@ export function cache<TArgs extends unknown[], TResult>(
   };
 }
 
+/** Returns the abort signal for the currently active cache scope. */
 export function cacheSignal(): AbortSignal | null {
   return getCurrentCacheScope()?.controller.signal ?? null;
 }
 
+/** Returns the current owner stack captured for cache diagnostics. */
 export function captureOwnerStack(): string | null {
   const stack = getCurrentCacheScope()?.ownerStack ?? emptyCacheOwnerStack;
   return stack.length === 0 ? null : stack.join("\n");
 }
 
+/** Returns a callback placeholder for refreshing the current cache boundary. */
 export function unstable_useCacheRefresh(): () => void {
   return useCallback(() => undefined, []);
 }
@@ -1504,9 +1531,12 @@ function readThenable<T>(thenable: PromiseLike<T>): T {
   throw thenable;
 }
 
+/** Callback body scheduled as transition work. */
 export type TransitionScope = () => void;
+/** Function that schedules a transition scope. */
 export type StartTransition = (scope: TransitionScope) => void;
 
+/** Schedules non-urgent updates produced inside a transition scope. */
 export function startTransition(scope: TransitionScope): void {
   const context = {
     syncVersion,
@@ -1516,6 +1546,7 @@ export function startTransition(scope: TransitionScope): void {
   runTransitionScope(scope, context);
 }
 
+/** Runs a callback while updates are batched at the requested event priority. */
 export function runWithEventPriority<T>(
   priority: EventPriority,
   callback: () => T,
@@ -1566,6 +1597,7 @@ export function runWithHostCommit<T>(callback: () => T): T {
   }
 }
 
+/** Returns transition pending state and a function that starts transition work. */
 export function useTransition(): [boolean, StartTransition] {
   const [pending, setPending] = runWithoutDevToolsHookTracking(() => useState(false));
   const startTransitionWithPending: StartTransition = (scope) => {
@@ -1598,6 +1630,7 @@ export function useTransition(): [boolean, StartTransition] {
   ];
 }
 
+/** Defers a value update so urgent renders can commit first. */
 export function useDeferredValue<T>(value: T, initialValue?: T): T {
   const [deferredValue, setDeferredValue] = runWithoutDevToolsHookTracking(() =>
     useState(arguments.length > 1 ? (initialValue as T) : value)

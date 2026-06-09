@@ -1,16 +1,19 @@
 import { flushQueuedComputations } from "./scheduler.js";
 import { setScheduler, type Scheduler } from "./scheduler.js";
 
+/** Waits for one queued microtask turn. */
 export async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
+/** Flushes queued reactive effects around a microtask turn. */
 export async function flushEffects(): Promise<void> {
   flushQueuedComputations();
   await Promise.resolve();
   flushQueuedComputations();
 }
 
+/** Test scheduler handle for deterministic reactive flush control. */
 export interface ReactiveTestRuntime {
   dispose(): void;
   flushAll(): void;
@@ -18,6 +21,7 @@ export interface ReactiveTestRuntime {
   scheduledFlushCount(): number;
 }
 
+/** Creates a deterministic reactive scheduler for tests. */
 export function createReactiveTestRuntime(): ReactiveTestRuntime {
   const scheduled: Array<() => void> = [];
   const scheduler: Scheduler = {

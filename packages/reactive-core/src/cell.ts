@@ -8,6 +8,7 @@ const clientDevtoolsDisabled =
   typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
   __MREACT_CLIENT_DEVTOOLS__ === false;
 
+/** Creates a mutable reactive cell with an initial value. */
 export function cell<T>(initial: T): Cell<T> {
   let current = initial;
   const source: Source = {

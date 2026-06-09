@@ -1,6 +1,7 @@
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
+/** Options for binding DOM events through the reactive DOM runtime. */
 export interface BindEventOptions {
   direct?: boolean;
 }
@@ -27,6 +28,7 @@ const delegatedEventTypes = " change click input keydown keyup pointerdown point
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
 
+/** Binds an event handler to an element and returns a disposer. */
 export function bindEvent<K extends keyof HTMLElementEventMap>(
   element: HTMLElement,
   type: K,

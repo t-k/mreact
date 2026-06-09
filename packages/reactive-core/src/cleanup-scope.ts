@@ -1,5 +1,6 @@
 import { runtimeState } from "./state.js";
 
+/** Runs a callback with a cleanup owner that can collect disposers. */
 export function withCleanupScope<T>(
   owner: (dispose: () => void) => void,
   run: () => T,
@@ -14,6 +15,7 @@ export function withCleanupScope<T>(
   }
 }
 
+/** Registers a disposer with the currently active cleanup scope. */
 export function registerCleanup(dispose: () => void): void {
   runtimeState.cleanupOwner?.(dispose);
 }

@@ -11,6 +11,7 @@ import type {
   FlightTypedArrayName,
 } from "./flight-types.js";
 
+/** Options used when resolving client and server references while decoding Flight models. */
 export interface DecodeFlightOptions {
   loadClientReference(reference: FlightClientReference): ElementType<Record<string, unknown>>;
   callServerReference?(

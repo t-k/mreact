@@ -2,6 +2,7 @@ import { runtimeState } from "./state.js";
 import { schedulePendingFlush } from "./scheduler.js";
 import { flushPendingComputed } from "./tracking.js";
 
+/** Groups reactive writes and flushes dependents after the callback returns. */
 export function batch<T>(fn: () => T): T {
   runtimeState.batchDepth += 1;
 
@@ -17,6 +18,7 @@ export function batch<T>(fn: () => T): T {
   }
 }
 
+/** Groups reactive writes across an async callback and flushes after it settles. */
 export async function batchAsync<T>(fn: () => Promise<T> | T): Promise<T> {
   runtimeState.batchDepth += 1;
 

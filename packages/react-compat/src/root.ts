@@ -41,15 +41,18 @@ import {
 import type { Fiber, FiberRoot } from "./fiber.js";
 import { renderIntoContainer } from "./reconciler.js";
 
+/** Root controller returned by createRoot and hydrateRoot. */
 export interface Root {
   render(element: ReactCompatNode): void;
   unmount(): void;
 }
 
+/** Options used when creating a client render root. */
 export interface RootOptions {
   identifierPrefix?: string;
 }
 
+/** Options used when hydrating server-rendered markup. */
 export interface HydrateRootOptions {
   onRecoverableError?: (
     error: Error,
@@ -60,11 +63,13 @@ export interface HydrateRootOptions {
   identifierPrefix?: string;
 }
 
+/** Controller for deferred or selective streaming hydration. */
 export interface StreamingHydrationRoot {
   hydrate(element: ReactCompatNode, options?: HydrateRootOptions): Root;
   dispose(): void;
 }
 
+/** Options for creating a streaming hydration root. */
 export interface StreamingHydrationRootOptions {
   manifest?: EventHydrationManifest;
   manifestRoot?: ParentNode;
@@ -74,12 +79,14 @@ export interface StreamingHydrationRootOptions {
   selectiveHydration?: SelectiveHydrationOptions;
 }
 
+/** Rules that choose which boundary to hydrate after a captured event. */
 export interface SelectiveHydrationOptions {
   element?: ReactCompatNode;
   options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
   boundaries?: Record<string, SelectiveHydrationBoundary>;
 }
 
+/** Element and options used to hydrate one selective boundary. */
 export interface SelectiveHydrationBoundary {
   element: ReactCompatNode;
   options?: HydrateRootOptions | ((event: Event) => HydrateRootOptions);
@@ -87,6 +94,7 @@ export interface SelectiveHydrationBoundary {
 
 const legacyRoots = new WeakMap<Element, Root>();
 
+/** Creates a root that renders React-compatible nodes into a DOM container. */
 export function createRoot(
   container: Element,
   options: RootOptions = {},
@@ -236,16 +244,19 @@ function renderHydratingHostFiberIntoContainer(
   throw new Error("Store unstable.");
 }
 
+/** Renders a React-compatible node into a legacy root container. */
 export function render(element: ReactCompatNode, container: Element): void {
   const root = legacyRoots.get(container) ?? createRoot(container);
   legacyRoots.set(container, root);
   root.render(element);
 }
 
+/** Runs updates synchronously and flushes pending reactive work before returning. */
 export function flushSync<T>(callback: () => T): T {
   return flushSyncUpdates(callback);
 }
 
+/** Hydrates server-rendered markup with a React-compatible element tree. */
 export function hydrateRoot(
   container: Element,
   element: ReactCompatNode,
@@ -355,6 +366,7 @@ function laneForRenderPriority(priority: RenderPriority): Lane {
   return SyncLane;
 }
 
+/** Creates a root that can hydrate streamed or selectively revealed markup. */
 export function createStreamingHydrationRoot(
   container: Element,
   options: StreamingHydrationRootOptions = {},
@@ -434,6 +446,7 @@ export function createStreamingHydrationRoot(
   };
 }
 
+/** Unmounts a legacy root from a container and reports whether anything was removed. */
 export function unmountComponentAtNode(container: Element): boolean {
   const root = legacyRoots.get(container);
 

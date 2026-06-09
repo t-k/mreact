@@ -68,6 +68,7 @@ import {
 } from "./hooks.js";
 import { renderToString } from "./server-render.js";
 
+/** Default React-compatible namespace export. */
 const ReactCompat = {
   Component,
   PureComponent,
@@ -130,4 +131,5 @@ const ReactCompat = {
   version,
 } as const;
 
+/** Default React-compatible namespace export. */
 export default ReactCompat;

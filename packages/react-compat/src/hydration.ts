@@ -1,5 +1,6 @@
 import type { ReactCompatNode } from "./element.js";
 
+/** Details passed to recoverable hydration error callbacks. */
 export interface HydrationRecoverableErrorInfo {
   kind: "tag" | "text" | "attribute" | "node" | "suspense-server-error";
   path: string;
@@ -27,6 +28,7 @@ export interface HydrationScope {
   after: ChildNode | null;
 }
 
+/** Applies streamed out-of-order hydration fragments to their placeholders. */
 export function applyStreamingHydrationFragments(
   root: ParentNode = document,
 ): void {

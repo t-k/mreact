@@ -56,12 +56,14 @@ export const reactFlightModelTokens = [
 
 export type ReactFlightBinaryRowTag = (typeof reactFlightBinaryRowTags)[number];
 
+/** Lists the React Flight row tags and model tokens recognized by this package. */
 export interface ReactFlightProtocolCoverage {
   binaryRowTags: string[];
   modelTokens: string[];
   rowTags: string[];
 }
 
+/** Returns the React Flight protocol markers currently covered by the decoder. */
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage {
   return {
     binaryRowTags: [...reactFlightBinaryRowTags],

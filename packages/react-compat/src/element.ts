@@ -6,15 +6,21 @@ export const LAZY_TYPE = Symbol.for("react.lazy");
 export const STRICT_MODE_TYPE = Symbol.for("react.strict_mode");
 export const PORTAL_TYPE = Symbol.for("react.portal");
 const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
+/** Symbol used to group JSX children without adding a host element. */
 export const Fragment = Symbol.for("react.fragment");
+/** Symbol used to suspend rendering while async content resolves. */
 export const Suspense = Symbol.for("react.suspense");
+/** Symbol used to coordinate multiple suspense boundaries. */
 export const SuspenseList = Symbol.for("react.suspense_list");
+/** Symbol used to mark activity boundaries in React-compatible trees. */
 export const Activity = Symbol.for("react.activity");
+/** Symbol used to measure render work with profiler callbacks. */
 export const Profiler = Symbol.for("react.profiler");
 export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta");
 export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
   "modular.react.host_children_only_props_meta",
 );
+/** Metadata key that links a state value to a reactive text binding. */
 export const REACTIVE_TEXT_BINDING_META = Symbol.for(
   "modular.react.reactive_text_binding_meta",
 );
@@ -30,6 +36,7 @@ export interface ReactCompatContextProviderShorthand {
   Consumer: unknown;
 }
 
+/** Element type accepted by createElement, JSX, and renderer entrypoints. */
 export type ElementType<P = Record<string, unknown>> =
   | string
   | typeof Fragment
@@ -47,6 +54,7 @@ export type ElementType<P = Record<string, unknown>> =
   | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>)
   | (new (props: P) => { render(): ReactCompatNode });
 
+/** Renderable value accepted by the React-compatible renderer. */
 export type ReactCompatNode =
   | ReactCompatElement
   | ReactCompatPortal
@@ -57,6 +65,7 @@ export type ReactCompatNode =
   | undefined
   | ReactCompatNode[];
 
+/** React-compatible element record produced by createElement and JSX transforms. */
 export interface ReactCompatElement<P = Record<string, unknown>> {
   $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
   type: ElementType<P>;
@@ -65,6 +74,7 @@ export interface ReactCompatElement<P = Record<string, unknown>> {
   props: P & { children?: ReactCompatNode };
 }
 
+/** Portal record that renders children into an external DOM container. */
 export interface ReactCompatPortal {
   $$typeof: typeof PORTAL_TYPE;
   container: Element;
@@ -72,6 +82,7 @@ export interface ReactCompatPortal {
   key: string | null;
 }
 
+/** Creates a React-compatible element from a type, config object, and children. */
 export function createElement<P extends Record<string, unknown>>(
   type: ElementType<P>,
   config: (P & ReactReservedProps) | null,
@@ -126,6 +137,7 @@ export function createElement<P extends Record<string, unknown>>(
   };
 }
 
+/** Creates a React-compatible element from JSX runtime arguments. */
 export function createElementFromJsxConfig<P extends Record<string, unknown>>(
   type: ElementType<P>,
   config: (P & ReactReservedProps & { children?: ReactCompatNode }) | null,
@@ -163,6 +175,7 @@ export function createElementFromJsxConfig<P extends Record<string, unknown>>(
   };
 }
 
+/** Returns true when a value is a React-compatible element record. */
 export function isReactCompatElement(
   value: unknown,
 ): value is ReactCompatElement {
@@ -173,6 +186,7 @@ export function isReactCompatElement(
   );
 }
 
+/** Creates a portal that renders children into a DOM container outside the parent tree. */
 export function createPortal(
   children: ReactCompatNode,
   container: Element,
@@ -186,6 +200,7 @@ export function createPortal(
   };
 }
 
+/** Returns true when a value is a React-compatible portal record. */
 export function isReactCompatPortal(value: unknown): value is ReactCompatPortal {
   return (
     typeof value === "object" &&
@@ -194,21 +209,25 @@ export function isReactCompatPortal(value: unknown): value is ReactCompatPortal 
   );
 }
 
+/** Creates a mutable ref object with a null initial current value. */
 export function createRef<T>(): { current: T | null } {
   return { current: null };
 }
 
+/** Element type record produced by forwardRef. */
 export interface ForwardRefType<P = Record<string, unknown>> {
   $$typeof: typeof FORWARD_REF_TYPE;
   render: (props: P, ref: unknown) => ReactCompatNode;
 }
 
+/** Element type record produced by memo. */
 export interface MemoType<P = Record<string, unknown>> {
   $$typeof: typeof MEMO_TYPE;
   type: ElementType<P>;
   compare?: (previous: P, next: P) => boolean;
 }
 
+/** Element type record produced by lazy. */
 export interface LazyType<P = Record<string, unknown>> {
   $$typeof: typeof LAZY_TYPE;
   load: () => Promise<{ default: ElementType<P> }>;
@@ -218,12 +237,14 @@ export interface LazyType<P = Record<string, unknown>> {
   error?: unknown;
 }
 
+/** Wraps a component so it can receive a ref as the second render argument. */
 export function forwardRef<P, T>(
   render: (props: P, ref: { current: T | null } | ((value: T | null) => void) | null) => ReactCompatNode,
 ): ForwardRefType<P & { ref?: unknown }> {
   return { $$typeof: FORWARD_REF_TYPE, render: render as ForwardRefType<P>["render"] };
 }
 
+/** Wraps an element type with optional prop comparison for memoized renders. */
 export function memo<P>(
   type: ElementType<P>,
   compare?: (previous: P, next: P) => boolean,
@@ -233,6 +254,7 @@ export function memo<P>(
     : { $$typeof: MEMO_TYPE, type, compare };
 }
 
+/** Creates a lazy element type that resolves its implementation on demand. */
 export function lazy<P>(
   load: () => Promise<{ default: ElementType<P> }>,
 ): LazyType<P> {
@@ -243,8 +265,10 @@ export function lazy<P>(
   };
 }
 
+/** Symbol used to mark a subtree for strict-mode development checks. */
 export const StrictMode = STRICT_MODE_TYPE;
 
+/** Clones an existing element with merged props and optional replacement children. */
 export function cloneElement<P extends Record<string, unknown>>(
   element: ReactCompatElement<P>,
   props: Partial<P> | null,
@@ -445,8 +469,10 @@ function hostPropsAreChildrenOnly(props: Record<string, unknown>): boolean {
   return true;
 }
 
+/** Alias for checking whether a value is a React-compatible element. */
 export const isValidElement = isReactCompatElement;
 
+/** Helpers for iterating, counting, flattening, and validating children. */
 export const Children = {
   map<T>(
     children: ReactCompatNode,
@@ -506,11 +532,13 @@ function flattenChildren(children: ReactCompatNode): ReactCompatNode[] {
   return [children];
 }
 
+/** Options used to render and observe a React-compatible error boundary. */
 export interface ErrorBoundaryOptions {
   fallback: (error: Error) => ReactCompatNode;
   onError?: (error: Error) => void;
 }
 
+/** Creates an error boundary element with a fallback renderer. */
 export function createErrorBoundary(
   options: ErrorBoundaryOptions,
   children: ReactCompatNode,

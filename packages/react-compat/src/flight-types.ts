@@ -1,3 +1,4 @@
+/** Client module reference carried by a Flight response. */
 export interface FlightClientReference {
   id: number;
   moduleId: string;
@@ -5,6 +6,7 @@ export interface FlightClientReference {
   chunks?: string[];
 }
 
+/** Server action reference carried by a Flight response. */
 export interface FlightServerReference {
   id: number;
   moduleId: string;
@@ -12,6 +14,7 @@ export interface FlightServerReference {
   bound?: FlightModel[];
 }
 
+/** Parsed React Flight response with root model and reference tables. */
 export interface FlightResponse {
   version: 1;
   root: FlightModel;
@@ -19,6 +22,7 @@ export interface FlightResponse {
   serverReferences: FlightServerReference[];
 }
 
+/** Serializable model value supported by the mreact Flight decoder. */
 export type FlightModel =
   | null
   | string
@@ -49,6 +53,7 @@ export interface FlightObjectModel {
   [key: string]: FlightModel | undefined;
 }
 
+/** Flight model record for a rendered element. */
 export interface FlightElementModel {
   kind: "element";
   type: string | FlightClientReferenceModel | { kind: "fragment" };
@@ -56,56 +61,67 @@ export interface FlightElementModel {
   props: Record<string, FlightModel>;
 }
 
+/** Flight model record that points at a client reference table entry. */
 export interface FlightClientReferenceModel {
   kind: "client-reference";
   id: number;
 }
 
+/** Flight model record that points at a server reference table entry. */
 export interface FlightServerReferenceModel {
   kind: "server-reference";
   id: number;
 }
 
+/** Flight model record for a Date value. */
 export interface FlightDateModel {
   kind: "date";
   value: string;
 }
 
+/** Flight model record for a bigint value. */
 export interface FlightBigIntModel {
   kind: "bigint";
   value: string;
 }
 
+/** Flight model record for non-finite or negative-zero numbers. */
 export interface FlightNumberModel {
   kind: "number";
   value: "Infinity" | "-Infinity" | "NaN" | "-0";
 }
 
+/** Flight model record for a global symbol. */
 export interface FlightSymbolModel {
   kind: "symbol";
   name: string;
 }
 
+/** Flight model record for a Map value. */
 export interface FlightMapModel {
   kind: "map";
   entries: [FlightModel, FlightModel][];
 }
 
+/** Flight model record for a Set value. */
 export interface FlightSetModel {
   kind: "set";
   values: FlightModel[];
 }
 
+/** Flight model record for a FormData value. */
 export interface FlightFormDataModel {
   kind: "form-data";
   entries: [string, FlightModel][];
 }
 
+/** Flight model record for an iterable value encoded as an array. */
 export interface FlightIterableModel {
   kind: "iterable";
   values: FlightModel[];
 }
 
+/** Flight model record for an error thrown while decoding. */
 export interface FlightErrorModel {
   kind: "error";
   name: string;
@@ -113,27 +129,32 @@ export interface FlightErrorModel {
   digest?: string;
 }
 
+/** Flight model record for a pending promise chunk. */
 export interface FlightPromiseModel {
   kind: "promise";
   id: number;
 }
 
+/** Flight model record for an ArrayBuffer value. */
 export interface FlightArrayBufferModel {
   kind: "array-buffer";
   bytes: number[];
 }
 
+/** Flight model record for a typed array value. */
 export interface FlightTypedArrayModel {
   kind: "typed-array";
   arrayType: FlightTypedArrayName;
   bytes: number[];
 }
 
+/** Flight model record for a DataView value. */
 export interface FlightDataViewModel {
   kind: "data-view";
   bytes: number[];
 }
 
+/** Typed array constructor names supported by the Flight decoder. */
 export type FlightTypedArrayName =
   | "Int8Array"
   | "Uint8Array"

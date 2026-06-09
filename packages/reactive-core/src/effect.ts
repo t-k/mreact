@@ -14,6 +14,7 @@ const clientDevtoolsDisabled =
   typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" &&
   __MREACT_CLIENT_DEVTOOLS__ === false;
 
+/** Runs a reactive side effect and returns a disposer. */
 export function effect(fn: () => void | (() => void)): () => void {
   let cleanup: (() => void) | undefined;
 

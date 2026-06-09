@@ -1,5 +1,6 @@
 type RuntimeGlobal = typeof globalThis & Record<string, unknown>;
 
+/** Returns a shared global runtime state object, creating it when needed. */
 export function getGlobalRuntimeState<TState extends object>(
   key: string,
   create: () => TState,

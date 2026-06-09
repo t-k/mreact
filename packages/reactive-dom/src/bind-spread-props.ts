@@ -7,6 +7,7 @@ import {
 } from "./dom-prop-application.js";
 import type { Dispose } from "./types.js";
 
+/** Binds a reactive object of spread props to an element. */
 export function bindSpreadProps(
   element: HTMLElement,
   props: () => Record<string, unknown> | null | undefined,

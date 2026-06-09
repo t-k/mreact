@@ -10,6 +10,7 @@ import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, ListRenderValue, RenderValue } from "./types.js";
 
+/** Inserts and updates a dynamic render value before a marker node. */
 export function insertDynamic(
   parent: ParentNode,
   marker: ChildNode,

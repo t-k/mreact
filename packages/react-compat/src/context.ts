@@ -53,6 +53,7 @@ const contextReadObserverState =
     current: undefined,
   });
 
+/** Creates a context object with Provider and Consumer entries. */
 export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
   const context: ReactCompatContext<T> = {
     defaultValue,
@@ -94,6 +95,7 @@ function installContextDisplayName<T>(context: ReactCompatContext<T>): void {
   });
 }
 
+/** Reads the current value for a React-compatible context. */
 export function useContext<T>(context: ReactCompatContextLike<T>): T {
   const value = readContextValue(context);
   contextReadObserverState.current?.(context as ReactCompatContextLike<unknown>, value);
@@ -213,6 +215,7 @@ export function popContextProvider<T>(provider: ReactCompatProvider<T>): void {
   externalContextValues.get(context)?.pop();
 }
 
+/** Renders a string while a provider value is active. */
 export function renderContextProviderToString<T>(
   provider: ReactCompatProvider<T>,
   value: T,
@@ -221,6 +224,7 @@ export function renderContextProviderToString<T>(
   return renderWithContextProvider(provider, value, render);
 }
 
+/** Renders a string with the current value from a context consumer. */
 export function renderContextConsumerToString<T>(
   consumer: ReactCompatConsumer<T>,
   render: (value: T) => string,

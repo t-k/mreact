@@ -6,6 +6,7 @@ import {
 } from "./dom-prop-application.js";
 import type { Dispose } from "./types.js";
 
+/** Binds one DOM property or attribute to a reactive value. */
 export function bindProp(
   element: Element,
   name: string,

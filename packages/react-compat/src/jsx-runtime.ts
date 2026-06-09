@@ -9,9 +9,12 @@ import type {
   ReactCompatNode,
 } from "./element.js";
 
+/** Fragment marker used by the automatic JSX runtime. */
 export { Fragment };
+/** Metadata key used by compiled JSX for reactive text bindings. */
 export { REACTIVE_TEXT_BINDING_META };
 
+/** DOM event type with a narrowed currentTarget. */
 export type JSXEvent<
   TCurrentTarget extends EventTarget,
   TEvent extends Event = Event,
@@ -19,19 +22,23 @@ export type JSXEvent<
   readonly currentTarget: TCurrentTarget;
 };
 
+/** Event handler type used by JSX DOM attributes. */
 export type JSXEventHandler<
   TCurrentTarget extends EventTarget,
   TEvent extends Event = Event,
 > = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
 
+/** Submit event type used by form-related JSX attributes. */
 export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<
   TCurrentTarget,
   SubmitEvent
 >;
 
+/** Submit event handler type used by form-related JSX attributes. */
 export type FormEventHandler<TCurrentTarget extends EventTarget = Element> =
   JSXEventHandler<TCurrentTarget, SubmitEvent>;
 
+/** DOM event attributes accepted by JSX elements. */
 export interface JSXDOMAttributes<TElement extends EventTarget> {
   children?: ReactCompatNode;
   onClick?: JSXEventHandler<TElement, MouseEvent>;
@@ -40,16 +47,19 @@ export interface JSXDOMAttributes<TElement extends EventTarget> {
   onSubmit?: JSXEventHandler<TElement, SubmitEvent>;
 }
 
+/** HTML attributes accepted by JSX host elements. */
 export interface JSXHTMLAttributes<TElement extends HTMLElement>
   extends JSXDOMAttributes<TElement> {
   [attributeName: string]: unknown;
 }
 
+/** Attributes accepted by every JSX element. */
 export interface JSXIntrinsicAttributes {
   key?: unknown;
   ref?: unknown;
 }
 
+/** Built-in JSX element names and their attribute types. */
 export interface JSXIntrinsicElements {
   form: JSXHTMLAttributes<HTMLFormElement> & {
     onSubmit?: JSXEventHandler<HTMLFormElement, SubmitEvent>;
@@ -67,6 +77,7 @@ export interface JSXIntrinsicElements {
   [elementName: string]: Record<string, unknown>;
 }
 
+/** JSX namespace exported by the automatic JSX runtime. */
 export namespace JSX {
   export interface Element extends ReactCompatElement {}
 
@@ -83,6 +94,7 @@ declare global {
   }
 }
 
+/** Creates a single-child JSX element for the automatic JSX runtime. */
 export function jsx<P extends Record<string, unknown>>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
@@ -91,6 +103,7 @@ export function jsx<P extends Record<string, unknown>>(
   return createElementFromJsx(type, props, key);
 }
 
+/** Creates a multi-child JSX element for the automatic JSX runtime. */
 export function jsxs<P extends Record<string, unknown>>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,

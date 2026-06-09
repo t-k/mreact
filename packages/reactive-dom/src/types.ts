@@ -1,7 +1,10 @@
+/** Disposer function returned by reactive DOM bindings. */
 export type Dispose = () => void;
 
+/** Marker symbol used to distinguish list render values from plain objects. */
 export const LIST_RENDER_VALUE = Symbol.for("mreact.list-render-value");
 
+/** Declarative list render value consumed by insertDynamic and bindList. */
 export interface ListRenderValue<T = unknown> {
   readonly [LIST_RENDER_VALUE]: true;
   readonly items: () => readonly T[];
@@ -12,6 +15,7 @@ export interface ListRenderValue<T = unknown> {
   };
 }
 
+/** Value that can be normalized into DOM nodes by the reactive DOM runtime. */
 export type RenderValue =
   | Node
   | string

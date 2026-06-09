@@ -16,6 +16,7 @@ export interface BindListOptions<T> {
 type ListItemRenderer<T> = (item: T, index: number, items: readonly T[]) => RenderValue;
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
 
+/** Binds a reactive list of items to DOM nodes before a marker node. */
 export function bindList<T>(
   parent: ParentNode,
   marker: ChildNode,

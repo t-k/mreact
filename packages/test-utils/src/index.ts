@@ -17,17 +17,20 @@ import {
   type RenderAppRequestOptions,
 } from "@reckona/mreact-router";
 
+/** Temporary app fixture for rendering and writing app-router files in tests. */
 export interface AppFixture {
   readonly appDir: string;
   render(path: string, options?: AppFixtureRenderOptions | undefined): Promise<Response>;
   write(path: string, contents: string): Promise<void>;
 }
 
+/** Options passed when rendering a request with an app fixture. */
 export type AppFixtureRenderOptions = Omit<RenderAppRequestOptions, "appDir" | "request"> & {
   request?: RequestInit | undefined;
   origin?: string | undefined;
 };
 
+/** Query state decoded from an SSR hydration script. */
 export interface DehydratedQueryState {
   queries: Array<{
     data: unknown;
@@ -37,19 +40,23 @@ export interface DehydratedQueryState {
   }>;
 }
 
+/** Result returned by the component render helper. */
 export interface ComponentRenderResult {
   readonly container: HTMLElement;
   rerender(value: ComponentRenderInput): void;
   unmount(): void;
 }
 
+/** Component render input accepted by render and rerender. */
 export type ComponentRenderInput = RenderValue | (() => RenderValue);
 
+/** Route handler signature accepted by invokeRouteHandler. */
 export type RouteHandler<TContext = undefined> = (
   request: Request,
   context: TContext,
 ) => Response | Promise<Response>;
 
+/** Options for mounting a component render in tests. */
 export interface ComponentRenderOptions {
   container?: HTMLElement | undefined;
 }
@@ -57,6 +64,7 @@ export interface ComponentRenderOptions {
 const queryStateScriptPattern =
   /<script\b[^>]*\bid=(?:"__mreact_query_state"|'__mreact_query_state')[^>]*>([\s\S]*?)<\/script>/i;
 
+/** Creates a temporary app fixture directory for integration tests. */
 export async function createAppFixture(prefix = "mreact-app-fixture"): Promise<AppFixture> {
   const appDir = await mkdtemp(join(tmpdir(), `${prefix}-`));
 
@@ -84,10 +92,12 @@ export async function createAppFixture(prefix = "mreact-app-fixture"): Promise<A
   };
 }
 
+/** Reads a response body as text. */
 export async function responseText(response: Response): Promise<string> {
   return response.text();
 }
 
+/** Invokes a route handler and normalizes redirect, not-found, and invalid responses. */
 export async function invokeRouteHandler<TContext = undefined>(
   handler: RouteHandler<TContext>,
   request: Request,
@@ -119,6 +129,7 @@ export async function invokeRouteHandler<TContext = undefined>(
   }
 }
 
+/** Renders a reactive component value into a DOM container for tests. */
 export function render(
   value: ComponentRenderInput,
   options: ComponentRenderOptions = {},
@@ -140,24 +151,29 @@ export function render(
   };
 }
 
+/** Runs a test action and flushes reactive effects after it settles. */
 export async function act<T>(fn: () => Promise<T> | T): Promise<T> {
   const result = await batchAsync(fn);
   await flushReactive();
   return result;
 }
 
+/** Flushes queued reactive effects for tests. */
 export async function flushReactive(): Promise<void> {
   await flushEffects();
 }
 
+/** Creates a real reactive cell for tests that need controllable state. */
 export function createCellMock<T>(initial: T): Cell<T> {
   return cell(initial);
 }
 
+/** Creates a real computed reactive value for tests. */
 export function createComputedMock<T>(fn: () => T): ReadonlyCell<T> {
   return computed(fn);
 }
 
+/** Reads dehydrated query state from rendered HTML. */
 export function readQueryState(html: string): DehydratedQueryState | undefined {
   const encoded = queryStateScriptPattern.exec(html)?.[1];
 

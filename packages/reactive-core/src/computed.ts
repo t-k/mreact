@@ -12,12 +12,15 @@ import {
 } from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
 
+/** Equality function used to decide whether a computed value changed. */
 export type ComputedEquality<T> = (previous: T, next: T) => boolean;
 
+/** Options for creating a computed reactive value. */
 export interface ComputedOptions<T> {
   equals?: ComputedEquality<T> | undefined;
 }
 
+/** Creates a lazily evaluated reactive value derived from other cells. */
 export function computed<T>(
   fn: () => T,
   options?: ComputedOptions<T> | ComputedEquality<T>,

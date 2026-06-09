@@ -1,5 +1,6 @@
 import { runtimeState, type ReactiveComputation } from "./state.js";
 
+/** Scheduler used to enqueue pending reactive computations. */
 export interface Scheduler {
   schedule(flush: () => void): void;
 }
@@ -23,6 +24,7 @@ let scheduled = false;
 let flushing = false;
 const maxFlushIterations = 100;
 
+/** Replaces the reactive scheduler and returns a restore function. */
 export function setScheduler(nextScheduler: Scheduler): () => void {
   const previous = scheduler;
   scheduler = nextScheduler;
@@ -52,6 +54,7 @@ export function queueComputation(computation: ReactiveComputation): void {
   schedulePendingFlush();
 }
 
+/** Requests a flush of queued reactive computations. */
 export function schedulePendingFlush(): void {
   if (queue.length === 0 || scheduled || flushing) {
     return;
@@ -71,6 +74,7 @@ export function schedulePendingFlush(): void {
   }
 }
 
+/** Immediately flushes queued reactive computations. */
 export function flushQueuedComputations(): void {
   if (flushing) {
     return;

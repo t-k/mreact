@@ -57,6 +57,7 @@ export type {
 };
 export type { ReactFlightProtocolCoverage };
 
+/** Options for creating a fetch-based server reference caller. */
 export interface FetchServerReferenceCallerOptions {
   fetch?: typeof fetch;
   headers?: Record<string, string>;
@@ -67,14 +68,17 @@ export interface FetchServerReferenceCallerOptions {
   nonce?: string | (() => string);
 }
 
+/** Options for decoding a Flight response and hydrating it into a DOM container. */
 export interface HydrateFlightOptions extends DecodeFlightOptions {
   hydrate?: HydrateRootOptions;
 }
 
+/** Parses a serialized Flight payload into a Flight response object. */
 export function parseFlightResponse(payload: string | ArrayBuffer | Uint8Array): FlightResponse {
   return parseReactFlightPayload(payload);
 }
 
+/** Decodes the root model from a parsed Flight response. */
 export function decodeFlightResponse(
   response: FlightResponse,
   options: DecodeFlightOptions,
@@ -82,6 +86,7 @@ export function decodeFlightResponse(
   return decodeFlightModel(response.root, response, options) as ReactCompatNode;
 }
 
+/** Reads and parses a Flight response script from a document or parent node. */
 export function readFlightResponse(
   root: Document | ParentNode,
   id?: string,
@@ -99,6 +104,7 @@ export function readFlightResponse(
   return parseFlightResponse(script.textContent);
 }
 
+/** Decodes a Flight response and hydrates the resulting tree into a container. */
 export function hydrateFlightResponse(
   container: Element,
   response: FlightResponse,
@@ -107,6 +113,7 @@ export function hydrateFlightResponse(
   return hydrateRoot(container, decodeFlightResponse(response, options), options.hydrate);
 }
 
+/** Creates a server reference caller that POSTs encoded action invocations to an endpoint. */
 export function createFetchServerReferenceCaller(
   endpoint: string,
   options: FetchServerReferenceCallerOptions = {},

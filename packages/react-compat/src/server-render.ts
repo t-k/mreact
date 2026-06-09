@@ -34,6 +34,7 @@ import {
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 import { isVoidHtmlElement } from "@reckona/mreact-shared";
 
+/** Renders a React-compatible component to an HTML string. */
 export function renderToString<TProps>(
   component:
     | ((props: TProps) => ReactCompatNode)
