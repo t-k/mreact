@@ -1,6 +1,259 @@
 export const title = "i18n";
-export const description = "Locale detection and typed message bundles.";
+export const description = "Use typed message bundles, locale detection, route params, metadata, cookies, and cache-aware locale routing.";
 
 # i18n
 
-Use `defineMessages()` for typed message bundles and `detectLocale()` to derive locale from route prefixes or request headers. Keep UI strings centralized rather than hard-coding translated text in components.
+Mreact gives you small i18n primitives instead of a full translation runtime. Keep route structure, locale negotiation, message loading, metadata, and client islands explicit so the app can stay server-rendered by default.
+
+## What Mreact provides
+
+`defineMessages()` keeps message bundles typed and returns the input object at runtime. It is useful for small static bundles, demos, and app-owned strings where you want TypeScript to catch missing keys.
+
+`detectLocale()` chooses a locale from the request in this order: URL path prefix, `Accept-Language`, then `defaultLocale`. The URL path prefix means the first path segment, such as `/ja/docs`; it does not inspect nested segments such as `/docs/ja`.
+
+## Define locales and messages
+
+Define supported locales once, export the `Locale` type, and keep message keys aligned across locales.
+
+```ts
+// src/app/i18n/messages.ts
+import { defineMessages } from "@reckona/mreact-router";
+
+export const SUPPORTED_LOCALES = ["en", "ja", "fr"] as const;
+export type Locale = (typeof SUPPORTED_LOCALES)[number];
+export const DEFAULT_LOCALE: Locale = "en";
+
+export const messages = defineMessages({
+  en: {
+    heading: "Locale detection",
+    switchLocale: "Switch locale",
+    welcome: "Hello!",
+  },
+  ja: {
+    heading: "ロケール検出",
+    switchLocale: "言語を切り替え",
+    welcome: "こんにちは！",
+  },
+  fr: {
+    heading: "Détection de locale",
+    switchLocale: "Changer de langue",
+    welcome: "Bonjour !",
+  },
+});
+
+export function isLocale(value: string): value is Locale {
+  return SUPPORTED_LOCALES.includes(value as Locale);
+}
+```
+
+Use `messages[locale]` in server components, loaders, metadata helpers, and small client islands. For large products, generate the same shape from a translation pipeline instead of editing message objects by hand.
+
+## Detect locale in a loader
+
+For canonical locale-prefix URLs such as `/ja/dashboard`, call `detectLocale<Locale>()` from a root route, layout, middleware, or page loader. It returns the selected `locale`, the `pathname` with the locale prefix removed, and a `source` value such as `source: "path"`, `source: "accept-language"`, or `source: "default"`.
+
+```tsx
+// src/app/$...path/page.tsx
+import { definePage, detectLocale, type LoaderContext } from "@reckona/mreact-router";
+import { Link } from "@reckona/mreact-router/link";
+import {
+  DEFAULT_LOCALE,
+  SUPPORTED_LOCALES,
+  messages,
+  type Locale,
+} from "../i18n/messages.js";
+
+interface PageData {
+  locale: Locale;
+  pathname: string;
+  source: "accept-language" | "default" | "path";
+}
+
+export function loader(context: LoaderContext<{ path: readonly string[] }>): PageData {
+  return detectLocale<Locale>(context.request, {
+    defaultLocale: DEFAULT_LOCALE,
+    locales: SUPPORTED_LOCALES,
+  });
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  const locale = props.data.locale;
+  const t = messages[locale];
+
+  return (
+    <main>
+      <h1>{t.heading}</h1>
+      <p>{t.welcome}</p>
+      <p>
+        {t.switchLocale}:{" "}
+        {SUPPORTED_LOCALES.map((nextLocale) => (
+          <Link key={nextLocale} href={hrefForLocale(nextLocale, props.data.pathname)}>
+            {nextLocale}
+          </Link>
+        ))}
+      </p>
+    </main>
+  );
+});
+
+function hrefForLocale(locale: Locale, pathname: string): string {
+  return locale === DEFAULT_LOCALE ? pathname : `/${locale}${pathname}`;
+}
+```
+
+Use URL prefixes for cacheable public content. A route such as `/ja/docs/routing` can be cached independently from `/en/docs/routing`, bookmarked cleanly, and shared without relying on browser headers.
+
+## Route params for nested locale routes
+
+If your route shape is nested, such as `/i18n/$locale`, read `context.params.locale` instead of calling `detectLocale()`. The helper only checks the first path segment, so `/i18n/ja` is better modeled as an ordinary dynamic param.
+
+```tsx
+// src/app/i18n/$locale/page.tsx
+import { definePage, notFound, type LoaderContext } from "@reckona/mreact-router";
+import { isLocale, messages, type Locale } from "../messages.js";
+
+interface PageData {
+  locale: Locale;
+}
+
+export function loader(context: LoaderContext<{ locale: string }>): PageData {
+  if (!isLocale(context.params.locale)) {
+    notFound();
+  }
+
+  return {
+    locale: context.params.locale,
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  const t = messages[props.data.locale];
+
+  return (
+    <main>
+      <h1>{t.heading}</h1>
+      <p>{t.welcome}</p>
+    </main>
+  );
+});
+```
+
+This keeps the route behavior obvious: the file-system route owns the locale segment, and unsupported locale params become normal 404s.
+
+## Set html lang and alternate links
+
+Use route metadata to set the document language. `metadata.lang` changes the rendered `<html lang="...">`, and `metadata.head` can emit language alternate links when your site has stable localized URLs.
+
+```ts
+// src/app/$...path/page.tsx
+import type { RouteMetadata } from "@reckona/mreact-router";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from "../i18n/messages.js";
+
+interface PageData {
+  locale: Locale;
+  pathname: string;
+}
+
+export function generateMetadata(
+  { data, request }: { data: PageData; request: Request },
+): RouteMetadata {
+  const url = new URL(request.url);
+
+  return {
+    lang: data.locale,
+    alternates: {
+      canonical: localizedUrl(url.origin, data.locale, data.pathname),
+    },
+    head: SUPPORTED_LOCALES.map((locale) => ({
+      tag: "link",
+      attrs: {
+        rel: "alternate",
+        hreflang: locale,
+        href: localizedUrl(url.origin, locale, data.pathname),
+      },
+    })),
+  };
+}
+
+function localizedUrl(origin: string, locale: Locale, pathname: string): string {
+  const prefix = locale === DEFAULT_LOCALE ? "" : `/${locale}`;
+  return new URL(`${prefix}${pathname}`, origin).href;
+}
+```
+
+Keep canonical and alternate URLs stable. If the same content is reachable through both header negotiation and locale prefixes, redirect to the canonical prefixed URL after locale selection.
+
+## Persist a locale preference
+
+Use a cookie only as a preference hint. URL locale prefixes should still win when they are present because a shared link should render the language encoded in the URL.
+
+```ts
+// src/app/api/locale/route.ts
+import { redirect303, setCookie, textError } from "@reckona/mreact-router";
+import { isLocale } from "../../i18n/messages.js";
+
+export async function POST(request: Request): Promise<Response> {
+  const form = await request.formData();
+  const locale = String(form.get("locale") ?? "");
+  const next = String(form.get("next") ?? "/");
+
+  if (!isLocale(locale)) {
+    return textError("Unsupported locale.", 422);
+  }
+
+  const response = redirect303(next.startsWith("/") ? next : "/");
+
+  setCookie(response, "locale", locale, {
+    maxAge: 60 * 60 * 24 * 365,
+    path: "/",
+    sameSite: "Lax",
+  });
+
+  return response;
+}
+```
+
+For authenticated apps, treat locale changes like any other form mutation: use `POST`, validate the value, and apply the same CSRF policy as the rest of your cookie-authenticated forms.
+
+## Caching and redirects
+
+Prefer locale prefixes for public pages. They produce one URL per language and avoid shared-cache ambiguity.
+
+If a route varies by `Accept-Language` or by a `locale=` cookie, include the matching cache policy. Header negotiation needs `Vary: Accept-Language`; cookie negotiation usually means the page should be private or should redirect to a locale-prefixed public URL before rendering cacheable content.
+
+Do not cache a header-negotiated response as if it were language-neutral HTML. The first visitor's language can otherwise leak into later visitors' responses through a CDN or route cache.
+
+## Client boundaries
+
+Keep i18n rendering on the server when the page is mostly static text. A `.client.tsx` island should receive the selected locale and any needed messages as serializable props.
+
+```tsx
+// src/app/settings/LocaleSwitcher.client.tsx
+"use client";
+
+import { cell } from "@reckona/mreact";
+import type { Locale } from "../i18n/messages.js";
+
+export function LocaleSwitcher(props: {
+  currentLocale: Locale;
+  labels: Record<Locale, string>;
+}) {
+  const open = cell(false);
+
+  return (
+    <button type="button" onClick={() => open.set(!open.get())}>
+      {props.labels[props.currentLocale]}
+    </button>
+  );
+}
+```
+
+Do not put server-only message loaders, secrets, or request-specific negotiation in client components. Resolve the locale in a loader, render server HTML in that locale, and hydrate only the controls that need browser interaction.
+
+## Related pages
+
+- [Routing](/guides/routing/)
+- [Data Loading](/guides/data-loading/)
+- [Metadata and Head](/guides/metadata-and-head/)
+- [Cookies and Sessions](/guides/cookies-and-sessions/)
+- [Cache and Revalidation](/guides/cache-and-revalidation/)

@@ -652,6 +652,53 @@ describe("docs-site example contract", () => {
     expect(mdxGuide).toContain("[Metadata and Head](/guides/metadata-and-head/)");
   });
 
+  test("documents i18n messages, locale detection, params, metadata, cookies, caching, and client boundaries", async () => {
+    const i18nGuide = await readDocsSite("src/content/guides/advanced/i18n.mdx");
+
+    expect(i18nGuide).toContain("## What Mreact provides");
+    expect(i18nGuide).toContain("defineMessages()");
+    expect(i18nGuide).toContain("detectLocale()");
+    expect(i18nGuide).toContain("URL path prefix");
+    expect(i18nGuide).toContain("Accept-Language");
+    expect(i18nGuide).toContain("defaultLocale");
+    expect(i18nGuide).toContain("## Define locales and messages");
+    expect(i18nGuide).toContain("SUPPORTED_LOCALES");
+    expect(i18nGuide).toContain("DEFAULT_LOCALE");
+    expect(i18nGuide).toContain("type Locale");
+    expect(i18nGuide).toContain("messages[locale]");
+    expect(i18nGuide).toContain("## Detect locale in a loader");
+    expect(i18nGuide).toContain("LoaderContext");
+    expect(i18nGuide).toContain("detectLocale<Locale>");
+    expect(i18nGuide).toContain("source: \"path\"");
+    expect(i18nGuide).toContain("source: \"accept-language\"");
+    expect(i18nGuide).toContain("definePage<typeof loader>");
+    expect(i18nGuide).toContain("Link");
+    expect(i18nGuide).toContain("## Route params for nested locale routes");
+    expect(i18nGuide).toContain("src/app/i18n/$locale/page.tsx");
+    expect(i18nGuide).toContain("context.params.locale");
+    expect(i18nGuide).toContain("notFound()");
+    expect(i18nGuide).toContain("## Set html lang and alternate links");
+    expect(i18nGuide).toContain("generateMetadata");
+    expect(i18nGuide).toContain("lang: data.locale");
+    expect(i18nGuide).toContain("hreflang");
+    expect(i18nGuide).toContain("rel: \"alternate\"");
+    expect(i18nGuide).toContain("## Persist a locale preference");
+    expect(i18nGuide).toContain("setCookie");
+    expect(i18nGuide).toContain("locale=");
+    expect(i18nGuide).toContain("sameSite: \"Lax\"");
+    expect(i18nGuide).toContain("## Caching and redirects");
+    expect(i18nGuide).toContain("Vary: Accept-Language");
+    expect(i18nGuide).toContain("Prefer locale prefixes");
+    expect(i18nGuide).toContain("## Client boundaries");
+    expect(i18nGuide).toContain(".client.tsx");
+    expect(i18nGuide).toContain("serializable");
+    expect(i18nGuide).toContain("## Related pages");
+    expect(i18nGuide).toContain("[Routing](/guides/routing/)");
+    expect(i18nGuide).toContain("[Data Loading](/guides/data-loading/)");
+    expect(i18nGuide).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+    expect(i18nGuide).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
+  });
+
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 
