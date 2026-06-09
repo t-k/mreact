@@ -3,6 +3,304 @@ export const description = "Reactive form state, server errors, schema validatio
 
 # Forms and validation
 
-Use `@reckona/mreact-forms` for reactive form state and field-level errors. Use route handlers for explicit JSON or multipart APIs, and server actions for form-first mutations that should be bound to rendered action references.
+Use `@reckona/mreact-forms` to keep form values, field state, client validation, schema validation, server errors, and submit state in one reactive form object. Use this page for input handling; use [Server Actions](/guides/server-actions/) or [HTTP APIs](/guides/http-apis/) for the mutation transport.
 
-Keep validation close to the mutation boundary.
+## What this page covers
+
+`@reckona/mreact-forms` tracks form state and validation. It does not choose the mutation transport, persist data, authenticate users, protect arbitrary HTTP endpoints from CSRF, or replace server-side validation.
+
+The common shape is: keep input state in a form object, run fast client validation for feedback, submit only valid values, map server validation errors back into the same form, and still validate at the trusted mutation boundary.
+
+## Create a reactive form
+
+Create the form outside the component when it should live for the route module lifetime. `createForm()` returns a reactive `FormApi`, and `form.state.get()` exposes the current snapshot.
+
+```ts
+import { createForm } from "@reckona/mreact-forms";
+
+interface ContactValues {
+  email: string;
+  message: string;
+  name: string;
+}
+
+const form = createForm<ContactValues>({
+  initialValues: {
+    email: "",
+    message: "",
+    name: "",
+  },
+});
+
+const state = form.state.get();
+
+state.dirty;
+state.valid;
+state.submitting;
+state.submitCount;
+state.values.email;
+```
+
+The form state includes `values`, `initialValues`, `errors`, `touched`, `validating`, `dirty`, `valid`, `submitting`, and `submitCount`. Use those fields to render counters, disable duplicate submit buttons, and decide when to show field errors.
+
+## Bind fields
+
+The most explicit pattern is to read the field value from `form.state.get().values` and write changes with `setValue()`. Call `blur()` when the user leaves a field so `validateOn: "blur"` can run.
+
+```tsx
+const contactState = form.state;
+
+function firstError(errors: readonly string[] | undefined): string {
+  return errors?.[0] ?? "";
+}
+
+export default function Page() {
+  const email = form.field("email");
+
+  return (
+    <label>
+      Email
+      <input
+        aria-describedby="email-error"
+        aria-invalid={(contactState.get().errors.email?.length ?? 0) > 0}
+        name="email"
+        type="email"
+        value={contactState.get().values.email}
+        onInput={(event) =>
+          void email.setValue((event.target as HTMLInputElement).value)}
+        onBlur={(event) => {
+          void email.setValue((event.target as HTMLInputElement).value);
+          void email.blur();
+        }}
+      />
+      <span id="email-error">
+        {firstError(contactState.get().errors.email)}
+      </span>
+    </label>
+  );
+}
+```
+
+Each field also has `field.state.get()` for field-local `value`, `errors`, `dirty`, `touched`, and `validating`. `field.bind()` returns `{ value, onInput, onChange, onBlur }` for component wrappers that want value and event props in one object. Use `field.bind({ event: "change" })` for controls such as `<select>` that should update from `onChange` instead of `onInput`.
+
+## Validate fields
+
+Use `validate` for field-level rules and `validateOn` to decide when they run. A field validator can return `readonly string[] | string | undefined`, and it can be `async`.
+
+```ts
+const contactForm = createForm<ContactValues>({
+  initialValues: {
+    email: "",
+    message: "",
+    name: "",
+  },
+  validate: {
+    name(value) {
+      return value.trim().length < 2
+        ? "Name must be at least 2 characters."
+        : undefined;
+    },
+    async email(value) {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        return "Enter a valid email.";
+      }
+
+      return await isDisposableEmail(value)
+        ? "Use a permanent email address."
+        : undefined;
+    },
+    message(value) {
+      if (value.trim().length < 10) {
+        return "Message must be at least 10 characters.";
+      }
+
+      return value.length > 500
+        ? "Message must be at most 500 characters."
+        : undefined;
+    },
+  },
+  validateOn: ["blur", "submit"],
+});
+```
+
+`validateOn` accepts `"change"`, `"blur"`, `"submit"`, or an array of those modes. The default is `"submit"`. Async field validators set `field.state.get().validating` while the latest validation is pending, and slower stale validator results are ignored.
+
+## Submit valid values
+
+Call `form.submit(handler)` from your `onSubmit` handler after calling `event.preventDefault()`. The handler only receives values after client and schema validation have succeeded.
+
+```tsx
+async function saveContact(values: ContactValues) {
+  const response = await fetch("/api/contact", {
+    body: JSON.stringify(values),
+    headers: { "content-type": "application/json" },
+    method: "POST",
+  });
+
+  return await response.json();
+}
+
+async function onSubmit(): Promise<void> {
+  const result = await contactForm.submit(saveContact);
+
+  if (result.status === "success") {
+    contactForm.reset();
+    return;
+  }
+
+  if (result.status === "invalid") {
+    return;
+  }
+
+  contactForm.setErrors({
+    root: ["The contact request could not be saved."],
+  });
+}
+
+export default function Page() {
+  return (
+    <form
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        void onSubmit();
+      }}
+    >
+      <button disabled={contactForm.state.get().submitting} type="submit">
+        Send
+      </button>
+    </form>
+  );
+}
+```
+
+The submit result is `status === "success"`, `status === "invalid"`, or `status === "error"`. Call `form.reset()` after a successful mutation when the next form should start from the initial values. `form.submit()` dedupes concurrent submissions: while an active submit is running, later calls share the same result and `submitting` stays true.
+
+## Map server errors
+
+Client validation is feedback. Server validation is authority. When a route handler or server action rejects input, return a stable error shape and pass it to `setServerErrors()`.
+
+```ts
+// src/app/api/contact/route.ts
+export async function POST(request: Request): Promise<Response> {
+  const values = await request.json();
+  const result = await validateContactOnServer(values);
+
+  if (!result.ok) {
+    return Response.json(
+      {
+        fieldErrors: result.fieldErrors,
+        formErrors: result.formErrors,
+      },
+      { status: 422 },
+    );
+  }
+
+  return Response.json({ data: await saveContact(result.value), ok: true });
+}
+```
+
+```ts
+async function onSubmit(): Promise<void> {
+  const result = await contactForm.submit(async (values) => {
+    const response = await saveContact(values);
+
+    if (response.ok) {
+      return response.data;
+    }
+
+    contactForm.setServerErrors({
+      fieldErrors: response.fieldErrors,
+      formErrors: response.formErrors,
+    });
+
+    throw new Error("server validation failed");
+  });
+
+  if (result.status === "success") {
+    contactForm.reset();
+  }
+}
+```
+
+`fieldErrors` maps field names to arrays of messages. `formErrors` maps to the root error slot. `setServerErrors()` ignores dangerous object keys such as `__proto__`, `constructor`, and `prototype`, but you should still only return errors for fields your form actually renders.
+
+## Use Standard Schema
+
+`createForm()` accepts Standard Schema-compatible validators through the `schema` option. Zod v4 and Valibot expose Standard Schema metadata directly, so no Mreact-specific adapter is needed.
+
+```ts
+import { createForm } from "@reckona/mreact-forms";
+import * as z from "zod/v4";
+
+const inviteSchema = z.object({
+  email: z.string().trim().email("Enter a valid email."),
+  role: z.enum(["viewer", "editor", "admin"], "Choose a role."),
+  seats: z
+    .string()
+    .trim()
+    .transform((value) => Number(value))
+    .pipe(
+      z
+        .number("Seats must be a number.")
+        .int("Seats must be a whole number.")
+        .min(1, "Choose at least one seat.")
+        .max(100, "Choose at most 100 seats."),
+    ),
+});
+
+type InviteValues = z.input<typeof inviteSchema>;
+type InviteSubmitValues = z.output<typeof inviteSchema>;
+
+const inviteForm = createForm<InviteValues, InviteSubmitValues>({
+  initialValues: {
+    email: "",
+    role: "viewer",
+    seats: "1",
+  },
+  schema: inviteSchema,
+  validateOn: ["blur", "submit"],
+});
+
+await inviteForm.submit((values) => {
+  values.seats;
+  return values;
+});
+```
+
+The form state keeps browser-friendly input values such as strings and booleans. The submit handler receives the schema output after validation and transforms. The same pattern works with Valibot by using `v.InferInput` and `v.InferOutput`.
+
+## Choose a mutation path
+
+Use [Server Actions](/guides/server-actions/) when the form is rendered by your Mreact UI and the mutation should be invoked through a bound `<form action={saveAction}>`. Server actions include action reference checks, nonce replay protection, and framework CSRF handling for same-site rendered forms.
+
+Use [HTTP APIs](/guides/http-apis/) when external clients, webhooks, custom `fetch()` callers, JSON APIs, or multipart workflows need a stable endpoint. HTTP APIs need explicit authentication, authorization, CSRF policy for cookie-authenticated browser mutations, body limits, and request validation.
+
+Both paths need server-side validation. Client validation improves the user experience; it does not prove that the request is allowed or trustworthy.
+
+## Accessibility and UX notes
+
+- Use `noValidate` only when your form renders accessible validation messages itself.
+- Connect field errors with `aria-describedby`, and set `aria-invalid` when the field has errors.
+- Keep labels programmatically associated with inputs.
+- Disable or mark submit buttons while `form.state.get().submitting` is true, but keep errors and status text readable.
+- Render root errors near the form summary, and render field errors next to the related input.
+- Preserve user input when server validation fails. Reset only after a successful mutation.
+
+## Production checklist
+
+- Do not trust client validation. Validate again in the server action, route handler, database boundary, or domain service.
+- Protect cookie-authenticated HTTP mutations from CSRF. Use [File Uploads and CSRF](/guides/file-uploads-and-csrf/) for token and multipart guidance.
+- Enforce authentication and authorization before applying the mutation.
+- Apply body size limits, file size limits, rate limit controls, and abuse detection to public endpoints.
+- Avoid logging raw PII, passwords, tokens, full message bodies, or uploaded file contents.
+- Return stable validation error shapes. Do not leak stack traces, database errors, or internal policy details.
+- Revalidate or invalidate cached pages after successful mutations that change rendered data.
+
+## Related pages
+
+- [Server Actions](/guides/server-actions/)
+- [HTTP APIs](/guides/http-apis/)
+- [File Uploads and CSRF](/guides/file-uploads-and-csrf/)
+- [Authentication](/guides/authentication/)
+- [Cache and Revalidation](/guides/cache-and-revalidation/)

@@ -665,6 +665,64 @@ describe("docs-site example contract", () => {
     expect(authGuide).toContain("[Production Checklist](/deployments/production-checklist/)");
   });
 
+  test("documents reactive forms, validation modes, server errors, schema output, and mutation choices", async () => {
+    const formsGuide = await readDocsSite("src/content/guides/forms-and-validation.mdx");
+
+    expect(formsGuide).toContain("## What this page covers");
+    expect(formsGuide).toContain("@reckona/mreact-forms");
+    expect(formsGuide).toContain("does not choose the mutation transport");
+    expect(formsGuide).toContain("## Create a reactive form");
+    expect(formsGuide).toContain("createForm<ContactValues>");
+    expect(formsGuide).toContain("initialValues");
+    expect(formsGuide).toContain("form.state.get()");
+    expect(formsGuide).toContain("dirty");
+    expect(formsGuide).toContain("valid");
+    expect(formsGuide).toContain("submitting");
+    expect(formsGuide).toContain("submitCount");
+    expect(formsGuide).toContain("## Bind fields");
+    expect(formsGuide).toContain("form.field(\"email\")");
+    expect(formsGuide).toContain("setValue");
+    expect(formsGuide).toContain("blur()");
+    expect(formsGuide).toContain("field.bind({ event: \"change\" })");
+    expect(formsGuide).toContain("## Validate fields");
+    expect(formsGuide).toContain("validateOn: [\"blur\", \"submit\"]");
+    expect(formsGuide).toContain("async");
+    expect(formsGuide).toContain("readonly string[] | string | undefined");
+    expect(formsGuide).toContain("## Submit valid values");
+    expect(formsGuide).toContain("form.submit");
+    expect(formsGuide).toContain("status === \"success\"");
+    expect(formsGuide).toContain("status === \"invalid\"");
+    expect(formsGuide).toContain("status === \"error\"");
+    expect(formsGuide).toContain("form.reset()");
+    expect(formsGuide).toContain("## Map server errors");
+    expect(formsGuide).toContain("setServerErrors");
+    expect(formsGuide).toContain("fieldErrors");
+    expect(formsGuide).toContain("formErrors");
+    expect(formsGuide).toContain("server validation");
+    expect(formsGuide).toContain("## Use Standard Schema");
+    expect(formsGuide).toContain("Zod v4");
+    expect(formsGuide).toContain("Valibot");
+    expect(formsGuide).toContain("Standard Schema");
+    expect(formsGuide).toContain("z.input");
+    expect(formsGuide).toContain("z.output");
+    expect(formsGuide).toContain("seats");
+    expect(formsGuide).toContain("## Choose a mutation path");
+    expect(formsGuide).toContain("[Server Actions](/guides/server-actions/)");
+    expect(formsGuide).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(formsGuide).toContain("## Accessibility and UX notes");
+    expect(formsGuide).toContain("aria-invalid");
+    expect(formsGuide).toContain("aria-describedby");
+    expect(formsGuide).toContain("noValidate");
+    expect(formsGuide).toContain("## Production checklist");
+    expect(formsGuide).toContain("Do not trust client validation");
+    expect(formsGuide).toContain("CSRF");
+    expect(formsGuide).toContain("rate limit");
+    expect(formsGuide).toContain("PII");
+    expect(formsGuide).toContain("[File Uploads and CSRF](/guides/file-uploads-and-csrf/)");
+    expect(formsGuide).toContain("[Authentication](/guides/authentication/)");
+    expect(formsGuide).toContain("[Cache and Revalidation](/guides/cache-and-revalidation/)");
+  });
+
   test("documents SSG prerendering and static export constraints", async () => {
     const ssg = await readDocsSite("src/content/guides/ssg-and-static-export.mdx");
 
