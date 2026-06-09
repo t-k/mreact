@@ -433,6 +433,43 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("[Route Module Exports](/reference/route-module-exports/)");
   });
 
+  test("documents SSG prerendering and static export constraints", async () => {
+    const ssg = await readDocsSite("src/content/guides/ssg-and-static-export.mdx");
+
+    expect(ssg).toContain("## Prerender a route");
+    expect(ssg).toContain("export const prerender = true");
+    expect(ssg).toContain("build-time HTML artifact");
+    expect(ssg).toContain("## Dynamic routes with generateStaticParams");
+    expect(ssg).toContain("src/app/users/$id/page.tsx");
+    expect(ssg).toContain("generateStaticParams()");
+    expect(ssg).toContain('/users/ada');
+    expect(ssg).toContain("## What runs at build time");
+    expect(ssg).toContain("loader");
+    expect(ssg).toContain("generateMetadata");
+    expect(ssg).toContain("build-time snapshot");
+    expect(ssg).toContain("## Static export");
+    expect(ssg).toContain("mreact-router build --target=node");
+    expect(ssg).toContain("exportStaticApp");
+    expect(ssg).toContain('outDir: ".mreact"');
+    expect(ssg).toContain('exportDir: "dist"');
+    expect(ssg).toContain("Cannot export non-prerendered route");
+    expect(ssg).toContain("## Static host details");
+    expect(ssg).toContain("dist/_mreact/client/");
+    expect(ssg).toContain(".nojekyll");
+    expect(ssg).toContain("404.html");
+    expect(ssg).toContain("base path");
+    expect(ssg).toContain("## When not to use static export");
+    expect(ssg).toContain("request-time auth");
+    expect(ssg).toContain("cookies");
+    expect(ssg).toContain("middleware");
+    expect(ssg).toContain("[Data Loading](/guides/data-loading/)");
+    expect(ssg).toContain("[Routing](/guides/routing/)");
+    expect(ssg).toContain("[Metadata and Head](/guides/metadata-and-head/)");
+    expect(ssg).toContain("[Static Hosting](/deployments/static-hosting/)");
+    expect(ssg).toContain("[Cloudflare](/deployments/cloudflare/)");
+    expect(ssg).toContain("[Container and Cloud Run](/deployments/container-and-cloud-run/)");
+  });
+
   test("renders readable document lists and the latest benchmark run", async () => {
     const css = await readDocsSite("src/app/globals.css");
     const benchmarks = await readDocsSite("src/content/benchmarks.mdx");

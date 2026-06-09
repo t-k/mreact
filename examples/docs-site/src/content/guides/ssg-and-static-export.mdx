@@ -3,6 +3,122 @@ export const description = "Build-time prerendering and static export for static
 
 # SSG and static export
 
-Set `export const prerender = true` to render a route during the build. Dynamic routes can export `generateStaticParams()` to enumerate concrete paths.
+SSG and static export are related, but they are not the same thing. SSG creates build-time HTML artifacts for routes. Static export writes those prerendered artifacts and client assets into a directory that can be served by a static host.
 
-Static hosts can use `exportStaticApp()` after `mreact-router build` to write route HTML and client assets to a deployable directory.
+## Prerender a route
+
+Set `export const prerender = true` in a page module to render that route during the build. The build records a build-time HTML artifact in the server manifest.
+
+```tsx
+// src/app/about/page.tsx
+export const prerender = true;
+
+export const metadata = {
+  title: "About",
+  description: "A prerendered page.",
+};
+
+export default function Page() {
+  return (
+    <main>
+      <h1>About</h1>
+      <p>This HTML is produced during the build.</p>
+    </main>
+  );
+}
+```
+
+On a dynamic runtime such as Node, Cloudflare, AWS Lambda, or Cloud Run, prerendered routes can be served from the build artifact without rerunning the page module for every request.
+
+## Dynamic routes with generateStaticParams
+
+Dynamic routes need `generateStaticParams()` so the build knows which concrete paths to prerender. For `src/app/users/$id/page.tsx`, each returned `id` becomes one route such as `/users/ada`.
+
+```tsx
+// src/app/users/$id/page.tsx
+import { notFound, type LoaderContext } from "@reckona/mreact-router";
+
+interface UserData {
+  name: string;
+  role: string;
+}
+
+export const prerender = true;
+
+export function generateStaticParams(): Array<{ id: string }> {
+  return [{ id: "ada" }, { id: "grace" }];
+}
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+): Promise<UserData> {
+  const user = await findUser(context.params.id);
+
+  if (user === undefined) {
+    notFound();
+  }
+
+  return {
+    name: user.name,
+    role: user.role,
+  };
+}
+
+export default function Page(props: { data: UserData }) {
+  return <h1>{props.data.name}</h1>;
+}
+```
+
+Only paths returned by `generateStaticParams()` are prerendered. A path that is not returned is not part of the static export output.
+
+## What runs at build time
+
+For a prerendered route, Mreact runs the route module during the build. That includes `generateStaticParams()`, `loader`, `generateMetadata`, layouts, slots, templates, and the page render.
+
+The resulting HTML is a build-time snapshot. If the loader reads a database, CMS, file, or API, the exported page contains the data as it existed when the build ran. Rebuild the app when that data should change in static output.
+
+## Static export
+
+Static export runs after the router build. First build the app, then call `exportStaticApp()` from `@reckona/mreact-router/adapters/static`.
+
+```bash
+mreact-router build --target=node
+tsx scripts/export-static.ts
+```
+
+```ts
+// scripts/export-static.ts
+import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
+
+await exportStaticApp({
+  outDir: ".mreact",
+  exportDir: "dist",
+});
+```
+
+`exportStaticApp()` writes one `index.html` file per prerendered route and copies the client build into the export directory. It only exports prerendered routes. If you pass a route that was not prerendered, export fails with `Cannot export non-prerendered route`.
+
+## Static host details
+
+The exported directory contains route HTML and client assets. Client assets are copied under `dist/_mreact/client/`, and public assets are copied to the export root.
+
+Static hosts often need small deployment-specific adjustments:
+
+- Add `.nojekyll` for GitHub Pages so `_mreact` is served as a normal directory.
+- Copy or generate `404.html` when the host expects a root-level fallback file.
+- Handle a base path when the site is served below a subpath. The docs site uses `MREACT_DOCS_BASE_PATH` to rewrite root-relative `href` and `src` values for GitHub Pages.
+
+## When not to use static export
+
+Use a dynamic deployment when a route needs request-time auth, per-user cookies, live sessions, request-specific headers, middleware decisions, route handlers, or data that must be fresh on every request.
+
+Static export is best for documentation, marketing pages, fully prerendered content, and apps where all required HTML paths are known at build time. For dynamic workloads, deploy the built app to Cloudflare, AWS Lambda, Cloud Run, or another server runtime instead.
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [Routing](/guides/routing/)
+- [Metadata and Head](/guides/metadata-and-head/)
+- [Static Hosting](/deployments/static-hosting/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)
