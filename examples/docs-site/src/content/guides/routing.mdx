@@ -1,16 +1,130 @@
 export const title = "Routing";
-export const description = "Static, dynamic, catch-all, route group, and metadata route conventions.";
+export const description = "Static routes, dynamic segments, catch-all segments, route groups, and route params.";
 
 # Routing
 
-Use `page.tsx` for pages, `$id` for dynamic segments, `$...slug` for catch-all segments, and parenthesized route groups for URL-free organization.
+Routing maps folders under `src/app` to URL paths. Use this page when you need to choose a route shape, read params, or decide where 404 behavior belongs.
+
+## Route shapes
+
+Use `page.tsx` for pages, `$id` for a single dynamic segment, `$...path` for a catch-all segment, and parenthesized route groups for URL-free organization.
 
 ```text
 src/app/
   page.tsx
-  users/$id/page.tsx
-  files/$...path/page.tsx
-  (marketing)/contact/page.tsx
+  docs/
+    page.tsx
+  users/
+    $id/
+      page.tsx
+  files/
+    $...path/
+      page.tsx
+  (marketing)/
+    contact/
+      page.tsx
 ```
 
-Route params are decoded before they reach loaders and page props. Re-encode params before embedding them into new URLs.
+- `src/app/page.tsx` renders `/`.
+- `src/app/docs/page.tsx` renders `/docs/`.
+- `src/app/users/$id/page.tsx` renders `/users/:id/`.
+- `src/app/files/$...path/page.tsx` renders `/files/*`.
+- `src/app/(marketing)/contact/page.tsx` renders `/contact/`.
+
+## Dynamic segments
+
+A folder that starts with `$` captures one URL segment. In `src/app/users/$id/page.tsx`, Mreact exposes the value as `params.id`.
+
+```tsx
+type UserPageProps = {
+  readonly params: { readonly id: string };
+};
+
+export default function UserPage(props: UserPageProps) {
+  return (
+    <main>
+      <h1>User {props.params.id}</h1>
+    </main>
+  );
+}
+```
+
+The same decoded params are available to loaders, metadata functions, and route handlers. Use a typed loader context when server work needs the segment before rendering.
+
+```tsx
+import { notFound, type LoaderContext } from "@reckona/mreact-router";
+
+type UserParams = { readonly id: string };
+
+export async function loader(context: LoaderContext<UserParams>) {
+  const user = await findUser(context.params.id);
+
+  if (user === undefined) {
+    notFound();
+  }
+
+  return { user };
+}
+```
+
+## Catch-all segments
+
+A folder named `$...path` captures the rest of the URL. Catch-all params are decoded segment arrays, so `/files/docs/setup.md` becomes `params.path` with `["docs", "setup.md"]`.
+
+```tsx
+type FilePageProps = {
+  readonly params: { readonly path: readonly string[] };
+};
+
+export default function FilePage(props: FilePageProps) {
+  const displayPath = props.params.path.join("/");
+  const downloadPath = props.params.path.map(encodeURIComponent).join("/");
+
+  return (
+    <main>
+      <h1>{displayPath}</h1>
+      <a href={`/download/${downloadPath}`}>Download</a>
+    </main>
+  );
+}
+```
+
+Route params are decoded before they reach route modules. Re-encode each segment with `encodeURIComponent` before embedding a param into a new URL.
+
+## Route groups
+
+Parenthesized folders organize routes without changing the URL. `src/app/(marketing)/contact/page.tsx` renders `/contact/`, not `/(marketing)/contact/`. Use route groups when a subtree needs a shared layout, template, or file organization boundary that should not appear in public URLs.
+
+## Static params
+
+Dynamic routes can be prerendered when the route exports `prerender = true` and `generateStaticParams()`. Return one params object for each concrete path.
+
+```tsx
+export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ id: "ada" }, { id: "grace" }];
+}
+```
+
+For catch-all routes, return arrays for the catch-all param.
+
+```tsx
+export const prerender = true;
+
+export function generateStaticParams() {
+  return [{ path: ["docs", "setup.md"] }, { path: ["images", "logo.svg"] }];
+}
+```
+
+## Not found behavior
+
+Add `not-found.tsx` where a route subtree needs its own 404 UI. A route can also call `notFound()` from server-side code when a valid URL shape points at missing data, such as an unknown `params.id`.
+
+## Related pages
+
+- [Project Structure](/guides/project-structure/)
+- [Data Loading](/guides/data-loading/)
+- [Route Handlers](/guides/route-handlers/)
+- [SSG and Static Export](/guides/ssg-and-static-export/)
+- [Link and Navigation](/guides/link-and-navigation/)

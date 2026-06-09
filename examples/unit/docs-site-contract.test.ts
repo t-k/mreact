@@ -192,6 +192,40 @@ describe("docs-site example contract", () => {
     expect(appRouter).toContain("[Server and Client Model](/guides/server-and-client-model/)");
   });
 
+  test("documents routing shapes and route params with component examples", async () => {
+    const routing = await readDocsSite("src/content/guides/routing.mdx");
+
+    expect(routing).toContain("## Route shapes");
+    expect(routing).toContain("src/app/");
+    expect(routing).toContain("docs/");
+    expect(routing).toContain("$id/");
+    expect(routing).toContain("$...path/");
+    expect(routing).toContain("(marketing)/");
+    expect(routing).toContain("/users/:id/");
+    expect(routing).toContain("/files/*");
+    expect(routing).toContain("/contact/");
+    expect(routing).toContain("## Dynamic segments");
+    expect(routing).toContain("params.id");
+    expect(routing).toContain("type UserPageProps = {");
+    expect(routing).toContain("readonly params: { readonly id: string };");
+    expect(routing).toContain("export default function UserPage(props: UserPageProps)");
+    expect(routing).toContain("## Catch-all segments");
+    expect(routing).toContain("readonly params: { readonly path: readonly string[] };");
+    expect(routing).toContain("props.params.path.join");
+    expect(routing).toContain("encodeURIComponent");
+    expect(routing).toContain("## Route groups");
+    expect(routing).toContain("## Static params");
+    expect(routing).toContain("prerender = true");
+    expect(routing).toContain("generateStaticParams()");
+    expect(routing).toContain("## Not found behavior");
+    expect(routing).toContain("notFound()");
+    expect(routing).toContain("[Project Structure](/guides/project-structure/)");
+    expect(routing).toContain("[Data Loading](/guides/data-loading/)");
+    expect(routing).toContain("[Route Handlers](/guides/route-handlers/)");
+    expect(routing).toContain("[SSG and Static Export](/guides/ssg-and-static-export/)");
+    expect(routing).toContain("[Link and Navigation](/guides/link-and-navigation/)");
+  });
+
   test("documents Link prefetch controls and configures syntax highlighting", async () => {
     const linkGuide = await readDocsSite("src/content/guides/link-and-navigation.mdx");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
