@@ -110,7 +110,15 @@ a:hover {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
+  justify-content: space-between;
   margin-bottom: 1.35rem;
+}
+
+.site-header-actions {
+  align-items: center;
+  display: flex;
+  flex: none;
+  gap: 0.45rem;
 }
 
 .site-brand {
@@ -165,6 +173,10 @@ a:hover {
 .theme-toggle[data-theme-next="dark"] [data-theme-icon="dark"],
 .theme-toggle[data-theme-next="light"] [data-theme-icon="light"] {
   display: block;
+}
+
+.site-menu-toggle {
+  display: none;
 }
 
 .site-search {
@@ -1005,6 +1017,24 @@ a:hover {
     height: auto;
     max-height: 45vh;
     position: relative;
+  }
+
+  .site-sidebar-header {
+    margin-bottom: 0;
+  }
+
+  .site-menu-toggle {
+    display: inline-flex;
+  }
+
+  .site-sidebar-body {
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+
+  .site-sidebar-body[hidden] {
+    display: none;
   }
 
   .site-main {

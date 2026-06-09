@@ -159,6 +159,7 @@ describe("docs-site example contract", () => {
     );
     expect(layout).toContain("https://github.com/t-k/mreact");
     expect(layout).toContain('src={sitePath("docs-sidebar.js")}');
+    expect(layout).toContain('src={sitePath("docs-menu.js")}');
     expect(layout).toContain('src={sitePath("docs-copy.js")}');
     expect(layout).toContain('src={sitePath("docs-search.js")}');
     expect(layout).toContain('src={sitePath("docs-theme.js")}');
@@ -169,6 +170,9 @@ describe("docs-site example contract", () => {
     expect(layout).toContain('data-theme-toggle');
     expect(layout).toContain('data-theme-icon="dark"');
     expect(layout).toContain('data-theme-icon="light"');
+    expect(layout).toContain('data-menu-toggle');
+    expect(layout).toContain('aria-controls="site-sidebar-menu"');
+    expect(layout).toContain('id="site-sidebar-menu"');
     expect(layout).toContain("<search");
     expect(layout).toContain('type="search"');
     expect(layout).toContain('aria-label="Search documentation"');
@@ -187,9 +191,11 @@ describe("docs-site example contract", () => {
   test("preserves sidebar position across full-page documentation navigation", async () => {
     const layout = await readDocsSite("src/app/layout.tsx");
     const sidebarScript = await readDocsSite("public/docs-sidebar.js");
+    const menuScript = await readDocsSite("public/docs-menu.js");
 
     expect(layout).toContain('class="site-sidebar"');
     expect(layout).toContain('src={sitePath("docs-sidebar.js")}');
+    expect(layout).toContain('class="site-sidebar-body"');
     expect(sidebarScript).toContain(".site-sidebar");
     expect(sidebarScript).toContain("mreact:docs:sidebar-scroll");
     expect(sidebarScript).toContain("sessionStorage");
@@ -199,6 +205,12 @@ describe("docs-site example contract", () => {
     expect(sidebarScript).toContain('setAttribute("aria-current", "page")');
     expect(sidebarScript).toContain("scrollIntoView");
     expect(sidebarScript).not.toContain("innerHTML");
+    expect(menuScript).toContain('window.matchMedia("(max-width: 51.25rem)")');
+    expect(menuScript).toContain("[data-menu-toggle]");
+    expect(menuScript).toContain("#site-sidebar-menu");
+    expect(menuScript).toContain("aria-expanded");
+    expect(menuScript).toContain("menuPanel.hidden");
+    expect(menuScript).not.toContain("innerHTML");
   });
 
   test("supports a persisted light and dark theme toggle", async () => {
@@ -1962,6 +1974,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
     expect(css).toContain(".site-icon-control");
+    expect(css).toContain(".site-menu-toggle");
+    expect(css).toContain(".site-sidebar-body[hidden]");
   });
 
   test("has source content for the critical launch pages", async () => {
