@@ -92,7 +92,7 @@ When a server action revalidates paths, Mreact deletes matching route cache entr
 
 The browser navigation runtime can keep prefetched navigation HTML so link-based navigation can avoid a request. After successful non-GET/HEAD mutations, Mreact clears affected cached navigation HTML so the next navigation re-requests loader-rendered pages.
 
-For server actions today, revalidation can invalidate the cached route HTML and the client navigation cache. Mreact does not yet attach refreshed route payloads to the server action response, so unsupported flows can still need a follow-up navigation or data request after the mutation response.
+For browser-enhanced server action forms, a revalidation of the current route can use a single-flight mutation response. The action POST response carries fresh navigation HTML marked with `x-mreact-action-single-flight`, so the browser can update the visible route without a second GET. Unsupported server action flows still fall back to `x-mreact-revalidate`, redirect handling, or a later navigation request.
 
 ## Use a shared route cache
 

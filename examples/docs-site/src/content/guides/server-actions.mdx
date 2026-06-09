@@ -110,7 +110,15 @@ export async function saveNote(formData: FormData) {
 
 Use the same path users navigate to. If the mutation affects multiple cached pages, revalidate each route that depends on the changed data.
 
-## Single-flight mutations
+## Single-flight mutation responses
+
+Browser-enhanced server action forms can update the visible route with a single-flight mutation response. When an action mutates data, calls `revalidatePath()` for the current route, and completes through the normal form redirect flow, Mreact can render fresh navigation HTML into the action POST response and mark it with `x-mreact-action-single-flight`.
+
+The browser applies that HTML to the current route without a second GET. Mreact still sends `x-mreact-revalidate` so unsupported flows can fall back to client navigation cache invalidation, a redirect, or a follow-up navigation.
+
+This is a transport optimization, not an application idempotency system. It updates the route after a successful mutation; it does not decide whether two submitted business operations are duplicates.
+
+## Application idempotency keys
 
 Server action nonce replay protection prevents the same rendered action nonce from being accepted twice. That protects the action transport from replay, but it is not a full business-level idempotency system. If two different rendered forms can submit the same logical mutation, or if a user can retry from another tab, add an application-level mutation key.
 

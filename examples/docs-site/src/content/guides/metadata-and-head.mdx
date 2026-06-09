@@ -3,4 +3,301 @@ export const description = "Set titles, descriptions, Open Graph, icons, robots,
 
 # Metadata and head
 
-Routes can export static `metadata` or `generateMetadata(context)`. Metadata composes through layouts, can read loader data, and supports title, description, canonical links, Open Graph, icons, robots, theme color, viewport, CSP, security headers, and custom head descriptors.
+Routes can export static `metadata` or `generateMetadata(context)` to control the document head and selected response headers. Metadata composes through layouts, can use params and loader data, and stays server-side.
+
+## What metadata controls
+
+Route metadata controls `title`, `description`, canonical links, Open Graph tags, icons, robots, `themeColor`, `viewport`, `lang`, custom `head` descriptors, route-level CSP, and security headers.
+
+Use metadata for document-owned head state. Use page JSX for visible content, [External Scripts](/guides/external-scripts/) for analytics integration details, and [CSP](/guides/csp/) for full Content Security Policy design.
+
+## Static metadata
+
+Export `metadata` from a page or layout when the values are known without reading the request. Type the object with `RouteMetadata` or `satisfies RouteMetadata` so unsupported keys are caught before runtime.
+
+```tsx
+// src/app/about/page.tsx
+import type { RouteMetadata } from "@reckona/mreact-router";
+
+export const prerender = true;
+
+export const metadata = {
+  title: "About - Acme",
+  description: "A static overview of Acme products.",
+  alternates: {
+    canonical: "https://example.com/about/",
+  },
+  openGraph: {
+    title: "About - Acme",
+    description: "A static overview of Acme products.",
+    image: {
+      alt: "Acme product dashboard",
+      height: 630,
+      url: "https://example.com/og/about.png",
+      width: 1200,
+    },
+  },
+  robots: { index: true, follow: true },
+  viewport: { width: "device-width", initialScale: 1 },
+} satisfies RouteMetadata;
+```
+
+Static metadata works with SSR and SSG. For prerendered routes, the metadata is resolved at build time together with the HTML artifact.
+
+## Metadata composition
+
+Layouts and pages can both export metadata. Mreact merges metadata from the matched layout shell and the page; the page wins for overlapping scalar fields such as `title` and `description`.
+
+```tsx
+// src/app/docs/layout.tsx
+export const metadata = {
+  title: "Docs - Acme",
+  description: "Documentation for Acme developers.",
+  openGraph: {
+    image: "/og/docs.png",
+  },
+};
+```
+
+```tsx
+// src/app/docs/routing/page.tsx
+export const metadata = {
+  title: "Routing - Acme Docs",
+};
+```
+
+The page above renders its own title and inherits the layout description and Open Graph image. Nested objects such as `openGraph`, `icons`, `alternates`, and `csp` are merged. `metadata.head` arrays are appended, so layout-owned descriptors and page-owned descriptors can both appear.
+
+## Generate request-aware metadata
+
+Use `generateMetadata(context)` when metadata depends on route params, headers, cookies, or other request data. The context includes `params` and `request`.
+
+```tsx
+// src/app/products/$id/page.tsx
+import type {
+  GenerateMetadataContext,
+  RouteMetadata,
+} from "@reckona/mreact-router";
+
+export async function generateMetadata(
+  context: GenerateMetadataContext<{ id: string }>,
+): Promise<RouteMetadata> {
+  const product = await findProduct(context.params.id);
+  const url = new URL(context.request.url);
+
+  return {
+    title: `${product.name} - Acme`,
+    description: product.summary,
+    alternates: {
+      canonical: new URL(`/products/${product.id}/`, url.origin).href,
+    },
+  };
+}
+```
+
+Request-aware metadata can make a route dynamic. Be careful with user-specific metadata: personalized titles, noindex decisions, or per-user canonical URLs should not be served from a shared route cache.
+
+## Use loader data in metadata
+
+When the route has a loader, metadata can derive from the same loaded data instead of fetching the record twice.
+
+```tsx
+// src/app/products/$id/page.tsx
+import { definePage, type LoaderContext, type RouteMetadata } from "@reckona/mreact-router";
+
+interface ProductData {
+  id: string;
+  name: string;
+  summary: string;
+}
+
+export async function loader(
+  context: LoaderContext<{ id: string }>,
+): Promise<ProductData> {
+  return await findProduct(context.params.id);
+}
+
+export function generateMetadata({ data }: { data: ProductData }): RouteMetadata {
+  return {
+    title: `${data.name} - Acme`,
+    description: data.summary,
+    openGraph: {
+      title: data.name,
+      description: data.summary,
+    },
+  };
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  return <h1>{props.data.name}</h1>;
+});
+```
+
+Use loader data for metadata that describes the same entity the page renders. Keep metadata generation free of side effects.
+
+## Open Graph, icons, robots, and viewport
+
+Most product pages need a small set of reusable fields: page title, description, canonical URL, Open Graph image, icons, robots, theme color, and viewport.
+
+```tsx
+export const metadata = {
+  title: "Dashboard - Acme",
+  description: "Operational dashboard for Acme teams.",
+  icons: {
+    icon: "/favicon.svg",
+    apple: "/apple-icon.png",
+  },
+  openGraph: {
+    title: "Dashboard - Acme",
+    description: "Operational dashboard for Acme teams.",
+    images: [
+      {
+        alt: "Acme dashboard",
+        height: 630,
+        url: "https://example.com/og/dashboard.png",
+        width: 1200,
+      },
+    ],
+  },
+  robots: { index: false, follow: false },
+  themeColor: { color: "#111827", media: "(prefers-color-scheme: dark)" },
+  viewport: { width: "device-width", initialScale: 1 },
+} satisfies RouteMetadata;
+```
+
+Use absolute URLs for share images and canonical links in production. Relative asset URLs can work for same-origin browser rendering, but crawlers and social preview fetchers are more predictable with absolute public URLs.
+
+## Custom head descriptors
+
+Use `metadata.head` for route-owned head tags that are not covered by the structured fields. Supported descriptor tags are `base`, `link`, `meta`, `script`, and `style`.
+
+```tsx
+export const metadata = {
+  head: [
+    {
+      tag: "meta",
+      attrs: {
+        content: "summary_large_image",
+        name: "twitter:card",
+      },
+    },
+    {
+      tag: "link",
+      attrs: {
+        href: "/feed.xml",
+        rel: "alternate",
+        type: "application/rss+xml",
+      },
+    },
+    {
+      tag: "script",
+      attrs: {
+        type: "application/ld+json",
+      },
+      content: JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        name: "Acme",
+      }),
+    },
+  ],
+} satisfies RouteMetadata;
+```
+
+Head descriptors are validated: event handler attributes are rejected, dangerous attributes are rejected, and unsafe URL values are rejected. Text content is escaped so a `<script>` or `<style>` descriptor cannot break out through a literal `<` character.
+
+## CSP nonce and external scripts
+
+Use `metadata.csp` when a route needs route-specific CSP. A nonce generated in `generateMetadata()` can be applied to `metadata.head` script or style descriptors with `nonce: true`.
+
+```tsx
+import { randomBytes } from "node:crypto";
+import type { GenerateMetadataContext, RouteMetadata } from "@reckona/mreact-router";
+
+function nonce(): string {
+  return randomBytes(16).toString("base64url");
+}
+
+export function generateMetadata(
+  _context: GenerateMetadataContext,
+): RouteMetadata {
+  const value = nonce();
+
+  return {
+    csp: {
+      directives: {
+        "script-src": ["'self'"],
+      },
+      nonce: value,
+    },
+    head: [
+      {
+        tag: "script",
+        nonce: true,
+        content: "window.dataLayer=window.dataLayer||[];",
+      },
+    ],
+  };
+}
+```
+
+The serializer adds the nonce to the CSP directive and to descriptors with `nonce: true`. For GTM, GA4, JSON-LD, and SPA page-view tracking, see [External Scripts](/guides/external-scripts/).
+
+## Security headers from metadata
+
+Use `metadata.security` for route-owned response headers that travel with the page render.
+
+```tsx
+export const metadata = {
+  security: {
+    contentTypeOptions: "nosniff",
+    frameOptions: "DENY",
+    hsts: {
+      includeSubDomains: true,
+      maxAge: 31_536_000,
+      preload: true,
+    },
+    permissionsPolicy: {
+      camera: [],
+      geolocation: [],
+      microphone: [],
+    },
+    referrerPolicy: "strict-origin-when-cross-origin",
+  },
+} satisfies RouteMetadata;
+```
+
+Use deployment-level headers for site-wide policy, and route metadata for exceptions or route-local hardening. Header values are validated to reject control characters and invalid policy shapes.
+
+## Metadata routes and file conventions
+
+Mreact also recognizes metadata-related file conventions. Route-local or root-level `icon`, `apple-icon`, and `opengraph-image` assets can supply default icon and Open Graph image metadata when the route does not set those fields explicitly.
+
+Metadata routes such as `robots` and `sitemap` produce crawler-facing documents. Keep robots and sitemap output based on public canonical URLs, not request-host guesses from untrusted traffic.
+
+## Head updates during client navigation
+
+During client navigation, Mreact synchronizes managed head metadata from the fetched route HTML into `document.head`. Managed tags include route metadata such as title, description, canonical, Open Graph, robots, viewport, theme color, icons, and supported head descriptors.
+
+This updates document metadata for SPA-style navigation. It does not replace analytics page-view tracking, body-level `noscript` fallbacks, or third-party script lifecycle code; those need explicit client code or route-owned script handling.
+
+## Production checklist
+
+- Verify every public route has the intended title and description.
+- Use a stable canonical URL for indexable pages.
+- Use absolute public Open Graph image URLs and verify their dimensions.
+- Check `robots` values for staging, previews, private dashboards, and public pages.
+- Keep CSP and nonce policy consistent with [CSP](/guides/csp/) and [External Scripts](/guides/external-scripts/).
+- Do not put secrets or PII in metadata, head descriptors, JSON-LD, canonical URLs, or analytics bootstraps.
+- Be careful with request-specific metadata and route caching. Personalized metadata should be uncached or private.
+- Configure [Host Policy and Proxies](/deployments/host-policy-and-proxies/) so canonical URL generation does not trust attacker-controlled hosts.
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [External Scripts](/guides/external-scripts/)
+- [CSP](/guides/csp/)
+- [Cache and Revalidation](/guides/cache-and-revalidation/)
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
+- [SSG and Static Export](/guides/ssg-and-static-export/)
+- [Metadata API](/reference/metadata-api/)
