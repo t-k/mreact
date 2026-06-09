@@ -25,6 +25,7 @@ import guidesServerActions, * as guidesServerActionsMeta from "./content/guides/
 import guidesServerAndClientModel, * as guidesServerAndClientModelMeta from "./content/guides/server-and-client-model.mdx";
 import guidesSsgAndStaticExport, * as guidesSsgAndStaticExportMeta from "./content/guides/ssg-and-static-export.mdx";
 import guidesSsrAndStreaming, * as guidesSsrAndStreamingMeta from "./content/guides/ssr-and-streaming.mdx";
+import guidesTesting, * as guidesTestingMeta from "./content/guides/testing.mdx";
 import guidesAdvancedI18n, * as guidesAdvancedI18nMeta from "./content/guides/advanced/i18n.mdx";
 import guidesAdvancedMdx, * as guidesAdvancedMdxMeta from "./content/guides/advanced/mdx.mdx";
 import guidesAdvancedVitePluginIntegration, * as guidesAdvancedVitePluginIntegrationMeta from "./content/guides/advanced/vite-plugin-integration.mdx";
@@ -212,6 +213,7 @@ export const docsPages = [
   page("guides/cookies-and-sessions", guidesCookiesAndSessions, guidesCookiesAndSessionsMeta),
   page("guides/authentication", guidesAuthentication, guidesAuthenticationMeta),
   page("guides/forms-and-validation", guidesFormsAndValidation, guidesFormsAndValidationMeta),
+  page("guides/testing", guidesTesting, guidesTestingMeta),
   page("guides/metadata-and-head", guidesMetadataAndHead, guidesMetadataAndHeadMeta),
   page("guides/css-and-assets", guidesCssAndAssets, guidesCssAndAssetsMeta),
   page("guides/csp", guidesCsp, guidesCspMeta),

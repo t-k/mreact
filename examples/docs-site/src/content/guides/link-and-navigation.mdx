@@ -19,7 +19,7 @@ export default function Page() {
 
 ## Typed route hrefs
 
-Since `0.0.151`, concrete `Link` hrefs can be typed directly. Build output includes `.mreact/routes.d.ts`, which declares discovered app route patterns and augments `@reckona/mreact-router/link`. Include that declaration in your TypeScript program, and `Link` will type-check internal href strings without importing any generated runtime module.
+Concrete `Link` hrefs can be typed directly. Build output includes `.mreact/routes.d.ts`, which declares discovered app route patterns and augments `@reckona/mreact-router/link`. Include that declaration in your TypeScript program, and `Link` will type-check internal href strings without importing any generated runtime module.
 
 The generated file contains `declare module "@reckona/mreact-router/link"` so the public `Link` type learns your app's route union at type-check time.
 

@@ -1,6 +1,194 @@
 export const title = "Vite Plugin Integration";
-export const description = "How user Vite plugins participate in server, client, Cloudflare, and prerender builds.";
+export const description = "Use Vite plugins for MDX, CSS tooling, custom content transforms, define values, and app-router builds.";
 
 # Vite plugin integration
 
-The router forwards user Vite plugins into app-router bundle builds after removing the router plugin itself. This allows content transforms, MDX, CSS tooling, and custom loaders to participate in server, client, Cloudflare, and prerender builds.
+Mreact reads your `vite.config.ts` and forwards app-safe Vite plugin behavior into dev, SSR, client, adapter, and prerender builds. This is what lets MDX, Tailwind, syntax highlighting, and small content transforms participate in the app router without a separate build system.
+
+## What gets forwarded
+
+Mreact forwards route-agnostic Vite plugins after removing the `mreactRouter()` plugin itself. The same transformed modules can participate in server, client, Cloudflare, and prerender builds.
+
+Plugin transforms are used by route pages, layouts, loaders, metadata, middleware, route handlers, server component artifacts, and `generateStaticParams()`. The dev server also keeps configured CSS plugins available for linked route CSS.
+
+This means a `.mdx`, `.yaml`, `.fixture`, or CSS input can be imported from route code as long as the configured plugin can transform it in an SSR/build context.
+
+## Configure plugins in vite.config.ts
+
+Put content and CSS plugins in the same `plugins` array as `mreactRouter()`. Keep `mreactRouter()` in the config so the CLI can discover `projectRoot`, `routesDir`, `publicDir`, `allowedSourceDirs`, and build options.
+
+```ts
+// vite.config.ts
+import mdx from "@mdx-js/rollup";
+import tailwindcss from "@tailwindcss/vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+import { defineConfig } from "vite";
+
+export default defineConfig({
+  plugins: [
+    mdx({
+      jsxImportSource: "@reckona/mreact",
+      jsxRuntime: "automatic",
+    }),
+    tailwindcss(),
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+      publicDir: "public",
+      allowedSourceDirs: ["src"],
+    }),
+  ],
+});
+```
+
+For common layouts, `routesDir: "src/app"` defaults `allowedSourceDirs` to `["src"]`, and `routesDir: "app"` defaults it to `["app"]`. Keep `allowedSourceDirs` explicit when app-local route code imports shared modules from another project-root-relative directory.
+
+## Use custom content transforms
+
+Custom plugins work when they return JavaScript that the server and client bundlers can consume. This example turns a simple `.fixture` content file into a named export.
+
+```ts
+// vite.config.ts
+import { mreactRouter } from "@reckona/mreact-router/vite";
+import { defineConfig } from "vite";
+
+function contentFixturePlugin() {
+  return {
+    name: "content-fixture",
+    transform(code, id) {
+      if (!id.endsWith(".fixture")) {
+        return;
+      }
+
+      const [, value = ""] = code.split(":");
+
+      return {
+        code: `export const title = ${JSON.stringify(value.trim())};`,
+        map: null,
+      };
+    },
+  };
+}
+
+export default defineConfig({
+  plugins: [
+    contentFixturePlugin(),
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+      allowedSourceDirs: ["src"],
+    }),
+  ],
+});
+```
+
+```tsx
+// src/app/page.tsx
+import { title } from "../content/post.fixture";
+
+export default function Page() {
+  return <main>{title}</main>;
+}
+```
+
+Add a module declaration for non-TypeScript imports so the TypeScript program understands the shape.
+
+```ts
+// src/content.d.ts
+declare module "*.fixture" {
+  export const title: string;
+}
+```
+
+## CSS plugins
+
+CSS plugins such as `@tailwindcss/vite` participate in dev and production route CSS. Import the CSS from a layout, page, template, or boundary that owns the style.
+
+```css
+/* src/app/globals.css */
+@import "tailwindcss";
+```
+
+```tsx
+// src/app/layout.tsx
+import type { MReactNode } from "@reckona/mreact-router";
+import "./globals.css";
+
+export default function Layout(props: { children: MReactNode }) {
+  return (
+    <html lang="en">
+      <body>{props.children}</body>
+    </html>
+  );
+}
+```
+
+Mreact injects Tailwind-compatible `@source` hints for route source roots before dev CSS transforms run, so route-local class names can be found without manually listing every app file. Keep your route files under `allowedSourceDirs` so CSS tooling can scan the same source tree the router builds.
+
+## Define values
+
+Vite `define` values are forwarded into app-router builds. They work for route code, loaders, route handlers, and generated Cloudflare server bundles, including `import.meta.env` aliases when Vite supplies them.
+
+```ts
+// vite.config.ts
+export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
+    "import.meta.env.PUBLIC_ANALYTICS_ID": JSON.stringify(
+      process.env.PUBLIC_ANALYTICS_ID ?? "",
+    ),
+  },
+  plugins: [
+    mreactRouter({
+      projectRoot: __dirname,
+      routesDir: "src/app",
+    }),
+  ],
+});
+```
+
+These are build-time values. Do not put secrets in `define`, `import.meta.env`, or client transforms. Use runtime environment variables for deployment-specific server secrets.
+
+## Import policy and source roots
+
+The router import policy protects server-side route code before bundling loaders, middleware, route handlers, metadata, and server actions. App-local modules should live under `projectRoot` and one of the configured `allowedSourceDirs`.
+
+Use relative imports for app-local server modules:
+
+```ts
+// Good in loaders, route handlers, middleware, metadata, and server actions.
+import { requireUser } from "../lib/session.js";
+```
+
+Avoid relying on a Vite-only or tsconfig path alias in server-side route code:
+
+```ts
+// Avoid in server-side route code.
+import { requireUser } from "~/lib/session";
+```
+
+The production server bundler applies the import policy before a tsconfig path alias plugin can rewrite `~/lib/session`, so the alias may be treated as a package import named `"~"`. Use relative imports or place the shared source under an explicit `allowedSourceDirs` entry.
+
+## Plugin constraints
+
+Prefer deterministic plugins that work during SSR and production build. A plugin that depends on a running browser, a dev server websocket, or request-local state is usually dev-server-only and should not be required by production route artifacts.
+
+If a plugin emits code that touches `window`, `document`, or other browser globals, keep that output in client-only modules or `.client.tsx` islands. Server-side route code still runs in Node, Cloudflare Workers, AWS Lambda, or another server runtime.
+
+When a plugin transforms a module into JSX, use the automatic runtime and the Mreact JSX import source, for example `jsxImportSource: "@reckona/mreact"` and `jsxRuntime: "automatic"` for MDX.
+
+## Troubleshooting
+
+- `Cannot resolve` an app-local import from a loader, route handler, middleware, metadata module, or server action: check that the source file is under `allowedSourceDirs`, and prefer a relative import over a path alias.
+- A transformed content import works in dev but fails in build: make sure the plugin is present in `vite.config.ts`, not only in a test helper or dev-server wrapper, and that it does not depend on dev-server-only APIs.
+- A non-TypeScript content import type-checks as a missing module declaration: add a declaration such as `declare module "*.mdx"` or `declare module "*.fixture"`.
+- Tailwind or CSS output misses route classes: check that the route files live under `allowedSourceDirs` and that the CSS plugin is in the same `vite.config.ts`.
+- A value differs after deployment: remember that `define` and `import.meta.env` substitutions are build-time values.
+
+## Related pages
+
+- [MDX](/guides/advanced/mdx/)
+- [CSS and Assets](/guides/css-and-assets/)
+- [Environment Variables](/guides/environment-variables/)
+- [Config](/reference/config/)
+- [Cloudflare](/deployments/cloudflare/)

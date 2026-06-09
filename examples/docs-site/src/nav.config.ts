@@ -37,6 +37,7 @@ export const sidebar: readonly NavGroup[] = [
       { text: "Cookies and Sessions", slug: "guides/cookies-and-sessions" },
       { text: "Authentication", slug: "guides/authentication" },
       { text: "Forms and Validation", slug: "guides/forms-and-validation" },
+      { text: "Testing", slug: "guides/testing" },
       { text: "Metadata and Head", slug: "guides/metadata-and-head" },
       { text: "CSS and Assets", slug: "guides/css-and-assets" },
       { text: "CSP", slug: "guides/csp" },

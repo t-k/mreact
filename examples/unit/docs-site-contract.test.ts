@@ -12,6 +12,7 @@ const requiredSlugs = [
   "guides/project-structure",
   "guides/environment-variables",
   "guides/http-apis",
+  "guides/testing",
   "guides/advanced/mdx",
   "deployments/production-checklist",
   "deployments/source-maps",
@@ -77,6 +78,12 @@ describe("docs-site example contract", () => {
     );
     expect(nav.indexOf('slug: "guides/environment-variables"')).toBeLessThan(
       nav.indexOf('slug: "guides/http-apis"'),
+    );
+    expect(nav.indexOf('slug: "guides/forms-and-validation"')).toBeLessThan(
+      nav.indexOf('slug: "guides/testing"'),
+    );
+    expect(nav.indexOf('slug: "guides/testing"')).toBeLessThan(
+      nav.indexOf('slug: "guides/metadata-and-head"'),
     );
     expect(nav).toContain('{ text: "Overview", slug: "" }');
     expect(nav).not.toContain(
@@ -368,7 +375,6 @@ describe("docs-site example contract", () => {
     expect(linkGuide).toContain('import { Link } from "@reckona/mreact-router/link";');
     expect(linkGuide).toContain('<Link href="/docs">Docs</Link>');
     expect(linkGuide).toContain("## Typed route hrefs");
-    expect(linkGuide).toContain("0.0.151");
     expect(linkGuide).toContain("<Link href={`/users/${encodeURIComponent(props.user.id)}?tab=activity#profile`}>");
     expect(linkGuide).toContain("const encodedPath = props.path.map(encodeURIComponent).join(\"/\");");
     expect(linkGuide).toContain("<Link href={`/files/${encodedPath}`}>");
@@ -704,6 +710,58 @@ describe("docs-site example contract", () => {
     expect(i18nGuide).toContain("[Cookies and Sessions](/guides/cookies-and-sessions/)");
   });
 
+  test("documents Vite plugin forwarding, config shape, build targets, define values, import policy, and limits", async () => {
+    const vitePluginGuide = await readDocsSite(
+      "src/content/guides/advanced/vite-plugin-integration.mdx",
+    );
+
+    expect(vitePluginGuide).toContain("## What gets forwarded");
+    expect(vitePluginGuide).toContain("route-agnostic Vite plugins");
+    expect(vitePluginGuide).toContain("after removing the `mreactRouter()` plugin");
+    expect(vitePluginGuide).toContain("server, client, Cloudflare, and prerender builds");
+    expect(vitePluginGuide).toContain("loaders");
+    expect(vitePluginGuide).toContain("middleware");
+    expect(vitePluginGuide).toContain("route handlers");
+    expect(vitePluginGuide).toContain("generateStaticParams()");
+    expect(vitePluginGuide).toContain("## Configure plugins in vite.config.ts");
+    expect(vitePluginGuide).toContain('import mdx from "@mdx-js/rollup";');
+    expect(vitePluginGuide).toContain('import tailwindcss from "@tailwindcss/vite";');
+    expect(vitePluginGuide).toContain('import { mreactRouter } from "@reckona/mreact-router/vite";');
+    expect(vitePluginGuide).toContain("plugins: [");
+    expect(vitePluginGuide).toContain("mreactRouter({");
+    expect(vitePluginGuide).toContain('routesDir: "src/app"');
+    expect(vitePluginGuide).toContain('allowedSourceDirs: ["src"]');
+    expect(vitePluginGuide).toContain("## Use custom content transforms");
+    expect(vitePluginGuide).toContain('name: "content-fixture"');
+    expect(vitePluginGuide).toContain("transform(code, id)");
+    expect(vitePluginGuide).toContain('id.endsWith(".fixture")');
+    expect(vitePluginGuide).toContain("## CSS plugins");
+    expect(vitePluginGuide).toContain("@tailwindcss/vite");
+    expect(vitePluginGuide).toContain("@source");
+    expect(vitePluginGuide).toContain("## Define values");
+    expect(vitePluginGuide).toContain("define:");
+    expect(vitePluginGuide).toContain("import.meta.env");
+    expect(vitePluginGuide).toContain("build-time values");
+    expect(vitePluginGuide).toContain("Do not put secrets");
+    expect(vitePluginGuide).toContain("## Import policy and source roots");
+    expect(vitePluginGuide).toContain("allowedSourceDirs");
+    expect(vitePluginGuide).toContain("projectRoot");
+    expect(vitePluginGuide).toContain("relative imports");
+    expect(vitePluginGuide).toContain("tsconfig path alias");
+    expect(vitePluginGuide).toContain("## Plugin constraints");
+    expect(vitePluginGuide).toContain("deterministic");
+    expect(vitePluginGuide).toContain("SSR");
+    expect(vitePluginGuide).toContain("dev-server-only");
+    expect(vitePluginGuide).toContain("## Troubleshooting");
+    expect(vitePluginGuide).toContain("Cannot resolve");
+    expect(vitePluginGuide).toContain("missing module declaration");
+    expect(vitePluginGuide).toContain("## Related pages");
+    expect(vitePluginGuide).toContain("[MDX](/guides/advanced/mdx/)");
+    expect(vitePluginGuide).toContain("[CSS and Assets](/guides/css-and-assets/)");
+    expect(vitePluginGuide).toContain("[Environment Variables](/guides/environment-variables/)");
+    expect(vitePluginGuide).toContain("[Config](/reference/config/)");
+  });
+
   test("documents page data loading with loaders, params, request data, and metadata", async () => {
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
 
@@ -1033,6 +1091,53 @@ describe("docs-site example contract", () => {
     expect(formsGuide).toContain("[File Uploads and CSRF](/guides/file-uploads-and-csrf/)");
     expect(formsGuide).toContain("[Authentication](/guides/authentication/)");
     expect(formsGuide).toContain("[Cache and Revalidation](/guides/cache-and-revalidation/)");
+  });
+
+  test("documents testing strategy with unit, route, build, E2E, forms, security, and CI guidance", async () => {
+    const testing = await readDocsSite("src/content/guides/testing.mdx");
+    const nav = await readDocsSite("src/nav.config.ts");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+
+    expect(nav).toContain('{ text: "Testing", slug: "guides/testing" }');
+    expect(contentRegistry).toContain(
+      'import guidesTesting, * as guidesTestingMeta from "./content/guides/testing.mdx";',
+    );
+    expect(contentRegistry).toContain('page("guides/testing", guidesTesting, guidesTestingMeta)');
+    expect(testing).toContain("## Testing layers");
+    expect(testing).toContain("Vitest");
+    expect(testing).toContain("Playwright");
+    expect(testing).toContain("route contract");
+    expect(testing).toContain("## Unit test pure logic");
+    expect(testing).toContain("defineMessages");
+    expect(testing).toContain("detectLocale");
+    expect(testing).toContain("## Test route rendering");
+    expect(testing).toContain("renderAppRequest");
+    expect(testing).toContain("LoaderContext");
+    expect(testing).toContain("## Test built output");
+    expect(testing).toContain("buildApp");
+    expect(testing).toContain("renderBuiltAppRequest");
+    expect(testing).toContain("mreact-router build");
+    expect(testing).toContain("## Test server actions and HTTP APIs");
+    expect(testing).toContain("FormData");
+    expect(testing).toContain("__mreact_csrf");
+    expect(testing).toContain("Response.json");
+    expect(testing).toContain("## Browser E2E with Playwright");
+    expect(testing).toContain("startDevServer");
+    expect(testing).toContain("test.afterAll");
+    expect(testing).toContain("await server.close()");
+    expect(testing).toContain("## What to assert for SSR");
+    expect(testing).toContain("initial HTML");
+    expect(testing).toContain("hydration");
+    expect(testing).toContain("navigation runtime");
+    expect(testing).toContain("## CI checklist");
+    expect(testing).toContain("pnpm vitest run");
+    expect(testing).toContain("pnpm --filter");
+    expect(testing).toContain("pnpm test:e2e");
+    expect(testing).toContain("[Data Loading](/guides/data-loading/)");
+    expect(testing).toContain("[Server Actions](/guides/server-actions/)");
+    expect(testing).toContain("[HTTP APIs](/guides/http-apis/)");
+    expect(testing).toContain("[Forms and Validation](/guides/forms-and-validation/)");
+    expect(testing).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
   });
 
   test("documents metadata composition, generated metadata, head descriptors, CSP, and metadata routes", async () => {

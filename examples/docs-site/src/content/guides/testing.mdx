@@ -1,0 +1,183 @@
+export const title = "Testing";
+export const description = "Test Mreact apps with Vitest, route rendering, built artifacts, Playwright, server actions, HTTP APIs, and CI checks.";
+
+# Testing
+
+Test Mreact apps at the same boundaries that users and deployments hit: pure logic, route rendering, built artifacts, browser behavior, mutation endpoints, and production checks. Keep router behavior real in tests whenever possible, then make individual assertions small enough to diagnose quickly.
+
+## Testing layers
+
+- Unit tests: use Vitest for pure functions, validators, message helpers, cache-key builders, and other code that does not need a route request.
+- Route contract tests: call `renderAppRequest()` with a `Request` so loaders, params, middleware, metadata, route handlers, and server actions run through the router without starting an HTTP server.
+- Built output tests: call `buildApp()` and `renderBuiltAppRequest()` when you need confidence in generated production artifacts, or run `mreact-router build` in CI for the same production path.
+- Browser E2E tests: use Playwright for hydration, client state, focus behavior, navigation, forms, external scripts, CSP effects, and user-visible regressions.
+- Security and integration probes: exercise authentication redirects, cookie attributes, CSRF failures, upload limits, cache headers, and CORS with real `Request` objects.
+
+## Unit test pure logic
+
+Keep route-independent code in `src/lib` so it can be tested without rendering a route. This is the right place for i18n helpers, validation schemas, URL builders, and small data transforms.
+
+```ts
+import { expect, test } from "vitest";
+import { defineMessages, detectLocale } from "@reckona/mreact-router";
+
+const messages = defineMessages({
+  en: { greeting: "Hello" },
+  ja: { greeting: "こんにちは" },
+});
+
+test("detects the preferred locale", () => {
+  const request = new Request("https://example.com/", {
+    headers: { "accept-language": "ja,en;q=0.8" },
+  });
+  const detected = detectLocale(request, {
+    defaultLocale: "en",
+    locales: ["en", "ja"],
+  });
+
+  expect(detected.locale).toBe("ja");
+  expect(messages[detected.locale].greeting).toBe("こんにちは");
+});
+```
+
+Use these tests for fast feedback, but do not stop here for route features. A passing helper test does not prove the helper is wired into the route correctly.
+
+## Test route rendering
+
+`renderAppRequest()` renders from a source `src/app` tree. It is useful for route contract tests because it exercises the file-system router, loader params, headers, metadata, and route handlers through the same request shape as the dev server.
+
+```ts
+import { expect, test } from "vitest";
+import { renderAppRequest, type LoaderContext } from "@reckona/mreact-router";
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  return { user: await findUser(context.params.id) };
+}
+
+test("renders a user page from a dynamic route", async () => {
+  const response = await renderAppRequest({
+    appDir: "src/app",
+    request: new Request("https://example.test/users/ada/"),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.text()).toContain("Ada Lovelace");
+});
+```
+
+Prefer route contract tests for request-dependent behavior: `params.id`, cookies, redirects, `throwNotFound()`, metadata, cache headers, and middleware decisions.
+
+## Test built output
+
+Use built output tests when a regression could hide in compilation, route analysis, client boundary inference, asset emission, prerendering, or adapter output. These tests are slower than source route tests, so keep them focused on production risks.
+
+```ts
+import { expect, test } from "vitest";
+import { buildApp, renderBuiltAppRequest } from "@reckona/mreact-router";
+
+test("serves the production route artifact", async () => {
+  await buildApp({
+    appDir: "src/app",
+    outDir: ".mreact-test",
+    targets: ["node"],
+  });
+  const response = await renderBuiltAppRequest({
+    outDir: ".mreact-test",
+    request: new Request("https://example.test/dashboard/"),
+  });
+
+  expect(response.status).toBe(200);
+  expect(await response.text()).toContain("Dashboard");
+});
+```
+
+For a broad release check, run `mreact-router build` through your package script and then run the adapter or static export entry that production will use. Use a temporary `outDir` in real test files and remove it in teardown.
+
+## Test server actions and HTTP APIs
+
+Server actions are best tested through the rendered form when you care about production dispatch, hidden fields, CSRF, revalidation, redirects, or the single-flight response. Render the page, collect fields such as `__mreact_csrf`, then submit a real `FormData` body back to the action endpoint. Plain `route.ts` APIs can be tested with the same renderer by asserting standard `Response` behavior: status, headers, `Response.json()` shapes, invalid input, unauthorized access, CORS preflight, and unsupported methods.
+
+```ts
+import { expect, test } from "vitest";
+import { renderAppRequest } from "@reckona/mreact-router";
+
+test("submits mutations through the router", async () => {
+  const body = new FormData();
+  body.set("__mreact_csrf", csrfFromRenderedForm);
+  body.set("__mreact_action_nonce", nonceFromRenderedForm);
+  body.set("__mreact_module_id", "notes/actions.ts");
+  body.set("__mreact_export_name", "createNote");
+  body.set("text", "Ship the test guide");
+
+  const action = await renderAppRequest({
+    appDir: "src/app",
+    request: new Request("https://example.test/_mreact/actions", {
+      body,
+      headers: { cookie: csrfCookieFromRenderedForm },
+      method: "POST",
+    }),
+  });
+  const api = await renderAppRequest({
+    appDir: "src/app",
+    request: new Request("https://example.test/api/users/missing/"),
+  });
+
+  expect(action.status).toBe(200);
+  expect(api.status).toBe(404);
+  await expect(api.json()).resolves.toEqual({ error: "User not found" });
+});
+```
+
+## Browser E2E with Playwright
+
+Use Playwright for the behavior that only a browser can prove: hydration, focus, form controls, client navigation, scroll restoration, external scripts, CSP enforcement, and visual regressions. Start the Mreact dev server once for the test file and always close it.
+
+```ts
+import { expect, test } from "@playwright/test";
+import { startDevServer } from "@reckona/mreact-router";
+
+let server: Awaited<ReturnType<typeof startDevServer>>;
+
+test.beforeAll(async () => {
+  server = await startDevServer({ port: 0, projectRoot: process.cwd() });
+});
+
+test.afterAll(async () => {
+  await server.close();
+});
+
+test("hydrates a route and navigates with Link", async ({ page }) => {
+  await page.goto(`${server.url}/dashboard/`);
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+});
+```
+
+If the app needs files, databases, queues, or emulators for E2E, start them in the test harness and stop them in teardown. Avoid leaving dev servers or emulator processes behind after the test run.
+
+## What to assert for SSR
+
+- The initial HTML contains route data, metadata, critical text, and the expected status code before hydration runs.
+- Loader redirects, `throwNotFound()`, auth redirects, and middleware decisions return the expected status and headers.
+- The page is not an empty or loading-only shell when the route is expected to SSR real content.
+- Hydration keeps the server-rendered content stable before user interaction.
+- Client islands update after interaction without forcing unrelated route content into the navigation runtime.
+- The navigation runtime only appears where `Link` navigation or a client boundary actually needs it.
+- Cache headers, cookies, CSP, and security headers match the deployment page that owns that policy.
+
+## CI checklist
+
+- Run `pnpm vitest run` for unit, route contract, built artifact, and API tests.
+- Run `pnpm --filter <app> typecheck`, `pnpm --filter <app> lint`, and `pnpm --filter <app> build` before deployment.
+- Run `pnpm test:e2e` or your Playwright command for browser coverage.
+- Keep at least one production-path test that uses `mreact-router build` or `buildApp()` for pages that rely on client boundaries, server actions, middleware, or static export.
+- Include negative probes for authentication, CSRF, upload limits, invalid JSON, unsupported methods, and cache headers.
+- Stop any dev server, Playwright server, database, storage emulator, or container process that the test starts.
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [Server Actions](/guides/server-actions/)
+- [HTTP APIs](/guides/http-apis/)
+- [Forms and Validation](/guides/forms-and-validation/)
+- [SSR and Streaming](/guides/ssr-and-streaming/)
+- [File Uploads and CSRF](/guides/file-uploads-and-csrf/)
