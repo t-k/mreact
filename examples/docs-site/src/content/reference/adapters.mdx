@@ -1,6 +1,60 @@
 export const title = "Adapters";
-export const description = "Node, edge, Cloudflare, AWS Lambda, and static adapters.";
+export const description = "Node, edge, Cloudflare, AWS Lambda, and static adapter entrypoints.";
 
 # Adapters
 
-Deployment adapters live under `@reckona/mreact-router/adapters/*`. Use Node for servers and containers, edge for generic Request/Response runtimes, Cloudflare for Workers, AWS Lambda for API Gateway and Function URLs, and static for prerendered export.
+Deployment adapters live under `@reckona/mreact-router/adapters/*`. They turn the built `.mreact` output into a runtime-specific request handler or static export.
+
+## When to use this page
+
+Use this page when connecting build output to an HTTP server, Cloudflare Worker, AWS Lambda entrypoint, generic edge runtime, or static hosting export.
+
+## Adapter imports
+
+```ts
+import { createNodeRequestHandler } from "@reckona/mreact-router/adapters/node";
+import { createCloudflareRequestHandler } from "@reckona/mreact-router/adapters/cloudflare";
+import { createAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+import { createEdgeRequestHandler } from "@reckona/mreact-router/adapters/edge";
+import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
+```
+
+## Runtime map
+
+- Node servers and containers use `createNodeRequestHandler()`.
+- Cloudflare Workers and Pages advanced mode use `createCloudflareRequestHandler()` or generated Pages packaging output.
+- AWS Lambda HTTP API, Function URLs, and streaming variants use the AWS Lambda adapter.
+- Generic Fetch-compatible runtimes can use the edge adapter.
+- Static hosting uses `exportStaticApp()` after building a prerenderable app.
+
+## Minimal Node server
+
+```ts
+import { createServer } from "node:http";
+import { createNodeRequestHandler } from "@reckona/mreact-router/adapters/node";
+
+const handler = await createNodeRequestHandler({ outDir: ".mreact" });
+
+createServer(handler).listen(Number(process.env.PORT ?? 3000));
+```
+
+## Static export
+
+```ts
+import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
+
+await exportStaticApp({
+  outDir: ".mreact",
+  exportDir: "dist",
+});
+```
+
+## Related pages
+
+- [Cloudflare](/deployments/cloudflare/)
+- [AWS Lambda](/deployments/aws-lambda/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)
+- [Static Hosting](/deployments/static-hosting/)
+- [Host Policy and Proxies](/deployments/host-policy-and-proxies/)
+
+API reference: [Node adapter](/api/modules/_reckona_mreact-router.adapters_node.html), [Cloudflare adapter](/api/modules/_reckona_mreact-router.adapters_cloudflare.html), [AWS Lambda adapter](/api/modules/_reckona_mreact-router.adapters_aws-lambda.html), [Edge adapter](/api/modules/_reckona_mreact-router.adapters_edge.html), and [Static adapter](/api/modules/_reckona_mreact-router.adapters_static.html).

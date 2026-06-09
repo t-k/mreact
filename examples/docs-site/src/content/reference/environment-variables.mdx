@@ -1,8 +1,75 @@
 export const title = "Environment Variables Reference";
-export const description = "Framework environment variables and what reads them.";
+export const description = "Framework environment variables, application variables, and server/client exposure rules.";
 
 # Environment variables reference
 
-Framework-level variables include `PORT`, `HOST`, `MREACT_ROUTER_LOG`, `MREACT_ROUTER_HOST_POLICY`, `MREACT_ROUTER_ALLOWED_HOSTS`, `MREACT_SERVER_ACTION_SECRET`, and `NODE_ENV`.
+Mreact does not make every environment variable available to browser code. Treat environment variables as server-only by default, and explicitly serialize only the public values a client component needs.
 
-Application-specific variables should be documented by the app. Treat secrets as server-only unless a page intentionally serializes a public value.
+## When to use this page
+
+Use this page when configuring framework behavior from CI, deployment platforms, local development, or application code that needs a clear split between server-only secrets and public client configuration.
+
+## Framework variables
+
+- `PORT` sets the server port for dev/start flows when no CLI port is provided.
+- `HOST` sets the server host for dev/start flows when no CLI host is provided.
+- `MREACT_ROUTER_LOG=requests` enables request logging.
+- `MREACT_ROUTER_HOST_POLICY` controls host validation policy.
+- `MREACT_ROUTER_ALLOWED_HOSTS` provides the allowed host list for host validation.
+- `MREACT_SERVER_ACTION_SECRET` signs server action requests. Set it in production when server actions are enabled.
+- `NODE_ENV=production` enables normal production assumptions in dependent tooling.
+
+## Server-only application variables
+
+Read secrets from server-only modules, loaders, route handlers, middleware, and deployment adapters. Do not import secret-reading modules from `.client.tsx` files.
+
+```ts
+// src/lib/env.server.ts
+export function requireEnv(name: string): string {
+  const value = process.env[name];
+
+  if (value === undefined || value === "") {
+    throw new Error(`Missing environment variable: ${name}`);
+  }
+
+  return value;
+}
+```
+
+```ts
+// src/app/api/payments/route.ts
+import { requireEnv } from "../../../lib/env.server.js";
+
+export async function POST(request: Request) {
+  const apiKey = requireEnv("PAYMENTS_API_KEY");
+
+  return createPayment(request, apiKey);
+}
+```
+
+## Client-visible values
+
+Expose public values intentionally through loader data, metadata, inline JSON, or an HTTP endpoint. Name public variables clearly, for example `PUBLIC_SITE_URL`, but do not rely on a name prefix alone as an access-control boundary.
+
+```ts
+// src/app/page.tsx
+export function loader() {
+  return {
+    publicConfig: {
+      siteUrl: process.env.PUBLIC_SITE_URL ?? "http://localhost:5173",
+    },
+  };
+}
+```
+
+Vite `import.meta.env` values are build-time values. Use them for build configuration, not request-specific secrets. Runtime server code should prefer `process.env` or adapter-provided environment bindings.
+
+## Related pages
+
+- [Environment Variables](/guides/environment-variables/)
+- [HTTP APIs](/guides/http-apis/)
+- [Middleware](/guides/middleware/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)
+
+API reference: [LoaderContext](/api/interfaces/_reckona_mreact-router..LoaderContext.html), [RouteHandlerContext](/api/interfaces/_reckona_mreact-router..RouteHandlerContext.html), [AppRouterVitePluginOptions](/api/interfaces/_reckona_mreact-router.vite.AppRouterVitePluginOptions.html), and [CloudflareRequestHandlerOptions](/api/interfaces/_reckona_mreact-router.adapters_cloudflare.CloudflareRequestHandlerOptions.html).

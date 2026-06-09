@@ -28,8 +28,16 @@ const requiredSlugs = [
   "utilities/store",
   "utilities/server-state",
   "reference/api",
+  "reference/adapters",
+  "reference/auth-api",
+  "reference/cache-api",
   "reference/cli",
+  "reference/config",
   "reference/environment-variables",
+  "reference/metadata-api",
+  "reference/response-helpers",
+  "reference/route-handler-context",
+  "reference/route-module-exports",
 ] as const;
 
 describe("docs-site example contract", () => {
@@ -378,6 +386,39 @@ describe("docs-site example contract", () => {
     expect(apiReference).not.toContain("Generate or refresh");
     expect(exportScript).toContain("copyGeneratedApiReference");
     expect(exportScript).toContain('join(exportDir, "api")');
+    expect(exportScript).toContain("postprocessGeneratedApiReference");
+    expect(exportScript).toContain("writeGeneratedApiIntegrationStyles");
+    expect(exportScript).toContain("data-mreact-docs-api-shell");
+    expect(exportScript).toContain("docs-api.css");
+  });
+
+  test("keeps every Reference page practical and connected to generated API details", async () => {
+    const referencePages = [
+      ["src/content/reference/cli.mdx", ["## Commands", "mreact-router build --target=node", "mreact-router package aws-lambda", "MREACT_ROUTER_LOG", "/api/functions/_reckona_mreact-router..buildApp.html"]],
+      ["src/content/reference/config.mdx", ["## Project shape", "mreactRouter({", "clientSourceMaps: \"hidden\"", "assetBaseUrl", "publicAssetBaseUrl", "/api/interfaces/_reckona_mreact-router.vite.AppRouterVitePluginOptions.html"]],
+      ["src/content/reference/environment-variables.mdx", ["## Framework variables", "MREACT_ROUTER_ALLOWED_HOSTS", "MREACT_SERVER_ACTION_SECRET", "PUBLIC_SITE_URL", "process.env", "import.meta.env"]],
+      ["src/content/reference/route-module-exports.mdx", ["## Page and layout modules", "definePage<typeof loader>", "generateStaticParams", "export const revalidate = 60", "export async function GET", "/api/functions/_reckona_mreact-router..definePage.html"]],
+      ["src/content/reference/route-handler-context.mdx", ["## Dynamic params", "RouteHandlerContext<{ id: string }>", "context.params.id", "Response.json", "context.request", "/api/interfaces/_reckona_mreact-router..RouteHandlerContext.html"]],
+      ["src/content/reference/response-helpers.mdx", ["## Redirects and 404s", "throwNotFound()", "redirectExternal", "parseForm", "createFormCsrfToken", "/api/functions/_reckona_mreact-router..throwNotFound.html"]],
+      ["src/content/reference/adapters.mdx", ["## Adapter imports", "createNodeRequestHandler", "createCloudflareRequestHandler", "createAwsLambdaRequestHandler", "exportStaticApp", "/api/modules/_reckona_mreact-router.adapters_static.html"]],
+      ["src/content/reference/metadata-api.mdx", ["## Static metadata", "generateMetadata", "contentSecurityPolicy", "security", "RouteHeadDescriptor", "/api/interfaces/_reckona_mreact-router..RouteMetadata.html"]],
+      ["src/content/reference/auth-api.mdx", ["## Configure auth", "configureAuth", "runWithAuthRequest", "requirePermission", "tryRequireRole", "/api/modules/_reckona_mreact-auth.html"]],
+      ["src/content/reference/cache-api.mdx", ["## Route HTML cache", "cacheControl({", "revalidatePath", "createMemoryRouteCache", "x-mreact-revalidate", "/api/interfaces/_reckona_mreact-router..CacheControlOptions.html"]],
+      ["src/content/reference/api.mdx", ["## Framework and router", "## Deployment adapters", "## Utilities", "## Compatibility and rendering", "## Forms and authentication", "Generated TypeDoc"]],
+    ] as const;
+
+    for (const [path, expectedSnippets] of referencePages) {
+      const page = await readDocsSite(path);
+      expect(page).toContain("## When to use this page");
+      expect(page).toContain("## Related pages");
+      expect(page).toContain("API reference:");
+      expect(page).not.toContain("TODO");
+      expect(page).not.toContain("coming soon");
+
+      for (const snippet of expectedSnippets) {
+        expect(page).toContain(snippet);
+      }
+    }
   });
 
   test("documents project structure conventions for routes, params, 404s, and output", async () => {

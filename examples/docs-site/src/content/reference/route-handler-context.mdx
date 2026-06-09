@@ -1,6 +1,61 @@
 export const title = "Route Handler Context";
-export const description = "Params, request, route, env, and adapter-specific context.";
+export const description = "Request, params, and adapter context available to HTTP route handlers.";
 
-# Route handler context
+# Route Handler Context
 
-Route handlers receive decoded params as their second argument. The context also includes the current request, matched route, and adapter environment where available. Cloudflare adds Worker bindings and execution context.
+Route handlers use standard Web `Request` and `Response` objects. Mreact passes decoded route params as the second argument so API endpoints can share the same file-system routing model as pages.
+
+## When to use this page
+
+Use this page when writing ordinary HTTP APIs in `route.ts`, when typing dynamic params, or when checking what context is available before returning a `Response`.
+
+## Dynamic params
+
+Dynamic route folders become decoded params. A folder named `$id` provides `params.id`; a catch-all folder named `$...path` provides `params.path` as an array of decoded path segments.
+
+```ts
+// src/app/api/users/$id/route.ts
+import type { RouteHandlerContext } from "@reckona/mreact-router";
+
+export async function GET(
+  _request: Request,
+  context: RouteHandlerContext<{ id: string }>,
+) {
+  const user = await findUser(context.params.id);
+
+  if (user === undefined) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return Response.json(user);
+}
+```
+
+## Request access
+
+Use `context.request` when helper code expects one object instead of separate arguments. The first argument and `context.request` refer to the same request.
+
+```ts
+export async function POST(request: Request, context: RouteHandlerContext<{ id: string }>) {
+  await assertCanEdit(context.request, context.params.id);
+  const body = await request.json();
+
+  return Response.json(await updateUser(context.params.id, body));
+}
+```
+
+`Response.json` is the standard Web API static method, available in modern Node and edge runtimes.
+
+## Adapter context
+
+The base route handler context contains `request` and `params`. Adapter-specific helpers expose richer types where the runtime provides bindings, execution contexts, or platform event details.
+
+## Related pages
+
+- [HTTP APIs](/guides/http-apis/)
+- [Routing](/guides/routing/)
+- [File Uploads and CSRF](/guides/file-uploads-and-csrf/)
+- [Cloudflare](/deployments/cloudflare/)
+- [AWS Lambda](/deployments/aws-lambda/)
+
+API reference: [RouteHandlerContext](/api/interfaces/_reckona_mreact-router..RouteHandlerContext.html), [RouteParams](/api/types/_reckona_mreact-router..RouteParams.html), [CloudflareRequestHandlerOptions](/api/interfaces/_reckona_mreact-router.adapters_cloudflare.CloudflareRequestHandlerOptions.html), and [AwsLambdaRequestHandlerOptions](/api/interfaces/_reckona_mreact-router.adapters_aws-lambda.AwsLambdaRequestHandlerOptions.html).

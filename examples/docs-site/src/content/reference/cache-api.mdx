@@ -1,6 +1,86 @@
 export const title = "Cache API";
-export const description = "Route cache and revalidation helper reference.";
+export const description = "Route HTML cache, cacheControl, revalidate, route cache stores, and revalidation helpers.";
 
 # Cache API
 
-Use `revalidate`, `cacheControl()`, and `revalidatePath()` to control route HTML caching and invalidation.
+Mreact has separate cache surfaces for route HTML, browser assets, public files, and server-state query data. This page covers the route HTML cache and explicit route revalidation helpers.
+
+## When to use this page
+
+Use this page when tuning HTML cache headers, choosing `revalidate`, invalidating cached pages after a mutation, or providing a custom route cache store for a deployment runtime.
+
+## Route HTML cache
+
+`export const revalidate = 60` sets `cache-control: s-maxage=60, stale-while-revalidate` for a route and stores eligible HTML in the configured route cache. Use `revalidate = 0` when a route should explicitly send `no-store`.
+
+```ts
+// src/app/docs/page.tsx
+export const revalidate = 60;
+
+export default function Page() {
+  return <main>Docs</main>;
+}
+```
+
+## Imperative cache control
+
+Use `cacheControl()` inside a route render when the policy depends on loaded data.
+
+```ts
+import { cacheControl } from "@reckona/mreact-router";
+
+export async function loader() {
+  const post = await findPost();
+
+  cacheControl({
+    sMaxAge: post.published ? 300 : 0,
+    staleWhileRevalidate: post.published ? 600 : false,
+  });
+
+  return { post };
+}
+```
+
+## Revalidation after mutations
+
+`revalidatePath()` invalidates cached route HTML for a path. Server action responses can also carry `x-mreact-revalidate` so the client navigation cache drops stale prefetched HTML.
+
+```ts
+import { revalidatePath } from "@reckona/mreact-router";
+
+export async function savePost(formData: FormData) {
+  const post = await updatePost(formData);
+
+  revalidatePath("/posts");
+  revalidatePath(`/posts/${post.id}`);
+
+  return post;
+}
+```
+
+## Route cache stores
+
+Use `createMemoryRouteCache()` for local Node processes. Long-lived production deployments can provide an `AppRouterCache` implementation backed by platform storage.
+
+```ts
+import { createMemoryRouteCache } from "@reckona/mreact-router";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default {
+  plugins: [
+    mreactRouter({
+      routeCache: createMemoryRouteCache({ maxEntries: 5_000 }),
+    }),
+  ],
+};
+```
+
+## Related pages
+
+- [Cache and Revalidation](/guides/cache-and-revalidation/)
+- [Server Actions](/guides/server-actions/)
+- [Cache Policy](/deployments/cache-policy/)
+- [Data Loading](/guides/data-loading/)
+- [Server State](/utilities/server-state/)
+
+API reference: [CacheControlOptions](/api/interfaces/_reckona_mreact-router..CacheControlOptions.html), [cacheControl()](/api/functions/_reckona_mreact-router..cacheControl.html), [revalidatePath()](/api/functions/_reckona_mreact-router..revalidatePath.html), [createMemoryRouteCache()](/api/functions/_reckona_mreact-router..createMemoryRouteCache.html), and [AppRouterCache](/api/interfaces/_reckona_mreact-router..AppRouterCache.html).

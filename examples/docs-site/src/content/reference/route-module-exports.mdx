@@ -1,6 +1,81 @@
 export const title = "Route Module Exports";
-export const description = "Supported exports from page, layout, template, middleware, and route modules.";
+export const description = "Supported exports from page, layout, template, middleware, metadata, static, and route handler modules.";
 
-# Route module exports
+# Route Module Exports
 
-Common exports include `loader`, `metadata`, `generateMetadata`, `prerender`, `generateStaticParams`, `revalidate`, `stream`, `slots`, middleware `config`, and route handler method exports.
+Route modules are ordinary TypeScript modules with file-system meaning. Mreact reads named exports from pages, layouts, metadata routes, middleware, and `route.ts` files to decide how a request should load data, render HTML, stream, cache, or respond as an HTTP API.
+
+## When to use this page
+
+Use this page when you need a compact list of supported route exports, when moving logic between a guide and an API reference, or when checking which exports belong in `page.tsx`, `layout.tsx`, `middleware.ts`, and `route.ts`.
+
+## Page and layout modules
+
+- `default` renders the page, layout, template, loading UI, error UI, or not-found UI for the file convention.
+- `loader(context)` runs before rendering a page and returns serializable route data.
+- `metadata` declares static head metadata.
+- `generateMetadata(context)` computes head metadata from request, params, and loader data.
+- `prerender = true` marks a route as eligible for static prerendering.
+- `generateStaticParams()` returns params for dynamic static routes.
+- `revalidate = 60` enables route HTML caching for the route.
+- `stream = true` opts a route into streaming behavior where supported.
+- `slots` declares named layout slots.
+
+```tsx
+// src/app/users/$id/page.tsx
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+
+interface UserData {
+  id: string;
+  name: string;
+}
+
+export async function loader(context: LoaderContext<{ id: string }>): Promise<UserData> {
+  return findUser(context.params.id);
+}
+
+export const revalidate = 60;
+
+export default definePage<typeof loader>((props) => {
+  return <h1>{props.data.name}</h1>;
+});
+```
+
+## Static route exports
+
+Use `generateStaticParams` with dynamic segments when static export or prerendering should enumerate paths.
+
+```ts
+export const prerender = true;
+
+export async function generateStaticParams() {
+  return [{ id: "intro" }, { id: "api" }];
+}
+```
+
+## HTTP route handlers
+
+`route.ts` files export HTTP method functions. The function receives the standard `Request` and a Mreact route context.
+
+```ts
+// src/app/api/users/$id/route.ts
+import type { RouteHandlerContext } from "@reckona/mreact-router";
+
+export async function GET(_request: Request, context: RouteHandlerContext<{ id: string }>) {
+  return Response.json(await findUser(context.params.id));
+}
+```
+
+## Middleware exports
+
+`middleware.ts` exports a default function. It can return `next()`, `redirect()`, `rewrite()`, or a `Response`. A `config` export can narrow which paths the middleware runs for.
+
+## Related pages
+
+- [Routing](/guides/routing/)
+- [Data Loading](/guides/data-loading/)
+- [HTTP APIs](/guides/http-apis/)
+- [Middleware](/guides/middleware/)
+- [Cache API](/reference/cache-api/)
+
+API reference: [definePage()](/api/functions/_reckona_mreact-router..definePage.html), [LoaderContext](/api/interfaces/_reckona_mreact-router..LoaderContext.html), [PageProps](/api/interfaces/_reckona_mreact-router..PageProps.html), [RouteMetadata](/api/interfaces/_reckona_mreact-router..RouteMetadata.html), and [RouteHandlerContext](/api/interfaces/_reckona_mreact-router..RouteHandlerContext.html).

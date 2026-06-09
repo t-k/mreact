@@ -1,6 +1,84 @@
 export const title = "Config";
-export const description = "mreactRouter Vite plugin options.";
+export const description = "mreactRouter Vite plugin options for project shape, assets, source maps, and production behavior.";
 
 # Config
 
-Core project options include `projectRoot`, `routesDir`, `publicDir`, `allowedSourceDirs`, `buildTargets`, `clientSourceMaps`, `assetBaseUrl`, `publicAssetBaseUrl`, and `production.dropClientConsole`.
+Configure Mreact through the `mreactRouter()` Vite plugin. Most apps only need `routesDir`, but production apps often also set build targets, source map policy, asset hosts, and import policy.
+
+## When to use this page
+
+Use this page when you are wiring a project from scratch, changing the app directory layout, building for more than one runtime, disabling production source maps, or moving generated assets onto a CDN host.
+
+## Project shape
+
+`projectRoot` defaults to the current working directory. `routesDir` defaults to `src/app`, and `publicDir` defaults to `public`.
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+export default defineConfig({
+  plugins: [
+    mreactRouter({
+      projectRoot: process.cwd(),
+      routesDir: "src/app",
+      publicDir: "public",
+      allowedSourceDirs: ["src"],
+    }),
+  ],
+});
+```
+
+Use `allowedSourceDirs` when route modules import app-local server code outside the route directory. Keep it narrow; it also informs server import policy checks.
+
+## Build targets
+
+`buildTargets` controls which runtime artifacts the build writes. The CLI `--target` option can override the target for command-line builds.
+
+```ts
+mreactRouter({
+  buildTargets: ["node", "cloudflare", "aws-lambda"],
+});
+```
+
+## Assets and source maps
+
+`assetBaseUrl` rewrites generated client route assets such as client scripts, CSS, prefetch manifests, and modulepreload links. `publicAssetBaseUrl` rewrites assets served from `public/`.
+
+```ts
+mreactRouter({
+  assetBaseUrl: "https://cdn.example.com/_mreact/client/",
+  publicAssetBaseUrl: "https://cdn.example.com/",
+  clientSourceMaps: "hidden",
+  production: {
+    dropClientConsole: true,
+  },
+});
+```
+
+Use `clientSourceMaps: false` or `"none"` for no production client source maps. Use `"hidden"` when uploading source maps to Sentry or another private error-reporting system. Use `"linked"` only when you intentionally want browser-visible source map comments.
+
+## Server imports
+
+`importPolicy.allowedPackages` lets server route modules import packages that would otherwise be blocked by the route module import policy.
+
+```ts
+mreactRouter({
+  importPolicy: {
+    allowedPackages: ["better-sqlite3"],
+  },
+});
+```
+
+Prefer narrow package and source-directory allowances. If a dependency touches browser globals during server render, move that usage behind a client boundary instead of broadening the server import policy.
+
+## Related pages
+
+- [Project Structure](/guides/project-structure/)
+- [CSS and Assets](/guides/css-and-assets/)
+- [Source Maps](/deployments/source-maps/)
+- [CDN Assets](/deployments/cdn-assets/)
+- [Vite Plugin Integration](/guides/advanced/vite-plugin-integration/)
+
+API reference: [mreactRouter](/api/variables/_reckona_mreact-router.vite.mreactRouter.html), [AppRouterVitePluginOptions](/api/interfaces/_reckona_mreact-router.vite.AppRouterVitePluginOptions.html), [AppRouterProductionOptions](/api/interfaces/_reckona_mreact-router..AppRouterProductionOptions.html), and [AppRouterClientSourceMapOption](/api/types/_reckona_mreact-router..AppRouterClientSourceMapOption.html).

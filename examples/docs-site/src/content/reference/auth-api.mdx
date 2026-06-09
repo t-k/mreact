@@ -1,6 +1,82 @@
 export const title = "Auth API";
-export const description = "Session and authorization helper reference.";
+export const description = "Session, claims, guards, role checks, and permission helpers from @reckona/mreact-auth.";
 
 # Auth API
 
-`@reckona/mreact-auth` exports session helpers, `configureAuth`, `getCurrentSession`, `requireSession`, `requireRole`, `requirePermission`, `tryRequireRole`, `tryRequirePermission`, and browser-safe session claims helpers.
+`@reckona/mreact-auth` builds on router sessions and adds request-scoped claims, redirecting guards, non-throwing authorization checks, and browser-safe claim serialization.
+
+## When to use this page
+
+Use this page when configuring auth defaults, protecting loaders or route handlers, checking roles and permissions, or exposing safe session claims to client code.
+
+## Configure auth
+
+Call `configureAuth()` once from server startup or an app-local auth module. Defaults are `/login` for missing sessions and `/forbidden` for failed authorization.
+
+```ts
+import { configureAuth } from "@reckona/mreact-auth";
+
+configureAuth({
+  redirectTo: "/sign-in",
+  forbiddenTo: "/forbidden",
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null) {
+      return undefined;
+    }
+
+    const session = data as { roles?: string[]; userId?: string };
+
+    return {
+      userId: session.userId,
+      roles: session.roles,
+    };
+  },
+});
+```
+
+## Guard a loader
+
+`requireSession()`, `requireRole()`, and `requirePermission()` redirect when the requirement is not met.
+
+```ts
+import { requirePermission } from "@reckona/mreact-auth";
+import { sessionStore } from "../../lib/session.server.js";
+
+export async function loader({ request }: { request: Request }) {
+  const session = await requirePermission(request, sessionStore, "admin:read", {
+    mode: "all",
+  });
+
+  return { user: session.data };
+}
+```
+
+## Non-throwing checks
+
+Use `tryRequireRole()` and `tryRequirePermission()` when you want to return JSON, render partial UI, or branch without redirects.
+
+```ts
+import { tryRequireRole } from "@reckona/mreact-auth";
+
+export async function GET(request: Request) {
+  const result = await tryRequireRole(request, sessionStore, "admin");
+
+  if (!result.authorized) {
+    return Response.json({ error: result.reason }, { status: 403 });
+  }
+
+  return Response.json({ ok: true });
+}
+```
+
+Use `runWithAuthRequest()` when integration code needs request-scoped claims during a manually assembled request pipeline.
+
+## Related pages
+
+- [Authentication](/guides/authentication/)
+- [Cookies and Sessions](/guides/cookies-and-sessions/)
+- [Middleware](/guides/middleware/)
+- [HTTP APIs](/guides/http-apis/)
+- [Environment Variables Reference](/reference/environment-variables/)
+
+API reference: [@reckona/mreact-auth](/api/modules/_reckona_mreact-auth.html), [configureAuth()](/api/functions/_reckona_mreact-auth.configureAuth.html), [runWithAuthRequest()](/api/functions/_reckona_mreact-auth.runWithAuthRequest.html), [requirePermission()](/api/functions/_reckona_mreact-auth.requirePermission.html), [tryRequireRole()](/api/functions/_reckona_mreact-auth.tryRequireRole.html), and [SessionStore](/api/interfaces/_reckona_mreact-auth.SessionStore.html).

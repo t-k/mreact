@@ -1,6 +1,95 @@
 export const title = "Response Helpers";
-export const description = "Small helpers for redirects, errors, forms, cache, and CSRF.";
+export const description = "Redirects, not-found errors, form parsing, cookies, HTML, JSON, cache, and CSRF helpers.";
 
-# Response helpers
+# Response Helpers
 
-Router helpers include `redirect`, `redirect303`, `textError`, `parseForm`, `cacheControl`, `revalidatePath`, and CSRF helpers for form and multipart workflows.
+Mreact Router exports small helpers for common response flows. Use throwing helpers inside loaders and server render paths, and return `Response` objects from route handlers and middleware.
+
+## When to use this page
+
+Use this page when you need the right helper for redirects, 404s, forms, cookies, CSRF, cache headers, or a typed response body.
+
+## Redirects and 404s
+
+`redirect()` and `throwNotFound()` throw control-flow errors for loaders and render-time code. `redirect303()` returns a normal `Response`, which is useful in route handlers.
+
+```ts
+import { redirect, redirect303, throwNotFound } from "@reckona/mreact-router";
+
+export async function loader() {
+  const session = await readSession();
+
+  if (session === undefined) {
+    redirect("/login");
+  }
+
+  const project = await findProject(session.projectId);
+
+  if (project === undefined) {
+    throwNotFound();
+  }
+
+  return { project };
+}
+
+export async function POST() {
+  return redirect303("/thanks");
+}
+```
+
+Use `redirectExternal()` for off-site HTTP(S) redirects. `redirect()` intentionally rejects protocol-relative URLs, backslash variants, and schemes such as `javascript:`.
+
+## JSON, HTML, and text responses
+
+`json()` delegates to `Response.json()`. `html()` and `textError()` set useful content types.
+
+```ts
+import { html, json, textError } from "@reckona/mreact-router";
+
+export async function GET() {
+  return json({ ok: true });
+}
+
+export function fallbackHtml() {
+  return html("<main>Offline</main>");
+}
+
+export function badRequest() {
+  return textError("Invalid request", 400);
+}
+```
+
+## Forms, cookies, and CSRF
+
+Use `parseForm()` for standard form bodies. Use `createFormCsrfToken()`, `formCsrfCookie()`, and `validateFormCsrf()` for custom form or upload routes that do not go through server actions.
+
+```ts
+import { cookies, createFormCsrfToken, formCsrfCookie, parseForm } from "@reckona/mreact-router";
+
+export async function POST(request: Request) {
+  const form = await parseForm(request);
+  const theme = cookies(request).get("theme") ?? "system";
+
+  return Response.json({ theme, name: form.get("name") });
+}
+
+export function GET(request: Request) {
+  const token = createFormCsrfToken(request);
+
+  return new Response(renderForm(token), {
+    headers: {
+      "set-cookie": formCsrfCookie(token),
+    },
+  });
+}
+```
+
+## Related pages
+
+- [Data Loading](/guides/data-loading/)
+- [HTTP APIs](/guides/http-apis/)
+- [Forms and Validation](/guides/forms-and-validation/)
+- [File Uploads and CSRF](/guides/file-uploads-and-csrf/)
+- [Cache API](/reference/cache-api/)
+
+API reference: [redirect()](/api/functions/_reckona_mreact-router..redirect.html), [redirectExternal()](/api/functions/_reckona_mreact-router..redirectExternal.html), [throwNotFound()](/api/functions/_reckona_mreact-router..throwNotFound.html), [parseForm()](/api/functions/_reckona_mreact-router..parseForm.html), [createFormCsrfToken()](/api/functions/_reckona_mreact-router..createFormCsrfToken.html), and [validateFormCsrf()](/api/functions/_reckona_mreact-router..validateFormCsrf.html).

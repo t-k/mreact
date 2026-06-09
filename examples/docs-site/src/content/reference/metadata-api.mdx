@@ -1,6 +1,84 @@
 export const title = "Metadata API";
-export const description = "RouteMetadata fields and head descriptor support.";
+export const description = "RouteMetadata fields, dynamic metadata, head descriptors, CSP, and security headers.";
 
 # Metadata API
 
-`RouteMetadata` supports title, description, canonical links, Open Graph, icons, robots, theme color, viewport, CSP, security headers, language, and arbitrary head descriptors for base, link, meta, script, and style tags.
+Metadata controls `<head>` output and selected response headers for pages and metadata routes. Prefer structured metadata fields before falling back to arbitrary head descriptors.
+
+## When to use this page
+
+Use this page when adding document titles, descriptions, canonical links, Open Graph previews, icons, robots policy, CSP, or security headers.
+
+## Static metadata
+
+```ts
+import type { RouteMetadata } from "@reckona/mreact-router";
+
+export const metadata: RouteMetadata = {
+  title: "Pricing",
+  description: "Plans for Mreact applications.",
+  alternates: {
+    canonical: "https://example.com/pricing",
+  },
+  openGraph: {
+    title: "Pricing",
+    image: "https://example.com/og/pricing.png",
+  },
+};
+```
+
+## Dynamic metadata
+
+`generateMetadata()` receives params, request, and loader data.
+
+```ts
+import type { GenerateMetadataContext, RouteMetadata } from "@reckona/mreact-router";
+import { contentSecurityPolicy } from "@reckona/mreact-router/csp";
+
+export function generateMetadata(
+  context: GenerateMetadataContext<{ title: string }, { id: string }>,
+): RouteMetadata {
+  return {
+    title: context.data.title,
+    csp: {
+      directives: contentSecurityPolicy({
+        "default-src": "'self'",
+        "script-src": ["'self'"],
+      }),
+    },
+    security: {
+      contentTypeOptions: "nosniff",
+      frameOptions: "DENY",
+      referrerPolicy: "strict-origin-when-cross-origin",
+    },
+  };
+}
+```
+
+## Head descriptors
+
+Use `head` only when the structured fields do not cover the tag you need. `RouteHeadDescriptor` supports `base`, `link`, `meta`, `script`, and `style`.
+
+```ts
+export const metadata = {
+  head: [
+    {
+      tag: "link",
+      attrs: {
+        rel: "preconnect",
+        href: "https://www.googletagmanager.com",
+      },
+    },
+  ],
+};
+```
+
+## Related pages
+
+- [Metadata and Head](/guides/metadata-and-head/)
+- [CSP](/guides/csp/)
+- [External Scripts](/guides/external-scripts/)
+- [Route Module Exports](/reference/route-module-exports/)
+- [Security Headers](/deployments/host-policy-and-proxies/)
+
+API reference: [RouteMetadata](/api/interfaces/_reckona_mreact-router..RouteMetadata.html), [GenerateMetadataContext](/api/interfaces/_reckona_mreact-router..GenerateMetadataContext.html), [RouteHeadDescriptor](/api/interfaces/_reckona_mreact-router..RouteHeadDescriptor.html), [RouteSecurityHeaders](/api/interfaces/_reckona_mreact-router..RouteSecurityHeaders.html), and [RouteStrictTransportSecurity](/api/interfaces/_reckona_mreact-router..RouteStrictTransportSecurity.html).

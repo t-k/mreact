@@ -1,6 +1,62 @@
 export const title = "CLI";
-export const description = "mreact-router command overview.";
+export const description = "mreact-router command overview for development, production builds, servers, and deployment packages.";
 
 # CLI
 
-Use `mreact-router --help`, `mreact-router help build`, or command-level help to inspect supported flags. Common commands are `dev`, `build`, `start`, and `package`.
+The `mreact-router` CLI is the operational entrypoint for local development, production builds, serving Node output, and packaging adapter artifacts. Use command-level help when you need the exact option list for the installed version.
+
+## When to use this page
+
+Use this page when you need to choose the right CLI command, map an npm script to a build target, enable request logging, or create deployment artifacts from an existing `.mreact` build.
+
+## Commands
+
+- `mreact-router dev` starts the Vite-backed development server. It is the default when no command is provided.
+- `mreact-router build --target=node` builds Node server output and client assets into `.mreact`.
+- `mreact-router build --target=cloudflare` builds Cloudflare-compatible output.
+- `mreact-router build --target=aws-lambda` builds AWS Lambda-compatible output.
+- `mreact-router build --target=all` writes every supported target in one build.
+- `mreact-router start` serves the built Node target.
+- `mreact-router package aws-lambda` creates a minimal AWS Lambda package directory from existing build output.
+- `mreact-router package cloudflare-pages` creates a Cloudflare Pages advanced-mode artifact with `_worker.js`.
+
+```bash
+mreact-router dev --host 0.0.0.0 --port 5173 --log requests
+mreact-router build --target=node --client-source-maps=hidden
+mreact-router build --target=aws-lambda
+mreact-router package aws-lambda --from .mreact --out .lambda
+```
+
+## Options to know first
+
+- `--target=node|cloudflare|aws-lambda|all` controls which production artifact is built.
+- `--client-source-maps=none|hidden` controls production browser source maps. Use `hidden` when you upload maps to Sentry or another error pipeline without publishing source map comments to browsers.
+- `--host`, `--port`, `--host-policy`, and `--allowed-hosts` affect development and start server binding and request host checks.
+- `--log requests` enables compact request logs. `MREACT_ROUTER_LOG=requests` enables the same mode from the environment.
+- `--from`, `--out`, `--handler`, and `--skip-runtime-dependency-check` are packaging options used after a build.
+
+## Package scripts
+
+Keep application scripts explicit about the target they produce. That makes CI logs and deployment jobs easier to read.
+
+```json
+{
+  "scripts": {
+    "dev": "mreact-router dev",
+    "build": "mreact-router build --target=node",
+    "build:cloudflare": "mreact-router build --target=cloudflare",
+    "build:lambda": "mreact-router build --target=aws-lambda",
+    "start": "mreact-router start"
+  }
+}
+```
+
+## Related pages
+
+- [Config](/reference/config/)
+- [Source Maps](/deployments/source-maps/)
+- [AWS Lambda](/deployments/aws-lambda/)
+- [Cloudflare](/deployments/cloudflare/)
+- [Container and Cloud Run](/deployments/container-and-cloud-run/)
+
+API reference: [buildApp()](/api/functions/_reckona_mreact-router..buildApp.html), [startServer()](/api/functions/_reckona_mreact-router..startServer.html), [packageAwsLambdaArtifact()](/api/functions/_reckona_mreact-router..packageAwsLambdaArtifact.html), and [packageCloudflarePagesArtifact()](/api/functions/_reckona_mreact-router..packageCloudflarePagesArtifact.html).
