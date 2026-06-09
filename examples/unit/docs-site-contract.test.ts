@@ -1,5 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { Window } from "happy-dom";
 import { describe, expect, test } from "vitest";
 
 const root = process.cwd();
@@ -153,6 +154,7 @@ describe("docs-site example contract", () => {
       '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     );
     expect(layout).toContain("https://github.com/t-k/mreact");
+    expect(layout).toContain('src={sitePath("docs-sidebar.js")}');
     expect(layout).toContain('src={sitePath("docs-copy.js")}');
     expect(layout).toContain('src={sitePath("docs-search.js")}');
     expect(layout).toContain("<search");
@@ -168,6 +170,60 @@ describe("docs-site example contract", () => {
     expect(overview).toContain("## Performance");
     expect(overview).toContain("[Benchmarks](/benchmarks/)");
     expect(await readDocsSite("package.json")).toContain("@reckona/example-docs-site");
+  });
+
+  test("preserves sidebar position across full-page documentation navigation", async () => {
+    const layout = await readDocsSite("src/app/layout.tsx");
+    const sidebarScript = await readDocsSite("public/docs-sidebar.js");
+
+    expect(layout).toContain('class="site-sidebar"');
+    expect(layout).toContain('src={sitePath("docs-sidebar.js")}');
+    expect(sidebarScript).toContain(".site-sidebar");
+    expect(sidebarScript).toContain("mreact:docs:sidebar-scroll");
+    expect(sidebarScript).toContain("sessionStorage");
+    expect(sidebarScript).toContain("scrollTop");
+    expect(sidebarScript).toContain("pagehide");
+    expect(sidebarScript).toContain("requestAnimationFrame");
+    expect(sidebarScript).toContain('setAttribute("aria-current", "page")');
+    expect(sidebarScript).toContain("scrollIntoView");
+    expect(sidebarScript).not.toContain("innerHTML");
+  });
+
+  test("restores the sidebar position and marks the current page in the browser", async () => {
+    const sidebarScript = await readDocsSite("public/docs-sidebar.js");
+    const window = new Window({ url: "https://docs.example.com/reference/api/" });
+
+    try {
+      window.document.body.innerHTML = `
+        <aside class="site-sidebar">
+          <a class="nav-link" href="/">Overview</a>
+          <a class="nav-link" href="/guides/app-router/">App Router</a>
+          <a class="nav-link" href="/reference/api/">API Reference</a>
+        </aside>
+      `;
+      window.sessionStorage.setItem("mreact:docs:sidebar-scroll", "240");
+
+      window.eval(sidebarScript);
+      await new Promise((resolve) => {
+        window.requestAnimationFrame(resolve);
+      });
+
+      const sidebar = window.document.querySelector(".site-sidebar");
+      const currentLink = window.document.querySelector('a[href="/reference/api/"]');
+
+      expect(sidebar).toBeInstanceOf(window.HTMLElement);
+      expect(sidebar?.scrollTop).toBe(240);
+      expect(currentLink?.getAttribute("aria-current")).toBe("page");
+
+      if (sidebar instanceof window.HTMLElement) {
+        sidebar.scrollTop = 321;
+      }
+      window.dispatchEvent(new window.Event("pagehide"));
+
+      expect(window.sessionStorage.getItem("mreact:docs:sidebar-scroll")).toBe("321");
+    } finally {
+      window.close();
+    }
   });
 
   test("adds static Pagefind search as progressive enhancement", async () => {

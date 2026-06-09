@@ -13,6 +13,7 @@ export default function RootLayout() {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script src={sitePath("docs-sidebar.js")} defer></script>
         <script src={sitePath("docs-copy.js")} defer></script>
         <script src={sitePath("docs-search.js")} defer></script>
         <script src={sitePath("docs-benchmarks.js")} defer></script>
