@@ -3512,6 +3512,22 @@ function __mreactInstallNavigation() {
     }
   });
   __mreactObserveViewportPrefetchAnchors(document);
+  document.addEventListener("submit", (event) => {
+    if (event.defaultPrevented || typeof fetch !== "function") {
+      return;
+    }
+
+    const submission = __mreactServerActionSubmissionFromEvent(event);
+
+    if (submission === null) {
+      return;
+    }
+
+    event.preventDefault();
+    void __mreactSubmitServerActionForm(submission).catch(() => {
+      location.href = submission.action;
+    });
+  });
   document.addEventListener("click", (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
       return;
@@ -3560,6 +3576,100 @@ function __mreactInstallNavigation() {
         location.href = nextUrl.href;
       });
   });
+}
+
+function __mreactServerActionSubmissionFromEvent(event) {
+  const target = event.target;
+  const form = target instanceof Element ? target.closest("form") : null;
+  const submitter = __mreactFormSubmitterFromEvent(event);
+
+  if (!(form instanceof HTMLFormElement)) {
+    return null;
+  }
+
+  const action = submitter?.getAttribute("formaction") ?? form.action;
+  const method = submitter?.getAttribute("formmethod") ?? form.method;
+  const targetName = submitter?.getAttribute("formtarget") ?? form.target;
+  const actionUrl = new URL(action, location.href);
+
+  if (
+    targetName !== "" ||
+    actionUrl.origin !== location.origin ||
+    actionUrl.pathname !== "/_mreact/actions" ||
+    method.toUpperCase() !== "POST"
+  ) {
+    return null;
+  }
+
+  return { action: actionUrl.href, form, submitter };
+}
+
+function __mreactFormSubmitterFromEvent(event) {
+  const submitter = event.submitter;
+
+  return submitter instanceof HTMLElement ? submitter : null;
+}
+
+async function __mreactSubmitServerActionForm(submission) {
+  const response = await fetch(submission.action, {
+    body: __mreactServerActionFormData(submission.form, submission.submitter),
+    headers: { "x-mreact-action-single-flight": "1" },
+    method: "POST",
+  });
+  __mreactApplyRevalidationHeader(response);
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const singleFlight = response.headers.get("x-mreact-action-single-flight") === "1";
+  if (
+    !singleFlight &&
+    !contentType.includes("text/html")
+  ) {
+    location.href = response.url || submission.action;
+    return;
+  }
+
+  const html = await response.text();
+  const applied = __mreactApplyServerActionHtml(html, singleFlight);
+
+  if (!applied) {
+    location.href = response.url || submission.action;
+  }
+}
+
+function __mreactServerActionFormData(form, submitter) {
+  if (submitter !== null) {
+    try {
+      return new FormData(form, submitter);
+    } catch {
+      // Older DOM implementations only accept the form argument.
+    }
+  }
+
+  return new FormData(form);
+}
+
+function __mreactApplyServerActionHtml(html, singleFlight) {
+  __mreactSaveCurrentHistoryState();
+  const applied = __mreactApplyNavigationHtml(html, location.href);
+
+  if (!applied) {
+    if (
+      !singleFlight ||
+      typeof document === "undefined" ||
+      typeof document.open !== "function"
+    ) {
+      return false;
+    }
+
+    document.open();
+    document.write(html);
+    document.close();
+    return true;
+  }
+
+  __mreactResetNavigationFocus();
+  __mreactAnnounceNavigation();
+  return true;
 }
 
 function __mreactInstallNavigationFetchRevalidation() {

@@ -5707,6 +5707,99 @@ export default function Page() {
     ]);
   });
 
+  test("applies server action single-flight HTML without a follow-up GET", async () => {
+    const fetchCalls: Array<{
+      bodyTitle: string | null;
+      method: string;
+      singleFlight: string | null;
+      url: string;
+    }> = [];
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : undefined;
+      const headers = new Headers(init?.headers ?? request?.headers);
+      const method = init?.method ?? request?.method ?? "GET";
+      const body = init?.body instanceof FormData ? init.body : undefined;
+      const url = String(input);
+      fetchCalls.push({
+        bodyTitle: body?.get("title")?.toString() ?? null,
+        method,
+        singleFlight: headers.get("x-mreact-action-single-flight"),
+        url,
+      });
+
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="index"><main><h1>Published</h1></main></div>',
+          '<script type="application/json" id="mreact-props-index">{}</script>',
+        ].join(""),
+        {
+          headers: {
+            "content-type": "text/html; charset=utf-8",
+            "x-mreact-action-single-flight": "1",
+            "x-mreact-revalidate": "/",
+          },
+        },
+      );
+    };
+    await importRouteRuntime("server-action-single-flight");
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index">',
+      '<main><h1>Draft</h1><form method="post" action="/_mreact/actions">',
+      '<input type="hidden" name="__mreact_module_id" value="actions.ts" />',
+      '<input type="hidden" name="__mreact_export_name" value="save" />',
+      '<input type="hidden" name="__mreact_csrf" value="csrf" />',
+      '<input type="hidden" name="__mreact_action_nonce" value="nonce" />',
+      '<input type="hidden" name="__mreact_action_token" value="token" />',
+      '<input name="title" value="Published" />',
+      '<button type="submit">Save</button>',
+      "</form></main></div>",
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const submit = new Event("submit", { bubbles: true, cancelable: true });
+    document.querySelector("form")?.dispatchEvent(submit);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(submit.defaultPrevented).toBe(true);
+    expect(document.querySelector("h1")?.textContent).toBe("Published");
+    expect(fetchCalls).toEqual([
+      {
+        bodyTitle: "Published",
+        method: "POST",
+        singleFlight: "1",
+        url: `${location.origin}/_mreact/actions`,
+      },
+    ]);
+  });
+
+  test("does not intercept server action forms when the submitter overrides the action", async () => {
+    const fetchCalls: string[] = [];
+    globalThis.fetch = async (input: string | URL | Request) => {
+      fetchCalls.push(String(input));
+      return new Response(null, { status: 204 });
+    };
+    await importRouteRuntime("server-action-submitter-override");
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index">',
+      '<main><form method="post" action="/_mreact/actions">',
+      '<button type="submit" formaction="/api/save">Save elsewhere</button>',
+      "</form></main></div>",
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const submit = new SubmitEvent("submit", {
+      bubbles: true,
+      cancelable: true,
+      submitter: document.querySelector("button"),
+    });
+    document.querySelector("form")?.dispatchEvent(submit);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(submit.defaultPrevented).toBe(false);
+    expect(fetchCalls).toEqual([]);
+  });
+
   test("drops prefetched navigation HTML after mutations from rerendered content", async () => {
     const fetchCalls: Array<{
       cache: string | null;

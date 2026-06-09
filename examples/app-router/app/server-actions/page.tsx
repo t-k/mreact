@@ -11,6 +11,7 @@ import { addNote } from "./actions.js";
 import { listNotes } from "./store.js";
 
 export const revalidate = 30;
+export const navigationRuntime = true;
 
 export const metadata = {
   title: "Server Actions — mreact App Router",
@@ -27,9 +28,9 @@ export default function Page() {
       <p>
         Submitting the form below calls the <code>"use server"</code>{" "}
         function in <code>actions.ts</code>. The action stores the note,
-        then calls <code>revalidatePath("/server-actions")</code>, which
-        drops this page from the HTML cache so the next render shows the
-        new entry.
+        then calls <code>revalidatePath("/server-actions")</code>. With
+        the navigation runtime active, the action response includes fresh
+        route HTML for this page instead of requiring a separate GET.
       </p>
       <p class="muted">
         <code>export const revalidate = 30</code> — this page's HTML is
