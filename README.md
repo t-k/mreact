@@ -376,7 +376,7 @@ Use `$name` for dynamic segments and `$...name` for catch-all segments. `loader(
 
 ```tsx
 // src/app/users/$id/page.tsx
-import { notFound, type LoaderContext } from "@reckona/mreact-router";
+import { definePage, notFound, type LoaderContext } from "@reckona/mreact-router";
 
 const users = new Map([
   ["ada", { name: "Ada Lovelace", role: "admin" }],
@@ -395,17 +395,14 @@ export async function loader(context: LoaderContext<{ id: string }>) {
   return user;
 }
 
-export default function UserPage(props: {
-  params: { id: string };
-  data: { name: string; role: string };
-}) {
+export default definePage<typeof loader>(function UserPage(props) {
   return (
     <main>
       <h1>{props.data.name}</h1>
       <p>Role: {props.data.role}</p>
     </main>
   );
-}
+});
 ```
 
 `generateStaticParams()` runs through the same app-router source module bundler as prerendered pages, so configured Vite plugins can transform content modules imported by the page before path generation.

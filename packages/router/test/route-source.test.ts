@@ -108,6 +108,27 @@ export default function Page(props: { data: unknown[] }) {
     expect(stripped).toContain("export default function Page");
   });
 
+  test("keeps definePage calls while stripping loaders for client-only route compilation", () => {
+    const source = `import { definePage, type LoaderContext } from "@reckona/mreact-router";
+import { getUser } from "./server/user.js";
+
+export async function loader(context: LoaderContext<{ id: string }>) {
+  return getUser(context.params.id);
+}
+
+export default definePage<typeof loader>(function Page(props) {
+  return <main>{props.data.name}</main>;
+});`;
+
+    const stripped = stripRouteClientOnlyExports(source);
+
+    expect(stripped).toContain("definePage");
+    expect(stripped).toContain("export default definePage");
+    expect(stripped).not.toContain("function loader");
+    expect(stripped).not.toContain("getUser");
+    expect(stripped).not.toContain("./server/user.js");
+  });
+
   test("strips one-line and nested server exports with the parser", () => {
     const source = `export const loader = () => ({ title: "inline" });
 export async function generateStaticParams() { return [{ id: "ada" }]; }

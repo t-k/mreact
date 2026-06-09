@@ -178,6 +178,25 @@ const instrumentation: RouterInstrumentation = {
 };
 ```
 
+Use `definePage<typeof loader>()` when a route page should infer `props.data` and `props.params` from its sibling loader without repeating the loader data shape in the page props annotation:
+
+```tsx
+import { definePage, type LoaderContext } from "@reckona/mreact-router";
+
+interface UserData {
+  id: string;
+  name: string;
+}
+
+export async function loader(context: LoaderContext<{ id: string }>): Promise<UserData> {
+  return { id: context.params.id, name: "Ada" };
+}
+
+export default definePage<typeof loader>(function UserPage(props) {
+  return <h1>{props.params.id}: {props.data.name}</h1>;
+});
+```
+
 Use `InferLoaderData<typeof loader>` when sibling modules need the exact data shape returned by a route loader:
 
 ```ts

@@ -501,6 +501,9 @@ export type DeferredLoaderData<TData extends Record<string, unknown>> = TData & 
 export function defineMessages<const Messages extends MessageTree>(messages: Messages): Messages;
 
 // @public (undocumented)
+export function definePage<TLoader extends RouteLoader>(component: PageComponent<TLoader>): PageComponent<TLoader>;
+
+// @public (undocumented)
 export function deleteCookie(response: Response, name: string, options?: Pick<CookieOptions, "domain" | "path" | "sameSite" | "secure">): Response;
 
 // Warning: (ae-forgotten-export) The symbol "destroySession_2" needs to be exported by the entry point index.d.ts
@@ -582,7 +585,12 @@ export function html(value: string, init?: ResponseInit): Response;
 export type HttpUpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
 // @public (undocumented)
-export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awaited<ReturnType<TLoader>>;
+export type InferLoaderData<TLoader extends RouteLoader> = Awaited<ReturnType<TLoader>>;
+
+// @public (undocumented)
+export type InferLoaderParams<TLoader extends RouteLoader> = TLoader extends (context: infer TContext, ...args: never[]) => unknown ? TContext extends {
+    params: infer TParams;
+} ? TParams extends RouteParams ? TParams : RouteParams : RouteParams : RouteParams;
 
 // @public (undocumented)
 export function isDeferredLoaderData(value: unknown): value is DeferredLoaderData<Record<string, unknown>>;
@@ -871,6 +879,9 @@ export interface PackageCloudflarePagesArtifactOptions {
 }
 
 // @public (undocumented)
+export type PageComponent<TLoader extends RouteLoader> = (props: PageProps<InferLoaderData<TLoader>, InferLoaderParams<TLoader>>) => ReactCompatNode;
+
+// @public (undocumented)
 export interface PageProps<TData = unknown, TParams extends RouteParams = RouteParams> {
     // (undocumented)
     data: TData;
@@ -1131,6 +1142,9 @@ export interface RouteHeadDescriptor {
     // (undocumented)
     tag: "base" | "link" | "meta" | "script" | "style";
 }
+
+// @public (undocumented)
+export type RouteLoader = (...args: never[]) => unknown;
 
 // @public (undocumented)
 export interface RouteMetadata {

@@ -1,11 +1,22 @@
 import type { ReactCompatNode } from "@reckona/mreact-compat";
 import type { QueryClient } from "@reckona/mreact-query";
 
-export type InferLoaderData<TLoader extends (...args: never[]) => unknown> = Awaited<
-  ReturnType<TLoader>
->;
+export type RouteLoader = (...args: never[]) => unknown;
+
+export type InferLoaderData<TLoader extends RouteLoader> = Awaited<ReturnType<TLoader>>;
 
 export type RouteParams = Record<string, readonly string[] | string>;
+
+export type InferLoaderParams<TLoader extends RouteLoader> = TLoader extends (
+  context: infer TContext,
+  ...args: never[]
+) => unknown
+  ? TContext extends { params: infer TParams }
+    ? TParams extends RouteParams
+      ? TParams
+      : RouteParams
+    : RouteParams
+  : RouteParams;
 
 export interface LoaderContext<TParams extends RouteParams = RouteParams> {
   env?: unknown;
@@ -32,6 +43,16 @@ export interface PageProps<TData = unknown, TParams extends RouteParams = RouteP
   data: TData;
   params: TParams;
   request: Request;
+}
+
+export type PageComponent<TLoader extends RouteLoader> = (
+  props: PageProps<InferLoaderData<TLoader>, InferLoaderParams<TLoader>>,
+) => ReactCompatNode;
+
+export function definePage<TLoader extends RouteLoader>(
+  component: PageComponent<TLoader>,
+): PageComponent<TLoader> {
+  return component;
 }
 
 export interface LayoutProps<TParams extends RouteParams = RouteParams> {
