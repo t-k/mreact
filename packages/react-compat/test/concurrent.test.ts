@@ -311,6 +311,29 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<em>loading</em>");
   });
 
+  test("SuspenseList revealOrder forwards stops at pending null fallbacks", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const pending = new Promise<void>(() => {});
+
+    function Pending() {
+      throw pending;
+    }
+
+    root.render(
+      createElement(
+        SuspenseList,
+        { revealOrder: "forwards" },
+        [
+          createElement(Suspense, { fallback: null }, createElement(Pending, null)),
+          createElement("strong", null, "later"),
+        ],
+      ),
+    );
+
+    expect(container.innerHTML).toBe("");
+  });
+
   test("SuspenseList revealOrder backwards stops at the last pending boundary", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

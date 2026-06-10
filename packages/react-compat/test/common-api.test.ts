@@ -136,6 +136,48 @@ describe("react-compat common API subset", () => {
     expect(ref.current).toBe(container.querySelector("div"));
   });
 
+  test("useImperativeHandle does not publish handles during insertion effects", () => {
+    const container = document.createElement("div");
+    const ref = { current: null as { ready: true } | null };
+    const observedDuringInsertion: Array<{ ready: true } | null> = [];
+
+    const Widget = forwardRef<Record<string, never>, { ready: true }>((_props, forwardedRef) => {
+      useImperativeHandle(forwardedRef, () => ({ ready: true }));
+      useInsertionEffect(() => {
+        observedDuringInsertion.push(ref.current);
+      });
+      return createElement("div", null, "ready");
+    });
+
+    render(createElement(Widget, { ref }), container);
+
+    expect(observedDuringInsertion).toEqual([null]);
+    expect(ref.current).toEqual({ ready: true });
+  });
+
+  test("async act drains chained microtask updates until idle", async () => {
+    const container = document.createElement("div");
+    let setValue: (value: string) => void = () => {};
+
+    function App() {
+      const [value, innerSetValue] = useState("idle");
+      setValue = innerSetValue;
+      return createElement("span", null, value);
+    }
+
+    render(createElement(App, null), container);
+
+    await act(async () => {
+      let chain = Promise.resolve();
+      for (let index = 0; index < 12; index += 1) {
+        chain = chain.then(() => undefined);
+      }
+      void chain.then(() => setValue("done"));
+    });
+
+    expect(container.innerHTML).toBe("<span>done</span>");
+  });
+
   test("memo renders the wrapped component", () => {
     const container = document.createElement("div");
     const Label = memo((props: { value: string }) =>
@@ -1107,6 +1149,41 @@ describe("react-compat common API subset", () => {
 
     expect(container.textContent).toBe("2");
     expect(callbacks).toEqual(["done:2"]);
+  });
+
+  test("class component setState callbacks run after update commit lifecycles", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    let instance: { increment(): void } | undefined;
+
+    class Counter extends Component<Record<string, never>, { count: number }> {
+      state = { count: 0 };
+
+      constructor(props: Record<string, never>) {
+        super(props);
+        instance = this;
+      }
+
+      increment() {
+        this.setState(
+          (state) => ({ count: state.count + 1 }),
+          () => calls.push(`callback:${container.innerHTML}`),
+        );
+      }
+
+      componentDidUpdate() {
+        calls.push(`didUpdate:${container.innerHTML}`);
+      }
+
+      render() {
+        return createElement("span", null, this.state.count);
+      }
+    }
+
+    render(createElement(Counter, null), container);
+    instance?.increment();
+
+    expect(calls).toEqual(["didUpdate:<span>1</span>", "callback:<span>1</span>"]);
   });
 
   test("React.Component exposes setState and forceUpdate during subclass construction", () => {

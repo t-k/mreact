@@ -908,16 +908,20 @@ export function useReducer<TState, TAction, TInitial = TState>(
     ),
   );
   const reducerRef = runWithoutDevToolsHookTracking(() => useRef(reducer));
+  const stateRef = runWithoutDevToolsHookTracking(() => useRef(state));
   const dispatchRef = runWithoutDevToolsHookTracking(() =>
     useRef<((action: TAction) => void) | undefined>(
       undefined,
     )
   );
   reducerRef.current = reducer;
+  stateRef.current = state;
 
   if (dispatchRef.current === undefined) {
     dispatchRef.current = (action: TAction): void => {
-      setState((previousState) => reducerRef.current(previousState, action));
+      const nextState = reducerRef.current(stateRef.current, action);
+      stateRef.current = nextState;
+      setState(nextState);
     };
   }
 
@@ -995,7 +999,7 @@ export function useImperativeHandle<T>(
   deps?: readonly unknown[],
 ): void {
   runWithoutDevToolsHookTracking(() =>
-    useInsertionEffect(() => {
+    useLayoutEffect(() => {
       const handle = create();
       assignRef(ref, handle);
       return () => {
