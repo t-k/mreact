@@ -1,4 +1,4 @@
-import { flushQueuedComputations } from "./scheduler.js";
+import { flushQueuedComputations, resetSchedulerStateForTesting } from "./scheduler.js";
 import { setScheduler, type Scheduler } from "./scheduler.js";
 
 export async function flushMicrotasks(): Promise<void> {
@@ -41,6 +41,7 @@ export function createReactiveTestRuntime(): ReactiveTestRuntime {
       }
       disposed = true;
       scheduled.length = 0;
+      resetSchedulerStateForTesting();
       restore();
     },
     flushAll() {

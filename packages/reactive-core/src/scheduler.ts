@@ -32,6 +32,16 @@ export function setScheduler(nextScheduler: Scheduler): () => void {
   };
 }
 
+export function resetSchedulerStateForTesting(): void {
+  for (const computation of queue) {
+    computation.queued = false;
+  }
+
+  clearQueue();
+  scheduled = false;
+  flushing = false;
+}
+
 export function queueComputation(computation: ReactiveComputation): void {
   if (computation.disposed || computation.queued) {
     return;

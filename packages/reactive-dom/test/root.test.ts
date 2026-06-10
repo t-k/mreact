@@ -90,4 +90,15 @@ describe("createRoot", () => {
 
     dispose();
   });
+
+  test("throws a bounded error for deeply nested render values", () => {
+    const container = document.createElement("main");
+    let value: unknown = "leaf";
+
+    for (let index = 0; index < 300; index += 1) {
+      value = [value];
+    }
+
+    expect(() => createRoot(container, () => value as never)).toThrow(/render value is too deep/i);
+  });
 });

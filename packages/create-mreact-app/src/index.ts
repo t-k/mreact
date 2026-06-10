@@ -1164,9 +1164,9 @@ const demoAccount = {
 } as const;
 
 export async function POST(request: Request): Promise<Response> {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
     return Response.json(
-      { ok: false, error: "Development-only demo credentials are disabled in production." },
+      { ok: false, error: "Development-only demo credentials are disabled outside development." },
       { status: 403 },
     );
   }
@@ -1600,7 +1600,7 @@ Bindings are declared in \`wrangler.toml\` and typed in \`worker-env.d.ts\`. The
         ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
         : "";
   const dashboardNote = options.dashboard
-    ? "\nThis is the dashboard starter. It includes auth guards, a development-only demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`. Replace these credentials before production; the generated login route disables them when `NODE_ENV` is `production`.\n"
+    ? "\nThis is the dashboard starter. It includes auth guards, a development-only demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`. Replace these credentials before production; the generated login route enables them only when `NODE_ENV` is `development` or `test`.\n"
     : "";
   const pnpmTroubleshooting =
     packageManager === "pnpm"

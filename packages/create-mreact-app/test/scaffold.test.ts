@@ -285,6 +285,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(login).toContain('action="/api/login"');
     expect(loginRoute).toContain("createSession");
     expect(loginRoute).toContain("NODE_ENV");
+    expect(loginRoute).toContain('process.env.NODE_ENV !== "development"');
+    expect(loginRoute).toContain('process.env.NODE_ENV !== "test"');
     expect(loginRoute).toContain("Development-only demo credentials");
     expect(loginRoute).toContain('roles: ["admin"]');
     expect(logoutRoute).toContain("destroySession");
