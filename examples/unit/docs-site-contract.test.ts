@@ -1966,6 +1966,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("--text: oklch(");
     expect(css).toContain("--brand: oklch(");
     expect(css).toContain("--code-panel-bg: oklch(");
+    expect(css).toContain("--inline-code-text: oklch(");
+    expect(css).toContain("--inline-code-bg: oklch(");
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).not.toMatch(/\b(?:rgb|rgba|hsl|hsla)\(/);
     expect(css).toContain("color-scheme: only dark");
@@ -1984,12 +1986,16 @@ describe("docs-site example contract", () => {
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
     expect(css).toContain("grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr)");
+    expect(css).toContain("grid-template-columns: minmax(11rem, 1fr) minmax(18rem, 42rem) auto");
+    expect(css).toContain("justify-self: end");
     expect(css).toContain('grid-template-areas: "header header" "sidebar main"');
     expect(css).toContain("grid-area: header");
     expect(css).toContain("grid-area: sidebar");
     expect(css).toContain("grid-area: main");
     expect(css).toContain("position: absolute");
     expect(css).toContain("max-height: min(28rem, calc(100dvh - 8rem))");
+    expect(css).toContain("color: var(--inline-code-text)");
+    expect(css).toContain("background: var(--inline-code-bg)");
     expect(css).toContain(".site-icon-control");
     expect(css).toContain(".site-menu-toggle");
     expect(css).toContain(".site-sidebar-body[hidden]");
