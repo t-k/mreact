@@ -2404,10 +2404,33 @@ function getDirectHostTextChild(children: unknown): string | undefined {
     : undefined;
 }
 
+// This package has no Node type dependency; declare the minimal process
+// shape needed for the literal process.env.NODE_ENV expression below.
+declare const process: { env: Record<string, string | undefined> };
+
+type HostFastPathMode = "static-fast" | "dynamic";
+
+const hostFastPathMode: HostFastPathMode = (() => {
+  try {
+    // The literal process.env.NODE_ENV member expression is what bundler
+    // define rewriting matches; a globalThis.process indirection is never
+    // rewritten and leaves deployed browser bundles without any fast path.
+    return process.env.NODE_ENV === "production" ? "static-fast" : "dynamic";
+  } catch {
+    // No process global at all: an unbundled browser runtime. Treat it as
+    // production rather than running every host update on the slow path.
+    return "static-fast";
+  }
+})();
+
 function shouldUseDirectHostTextChild(): boolean {
-  const globalProcess = (globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process;
-  return globalProcess?.env?.NODE_ENV === "production";
+  if (hostFastPathMode === "static-fast") {
+    return true;
+  }
+
+  // Node dev/test environments keep the per-call env read so test harnesses
+  // can flip NODE_ENV (vi.stubEnv) without re-importing this module.
+  return process.env.NODE_ENV === "production";
 }
 
 function syncDirectHostTextChild(element: Element, text: string): Text {
