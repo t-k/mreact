@@ -24,6 +24,7 @@ export interface RootRuntime {
   profilerBaseDurations: Map<string, number>;
   pendingProfilerCommits: PendingProfilerCommit[];
   pendingInsertionEffects: PendingEffect[];
+  pendingImperativeHandleEffects: PendingEffect[];
   pendingLayoutEffects: PendingEffect[];
   pendingEffects: PendingEffect[];
   externalStoreChecks: ExternalStoreCheck[];
@@ -39,7 +40,7 @@ export interface RootRuntime {
   strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
   strictMemoReplayByHook: ReadonlyMap<string, unknown> | undefined;
   profilerFlushDepth: number;
-  effectFlushPhase: "insertion" | "layout" | "normal" | undefined;
+  effectFlushPhase: "insertion" | "imperative-handle" | "layout" | "normal" | undefined;
   externalStoreUpdate: boolean;
   renderPhaseUpdate: boolean;
   rerender(priority?: RenderPriority): void;
@@ -147,7 +148,7 @@ type HookSlot =
   | { kind: "debug"; value: unknown }
   | {
       kind: "effect";
-      effectKind: "insertion" | "layout" | "normal";
+      effectKind: "insertion" | "imperative-handle" | "layout" | "normal";
       callback: EffectCallback;
       deps?: readonly unknown[];
       cleanup?: () => void;
@@ -284,6 +285,7 @@ export interface RuntimeSnapshot {
   portalContainers: Set<Element>;
   portalNodes: Map<Element, Set<Node>>;
   pendingInsertionEffectsLength: number;
+  pendingImperativeHandleEffectsLength: number;
   pendingLayoutEffectsLength: number;
   pendingEffectsLength: number;
   pendingProfilerCommitsLength: number;
@@ -313,6 +315,7 @@ export function createRootRuntime(
     profilerBaseDurations: new Map(),
     pendingProfilerCommits: [],
     pendingInsertionEffects: [],
+    pendingImperativeHandleEffects: [],
     pendingLayoutEffects: [],
     pendingEffects: [],
     externalStoreChecks: [],
@@ -337,6 +340,7 @@ export function createRootRuntime(
       this.activeProfilerPaths = new Set();
       this.pendingProfilerCommits = [];
       this.pendingInsertionEffects = [];
+      this.pendingImperativeHandleEffects = [];
       this.pendingLayoutEffects = [];
       this.pendingEffects = [];
       this.externalStoreChecks = [];
@@ -367,6 +371,8 @@ export function createRootRuntime(
       try {
         this.effectFlushPhase = "insertion";
         flushPendingEffects(this.pendingInsertionEffects);
+        this.effectFlushPhase = "imperative-handle";
+        flushPendingEffects(this.pendingImperativeHandleEffects);
         this.effectFlushPhase = "layout";
         const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
         this.effectFlushPhase = "normal";
@@ -661,6 +667,7 @@ export function takeRuntimeSnapshot(runtime: RootRuntime): RuntimeSnapshot {
     portalContainers: new Set(runtime.portalContainers),
     portalNodes: clonePortalNodes(runtime.portalNodes),
     pendingInsertionEffectsLength: runtime.pendingInsertionEffects.length,
+    pendingImperativeHandleEffectsLength: runtime.pendingImperativeHandleEffects.length,
     pendingLayoutEffectsLength: runtime.pendingLayoutEffects.length,
     pendingEffectsLength: runtime.pendingEffects.length,
     pendingProfilerCommitsLength: runtime.pendingProfilerCommits.length,
@@ -683,6 +690,7 @@ export function restoreRuntimeSnapshot(
   snapshot: RuntimeSnapshot,
 ): void {
   runtime.pendingInsertionEffects.length = snapshot.pendingInsertionEffectsLength;
+  runtime.pendingImperativeHandleEffects.length = snapshot.pendingImperativeHandleEffectsLength;
   runtime.pendingLayoutEffects.length = snapshot.pendingLayoutEffectsLength;
   runtime.pendingEffects.length = snapshot.pendingEffectsLength;
   runtime.pendingProfilerCommits.length = snapshot.pendingProfilerCommitsLength;
@@ -998,7 +1006,7 @@ export function useImperativeHandle<T>(
   deps?: readonly unknown[],
 ): void {
   runWithoutDevToolsHookTracking(() =>
-    useLayoutEffect(() => {
+    useEffectImpl("imperative-handle", () => {
       const handle = create();
       assignRef(ref, handle);
       return () => {
@@ -1738,7 +1746,7 @@ function isTransitionContextCurrent(context: TransitionContext): boolean {
 }
 
 function useEffectImpl(
-  effectKind: "insertion" | "layout" | "normal",
+  effectKind: "insertion" | "imperative-handle" | "layout" | "normal",
   callback: EffectCallback,
   deps?: readonly unknown[],
 ): void {
@@ -1780,12 +1788,15 @@ function useEffectImpl(
 
   slot.strictReplay =
     (runtime.strictModeDepth > 0 || runtime.strictReplayDepth > 0) &&
-    effectKind !== "insertion";
+    effectKind !== "insertion" &&
+    effectKind !== "imperative-handle";
 
   if (shouldRun) {
     const queue =
       effectKind === "insertion"
         ? runtime.pendingInsertionEffects
+        : effectKind === "imperative-handle"
+        ? runtime.pendingImperativeHandleEffects
         : effectKind === "layout"
         ? runtime.pendingLayoutEffects
         : runtime.pendingEffects;
