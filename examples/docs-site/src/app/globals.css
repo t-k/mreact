@@ -91,7 +91,7 @@ a:hover {
 
 .site-shell {
   display: grid;
-  grid-template-columns: minmax(16rem, 19rem) minmax(0, 1fr);
+  grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
   min-height: 100vh;
 }
 
@@ -223,7 +223,7 @@ a:hover {
   gap: 0.5rem;
   list-style: none;
   margin: 0;
-  max-height: 18rem;
+  max-height: 24rem;
   overflow: auto;
   padding: 0;
   scrollbar-color: var(--text-3) var(--bg);
@@ -1015,7 +1015,7 @@ a:hover {
 
   .site-sidebar {
     height: auto;
-    max-height: 45vh;
+    max-height: 76vh;
     position: relative;
   }
 

@@ -281,12 +281,17 @@ describe("docs-site example contract", () => {
     expect(searchScript).toContain("import(pagefindModuleUrl.href)");
     expect(searchScript).toContain("pagefind.search");
     expect(searchScript).toContain("site-search-result");
+    expect(searchScript).toContain('event.key === "ArrowDown"');
+    expect(searchScript).toContain('event.key === "ArrowUp"');
+    expect(searchScript).toContain("focusAdjacentSearchResult");
+    expect(searchScript).toContain("dataset.searchResultLink");
     expect(searchScript).toContain("Search is available after the static docs build.");
     expect(searchScript).not.toContain("innerHTML");
 
     expect(css).toContain(".site-search");
     expect(css).toContain(".site-search-input");
     expect(css).toContain(".site-search-results");
+    expect(css).toContain("max-height: 24rem");
     expect(css).toContain(".site-search-result");
     expect(css).not.toMatch(/font-size:\s*0\./);
   });
@@ -1973,6 +1978,8 @@ describe("docs-site example contract", () => {
     expect(css).not.toContain("margin: 16px 0");
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
+    expect(css).toContain("grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr)");
+    expect(css).toContain("max-height: 76vh");
     expect(css).toContain(".site-icon-control");
     expect(css).toContain(".site-menu-toggle");
     expect(css).toContain(".site-sidebar-body[hidden]");

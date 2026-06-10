@@ -21,6 +21,33 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
         void runSearch(input.value.trim());
       }, 120);
     });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        if (focusSearchResult(0)) {
+          event.preventDefault();
+        }
+      }
+    });
+
+    results.addEventListener("keydown", (event) => {
+      const link = event.target instanceof HTMLAnchorElement ? event.target : null;
+      if (link === null) {
+        return;
+      }
+
+      if (event.key === "ArrowDown") {
+        if (focusAdjacentSearchResult(link, 1)) {
+          event.preventDefault();
+        }
+      }
+
+      if (event.key === "ArrowUp") {
+        if (focusAdjacentSearchResult(link, -1)) {
+          event.preventDefault();
+        }
+      }
+    });
   }
 
   async function runSearch(query) {
@@ -75,6 +102,7 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
 
       item.className = "site-search-result";
       link.href = result.url;
+      link.dataset.searchResultLink = "";
       title.className = "site-search-result-title";
       title.textContent = result.meta?.title ?? result.url;
       excerpt.className = "site-search-result-excerpt";
@@ -92,6 +120,36 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
 
   function clearResults() {
     results.replaceChildren();
+  }
+
+  function focusAdjacentSearchResult(currentLink, direction) {
+    const links = searchResultLinks();
+    const currentIndex = links.indexOf(currentLink);
+    const nextIndex = currentIndex + direction;
+
+    if (nextIndex < 0) {
+      input.focus();
+      return true;
+    }
+
+    return focusSearchResult(nextIndex);
+  }
+
+  function focusSearchResult(index) {
+    const links = searchResultLinks();
+    const link = links[index];
+    if (link === undefined) {
+      return false;
+    }
+
+    link.focus();
+    return true;
+  }
+
+  function searchResultLinks() {
+    return [...results.querySelectorAll("[data-search-result-link]")].filter(
+      (link) => link instanceof HTMLAnchorElement,
+    );
   }
 
   function setStatus(message) {
