@@ -498,6 +498,20 @@ function createMreactAppRouterAdapter(options: {
       }
       return html;
     },
+    async renderDynamicRoute(): Promise<string> {
+      // Ensure this variant's own fixture; the generic runner probe reads the
+      // module-level server shared across all mreact variants and can measure
+      // whichever variant fixture was started last.
+      const url = await ensureFixture(1000, logEnabled, reactCompat);
+      const response = await fetch(`${url}/data-grid?user=199&tab=activity`);
+      const html = await response.text();
+
+      if (!html.includes("Item #199 &lt;data")) {
+        throw new Error("mreact-app-router renderDynamicRoute did not include expected data");
+      }
+
+      return html;
+    },
     async measureServerOnlyClientBundleBytes(): Promise<number> {
       if (reactCompat) {
         const url = await ensureFixture(NODE_COUNT_DEFAULT, logEnabled, reactCompat);
