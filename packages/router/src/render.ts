@@ -476,6 +476,7 @@ type StreamModuleExports = Record<string, unknown> & {
 
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverTransformCacheCounters = createRouterRuntimeCacheCounters();
+let productionDynamicServerTransformWarned = false;
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const serverSourceFileCacheCounters = createRouterRuntimeCacheCounters();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
@@ -2604,6 +2605,8 @@ function transformServerModule(options: {
     return cached;
   }
 
+  warnProductionDynamicServerTransform();
+
   const output = transform({
     code: options.code,
     ...(options.clientBoundaryImports === undefined
@@ -2629,6 +2632,19 @@ function transformServerModule(options: {
   );
 
   return output;
+}
+
+export const __transformServerModuleForTesting = transformServerModule;
+
+function warnProductionDynamicServerTransform(): void {
+  if (process.env.NODE_ENV !== "production" || productionDynamicServerTransformWarned) {
+    return;
+  }
+
+  productionDynamicServerTransformWarned = true;
+  console.warn(
+    "mreact router: dynamic server transform path ran in production. Production deployments should provide prebuilt serverModules; otherwise request-time transforms use development compiler settings.",
+  );
 }
 
 async function analyzeRouteSource(options: {
@@ -4565,10 +4581,7 @@ async function loadComposedRouteMetadata(options: {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteMetadata | undefined> {
-  const cacheKey =
-    options.serverModuleCacheVersion === undefined
-      ? undefined
-      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+  const cacheKey = composedRouteMetadataCacheKey(options);
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
       composedRouteMetadataCache,
@@ -4600,6 +4613,22 @@ async function loadComposedRouteMetadata(options: {
     throw error;
   }
 }
+
+function composedRouteMetadataCacheKey(options: {
+  appDir: string;
+  code: string;
+  define?: UserConfig["define"] | undefined;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): string | undefined {
+  return options.serverModuleCacheVersion === undefined
+    ? undefined
+    : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+}
+
+export const __composedRouteMetadataCacheKeyForTesting = composedRouteMetadataCacheKey;
 
 async function loadComposedRouteMetadataUncached(options: {
   appDir: string;
@@ -4801,25 +4830,58 @@ interface InlineCspTag {
 
 function inlineCspTags(html: string): InlineCspTag[] {
   const tags: InlineCspTag[] = [];
-  const pattern = /<(script|style)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
-  let match: RegExpExecArray | null;
+  const lowerHtml = html.toLowerCase();
+  let position = 0;
 
-  while ((match = pattern.exec(html)) !== null) {
-    const name = match[1]?.toLowerCase();
+  while (position < html.length) {
+    const scriptIndex = lowerHtml.indexOf("<script", position);
+    const styleIndex = lowerHtml.indexOf("<style", position);
+    const openerIndex =
+      scriptIndex === -1
+        ? styleIndex
+        : styleIndex === -1
+          ? scriptIndex
+          : Math.min(scriptIndex, styleIndex);
 
-    if (name !== "script" && name !== "style") {
+    if (openerIndex === -1) {
+      break;
+    }
+
+    const name = lowerHtml.startsWith("<script", openerIndex) ? "script" : "style";
+    const tagEnd = html.indexOf(">", openerIndex + 1);
+    if (tagEnd === -1) {
+      break;
+    }
+
+    const closeToken = `</${name}>`;
+    const closeIndex = lowerHtml.indexOf(closeToken, tagEnd + 1);
+    const nextScriptIndex = lowerHtml.indexOf("<script", tagEnd + 1);
+    const nextStyleIndex = lowerHtml.indexOf("<style", tagEnd + 1);
+    const nextOpenerIndex =
+      nextScriptIndex === -1
+        ? nextStyleIndex
+        : nextStyleIndex === -1
+          ? nextScriptIndex
+          : Math.min(nextScriptIndex, nextStyleIndex);
+
+    if (closeIndex === -1 || (nextOpenerIndex !== -1 && nextOpenerIndex < closeIndex)) {
+      position = tagEnd + 1;
       continue;
     }
 
     tags.push({
-      attributes: parseTagAttributes(match[2] ?? ""),
-      content: match[3] ?? "",
+      attributes: parseTagAttributes(html.slice(openerIndex + name.length + 1, tagEnd)),
+      content: html.slice(tagEnd + 1, closeIndex),
       name,
     });
+
+    position = closeIndex + closeToken.length;
   }
 
   return tags;
 }
+
+export const __inlineCspTagsForTesting = inlineCspTags;
 
 function parseTagAttributes(source: string): ReadonlyMap<string, string> {
   const attributes = new Map<string, string>();
