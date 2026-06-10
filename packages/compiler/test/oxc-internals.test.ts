@@ -837,6 +837,73 @@ export default function Page() {
     ).toEqual(["stable", "items", "moreItems"]);
   });
 
+  test("ignores nested function assignments when they target shadowed JSX bindings", () => {
+    expect([
+      ...collectOxcBodyJsxBindingNames([
+        {
+          type: "VariableDeclaration",
+          kind: "let",
+          declarations: [
+            { id: { type: "Identifier", name: "shadowed" }, init: { type: "JSXElement" } },
+          ],
+        },
+        {
+          type: "VariableDeclaration",
+          kind: "let",
+          declarations: [
+            { id: { type: "Identifier", name: "captured" }, init: { type: "JSXElement" } },
+          ],
+        },
+        {
+          type: "FunctionDeclaration",
+          id: { type: "Identifier", name: "rewriteLocals" },
+          params: [],
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "VariableDeclaration",
+                kind: "let",
+                declarations: [
+                  {
+                    id: { type: "Identifier", name: "shadowed" },
+                    init: { type: "Literal", value: "" },
+                  },
+                ],
+              },
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "AssignmentExpression",
+                  left: { type: "Identifier", name: "shadowed" },
+                  right: { type: "Literal", value: "" },
+                },
+              },
+            ],
+          },
+        },
+        {
+          type: "FunctionDeclaration",
+          id: { type: "Identifier", name: "rewriteCaptured" },
+          params: [],
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "AssignmentExpression",
+                  left: { type: "Identifier", name: "captured" },
+                  right: { type: "Literal", value: "" },
+                },
+              },
+            ],
+          },
+        },
+      ]),
+    ]).toEqual(["shadowed"]);
+  });
+
   test("marks render value expressions recursively", () => {
     const nodes = [
       {

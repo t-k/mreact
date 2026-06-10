@@ -5,6 +5,10 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { describe, expect, test } from "vitest";
 import { bindSpreadProps } from "../src/index.js";
 
+interface RetargetableElement extends HTMLElement {
+  __mreactPropBindings?: Array<{ retarget(element: Element): void }>;
+}
+
 describe("bindSpreadProps", () => {
   test("applies and removes spread attributes", async () => {
     const props = cell<Record<string, unknown>>({
@@ -17,9 +21,7 @@ describe("bindSpreadProps", () => {
 
     await flushEffects();
 
-    expect(element.outerHTML).toBe(
-      '<div id="first" class="primary" hidden=""></div>',
-    );
+    expect(element.outerHTML).toBe('<div id="first" class="primary" hidden=""></div>');
 
     props.set({ title: "next" });
     await flushEffects();
@@ -136,6 +138,34 @@ describe("bindSpreadProps", () => {
     await flushEffects();
 
     expect(writes).toEqual(["set:class:primary", "set:id:save", "set:class:secondary"]);
+
+    dispose();
+  });
+
+  test("tracks props read after retargeting spread bindings", async () => {
+    const initialTitle = cell("initial");
+    const hydratedTitle = cell("hydrated");
+    const source = document.createElement("div") as RetargetableElement;
+    const target = document.createElement("div");
+    let retargeted = false;
+
+    const dispose = bindSpreadProps(source, () =>
+      retargeted ? { title: hydratedTitle.get() } : { title: initialTitle.get() },
+    );
+    await flushEffects();
+
+    expect(source.getAttribute("title")).toBe("initial");
+
+    retargeted = true;
+    source.__mreactPropBindings?.[0]?.retarget(target);
+
+    expect(source.hasAttribute("title")).toBe(false);
+    expect(target.getAttribute("title")).toBe("hydrated");
+
+    hydratedTitle.set("updated");
+    await flushEffects();
+
+    expect(target.getAttribute("title")).toBe("updated");
 
     dispose();
   });
