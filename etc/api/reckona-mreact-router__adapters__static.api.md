@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function exportStaticApp(options: StaticExportOptions): Promise<StaticExportResult>;
 
 // @public (undocumented)

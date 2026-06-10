@@ -32,7 +32,7 @@ export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath
     readonly __mreactRoutePatternHrefError__: never;
 } : unknown;
 
-// @public (undocumented)
+// @public
 export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
 // @public (undocumented)
@@ -69,7 +69,7 @@ export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<H
     children?: LinkChild;
 }
 
-// @public (undocumented)
+// @public
 export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
 // @public (undocumented)

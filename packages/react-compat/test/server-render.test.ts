@@ -170,12 +170,12 @@ describe("react-compat server render", () => {
     );
   });
 
-  test("serializes readOnly as the lowercase readonly HTML attribute", () => {
+  test("serializes readOnly with React DOM server casing", () => {
     function App() {
       return createElement("input", { readOnly: true });
     }
 
-    expect(renderToString(App)).toBe('<input readonly=""/>');
+    expect(renderToString(App)).toBe('<input readOnly=""/>');
   });
 
   test("treats srcDoc as the dangerous srcdoc attribute alias", () => {

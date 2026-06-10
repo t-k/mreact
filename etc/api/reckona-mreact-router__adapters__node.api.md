@@ -10,7 +10,7 @@ import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
 import type { ServerResponse } from 'node:http';
 
-// @public (undocumented)
+// @public
 export function createNodeRequestHandler(options: NodeRequestHandlerOptions): NodeRequestHandler;
 
 // @public (undocumented)

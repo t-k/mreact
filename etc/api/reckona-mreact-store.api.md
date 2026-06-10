@@ -6,10 +6,10 @@
 
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
-// @public (undocumented)
+// @public
 export function createRequestStoreFactory<T extends object>(initial: () => T, options?: StoreOptions<T> | undefined): () => Store<T>;
 
-// @public (undocumented)
+// @public
 export function createStore<T extends object>(initial: T, options?: StoreOptions<T>): Store<T>;
 
 // @public (undocumented)
@@ -18,7 +18,7 @@ export interface SelectedCell<T> extends ReadonlyCell<T> {
     dispose(): void;
 }
 
-// @public (undocumented)
+// @public
 export function shallowEqual<T>(left: T, right: T): boolean;
 
 // @public (undocumented)

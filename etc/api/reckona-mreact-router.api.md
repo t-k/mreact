@@ -292,7 +292,7 @@ export interface AppRouterResponseHookContext {
 // @public (undocumented)
 export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
 
-// @public (undocumented)
+// @public
 export interface AppRouterServerActionOptions {
     // (undocumented)
     allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
@@ -358,7 +358,7 @@ export interface AwsLambdaArtifactManifest {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point index.d.ts
@@ -428,7 +428,7 @@ export interface BuiltImportPolicyArtifact {
     version: 1;
 }
 
-// @public (undocumented)
+// @public
 export function cacheControl(options: CacheControlOptions): void;
 
 // @public (undocumented)
@@ -483,7 +483,7 @@ export interface CookieOptions {
 
 // Warning: (ae-forgotten-export) The symbol "RequestCookies" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function cookies(request: Request): RequestCookies;
 
 // @public (undocumented)
@@ -498,7 +498,7 @@ export function createKeyValuePrerenderStore(options: KeyValuePrerenderStoreOpti
 // @public (undocumented)
 export function createMemoryPrerenderStore(options?: MemoryPrerenderStoreOptions): AppRouterPrerenderStore;
 
-// @public (undocumented)
+// @public
 export function createMemoryRouteCache(options?: MemoryRouteCacheOptions): AppRouterCache;
 
 // Warning: (ae-forgotten-export) The symbol "createMemorySessionStore_2" needs to be exported by the entry point index.d.ts
@@ -522,10 +522,10 @@ export type DeferredLoaderData<TData extends Record<string, unknown>> = TData & 
 // @public (undocumented)
 export function defineMessages<const Messages extends MessageTree>(messages: Messages): Messages;
 
-// @public (undocumented)
+// @public
 export function definePage<TLoader extends RouteLoader>(component: PageComponent<TLoader>): PageComponent<TLoader>;
 
-// @public (undocumented)
+// @public
 export function deleteCookie(response: Response, name: string, options?: Pick<CookieOptions, "domain" | "path" | "sameSite" | "secure">): Response;
 
 // Warning: (ae-forgotten-export) The symbol "destroySession_2" needs to be exported by the entry point index.d.ts
@@ -570,7 +570,7 @@ export function formCsrfCookie(csrfToken: string): string;
 // @public (undocumented)
 export const formCsrfFieldName = "__mreact_csrf";
 
-// @public (undocumented)
+// @public
 export interface GenerateMetadataContext<TData = unknown, TParams extends RouteParams = RouteParams> {
     // (undocumented)
     data: TData;
@@ -594,15 +594,15 @@ export function getServerRuntimeState<TState extends object>(key: string, create
 // @public @deprecated (undocumented)
 export const getSession: typeof getSession_2;
 
-// @public (undocumented)
+// @public
 export function headers(request: Request): Headers;
 
 // Warning: (ae-forgotten-export) The symbol "HasRouteParams" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function href<const Path extends `/${string}`>(path: Path, ...args: HasRouteParams<Path> extends true ? [options: DynamicHrefOptions<Path>] : [options?: StaticHrefOptions]): string;
 
-// @public (undocumented)
+// @public
 export function html(value: string, init?: ResponseInit): Response;
 
 // @public (undocumented)
@@ -628,7 +628,7 @@ export function isRedirectError(error: unknown): error is Error & {
     status: number;
 };
 
-// @public (undocumented)
+// @public
 export function json(value: unknown, init?: ResponseInit): Response;
 
 // @public (undocumented)
@@ -665,7 +665,7 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
     request: Request;
 }
 
-// @public (undocumented)
+// @public
 export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
 // @public (undocumented)
@@ -702,7 +702,7 @@ export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<H
     children?: LinkChild;
 }
 
-// @public (undocumented)
+// @public
 export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
 // @public (undocumented)
@@ -873,13 +873,13 @@ export interface MultipartStreamPart {
 
 // Warning: (ae-forgotten-export) The symbol "MiddlewareNext" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function next(): MiddlewareNext;
 
-// @public (undocumented)
+// @public
 export function notFound(): never;
 
-// @public (undocumented)
+// @public
 export function packageAwsLambdaArtifact(options: PackageAwsLambdaArtifactOptions): Promise<AwsLambdaArtifactManifest>;
 
 // @public (undocumented)
@@ -894,7 +894,7 @@ export interface PackageAwsLambdaArtifactOptions {
     skipRuntimeDependencyCheck?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function packageCloudflarePagesArtifact(options: PackageCloudflarePagesArtifactOptions): Promise<CloudflarePagesArtifactManifest>;
 
 // @public (undocumented)
@@ -930,10 +930,10 @@ export interface PageRoute {
     segments: RouteSegment[];
 }
 
-// @public (undocumented)
+// @public
 export function parseCookieHeader(cookieHeader: string | null | undefined): Map<string, string>;
 
-// @public (undocumented)
+// @public
 export function parseForm(request: Request): Promise<FormData>;
 
 // @public (undocumented)
@@ -983,13 +983,13 @@ export interface PreparedFormActionReference {
 
 // Warning: (ae-forgotten-export) The symbol "RedirectOptions" needs to be exported by the entry point index.d.ts
 //
-// @public (undocumented)
+// @public
 export function redirect(location: string, options?: RedirectOptions): never;
 
-// @public (undocumented)
+// @public
 export function redirect303(location: string, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export function redirectExternal(location: string, options?: RedirectOptions): never;
 
 // @public (undocumented)
@@ -1106,10 +1106,10 @@ export interface RenderBuiltAppRequestOptions {
 // @public (undocumented)
 export type RequestHostPolicy = "strict" | "trusted-proxy";
 
-// @public (undocumented)
+// @public
 export function revalidatePath(path: string): void;
 
-// @public (undocumented)
+// @public
 export function rewrite(location: string, init?: ResponseInit): Response;
 
 // @public (undocumented)
@@ -1178,7 +1178,7 @@ export interface RouteHeadDescriptor {
 // @public (undocumented)
 export type RouteLoader = (...args: never[]) => unknown;
 
-// @public (undocumented)
+// @public
 export interface RouteMetadata {
     // (undocumented)
     alternates?: {
@@ -1371,10 +1371,10 @@ export interface RouteStrictTransportSecurity {
 // @public (undocumented)
 export function scanAppRoutes(options: ScanAppRoutesOptions): Promise<AppRoute[]>;
 
-// @public (undocumented)
+// @public
 export function serializeCookie(name: string, value: string, options?: CookieOptions): string;
 
-// @public (undocumented)
+// @public
 export interface ServerActionContext {
     // (undocumented)
     clientIp?: string | undefined;
@@ -1413,7 +1413,7 @@ export type SessionRecord<TData = unknown> = SessionRecord_2<TData>;
 // @public @deprecated (undocumented)
 export type SessionStore<TData = unknown> = SessionStore_2<TData>;
 
-// @public (undocumented)
+// @public
 export function setCookie(response: Response, name: string, value: string, options?: CookieOptions): Response;
 
 // @public (undocumented)
@@ -1438,7 +1438,7 @@ export interface SitemapEntry {
     url: string;
 }
 
-// @public (undocumented)
+// @public
 export function startDevServer(options: StartDevServerOptions): Promise<{
     close(): Promise<void>;
     server: Server;
@@ -1467,7 +1467,7 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     viteConfig?: UserConfig | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function startServer(options: StartServerOptions): Promise<{
     close(): Promise<void>;
     server: Server;
@@ -1523,10 +1523,10 @@ export interface StaticHrefOptions {
 // @public (undocumented)
 export function subscribeNavigationState(listener: AppRouterNavigationStateListener): () => void;
 
-// @public (undocumented)
+// @public
 export function textError(message: string, status?: number, init?: ResponseInit): Response;
 
-// @public (undocumented)
+// @public
 export function throwNotFound(): never;
 
 // @public (undocumented)

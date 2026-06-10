@@ -153,16 +153,16 @@ export interface AwsLambdaStreamingResponseStream {
     write(chunk: string | Uint8Array): boolean;
 }
 
-// @public (undocumented)
+// @public
 export function createAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOptions): AwsLambdaRequestHandler;
 
-// @public (undocumented)
+// @public
 export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): AwsLambdaStreamingRequestHandler<TContext>;
 
-// @public (undocumented)
+// @public
 export function createPreloadedAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaRequestHandler>;
 
-// @public (undocumented)
+// @public
 export function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaStreamingRequestHandler<TContext>>;
 
 // @public (undocumented)

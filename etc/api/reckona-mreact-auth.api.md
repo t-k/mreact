@@ -58,8 +58,14 @@ export type AuthorizationResult = {
     reason: "missing-permission" | "missing-role";
 };
 
-// @public (undocumented)
+// @public
 export function authorizeSession<TData extends AuthSessionClaims>(data: TData, policy: AuthorizationPolicy): AuthorizationResult;
+
+// @public (undocumented)
+export interface AuthRequestOptions {
+    // (undocumented)
+    config?: AuthConfig | undefined;
+}
 
 // @public (undocumented)
 export type AuthRequirement = string | readonly string[];
@@ -77,7 +83,7 @@ export interface AuthSessionClaims {
     roles?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function configureAuth(config: AuthConfig): void;
 
 export { createMemorySessionStore }
@@ -86,33 +92,33 @@ export { createSession }
 
 export { destroySession }
 
-// @public (undocumented)
+// @public
 export function getCurrentSession<TData>(request: Request, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
 export { getSession }
 
-// @public (undocumented)
+// @public
 export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionClaims>(): TData | undefined;
 
-// @public (undocumented)
+// @public
 export function refreshSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
-// @public (undocumented)
+// @public
 export function requirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function requireRole<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, role: AuthRequirement, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function requireSession<TData>(request: Request, store: SessionStore<TData>, options?: AuthGuardOptions): Promise<SessionRecord<TData>>;
 
-// @public (undocumented)
+// @public
 export function revokeCurrentSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<void>;
 
 export { rotateSession }
 
-// @public (undocumented)
-export function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>>;
+// @public
+export function runWithAuthRequest<T>(fn: () => T | Promise<T>, options?: AuthRequestOptions): Promise<Awaited<T>>;
 
 export { SessionCookieOptions }
 
@@ -129,10 +135,10 @@ export type TryAuthResult<TData> = {
     reason: "missing-permission" | "missing-role" | "missing-session";
 };
 
-// @public (undocumented)
+// @public
 export function tryRequirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: Pick<AuthGuardOptions, "mode">): Promise<TryAuthResult<TData>>;
 
-// @public (undocumented)
+// @public
 export function tryRequireRole<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, role: AuthRequirement, options?: Pick<AuthGuardOptions, "mode">): Promise<TryAuthResult<TData>>;
 
 // (No @packageDocumentation comment for this package)

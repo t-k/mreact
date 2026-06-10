@@ -46,7 +46,7 @@ export interface CloudflareCache {
     put(request: Request | string, response: Response): void | Promise<void>;
 }
 
-// @public (undocumented)
+// @public
 export function cloudflareClientAssetPaths(manifest: CloudflareClientManifest, options?: {
     extraPaths?: readonly string[] | undefined;
     prefix?: string | undefined;
@@ -245,7 +245,7 @@ export interface CloudflareStaticAssetLoaderOptions<Env = unknown> {
     prefix?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function collectCloudflareRouteModules<Env = unknown>(glob: CloudflareRouteModuleGlob<Env>, options: CollectCloudflareRouteModulesOptions): CloudflareRouteModuleRegistry<Env>;
 
 // @public (undocumented)
@@ -254,21 +254,21 @@ export interface CollectCloudflareRouteModulesOptions {
     manifest: BuiltServerManifest;
 }
 
-// @public (undocumented)
+// @public
 export function createCloudflareBuiltRequestHandler<Env = unknown>(options: CloudflareBuiltRequestHandlerOptions<Env>): CloudflareRequestHandler<Env>;
 
 // Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point cloudflare.d.ts
 //
-// @public (undocumented)
+// @public
 export function createCloudflarePrerenderStore(options: CloudflarePrerenderStoreOptions): AppRouterPrerenderStore;
 
-// @public (undocumented)
+// @public
 export function createCloudflareRequestHandler<Env = unknown>(options: CloudflareRequestHandlerOptions<Env>): CloudflareRequestHandler<Env>;
 
-// @public (undocumented)
+// @public
 export function createCloudflareRouteModuleRenderer<Env = unknown>(options: CloudflareRouteModuleRendererOptions<Env>): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]>;
 
-// @public (undocumented)
+// @public
 export function createCloudflareStaticAssetLoader<Env = unknown>(options: CloudflareStaticAssetLoaderOptions<Env>): CloudflareAssetLoader<Env>;
 
 // (No @packageDocumentation comment for this package)

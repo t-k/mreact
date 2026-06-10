@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.0.153 - 2026-06-10
+
+### Added
+
+- Added `runWithAuthRequest(fn, { config })` request-scoped auth configuration overrides so custom server handlers and multi-tenant integrations can change auth redirects or claim serialization without mutating process-wide defaults.
+- Added a package dist size check script used by `pnpm size` and `pnpm size:check`, reporting raw and gzip totals for publishable package outputs.
+
+### Changed
+
+- Clarified the documented `batchAsync()` scheduling contract and the React-compatible `useId()` id format divergence.
+
+### Fixed
+
+- Fixed App Router stream loading routes whose loaders redirect, return a `Response`, or call `notFound()` so router control-flow settles before page render artifacts are loaded, while ordinary pending data loaders still stream the loading shell immediately.
+- Fixed prebuilt stream server artifacts so `serverAwaitHydration` metadata must match before the artifact or external module file is reused.
+- Fixed React-compatible `useImperativeHandle()` timing so insertion effects do not see the handle, while parent layout effects do.
+- Fixed React-compatible server rendering so `readOnly` attribute casing matches React DOM server output.
+- Fixed OXC server string list rendering so list renderer body statements are preserved.
+- Fixed keyed reactive DOM list cleanup so stale keyed rows are removed even when a disposer throws, without double-disposing records.
+- Fixed duplicate form submissions to return an explicit duplicate result instead of sharing a pending promise through an unsound cast.
+- Hardened router render internals by replacing inline CSP tag scanning with a linear scanner, including import policy in composed metadata cache keys, and warning when production falls back to dynamic server transforms.
+- Fixed out-of-order SSR placeholders to reject async placeholder callbacks in development and fixed buffered list children so deferred work is attached to the parent stream instead of delaying the shell.
+- Updated `create-mreact-app` migration advisories for recent package layout, route CSS asset, Lambda packaging, and starter counter changes.
+
 ## 0.0.152 - 2026-06-09
 
 ### Fixed

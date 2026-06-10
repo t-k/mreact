@@ -6,13 +6,13 @@
 
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
-// @public (undocumented)
+// @public
 export function calculateVirtualRange(options: VirtualRangeOptions): VirtualRange;
 
-// @public (undocumented)
+// @public
 export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem>;
 
-// @public (undocumented)
+// @public
 export function createVirtualList<TItem>(options: VirtualListOptions<TItem>): Virtualizer<TItem>;
 
 // @public (undocumented)

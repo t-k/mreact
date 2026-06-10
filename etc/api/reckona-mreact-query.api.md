@@ -12,7 +12,7 @@ export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 // @public (undocumented)
 export function __resetQueryClientForTesting(): void;
 
-// @public (undocumented)
+// @public
 export function createInfiniteQuery<TPage, TPageParam>(client: QueryClient, options: CreateInfiniteQueryOptions<TPage, TPageParam>): InfiniteQueryObserver<TPage, TPageParam>;
 
 // @public (undocumented)
@@ -32,7 +32,7 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<Fetc
     refetchOnWindowFocus?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function createMutation<TVariables = void, TData = unknown, TContext = unknown>(client: QueryClient, options: CreateMutationOptions<TVariables, TData, TContext>): MutationObserver_2<TVariables, TData>;
 
 // @public (undocumented)
@@ -57,10 +57,10 @@ export interface CreateMutationOptions<TVariables, TData, TContext = unknown> {
     onSuccess?: ((data: TData, variables: TVariables) => Promise<void> | void) | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function createQuery<TData>(client: QueryClient, options: CreateQueryOptions<TData>): QueryObserver<TData>;
 
-// @public (undocumented)
+// @public
 export function createQueryClient(): QueryClient;
 
 // @public (undocumented)
@@ -71,7 +71,7 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
     refetchOnWindowFocus?: boolean | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function dehydrate(client: QueryClient): DehydratedQueryClient;
 
 // @public (undocumented)
@@ -108,13 +108,13 @@ export interface FetchQueryOptions<TData> {
     staleTime?: number;
 }
 
-// @public (undocumented)
+// @public
 export function getQueryClient(): QueryClient;
 
 // @public (undocumented)
 export function hashQueryKey(queryKey: QueryKey): string;
 
-// @public (undocumented)
+// @public
 export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient): void;
 
 // @public (undocumented)
@@ -292,7 +292,7 @@ export interface QuerySubscriptionOptions {
     gcTime?: false | number | undefined;
 }
 
-// @public (undocumented)
+// @public
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T;
 
 // (No @packageDocumentation comment for this package)

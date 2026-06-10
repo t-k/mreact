@@ -16,6 +16,22 @@ export const createMreactAppCodemods: readonly [{
     readonly description: "Check AWS Lambda template ESM entrypoints and package-manager production install guidance.";
     readonly id: "0.0.16-aws-lambda-esm-template";
     readonly version: "0.0.16";
+}, {
+    readonly description: "Check app-router tsconfig global type declarations for Slot, Await, and generated route helpers.";
+    readonly id: "0.0.54-app-router-globals";
+    readonly version: "0.0.54";
+}, {
+    readonly description: "Review generated app-router CSS imports and route stylesheet assumptions after automatic route CSS asset support.";
+    readonly id: "0.0.78-route-css-assets";
+    readonly version: "0.0.78";
+}, {
+    readonly description: "Review AWS Lambda build/package scripts for generated Lambda targets, generated import policy, and minimal asset packaging.";
+    readonly id: "0.0.120-aws-lambda-generated-package";
+    readonly version: "0.0.120";
+}, {
+    readonly description: "Review starter pages that still render static hello content; current basic and Tailwind starters use a small interactive cell counter.";
+    readonly id: "0.0.148-interactive-counter-starter";
+    readonly version: "0.0.148";
 }];
 
 // @public (undocumented)

@@ -4,7 +4,7 @@
 
 ```ts
 
-// @public (undocumented)
+// @public
 export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): EdgeRequestHandler;
 
 // @public (undocumented)
