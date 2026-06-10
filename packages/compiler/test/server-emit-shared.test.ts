@@ -268,6 +268,19 @@ export function SunIcon(props: { class?: string }) {
     ]);
   });
 
+  test("static style object parsing rejects invalid bare hyphenated keys", () => {
+    expect(parseStaticStyleObjectLiteral(`{ font-size: 14 }`)).toBeUndefined();
+    expect(parseStaticStyleObjectLiteral(`{ fontSize: 14 }`)).toEqual([
+      { cssName: "font-size", valueCode: "14" },
+    ]);
+    expect(parseStaticStyleObjectLiteral(`{ "font-size": 14 }`)).toEqual([
+      { cssName: "font-size", valueCode: "14" },
+    ]);
+    expect(parseStaticStyleObjectLiteral(`{ "--custom-prop": 4 }`)).toEqual([
+      { cssName: "--custom-prop", valueCode: "4" },
+    ]);
+  });
+
   test("static style object parsing keeps computed keys on the dynamic path", () => {
     expect(parseStaticStyleObjectLiteral(`{ [name]: value }`)).toBeUndefined();
   });

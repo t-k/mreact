@@ -399,7 +399,7 @@ function findMatchingClose(code: string, openIndex: number): number {
 }
 
 function parseStaticObjectKey(rawKey: string): string | undefined {
-  if (/^[A-Za-z_$][\w$-]*$/.test(rawKey)) {
+  if (/^[A-Za-z_$][\w$]*$/.test(rawKey)) {
     return rawKey;
   }
 
