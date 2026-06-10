@@ -342,6 +342,24 @@ export function resolveCompatVendorEntryFiles(resolveDir?: string): Map<string, 
   return files;
 }
 
+const compatVendorPlaceholderImportPattern =
+  /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
+
+export function rewriteCompatVendorPlaceholderImportsForRunner(code: string): string {
+  if (!code.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+    return code;
+  }
+
+  return code.replace(
+    compatVendorPlaceholderImportPattern,
+    (source, quote: string, entry: string) => {
+      const specifier = compatVendorEntrySpecifiers.get(entry);
+
+      return specifier === undefined ? source : `${quote}${specifier}${quote}`;
+    },
+  );
+}
+
 // Marks every compat-family import as external with a deterministic
 // placeholder specifier; writeServerModuleArtifactFiles later rewrites the
 // placeholders to relative paths into the emitted shared vendor chunks.
