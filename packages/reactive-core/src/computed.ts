@@ -72,6 +72,7 @@ export function computed<T>(
       runtimeState.pendingComputed.delete(computation);
       cleanupDeps(computation);
       source.subscribers.clear();
+      source.hasSubscribers = false;
       source.singleSubscriber = undefined;
     },
   };

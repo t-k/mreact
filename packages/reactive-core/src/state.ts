@@ -6,6 +6,10 @@ import { warnOnDuplicateReactiveCoreCopy } from "./duplicate-guard.js";
 warnOnDuplicateReactiveCoreCopy(import.meta.url);
 
 export interface Source {
+  // Mirrors subscribers.size > 0 so hot write sites can skip the notify call
+  // (and its Set.size accessor) entirely for unobserved sources. Maintained
+  // at every subscribers.add/delete/clear site.
+  hasSubscribers?: boolean | undefined;
   singleSubscriber?: ReactiveComputation | undefined;
   subscribers: Set<ReactiveComputation>;
   trackedBy?: ReactiveComputation | undefined;

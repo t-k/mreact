@@ -21,6 +21,7 @@ export function trackSource(source: Source): void {
 
   const previousSize = source.subscribers.size;
   source.subscribers.add(tracker);
+  source.hasSubscribers = true;
   tracker.deps.add(source);
 
   if (previousSize === 0) {
@@ -42,6 +43,7 @@ export function cleanupDeps(computation: ReactiveComputation): void {
     }
 
     if (dep.subscribers.size === 0) {
+      dep.hasSubscribers = false;
       dep.singleSubscriber = undefined;
     } else if (dep.subscribers.size === 1) {
       dep.singleSubscriber = dep.subscribers.values().next().value;
@@ -93,6 +95,7 @@ export function trackIncrementalSource(
 
   const previousSize = source.subscribers.size;
   source.subscribers.add(computation);
+  source.hasSubscribers = true;
   computation.deps.add(source);
   computation.trackingAddedDeps?.push(source);
 
@@ -150,6 +153,7 @@ export function cleanupUntrackedDeps(
     computation.deps.delete(dep);
 
     if (dep.subscribers.size === 0) {
+      dep.hasSubscribers = false;
       dep.singleSubscriber = undefined;
     } else if (dep.subscribers.size === 1) {
       dep.singleSubscriber = dep.subscribers.values().next().value;
@@ -177,6 +181,7 @@ export function cleanupAddedDeps(computation: ReactiveComputation): void {
     computation.deps.delete(dep);
 
     if (dep.subscribers.size === 0) {
+      dep.hasSubscribers = false;
       dep.singleSubscriber = undefined;
     } else if (dep.subscribers.size === 1) {
       dep.singleSubscriber = dep.subscribers.values().next().value;

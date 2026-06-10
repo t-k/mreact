@@ -1,3 +1,4 @@
+import { invalidateDevtoolsWriteCache } from "./cell.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 
 export interface Scheduler {
@@ -86,6 +87,7 @@ export function flushQueuedComputations(): void {
     return;
   }
 
+  invalidateDevtoolsWriteCache();
   scheduled = false;
   flushing = true;
   let firstError: unknown;
