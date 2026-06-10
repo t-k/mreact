@@ -45,6 +45,45 @@ export const clientNavigation = false;
   return { appDir, outDir };
 }
 
+async function createPrerenderedCompatApp(): Promise<{ appDir: string; outDir: string }> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-compat-vendor-"));
+  tempRoots.push(rootDir);
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "view.tsx"),
+    `import { createElement, renderToString } from "@reckona/mreact-compat";
+
+export function View() {
+  return createElement("main", { id: "prerendered" }, "compat:prerendered");
+}
+
+export function renderView() {
+  return renderToString(View);
+}
+`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { renderView } from "./view.js";
+
+export const prerender = true;
+
+export default function Page() {
+  return renderView();
+}
+`,
+  );
+  return { appDir, outDir };
+}
+
 async function routeModuleSources(outDir: string): Promise<string[]> {
   const codeDir = join(outDir, "server", "server-modules", "code");
   const sources: string[] = [];
@@ -93,6 +132,21 @@ describe("compat server vendor chunks", () => {
     } finally {
       await server.close();
     }
+  }, 120_000);
+
+  test("prerenders compat routes with shared vendor chunks during build", async () => {
+    const { appDir, outDir } = await createPrerenderedCompatApp();
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      prerenderedRoutes?: Record<string, { html: string; status: number }>;
+    };
+
+    expect(manifest.prerenderedRoutes?.["/"]?.status).toBe(200);
+    expect(manifest.prerenderedRoutes?.["/"]?.html).toContain(
+      '<main id="prerendered">compat:prerendered</main>',
+    );
   }, 120_000);
 
   test("keeps non-compat builds free of vendor chunk machinery", async () => {

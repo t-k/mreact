@@ -64,6 +64,7 @@ import {
   importAppRouterFileModule,
   importAppRouterSourceModule,
   fileImportMetaUrlPlugin,
+  rewriteCompatVendorPlaceholderImportsForRunner,
 } from "./module-runner.js";
 import { bytesResponse, htmlResponse } from "./http.js";
 import { isNotFoundError, isRedirectError, rewriteLocation } from "./navigation.js";
@@ -2952,7 +2953,8 @@ async function loadServerModule(
       serverModuleCacheVersion,
     });
   }
-  const moduleCode = prebuiltCode ?? code;
+  const moduleCode =
+    prebuiltCode === undefined ? code : rewriteCompatVendorPlaceholderImportsForRunner(prebuiltCode);
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
@@ -3604,7 +3606,8 @@ async function loadServerStreamModule(
       serverModuleCacheVersion,
     });
   }
-  const moduleCode = prebuiltCode ?? code;
+  const moduleCode =
+    prebuiltCode === undefined ? code : rewriteCompatVendorPlaceholderImportsForRunner(prebuiltCode);
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
