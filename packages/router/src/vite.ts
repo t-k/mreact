@@ -549,6 +549,7 @@ async function handleAppRouterViteRequest(
       await renderAppRequest({
         appDir: project.routesDir,
         define: options.define,
+        dev: true,
         importPolicy: {
           ...options.importPolicy,
           allowedSourceDirs: project.allowedSourceDirs,

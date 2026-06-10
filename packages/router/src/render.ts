@@ -185,6 +185,9 @@ export interface RenderAppRequestOptions {
   routes?: readonly AppRoute[] | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  // True when serving through a dev server: request-time server transforms
+  // are expected there and must not trigger the production prebuild warning.
+  dev?: boolean | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   serverActionReferencesByFile?:
@@ -479,7 +482,7 @@ type StreamModuleExports = Record<string, unknown> & {
 
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverTransformCacheCounters = createRouterRuntimeCacheCounters();
-let productionDynamicServerTransformWarned = false;
+const productionDynamicServerTransformWarned = new Set<string>();
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const serverSourceFileCacheCounters = createRouterRuntimeCacheCounters();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
@@ -766,6 +769,7 @@ export async function resolveAppRouterMiddleware(options: {
 }
 
 async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
+  warnProductionRenderWithoutPrebuiltModules(options);
   const timing = createRenderTiming(options.logger);
   const clientRouteInferenceCache =
     options.clientRouteInferenceCache ?? createClientRouteInferenceCache();
@@ -2643,7 +2647,22 @@ function transformServerModule(options: {
     return cached;
   }
 
-  warnProductionDynamicServerTransform();
+  // Only renders that were handed a prebuild map can have a prebuild gap;
+  // dev servers pass no serverModules and transform at request time by design.
+  if (options.serverModules !== undefined) {
+    warnProductionDynamicServerTransform(
+      options.filename,
+      options.serverOutput,
+      artifact === undefined
+        ? "no prebuilt server module for this output mode"
+        : !prebuiltServerModuleOutputOptionsMatch(
+              artifact,
+              options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {},
+            )
+          ? `serverAwaitHydration mismatch (artifact=${artifact.metadata?.serverAwaitHydration === true}, requested=${options.serverAwaitHydration === true})`
+          : "stale prebuilt server module (source hash changed)",
+    );
+  }
 
   const output = transform({
     code: options.code,
@@ -2674,14 +2693,60 @@ function transformServerModule(options: {
 
 export const __transformServerModuleForTesting = transformServerModule;
 
-function warnProductionDynamicServerTransform(): void {
-  if (process.env.NODE_ENV !== "production" || productionDynamicServerTransformWarned) {
+let productionRenderWithoutPrebuiltModulesWarned = false;
+
+export function __resetProductionRenderWarningsForTesting(): void {
+  productionRenderWithoutPrebuiltModulesWarned = false;
+  productionDynamicServerTransformWarned.clear();
+}
+
+// Covers the deployment that forgot prebuilt modules entirely; per-module
+// gaps inside a provided prebuild map are reported by
+// warnProductionDynamicServerTransform with the affected file instead.
+export function __warnProductionRenderWithoutPrebuiltModulesForTesting(options: {
+  dev?: boolean | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+}): void {
+  warnProductionRenderWithoutPrebuiltModules(options);
+}
+
+function warnProductionRenderWithoutPrebuiltModules(options: {
+  dev?: boolean | undefined;
+  serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
+}): void {
+  if (
+    process.env.NODE_ENV !== "production" ||
+    options.dev === true ||
+    options.serverModules !== undefined ||
+    productionRenderWithoutPrebuiltModulesWarned
+  ) {
     return;
   }
 
-  productionDynamicServerTransformWarned = true;
+  productionRenderWithoutPrebuiltModulesWarned = true;
   console.warn(
-    "mreact router: dynamic server transform path ran in production. Production deployments should provide prebuilt serverModules; otherwise request-time transforms use development compiler settings.",
+    "mreact router: production render without prebuilt serverModules. Request-time transforms use development compiler settings; pass the build output's serverModules (or set dev: true for dev servers).",
+  );
+}
+
+function warnProductionDynamicServerTransform(
+  filename: string,
+  serverOutput: ServerOutputMode,
+  reason: string,
+): void {
+  if (process.env.NODE_ENV !== "production") {
+    return;
+  }
+
+  const warnedKey = `${filename}\0${serverOutput}`;
+
+  if (productionDynamicServerTransformWarned.has(warnedKey)) {
+    return;
+  }
+
+  productionDynamicServerTransformWarned.add(warnedKey);
+  console.warn(
+    `mreact router: dynamic server transform path ran in production for ${filename} (serverOutput=${serverOutput}): ${reason}. Production deployments should provide prebuilt serverModules; otherwise request-time transforms use development compiler settings.`,
   );
 }
 
