@@ -44,6 +44,39 @@ configureAuth({
 
 Import this setup from a server-loaded module such as the root layout or another app bootstrap file. Keep `serializeClaims` conservative because its return value can be embedded in HTML when a page opts in.
 
+## Override auth config per request
+
+Most apps use one process-wide `configureAuth()` call. Use `runWithAuthRequest()` only for custom server pipelines that call auth helpers outside the App Router request lifecycle, or for multi-tenant handlers that need different redirect targets or claim serialization per request.
+
+```ts
+// src/server/tenant-handler.ts
+import { getCurrentSession, getSessionClaims, runWithAuthRequest } from "@reckona/mreact-auth";
+
+export async function handleTenantRequest(request: Request, tenant: Tenant) {
+  return runWithAuthRequest(
+    async () => {
+      const session = await getCurrentSession(request, tenant.sessions);
+
+      return Response.json({
+        userId: session?.data.userId,
+        claims: getSessionClaims(),
+      });
+    },
+    {
+      config: {
+        redirectTo: `/${tenant.slug}/login`,
+        forbiddenTo: `/${tenant.slug}/forbidden`,
+        serializeClaims(data) {
+          return serializeTenantClaims(data, tenant.publicClaimPolicy);
+        },
+      },
+    },
+  );
+}
+```
+
+Do not mutate global auth configuration per tenant or per request. The request-scoped config applies only while the callback runs, which keeps concurrent requests isolated in long-lived Node, Cloudflare, Lambda, or container processes.
+
 ## Create sessions during login
 
 Authentication starts after your app has verified the credentials or identity provider result. Store the user id plus the authorization claims your guards need on later requests.

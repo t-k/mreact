@@ -39,7 +39,7 @@ Use a custom handler when you need adapter options such as `allowedHosts`, `serv
 
 ## Cold start and preload
 
-Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. Use `createPreloadedAwsLambdaRequestHandler()` when first-hit latency matters and you accept more initialization work.
+Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. This also applies to stream routes with a loading boundary when the loader source contains router control-flow helpers such as `redirect()`, `notFound()`, or `throwNotFound()`: those routing decisions settle before page render artifacts are loaded. Use `createPreloadedAwsLambdaRequestHandler()` when first-hit latency matters and you accept more initialization work.
 
 Measure before changing preload. Compare cold start, first request, and warm request timings for the same route and Lambda memory size.
 

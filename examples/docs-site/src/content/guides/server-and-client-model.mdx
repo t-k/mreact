@@ -68,6 +68,28 @@ export default function WidgetsPage() {
 
 Use this pattern for counters, menus, analytics bridges, small controls, or isolated browser-only integrations inside an otherwise server-rendered page.
 
+## Reactive update scheduling
+
+`cell.set()` updates the stored value immediately, invalidates derived values synchronously, and schedules effects and compiler-emitted DOM bindings in a microtask. Reads through `.get()` see the latest value before that flush runs.
+
+Use `batch()` for synchronous transactions and `batchAsync()` only for intentionally scoped async transactions. `batchAsync()` keeps effect flushing suspended across every awaited step and releases the queued work once the callback resolves or rejects, so avoid wrapping long I/O or user interaction flows.
+
+```ts
+import { batchAsync, cell, effect } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+effect(() => {
+  console.log(count.get());
+});
+
+await batchAsync(async () => {
+  count.set(1);
+  await Promise.resolve();
+  count.set(2);
+});
+```
+
 ## Route-level "use client"
 
 Use route-level `"use client"` when the whole page, layout, or template should hydrate as a client route.

@@ -69,7 +69,34 @@ export async function GET(request: Request) {
 }
 ```
 
-Use `runWithAuthRequest()` when integration code needs request-scoped claims during a manually assembled request pipeline.
+## Request-scoped auth
+
+Use `runWithAuthRequest()` when integration code needs request-scoped claims during a manually assembled request pipeline. Pass `{ config }` when that request should use different auth redirects or claim serialization without changing the process-wide defaults.
+
+```ts
+import { getCurrentSession, getSessionClaims, runWithAuthRequest } from "@reckona/mreact-auth";
+
+export async function handleRequest(request: Request, tenant: Tenant) {
+  return runWithAuthRequest(
+    async () => {
+      await getCurrentSession(request, tenant.sessionStore);
+
+      return Response.json({
+        claims: getSessionClaims(),
+      });
+    },
+    {
+      config: {
+        redirectTo: `/${tenant.slug}/login`,
+        forbiddenTo: `/${tenant.slug}/forbidden`,
+        serializeClaims: (data) => serializeTenantClaims(data, tenant),
+      },
+    },
+  );
+}
+```
+
+Server calls without an active request scope return `undefined` from `getSessionClaims()` instead of falling back to shared module-global claims.
 
 ## Related pages
 
