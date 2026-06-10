@@ -106,7 +106,7 @@ a:hover {
   display: grid;
   gap: 1rem;
   grid-area: header;
-  grid-template-columns: minmax(18rem, 42rem) auto minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(18rem, 42rem) minmax(0, 1fr) auto;
   min-height: 4.5rem;
   padding: 0.8rem 1.25rem;
   position: sticky;
@@ -131,8 +131,8 @@ a:hover {
   display: flex;
   flex: none;
   gap: 0.45rem;
-  grid-column: 2;
-  justify-self: start;
+  grid-column: 4;
+  justify-self: end;
 }
 
 .site-brand {
@@ -140,8 +140,7 @@ a:hover {
   display: block;
   font-size: 1.15rem;
   font-weight: 700;
-  grid-column: 4;
-  justify-self: end;
+  grid-column: 1;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -197,7 +196,7 @@ a:hover {
 }
 
 .site-search {
-  grid-column: 1;
+  grid-column: 2;
   justify-self: start;
   min-width: 0;
   position: relative;
@@ -1056,18 +1055,18 @@ a:hover {
   }
 
   .site-brand {
-    grid-column: 2;
-    grid-row: 2;
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .site-header-actions {
-    grid-column: 1;
-    grid-row: 2;
+    grid-column: 2;
+    grid-row: 1;
   }
 
   .site-search {
     grid-column: 1 / -1;
-    grid-row: 1;
+    grid-row: 2;
   }
 
   .site-search-results {
