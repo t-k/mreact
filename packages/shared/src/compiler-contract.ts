@@ -52,6 +52,7 @@ export interface ModuleMetadata {
   serverBootstrapNonce?: string;
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
+  serverAwaitHydration?: boolean;
   reactSuspenseRevealScriptSrc?: string;
   components: ComponentMetadata[];
   imports: RuntimeImport[];

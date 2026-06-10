@@ -285,6 +285,36 @@ export default function Page(props) {
     expect(queryStateScript).not.toContain("</body>");
   });
 
+  test("injects dehydrated query state before the final body close tag", async () => {
+    const fixture = await createAppFixture("mreact-app-query-final-body-state");
+    const queryClient = createQueryClient();
+    await fixture.write(
+      "page.tsx",
+      `export async function loader({ queryClient }) {
+  await queryClient.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: async () => ({ name: "Ada" }),
+  });
+}
+
+export default function Page(props) {
+  return <html><head></head><body><script dangerouslySetInnerHTML={{ __html: "const marker = \\"</body>\\";" }} /></body></html>;
+}`,
+    );
+
+    const response = await fixture.render("/", {
+      queryClient,
+    });
+    const html = await responseText(response);
+    const literalBodyClose = html.indexOf('const marker = "</body>";');
+    const script = html.indexOf('<script type="application/json" id="__mreact_query_state">');
+    const finalBodyClose = html.toLowerCase().lastIndexOf("</body>");
+
+    expect(literalBodyClose).toBeGreaterThan(-1);
+    expect(script).toBeGreaterThan(literalBodyClose);
+    expect(script).toBeLessThan(finalBodyClose);
+  });
+
   test("injects auth claims without replace-dollar expansion", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-auth-dollar-state-"));
     const value = "claim$`before$'after$&whole";
@@ -3501,6 +3531,24 @@ export default function Page(props) {
     expect(await response.json()).toEqual({ ok: true });
   });
 
+  test("route handlers return an Allow header for unsupported methods", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-allow-"));
+    await mkdir(join(appDir, "api", "time"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "time", "route.ts"),
+      "export function GET() { return Response.json({ ok: true }); }\nexport function POST() { return Response.json({ ok: true }); }",
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/api/time", { method: "DELETE" }),
+    });
+
+    expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("GET, POST");
+    expect(await response.text()).toBe("Method Not Allowed");
+  });
+
   test("runtime route handlers honor user Vite plugins", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-vite-plugin-"));
     await mkdir(join(appDir, "api", "message"), { recursive: true });
@@ -4132,6 +4180,54 @@ export function loader() {
 export default function Page() {
   const name = Promise.resolve("Ada");
   return <main><Await value={name}>{value => <strong>{value}</strong>}</Await></main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      logger: {
+        debug(event) {
+          events.push(event);
+        },
+      },
+      request: new Request("http://local.test/"),
+    });
+    const timing = events.find((event) => event.type === "router:render:timing");
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(timing?.status).toBe(303);
+    expect(timing?.phases).toEqual(
+      expect.objectContaining({
+        loaderStartMs: expect.any(Number),
+        loaderWaitMs: expect.any(Number),
+      }),
+    );
+    expect(timing?.phases).not.toHaveProperty("streamTransformMs");
+    expect(timing?.phases).not.toHaveProperty("streamConstructionMs");
+  });
+
+  test("defers stream loading boundary render until after loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-loading-loader-redirect-"));
+    const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      `export default function Loading() {
+  return <p>loading</p>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export const stream = true;
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
 }`,
     );
 
@@ -4898,6 +4994,26 @@ export default function Page(props) {
     expect(firstChunk).toContain(
       '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
     );
+  });
+
+  test("renders special not-found routes from built server source files without filesystem access", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-not-found-boundary-"));
+    const notFoundFile = join(appDir, "not-found.mreact.tsx");
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/missing"),
+      routes: [],
+      serverSourceFiles: new Map([
+        [
+          notFoundFile,
+          "export default function NotFound() { return <html><body><main>Built Not Found</main></body></html>; }",
+        ],
+      ]),
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain("<main>Built Not Found</main>");
   });
 
   test("wraps stream routes with layouts and hydration markers", async () => {

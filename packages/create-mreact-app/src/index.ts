@@ -70,14 +70,14 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.152",
-  "@reckona/mreact-devtools": "^0.0.152",
-  "@reckona/mreact-forms": "^0.0.152",
-  "@reckona/mreact": "^0.0.152",
-  "@reckona/mreact-query": "^0.0.152",
-  "@reckona/mreact-reactive-core": "^0.0.152",
+  "@reckona/mreact-auth": "^0.0.153",
+  "@reckona/mreact-devtools": "^0.0.153",
+  "@reckona/mreact-forms": "^0.0.153",
+  "@reckona/mreact": "^0.0.153",
+  "@reckona/mreact-query": "^0.0.153",
+  "@reckona/mreact-reactive-core": "^0.0.153",
   "@reckona/mreact-reactive-dom": "^0.0.51",
-  "@reckona/mreact-router": "^0.0.152",
+  "@reckona/mreact-router": "^0.0.153",
   "@reckona/mreact-test-utils": "^0.0.51",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
@@ -170,7 +170,7 @@ export async function upgradeMreactApp(
       description: codemod.description,
       id: codemod.id,
     }));
-  const packageJsonChanged = updatedDependencies.length > 0 || codemods.length > 0;
+  const packageJsonChanged = updatedDependencies.length > 0;
   const changed = packageJsonChanged || tsconfigUpdate.changed;
 
   if (changed && options.dryRun !== true) {
@@ -218,6 +218,30 @@ export const createMreactAppCodemods = [
       "Check AWS Lambda template ESM entrypoints and package-manager production install guidance.",
     id: "0.0.16-aws-lambda-esm-template",
     version: "0.0.16",
+  },
+  {
+    description:
+      "Check app-router tsconfig global type declarations for Slot, Await, and generated route helpers.",
+    id: "0.0.54-app-router-globals",
+    version: "0.0.54",
+  },
+  {
+    description:
+      "Review generated app-router CSS imports and route stylesheet assumptions after automatic route CSS asset support.",
+    id: "0.0.78-route-css-assets",
+    version: "0.0.78",
+  },
+  {
+    description:
+      "Review AWS Lambda build/package scripts for generated Lambda targets, generated import policy, and minimal asset packaging.",
+    id: "0.0.120-aws-lambda-generated-package",
+    version: "0.0.120",
+  },
+  {
+    description:
+      "Review starter pages that still render static hello content; current basic and Tailwind starters use a small interactive cell counter.",
+    id: "0.0.148-interactive-counter-starter",
+    version: "0.0.148",
   },
 ] as const;
 
@@ -1148,6 +1172,9 @@ export default function Page() {
         <p class="text-sm text-slate-300">
           Demo account: <code>demo@example.com</code> / <code>kanban1234</code>
         </p>
+        <p class="text-xs text-amber-200">
+          Replace these development-only credentials before production.
+        </p>
         <label class="grid gap-1 text-sm text-slate-300">
           Email
           <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="email" type="email" defaultValue="demo@example.com" required />
@@ -1168,6 +1195,8 @@ export default function Page() {
 const dashboardLoginRouteSource = `import { createSession } from "@reckona/mreact-auth";
 import { sessions } from "../../session-store.js";
 
+// Development-only demo credentials. Replace this route with your real
+// authentication provider before deploying the dashboard starter.
 const demoAccount = {
   email: "demo@example.com",
   password: "kanban1234",
@@ -1175,6 +1204,13 @@ const demoAccount = {
 } as const;
 
 export async function POST(request: Request): Promise<Response> {
+  if (process.env.NODE_ENV !== "development" && process.env.NODE_ENV !== "test") {
+    return Response.json(
+      { ok: false, error: "Development-only demo credentials are disabled outside development." },
+      { status: 403 },
+    );
+  }
+
   const form = await request.formData();
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
@@ -1604,7 +1640,7 @@ Bindings are declared in \`wrangler.toml\` and typed in \`worker-env.d.ts\`. The
         ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
         : "";
   const dashboardNote = options.dashboard
-    ? "\nThis is the dashboard starter. It includes auth guards, a working demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`.\n"
+    ? "\nThis is the dashboard starter. It includes auth guards, a development-only demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`. Replace these credentials before production; the generated login route enables them only when `NODE_ENV` is `development` or `test`.\n"
     : "";
   const pnpmTroubleshooting =
     packageManager === "pnpm"

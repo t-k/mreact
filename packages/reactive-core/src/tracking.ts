@@ -51,6 +51,22 @@ export function cleanupDeps(computation: ReactiveComputation): void {
   computation.deps.clear();
 }
 
+export function nextTrackingVersionFor(computation: ReactiveComputation): number {
+  const nextTrackingVersion = (computation.trackingVersion ?? 0) + 1;
+
+  if (Number.isSafeInteger(nextTrackingVersion)) {
+    return nextTrackingVersion;
+  }
+
+  for (const dep of computation.deps) {
+    if (dep.trackedBy === computation) {
+      dep.trackedVersion = undefined;
+    }
+  }
+
+  return 1;
+}
+
 export function trackIncrementalSource(
   source: Source,
   computation: ReactiveComputation,
@@ -175,14 +191,12 @@ export function notifySubscribers(source: Source): void {
 
   const cachedSingleSubscriber = source.singleSubscriber;
   if (cachedSingleSubscriber !== undefined) {
-    if (cachedSingleSubscriber.disposed || cachedSingleSubscriber.queued) {
-      return;
-    }
-
     runtimeState.notificationDepth += 1;
 
     try {
-      cachedSingleSubscriber.markDirty();
+      if (!cachedSingleSubscriber.disposed && !cachedSingleSubscriber.queued) {
+        cachedSingleSubscriber.markDirty();
+      }
     } finally {
       runtimeState.notificationDepth -= 1;
 

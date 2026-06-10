@@ -181,7 +181,7 @@ export function createMreactAppSuccessText(options: {
         : "pnpm dev";
   const dashboardNote =
     options.template === "dashboard"
-      ? ["", "Demo account:", "  demo@example.com / kanban1234"]
+      ? ["", "development-only demo account:", "  demo@example.com / kanban1234"]
       : [];
 
   return [

@@ -40,8 +40,43 @@ export function collectBindingNames(statement: unknown): string[] {
 
   return readArray(object.declarations).flatMap((declaration) => {
     const id = readObject(readObject(declaration).id);
-    return typeof id.name === "string" ? [id.name] : [];
+    return collectBindingNamesFromPattern(id);
   });
+}
+
+function collectBindingNamesFromPattern(pattern: Record<string, unknown>): string[] {
+  if (typeof pattern.name === "string") {
+    return [pattern.name];
+  }
+
+  if (pattern.type === "AssignmentPattern") {
+    return collectBindingNamesFromPattern(readObject(pattern.left));
+  }
+
+  if (pattern.type === "RestElement") {
+    return collectBindingNamesFromPattern(readObject(pattern.argument));
+  }
+
+  if (pattern.type === "ObjectPattern") {
+    return readArray(pattern.properties).flatMap((property) => {
+      const object = readObject(property);
+
+      if (object.type === "RestElement") {
+        return collectBindingNamesFromPattern(readObject(object.argument));
+      }
+
+      return collectBindingNamesFromPattern(readObject(object.value));
+    });
+  }
+
+  if (pattern.type === "ArrayPattern") {
+    return readArray(pattern.elements).flatMap((element) => {
+      const object = readObject(element);
+      return Object.keys(object).length === 0 ? [] : collectBindingNamesFromPattern(object);
+    });
+  }
+
+  return [];
 }
 
 export function collectImportBindingNames(statement: unknown): string[] {

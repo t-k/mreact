@@ -284,6 +284,10 @@ describe("create-mreact-app scaffolder", () => {
     expect(login).toContain('method="post"');
     expect(login).toContain('action="/api/login"');
     expect(loginRoute).toContain("createSession");
+    expect(loginRoute).toContain("NODE_ENV");
+    expect(loginRoute).toContain('process.env.NODE_ENV !== "development"');
+    expect(loginRoute).toContain('process.env.NODE_ENV !== "test"');
+    expect(loginRoute).toContain("Development-only demo credentials");
     expect(loginRoute).toContain('roles: ["admin"]');
     expect(logoutRoute).toContain("destroySession");
     expect(middleware).toContain('matcher: ["/dashboard/:path*"]');
@@ -295,6 +299,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(readme).toContain("dashboard starter");
     expect(readme).toContain("demo@example.com");
     expect(readme).toContain("kanban1234");
+    expect(readme).toContain("development-only");
     expect(readme).toContain("Adding native dependencies");
   });
 
@@ -411,6 +416,9 @@ describe("create-mreact-app scaffolder", () => {
       "@reckona/mreact-router",
     ]);
     expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.16-import-policy-normalize");
+    expect(dryRun.codemods.map((item) => item.id)).toContain(
+      "0.0.148-interactive-counter-starter",
+    );
     expect(dryRunPackage).toContain('"@reckona/mreact": "^0.0.10"');
 
     const result = await upgradeMreactApp({ directory, fromVersion: "0.0.10" });

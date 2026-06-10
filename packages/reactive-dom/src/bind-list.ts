@@ -265,7 +265,6 @@ function bindKeyedList<T>(
         if (!record.update(keyedItem.item, keyedItem.index, currentItems)) {
           reusedAllRecords = false;
           removeRecordNodes([existingRecord]);
-          existingRecord.dispose();
           record = createKeyedRecord(
             keyedItem.item,
             keyedItem.index,
@@ -292,12 +291,18 @@ function bindKeyedList<T>(
       insertionParent.childNodes.length === 1;
 
     if (canClaimEmptyParent) {
-      disposeStaleRecords(records, nextRecords);
+      const disposeError = disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
+      if (disposeError !== undefined) {
+        throw disposeError;
+      }
       ownsParent = true;
     } else if (ownsCurrentParent) {
-      disposeStaleRecords(records, nextRecords);
+      const disposeError = disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
+      if (disposeError !== undefined) {
+        throw disposeError;
+      }
       ownsParent = true;
     } else {
       if (!reusedAllRecords || nextRecords.size !== records.size) {
@@ -836,21 +841,39 @@ function removeStaleRecords(
 function disposeStaleRecords(
   records: Map<unknown, KeyedRecord>,
   nextRecords: Map<unknown, KeyedRecord>,
-): void {
+): unknown {
+  let firstError: unknown;
+
   for (const [itemKey, record] of records) {
     if (!nextRecords.has(itemKey)) {
-      record.dispose();
+      try {
+        record.dispose();
+      } catch (error) {
+        firstError ??= error;
+      }
     }
   }
+
+  return firstError;
 }
 
 function removeRecordNodes(records: Iterable<KeyedRecord>): void {
+  let firstError: unknown;
+
   for (const record of records) {
-    record.dispose();
+    try {
+      record.dispose();
+    } catch (error) {
+      firstError ??= error;
+    }
 
     for (const node of record.nodes) {
       node.parentNode?.removeChild(node);
     }
+  }
+
+  if (firstError !== undefined) {
+    throw firstError;
   }
 }
 

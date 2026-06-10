@@ -52,6 +52,8 @@ document.startViewTransition(() => {
 
 If you need the DOM committed synchronously before the current task continues, for example to measure layout right after an update, wrap the update in `flushSync` from the React DOM-compatible entrypoint (`react-dom` in mreact apps, `@reckona/mreact-dom` standalone), which drains pending reactive computations before returning. Updates deferred through `startTransition` or `useDeferredValue` run on a macrotask scheduler and are not guaranteed to land inside a view transition capture.
 
+`batchAsync()` keeps effect flushing suspended for the full callback, including every awaited step, then releases the queued work once when the callback resolves or rejects. Use it for short transaction-style updates where intermediate effects would be misleading; avoid wrapping long I/O or user interaction flows because observers will not see effects until the batch finishes, even though direct `.get()` reads still see the latest cell values.
+
 ## Testing
 
 `@reckona/mreact-reactive-core/testing` exports `flushMicrotasks()` and

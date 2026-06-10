@@ -106,4 +106,43 @@ describe("server action registry cache (Issue 067)", () => {
     });
     expect(response.status).toBe(415);
   });
+
+  test("does not scan node_modules while building the server action registry", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-actions-skip-node-modules-"));
+    await writeActionFixture(appDir);
+    await mkdir(join(appDir, "node_modules", "fixture-actions"), { recursive: true });
+    await writeFile(
+      join(appDir, "node_modules", "fixture-actions", "index.ts"),
+      `"use server";\nthrow new Error("node_modules server action file was scanned");\nexport function ignored() {}\n`,
+    );
+
+    const page = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await page.text();
+    const csrf = /name="__mreact_csrf"\s+value="([^"]+)"/.exec(html)?.[1] ?? "";
+    const nonce = /name="__mreact_action_nonce"\s+value="([^"]+)"/.exec(html)?.[1] ?? "";
+    const cookie = page.headers.get("set-cookie")?.split(";")[0] ?? "";
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "ok",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+  });
 });

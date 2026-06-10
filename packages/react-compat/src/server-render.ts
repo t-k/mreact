@@ -60,10 +60,26 @@ export function renderToString<TProps>(
       return typeof rendered === "string"
         ? rendered
         : renderNodeToString(rendered, runtime, "0.0");
+    } catch (error) {
+      if (isThenable(error)) {
+        throw new Error(
+          "renderToString does not support Suspense. Use a streaming server renderer for components that suspend.",
+        );
+      }
+
+      throw error;
     } finally {
       runtime.dispose();
     }
   });
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 function renderNodeToString(
@@ -442,7 +458,6 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   minLength: "minlength",
   noValidate: "novalidate",
   playsInline: "playsinline",
-  readOnly: "readOnly",
   rowSpan: "rowspan",
   spellCheck: "spellcheck",
   srcDoc: "srcdoc",

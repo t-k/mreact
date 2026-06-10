@@ -144,6 +144,8 @@ export interface ModuleMetadata {
     // (undocumented)
     reactSuspenseRevealScriptSrc?: string;
     // (undocumented)
+    serverAwaitHydration?: boolean;
+    // (undocumented)
     serverBootstrap?: ServerBootstrapMode;
     // (undocumented)
     serverBootstrapNonce?: string;

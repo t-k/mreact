@@ -230,6 +230,37 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("removes stale keyed row nodes even when their disposer throws", async () => {
+    const items = cell([{ id: "a", label: "A" }]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        registerDispose(() => {
+          if (item.id === "a") {
+            throw new Error("dispose a");
+          }
+        });
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    items.set([{ id: "b", label: "B" }]);
+    await expect(flushEffects()).rejects.toThrow("dispose a");
+
+    expect(parent.innerHTML).toBe("<li>B</li><!--list-->");
+
+    dispose();
+  });
+
   test("keeps numeric and string keys as distinct keyed rows", async () => {
     const items = cell([
       { id: 1 as number | string, label: "number" },

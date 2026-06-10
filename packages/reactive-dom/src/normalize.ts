@@ -3,8 +3,13 @@ import type { RenderValue } from "./types.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("react.fragment");
+const maxRenderValueDepth = 256;
 
-export function normalizeRenderValue(value: RenderValue): Node[] {
+export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
+  if (depth > maxRenderValueDepth) {
+    throw new Error(`mreact render value is too deep: exceeded ${maxRenderValueDepth} levels`);
+  }
+
   if (value === null || value === undefined || typeof value === "boolean") {
     return [];
   }
@@ -22,7 +27,7 @@ export function normalizeRenderValue(value: RenderValue): Node[] {
   }
 
   if (isCompatElement(value)) {
-    return normalizeCompatElement(value);
+    return normalizeCompatElement(value, depth + 1);
   }
 
   const nodes: Node[] = [];
@@ -32,7 +37,7 @@ export function normalizeRenderValue(value: RenderValue): Node[] {
   }
 
   for (const item of value as Iterable<RenderValue>) {
-    nodes.push(...normalizeRenderValue(item));
+    nodes.push(...normalizeRenderValue(item, depth + 1));
   }
 
   return nodes;
@@ -60,16 +65,17 @@ function isIterable(value: unknown): value is Iterable<unknown> {
   );
 }
 
-function normalizeCompatElement(element: CompatElement): Node[] {
+function normalizeCompatElement(element: CompatElement, depth: number): Node[] {
   const props = element.props ?? {};
 
   if (element.type === REACT_COMPAT_FRAGMENT_TYPE) {
-    return normalizeRenderValue(props.children as RenderValue);
+    return normalizeRenderValue(props.children as RenderValue, depth + 1);
   }
 
   if (typeof element.type === "function") {
     return normalizeRenderValue(
       (element.type as (props: Record<string, unknown>) => RenderValue)(props),
+      depth + 1,
     );
   }
 
@@ -81,7 +87,7 @@ function normalizeCompatElement(element: CompatElement): Node[] {
 
   applyCompatElementProps(node, props);
 
-  for (const child of normalizeRenderValue(props.children as RenderValue)) {
+  for (const child of normalizeRenderValue(props.children as RenderValue, depth + 1)) {
     node.appendChild(child);
   }
 

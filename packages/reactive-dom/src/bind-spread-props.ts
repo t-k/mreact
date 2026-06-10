@@ -15,9 +15,11 @@ export function bindSpreadProps(
   let target: Element = element;
   const previousProps = new Map<string, unknown>();
 
-  const disposeEffect = effect(() => {
-    applySpreadProps(target, props(), previousProps);
-  });
+  const createTrackedApplyEffect = (): Dispose =>
+    effect(() => {
+      applySpreadProps(target, props(), previousProps);
+    });
+  let disposeEffect = createTrackedApplyEffect();
   const binding: PropBinding = {
     dispose() {
       disposeEffect();
@@ -26,10 +28,10 @@ export function bindSpreadProps(
     retarget(nextElement) {
       const previousTarget = target;
       target = nextElement;
-      const nextProps = props();
 
       clearSpreadProps(previousTarget, previousProps);
-      applySpreadProps(target, nextProps, previousProps);
+      disposeEffect();
+      disposeEffect = createTrackedApplyEffect();
     },
   };
 

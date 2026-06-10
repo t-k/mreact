@@ -8,7 +8,14 @@ export function createRoot(
   render: () => RenderValue,
 ): Dispose {
   const scope = createScope();
-  const nodes = withScope(scope, () => normalizeRenderValue(render()));
+  let nodes: Node[];
+
+  try {
+    nodes = withScope(scope, () => normalizeRenderValue(render()));
+  } catch (error) {
+    disposeScope(scope);
+    throw error;
+  }
 
   container.replaceChildren(...nodes);
 

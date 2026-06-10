@@ -21,6 +21,50 @@ describe("compiler oxc-transform edge branches", () => {
     expect(result).toContain("export const x");
   });
 
+  test.each([
+    {
+      name: "export type declarations",
+      source: "export type { Foo };\nconst x = 1;",
+      absent: [/export\s+type/],
+      present: ["const x = 1;"],
+    },
+    {
+      name: "non-null assertions",
+      source: "const x = maybe()!;",
+      absent: [/maybe\(\)!/],
+      present: ["const x = maybe();"],
+    },
+    {
+      name: "satisfies expressions",
+      source: "const v = value satisfies Foo;",
+      absent: [/satisfies\s+Foo/],
+      present: ["const v = value;"],
+    },
+    {
+      name: "arrow function type parameters",
+      source: "const f = <T extends object>(input) => input;",
+      absent: [/<T extends object>/],
+      present: ["const f = (input) => input;"],
+    },
+  ])("stripTypeScriptWithOxc strips $name missed by the fast-path heuristic", (sample) => {
+    const result = stripTypeScriptWithOxc(sample.source);
+
+    for (const pattern of sample.absent) {
+      expect(result).not.toMatch(pattern);
+    }
+    for (const expected of sample.present) {
+      expect(result).toContain(expected);
+    }
+  });
+
+  test("stripTypeScriptWithOxc strips TypeScript annotations when a missed construct is present", () => {
+    const result = stripTypeScriptWithOxc("const f = <T extends object>(input: T) => input;");
+
+    expect(result).not.toContain("<T extends object>");
+    expect(result).not.toContain("input: T");
+    expect(result).toContain("const f = (input) => input;");
+  });
+
   test("stripTypeScriptWithOxc memoizes repeated TypeScript snippets", async () => {
     const source = await readFile(
       join(process.cwd(), "packages/compiler/src/oxc-transform.ts"),

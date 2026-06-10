@@ -126,6 +126,47 @@ describe("modularReact vite plugin transform", () => {
     expect((result as { code: string }).code).toContain('src: "/assets/mreact-reorder.js"');
   });
 
+  test("evaluates server bootstrap nonce functions once per plugin instance", async () => {
+    let nonceCalls = 0;
+    const plugin = modularReact({
+      serverOutput: "stream",
+      serverBootstrap: "out-of-order-reorder",
+      serverBootstrapNonce: () => {
+        nonceCalls += 1;
+        return `nonce-${nonceCalls}`;
+      },
+    });
+    const transform = plugin.transform;
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    const context = {
+      error(error: string | Error): never {
+        throw typeof error === "string" ? new Error(error) : error;
+      },
+      warn() {},
+    } as never;
+
+    const first = await transform.call(
+      context,
+      'export function App() { const name = Promise.resolve("Ada"); return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await></section>; }',
+      "/src/First.tsx",
+      { ssr: true },
+    );
+    const second = await transform.call(
+      context,
+      'export function App() { const name = Promise.resolve("Grace"); return <section><Await value={name} placeholder={<span>Loading</span>}>{value => <span>{value}</span>}</Await></section>; }',
+      "/src/Second.tsx",
+      { ssr: true },
+    );
+
+    expect(nonceCalls).toBe(1);
+    expect((first as { code: string }).code).toContain('nonce: "nonce-1"');
+    expect((second as { code: string }).code).toContain('nonce: "nonce-1"');
+  });
+
   test("forwards React Suspense external reveal script src for ssr stream transforms", async () => {
     const plugin = modularReact({
       serverOutput: "stream",

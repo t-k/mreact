@@ -69,6 +69,14 @@ describe("react-compat server render", () => {
     expect(renderToString(App)).toBe("<span>child</span>");
   });
 
+  test("throws an explanatory error when renderToString encounters Suspense work", () => {
+    function App() {
+      throw Promise.resolve("pending");
+    }
+
+    expect(() => renderToString(App)).toThrow(/renderToString does not support Suspense/i);
+  });
+
   test("renders class component types without invoking them as functions", () => {
     class Panel extends Component<{ title: string }> {
       render() {
@@ -160,6 +168,14 @@ describe("react-compat server render", () => {
     expect(renderToString(App)).toBe(
       '<div data-enabled="true" data-ready="false"></div>',
     );
+  });
+
+  test("serializes readOnly with React DOM server casing", () => {
+    function App() {
+      return createElement("input", { readOnly: true });
+    }
+
+    expect(renderToString(App)).toBe('<input readOnly=""/>');
   });
 
   test("treats srcDoc as the dangerous srcdoc attribute alias", () => {

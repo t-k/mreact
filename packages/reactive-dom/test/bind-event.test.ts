@@ -141,6 +141,29 @@ describe("bindEvent", () => {
     dispose();
   });
 
+  test("promotes delayed delegated events without queueMicrotask", async () => {
+    const originalQueueMicrotask = globalThis.queueMicrotask;
+    const templateDocument = document.implementation.createHTMLDocument("template");
+    const button = templateDocument.createElement("button");
+    let calls = 0;
+
+    try {
+      (globalThis as { queueMicrotask?: typeof queueMicrotask }).queueMicrotask = undefined;
+      const dispose = bindEvent(button, "click", () => {
+        calls += 1;
+      });
+
+      document.body.append(button);
+      await Promise.resolve();
+      button.click();
+
+      expect(calls).toBe(1);
+      dispose();
+    } finally {
+      globalThis.queueMicrotask = originalQueueMicrotask;
+    }
+  });
+
   test("keeps a direct listener when requested", () => {
     const button = document.createElement("button");
     document.body.append(button);

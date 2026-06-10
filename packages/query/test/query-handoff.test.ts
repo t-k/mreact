@@ -23,12 +23,10 @@ describe("query client hand-off", () => {
     expect(active.getQueryData(["profile"])).toEqual({ name: "Ada" });
   });
 
-  it("creates a fresh client outside a request scope on the server", () => {
+  it("throws outside a request scope on the server instead of creating an empty client", () => {
     __resetQueryClientForTesting();
 
-    const client = getQueryClient();
-
-    expect(client.getQueryData(["profile"])).toBeUndefined();
+    expect(() => getQueryClient()).toThrow(/query client scope is unavailable/);
   });
 
   it("throws instead of using a module-level async fallback on the server", () => {

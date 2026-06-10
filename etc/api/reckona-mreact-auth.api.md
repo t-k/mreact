@@ -13,16 +13,16 @@ import { SessionCookieOptions } from '@reckona/mreact-router/session';
 import { SessionRecord } from '@reckona/mreact-router/session';
 import { SessionStore } from '@reckona/mreact-router/session';
 
-// @public
+// @public (undocumented)
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
 
-// @public
+// @public (undocumented)
 export function __resetAuthForTesting(): void;
 
-// @public
+// @public (undocumented)
 export type AuthClaimsSerializer = (data: unknown) => AuthSessionClaims | undefined;
 
-// @public
+// @public (undocumented)
 export interface AuthConfig {
     // (undocumented)
     forbiddenTo?: string | undefined;
@@ -32,7 +32,7 @@ export interface AuthConfig {
     serializeClaims?: AuthClaimsSerializer | undefined;
 }
 
-// @public
+// @public (undocumented)
 export interface AuthGuardOptions extends SessionCookieOptions {
     // (undocumented)
     forbiddenTo?: string | undefined;
@@ -42,7 +42,7 @@ export interface AuthGuardOptions extends SessionCookieOptions {
     redirectTo?: string | undefined;
 }
 
-// @public
+// @public (undocumented)
 export interface AuthorizationPolicy {
     // (undocumented)
     permissions?: readonly string[] | undefined;
@@ -50,7 +50,7 @@ export interface AuthorizationPolicy {
     roles?: readonly string[] | undefined;
 }
 
-// @public
+// @public (undocumented)
 export type AuthorizationResult = {
     authorized: true;
 } | {
@@ -61,13 +61,19 @@ export type AuthorizationResult = {
 // @public
 export function authorizeSession<TData extends AuthSessionClaims>(data: TData, policy: AuthorizationPolicy): AuthorizationResult;
 
-// @public
+// @public (undocumented)
+export interface AuthRequestOptions {
+    // (undocumented)
+    config?: AuthConfig | undefined;
+}
+
+// @public (undocumented)
 export type AuthRequirement = string | readonly string[];
 
-// @public
+// @public (undocumented)
 export type AuthRequirementMode = "all" | "any";
 
-// @public
+// @public (undocumented)
 export interface AuthSessionClaims {
     // (undocumented)
     [claim: string]: unknown;
@@ -112,7 +118,7 @@ export function revokeCurrentSession<TData>(request: Request, response: Response
 export { rotateSession }
 
 // @public
-export function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>>;
+export function runWithAuthRequest<T>(fn: () => T | Promise<T>, options?: AuthRequestOptions): Promise<Awaited<T>>;
 
 export { SessionCookieOptions }
 
@@ -120,7 +126,7 @@ export { SessionRecord }
 
 export { SessionStore }
 
-// @public
+// @public (undocumented)
 export type TryAuthResult<TData> = {
     authorized: true;
     session: SessionRecord<TData>;

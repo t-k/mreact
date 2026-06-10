@@ -4,6 +4,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindText, createRoot } from "../src/index.js";
+import { registerDispose } from "../src/scope.js";
 
 const reactCompatElementType = Symbol.for("react.transitional.element");
 
@@ -44,6 +45,32 @@ describe("createRoot", () => {
     count.set(2);
     await flushEffects();
 
+    expect(container.textContent).toBe("");
+  });
+
+  test("disposes render scope when render throws before returning a disposer", async () => {
+    const container = document.createElement("main");
+    const count = cell(0);
+    const text = document.createTextNode("");
+    let cleanupCalls = 0;
+
+    expect(() =>
+      createRoot(container, () => {
+        bindText(text, () => count.get());
+        registerDispose(() => {
+          cleanupCalls += 1;
+        });
+        throw new Error("render failed");
+      }),
+    ).toThrow("render failed");
+
+    expect(cleanupCalls).toBe(1);
+    expect(text.data).toBe("0");
+
+    count.set(1);
+    await flushEffects();
+
+    expect(text.data).toBe("0");
     expect(container.textContent).toBe("");
   });
 
@@ -89,5 +116,16 @@ describe("createRoot", () => {
     expect(iframe?.hasAttribute("srcdoc")).toBe(false);
 
     dispose();
+  });
+
+  test("throws a bounded error for deeply nested render values", () => {
+    const container = document.createElement("main");
+    let value: unknown = "leaf";
+
+    for (let index = 0; index < 300; index += 1) {
+      value = [value];
+    }
+
+    expect(() => createRoot(container, () => value as never)).toThrow(/render value is too deep/i);
   });
 });

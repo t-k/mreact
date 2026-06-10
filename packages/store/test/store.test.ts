@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { effect } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { createStore } from "../src/index.js";
+import { createStore, shallowEqual } from "../src/index.js";
 
 describe("createStore", () => {
   it("returns the current state and shallow-merges set patches", () => {
@@ -130,6 +130,43 @@ describe("createStore", () => {
     expect(calls).toEqual([[{ count: 1 }, { count: 0 }]]);
   });
 
+  it("reports a single replace operation inside a transaction as a replace event", () => {
+    const events: string[] = [];
+    const store = createStore(
+      { count: 0 },
+      {
+        instrument(event) {
+          events.push(event.type);
+        },
+      },
+    );
+
+    store.transaction(() => {
+      store.replace({ count: 1 });
+    });
+
+    expect(events).toEqual(["replace"]);
+  });
+
+  it("keeps multi-operation transactions grouped as transaction events", () => {
+    const events: string[] = [];
+    const store = createStore(
+      { count: 0, name: "Ada" },
+      {
+        instrument(event) {
+          events.push(event.type);
+        },
+      },
+    );
+
+    store.transaction(() => {
+      store.set({ count: 1 });
+      store.set({ name: "Grace" });
+    });
+
+    expect(events).toEqual(["transaction"]);
+  });
+
   it("skips no-op shallow patches", () => {
     const store = createStore({ count: 0, name: "Ada" });
     let calls = 0;
@@ -141,5 +178,21 @@ describe("createStore", () => {
     store.set({});
 
     expect(calls).toBe(0);
+  });
+});
+
+describe("shallowEqual", () => {
+  it("does not treat distinct built-in objects as equal plain objects", () => {
+    expect(shallowEqual(new Date(0), new Date(1_000))).toBe(false);
+    expect(shallowEqual(new Map([["a", 1]]), new Map([["b", 2]]))).toBe(false);
+  });
+
+  it("does not compare arrays and object-shaped values as the same shape", () => {
+    expect(shallowEqual([1, 2], { 0: 1, 1: 2, length: 2 } as never)).toBe(false);
+  });
+
+  it("still supports plain objects and arrays", () => {
+    expect(shallowEqual({ name: "Ada" }, { name: "Ada" })).toBe(true);
+    expect(shallowEqual([1, 2], [1, 2])).toBe(true);
   });
 });

@@ -818,6 +818,10 @@ function analyzeOxcReactiveAliasExpression(
 }
 
 function containsAssignmentTo(node: Record<string, unknown>, name: string): boolean {
+  if (isOxcFunctionNode(node) && oxcFunctionShadowsName(node, name)) {
+    return false;
+  }
+
   if (node.type === "AssignmentExpression") {
     const left = readObject(node.left);
     if (left.type === "Identifier" && left.name === name) return true;
@@ -842,6 +846,12 @@ function containsAssignmentTo(node: Record<string, unknown>, name: string): bool
     }
   }
   return false;
+}
+
+function oxcFunctionShadowsName(functionNode: Record<string, unknown>, name: string): boolean {
+  const localBindings = new Set<string>();
+  collectOxcFunctionLocalBindings(functionNode, localBindings);
+  return localBindings.has(name);
 }
 
 function collectOxcPushJsxBindingNames(statements: readonly unknown[], names: Set<string>): void {

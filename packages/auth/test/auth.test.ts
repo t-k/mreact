@@ -413,6 +413,90 @@ describe("auth package", () => {
       });
     });
   });
+
+  it("keeps auth config request-scoped for redirects and claim serialization", async () => {
+    const store = createMemorySessionStore<{
+      tenant: string;
+      userId: string;
+    }>();
+    const firstResponse = new Response(null);
+    const secondResponse = new Response(null);
+    await createSession(firstResponse, store, { tenant: "first", userId: "ada" });
+    await createSession(secondResponse, store, { tenant: "second", userId: "grace" });
+    const firstRequest = new Request("https://app.test/first", {
+      headers: { cookie: cookiePair(firstResponse) },
+    });
+    const secondRequest = new Request("https://app.test/second", {
+      headers: { cookie: cookiePair(secondResponse) },
+    });
+
+    configureAuth({
+      redirectTo: "/global-login",
+      serializeClaims: () => ({ tenant: "global" }),
+    });
+
+    const [first, second] = await Promise.all([
+      runWithAuthRequest(
+        async () => {
+          await getCurrentSession(firstRequest, store);
+          const claims = getSessionClaims();
+          const redirect = await requireSession(new Request("https://app.test/missing"), store).catch(
+            (error: unknown) => error,
+          );
+          return {
+            claims,
+            location:
+              typeof redirect === "object" && redirect !== null && "location" in redirect
+                ? redirect.location
+                : undefined,
+          };
+        },
+        {
+          config: {
+            redirectTo: "/first-login",
+            serializeClaims: (data) =>
+              typeof data === "object" && data !== null && "tenant" in data
+                ? { tenant: `scope-${String(data.tenant)}` }
+                : undefined,
+          },
+        },
+      ),
+      runWithAuthRequest(
+        async () => {
+          await getCurrentSession(secondRequest, store);
+          const claims = getSessionClaims();
+          const redirect = await requireSession(new Request("https://app.test/missing"), store).catch(
+            (error: unknown) => error,
+          );
+          return {
+            claims,
+            location:
+              typeof redirect === "object" && redirect !== null && "location" in redirect
+                ? redirect.location
+                : undefined,
+          };
+        },
+        {
+          config: {
+            redirectTo: "/second-login",
+            serializeClaims: (data) =>
+              typeof data === "object" && data !== null && "tenant" in data
+                ? { tenant: `scope-${String(data.tenant)}` }
+                : undefined,
+          },
+        },
+      ),
+    ]);
+
+    expect(first).toEqual({
+      claims: { tenant: "scope-first" },
+      location: "/first-login",
+    });
+    expect(second).toEqual({
+      claims: { tenant: "scope-second" },
+      location: "/second-login",
+    });
+  });
 });
 
 function isString(value: unknown): value is string {

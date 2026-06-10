@@ -70,6 +70,32 @@ describe("reactive-core scheduler / tracking behavior", () => {
     dispose();
   });
 
+  test("disposing a test runtime clears queued computations before the next runtime", () => {
+    const firstRuntime = useRuntime();
+    const first = cell(0);
+    const firstObserved: number[] = [];
+    effect(() => {
+      firstObserved.push(first.get());
+    });
+    first.set(1);
+    expect(firstRuntime.scheduledFlushCount()).toBe(1);
+
+    firstRuntime.dispose();
+    runtime = undefined;
+
+    const secondRuntime = useRuntime();
+    const second = cell(0);
+    const secondObserved: number[] = [];
+    effect(() => {
+      secondObserved.push(second.get());
+    });
+    second.set(1);
+    secondRuntime.flushAll();
+
+    expect(firstObserved).toEqual([0]);
+    expect(secondObserved).toEqual([0, 1]);
+  });
+
   test("batch waits for the outer batch before scheduling a flush", () => {
     const testRuntime = useRuntime();
     const count = cell(0);

@@ -58,8 +58,13 @@ export function prebuiltServerComponentModuleCode(
   artifact: BuiltServerModuleArtifact["string"] | BuiltServerModuleArtifact["stream"] | undefined,
   code: string,
   codeHash: string,
+  options: { serverAwaitHydration?: boolean } = {},
 ): string | undefined {
   if (artifact === undefined) {
+    return undefined;
+  }
+
+  if (!prebuiltServerModuleOutputOptionsMatch(artifact, options)) {
     return undefined;
   }
 
@@ -68,6 +73,16 @@ export function prebuiltServerComponentModuleCode(
   }
 
   return artifact.bundleCode;
+}
+
+export function prebuiltServerModuleOutputOptionsMatch(
+  artifact: NonNullable<BuiltServerModuleArtifact["string"] | BuiltServerModuleArtifact["stream"]>,
+  options: { serverAwaitHydration?: boolean },
+): boolean {
+  return (
+    (artifact.metadata?.serverAwaitHydration === true) ===
+    (options.serverAwaitHydration === true)
+  );
 }
 
 export function prebuiltServerModuleOutputMatches(

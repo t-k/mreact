@@ -26,7 +26,7 @@ export function lowerOxcDomNodeExpression(
 
     if (right !== undefined && unwrapped.operator === "||") {
       const left = readSource(code, readObject(unwrapped.left));
-      return `((${left}) ? ${left} : ${right})`;
+      return `(() => { const _left = (${left}); return _left ? _left : ${right}; })()`;
     }
   }
 

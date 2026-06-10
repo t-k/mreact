@@ -54,13 +54,6 @@ export function cell<T>(initial: T): Cell<T> {
           });
         }
       }
-      const singleSubscriber = source.singleSubscriber;
-      if (
-        singleSubscriber !== undefined &&
-        (singleSubscriber.disposed || singleSubscriber.queued)
-      ) {
-        return;
-      }
       notifySubscribers(source);
     },
   };

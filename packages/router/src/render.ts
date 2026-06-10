@@ -137,6 +137,7 @@ import {
   prebuiltRouteLoaderModuleArtifact,
   prebuiltServerComponentModuleCode,
   prebuiltServerModuleOutputMatches,
+  prebuiltServerModuleOutputOptionsMatch,
   type BuiltServerModuleOutputLike,
 } from "./route-module-loader.js";
 
@@ -362,6 +363,8 @@ async function preloadBuiltPageRouteModules(options: {
       options.serverModuleCacheVersion,
       options.define,
       options.vitePlugins,
+      undefined,
+      { serverAwaitHydration: options.analysis.clientInference.client },
     );
   }
 
@@ -485,6 +488,7 @@ type StreamModuleExports = Record<string, unknown> & {
 
 const serverTransformCache = new Map<string, TransformOutput>();
 const serverTransformCacheCounters = createRouterRuntimeCacheCounters();
+let productionDynamicServerTransformWarned = false;
 const serverSourceFileCache = new Map<string, Promise<string>>();
 const serverSourceFileCacheCounters = createRouterRuntimeCacheCounters();
 const routeSourceAnalysisCache = new Map<string, Promise<RouteSourceAnalysis>>();
@@ -652,6 +656,17 @@ function finishRenderTimingPhase(
   timing.phases[phaseName] = logDurationMs(startedAt);
 }
 
+async function readSettledPromiseAtNextTask<T>(
+  promise: Promise<T>,
+): Promise<{ settled: true; value: T } | { settled: false }> {
+  return await Promise.race([
+    promise.then((value) => ({ settled: true as const, value })),
+    new Promise<{ settled: false }>((resolve) => {
+      setTimeout(() => resolve({ settled: false }), 0);
+    }),
+  ]);
+}
+
 function addRenderTimingPhaseDuration(
   timing: RenderTiming | undefined,
   startedAt: number | undefined,
@@ -662,6 +677,12 @@ function addRenderTimingPhaseDuration(
   }
 
   timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
+}
+
+function routeLoaderMayReturnControlResponse(code: string): boolean {
+  return /\b(?:redirect|redirectExternal|rewrite|notFound|throwNotFound)\s*\(/.test(code) ||
+    /\bnew\s+Response\s*\(/.test(code) ||
+    /\bResponse\.(?:redirect|json)\s*\(/.test(code);
 }
 
 async function waitForRenderPreload(
@@ -847,6 +868,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       appDir: options.appDir,
       filename: "not-found.mreact.tsx",
       pathname: url.pathname,
+      serverSourceFiles: options.serverSourceFiles,
     });
 
     const response = await renderSpecialRoute({
@@ -1220,8 +1242,9 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       }
 
       let streamData: unknown;
-      if (loadingFile === undefined) {
-        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+      let streamDataPromise = dataPromise ?? Promise.resolve(undefined);
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
+      if (loadingFile === undefined || routeLoaderMayReturnControlResponse(code)) {
         try {
           streamData = dataPromise === undefined ? undefined : await dataPromise;
         } finally {
@@ -1230,6 +1253,20 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         if (streamData instanceof Response) {
           emitRenderTiming(options, timing, streamData.status);
           return streamData;
+        }
+        streamDataPromise = Promise.resolve(streamData);
+      } else {
+        try {
+          const settledData = await readSettledPromiseAtNextTask(streamDataPromise);
+          if (settledData.settled) {
+            if (settledData.value instanceof Response) {
+              emitRenderTiming(options, timing, settledData.value.status);
+              return settledData.value;
+            }
+            streamDataPromise = Promise.resolve(settledData.value);
+          }
+        } finally {
+          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
         }
       }
 
@@ -1261,7 +1298,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientRoute,
-          data: dataPromise ?? Promise.resolve(undefined),
+          data: streamDataPromise,
           define: options.define,
           loadingFile,
           pageFile: matched.route.file,
@@ -1749,16 +1786,18 @@ async function nearestBoundaryFileForPath(options: {
   appDir: string;
   filename: string;
   pathname: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string> {
   const parts = options.pathname
     .replace(/^\/+|\/+$/g, "")
     .split("/")
-    .filter((part) => part.length > 0);
+    .filter((part) => part.length > 0 && part !== "." && part !== "..");
 
-  return nearestBoundaryFileFromParts({
+  return await nearestBoundaryFileFromParts({
     appDir: options.appDir,
     filename: options.filename,
     parts,
+    serverSourceFiles: options.serverSourceFiles,
   });
 }
 
@@ -1766,10 +1805,18 @@ async function nearestBoundaryFileFromParts(options: {
   appDir: string;
   filename: string;
   parts: string[];
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string> {
   for (let count = options.parts.length; count >= 0; count -= 1) {
     for (const filename of boundaryFilenameCandidates(options.filename)) {
       const candidate = join(options.appDir, ...options.parts.slice(0, count), filename);
+
+      if (options.serverSourceFiles !== undefined) {
+        if (options.serverSourceFiles.has(candidate)) {
+          return candidate;
+        }
+        continue;
+      }
 
       try {
         await access(candidate);
@@ -1847,10 +1894,16 @@ async function renderSpecialRoute(options: {
   textFallback: string;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Response> {
-  try {
-    await access(options.routeFile);
-  } catch {
-    return new Response(options.textFallback, { status: options.status });
+  if (options.serverSourceFiles !== undefined) {
+    if (!options.serverSourceFiles.has(options.routeFile)) {
+      return new Response(options.textFallback, { status: options.status });
+    }
+  } else {
+    try {
+      await access(options.routeFile);
+    } catch {
+      return new Response(options.textFallback, { status: options.status });
+    }
   }
 
   const props = {
@@ -1994,7 +2047,10 @@ async function dispatchServerRoute(options: {
   const handler = module[options.request.method] ?? module.ALL ?? module.default;
 
   if (typeof handler !== "function") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return new Response("Method Not Allowed", {
+      headers: { allow: allowedServerRouteMethods(module).join(", ") },
+      status: 405,
+    });
   }
 
   let response: unknown;
@@ -2017,6 +2073,12 @@ async function dispatchServerRoute(options: {
   return response instanceof Response
     ? response
     : new Response("Invalid route response", { status: 500 });
+}
+
+function allowedServerRouteMethods(module: Record<string, unknown>): string[] {
+  return ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].filter(
+    (method) => typeof module[method] === "function",
+  );
 }
 
 async function dispatchConventionAssetRoute(options: {
@@ -2556,7 +2618,10 @@ function transformServerModule(options: {
   if (
     artifact !== undefined &&
     artifact.sourceHash === sourceHash &&
-    options.serverAwaitHydration !== true
+    prebuiltServerModuleOutputOptionsMatch(
+      artifact,
+      options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {},
+    )
   ) {
     return {
       code: artifact.code,
@@ -2590,6 +2655,8 @@ function transformServerModule(options: {
     return cached;
   }
 
+  warnProductionDynamicServerTransform();
+
   const output = transform({
     code: options.code,
     ...(options.clientBoundaryImports === undefined
@@ -2615,6 +2682,19 @@ function transformServerModule(options: {
   );
 
   return output;
+}
+
+export const __transformServerModuleForTesting = transformServerModule;
+
+function warnProductionDynamicServerTransform(): void {
+  if (process.env.NODE_ENV !== "production" || productionDynamicServerTransformWarned) {
+    return;
+  }
+
+  productionDynamicServerTransformWarned = true;
+  console.warn(
+    "mreact router: dynamic server transform path ran in production. Production deployments should provide prebuilt serverModules; otherwise request-time transforms use development compiler settings.",
+  );
 }
 
 async function analyzeRouteSource(options: {
@@ -3454,12 +3534,14 @@ async function loadServerStreamModule(
   define?: UserConfig["define"] | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
   importPolicy?: AppRouterImportPolicy | undefined,
+  outputOptions: { serverAwaitHydration?: boolean } = {},
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
-  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash);
+  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash, outputOptions);
   if (
     artifactCode !== undefined &&
+    prebuiltServerModuleOutputOptionsMatch(artifactCode, outputOptions) &&
     prebuiltServerModuleOutputMatches(artifactCode, code, codeHash) &&
     artifactCode.moduleFile !== undefined
   ) {
@@ -4551,10 +4633,7 @@ async function loadComposedRouteMetadata(options: {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteMetadata | undefined> {
-  const cacheKey =
-    options.serverModuleCacheVersion === undefined
-      ? undefined
-      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+  const cacheKey = composedRouteMetadataCacheKey(options);
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
       composedRouteMetadataCache,
@@ -4586,6 +4665,22 @@ async function loadComposedRouteMetadata(options: {
     throw error;
   }
 }
+
+function composedRouteMetadataCacheKey(options: {
+  appDir: string;
+  code: string;
+  define?: UserConfig["define"] | undefined;
+  filename: string;
+  importPolicy?: AppRouterImportPolicy | undefined;
+  serverModuleCacheVersion?: string | undefined;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): string | undefined {
+  return options.serverModuleCacheVersion === undefined
+    ? undefined
+    : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+}
+
+export const __composedRouteMetadataCacheKeyForTesting = composedRouteMetadataCacheKey;
 
 async function loadComposedRouteMetadataUncached(options: {
   appDir: string;
@@ -4787,25 +4882,58 @@ interface InlineCspTag {
 
 function inlineCspTags(html: string): InlineCspTag[] {
   const tags: InlineCspTag[] = [];
-  const pattern = /<(script|style)\b([^>]*)>([\s\S]*?)<\/\1>/gi;
-  let match: RegExpExecArray | null;
+  const lowerHtml = html.toLowerCase();
+  let position = 0;
 
-  while ((match = pattern.exec(html)) !== null) {
-    const name = match[1]?.toLowerCase();
+  while (position < html.length) {
+    const scriptIndex = lowerHtml.indexOf("<script", position);
+    const styleIndex = lowerHtml.indexOf("<style", position);
+    const openerIndex =
+      scriptIndex === -1
+        ? styleIndex
+        : styleIndex === -1
+          ? scriptIndex
+          : Math.min(scriptIndex, styleIndex);
 
-    if (name !== "script" && name !== "style") {
+    if (openerIndex === -1) {
+      break;
+    }
+
+    const name = lowerHtml.startsWith("<script", openerIndex) ? "script" : "style";
+    const tagEnd = html.indexOf(">", openerIndex + 1);
+    if (tagEnd === -1) {
+      break;
+    }
+
+    const closeToken = `</${name}>`;
+    const closeIndex = lowerHtml.indexOf(closeToken, tagEnd + 1);
+    const nextScriptIndex = lowerHtml.indexOf("<script", tagEnd + 1);
+    const nextStyleIndex = lowerHtml.indexOf("<style", tagEnd + 1);
+    const nextOpenerIndex =
+      nextScriptIndex === -1
+        ? nextStyleIndex
+        : nextStyleIndex === -1
+          ? nextScriptIndex
+          : Math.min(nextScriptIndex, nextStyleIndex);
+
+    if (closeIndex === -1 || (nextOpenerIndex !== -1 && nextOpenerIndex < closeIndex)) {
+      position = tagEnd + 1;
       continue;
     }
 
     tags.push({
-      attributes: parseTagAttributes(match[2] ?? ""),
-      content: match[3] ?? "",
+      attributes: parseTagAttributes(html.slice(openerIndex + name.length + 1, tagEnd)),
+      content: html.slice(tagEnd + 1, closeIndex),
       name,
     });
+
+    position = closeIndex + closeToken.length;
   }
 
   return tags;
 }
+
+export const __inlineCspTagsForTesting = inlineCspTags;
 
 function parseTagAttributes(source: string): ReadonlyMap<string, string> {
   const attributes = new Map<string, string>();
@@ -4854,7 +4982,7 @@ function injectQueryState(html: string, state: DehydratedQueryClient): string {
   )}</script>`;
 
   return /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, () => `${script}</body>`)
+    ? replaceFinalBodyCloseTag(html, script)
     : `${html}${script}`;
 }
 
@@ -4868,8 +4996,19 @@ function injectAuthSessionClaims(html: string, claims: unknown): string {
   )}</script>`;
 
   return /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, () => `${script}</body>`)
+    ? replaceFinalBodyCloseTag(html, script)
     : `${html}${script}`;
+}
+
+function replaceFinalBodyCloseTag(html: string, insertion: string): string {
+  const matches = [...html.matchAll(/<\/body>/gi)];
+  const last = matches.at(-1);
+
+  if (last?.index === undefined) {
+    return `${html}${insertion}`;
+  }
+
+  return `${html.slice(0, last.index)}${insertion}${html.slice(last.index)}`;
 }
 
 function authIncludesClaims(code: string): boolean {

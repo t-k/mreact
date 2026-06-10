@@ -5,6 +5,7 @@ import { runtimeState, type ReactiveComputation } from "./state.js";
 import {
   cleanupDeps,
   cleanupUntrackedDeps,
+  nextTrackingVersionFor,
   trackIncrementalSource,
 } from "./tracking.js";
 
@@ -40,7 +41,7 @@ export function effect(fn: () => void | (() => void)): () => void {
       }
 
       const previousDepsSize = computation.deps.size;
-      const nextTrackingVersion = (computation.trackingVersion ?? 0) + 1;
+      const nextTrackingVersion = nextTrackingVersionFor(computation);
 
       computation.trackingAddedDeps = [];
       computation.trackingCount = 0;
@@ -89,6 +90,8 @@ export function effect(fn: () => void | (() => void)): () => void {
       }
 
       computation.disposed = true;
+      computation.queued = false;
+      runtimeState.pendingComputed.delete(computation);
       cleanupDeps(computation);
 
       if (cleanup !== undefined) {
@@ -105,6 +108,8 @@ export function effect(fn: () => void | (() => void)): () => void {
     computation.run();
   } catch (error) {
     computation.disposed = true;
+    computation.queued = false;
+    runtimeState.pendingComputed.delete(computation);
     cleanupDeps(computation);
 
     if (cleanup !== undefined) {

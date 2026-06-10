@@ -685,7 +685,7 @@ function normalizeItemSpan(
 ): Required<VirtualItemSpan> {
   return {
     colSpan: clampInteger(span?.colSpan ?? 1, 1, columnCount),
-    rowSpan: clampInteger(span?.rowSpan ?? 1, 1),
+    rowSpan: clampInteger(span?.rowSpan ?? 1, 1, maxVirtualGridRowSpan),
   };
 }
 
@@ -1096,6 +1096,8 @@ function clampInteger(value: number, min: number, max = Number.MAX_SAFE_INTEGER)
 
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
+
+const maxVirtualGridRowSpan = 1_000;
 
 function clampSize(value: number): number {
   if (!Number.isFinite(value)) {

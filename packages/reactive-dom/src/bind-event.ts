@@ -189,7 +189,7 @@ function addDisconnectedFallback(
     }
 
     promotionQueued = true;
-    queueMicrotask(() => {
+    enqueueMicrotask(() => {
       promotionQueued = false;
       promote();
     });
@@ -221,6 +221,15 @@ function addDisconnectedFallback(
     active = false;
     remove();
   };
+}
+
+function enqueueMicrotask(callback: () => void): void {
+  if (typeof queueMicrotask === "function") {
+    queueMicrotask(callback);
+    return;
+  }
+
+  void Promise.resolve().then(callback);
 }
 
 function retainDelegatedRoot(root: EventTarget, type: string): void {

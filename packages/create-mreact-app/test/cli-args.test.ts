@@ -123,6 +123,7 @@ describe("create-mreact-app CLI args", () => {
     expect(message).toContain("pnpm install");
     expect(message).toContain("pnpm dev");
     expect(message).toContain("http://localhost:3001/");
+    expect(message).toContain("development-only demo account");
     expect(message).toContain("demo@example.com / kanban1234");
   });
 

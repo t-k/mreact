@@ -164,6 +164,10 @@ function transformWithAnalyzer(
       metadata.serverHydration = true;
     }
 
+    if (input.serverAwaitHydration === true) {
+      metadata.serverAwaitHydration = true;
+    }
+
     if (input.reactSuspenseRevealScriptSrc !== undefined) {
       metadata.reactSuspenseRevealScriptSrc = input.reactSuspenseRevealScriptSrc;
     }
@@ -520,16 +524,16 @@ function dedupeAndSortSegments(segments: readonly SourceMapSegment[]): SourceMap
 
 const sourceMapBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-function encodeVlq(value: number): string {
-  let vlq = value < 0 ? (-value << 1) + 1 : value << 1;
+export function encodeVlq(value: number): string {
+  let vlq = value < 0 ? -value * 2 + 1 : value * 2;
   let encoded = "";
 
   do {
-    let digit = vlq & 31;
-    vlq >>>= 5;
+    let digit = vlq % 32;
+    vlq = Math.floor(vlq / 32);
 
     if (vlq > 0) {
-      digit |= 32;
+      digit += 32;
     }
 
     encoded += sourceMapBase64[digit] ?? "";

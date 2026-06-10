@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { batch, cell, computed, effect, untrack } from "../src/index.js";
+import { resetSchedulerStateForTesting, setScheduler } from "../src/scheduler.js";
+import { runtimeState, type ReactiveComputation, type Source } from "../src/state.js";
+import { notifySubscribers } from "../src/tracking.js";
 
 describe("reactive-core: coverage fill for the remaining branches", () => {
   test("batch nests without triggering schedulePendingFlush until the outer batch closes", () => {
@@ -173,6 +176,132 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     dep.set(99);
     // No assertion needed; we just want to exercise the `if (!disposed)`
     // branch when the computed has lost its subscriber.
+  });
+
+  test("computed dispose clears queued pending-computed bookkeeping immediately", () => {
+    const dep = cell(0);
+    const c = computed(() => dep.get() * 2);
+    const disposeEffect = effect(() => {
+      c.get();
+    });
+
+    try {
+      batch(() => {
+        dep.set(1);
+        const pending = Array.from(runtimeState.pendingComputed);
+        const queuedComputed = pending[0];
+
+        expect(queuedComputed).toBeDefined();
+        expect(queuedComputed?.queued).toBe(true);
+
+        queuedComputed?.dispose();
+
+        expect(queuedComputed?.queued).toBe(false);
+        expect(runtimeState.pendingComputed.has(queuedComputed as ReactiveComputation)).toBe(false);
+      });
+    } finally {
+      disposeEffect();
+      runtimeState.pendingComputed.clear();
+    }
+  });
+
+  test("effect dispose clears a queued effect flag before the scheduler flushes", () => {
+    const restoreScheduler = setScheduler({
+      schedule() {},
+    });
+    const dep = cell(0);
+    let captured: ReactiveComputation | undefined;
+
+    try {
+      const dispose = effect(() => {
+        captured = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+        dep.get();
+      });
+
+      dep.set(1);
+
+      expect(captured?.queued).toBe(true);
+
+      dispose();
+
+      expect(captured?.queued).toBe(false);
+    } finally {
+      resetSchedulerStateForTesting();
+      restoreScheduler();
+    }
+  });
+
+  test("notifySubscribers still flushes pending computed when cached subscriber is queued", () => {
+    let runs = 0;
+    const queuedComputation: ReactiveComputation = {
+      id: -1,
+      deps: new Set(),
+      disposed: false,
+      queued: true,
+      markDirty() {
+        throw new Error("queued subscriber should be skipped");
+      },
+      run() {
+        runs += 1;
+      },
+      dispose() {
+        this.disposed = true;
+      },
+    };
+    const source: Source = {
+      subscribers: new Set([queuedComputation]),
+      singleSubscriber: queuedComputation,
+    };
+
+    runtimeState.pendingComputed.add(queuedComputation);
+
+    try {
+      notifySubscribers(source);
+
+      expect(runtimeState.pendingComputed.has(queuedComputation)).toBe(false);
+      expect(queuedComputation.queued).toBe(false);
+      expect(runs).toBe(1);
+    } finally {
+      runtimeState.pendingComputed.delete(queuedComputation);
+      runtimeState.notificationDepth = 0;
+      runtimeState.batchDepth = 0;
+    }
+  });
+
+  test("effect tracking versions wrap before stale dependency cleanup loses precision", async () => {
+    const enabled = cell(true);
+    const first = cell(1);
+    const second = cell(10);
+    const observed: number[] = [];
+    let captured: ReactiveComputation | undefined;
+
+    const dispose = effect(() => {
+      captured = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      observed.push(enabled.get() ? first.get() : second.get());
+    });
+
+    if (captured === undefined) {
+      throw new Error("expected captured effect computation");
+    }
+
+    const unsafeVersion = Number.MAX_SAFE_INTEGER + 1;
+    captured.trackingVersion = unsafeVersion;
+    for (const dep of captured.deps) {
+      dep.trackedBy = captured;
+      dep.trackedVersion = unsafeVersion;
+    }
+
+    enabled.set(false);
+    await Promise.resolve();
+
+    expect(observed).toEqual([1, 10]);
+
+    first.set(2);
+    await Promise.resolve();
+
+    expect(observed).toEqual([1, 10]);
+
+    dispose();
   });
 
   test("scheduler falls back to Promise.resolve when queueMicrotask is not available", async () => {

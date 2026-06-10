@@ -11,8 +11,8 @@ describe("HTML escaping helpers", () => {
   });
 
   test("escapes attribute context characters", () => {
-    expect(escapeHtmlAttribute(`Tom & <Ada> "Grace"`)).toBe(
-      "Tom &amp; &lt;Ada&gt; &quot;Grace&quot;",
+    expect(escapeHtmlAttribute(`Tom & <Ada> "Grace" 'Lovelace'`)).toBe(
+      "Tom &amp; &lt;Ada&gt; &quot;Grace&quot; &#39;Lovelace&#39;",
     );
   });
 

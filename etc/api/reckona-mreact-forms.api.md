@@ -131,6 +131,8 @@ export type FormSubmitResult<TValues extends FormValues, TResult> = {
     data: TResult;
     status: "success";
 } | {
+    status: "duplicate";
+} | {
     errors: FormErrors<TValues>;
     status: "invalid";
 } | {

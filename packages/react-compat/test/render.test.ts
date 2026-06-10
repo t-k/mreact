@@ -932,6 +932,7 @@ describe("react-compat render", () => {
         onCompositionUpdate: () => { calls.push("compositionupdate"); },
         onCompositionEnd: () => { calls.push("compositionend"); },
         onContextMenu: () => { calls.push("contextmenu"); },
+        onDrag: () => { calls.push("drag"); },
         onDragEnter: () => { calls.push("dragenter"); },
         onTouchStart: () => { calls.push("touchstart"); },
       }),
@@ -944,6 +945,7 @@ describe("react-compat render", () => {
     input?.dispatchEvent(new CompositionEvent("compositionupdate", { bubbles: true }));
     input?.dispatchEvent(new CompositionEvent("compositionend", { bubbles: true }));
     input?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+    input?.dispatchEvent(new DragEvent("drag", { bubbles: true }));
     input?.dispatchEvent(new DragEvent("dragenter", { bubbles: true }));
     input?.dispatchEvent(new Event("touchstart", { bubbles: true }));
 
@@ -953,6 +955,7 @@ describe("react-compat render", () => {
       "compositionupdate",
       "compositionend",
       "contextmenu",
+      "drag",
       "dragenter",
       "touchstart",
     ]);

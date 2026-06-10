@@ -45,12 +45,18 @@ function rememberStrippedTypeScript(source: string, stripped: string): void {
 }
 
 function needsTypeScriptStripping(source: string): boolean {
+  // This is intentionally an over-approximation: false positives cost an oxc
+  // pass, but false negatives leak TypeScript syntax into emitted JavaScript.
   return (
     /\bimport\s+type\b/.test(source) ||
+    /\bexport\s+type\b/.test(source) ||
     /\btype\s+[A-Za-z_$][\w$]*\b/.test(source) ||
     /\binterface\s+[A-Za-z_$][\w$]*\b/.test(source) ||
+    /<[^>\n]+\bextends\b[^>\n]*>\s*\(/.test(source) ||
     /\b[A-Za-z_$][\w$.]*\s*<[^>\n]+>\s*\(/.test(source) ||
     /\bas\s+(?:const|[A-Za-z_$][\w$]*)\b/.test(source) ||
+    /\bsatisfies\s+[A-Za-z_$][\w$<>,\s|&.[\]?]*/.test(source) ||
+    /[A-Za-z_$)\]}]\s*!\s*(?=[,.;)\]}])/.test(source) ||
     /:\s*[A-Za-z_$][\w$<>,\s|&.[\]?]*(?=[,)=;{])/.test(source)
   );
 }

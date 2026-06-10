@@ -5,6 +5,7 @@ import {
   cleanupAddedDeps,
   cleanupDeps,
   cleanupUntrackedDeps,
+  nextTrackingVersionFor,
   notifySubscribers,
   preserveIncrementalTracking,
   trackIncrementalSource,
@@ -70,8 +71,11 @@ export function computed<T>(
       }
 
       computation.disposed = true;
+      computation.queued = false;
+      runtimeState.pendingComputed.delete(computation);
       cleanupDeps(computation);
       source.subscribers.clear();
+      source.singleSubscriber = undefined;
     },
   };
 
@@ -109,7 +113,7 @@ export function computed<T>(
 
     const previousTracker = runtimeState.activeTracker;
     const previousDepsSize = computation.deps.size;
-    const nextTrackingVersion = (computation.trackingVersion ?? 0) + 1;
+    const nextTrackingVersion = nextTrackingVersionFor(computation);
 
     computation.trackingAddedDeps = [];
     computation.trackingCount = 0;

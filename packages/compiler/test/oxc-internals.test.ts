@@ -560,6 +560,41 @@ export default function Page() {
     ).toEqual(["helper", "whenTrue", "WhenFalse"]);
   });
 
+  test("collects local bindings from destructuring patterns", () => {
+    expect(
+      collectBindingNames({
+        type: "VariableDeclaration",
+        declarations: [
+          {
+            id: {
+              type: "ObjectPattern",
+              properties: [
+                { type: "Property", value: { type: "Identifier", name: "name" } },
+                {
+                  type: "Property",
+                  value: {
+                    type: "AssignmentPattern",
+                    left: { type: "Identifier", name: "fallback" },
+                  },
+                },
+                { type: "RestElement", argument: { type: "Identifier", name: "rest" } },
+              ],
+            },
+          },
+          {
+            id: {
+              type: "ArrayPattern",
+              elements: [
+                { type: "Identifier", name: "first" },
+                { type: "RestElement", argument: { type: "Identifier", name: "tail" } },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toEqual(["name", "fallback", "rest", "first", "tail"]);
+  });
+
   test("collects exported component names from function and variable declarations", () => {
     expect(
       collectOxcExportedComponents({
@@ -800,6 +835,73 @@ export default function Page() {
         },
       ])],
     ).toEqual(["stable", "items", "moreItems"]);
+  });
+
+  test("ignores nested function assignments when they target shadowed JSX bindings", () => {
+    expect([
+      ...collectOxcBodyJsxBindingNames([
+        {
+          type: "VariableDeclaration",
+          kind: "let",
+          declarations: [
+            { id: { type: "Identifier", name: "shadowed" }, init: { type: "JSXElement" } },
+          ],
+        },
+        {
+          type: "VariableDeclaration",
+          kind: "let",
+          declarations: [
+            { id: { type: "Identifier", name: "captured" }, init: { type: "JSXElement" } },
+          ],
+        },
+        {
+          type: "FunctionDeclaration",
+          id: { type: "Identifier", name: "rewriteLocals" },
+          params: [],
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "VariableDeclaration",
+                kind: "let",
+                declarations: [
+                  {
+                    id: { type: "Identifier", name: "shadowed" },
+                    init: { type: "Literal", value: "" },
+                  },
+                ],
+              },
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "AssignmentExpression",
+                  left: { type: "Identifier", name: "shadowed" },
+                  right: { type: "Literal", value: "" },
+                },
+              },
+            ],
+          },
+        },
+        {
+          type: "FunctionDeclaration",
+          id: { type: "Identifier", name: "rewriteCaptured" },
+          params: [],
+          body: {
+            type: "BlockStatement",
+            body: [
+              {
+                type: "ExpressionStatement",
+                expression: {
+                  type: "AssignmentExpression",
+                  left: { type: "Identifier", name: "captured" },
+                  right: { type: "Literal", value: "" },
+                },
+              },
+            ],
+          },
+        },
+      ]),
+    ]).toEqual(["shadowed"]);
   });
 
   test("marks render value expressions recursively", () => {
@@ -1162,6 +1264,20 @@ export default function Page() {
     expect(compatCode).toContain('children: "Ada"');
   });
 
+  test("emits OXC server string list body statements before child expressions", () => {
+    expect(
+      emitOxcServerStringChildren([
+        {
+          bodyStatements: ["const label = item.label.toUpperCase();"],
+          children: [{ kind: "expr", code: "label" }],
+          itemName: "item",
+          itemsCode: "items",
+          kind: "list",
+        },
+      ]),
+    ).toContain("const label = item.label.toUpperCase();");
+  });
+
   test("lowers DOM JSX elements into imperative node creation", () => {
     const code = '<button className="primary" disabled>{label}<span>Child</span></button>';
     const labelStart = code.indexOf("label");
@@ -1211,6 +1327,25 @@ export default function Page() {
         "})()",
       ].join("\n"),
     );
+  });
+
+  test("lowers DOM logical-or expressions without duplicating the left operand", () => {
+    const code = 'sideEffect() || <span>Fallback</span>';
+    const lowered = lowerOxcDomNodeExpression(code, {
+      type: "LogicalExpression",
+      operator: "||",
+      left: { start: 0, end: "sideEffect()".length },
+      right: {
+        type: "JSXElement",
+        openingElement: {
+          name: { type: "JSXIdentifier", name: "span" },
+          attributes: [],
+        },
+        children: [{ type: "JSXText", value: "Fallback" }],
+      },
+    });
+
+    expect(lowered?.match(/sideEffect\(\)/g)).toHaveLength(1);
   });
 
   test("analyzes JSX nodes and expression children through child analysis context", () => {

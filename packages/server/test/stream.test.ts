@@ -260,6 +260,29 @@ describe("server streaming runtime", () => {
     expect(rendered).toBe(true);
   });
 
+  test("renderOutOfOrderBoundary rejects async placeholder callbacks in development", async () => {
+    const stream = renderToReadableStream((sink) => {
+        renderOutOfOrderBoundary(
+          sink,
+          "frag",
+          Promise.resolve("BODY"),
+          (boundarySink, value) => {
+            boundarySink.append(value);
+          },
+          {
+            placeholder: (async (placeholderSink) => {
+              await Promise.resolve();
+              placeholderSink.append("WAIT");
+            }) as never,
+          },
+        );
+      });
+
+    await expect(stream.getReader().read()).rejects.toThrow(
+      "renderOutOfOrderBoundary placeholder must be synchronous",
+    );
+  });
+
   test("renderToReadableStream does not require process when queued chunks exceed the soft limit", async () => {
     const globalWithProcess = globalThis as typeof globalThis & { process?: unknown };
     const previousProcess = globalWithProcess.process;
