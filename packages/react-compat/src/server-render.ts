@@ -131,7 +131,14 @@ function renderElementToString(
       return `<${element.type}${attributes}/>`;
     }
 
-    return `<${element.type}${attributes}>${renderNodeToString(element.props.children, runtime, `${path}.children`)}</${element.type}>`;
+    // Primitive children dominate real markup; serializing them inline skips
+    // one recursive call and one child-path allocation per text leaf.
+    const children = element.props.children;
+    if (typeof children === "string" || typeof children === "number") {
+      return `<${element.type}${attributes}>${escapeHtml(children)}</${element.type}>`;
+    }
+
+    return `<${element.type}${attributes}>${renderNodeToString(children, runtime, `${path}.children`)}</${element.type}>`;
   }
 
   if (element.type === Fragment) {
@@ -216,37 +223,26 @@ function renderElementToString(
 }
 
 function renderAttributesToString(props: Record<string, unknown>): string {
-  const sanitizedProps = sanitizeMetaRefreshProps(props);
-  const entries = Object.entries(sanitizedProps);
-  if (
-    entries.length === 0 ||
-    (entries.length === 1 && entries[0]?.[0] === "children")
-  ) {
-    return "";
-  }
+  const skipUnsafeMetaRefreshContent = hasUnsafeMetaRefreshProps(props);
 
   let attributes = "";
-  for (const [name, value] of entries) {
-    attributes += renderHtmlAttribute(name, value);
+  for (const name in props) {
+    if (skipUnsafeMetaRefreshContent && name === "content") {
+      continue;
+    }
+    attributes += renderHtmlAttribute(name, props[name]);
   }
   return attributes;
 }
 
-function sanitizeMetaRefreshProps(
-  props: Record<string, unknown>,
-): Record<string, unknown> {
-  const httpEquiv = props["http-equiv"] ?? props.httpEquiv;
+function hasUnsafeMetaRefreshProps(props: Record<string, unknown>): boolean {
   const content = props.content;
-  if (typeof httpEquiv !== "string" || typeof content !== "string") {
-    return props;
-  }
-  if (!isUnsafeMetaRefreshContent(httpEquiv, content)) {
-    return props;
+  if (typeof content !== "string") {
+    return false;
   }
 
-  const sanitized = { ...props };
-  delete sanitized.content;
-  return sanitized;
+  const httpEquiv = props["http-equiv"] ?? props.httpEquiv;
+  return typeof httpEquiv === "string" && isUnsafeMetaRefreshContent(httpEquiv, content);
 }
 
 function isClassComponentType(
@@ -339,15 +335,24 @@ function renderInputAttributesToString(props: Record<string, unknown>): string {
     .join("");
 }
 
+// Matches the /^on/i prefix without allocating a fresh regex per attribute.
+function isEventHandlerName(name: string): boolean {
+  return (
+    name.length > 1 &&
+    (name.charCodeAt(0) | 32) === 111 &&
+    (name.charCodeAt(1) | 32) === 110
+  );
+}
+
 function renderHtmlAttribute(name: string, value: unknown): string {
   if (
+    value === null ||
+    value === undefined ||
+    typeof value === "function" ||
     name === "children" ||
     name === "key" ||
     name === "ref" ||
-    /^on/i.test(name) ||
-    value === null ||
-    value === undefined ||
-    typeof value === "function"
+    isEventHandlerName(name)
   ) {
     return "";
   }
@@ -363,7 +368,7 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return "";
   }
 
-  if (/^on/i.test(attributeName)) {
+  if (isEventHandlerName(attributeName)) {
     return "";
   }
 
@@ -404,13 +409,14 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 
 const VALID_ATTRIBUTE_NAME = /^[A-Za-z_][\w.\-:]*$/;
 
-function isBooleanishStringAttribute(name: string): boolean {
-  const attributeName = toHtmlAttributeName(name).toLowerCase();
-  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
+function isBooleanishStringAttribute(attributeName: string): boolean {
+  // Callers pass the already-mapped HTML attribute name.
+  const lowerCased = attributeName.toLowerCase();
+  return lowerCased.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(lowerCased);
 }
 
-function isDataAttribute(name: string): boolean {
-  return toHtmlAttributeName(name).toLowerCase().startsWith("data-");
+function isDataAttribute(attributeName: string): boolean {
+  return attributeName.toLowerCase().startsWith("data-");
 }
 
 const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
@@ -470,17 +476,24 @@ function renderStyleAttribute(value: unknown): string {
     return "";
   }
 
-  return Object.entries(value)
-    .filter(([, propertyValue]) =>
-      propertyValue !== null &&
-      propertyValue !== undefined &&
-      typeof propertyValue !== "boolean" &&
-      propertyValue !== "",
-    )
-    .map(([name, propertyValue]) =>
-      `${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`,
-    )
-    .join(";");
+  const styleProps = value as Record<string, unknown>;
+  let css = "";
+  for (const name in styleProps) {
+    const propertyValue = styleProps[name];
+    if (
+      propertyValue === null ||
+      propertyValue === undefined ||
+      typeof propertyValue === "boolean" ||
+      propertyValue === ""
+    ) {
+      continue;
+    }
+
+    css += css === ""
+      ? `${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`
+      : `;${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`;
+  }
+  return css;
 }
 
 function renderCssValue(name: string, value: unknown): string {
@@ -491,8 +504,30 @@ function renderCssValue(name: string, value: unknown): string {
   return `${value}px`;
 }
 
+const UPPERCASE_LETTER = /[A-Z]/;
+const UPPERCASE_LETTER_GLOBAL = /[A-Z]/g;
+// Distinct camelCase style names per app are few; the cap only guards
+// pathological dynamically-generated property names.
+const KEBAB_CASE_CACHE = new Map<string, string>();
+const KEBAB_CASE_CACHE_LIMIT = 512;
+
+function kebabReplace(letter: string): string {
+  return `-${letter.toLowerCase()}`;
+}
+
 function toKebabCase(value: string): string {
-  return value.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+  if (!UPPERCASE_LETTER.test(value)) {
+    return value;
+  }
+
+  let cached = KEBAB_CASE_CACHE.get(value);
+  if (cached === undefined) {
+    cached = value.replace(UPPERCASE_LETTER_GLOBAL, kebabReplace);
+    if (KEBAB_CASE_CACHE.size < KEBAB_CASE_CACHE_LIMIT) {
+      KEBAB_CASE_CACHE.set(value, cached);
+    }
+  }
+  return cached;
 }
 
 function isUnitlessCssProperty(name: string): boolean {
