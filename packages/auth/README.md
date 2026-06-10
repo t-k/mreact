@@ -48,7 +48,7 @@ export async function loader({ request }) {
 - `requireRole()` and `requirePermission()` redirect or reject when the policy is not met.
 - `tryRequireRole()` and `tryRequirePermission()` return a boolean policy result.
 - `getSessionClaims()` reads session claims on both server and client hand-off paths.
-- `runWithAuthRequest()` creates an explicit request-local claims scope for custom server handlers that call auth helpers outside the app router request lifecycle.
+- `runWithAuthRequest()` creates an explicit request-local claims scope for custom server handlers that call auth helpers outside the app router request lifecycle, and can receive per-request auth config overrides.
 
 ## Router Integration
 
@@ -61,4 +61,4 @@ By default, the hand-off includes only authorization claims: `roles` and
 browser-safe fields, such as a public user id. Do not return server-only values
 such as refresh tokens or provider secrets from the serializer.
 
-Custom server code that calls `getCurrentSession()`, `refreshSession()`, or `revokeCurrentSession()` and then reads `getSessionClaims()` outside `renderAppRequest()` should wrap that request's work in `runWithAuthRequest()`. Server calls without an active request scope return `undefined` rather than falling back to a shared module-global claims value.
+Custom server code that calls `getCurrentSession()`, `refreshSession()`, or `revokeCurrentSession()` and then reads `getSessionClaims()` outside `renderAppRequest()` should wrap that request's work in `runWithAuthRequest()`. Server calls without an active request scope return `undefined` rather than falling back to a shared module-global claims value. Per-tenant handlers can pass `runWithAuthRequest(() => work(), { config })` to override redirect targets or claim serialization for that request without mutating process-wide defaults.
