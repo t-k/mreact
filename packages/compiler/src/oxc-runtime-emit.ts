@@ -45,7 +45,12 @@ function emitOxcServerStringNode(node: JsxNodeIr): string {
 
   if (node.kind === "list") {
     const parameters = emitOxcListParameters(node);
-    return `(${node.itemsCode}).map((${parameters}) => ${emitOxcServerStringChildren(node.children)}).join("")`;
+    const valueExpression = emitOxcServerStringChildren(node.children);
+    if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
+      return `(${node.itemsCode}).map((${parameters}) => ${valueExpression}).join("")`;
+    }
+
+    return `(${node.itemsCode}).map((${parameters}) => {\n${node.bodyStatements.map((statement) => `  ${statement}`).join("\n")}\n  return ${valueExpression};\n}).join("")`;
   }
 
   if (node.kind === "fragment") {

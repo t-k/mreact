@@ -1264,6 +1264,20 @@ export default function Page() {
     expect(compatCode).toContain('children: "Ada"');
   });
 
+  test("emits OXC server string list body statements before child expressions", () => {
+    expect(
+      emitOxcServerStringChildren([
+        {
+          bodyStatements: ["const label = item.label.toUpperCase();"],
+          children: [{ kind: "expr", code: "label" }],
+          itemName: "item",
+          itemsCode: "items",
+          kind: "list",
+        },
+      ]),
+    ).toContain("const label = item.label.toUpperCase();");
+  });
+
   test("lowers DOM JSX elements into imperative node creation", () => {
     const code = '<button className="primary" disabled>{label}<span>Child</span></button>';
     const labelStart = code.indexOf("label");
