@@ -571,8 +571,8 @@ function getReusableKeyedRowHostFiber(
   const previousRecord = previousProps as Record<string, unknown>;
 
   if (
-    getHostOwnPropsMeta(previousRecord) !== row.meta ||
-    getDirectHostTextChild(previousRecord.children) !== row.text
+    getDirectHostTextChild(previousRecord.children) !== row.text ||
+    !hostOwnPropsEqual(previousRecord, row.element.props)
   ) {
     return undefined;
   }
@@ -591,7 +591,6 @@ interface KeyedRowHostElement {
   element: ReactCompatElement;
   key: string;
   type: string;
-  meta: number;
   text: string;
 }
 
@@ -600,7 +599,6 @@ function createKeyedRowHostElementScratch(): KeyedRowHostElement {
     element: undefined as unknown as ReactCompatElement,
     key: "",
     type: "",
-    meta: 0,
     text: "",
   };
 }
@@ -618,18 +616,17 @@ function readKeyedRowHostElement(
     return false;
   }
 
-  const props = node.props as Record<string, unknown>;
-  const meta = getHostOwnPropsMeta(props);
-  const text = meta === undefined ? undefined : getDirectHostTextChild(props.children);
+  // Any keyed host row whose children collapse to a single text value
+  // qualifies; row props are compared per reuse with hostOwnPropsEqual.
+  const text = getDirectHostTextChild((node.props as Record<string, unknown>).children);
 
-  if (meta === undefined || text === undefined) {
+  if (text === undefined) {
     return false;
   }
 
   row.element = node;
   row.key = node.key;
   row.type = node.type;
-  row.meta = meta;
   row.text = text;
   return true;
 }
@@ -667,13 +664,9 @@ function createKeyedRowHostFiber(
   }
 
   const previousProps = current.memoizedProps ?? current.pendingProps;
-  const previousMeta =
-    typeof previousProps === "object" && previousProps !== null
-      ? getHostOwnPropsMeta(previousProps as Record<string, unknown>)
-      : undefined;
   const previousText = getDirectHostTextChild(hostFiberChildrenProp(previousProps));
 
-  if (previousMeta !== row.meta || previousText !== row.text) {
+  if (previousText !== row.text || !hostOwnPropsEqual(previousProps, row.element.props)) {
     fiber.flags |= Update;
   }
 
@@ -1642,6 +1635,8 @@ function commitHostDirtyFiber(
         hostPropsAreChildrenOnly(fiber.memoizedProps) &&
         hostPropsAreChildrenOnly(props));
     const textOnlyRowUpdate =
+      !propsAreUnchanged &&
+      !propsAreChildrenOnly &&
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
@@ -2032,6 +2027,8 @@ function commitHostFiber(
         hostPropsAreChildrenOnly(fiber.memoizedProps) &&
         hostPropsAreChildrenOnly(props));
     const textOnlyRowUpdate =
+      !propsAreUnchanged &&
+      !propsAreChildrenOnly &&
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
@@ -2243,12 +2240,6 @@ function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): bo
   }
 
   const previousProps = previous as Record<string, unknown>;
-  const previousMeta = getHostOwnPropsMeta(previousProps);
-  const nextMeta = getHostOwnPropsMeta(next);
-
-  if (previousMeta !== undefined && nextMeta !== undefined) {
-    return previousMeta === nextMeta;
-  }
 
   let previousCount = 0;
   let nextCount = 0;
@@ -2274,10 +2265,6 @@ function hostOwnPropsEqual(previous: unknown, next: Record<string, unknown>): bo
   }
 
   return previousCount === nextCount;
-}
-
-function getHostOwnPropsMeta(props: Record<string, unknown>): number | undefined {
-  return (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META];
 }
 
 function hostDirectTextChildChanged(previous: unknown, next: Record<string, unknown>): boolean {
@@ -2379,17 +2366,15 @@ function isRowTextOnlyUpdate(previous: unknown, next: Record<string, unknown>): 
   }
 
   const previousProps = previous as Record<string, unknown>;
-  const previousMeta = getHostOwnPropsMeta(previousProps);
-  const nextMeta = getHostOwnPropsMeta(next);
-
-  if (previousMeta === undefined || previousMeta !== nextMeta) {
-    return false;
-  }
-
   const previousText = getDirectHostTextChild(previousProps.children);
   const nextText = getDirectHostTextChild(next.children);
 
-  return previousText !== undefined && nextText !== undefined && previousText !== nextText;
+  return (
+    previousText !== undefined &&
+    nextText !== undefined &&
+    previousText !== nextText &&
+    hostOwnPropsEqual(previousProps, next)
+  );
 }
 
 function hostFiberChildrenProp(props: unknown): unknown {
