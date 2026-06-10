@@ -529,7 +529,7 @@ function captureThrownValue(
     }
 
     if (!isThenable(thrownValue) && boundary.tag === "class-component") {
-      const captured = captureClassErrorBoundary(root, boundary, thrownValue);
+      const captured = captureClassErrorBoundary(root, boundary, source, thrownValue);
 
       if (captured !== undefined) {
         return captured;
@@ -574,6 +574,7 @@ function beginClassComponent(
 function captureClassErrorBoundary(
   root: FiberRoot,
   boundary: Fiber,
+  source: Fiber,
   thrownValue: unknown,
 ): Fiber | undefined {
   if (!isClassComponentType(boundary.type)) {
@@ -598,13 +599,64 @@ function captureClassErrorBoundary(
     };
   }
 
-  instance.componentDidCatch?.(error, { componentStack: "" });
+  instance.componentDidCatch?.(error, {
+    componentStack: componentStackFromFiber(source, boundary),
+  });
   boundary.child = reconcileChildFibers(
     boundary,
     boundary.alternate?.child,
     instance.render(),
   );
   return boundary.child ?? completeUnitOfWork(root, boundary);
+}
+
+function componentStackFromFiber(source: Fiber, boundary: Fiber): string {
+  const names: string[] = [];
+  let cursor: Fiber | undefined = source;
+
+  while (cursor !== undefined) {
+    const name = componentNameForFiber(cursor);
+    if (name !== undefined) {
+      names.push(name);
+    }
+    if (cursor === boundary) {
+      break;
+    }
+    cursor = cursor.return;
+  }
+
+  return names.length === 0
+    ? "\n    at Anonymous"
+    : names.map((name) => `\n    at ${name}`).join("");
+}
+
+function componentNameForFiber(fiber: Fiber): string | undefined {
+  if (fiber.tag === "host-component") {
+    return String(fiber.type);
+  }
+
+  if (fiber.tag === "function-component" || fiber.tag === "class-component") {
+    return componentNameFromType(fiber.type);
+  }
+
+  if (fiber.tag === "memo" && isMemoType(fiber.type)) {
+    return componentNameFromType(fiber.type.type);
+  }
+
+  if (fiber.tag === "forward-ref" && isForwardRefType(fiber.type)) {
+    return componentNameFromType(fiber.type.render);
+  }
+
+  return undefined;
+}
+
+function componentNameFromType(type: unknown): string {
+  const displayName = (type as { displayName?: unknown } | undefined)?.displayName;
+  if (typeof displayName === "string" && displayName !== "") {
+    return displayName;
+  }
+  const name = (type as { name?: unknown } | undefined)?.name;
+  return typeof name === "string" && name !== "" ? name : "Anonymous";
 }
 
 function isClassErrorBoundary(

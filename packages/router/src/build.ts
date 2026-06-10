@@ -2139,6 +2139,10 @@ async function buildServerModuleArtifacts(options: {
             filename: join(options.projectRoot, file),
             moduleContextCache: options.clientRouteInferenceCache,
             serverOutput,
+            ...(serverOutput === "stream" &&
+            (routeAnalysis?.clientRoute ?? clientInference?.client) === true
+              ? { serverAwaitHydration: true as const }
+              : {}),
           });
           const fatalDiagnostics = output.diagnostics.filter(
             (diagnostic) => diagnostic.code !== "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",

@@ -25,6 +25,7 @@ import {
   setSchedulerHostForTesting,
   type SchedulerHost,
 } from "../src/fiber-scheduler.js";
+import { __getStrictMemoOwnerKeyForTesting } from "../src/hooks.js";
 
 interface TestSchedulerHost extends SchedulerHost {
   flushOneHostCallback(): void;
@@ -588,6 +589,13 @@ describe("react-compat useState", () => {
     );
 
     expect(container.innerHTML).toBe("<span>ready</span>");
+  });
+
+  test("derives StrictMode memo replay keys for primitive owners without retaining them", () => {
+    expect(__getStrictMemoOwnerKeyForTesting(undefined)).toBe("p:undefined:undefined");
+    expect(__getStrictMemoOwnerKeyForTesting("route:1")).toBe("p:string:route:1");
+    expect(__getStrictMemoOwnerKeyForTesting(1)).toBe("p:number:1");
+    expect(__getStrictMemoOwnerKeyForTesting(1)).toBe("p:number:1");
   });
 
   test("throws when called outside render", () => {

@@ -58,6 +58,7 @@ Known limits:
   reconciler. The tests assert observable behavior for the supported surface.
 - The app-router compiler path is separate from the React-compatible runtime.
   Compiler and router behavior is covered by their own tests.
+- `useId()` returns opaque underscore-delimited ids such as `_R_0_` and `_r_0_` instead of React's colon-delimited internal shape. The runtime keeps SSR and hydration ids stable through its hydrated-id map, but code should not parse the id string.
 - React private internals such as `__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE`
   are intentionally classified as private, not implemented as public API.
 

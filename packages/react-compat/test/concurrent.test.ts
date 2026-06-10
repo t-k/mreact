@@ -139,6 +139,36 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<p>settled:done</p>");
   });
 
+  test("useTransition drops scheduled work after the owning component unmounts", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let trigger: () => void = () => {};
+
+    function App() {
+      const [pending, start] = useTransition();
+      trigger = () => {
+        start(() => {
+          calls.push("transition");
+        });
+      };
+
+      return createElement("p", null, pending ? "pending" : "settled");
+    }
+
+    root.render(createElement(App, null));
+    trigger();
+    expect(container.innerHTML).toBe("<p>pending</p>");
+
+    root.unmount();
+    host.flushOneHostCallback();
+
+    expect(calls).toEqual([]);
+    expect(container.innerHTML).toBe("");
+  });
+
   test("useDeferredValue keeps the previous value until the transition lane commits", async () => {
     const host = createTestSchedulerHost();
     setSchedulerHostForTesting(host);
@@ -434,8 +464,8 @@ describe("react-compat concurrent subset", () => {
         return { message: error.message };
       }
 
-      componentDidCatch(error: Error) {
-        errors.push(error.message);
+      componentDidCatch(error: Error, info: { componentStack: string }) {
+        errors.push(`${error.message}:${info.componentStack}`);
       }
 
       render() {
@@ -450,7 +480,9 @@ describe("react-compat concurrent subset", () => {
     root.render(createElement(Boundary, null, createElement(Broken, null)));
 
     expect(container.innerHTML).toBe("<strong>boom</strong>");
-    expect(errors).toEqual(["boom"]);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain("boom:");
+    expect(errors[0]).toContain("Boundary");
   });
 
   test("sync updates abort stale transition commits", async () => {

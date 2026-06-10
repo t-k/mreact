@@ -162,6 +162,10 @@ function transformWithAnalyzer(
       metadata.serverHydration = true;
     }
 
+    if (input.serverAwaitHydration === true) {
+      metadata.serverAwaitHydration = true;
+    }
+
     if (input.reactSuspenseRevealScriptSrc !== undefined) {
       metadata.reactSuspenseRevealScriptSrc = input.reactSuspenseRevealScriptSrc;
     }

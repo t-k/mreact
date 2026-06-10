@@ -137,6 +137,7 @@ import {
   prebuiltRouteLoaderModuleArtifact,
   prebuiltServerComponentModuleCode,
   prebuiltServerModuleOutputMatches,
+  prebuiltServerModuleOutputOptionsMatch,
   type BuiltServerModuleOutputLike,
 } from "./route-module-loader.js";
 
@@ -353,6 +354,8 @@ async function preloadBuiltPageRouteModules(options: {
       options.serverModuleCacheVersion,
       options.define,
       options.vitePlugins,
+      undefined,
+      { serverAwaitHydration: options.analysis.clientInference.client },
     );
   }
 
@@ -641,6 +644,17 @@ function finishRenderTimingPhase(
   timing.phases[phaseName] = logDurationMs(startedAt);
 }
 
+async function readSettledPromiseAtNextTask<T>(
+  promise: Promise<T>,
+): Promise<{ settled: true; value: T } | { settled: false }> {
+  return await Promise.race([
+    promise.then((value) => ({ settled: true as const, value })),
+    new Promise<{ settled: false }>((resolve) => {
+      setTimeout(() => resolve({ settled: false }), 0);
+    }),
+  ]);
+}
+
 function addRenderTimingPhaseDuration(
   timing: RenderTiming | undefined,
   startedAt: number | undefined,
@@ -651,6 +665,12 @@ function addRenderTimingPhaseDuration(
   }
 
   timing.phases[phaseName] = (timing.phases[phaseName] ?? 0) + logDurationMs(startedAt);
+}
+
+function routeLoaderMayReturnControlResponse(code: string): boolean {
+  return /\b(?:redirect|redirectExternal|rewrite|notFound|throwNotFound)\s*\(/.test(code) ||
+    /\bnew\s+Response\s*\(/.test(code) ||
+    /\bResponse\.(?:redirect|json)\s*\(/.test(code);
 }
 
 async function waitForRenderPreload(
@@ -1210,8 +1230,9 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       }
 
       let streamData: unknown;
-      if (loadingFile === undefined) {
-        phaseStartedAt = renderTimingPhaseStartedAt(timing);
+      let streamDataPromise = dataPromise ?? Promise.resolve(undefined);
+      phaseStartedAt = renderTimingPhaseStartedAt(timing);
+      if (loadingFile === undefined || routeLoaderMayReturnControlResponse(code)) {
         try {
           streamData = dataPromise === undefined ? undefined : await dataPromise;
         } finally {
@@ -1220,6 +1241,20 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         if (streamData instanceof Response) {
           emitRenderTiming(options, timing, streamData.status);
           return streamData;
+        }
+        streamDataPromise = Promise.resolve(streamData);
+      } else {
+        try {
+          const settledData = await readSettledPromiseAtNextTask(streamDataPromise);
+          if (settledData.settled) {
+            if (settledData.value instanceof Response) {
+              emitRenderTiming(options, timing, settledData.value.status);
+              return settledData.value;
+            }
+            streamDataPromise = Promise.resolve(settledData.value);
+          }
+        } finally {
+          finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
         }
       }
 
@@ -1251,7 +1286,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientRoute,
-          data: dataPromise ?? Promise.resolve(undefined),
+          data: streamDataPromise,
           define: options.define,
           loadingFile,
           pageFile: matched.route.file,
@@ -2571,7 +2606,10 @@ function transformServerModule(options: {
   if (
     artifact !== undefined &&
     artifact.sourceHash === sourceHash &&
-    options.serverAwaitHydration !== true
+    prebuiltServerModuleOutputOptionsMatch(
+      artifact,
+      options.serverAwaitHydration === true ? { serverAwaitHydration: true } : {},
+    )
   ) {
     return {
       code: artifact.code,
@@ -3484,12 +3522,14 @@ async function loadServerStreamModule(
   define?: UserConfig["define"] | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
   importPolicy?: AppRouterImportPolicy | undefined,
+  outputOptions: { serverAwaitHydration?: boolean } = {},
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
-  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash);
+  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash, outputOptions);
   if (
     artifactCode !== undefined &&
+    prebuiltServerModuleOutputOptionsMatch(artifactCode, outputOptions) &&
     prebuiltServerModuleOutputMatches(artifactCode, code, codeHash) &&
     artifactCode.moduleFile !== undefined
   ) {

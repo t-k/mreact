@@ -1,5 +1,5 @@
 import { renderWithRootRuntime, useLayoutEffect, useRef, type RootRuntime } from "./hooks.js";
-import type { ReactCompatElement, ReactCompatNode } from "./element.js";
+import { isReactCompatElement, type ReactCompatElement, type ReactCompatNode } from "./element.js";
 import { withHydrationComponentStack, type RenderOptions } from "./hydration.js";
 import type { ReconcileNode, ReconcileResult } from "./reconcile-types.js";
 import { isThenable } from "./thenable.js";
@@ -239,6 +239,7 @@ export function reconcileClassComponent(
       rendered.type,
       rendered.instance,
       error,
+      componentStackFromNode(rendered.node, getClassComponentName(rendered.type)),
     );
 
     if (fallbackNode === undefined) {
@@ -387,6 +388,7 @@ export function recoverClassComponentError(
   type: ClassComponentType,
   instance: ClassComponentInstance,
   error: unknown,
+  componentStack = componentStackFromClassType(type),
 ): ReactCompatNode | undefined {
   if (isThenable(error) || !isErrorBoundaryClass(type, instance)) {
     return undefined;
@@ -403,7 +405,9 @@ export function recoverClassComponentError(
     };
   }
 
-  instance.componentDidCatch?.(normalizedError, { componentStack: "" });
+  instance.componentDidCatch?.(normalizedError, {
+    componentStack,
+  });
   return instance.render();
 }
 
@@ -417,6 +421,35 @@ export function isClassComponentType(value: unknown): value is ClassComponentTyp
 
 function getClassComponentName(type: ClassComponentType): string {
   return type.name === "" ? "Anonymous" : type.name;
+}
+
+function componentStackFromClassType(type: ClassComponentType): string {
+  return `\n    at ${getClassComponentName(type)}`;
+}
+
+function componentStackFromNode(node: ReactCompatNode, boundaryName: string): string {
+  const childName = componentNameFromNode(node);
+  return childName === undefined || childName === boundaryName
+    ? `\n    at ${boundaryName}`
+    : `\n    at ${childName}\n    at ${boundaryName}`;
+}
+
+function componentNameFromNode(node: ReactCompatNode): string | undefined {
+  if (!isReactCompatElement(node)) {
+    return undefined;
+  }
+
+  if (typeof node.type === "string") {
+    return node.type;
+  }
+
+  const displayName = (node.type as { displayName?: unknown }).displayName;
+  if (typeof displayName === "string" && displayName !== "") {
+    return displayName;
+  }
+
+  const name = (node.type as { name?: unknown }).name;
+  return typeof name === "string" && name !== "" ? name : "Anonymous";
 }
 
 export function reconcileErrorBoundary(

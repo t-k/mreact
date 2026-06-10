@@ -77,6 +77,46 @@ describe("router route module loader contract", () => {
         hash,
       ),
     ).toBeUndefined();
+    expect(
+      prebuiltServerComponentModuleCode(
+        {
+          bundleCode: "bundle",
+          code: "compiled",
+          metadata: {
+            compiler: { frontend: "oxc", typescriptFallback: false },
+            components: [],
+            filename: "page.tsx",
+            imports: [],
+            serverAwaitHydration: true,
+            serverOutput: "stream",
+            target: "server",
+          },
+          sourceHash: hash,
+        },
+        source,
+        hash,
+      ),
+    ).toBeUndefined();
+    expect(
+      prebuiltServerComponentModuleCode(
+        {
+          bundleCode: "bundle",
+          code: "compiled",
+          metadata: {
+            compiler: { frontend: "oxc", typescriptFallback: false },
+            components: [],
+            filename: "page.tsx",
+            imports: [],
+            serverOutput: "stream",
+            target: "server",
+          },
+          sourceHash: hash,
+        },
+        source,
+        hash,
+        { serverAwaitHydration: true },
+      ),
+    ).toBeUndefined();
   });
 
   test("normalizes import policy cache keys regardless of set order", () => {

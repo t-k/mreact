@@ -14,7 +14,7 @@ export interface AsyncBoundaryOptions {
 
 export interface OutOfOrderBoundaryOptions extends AsyncBoundaryOptions {
   hydration?: boolean;
-  placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
+  placeholder?: (sink: HtmlSink) => void;
   placeholderTag?: string;
 }
 
@@ -226,7 +226,10 @@ export function renderOutOfOrderBoundary<T>(
 ): void {
   const boundaryId = nextOutOfOrderBoundaryInstanceId(sink, id);
   const placeholderSink = createStringSink();
-  void options.placeholder?.(placeholderSink);
+  const placeholderResult = options.placeholder?.(placeholderSink);
+  if (!isProductionMode() && isPromiseLikeUnknown(placeholderResult)) {
+    throw new Error("renderOutOfOrderBoundary placeholder must be synchronous.");
+  }
   const placeholderTag = normalizeOutOfOrderPlaceholderTag(options.placeholderTag);
   const hydrationStart =
     options.hydration === true ? `<!--mreact-h:start:${encodeURIComponent(boundaryId)}-->` : "";

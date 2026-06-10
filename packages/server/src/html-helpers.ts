@@ -185,11 +185,7 @@ function appendReactNodeList(
   for (const node of nodes) {
     if (chain !== undefined) {
       const buffered = renderReactNodeToBufferedString(node, state);
-      chain = chain.then(async () => {
-        await buffered.result;
-        await buffered.sink.drain();
-        sink.append(buffered.sink.toString());
-      });
+      chain = chain.then(() => appendBufferedSinkAfterResult(sink, buffered));
       continue;
     }
 
@@ -312,11 +308,7 @@ function appendRawTextNodeList(
   for (const node of nodes) {
     if (chain !== undefined) {
       const buffered = renderRawTextNodeToBufferedString(node);
-      chain = chain.then(async () => {
-        await buffered.result;
-        await buffered.sink.drain();
-        sink.append(buffered.sink.toString());
-      });
+      chain = chain.then(() => appendBufferedSinkAfterResult(sink, buffered));
       continue;
     }
 
@@ -339,6 +331,31 @@ function renderRawTextNodeToBufferedString(
     result: appendRawTextNode(sink, node),
     sink,
   };
+}
+
+async function appendBufferedSinkAfterResult(
+  sink: HtmlSink,
+  buffered: { result: void | PromiseLike<void>; sink: ReturnType<typeof createStringSink> },
+): Promise<void> {
+  await buffered.result;
+  const shell = buffered.sink.toString();
+  sink.append(shell);
+
+  if (!hasDeferredTasks(buffered.sink)) {
+    return;
+  }
+
+  const appendDeferredTail = buffered.sink.drain().then(() => {
+    const resolved = buffered.sink.toString();
+    sink.append(resolved.slice(shell.length));
+  });
+
+  if (sink.defer !== undefined) {
+    sink.defer(appendDeferredTail);
+    return;
+  }
+
+  await appendDeferredTail;
 }
 
 function appendSuspenseElement(

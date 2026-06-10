@@ -191,7 +191,6 @@ let automaticRerenderScheduled = false;
 let effectFlushRerenderDepth = 0;
 let strictMemoOwnerId = 0;
 const strictMemoObjectOwnerIds = new WeakMap<object, number>();
-const strictMemoPrimitiveOwnerIds = new Map<unknown, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
 export const version = "19.2.6";
@@ -1080,10 +1079,14 @@ function getStrictMemoHookKey(
   instance: ComponentInstance,
   index: number,
 ): string {
-  return `${instance.path}:${getStrictMemoOwnerId(instance.owner)}:${index}`;
+  return `${instance.path}:${getStrictMemoOwnerKey(instance.owner)}:${index}`;
 }
 
-function getStrictMemoOwnerId(owner: unknown): number {
+export function __getStrictMemoOwnerKeyForTesting(owner: unknown): string {
+  return getStrictMemoOwnerKey(owner);
+}
+
+function getStrictMemoOwnerKey(owner: unknown): string {
   if ((typeof owner === "object" && owner !== null) || typeof owner === "function") {
     const objectOwner = owner as object;
     let ownerId = strictMemoObjectOwnerIds.get(objectOwner);
@@ -1091,15 +1094,17 @@ function getStrictMemoOwnerId(owner: unknown): number {
       ownerId = strictMemoOwnerId++;
       strictMemoObjectOwnerIds.set(objectOwner, ownerId);
     }
-    return ownerId;
+    return `o:${ownerId}`;
   }
 
-  let ownerId = strictMemoPrimitiveOwnerIds.get(owner);
-  if (ownerId === undefined) {
-    ownerId = strictMemoOwnerId++;
-    strictMemoPrimitiveOwnerIds.set(owner, ownerId);
+  if (typeof owner === "symbol") {
+    const globalKey = Symbol.keyFor(owner);
+    return globalKey === undefined
+      ? `p:symbol:${String(owner)}`
+      : `p:symbol-global:${globalKey}`;
   }
-  return ownerId;
+
+  return `p:${typeof owner}:${String(owner)}`;
 }
 
 function assignRef<T>(ref: unknown, value: T | null): void {
@@ -1571,6 +1576,7 @@ export function runWithHostCommit<T>(callback: () => T): T {
 }
 
 export function useTransition(): [boolean, StartTransition] {
+  const instance = requireInstance();
   const [pending, setPending] = runWithoutDevToolsHookTracking(() => useState(false));
   const startTransitionWithPending: StartTransition = (scope) => {
     setPending(true);
@@ -1579,6 +1585,10 @@ export function useTransition(): [boolean, StartTransition] {
       transitionVersion: ++transitionVersion,
     };
     scheduleCallback("low", () => {
+      if (instance.disposed === true) {
+        return;
+      }
+
       if (!isTransitionContextCurrent(context)) {
         setPending(false);
         return;
@@ -1586,6 +1596,9 @@ export function useTransition(): [boolean, StartTransition] {
 
       runTransitionScope(() => {
         scope();
+        if (instance.disposed === true) {
+          return;
+        }
         setPending(false);
       }, context);
     });
