@@ -62,6 +62,11 @@ describe("compat server vendor chunks", () => {
     const chunkDir = join(outDir, "server", "server-modules", "chunks");
     const chunkFiles = await readdir(chunkDir);
     expect(chunkFiles).toContain("compat.index.mjs");
+    // Only the entries the routes actually import may be bundled; shipping the
+    // full compat surface regresses output size for small apps.
+    expect(chunkFiles).not.toContain("compat.flight.mjs");
+    expect(chunkFiles).not.toContain("compat.internal.mjs");
+    expect(chunkFiles).not.toContain("compat.scheduler.mjs");
 
     const compatModuleSources = (await routeModuleSources(outDir)).filter((source) =>
       source.includes("compat:"),

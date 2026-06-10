@@ -975,24 +975,48 @@ function rewriteCompatVendorPlaceholderImports(code: string): string {
   );
 }
 
-function serverModuleArtifactUsesCompatVendor(artifact: BuiltServerModuleArtifact): boolean {
-  return (
-    artifact.string?.bundleCode?.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX) === true ||
-    artifact.stream?.bundleCode?.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX) === true
-  );
+function collectCompatVendorEntryUsage(
+  artifacts: ReadonlyArray<readonly [string, BuiltServerModuleArtifact]>,
+): ReadonlySet<string> {
+  const usedEntries = new Set<string>();
+
+  for (const [, artifact] of artifacts) {
+    for (const output of [artifact.string, artifact.stream]) {
+      const bundleCode = output?.bundleCode;
+
+      if (bundleCode === undefined || !bundleCode.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+        continue;
+      }
+
+      for (const match of bundleCode.matchAll(COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN)) {
+        const entry = match[2];
+
+        if (entry !== undefined) {
+          usedEntries.add(entry);
+        }
+      }
+    }
+  }
+
+  return usedEntries;
 }
 
 // Bundles the react-compat server runtime once per build into shared chunks
 // under server-modules/chunks/ so per-route server modules can import it via
 // relative paths instead of inlining their own copy.
-async function writeCompatVendorChunks(serverDir: string): Promise<void> {
+async function writeCompatVendorChunks(
+  serverDir: string,
+  usedEntries: ReadonlySet<string>,
+): Promise<void> {
   const entryFiles = resolveCompatVendorEntryFiles(serverDir);
   const entries = await Promise.all(
-    [...entryFiles].map(async ([name, filename]) => ({
-      code: await readFile(filename, "utf8"),
-      filename,
-      name,
-    })),
+    [...entryFiles]
+      .filter(([name]) => usedEntries.has(name))
+      .map(async ([name, filename]) => ({
+        code: await readFile(filename, "utf8"),
+        filename,
+        name,
+      })),
   );
   const firstEntry = entries[0];
 
@@ -1040,8 +1064,10 @@ async function writeServerModuleArtifactFiles(
     mkdir(join(modulesDir, "render"), { recursive: true }),
   ]);
 
-  if (artifactEntries.some(([, artifact]) => serverModuleArtifactUsesCompatVendor(artifact))) {
-    await writeCompatVendorChunks(serverDir);
+  const usedCompatVendorEntries = collectCompatVendorEntryUsage(artifactEntries);
+
+  if (usedCompatVendorEntries.size > 0) {
+    await writeCompatVendorChunks(serverDir, usedCompatVendorEntries);
   }
 
   const writtenArtifacts = await mapWithBuildConcurrency<
