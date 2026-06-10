@@ -416,6 +416,9 @@ describe("create-mreact-app scaffolder", () => {
       "@reckona/mreact-router",
     ]);
     expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.16-import-policy-normalize");
+    expect(dryRun.codemods.map((item) => item.id)).toContain(
+      "0.0.148-interactive-counter-starter",
+    );
     expect(dryRunPackage).toContain('"@reckona/mreact": "^0.0.10"');
 
     const result = await upgradeMreactApp({ directory, fromVersion: "0.0.10" });

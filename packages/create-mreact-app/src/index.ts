@@ -158,7 +158,7 @@ export async function upgradeMreactApp(
       description: codemod.description,
       id: codemod.id,
     }));
-  const packageJsonChanged = updatedDependencies.length > 0 || codemods.length > 0;
+  const packageJsonChanged = updatedDependencies.length > 0;
   const changed = packageJsonChanged || tsconfigUpdate.changed;
 
   if (changed && options.dryRun !== true) {
@@ -203,6 +203,30 @@ export const createMreactAppCodemods = [
       "Check AWS Lambda template ESM entrypoints and package-manager production install guidance.",
     id: "0.0.16-aws-lambda-esm-template",
     version: "0.0.16",
+  },
+  {
+    description:
+      "Check app-router tsconfig global type declarations for Slot, Await, and generated route helpers.",
+    id: "0.0.54-app-router-globals",
+    version: "0.0.54",
+  },
+  {
+    description:
+      "Review generated app-router CSS imports and route stylesheet assumptions after automatic route CSS asset support.",
+    id: "0.0.78-route-css-assets",
+    version: "0.0.78",
+  },
+  {
+    description:
+      "Review AWS Lambda build/package scripts for generated Lambda targets, generated import policy, and minimal asset packaging.",
+    id: "0.0.120-aws-lambda-generated-package",
+    version: "0.0.120",
+  },
+  {
+    description:
+      "Review starter pages that still render static hello content; current basic and Tailwind starters use a small interactive cell counter.",
+    id: "0.0.148-interactive-counter-starter",
+    version: "0.0.148",
   },
 ] as const;
 

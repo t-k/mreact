@@ -40,6 +40,10 @@ export interface AuthConfig {
   serializeClaims?: AuthClaimsSerializer | undefined;
 }
 
+export interface AuthRequestOptions {
+  config?: AuthConfig | undefined;
+}
+
 interface ResolvedAuthConfig {
   forbiddenTo: string;
   redirectTo: string;
@@ -78,6 +82,7 @@ const authRuntimeStateKey = "__mreactAuthRuntimeState";
 
 interface AuthRuntimeRequestState {
   claims?: AuthSessionClaims | undefined;
+  config?: AuthConfig | undefined;
 }
 
 interface AuthRequestStorage {
@@ -101,6 +106,7 @@ let authConfig: ResolvedAuthConfig = {
  * Updates the process-wide auth defaults used by the guard helpers.
  *
  * Configure redirect targets and claim serialization before handling requests that call `requireSession()`, `requireRole()`, or `requirePermission()`.
+ * For per-request or per-tenant overrides, pass `config` to `runWithAuthRequest()` instead of calling `configureAuth()` while requests are in flight.
  */
 export function configureAuth(config: AuthConfig): void {
   authConfig = {
@@ -115,10 +121,13 @@ export function configureAuth(config: AuthConfig): void {
  *
  * Use this around custom server rendering or tests so `getSessionClaims()` can read request-local claims.
  */
-export async function runWithAuthRequest<T>(fn: () => T | Promise<T>): Promise<Awaited<T>> {
+export async function runWithAuthRequest<T>(
+  fn: () => T | Promise<T>,
+  options: AuthRequestOptions = {},
+): Promise<Awaited<T>> {
   const storage = await authRequestStorage();
 
-  return await storage.run({}, fn);
+  return await storage.run(options.config === undefined ? {} : { config: options.config }, fn);
 }
 
 /**
@@ -333,6 +342,7 @@ export function __resetAuthForTesting(): void {
   const requestState = state.storage?.getStore();
   if (requestState !== undefined) {
     requestState.claims = undefined;
+    requestState.config = undefined;
   }
 }
 
@@ -349,11 +359,11 @@ function authorizeRequirement(
 }
 
 function authRedirectTo(options: AuthGuardOptions): string {
-  return options.redirectTo ?? authConfig.redirectTo;
+  return options.redirectTo ?? authRequestConfig()?.redirectTo ?? authConfig.redirectTo;
 }
 
 function authForbiddenTo(options: AuthGuardOptions): string {
-  return options.forbiddenTo ?? authConfig.forbiddenTo;
+  return options.forbiddenTo ?? authRequestConfig()?.forbiddenTo ?? authConfig.forbiddenTo;
 }
 
 function hasAll(
@@ -391,7 +401,8 @@ function hasAny(
 }
 
 function setSessionClaims(data: unknown): void {
-  const claims = normalizeSessionClaims(authConfig.serializeClaims(data));
+  const serializer = authRequestConfig()?.serializeClaims ?? authConfig.serializeClaims;
+  const claims = normalizeSessionClaims(serializer(data));
   const state = authRuntimeState();
   const requestState = state.storage?.getStore();
 
@@ -407,11 +418,15 @@ function setSessionClaims(data: unknown): void {
   state.currentClaims = claims;
 }
 
+function authRequestConfig(): AuthConfig | undefined {
+  return authRuntimeState().storage?.getStore()?.config;
+}
+
 async function authRequestStorage(): Promise<AuthRequestStorage> {
   const state = authRuntimeState();
   if (state.storage === undefined) {
     const { AsyncLocalStorage } = await import("node:async_hooks");
-    state.storage = new AsyncLocalStorage<AuthRuntimeRequestState>();
+    state.storage ??= new AsyncLocalStorage<AuthRuntimeRequestState>();
   }
 
   return state.storage;

@@ -25,6 +25,10 @@ export interface ModularReactViteOptions {
 
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
   const include = options.include ?? /\.[cm]?[jt]sx$/;
+  const serverBootstrapNonce =
+    typeof options.serverBootstrapNonce === "function"
+      ? options.serverBootstrapNonce()
+      : options.serverBootstrapNonce;
 
   return {
     name: "modular-react",
@@ -55,11 +59,8 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         input.serverBootstrap = options.serverBootstrap;
       }
 
-      if (transformOptions?.ssr === true && options.serverBootstrapNonce !== undefined) {
-        input.serverBootstrapNonce =
-          typeof options.serverBootstrapNonce === "function"
-            ? options.serverBootstrapNonce()
-            : options.serverBootstrapNonce;
+      if (transformOptions?.ssr === true && serverBootstrapNonce !== undefined) {
+        input.serverBootstrapNonce = serverBootstrapNonce;
       }
 
       if (transformOptions?.ssr === true && options.serverBootstrapSrc !== undefined) {

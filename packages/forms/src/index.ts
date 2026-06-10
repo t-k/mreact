@@ -90,6 +90,9 @@ export type FormSubmitResult<TValues extends FormValues, TResult> =
       status: "success";
     }
   | {
+      status: "duplicate";
+    }
+  | {
       errors: FormErrors<TValues>;
       status: "invalid";
     }
@@ -365,7 +368,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       handler: (values: TSubmitValues) => Promise<TResult> | TResult,
     ): Promise<FormSubmitResult<TValues, TResult>> {
       if (activeSubmit !== undefined) {
-        return activeSubmit as Promise<FormSubmitResult<TValues, TResult>>;
+        return { status: "duplicate" };
       }
 
       const task = (async (): Promise<FormSubmitResult<TValues, TResult>> => {

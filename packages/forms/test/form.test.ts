@@ -414,7 +414,7 @@ describe("createForm", () => {
     });
   });
 
-  it("coalesces synchronous double submit calls into one in-flight submission", async () => {
+  it("reports synchronous double submit calls as duplicate while the first submission runs", async () => {
     const form = createForm({
       initialValues: { email: "ada@example.test" },
     });
@@ -436,11 +436,16 @@ describe("createForm", () => {
       submitting: true,
     });
 
+    await expect(second).resolves.toEqual({ status: "duplicate" });
+    expect(calls).toBe(1);
+    expect(form.state.get()).toMatchObject({
+      submitCount: 1,
+      submitting: true,
+    });
+
     deferred.resolve("saved");
 
     await expect(first).resolves.toEqual({ data: "saved", status: "success" });
-    await expect(second).resolves.toEqual({ data: "saved", status: "success" });
-    expect(calls).toBe(1);
     expect(form.state.get()).toMatchObject({
       submitCount: 1,
       submitting: false,
