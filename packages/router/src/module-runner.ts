@@ -274,10 +274,100 @@ export async function importAppRouterBuiltFileModule<T>(options: {
   return (await import(pathToFileURL(options.file).href)) as T;
 }
 
+
+export const COMPAT_VENDOR_PLACEHOLDER_PREFIX = "mreact-compat-vendor:";
+
+// Specifier-to-dist-entry table for the react-compat server family. The
+// per-route externalization plugin and the shared vendor chunk build must
+// agree exactly with the workspace alias table above, so both derive from
+// this map.
+const compatVendorSpecifierEntries = new Map<string, string>([
+  ["react", "index"],
+  ["react-dom", "index"],
+  ["react-dom/client", "index"],
+  ["react-dom/server", "index"],
+  ["react/jsx-dev-runtime", "jsx-dev-runtime"],
+  ["react/jsx-runtime", "jsx-runtime"],
+  ["@reckona/mreact-compat", "index"],
+  ["@reckona/mreact-compat/event-priority", "event-priority"],
+  ["@reckona/mreact-compat/flight", "flight"],
+  ["@reckona/mreact-compat/hooks", "hooks-entry"],
+  ["@reckona/mreact-compat/internal", "internal"],
+  ["@reckona/mreact-compat/jsx-dev-runtime", "jsx-dev-runtime"],
+  ["@reckona/mreact-compat/jsx-runtime", "jsx-runtime"],
+  ["@reckona/mreact-compat/scheduler", "scheduler"],
+]);
+
+const compatVendorEntrySpecifiers = new Map<string, string>([
+  ["index", "@reckona/mreact-compat"],
+  ["jsx-runtime", "@reckona/mreact-compat/jsx-runtime"],
+  ["jsx-dev-runtime", "@reckona/mreact-compat/jsx-dev-runtime"],
+  ["hooks-entry", "@reckona/mreact-compat/hooks"],
+  ["scheduler", "@reckona/mreact-compat/scheduler"],
+  ["event-priority", "@reckona/mreact-compat/event-priority"],
+  ["flight", "@reckona/mreact-compat/flight"],
+  ["internal", "@reckona/mreact-compat/internal"],
+]);
+
+export function compatVendorEntryNames(): readonly string[] {
+  return [...compatVendorEntrySpecifiers.keys()];
+}
+
+// Cheap build-time prefilter. A false positive only costs one unused vendor
+// chunk build; a false negative keeps the per-route inlining fallback.
+const compatVendorSpecifierPattern =
+  /["'](?:react|react-dom|react\/jsx(?:-dev)?-runtime|react-dom\/(?:client|server)|@reckona\/mreact-compat(?:\/[\w-]+)?)["']/u;
+
+export function sourceReferencesCompatVendorSpecifier(source: string): boolean {
+  return compatVendorSpecifierPattern.test(source);
+}
+
+export function resolveCompatVendorEntryFiles(resolveDir?: string): Map<string, string> {
+  const files = new Map<string, string>();
+
+  for (const [entry, specifier] of compatVendorEntrySpecifiers) {
+    files.set(
+      entry,
+      resolveWorkspacePackageFile({
+        currentFileUrl: import.meta.url,
+        entry,
+        monorepoDir: "react-compat",
+        packageName: "@reckona/mreact-compat",
+        resolveDir,
+        specifier,
+      }),
+    );
+  }
+
+  return files;
+}
+
+// Marks every compat-family import as external with a deterministic
+// placeholder specifier; writeServerModuleArtifactFiles later rewrites the
+// placeholders to relative paths into the emitted shared vendor chunks.
+export function compatVendorExternalizePlugin(): RouterCompatPlugin {
+  return {
+    name: "mreact-compat-vendor-externalize",
+    setup(buildApi) {
+      buildApi.onResolve(
+        { filter: /^(?:react|react-dom|react\/.+|react-dom\/.+|@reckona\/mreact-compat(?:\/.+)?)$/u },
+        (args) => {
+          const entry = compatVendorSpecifierEntries.get(args.path);
+
+          return entry === undefined
+            ? undefined
+            : { external: true, path: `${COMPAT_VENDOR_PLACEHOLDER_PREFIX}${entry}` };
+        },
+      );
+    },
+  };
+}
+
 export async function bundleAppRouterSourceModule(options: {
   code: string;
   define?: UserConfig["define"] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
+  externalizeCompatVendor?: boolean | undefined;
   label: string;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   resolveDir?: string | undefined;
@@ -295,6 +385,7 @@ export async function bundleAppRouterSourceModule(options: {
     root: options.root,
     vitePlugins: options.vitePlugins,
     plugins: [
+      ...(options.externalizeCompatVendor === true ? [compatVendorExternalizePlugin()] : []),
       workspacePackageResolutionPlugin(),
       ...(options.serverSourceTransform === undefined
         ? []

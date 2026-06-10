@@ -217,6 +217,23 @@ describe("router benchmark configuration", () => {
     ).toEqual(expectedAdapters);
   });
 
+  it("exposes adapter-owned dynamic route probes for mreact app-router variants", () => {
+    // Regression: the generic dynamic-route probe reads the module-level server shared
+    // by all mreact variants, so without an adapter-owned probe the case measures
+    // whichever variant fixture happened to be running last.
+    const adaptersWithDynamicRouteProbes = routerBenchmarkAdapters
+      .filter((adapter) => adapter.renderDynamicRoute !== undefined)
+      .map((adapter) => adapter.name);
+
+    expect(adaptersWithDynamicRouteProbes).toEqual(
+      expect.arrayContaining([
+        "mreact-app-router",
+        "mreact-app-router+mreact react-compat",
+        "mreact-app-router+log enabled",
+      ]),
+    );
+  });
+
   it("exposes loader client navigation probes for adapters with loader/data routes", () => {
     const expectedAdapters = [
       "qwik-city",

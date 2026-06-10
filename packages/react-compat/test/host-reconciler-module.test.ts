@@ -37,6 +37,47 @@ describe("host reconciler module", () => {
     expect(reconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
   });
 
+  test("uses production host fast paths when no process global exists", async () => {
+    // Browsers without bundler define rewriting have no process global at all.
+    // The fast-path gate must treat that as production instead of silently
+    // disabling every host fast path in deployed browser bundles.
+    const globalWithProcess = globalThis as { process?: NodeJS.Process };
+    const originalProcess = globalWithProcess.process;
+    vi.resetModules();
+
+    try {
+      delete globalWithProcess.process;
+      const [hostReconciler, fiber, compat] = await Promise.all([
+        import("../src/host-reconciler.js"),
+        import("../src/fiber.js"),
+        import("../src/index.js"),
+      ]);
+      const container = document.createElement("div");
+      const root = fiber.createFiberRoot(container);
+      const work = hostReconciler.renderHostFiberRoot(
+        root,
+        compat.createElement("main", { id: "app" }, "Hello"),
+      );
+
+      expect(work.child?.tag).toBe("host-component");
+      expect(work.child?.child).toBeUndefined();
+    } finally {
+      globalWithProcess.process = originalProcess;
+      vi.resetModules();
+    }
+  });
+
+  test("keeps vi.stubEnv control over host fast paths in node test environments", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const work = renderHostFiberRoot(root, createElement("main", null, "Hello"));
+
+    // Development keeps the canonical fiber shape with a child text fiber.
+    expect(work.child?.tag).toBe("host-component");
+    expect(work.child?.child).toBeDefined();
+  });
+
   test("stores single primitive host text without a child text fiber in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     const container = document.createElement("div");

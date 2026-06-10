@@ -93,7 +93,7 @@ export {
   useTransition,
   version,
 } from "./hooks.js";
-export { renderToString } from "./server-render.js";
+export { renderChildToString, renderToString } from "./server-render.js";
 export type { StartTransition, TransitionScope } from "./hooks.js";
 /** Default React-compatible namespace export. */
 export { default } from "./react-default.js";

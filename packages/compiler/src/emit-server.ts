@@ -36,6 +36,7 @@ export interface EmitServerOptions {
 // name through every signature. Reset at the top of `emitServer`.
 let currentUrlSafeHelperName: string = "_urlAttrSafe";
 let currentClientBoundaryHelperName: string | undefined;
+let currentCompatChildHelperName: string | undefined;
 let currentSpreadAttributesHelperName: string = "_renderSpreadAttributes";
 
 export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitResult {
@@ -54,12 +55,16 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   const clientBoundaryHelperName = usesClientBoundary(ir)
     ? allocateHelperName(ir, "_renderClientBoundary")
     : undefined;
+  const compatChildHelperName = usesCompatChildRender(ir)
+    ? allocateHelperName(ir, "_renderCompatChild")
+    : undefined;
   const spreadAttributesHelperName = allocateHelperName(ir, "_renderSpreadAttributes");
   const outAccumulatorName = allocateHelperName(ir, "_out");
   const urlSafeHelperName = allocateHelperName(ir, "_urlAttrSafe");
   currentUrlSafeHelperName = urlSafeHelperName;
   setOxcServerStringUrlSafeHelperName(urlSafeHelperName);
   currentClientBoundaryHelperName = clientBoundaryHelperName;
+  currentCompatChildHelperName = compatChildHelperName;
   currentSpreadAttributesHelperName = spreadAttributesHelperName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   // Inline URL-scheme guard mirroring packages/server/src/url-safety.ts.
@@ -127,6 +132,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     contextProviderHelperName,
     contextConsumerHelperName,
     reactNodeRenderHelperName,
+    compatChildHelperName,
   );
   const moduleStatements = emitModuleStatements(ir);
   const code = createCodeBuilder();
@@ -146,6 +152,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
       contextProviderHelperName,
       contextConsumerHelperName,
       reactNodeRenderHelperName,
+      compatChildHelperName,
     ),
   };
 }
@@ -154,11 +161,15 @@ function emitContextImport(
   contextProviderHelperName: string | undefined,
   contextConsumerHelperName: string | undefined,
   reactNodeRenderHelperName: string | undefined,
+  compatChildHelperName?: string | undefined,
 ): string {
   const specifiers = [
     reactNodeRenderHelperName === undefined
       ? undefined
       : `renderToString as ${reactNodeRenderHelperName}`,
+    compatChildHelperName === undefined
+      ? undefined
+      : `renderChildToString as ${compatChildHelperName}`,
     contextProviderHelperName === undefined
       ? undefined
       : `renderContextProviderToString as ${contextProviderHelperName}`,
@@ -176,11 +187,13 @@ function collectContextImports(
   contextProviderHelperName: string | undefined,
   contextConsumerHelperName: string | undefined,
   reactNodeRenderHelperName?: string,
+  compatChildHelperName?: string,
 ): RuntimeImport[] {
   const specifiers = [
     reactNodeRenderHelperName === undefined ? undefined : "renderToString",
     contextProviderHelperName === undefined ? undefined : "renderContextProviderToString",
     contextConsumerHelperName === undefined ? undefined : "renderContextConsumerToString",
+    compatChildHelperName === undefined ? undefined : "renderChildToString",
   ].filter((specifier): specifier is string => specifier !== undefined);
 
   return specifiers.length === 0 ? [] : [{ source: "@reckona/mreact-compat", specifiers }];
@@ -315,6 +328,10 @@ function collectHtmlStatements(
 
     if (node.renderMode === "react-node" && reactNodeRenderHelperName !== undefined) {
       return [`${outVar} += ${reactNodeRenderHelperName}(() => (${node.code}));`];
+    }
+
+    if (node.renderMode === "compat-child" && currentCompatChildHelperName !== undefined) {
+      return [`${outVar} += ${currentCompatChildHelperName}(${node.code});`];
     }
 
     return [`${outVar} += ${escapeHelperName}(${node.code});`];
@@ -691,6 +708,10 @@ function collectHtmlParts(
       return [`${reactNodeRenderHelperName}(() => (${node.code}))`];
     }
 
+    if (node.renderMode === "compat-child" && currentCompatChildHelperName !== undefined) {
+      return [`${currentCompatChildHelperName}(${node.code})`];
+    }
+
     return [`${escapeHelperName}(${node.code})`];
   }
 
@@ -1013,7 +1034,9 @@ function collectHtmlAttributeParts(
 
   if (attr.name === "style") {
     return [
-      emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName),
+      attr.serialization === "compat"
+        ? emitCompatDynamicStyleAttributeExpression(attr.code, escapeHelperName)
+        : emitDynamicStyleAttributeExpression(attr.code, escapeHelperName, escapeBatchHelperName),
     ];
   }
 
@@ -1026,7 +1049,11 @@ function collectHtmlAttributeParts(
     ];
   }
 
-  return [emitDynamicAttributeExpression(htmlName, attr.code, escapeHelperName)];
+  return [
+    attr.serialization === "compat" && !isUrlAttribute(htmlName)
+      ? emitCompatDynamicAttributeExpression(htmlName, attr.code, escapeHelperName)
+      : emitDynamicAttributeExpression(htmlName, attr.code, escapeHelperName),
+  ];
 }
 
 function collectElementAttributeParts(
@@ -1173,6 +1200,42 @@ function emitDynamicAttributeExpression(
   return booleanishString
     ? `(() => { const _value = (${code}); return _value == null ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value) + ${stringLiteral('"')}; })()`
     : `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral('"')}; })()`;
+}
+
+// Mirrors packages/react-compat/src/server-render.ts renderHtmlAttribute for
+// dynamic values: functions and objects drop, booleans serialize as
+// "true"/"false" for booleanish-string and data attributes, and false drops
+// elsewhere. Byte parity with the interpreter is pinned by tests.
+function emitCompatDynamicAttributeExpression(
+  name: string,
+  code: string,
+  escapeHelperName: string,
+): string {
+  const lowerCased = name.toLowerCase();
+  const booleanishOrData =
+    lowerCased.startsWith("aria-") ||
+    lowerCased.startsWith("data-") ||
+    lowerCased === "contenteditable" ||
+    lowerCased === "draggable" ||
+    lowerCased === "spellcheck";
+  const booleanBranch = booleanishOrData
+    ? `return ${stringLiteral(` ${name}="`)} + (_value ? "true" : "false") + ${stringLiteral('"')};`
+    : `return _value ? ${stringLiteral(` ${name}=""`)} : "";`;
+
+  return `(() => { const _value = (${code}); if (_value == null || typeof _value === "function") return ""; if (typeof _value === "boolean") { ${booleanBranch} } if (typeof _value === "object") return ""; return ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value) + ${stringLiteral('"')}; })()`;
+}
+
+// Mirrors packages/react-compat/src/server-render.ts renderStyleAttribute and
+// renderCssValue: skips null/boolean/empty entries and appends px to nonzero
+// numeric values outside the react unitless list.
+function emitCompatDynamicStyleAttributeExpression(
+  code: string,
+  escapeHelperName: string,
+): string {
+  const unitlessCheck =
+    '_styleName === "flex" || _styleName === "fontWeight" || _styleName === "lineHeight" || _styleName === "opacity" || _styleName === "order" || _styleName === "zIndex" || _styleName === "zoom"';
+
+  return `(() => { const _value = (${code}); if (_value == null || typeof _value !== "object") return ""; let _style = ""; for (const _styleName in _value) { const _styleValue = _value[_styleName]; if (_styleValue == null || typeof _styleValue === "boolean" || _styleValue === "") continue; const _cssName = _styleName.startsWith("--") ? _styleName : _styleName.replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); const _css = typeof _styleValue !== "number" || _styleValue === 0 || (${unitlessCheck}) ? String(_styleValue) : _styleValue + "px"; _style += (_style === "" ? "" : ";") + ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_css); } return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function emitDynamicStyleAttributeExpression(
@@ -1326,7 +1389,10 @@ function emitBatchedSimpleChildrenExpression(
 
   const dynamicChildren = children.filter(
     (child) =>
-      child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
+      child.kind === "expr" &&
+      child.renderMode !== "html" &&
+      child.renderMode !== "react-node" &&
+      child.renderMode !== "compat-child",
   ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
 
   if (dynamicChildren.length < 2) {
@@ -1340,7 +1406,8 @@ function emitBatchedSimpleChildrenExpression(
         !(
           child.kind === "expr" &&
           child.renderMode !== "html" &&
-          child.renderMode !== "react-node"
+          child.renderMode !== "react-node" &&
+          child.renderMode !== "compat-child"
         ),
     )
   ) {
@@ -1680,6 +1747,38 @@ function replaceOxcServerStringReactNodeRenderHelper(
 
 function usesClientBoundary(ir: ModuleIr): boolean {
   return ir.components.some((component) => containsClientBoundary(component.root));
+}
+
+function usesCompatChildRender(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsCompatChildRender(component.root));
+}
+
+function containsCompatChildRender(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.renderMode === "compat-child";
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsCompatChildRender);
+  }
+
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsCompatChildRender);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsCompatChildRender);
+  }
+
+  if (node.kind === "component") {
+    return node.children.some(containsCompatChildRender);
+  }
+
+  return false;
 }
 
 function emitClientBoundaryHelper(name: string): string {

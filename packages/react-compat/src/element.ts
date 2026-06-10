@@ -16,7 +16,6 @@ export const SuspenseList = Symbol.for("react.suspense_list");
 export const Activity = Symbol.for("react.activity");
 /** Symbol used to measure render work with profiler callbacks. */
 export const Profiler = Symbol.for("react.profiler");
-export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta");
 export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
   "modular.react.host_children_only_props_meta",
 );
@@ -400,63 +399,11 @@ function isReactCompatContextProviderShorthand(
 }
 
 function setHostOwnPropsMeta(props: Record<string, unknown>): void {
-  const dataKey = props["data-key"];
-
-  if (typeof dataKey !== "number" || !Number.isSafeInteger(dataKey) || dataKey < 0) {
-    if (hostPropsAreChildrenOnly(props)) {
-      (props as { [HOST_CHILDREN_ONLY_PROPS_META]?: true })[
-        HOST_CHILDREN_ONLY_PROPS_META
-      ] = true;
-    }
-    return;
+  if (hostPropsAreChildrenOnly(props)) {
+    (props as { [HOST_CHILDREN_ONLY_PROPS_META]?: true })[
+      HOST_CHILDREN_ONLY_PROPS_META
+    ] = true;
   }
-
-  let selectedState = 0;
-
-  for (const name in props) {
-    if (!hasOwnProperty.call(props, name) || name === "children") {
-      continue;
-    }
-
-    if (name === "data-key") {
-      continue;
-    }
-
-    if (name === "className") {
-      const value = props[name];
-
-      if (value === undefined) {
-        continue;
-      }
-
-      if (value !== "selected") {
-        return;
-      }
-
-      selectedState |= 1;
-      continue;
-    }
-
-    if (name === "data-selected") {
-      const value = props[name];
-
-      if (value === undefined) {
-        continue;
-      }
-
-      if (value !== "true") {
-        return;
-      }
-
-      selectedState |= 2;
-      continue;
-    }
-
-    return;
-  }
-
-  (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META] =
-    dataKey * 4 + selectedState;
 }
 
 function hostPropsAreChildrenOnly(props: Record<string, unknown>): boolean {

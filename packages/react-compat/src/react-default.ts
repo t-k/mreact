@@ -66,7 +66,7 @@ import {
   useTransition,
   version,
 } from "./hooks.js";
-import { renderToString } from "./server-render.js";
+import { renderChildToString, renderToString } from "./server-render.js";
 
 /** Default React-compatible namespace export. */
 const ReactCompat = {
@@ -124,6 +124,7 @@ const ReactCompat = {
   cache,
   cacheSignal,
   captureOwnerStack,
+  renderChildToString,
   renderToString,
   startTransition,
   unstable_useCacheRefresh,

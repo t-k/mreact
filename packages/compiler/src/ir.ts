@@ -123,7 +123,7 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
-  renderMode?: "dynamic" | "html" | "react-node" | "stream-node";
+  renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child";
 }
 
 /** Represents an async boundary lowered from an Await-style JSX construct. */
@@ -159,6 +159,9 @@ export interface DynamicAttributeIr {
   kind: "dynamic-attr";
   name: string;
   code: string;
+  // "compat" applies react-compat serialization semantics (px suffix for
+  // numeric style values, interpreter-equivalent filtering).
+  serialization?: "compat";
 }
 
 /** Represents an event handler attribute emitted for client hydration. */

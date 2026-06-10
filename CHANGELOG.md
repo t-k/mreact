@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.154 - 2026-06-10
+
+### Changed
+
+- Improved React-compatible server rendering for static `createElement()` trees by compiling them through the server string pipeline, reducing runtime work for compat-heavy server output.
+- Reduced App Router client bundle duplication by sharing compat vendor chunks only for route artifacts that actually use compat client references.
+- Reduced reactive-core and reactive DOM hot-path overhead with leaner source subscriber storage, cached devtools sampling, shared cell write paths, smaller keyed list records, and a keyed list tail-append fast path.
+- Kept reactive-core devtools write hooks statically dead in production client route bundles, avoiding unnecessary production client code.
+
+### Fixed
+
+- Fixed dynamic route client script prefetch probing so each route variant is matched against its own fixture params instead of reusing another variant's params.
+- Fixed React-compatible keyed child reuse beyond benchmark-shaped props, so keyed list updates with more general prop shapes keep the correct row identity.
+- Limited production prebuild warnings to real prebuild gaps instead of warning for expected dynamic transform paths.
+
 ## 0.0.153 - 2026-06-10
 
 ### Added

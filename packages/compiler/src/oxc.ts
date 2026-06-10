@@ -70,6 +70,12 @@ import {
   analyzeOxcJsxNode,
   type OxcChildAnalysisContext,
 } from "./oxc-child-analysis.js";
+import {
+  analyzeCompatCreateElementRoot,
+  collectCompatCreateElementNames,
+  collectFunctionShadowedNames,
+  hasLowerableCompatCreateElementReturn,
+} from "./oxc-compat-create-element.js";
 import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import {
   lowerOxcCompatObjectExpression,
@@ -243,6 +249,12 @@ function analyzeOxcToIr(
       : undefined;
   const localJsxReturnFunctionNames =
     target === "server" ? collectOxcLocalJsxReturnFunctionNames(program) : new Set<string>();
+  // Stream emit keeps interpreting compat trees for now; only the string
+  // pipeline lowers createElement calls.
+  const compatCreateElementNames =
+    target === "server" && options?.serverOutput !== "stream"
+      ? collectCompatCreateElementNames(program)
+      : new Set<string>();
   const localJsxHelperHtmlParameters =
     target === "server"
       ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
@@ -269,6 +281,7 @@ function analyzeOxcToIr(
 
     if (
       isOxcJsxComponentStatement(statement, localJsxReturnFunctionNames) ||
+      isCompatCreateElementComponentStatement(code, statement, compatCreateElementNames) ||
       (options?.compatReactNodeReturn === true && isOxcExportedFunctionLike(statement))
     ) {
       const declaration = readObject(readObject(statement).declaration);
@@ -332,6 +345,7 @@ function analyzeOxcToIr(
       target,
       diagnostics,
       options?.bodyStatementJsx ?? "dom-node",
+      compatCreateElementNames,
       moduleRenderValueBindings,
       options?.compatReactNodeReturn === true,
       options?.serverOutput,
@@ -480,6 +494,97 @@ function collectOxcReturnExpressions(
   return [];
 }
 
+interface CompatCreateElementComponent {
+  name: string;
+  initializer: Record<string, unknown>;
+}
+
+function readCompatCreateElementFunctionLike(
+  code: string,
+  expression: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): Record<string, unknown> | undefined {
+  const functionLike = unwrapOxcComponentFunctionLikeInitializer(expression);
+
+  return functionLike !== undefined &&
+    hasLowerableCompatCreateElementReturn(code, functionLike, names)
+    ? functionLike
+    : undefined;
+}
+
+function readCompatCreateElementPlainComponent(
+  code: string,
+  statement: unknown,
+  names: ReadonlySet<string>,
+): CompatCreateElementComponent | undefined {
+  if (names.size === 0) {
+    return undefined;
+  }
+
+  const object = readObject(statement);
+
+  if (
+    object.type === "FunctionDeclaration" &&
+    hasLowerableCompatCreateElementReturn(code, object, names)
+  ) {
+    const id = readObject(object.id);
+    return typeof id.name === "string" ? { name: id.name, initializer: object } : undefined;
+  }
+
+  if (object.type !== "VariableDeclaration") {
+    return undefined;
+  }
+
+  for (const declarator of readArray(object.declarations)) {
+    const declaratorObject = readObject(declarator);
+    const id = readObject(declaratorObject.id);
+
+    if (typeof id.name !== "string" || !/^[A-Z]/.test(id.name)) {
+      continue;
+    }
+
+    const initializer = readCompatCreateElementFunctionLike(
+      code,
+      readObject(declaratorObject.init),
+      names,
+    );
+
+    if (initializer !== undefined) {
+      return { name: id.name, initializer };
+    }
+  }
+
+  return undefined;
+}
+
+function isCompatCreateElementComponentStatement(
+  code: string,
+  statement: unknown,
+  names: ReadonlySet<string>,
+): boolean {
+  if (names.size === 0) {
+    return false;
+  }
+
+  const object = readObject(statement);
+
+  if (object.type === "ExportDefaultDeclaration") {
+    return readCompatCreateElementFunctionLike(code, readObject(object.declaration), names) !== undefined;
+  }
+
+  if (object.type === "ExportNamedDeclaration") {
+    const declaration = readObject(object.declaration);
+
+    if (declaration.type === "FunctionDeclaration") {
+      return hasLowerableCompatCreateElementReturn(code, declaration, names);
+    }
+
+    return readCompatCreateElementPlainComponent(code, declaration, names) !== undefined;
+  }
+
+  return readCompatCreateElementPlainComponent(code, statement, names) !== undefined;
+}
+
 function analyzeOxcComponent(
   code: string,
   statement: unknown,
@@ -487,6 +592,7 @@ function analyzeOxcComponent(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  compatCreateElementNames: ReadonlySet<string>,
   moduleRenderValueBindings: Set<string>,
   compatReactNodeReturn: boolean,
   serverOutput: AnalyzeModuleOptions["serverOutput"],
@@ -501,7 +607,11 @@ function analyzeOxcComponent(
   if (object.type === "ExportDefaultDeclaration") {
     const declaration = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
 
-    if (declaration === undefined || !hasOxcFunctionLikeComponentReturn(declaration)) {
+    if (
+      declaration === undefined ||
+      (!hasOxcFunctionLikeComponentReturn(declaration) &&
+        !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames))
+    ) {
       return [];
     }
     const id = readObject(declaration.id);
@@ -517,6 +627,7 @@ function analyzeOxcComponent(
         target,
         diagnostics,
         bodyStatementJsx,
+        compatCreateElementNames,
         moduleRenderValueBindings,
         compatReactNodeReturn,
         serverOutput,
@@ -531,7 +642,9 @@ function analyzeOxcComponent(
   }
 
   if (object.type !== "ExportNamedDeclaration") {
-    const plainComponent = readOxcPlainComponent(statement);
+    const plainComponent =
+      readOxcPlainComponent(statement) ??
+      readCompatCreateElementPlainComponent(code, statement, compatCreateElementNames);
 
     if (plainComponent === undefined) {
       return [];
@@ -548,6 +661,7 @@ function analyzeOxcComponent(
           target,
           diagnostics,
           bodyStatementJsx,
+          compatCreateElementNames,
           moduleRenderValueBindings,
           compatReactNodeReturn,
           serverOutput,
@@ -565,7 +679,9 @@ function analyzeOxcComponent(
   const declaration = readObject(object.declaration);
 
   if (declaration.type === "VariableDeclaration") {
-    const variableComponent = readOxcVariableComponentDeclaration(declaration);
+    const variableComponent =
+      readOxcVariableComponentDeclaration(declaration) ??
+      readCompatCreateElementPlainComponent(code, declaration, compatCreateElementNames);
 
     if (variableComponent === undefined) {
       return [];
@@ -581,6 +697,7 @@ function analyzeOxcComponent(
         target,
         diagnostics,
         bodyStatementJsx,
+        compatCreateElementNames,
         moduleRenderValueBindings,
         compatReactNodeReturn,
         serverOutput,
@@ -597,7 +714,8 @@ function analyzeOxcComponent(
     declaration.type !== "FunctionDeclaration" ||
     (!compatReactNodeReturn &&
       !hasComponentReturn(declaration.body) &&
-      !hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames))
+      !hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames) &&
+      !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames))
   ) {
     return [];
   }
@@ -618,6 +736,7 @@ function analyzeOxcComponent(
       target,
       diagnostics,
       bodyStatementJsx,
+      compatCreateElementNames,
       moduleRenderValueBindings,
       compatReactNodeReturn,
       serverOutput,
@@ -667,6 +786,7 @@ function analyzeOxcFunctionLikeComponent(
   target: CompileTarget,
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
+  compatCreateElementNames: ReadonlySet<string>,
   moduleRenderValueBindings: Set<string>,
   compatReactNodeReturn: boolean,
   serverOutput: AnalyzeModuleOptions["serverOutput"],
@@ -747,6 +867,12 @@ function analyzeOxcFunctionLikeComponent(
   const root =
     analyzeOxcEarlyIfRootReturn(code, earlyIfRootReturn, childAnalysisContext, bodyStatementJsx) ??
     analyzeOxcSwitchRootReturn(code, rootStatement, childAnalysisContext, bodyStatementJsx) ??
+    (compatCreateElementNames.size === 0
+      ? undefined
+      : analyzeCompatCreateElementRoot(code, returnExpression, {
+          names: compatCreateElementNames,
+          shadowed: collectFunctionShadowedNames(functionLike, compatCreateElementNames),
+        })) ??
     (isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)

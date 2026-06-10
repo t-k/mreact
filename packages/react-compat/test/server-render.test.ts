@@ -11,6 +11,53 @@ import {
 } from "../src/index.js";
 
 describe("react-compat server render", () => {
+  test("strips unsafe meta refresh content on meta and non-meta hosts alike", () => {
+    function App() {
+      return createElement(
+        "main",
+        null,
+        createElement("meta", {
+          httpEquiv: "refresh",
+          content: "0;url=javascript:alert(1)",
+        }),
+        createElement("div", {
+          "http-equiv": "refresh",
+          content: "0;url=javascript:alert(1)",
+          id: "x",
+        }),
+      );
+    }
+
+    expect(renderToString(App)).toBe(
+      '<main><meta http-equiv="refresh"/><div http-equiv="refresh" id="x"></div></main>',
+    );
+  });
+
+  test("keeps attribute serialization order and skips internal or event props", () => {
+    function App() {
+      return createElement(
+        "section",
+        {
+          id: "panel",
+          className: "card",
+          onClick: () => undefined,
+          onpointerdown: () => undefined,
+          "data-state": "open",
+          "aria-hidden": false,
+          tabIndex: 0,
+          style: { backgroundColor: "red", "--x": "1" },
+          hidden: true,
+          title: 'He said "hi" & left',
+        },
+        "body",
+      );
+    }
+
+    expect(renderToString(App)).toBe(
+      '<section id="panel" class="card" data-state="open" aria-hidden="false" tabindex="0" style="background-color:red;--x:1" hidden="" title="He said &quot;hi&quot; &amp; left">body</section>',
+    );
+  });
+
   test("runs hooks while rendering a string component", () => {
     function App() {
       const [count] = useState(0);

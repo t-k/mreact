@@ -3,7 +3,6 @@ import {
   setAppliedProps,
   ensureDelegatedEventListenersForProp,
 } from "./host-event-binder.js";
-import { HOST_OWN_PROPS_META } from "./element.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import {
   isDangerousHtmlAttribute,
@@ -30,13 +29,6 @@ export function applyProps(
   const nextProps = sanitizeMetaRefreshElementProps(element, props);
 
   if (previous === undefined && !preserveHydrationAttributes) {
-    if (applyInitialRowProps(element, nextProps)) {
-      setAppliedProps(element, {
-        props: nextProps,
-      });
-      return;
-    }
-
     applyInitialProps(element, nextProps, path, options);
     setAppliedProps(element, {
       props: nextProps,
@@ -285,28 +277,6 @@ function applyInitialProps(
 
 }
 
-function applyInitialRowProps(
-  element: HostElement,
-  props: Record<string, unknown>,
-): boolean {
-  const meta = (props as { [HOST_OWN_PROPS_META]?: number })[HOST_OWN_PROPS_META];
-
-  if (meta === undefined) {
-    return false;
-  }
-
-  element.setAttribute("data-key", String(props["data-key"]));
-
-  if ((meta & 1) !== 0) {
-    element.setAttribute("class", "selected");
-  }
-
-  if ((meta & 2) !== 0) {
-    element.setAttribute("data-selected", "true");
-  }
-
-  return true;
-}
 
 export function applyPostChildFormProps(
   element: Element,

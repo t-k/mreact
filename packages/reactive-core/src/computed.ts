@@ -32,7 +32,7 @@ export function computed<T>(
   const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
 
   const source: Source = {
-    subscribers: new Set(),
+    subscribers: null,
   };
 
   const computation: ReactiveComputation = {
@@ -42,14 +42,14 @@ export function computed<T>(
     queued: false,
     markDirty() {
       if (dirty) {
-        if (source.subscribers.size === 0 || computation.queued) {
+        if (source.subscribers === null || computation.queued) {
           return;
         }
       }
 
       dirty = true;
 
-      if (source.subscribers.size > 0) {
+      if (source.subscribers !== null) {
         if (runtimeState.notificationDepth > 0) {
           computation.queued = true;
           runtimeState.pendingComputed.add(computation);
@@ -74,8 +74,7 @@ export function computed<T>(
       computation.queued = false;
       runtimeState.pendingComputed.delete(computation);
       cleanupDeps(computation);
-      source.subscribers.clear();
-      source.singleSubscriber = undefined;
+      source.subscribers = null;
     },
   };
 

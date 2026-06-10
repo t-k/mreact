@@ -273,6 +273,7 @@ const ReactCompat: {
     readonly cache: typeof cache;
     readonly cacheSignal: typeof cacheSignal;
     readonly captureOwnerStack: typeof captureOwnerStack;
+    readonly renderChildToString: typeof renderChildToString;
     readonly renderToString: typeof renderToString;
     readonly startTransition: typeof startTransition;
     readonly unstable_useCacheRefresh: typeof unstable_useCacheRefresh;
@@ -305,6 +306,9 @@ export function readEventHydrationManifest(root?: ParentNode): EventHydrationMan
 
 // @public
 export function render(element: ReactCompatNode, container: Element): void;
+
+// @public (undocumented)
+export function renderChildToString(value: unknown): string;
 
 // Warning: (ae-forgotten-export) The symbol "ReactCompatConsumer" needs to be exported by the entry point index.d.ts
 //

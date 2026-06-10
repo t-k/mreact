@@ -6,8 +6,11 @@ import { warnOnDuplicateReactiveCoreCopy } from "./duplicate-guard.js";
 warnOnDuplicateReactiveCoreCopy(import.meta.url);
 
 export interface Source {
-  singleSubscriber?: ReactiveComputation | undefined;
-  subscribers: Set<ReactiveComputation>;
+  // null while nothing subscribes, the computation itself while exactly one
+  // does, and a Set from the second subscriber on (kept as a Set until it
+  // empties back to null). Most sources never allocate a Set at all, and hot
+  // write sites can gate on a null check instead of a Set.size accessor.
+  subscribers: ReactiveComputation | Set<ReactiveComputation> | null;
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
 }
