@@ -1019,6 +1019,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     define?: UserConfig["define"] | undefined;
     // (undocumented)
+    dev?: boolean | undefined;
+    // (undocumented)
     env?: unknown;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
