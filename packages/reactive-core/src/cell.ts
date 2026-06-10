@@ -87,7 +87,10 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
 
   state.value = resolved;
 
-  if (cachedDevtoolsHook !== null) {
+  // clientDevtoolsDisabled folds to true under the client build define, which
+  // makes this branch statically dead so bundlers drop the emit path (and its
+  // globalThis.__mreactDevtools references) from production client bundles.
+  if (!clientDevtoolsDisabled && cachedDevtoolsHook !== null) {
     emitCellSetEvent(state.source, previous, resolved);
   }
 
