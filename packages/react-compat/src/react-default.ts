@@ -66,7 +66,7 @@ import {
   useTransition,
   version,
 } from "./hooks.js";
-import { renderToString } from "./server-render.js";
+import { renderChildToString, renderToString } from "./server-render.js";
 
 const ReactCompat = {
   Component,
@@ -123,6 +123,7 @@ const ReactCompat = {
   cache,
   cacheSignal,
   captureOwnerStack,
+  renderChildToString,
   renderToString,
   startTransition,
   unstable_useCacheRefresh,

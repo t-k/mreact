@@ -73,6 +73,30 @@ export function renderToString<TProps>(
   });
 }
 
+// Renders a single child value the way the interpreter renders expression
+// children: primitives escape, null/undefined/boolean render nothing, and
+// react nodes fall back to the interpreter. Compiled compat pages call this
+// for expression children whose runtime type is unknown.
+export function renderChildToString(value: unknown): string {
+  if (value === null || value === undefined || typeof value === "boolean") {
+    return "";
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    return escapeHtml(value);
+  }
+
+  const runtime = createRootRuntime(() => undefined, { idMode: "server" });
+
+  return runWithCacheScope(createCacheScope(), () => {
+    try {
+      return renderNodeToString(value as ReactCompatNode, runtime, "0.0");
+    } finally {
+      runtime.dispose();
+    }
+  });
+}
+
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (
     typeof value === "object" &&
