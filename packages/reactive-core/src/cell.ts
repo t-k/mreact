@@ -99,6 +99,8 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
 export function cell<T>(initial: T): Cell<T> {
   const state: CellState<T> = {
     source: {
+      // Declared at creation so later flag writes reuse the same object shape.
+      hasSubscribers: false,
       subscribers: new Set(),
     },
     value: initial,

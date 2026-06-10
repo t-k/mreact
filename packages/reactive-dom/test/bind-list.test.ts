@@ -939,15 +939,21 @@ describe("bindList", () => {
 
     const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
     let parentInsertions = 0;
+    let parentAppends = 0;
     let parentReplacements = 0;
     let parentRemovals = 0;
     const insertBefore = parent.insertBefore.bind(parent);
+    const appendChild = parent.appendChild.bind(parent);
     const replaceChildren = parent.replaceChildren.bind(parent);
     const removeChild = parent.removeChild.bind(parent);
     parent.insertBefore = ((node, child) => {
       parentInsertions += 1;
       return insertBefore(node, child);
     }) as typeof parent.insertBefore;
+    parent.appendChild = ((node) => {
+      parentAppends += 1;
+      return appendChild(node);
+    }) as typeof parent.appendChild;
     parent.replaceChildren = ((...nodes) => {
       parentReplacements += 1;
       return replaceChildren(...nodes);
@@ -960,7 +966,9 @@ describe("bindList", () => {
     items.set([0, 1, 2, 3, 4]);
     await flushEffects();
 
-    expect(parentInsertions).toBe(2);
+    // Tail appends use appendChild per new row plus one marker re-append;
+    // existing rows must never be rebuilt, replaced, or removed.
+    expect(parentInsertions + parentAppends).toBe(3);
     expect(parentReplacements).toBe(0);
     expect(parentRemovals).toBe(0);
     expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(

@@ -29,6 +29,7 @@ export function computed<T>(
   const equals = typeof options === "function" ? options : (options?.equals ?? Object.is);
 
   const source: Source = {
+    hasSubscribers: false,
     subscribers: new Set(),
   };
 
