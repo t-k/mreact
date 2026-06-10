@@ -11,7 +11,6 @@ export const Suspense = Symbol.for("react.suspense");
 export const SuspenseList = Symbol.for("react.suspense_list");
 export const Activity = Symbol.for("react.activity");
 export const Profiler = Symbol.for("react.profiler");
-export const HOST_OWN_PROPS_META = Symbol.for("modular.react.host_own_props_meta");
 export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
   "modular.react.host_children_only_props_meta",
 );

@@ -4,7 +4,6 @@ import {
   FORWARD_REF_TYPE,
   Fragment,
   HOST_CHILDREN_ONLY_PROPS_META,
-  HOST_OWN_PROPS_META,
   LAZY_TYPE,
   MEMO_TYPE,
   Profiler,
