@@ -1,7 +1,16 @@
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
+import { encodeVlq } from "../src/transform.js";
 
 describe("compiler source maps", () => {
+  test("encodes source-map VLQ values without 32-bit shift overflow", () => {
+    const samples = [0, 1, -1, 16, -16, 2 ** 30, -(2 ** 30)];
+
+    expect(samples.map((value) => encodeVlq(value))).toEqual(
+      samples.map((value) => encodeVlqReference(value)),
+    );
+  });
+
   test("emits a source map with sourcesContent when requested", () => {
     const code = "export function App() { return <div>Hello</div>; }";
     const output = transform({
@@ -386,3 +395,21 @@ function decodeSegment(segment: string): number[] {
 
 const sourceMapBase64 =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function encodeVlqReference(value: number): string {
+  let vlq = value < 0 ? -value * 2 + 1 : value * 2;
+  let encoded = "";
+
+  do {
+    let digit = vlq % 32;
+    vlq = Math.floor(vlq / 32);
+
+    if (vlq > 0) {
+      digit += 32;
+    }
+
+    encoded += sourceMapBase64[digit] ?? "";
+  } while (vlq > 0);
+
+  return encoded;
+}
