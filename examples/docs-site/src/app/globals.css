@@ -12,8 +12,6 @@
   --brand-strong: oklch(0.4 0.11 41);
   --accent: oklch(0.77 0.16 70);
   --code-bg: oklch(0.96 0.006 75);
-  --inline-code-bg: oklch(0.94 0.035 64);
-  --inline-code-border: oklch(0.82 0.07 64);
   --inline-code-text: oklch(0.38 0.12 43);
   --code-panel-bg: oklch(0.129 0.042 264.695);
   --code-panel-border: oklch(0.21 0.034 264.665);
@@ -42,8 +40,6 @@ html[data-theme="dark"] {
   --brand-strong: oklch(0.87 0.065 274.039);
   --accent: oklch(0.746 0.16 232.661);
   --code-bg: oklch(0.16 0.03 265);
-  --inline-code-bg: oklch(0.24 0.045 55);
-  --inline-code-border: oklch(0.4 0.08 55);
   --inline-code-text: oklch(0.82 0.145 65);
   --code-panel-bg: oklch(0.129 0.042 264.695);
   --code-panel-border: oklch(0.21 0.034 264.665);
@@ -414,8 +410,8 @@ a:hover {
 }
 
 .doc-article code {
-  background: var(--inline-code-bg);
-  border: 1px solid var(--inline-code-border);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
   border-radius: 4px;
   color: var(--inline-code-text);
   font-size: 1rem;

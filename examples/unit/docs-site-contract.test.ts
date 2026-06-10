@@ -1967,7 +1967,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("--brand: oklch(");
     expect(css).toContain("--code-panel-bg: oklch(");
     expect(css).toContain("--inline-code-text: oklch(");
-    expect(css).toContain("--inline-code-bg: oklch(");
+    expect(css).not.toContain("--inline-code-bg");
+    expect(css).not.toContain("--inline-code-border");
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).not.toMatch(/\b(?:rgb|rgba|hsl|hsla)\(/);
     expect(css).toContain("color-scheme: only dark");
@@ -1995,7 +1996,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("position: absolute");
     expect(css).toContain("max-height: min(28rem, calc(100dvh - 8rem))");
     expect(css).toContain("color: var(--inline-code-text)");
-    expect(css).toContain("background: var(--inline-code-bg)");
+    expect(css).toContain("background: var(--code-bg)");
+    expect(css).toContain("border: 1px solid var(--border)");
     expect(css).toContain(".site-icon-control");
     expect(css).toContain(".site-menu-toggle");
     expect(css).toContain(".site-sidebar-body[hidden]");
