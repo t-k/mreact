@@ -165,6 +165,7 @@ describe("docs-site example contract", () => {
     expect(layout).toContain('src={sitePath("docs-theme.js")}');
     expect(layout).toContain('<meta name="color-scheme" content="light dark" />');
     expect(layout).toContain('localStorage.getItem("mreact:docs:theme")');
+    expect(layout).toContain('<header class="site-header">');
     expect(layout).toContain('aria-label="GitHub repository"');
     expect(layout).toContain('class="site-icon-control"');
     expect(layout).toContain('data-theme-toggle');
@@ -177,6 +178,10 @@ describe("docs-site example contract", () => {
     expect(layout).toContain('type="search"');
     expect(layout).toContain('aria-label="Search documentation"');
     expect(layout).toContain('class="site-search-results"');
+    expect(layout.indexOf('<search class="site-search"')).toBeLessThan(
+      layout.indexOf('<aside class="site-sidebar">'),
+    );
+    expect(layout).not.toContain('class="site-sidebar-header"');
     expect(layout).toContain("data-pagefind-body");
     expect(overview).toContain("# Mreact");
     expect(overview).toContain("Mreact is a [React](https://react.dev/)-flavored framework");
@@ -291,7 +296,7 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".site-search");
     expect(css).toContain(".site-search-input");
     expect(css).toContain(".site-search-results");
-    expect(css).toContain("max-height: 24rem");
+    expect(css).toContain("max-height: min(28rem, calc(100dvh - 8rem))");
     expect(css).toContain(".site-search-result");
     expect(css).not.toMatch(/font-size:\s*0\./);
   });
@@ -1979,7 +1984,12 @@ describe("docs-site example contract", () => {
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
     expect(css).toContain("grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr)");
-    expect(css).toContain("max-height: 76vh");
+    expect(css).toContain('grid-template-areas: "header header" "sidebar main"');
+    expect(css).toContain("grid-area: header");
+    expect(css).toContain("grid-area: sidebar");
+    expect(css).toContain("grid-area: main");
+    expect(css).toContain("position: absolute");
+    expect(css).toContain("max-height: min(28rem, calc(100dvh - 8rem))");
     expect(css).toContain(".site-icon-control");
     expect(css).toContain(".site-menu-toggle");
     expect(css).toContain(".site-sidebar-body[hidden]");
