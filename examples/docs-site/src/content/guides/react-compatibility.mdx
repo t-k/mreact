@@ -61,6 +61,12 @@ Treat `optimizeDeps.include` as a dev-experience tool, not a compatibility switc
 
 The compatibility gate tracks React 19.2.6 public export coverage for React, React DOM, React DOM client, and React DOM server. It is a compatibility runtime, not a byte-for-byte React reconciler, so use tests for the specific library behavior you depend on.
 
+## App Router output
+
+Static React-compatible `createElement()` trees can still flow through the App Router server string pipeline, so a server-renderable compat subtree does not need to pay the same runtime cost as a fully dynamic client integration. When a route uses compat client references, the router shares compat vendor chunks only across route artifacts that actually need them, keeping server-only and non-compat routes out of that client payload.
+
+Use this as a performance model, not a compatibility switch: start from server-renderable route code, isolate browser-only libraries behind client boundaries, and check the route's client bundle size on the [Benchmarks](/benchmarks/) page or in your own production build.
+
 ## Known differences
 
 `useId()` returns opaque underscore-delimited ids such as `_R_0_` and `_r_0_` instead of React's colon-delimited internal shape. Mreact keeps SSR and hydration ids stable through its hydrated-id map, but application code and libraries should treat the returned string as opaque and must not parse or compare it against React's exact internal format.

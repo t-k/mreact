@@ -62,6 +62,7 @@ const benchmarkBadgeClassNames: Readonly<Record<BenchmarkBadgeLabel, string>> = 
   Size: "is-size",
   Startup: "is-startup",
 };
+const benchmarkResultsGitRef = "main";
 
 export function BenchmarkResults() {
   return (
@@ -173,7 +174,7 @@ function benchmarkFilterLabels(): readonly BenchmarkBadgeLabel[] {
 }
 
 function githubUrlForRunPath(path: string): string {
-  return `https://github.com/t-k/mreact/tree/${latestBenchmarkRun.gitCommit}/${path}`;
+  return `https://github.com/t-k/mreact/tree/${benchmarkResultsGitRef}/${path}`;
 }
 
 function benchmarkRunLabel(path: string): string {
@@ -181,7 +182,7 @@ function benchmarkRunLabel(path: string): string {
 }
 
 function githubUrlForFilePath(path: string): string {
-  return `https://github.com/t-k/mreact/blob/${latestBenchmarkRun.gitCommit}/${path}`;
+  return `https://github.com/t-k/mreact/blob/${benchmarkResultsGitRef}/${path}`;
 }
 
 function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }) {
