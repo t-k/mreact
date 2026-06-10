@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.155 - 2026-06-11
+
+### Fixed
+
+- Fixed React-compatible vendor chunk loading for prerendered routes so server prerender modules can resolve shared compat vendor chunks instead of failing when the page runs during the build.
+
 ## 0.0.154 - 2026-06-10
 
 ### Changed
