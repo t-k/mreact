@@ -14,39 +14,55 @@ export function trackSource(source: Source): void {
     return;
   }
 
-  if (source.singleSubscriber === tracker) {
-    tracker.deps.add(source);
-    return;
-  }
-
-  const previousSize = source.subscribers.size;
-  source.subscribers.add(tracker);
-  source.hasSubscribers = true;
+  addSourceSubscriber(source, tracker);
   tracker.deps.add(source);
+}
 
-  if (previousSize === 0) {
-    source.singleSubscriber = tracker;
-  } else if (source.subscribers.size > 1) {
-    source.singleSubscriber = undefined;
+function addSourceSubscriber(source: Source, computation: ReactiveComputation): void {
+  const subscribers = source.subscribers;
+
+  if (subscribers === null) {
+    source.subscribers = computation;
+  } else if (subscribers instanceof Set) {
+    subscribers.add(computation);
+  } else if (subscribers !== computation) {
+    source.subscribers = new Set([subscribers, computation]);
   }
+}
+
+function removeSourceSubscriber(source: Source, computation: ReactiveComputation): boolean {
+  const subscribers = source.subscribers;
+
+  if (subscribers === computation) {
+    source.subscribers = null;
+    return true;
+  }
+
+  if (subscribers instanceof Set && subscribers.delete(computation)) {
+    if (subscribers.size === 0) {
+      source.subscribers = null;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+export function sourceSubscriberCount(source: Source): number {
+  const subscribers = source.subscribers;
+
+  return subscribers === null ? 0 : subscribers instanceof Set ? subscribers.size : 1;
 }
 
 export function cleanupDeps(computation: ReactiveComputation): void {
   for (const dep of computation.deps) {
-    if (!dep.subscribers.delete(computation)) {
+    if (!removeSourceSubscriber(dep, computation)) {
       continue;
     }
 
     if (dep.trackedBy === computation) {
       dep.trackedBy = undefined;
       dep.trackedVersion = undefined;
-    }
-
-    if (dep.subscribers.size === 0) {
-      dep.hasSubscribers = false;
-      dep.singleSubscriber = undefined;
-    } else if (dep.subscribers.size === 1) {
-      dep.singleSubscriber = dep.subscribers.values().next().value;
     }
   }
 
@@ -93,17 +109,9 @@ export function trackIncrementalSource(
     return;
   }
 
-  const previousSize = source.subscribers.size;
-  source.subscribers.add(computation);
-  source.hasSubscribers = true;
+  addSourceSubscriber(source, computation);
   computation.deps.add(source);
   computation.trackingAddedDeps?.push(source);
-
-  if (previousSize === 0) {
-    source.singleSubscriber = computation;
-  } else if (source.subscribers.size > 1) {
-    source.singleSubscriber = undefined;
-  }
 }
 
 export function preserveIncrementalTracking(computation: ReactiveComputation): void {
@@ -141,7 +149,7 @@ export function cleanupUntrackedDeps(
       continue;
     }
 
-    if (!dep.subscribers.delete(computation)) {
+    if (!removeSourceSubscriber(dep, computation)) {
       continue;
     }
 
@@ -151,13 +159,6 @@ export function cleanupUntrackedDeps(
     }
 
     computation.deps.delete(dep);
-
-    if (dep.subscribers.size === 0) {
-      dep.hasSubscribers = false;
-      dep.singleSubscriber = undefined;
-    } else if (dep.subscribers.size === 1) {
-      dep.singleSubscriber = dep.subscribers.values().next().value;
-    }
   }
 }
 
@@ -169,7 +170,7 @@ export function cleanupAddedDeps(computation: ReactiveComputation): void {
   }
 
   for (const dep of addedDeps) {
-    if (!dep.subscribers.delete(computation)) {
+    if (!removeSourceSubscriber(dep, computation)) {
       continue;
     }
 
@@ -179,28 +180,22 @@ export function cleanupAddedDeps(computation: ReactiveComputation): void {
     }
 
     computation.deps.delete(dep);
-
-    if (dep.subscribers.size === 0) {
-      dep.hasSubscribers = false;
-      dep.singleSubscriber = undefined;
-    } else if (dep.subscribers.size === 1) {
-      dep.singleSubscriber = dep.subscribers.values().next().value;
-    }
   }
 }
 
 export function notifySubscribers(source: Source): void {
-  if (source.subscribers.size === 0) {
+  const subscribers = source.subscribers;
+
+  if (subscribers === null) {
     return;
   }
 
-  const cachedSingleSubscriber = source.singleSubscriber;
-  if (cachedSingleSubscriber !== undefined) {
+  if (!(subscribers instanceof Set)) {
     runtimeState.notificationDepth += 1;
 
     try {
-      if (!cachedSingleSubscriber.disposed && !cachedSingleSubscriber.queued) {
-        cachedSingleSubscriber.markDirty();
+      if (!subscribers.disposed && !subscribers.queued) {
+        subscribers.markDirty();
       }
     } finally {
       runtimeState.notificationDepth -= 1;
@@ -216,18 +211,14 @@ export function notifySubscribers(source: Source): void {
 
   try {
     const singleSubscriber =
-      source.subscribers.size === 1
-        ? source.subscribers.values().next().value
-        : undefined;
+      subscribers.size === 1 ? subscribers.values().next().value : undefined;
 
     if (singleSubscriber !== undefined) {
       if (!singleSubscriber.disposed && !singleSubscriber.queued) {
         singleSubscriber.markDirty();
       }
     } else {
-      const subscribers = orderedComputations(source.subscribers);
-
-      for (const subscriber of subscribers) {
+      for (const subscriber of orderedComputations(subscribers)) {
         if (!subscriber.disposed && !subscriber.queued) {
           subscriber.markDirty();
         }

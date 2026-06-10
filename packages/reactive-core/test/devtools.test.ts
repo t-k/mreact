@@ -99,6 +99,47 @@ describe("reactive-core devtools instrumentation", () => {
     expect(observed).toBe(2);
   });
 
+  test("notifies through subscriber slot promotion and demotion", async () => {
+    // Pins the polymorphic subscriber representation: null -> single
+    // computation -> Set -> back to null -> single again.
+    const count = cell(0);
+    const seenByFirst: number[] = [];
+    const seenBySecond: number[] = [];
+
+    const disposeFirst = effect(() => {
+      seenByFirst.push(count.get());
+    });
+    await flushEffects();
+    count.set(1);
+    await flushEffects();
+
+    const disposeSecond = effect(() => {
+      seenBySecond.push(count.get());
+    });
+    await flushEffects();
+    count.set(2);
+    await flushEffects();
+
+    disposeFirst();
+    count.set(3);
+    await flushEffects();
+
+    disposeSecond();
+    count.set(4);
+    await flushEffects();
+
+    const disposeThird = effect(() => {
+      seenBySecond.push(count.get() * 100);
+    });
+    await flushEffects();
+    count.set(5);
+    await flushEffects();
+    disposeThird();
+
+    expect(seenByFirst).toEqual([0, 1, 2]);
+    expect(seenBySecond).toEqual([1, 2, 3, 400, 500]);
+  });
+
   test("effect devtools emission does not allocate a bound emitter per run", async () => {
     const devtools = installDevtools();
     activeDevtools = devtools;

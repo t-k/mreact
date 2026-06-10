@@ -1,6 +1,6 @@
 import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
-import { notifySubscribers, trackSource } from "./tracking.js";
+import { notifySubscribers, sourceSubscriberCount, trackSource } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
@@ -62,7 +62,7 @@ function emitCellSetEvent<T>(source: Source, previous: T, value: T): void {
   emit.call(hook, {
     package: "@reckona/mreact-reactive-core",
     previous,
-    subscribers: source.subscribers.size,
+    subscribers: sourceSubscriberCount(source),
     timestamp: Date.now(),
     type: "reactive:cell:set",
     value,
@@ -94,7 +94,7 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
     emitCellSetEvent(state.source, previous, resolved);
   }
 
-  if (state.source.hasSubscribers === true) {
+  if (state.source.subscribers !== null) {
     notifySubscribers(state.source);
   }
 }
@@ -102,9 +102,7 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
 export function cell<T>(initial: T): Cell<T> {
   const state: CellState<T> = {
     source: {
-      // Declared at creation so later flag writes reuse the same object shape.
-      hasSubscribers: false,
-      subscribers: new Set(),
+      subscribers: null,
     },
     value: initial,
   };

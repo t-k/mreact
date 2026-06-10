@@ -250,7 +250,6 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     };
     const source: Source = {
       subscribers: new Set([queuedComputation]),
-      singleSubscriber: queuedComputation,
     };
 
     runtimeState.pendingComputed.add(queuedComputation);
