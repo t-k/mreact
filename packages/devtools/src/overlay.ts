@@ -34,6 +34,7 @@ const tabs: readonly TabDefinition[] = [
 ];
 
 const defaultMaxEvents = 200;
+const maxEventDetailsLength = 4_000;
 
 export function mountDevtoolsOverlay(
   options: DevtoolsOverlayOptions = {},
@@ -210,7 +211,24 @@ function renderEvent(doc: Document, event: DevtoolsEvent): HTMLLIElement {
 function eventDetails(event: DevtoolsEvent): string {
   const { package: _packageName, timestamp: _timestamp, type: _type, ...details } = event;
 
-  return Object.keys(details).length === 0 ? "{}" : JSON.stringify(details);
+  if (Object.keys(details).length === 0) {
+    return "{}";
+  }
+
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(details);
+  } catch {
+    serialized = "[unserializable]";
+  }
+
+  if (serialized === undefined) {
+    return "{}";
+  }
+
+  return serialized.length > maxEventDetailsLength
+    ? `${serialized.slice(0, maxEventDetailsLength)}...`
+    : serialized;
 }
 
 function eventTab(event: DevtoolsEvent): DevtoolsOverlayTab {

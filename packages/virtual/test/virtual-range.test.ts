@@ -256,6 +256,26 @@ describe("createVirtualList", () => {
 });
 
 describe("createVirtualGrid", () => {
+  it("clamps unbounded row spans before probing grid placement", () => {
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 20,
+      getColumnCount: () => 2,
+      getItemSpan: () => ({ rowSpan: Number.MAX_SAFE_INTEGER }),
+      getKey: (item: { id: string }) => item.id,
+      items: () => [{ id: "a" }],
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 20,
+    });
+
+    const entry = virtual.entries.get()[0];
+
+    expect(entry?.rowSpan).toBeLessThanOrEqual(1_000);
+    expect(virtual.range.get().rowCount).toBeLessThanOrEqual(1_000);
+  });
+});
+
+describe("createVirtualGrid", () => {
   it("computes span-aware ranges for mixed one-by-one and two-by-two grid items", () => {
     const items = Array.from({ length: 12 }, (_unused, index) => ({ id: `item-${index}` }));
     const virtual = createVirtualGrid({

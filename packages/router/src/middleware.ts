@@ -110,26 +110,76 @@ export function middlewareMatches(config: MiddlewareModule["config"], pathname: 
 }
 
 export function parseRouteMiddlewareControl(code: string): RouteMiddlewareControl | undefined {
-  if (!/\bexport\s+const\s+middleware\s*=/.test(code)) {
+  const masked = maskCodeLiterals(code);
+  const declaration = /\bexport\s+const\s+middleware\s*=\s*\{/.exec(masked);
+
+  if (declaration === null) {
     return undefined;
   }
 
-  if (/\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*true\b/.test(code)) {
+  const objectStart = masked.indexOf("{", declaration.index);
+  const objectEnd = findMatchingBrace(masked, objectStart);
+
+  if (objectStart < 0 || objectEnd < 0) {
+    return undefined;
+  }
+
+  const maskedBody = masked.slice(objectStart + 1, objectEnd);
+  const body = code.slice(objectStart + 1, objectEnd);
+
+  if (/\bskip\s*:\s*true\b/.test(maskedBody)) {
     return { skip: true };
   }
 
-  const skipArray = /\bmiddleware\s*=\s*\{[\s\S]*?\bskip\s*:\s*\[([\s\S]*?)\]/.exec(code);
+  const skipArray = /\bskip\s*:\s*\[([\s\S]*?)\]/.exec(maskedBody);
 
   if (skipArray === null) {
     return undefined;
   }
 
+  const arrayStart = skipArray.index + skipArray[0].indexOf("[") + 1;
+  const arrayEnd = skipArray.index + skipArray[0].lastIndexOf("]");
+  const arrayBody = body.slice(arrayStart, arrayEnd);
   const ids = Array.from(
-    skipArray[1]?.matchAll(/["']([^"']+)["']/g) ?? [],
+    arrayBody.matchAll(/["']([^"']+)["']/g),
     (match) => match[1],
   ).filter((id) => id !== undefined);
 
   return ids.length === 0 ? undefined : { skip: ids };
+}
+
+function maskCodeLiterals(code: string): string {
+  return code.replace(
+    /\/\*[\s\S]*?\*\/|\/\/[^\n\r]*|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*'|`(?:\\[\s\S]|[^`\\])*`/g,
+    (match) => " ".repeat(match.length),
+  );
+}
+
+function findMatchingBrace(code: string, openIndex: number): number {
+  if (openIndex < 0) {
+    return -1;
+  }
+
+  let depth = 0;
+
+  for (let index = openIndex; index < code.length; index += 1) {
+    const char = code[index];
+
+    if (char === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      depth -= 1;
+
+      if (depth === 0) {
+        return index;
+      }
+    }
+  }
+
+  return -1;
 }
 
 export function mergeRouteMiddlewareControls(

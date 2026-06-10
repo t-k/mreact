@@ -119,6 +119,19 @@ describe("server Flight runtime", () => {
     expect(calls).toBe(1);
   });
 
+  test("rejects deeply nested Flight encode values with a bounded error", async () => {
+    let nestedArray: unknown = "leaf";
+    let nestedObject: unknown = "leaf";
+
+    for (let index = 0; index < 300; index += 1) {
+      nestedArray = [nestedArray];
+      nestedObject = { child: nestedObject };
+    }
+
+    await expect(renderToFlightResponse(nestedArray)).rejects.toThrow(/MR_FLIGHT_TOO_DEEP/);
+    await expect(renderToFlightResponse(nestedObject)).rejects.toThrow(/MR_FLIGHT_TOO_DEEP/);
+  });
+
   test("keeps client references as module references instead of executing them", async () => {
     const ClientCard = createClientReference("./Card.client.tsx", "Card", [
       "/assets/Card.client.js",

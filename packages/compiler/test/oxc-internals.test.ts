@@ -560,6 +560,41 @@ export default function Page() {
     ).toEqual(["helper", "whenTrue", "WhenFalse"]);
   });
 
+  test("collects local bindings from destructuring patterns", () => {
+    expect(
+      collectBindingNames({
+        type: "VariableDeclaration",
+        declarations: [
+          {
+            id: {
+              type: "ObjectPattern",
+              properties: [
+                { type: "Property", value: { type: "Identifier", name: "name" } },
+                {
+                  type: "Property",
+                  value: {
+                    type: "AssignmentPattern",
+                    left: { type: "Identifier", name: "fallback" },
+                  },
+                },
+                { type: "RestElement", argument: { type: "Identifier", name: "rest" } },
+              ],
+            },
+          },
+          {
+            id: {
+              type: "ArrayPattern",
+              elements: [
+                { type: "Identifier", name: "first" },
+                { type: "RestElement", argument: { type: "Identifier", name: "tail" } },
+              ],
+            },
+          },
+        ],
+      }),
+    ).toEqual(["name", "fallback", "rest", "first", "tail"]);
+  });
+
   test("collects exported component names from function and variable declarations", () => {
     expect(
       collectOxcExportedComponents({
@@ -1211,6 +1246,25 @@ export default function Page() {
         "})()",
       ].join("\n"),
     );
+  });
+
+  test("lowers DOM logical-or expressions without duplicating the left operand", () => {
+    const code = 'sideEffect() || <span>Fallback</span>';
+    const lowered = lowerOxcDomNodeExpression(code, {
+      type: "LogicalExpression",
+      operator: "||",
+      left: { start: 0, end: "sideEffect()".length },
+      right: {
+        type: "JSXElement",
+        openingElement: {
+          name: { type: "JSXIdentifier", name: "span" },
+          attributes: [],
+        },
+        children: [{ type: "JSXText", value: "Fallback" }],
+      },
+    });
+
+    expect(lowered?.match(/sideEffect\(\)/g)).toHaveLength(1);
   });
 
   test("analyzes JSX nodes and expression children through child analysis context", () => {

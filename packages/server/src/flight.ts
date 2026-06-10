@@ -356,7 +356,7 @@ export async function renderToFlightResponse<P extends Record<string, unknown>>(
 
     return {
       version: 1,
-      root: await serializeFlightValue(rootValue, state),
+      root: await serializeFlightValue(rootValue, state, 0),
       clientReferences: state.clientReferences,
       serverReferences: state.serverReferences,
     };
@@ -1605,7 +1605,10 @@ function parseReactFlightId(value: string): number {
 async function serializeFlightValue(
   value: unknown,
   state: FlightSerializationState,
+  depth: number,
 ): Promise<FlightModel> {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
+
   const awaited = await value;
 
   if (awaited === null) {
@@ -1652,7 +1655,7 @@ async function serializeFlightValue(
   }
 
   if (Array.isArray(awaited)) {
-    return await Promise.all(awaited.map((item) => serializeFlightValue(item, state)));
+    return await Promise.all(awaited.map((item) => serializeFlightValue(item, state, depth + 1)));
   }
 
   if (isServerReference(awaited)) {
@@ -1663,7 +1666,7 @@ async function serializeFlightValue(
   }
 
   if (isReactCompatElement(awaited)) {
-    return await serializeElement(awaited, state);
+    return await serializeElement(awaited, state, depth + 1);
   }
 
   if (awaited instanceof Date) {
@@ -1675,8 +1678,8 @@ async function serializeFlightValue(
       kind: "map",
       entries: await Promise.all(
         Array.from(awaited.entries()).map(async ([key, value]) => [
-          await serializeFlightValue(key, state),
-          await serializeFlightValue(value, state),
+          await serializeFlightValue(key, state, depth + 1),
+          await serializeFlightValue(value, state, depth + 1),
         ] as [FlightModel, FlightModel]),
       ),
     };
@@ -1686,7 +1689,7 @@ async function serializeFlightValue(
     return {
       kind: "set",
       values: await Promise.all(
-        Array.from(awaited.values()).map((value) => serializeFlightValue(value, state)),
+        Array.from(awaited.values()).map((value) => serializeFlightValue(value, state, depth + 1)),
       ),
     };
   }
@@ -1697,7 +1700,7 @@ async function serializeFlightValue(
       entries: await Promise.all(
         Array.from(awaited.entries()).map(async ([key, value]) => [
           key,
-          await serializeFlightValue(value, state),
+          await serializeFlightValue(value, state, depth + 1),
         ] as [string, FlightModel]),
       ),
     };
@@ -1707,7 +1710,7 @@ async function serializeFlightValue(
     return {
       kind: "iterable",
       values: await Promise.all(
-        Array.from(awaited).map((value) => serializeFlightValue(value, state)),
+        Array.from(awaited).map((value) => serializeFlightValue(value, state, depth + 1)),
       ),
     };
   }
@@ -1721,7 +1724,7 @@ async function serializeFlightValue(
   }
 
   if (typeof awaited === "object") {
-    return await serializeObject(awaited as Record<string, unknown>, state);
+    return await serializeObject(awaited as Record<string, unknown>, state, depth + 1);
   }
 
   throw new TypeError(`Unsupported Flight value: ${typeof awaited}`);
@@ -1730,9 +1733,10 @@ async function serializeFlightValue(
 async function serializeElement(
   element: ReactCompatElementLike,
   state: FlightSerializationState,
+  depth: number,
 ): Promise<FlightElementModel | FlightModel> {
   if (typeof element.type === "function") {
-    return await serializeFlightValue(element.type(element.props), state);
+    return await serializeFlightValue(element.type(element.props), state, depth + 1);
   }
 
   if (isClientReference(element.type)) {
@@ -1743,7 +1747,7 @@ async function serializeElement(
         id: getClientReferenceId(element.type, state),
       },
       key: element.key,
-      props: await serializeProps(element.props, state),
+      props: await serializeProps(element.props, state, depth + 1),
     };
   }
 
@@ -1752,7 +1756,7 @@ async function serializeElement(
       kind: "element",
       type: element.type,
       key: element.key,
-      props: await serializeProps(element.props, state),
+      props: await serializeProps(element.props, state, depth + 1),
     };
   }
 
@@ -1761,7 +1765,7 @@ async function serializeElement(
       kind: "element",
       type: { kind: "fragment" },
       key: element.key,
-      props: await serializeProps(element.props, state),
+      props: await serializeProps(element.props, state, depth + 1),
     };
   }
 
@@ -1771,11 +1775,12 @@ async function serializeElement(
 async function serializeProps(
   props: Record<string, unknown>,
   state: FlightSerializationState,
+  depth: number,
 ): Promise<Record<string, FlightModel>> {
   const entries = await Promise.all(
     Object.entries(props).map(async ([key, value]) => [
       key,
-      await serializeFlightValue(value, state),
+      await serializeFlightValue(value, state, depth + 1),
     ] as const),
   );
 
@@ -1785,12 +1790,13 @@ async function serializeProps(
 async function serializeObject(
   object: Record<string, unknown>,
   state: FlightSerializationState,
+  depth: number,
 ): Promise<FlightObjectModel> {
   return Object.fromEntries(
     await Promise.all(
       Object.entries(object).map(async ([key, value]) => [
         key,
-        await serializeFlightValue(value, state),
+        await serializeFlightValue(value, state, depth + 1),
       ] as const),
     ),
   ) as FlightObjectModel;
@@ -1824,7 +1830,7 @@ async function getServerReferenceId(
 ): Promise<number> {
   const serializedBound = reference.bound === undefined
     ? undefined
-    : await Promise.all(reference.bound.map((value) => serializeFlightValue(value, state)));
+    : await Promise.all(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
   const key = `${reference.moduleId}:${reference.exportName}:${JSON.stringify(serializedBound ?? null)}`;
   const existing = state.serverReferenceIndexes.get(key);
 

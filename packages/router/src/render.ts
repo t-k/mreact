@@ -835,6 +835,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       appDir: options.appDir,
       filename: "not-found.mreact.tsx",
       pathname: url.pathname,
+      serverSourceFiles: options.serverSourceFiles,
     });
 
     const response = await renderSpecialRoute({
@@ -1737,16 +1738,18 @@ async function nearestBoundaryFileForPath(options: {
   appDir: string;
   filename: string;
   pathname: string;
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string> {
   const parts = options.pathname
     .replace(/^\/+|\/+$/g, "")
     .split("/")
-    .filter((part) => part.length > 0);
+    .filter((part) => part.length > 0 && part !== "." && part !== "..");
 
-  return nearestBoundaryFileFromParts({
+  return await nearestBoundaryFileFromParts({
     appDir: options.appDir,
     filename: options.filename,
     parts,
+    serverSourceFiles: options.serverSourceFiles,
   });
 }
 
@@ -1754,10 +1757,18 @@ async function nearestBoundaryFileFromParts(options: {
   appDir: string;
   filename: string;
   parts: string[];
+  serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): Promise<string> {
   for (let count = options.parts.length; count >= 0; count -= 1) {
     for (const filename of boundaryFilenameCandidates(options.filename)) {
       const candidate = join(options.appDir, ...options.parts.slice(0, count), filename);
+
+      if (options.serverSourceFiles !== undefined) {
+        if (options.serverSourceFiles.has(candidate)) {
+          return candidate;
+        }
+        continue;
+      }
 
       try {
         await access(candidate);
@@ -1835,10 +1846,16 @@ async function renderSpecialRoute(options: {
   textFallback: string;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Response> {
-  try {
-    await access(options.routeFile);
-  } catch {
-    return new Response(options.textFallback, { status: options.status });
+  if (options.serverSourceFiles !== undefined) {
+    if (!options.serverSourceFiles.has(options.routeFile)) {
+      return new Response(options.textFallback, { status: options.status });
+    }
+  } else {
+    try {
+      await access(options.routeFile);
+    } catch {
+      return new Response(options.textFallback, { status: options.status });
+    }
   }
 
   const props = {
@@ -1982,7 +1999,10 @@ async function dispatchServerRoute(options: {
   const handler = module[options.request.method] ?? module.ALL ?? module.default;
 
   if (typeof handler !== "function") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return new Response("Method Not Allowed", {
+      headers: { allow: allowedServerRouteMethods(module).join(", ") },
+      status: 405,
+    });
   }
 
   let response: unknown;
@@ -2005,6 +2025,12 @@ async function dispatchServerRoute(options: {
   return response instanceof Response
     ? response
     : new Response("Invalid route response", { status: 500 });
+}
+
+function allowedServerRouteMethods(module: Record<string, unknown>): string[] {
+  return ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].filter(
+    (method) => typeof module[method] === "function",
+  );
 }
 
 async function dispatchConventionAssetRoute(options: {
@@ -4842,7 +4868,7 @@ function injectQueryState(html: string, state: DehydratedQueryClient): string {
   )}</script>`;
 
   return /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, () => `${script}</body>`)
+    ? replaceFinalBodyCloseTag(html, script)
     : `${html}${script}`;
 }
 
@@ -4856,8 +4882,19 @@ function injectAuthSessionClaims(html: string, claims: unknown): string {
   )}</script>`;
 
   return /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, () => `${script}</body>`)
+    ? replaceFinalBodyCloseTag(html, script)
     : `${html}${script}`;
+}
+
+function replaceFinalBodyCloseTag(html: string, insertion: string): string {
+  const matches = [...html.matchAll(/<\/body>/gi)];
+  const last = matches.at(-1);
+
+  if (last?.index === undefined) {
+    return `${html}${insertion}`;
+  }
+
+  return `${html.slice(0, last.index)}${insertion}${html.slice(last.index)}`;
 }
 
 function authIncludesClaims(code: string): boolean {

@@ -70,6 +70,36 @@ describe("mreact devtools overlay", () => {
 
     expect(mounted.element.textContent).not.toContain("query:ignored");
   });
+
+  test("caps large event details and survives cyclic details", () => {
+    const devtools = createDevtools();
+    const large = "x".repeat(20_000);
+    const cyclic: { self?: unknown } = {};
+    cyclic.self = cyclic;
+    devtools.emit({
+      large,
+      package: "@reckona/mreact-query",
+      type: "query:large",
+    });
+    devtools.emit({
+      cyclic,
+      package: "@reckona/mreact-query",
+      type: "query:cyclic",
+    });
+
+    const mounted = mountDevtoolsOverlay({ devtools });
+    clickTab("Query");
+    const details = Array.from(mounted.element.querySelectorAll("pre")).map(
+      (item) => item.textContent ?? "",
+    );
+
+    const largeDetails = details.find((item) => item.includes("..."));
+    const cyclicDetails = details.find((item) => item.includes("[unserializable]"));
+
+    expect(largeDetails?.length).toBeLessThanOrEqual(4_200);
+    expect(largeDetails).toBeDefined();
+    expect(cyclicDetails).toBeDefined();
+  });
 });
 
 function clickTab(label: string): void {

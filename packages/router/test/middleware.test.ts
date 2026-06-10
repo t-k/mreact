@@ -88,6 +88,27 @@ describe("router middleware contract", () => {
     });
   });
 
+  test("ignores route-local middleware skip controls in strings and comments", () => {
+    expect(
+      parseRouteMiddlewareControl(`
+        const example = "export const middleware = { skip: ['auth'] }";
+      `),
+    ).toBeUndefined();
+    expect(
+      parseRouteMiddlewareControl(`
+        /*
+         export const middleware = { skip: true };
+         */
+      `),
+    ).toBeUndefined();
+    expect(
+      parseRouteMiddlewareControl(`
+        export const middleware = { skip: ["auth"] };
+        const unrelated = { skip: true };
+      `),
+    ).toEqual({ skip: ["auth"] });
+  });
+
   test("skips middleware globally or by configured middleware id", () => {
     expect(shouldSkipMiddleware({ id: "auth" }, { skip: true })).toBe(true);
     expect(shouldSkipMiddleware({ id: "auth" }, { skip: ["auth"] })).toBe(true);

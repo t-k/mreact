@@ -1132,6 +1132,9 @@ export default function Page() {
         <p class="text-sm text-slate-300">
           Demo account: <code>demo@example.com</code> / <code>kanban1234</code>
         </p>
+        <p class="text-xs text-amber-200">
+          Replace these development-only credentials before production.
+        </p>
         <label class="grid gap-1 text-sm text-slate-300">
           Email
           <input class="rounded-md border border-slate-700 bg-slate-950 px-3 py-2" name="email" type="email" defaultValue="demo@example.com" required />
@@ -1152,6 +1155,8 @@ export default function Page() {
 const dashboardLoginRouteSource = `import { createSession } from "@reckona/mreact-auth";
 import { sessions } from "../../session-store.js";
 
+// Development-only demo credentials. Replace this route with your real
+// authentication provider before deploying the dashboard starter.
 const demoAccount = {
   email: "demo@example.com",
   password: "kanban1234",
@@ -1159,6 +1164,13 @@ const demoAccount = {
 } as const;
 
 export async function POST(request: Request): Promise<Response> {
+  if (process.env.NODE_ENV === "production") {
+    return Response.json(
+      { ok: false, error: "Development-only demo credentials are disabled in production." },
+      { status: 403 },
+    );
+  }
+
   const form = await request.formData();
   const email = String(form.get("email") ?? "");
   const password = String(form.get("password") ?? "");
@@ -1588,7 +1600,7 @@ Bindings are declared in \`wrangler.toml\` and typed in \`worker-env.d.ts\`. The
         ? "\nAWS Lambda deploy files are included. See `docs/deploy/aws-lambda.md`.\n"
         : "";
   const dashboardNote = options.dashboard
-    ? "\nThis is the dashboard starter. It includes auth guards, a working demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`.\n"
+    ? "\nThis is the dashboard starter. It includes auth guards, a development-only demo login, query cache hydration, Tailwind styling, and the devtools overlay in development. Demo account: `demo@example.com` / `kanban1234`. Replace these credentials before production; the generated login route disables them when `NODE_ENV` is `production`.\n"
     : "";
   const pnpmTroubleshooting =
     packageManager === "pnpm"

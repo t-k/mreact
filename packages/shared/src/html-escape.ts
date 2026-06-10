@@ -1,5 +1,5 @@
 const textEscapePattern = /[&<>]/;
-const attributeEscapePattern = /["&<>]/;
+const attributeEscapePattern = /["&'<>]/;
 const quotedAttributeEscapePattern = /["&]/;
 
 export function escapeHtmlText(value: unknown): string {
@@ -63,6 +63,10 @@ function textReplacement(code: number): string | undefined {
 function attributeReplacement(code: number): string | undefined {
   if (code === 34) {
     return "&quot;";
+  }
+
+  if (code === 39) {
+    return "&#39;";
   }
 
   return textReplacement(code);

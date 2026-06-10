@@ -227,7 +227,7 @@ export function getQueryClient(): QueryClient {
   }
 
   if (typeof document === "undefined") {
-    return createQueryClient();
+    throw createQueryClientScopeUnavailableError();
   }
 
   if (state.browserQueryClient === undefined) {

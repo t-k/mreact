@@ -45,6 +45,8 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let transactionDepth = 0;
   let transactionPrevious: T | undefined;
   let transactionChanged = false;
+  let transactionType: StoreInstrumentationEvent<T>["type"] | undefined;
+  let transactionMutationCount = 0;
 
   function readUntracked(): T {
     return untrack(() => state.get());
@@ -63,6 +65,9 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
 
     if (transactionDepth > 0) {
       transactionChanged = true;
+      transactionMutationCount += 1;
+      transactionType =
+        transactionType === undefined || transactionType === type ? type : "transaction";
       return;
     }
 
@@ -109,11 +114,15 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
 
       if (transactionDepth === 0) {
         const previous = transactionPrevious;
+        const type =
+          transactionMutationCount === 1 ? (transactionType ?? "transaction") : "transaction";
         transactionPrevious = undefined;
+        transactionType = undefined;
+        transactionMutationCount = 0;
 
         if (transactionChanged && previous !== undefined) {
           transactionChanged = false;
-          notify(readUntracked(), previous, "transaction");
+          notify(readUntracked(), previous, type);
         }
       }
     }
@@ -158,10 +167,22 @@ export function shallowEqual<T>(left: T, right: T): boolean {
     return true;
   }
 
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) && compareOwnEnumerableValues(left, right);
+  }
+
   if (!isPlainObject(left) || !isPlainObject(right)) {
     return false;
   }
 
+  if (Object.getPrototypeOf(left) !== Object.getPrototypeOf(right)) {
+    return false;
+  }
+
+  return compareOwnEnumerableValues(left, right);
+}
+
+function compareOwnEnumerableValues(left: object, right: object): boolean {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
 
@@ -239,5 +260,11 @@ function isDangerousObjectKey(key: PropertyKey): boolean {
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+
+  return prototype === Object.prototype || prototype === null;
 }

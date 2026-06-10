@@ -1218,6 +1218,10 @@ async function collectFiles(directory: string): Promise<string[]> {
     const path = join(directory, entry.name);
 
     if (entry.isDirectory()) {
+      if (shouldSkipServerActionScanDirectory(entry.name)) {
+        continue;
+      }
+
       files.push(...(await collectFiles(path)));
       continue;
     }
@@ -1228,6 +1232,10 @@ async function collectFiles(directory: string): Promise<string[]> {
   }
 
   return files;
+}
+
+function shouldSkipServerActionScanDirectory(name: string): boolean {
+  return name === "node_modules" || name === "__tests__" || name.startsWith(".");
 }
 
 async function resolveSourceFile(directory: string, source: string): Promise<string | undefined> {
