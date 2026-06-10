@@ -560,7 +560,9 @@ options.serverActionReferencesByFile = new Map([["page.tsx", [reference]]]);
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
+    // Whole-program public-surface type checks need the same headroom as the
+    // sibling createProgram tests on single-worker CI runners.
+  }, 10_000);
 
   test("generated route declarations type-check Link href without a runtime helper import", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-link-routes-"));
