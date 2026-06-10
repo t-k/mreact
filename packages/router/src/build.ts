@@ -44,9 +44,12 @@ import {
   type BuildClientRouteOutputOptions,
 } from "./navigation-runtime.js";
 import {
+  COMPAT_VENDOR_PLACEHOLDER_PREFIX,
   bundleAppRouterSourceModule,
   fileImportMetaUrlPlugin,
   importAppRouterSourceModule,
+  resolveCompatVendorEntryFiles,
+  sourceReferencesCompatVendorSpecifier,
 } from "./module-runner.js";
 import { scanAppRoutes } from "./routes.js";
 import type { AppRoute } from "./routes.js";
@@ -957,6 +960,61 @@ async function buildPublicAssetManifest(
   return [...new Set([...publicAssetPaths, ...appConventionPublicAssets])].sort();
 }
 
+const COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN = /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
+
+function rewriteCompatVendorPlaceholderImports(code: string): string {
+  if (!code.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
+    return code;
+  }
+
+  // Module files live in server-modules/code/, vendor chunks in
+  // server-modules/chunks/, so the relative path is stable.
+  return code.replace(
+    COMPAT_VENDOR_PLACEHOLDER_IMPORT_PATTERN,
+    (_match, quote: string, entry: string) => `${quote}../chunks/compat.${entry}.mjs${quote}`,
+  );
+}
+
+function serverModuleArtifactUsesCompatVendor(artifact: BuiltServerModuleArtifact): boolean {
+  return (
+    artifact.string?.bundleCode?.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX) === true ||
+    artifact.stream?.bundleCode?.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX) === true
+  );
+}
+
+// Bundles the react-compat server runtime once per build into shared chunks
+// under server-modules/chunks/ so per-route server modules can import it via
+// relative paths instead of inlining their own copy.
+async function writeCompatVendorChunks(serverDir: string): Promise<void> {
+  const entryFiles = resolveCompatVendorEntryFiles(serverDir);
+  const entries = await Promise.all(
+    [...entryFiles].map(async ([name, filename]) => ({
+      code: await readFile(filename, "utf8"),
+      filename,
+      name,
+    })),
+  );
+  const firstEntry = entries[0];
+
+  if (firstEntry === undefined) {
+    return;
+  }
+
+  const output = await bundleRouterModules({
+    chunkFileNames: "compat-shared.[hash].mjs",
+    entries,
+    entryFileNames: "compat.[name].mjs",
+    platform: "node",
+    root: dirname(firstEntry.filename),
+  });
+  const chunksDir = join(serverDir, "server-modules", "chunks");
+
+  await mkdir(chunksDir, { recursive: true });
+  await Promise.all(
+    output.chunks.map((chunk) => writeFile(join(chunksDir, chunk.fileName), chunk.code)),
+  );
+}
+
 async function writeServerModuleArtifactFiles(
   serverDir: string,
   serverModules: Record<string, BuiltServerModuleArtifact>,
@@ -981,6 +1039,10 @@ async function writeServerModuleArtifactFiles(
     mkdir(join(modulesDir, "request"), { recursive: true }),
     mkdir(join(modulesDir, "render"), { recursive: true }),
   ]);
+
+  if (artifactEntries.some(([, artifact]) => serverModuleArtifactUsesCompatVendor(artifact))) {
+    await writeCompatVendorChunks(serverDir);
+  }
 
   const writtenArtifacts = await mapWithBuildConcurrency<
     [string, BuiltServerModuleArtifact],
@@ -1111,7 +1173,9 @@ async function externalizeServerModuleOutputCode(
   const moduleCode =
     sourceCode === undefined
       ? undefined
-      : rewritePortableRuntimePackageImports(sourceCode, portableRuntimePackages);
+      : rewriteCompatVendorPlaceholderImports(
+          rewritePortableRuntimePackageImports(sourceCode, portableRuntimePackages),
+        );
 
   if (moduleCode === undefined || moduleCode.length === 0) {
     return output;
@@ -1919,6 +1983,11 @@ async function buildServerModuleArtifacts(options: {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
   );
+  // One shared compat vendor chunk set replaces per-route inlining whenever
+  // any app source references the react/compat specifier family.
+  const externalizeCompatVendor =
+    options.prebundleServerComponents &&
+    Object.values(options.files).some(sourceReferencesCompatVendorSpecifier);
   const loaderArtifactFiles = new Set<string>();
   const metadataArtifactFiles = new Set<string>();
   const requestArtifactFiles = new Set<string>();
@@ -2186,6 +2255,7 @@ async function buildServerModuleArtifacts(options: {
                     bundleCode: await buildServerComponentBundleArtifactCode({
                       clientRouteInferenceCache: options.clientRouteInferenceCache,
                       code: output.code,
+                      externalizeCompatVendor,
                       filename: absoluteFile,
                       define: options.define,
                       root: options.projectRoot,
@@ -2225,6 +2295,7 @@ async function buildServerComponentBundleArtifactCode(options: {
   clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeCompatVendor?: boolean | undefined;
   filename: string;
   root?: string | undefined;
   serverOutput: ServerOutputMode;
@@ -2233,6 +2304,7 @@ async function buildServerComponentBundleArtifactCode(options: {
   return await bundleAppRouterSourceModule({
     code: options.code,
     define: options.define,
+    externalizeCompatVendor: options.externalizeCompatVendor,
     label: `server-component:${options.filename}`,
     resolveDir: dirname(options.filename),
     root: options.root,
