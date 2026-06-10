@@ -345,17 +345,21 @@ export function resolveCompatVendorEntryFiles(resolveDir?: string): Map<string, 
 const compatVendorPlaceholderImportPattern =
   /(["'])mreact-compat-vendor:([\w-]+)\1/gu;
 
-export function rewriteCompatVendorPlaceholderImportsForRunner(code: string): string {
+export function rewriteCompatVendorPlaceholderImportsForRunner(
+  code: string,
+  resolveDir?: string,
+): string {
   if (!code.includes(COMPAT_VENDOR_PLACEHOLDER_PREFIX)) {
     return code;
   }
+  const entryFiles = resolveCompatVendorEntryFiles(resolveDir);
 
   return code.replace(
     compatVendorPlaceholderImportPattern,
     (source, quote: string, entry: string) => {
-      const specifier = compatVendorEntrySpecifiers.get(entry);
+      const file = entryFiles.get(entry);
 
-      return specifier === undefined ? source : `${quote}${specifier}${quote}`;
+      return file === undefined ? source : `${quote}${pathToFileURL(file).href}${quote}`;
     },
   );
 }
