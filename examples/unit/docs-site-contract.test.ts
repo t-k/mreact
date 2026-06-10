@@ -179,6 +179,12 @@ describe("docs-site example contract", () => {
     expect(layout).toContain('aria-label="Search documentation"');
     expect(layout).toContain('class="site-search-results"');
     expect(layout.indexOf('<search class="site-search"')).toBeLessThan(
+      layout.indexOf('<div class="site-header-actions">'),
+    );
+    expect(layout.indexOf('<div class="site-header-actions">')).toBeLessThan(
+      layout.indexOf('<a class="site-brand" href={sitePath()}>'),
+    );
+    expect(layout.indexOf('<a class="site-brand" href={sitePath()}>')).toBeLessThan(
       layout.indexOf('<aside class="site-sidebar">'),
     );
     expect(layout).not.toContain('class="site-sidebar-header"');
@@ -1987,7 +1993,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("text-wrap: balance");
     expect(css).toContain("text-wrap: pretty");
     expect(css).toContain("grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr)");
-    expect(css).toContain("grid-template-columns: minmax(11rem, 1fr) minmax(18rem, 42rem) auto");
+    expect(css).toContain("grid-template-columns: minmax(18rem, 42rem) auto minmax(0, 1fr) max-content");
+    expect(css).toContain("grid-column: 4");
     expect(css).toContain("justify-self: end");
     expect(css).toContain('grid-template-areas: "header header" "sidebar main"');
     expect(css).toContain("grid-area: header");

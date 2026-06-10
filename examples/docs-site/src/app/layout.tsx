@@ -33,9 +33,6 @@ export default function RootLayout() {
         </a>
         <div class="site-shell">
           <header class="site-header">
-            <a class="site-brand" href={sitePath()}>
-              Mreact Docs
-            </a>
             <search class="site-search" aria-label="Search documentation">
               <label class="site-search-label" for="site-search-input">
                 Search
@@ -112,6 +109,9 @@ export default function RootLayout() {
                 </svg>
               </button>
             </div>
+            <a class="site-brand" href={sitePath()}>
+              Mreact Docs
+            </a>
           </header>
           <aside class="site-sidebar">
             <div class="site-sidebar-body" id="site-sidebar-menu">
