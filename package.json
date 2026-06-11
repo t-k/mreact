@@ -50,8 +50,17 @@
     "release:version": "node scripts/bump-package-versions.mjs"
   },
   "devDependencies": {
+    "@analogjs/content": "2.6.0",
     "@analogjs/platform": "2.6.0",
+    "@analogjs/router": "2.6.0",
+    "@angular/animations": "20.3.25",
+    "@angular/common": "20.3.25",
+    "@angular/compiler": "20.3.25",
+    "@angular/compiler-cli": "20.3.25",
     "@angular/core": "20.3.25",
+    "@angular/platform-browser": "20.3.25",
+    "@angular/platform-server": "20.3.25",
+    "@angular/router": "20.3.25",
     "@builder.io/qwik": "^1.19.2",
     "@mdx-js/rollup": "^3.1.1",
     "@microsoft/api-extractor": "^7.58.7",
@@ -83,6 +92,7 @@
     "rehype-slug": "^6.0.0",
     "remark-frontmatter": "^5.0.0",
     "remark-mdx-frontmatter": "^5.2.0",
+    "rxjs": "7.8.2",
     "solid-js": "^1.9.12",
     "solid-js-2": "npm:solid-js@2.0.0-beta.13",
     "svelte": "5.56.3",
@@ -93,7 +103,8 @@
     "vite": "^8.0.11",
     "vitest": "^4.1.6",
     "vue": "3.5.24",
-    "wrangler": "^4.92.0"
+    "wrangler": "^4.92.0",
+    "zone.js": "0.15.1"
   },
   "engines": {
     "node": ">=20.19.0"

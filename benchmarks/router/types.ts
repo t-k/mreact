@@ -53,6 +53,7 @@ export type AppFrameworkCaseName =
   | "app build output gzip bytes";
 
 export interface AppFrameworkAdapter {
+  fixtureKind?: "lightweight-proxy" | "production-app";
   name: AppFrameworkName;
   version: string;
   setup?: () => Promise<void>;
