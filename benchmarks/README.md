@@ -12,9 +12,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
   cross-checked against real browser DOM behavior.
 - `non-router`: package-level regression microbenchmarks for virtual, forms,
   query, store, auth, and other non-router packages.
-- `router`: production router/app framework comparison across Marko Run,
-  Qwik City, SolidStart, TanStack Start, Next.js App Router, and
-  mreact app router.
+- `router`: production router/app framework comparison across Marko Run, Vue, Nuxt, Svelte, SvelteKit, Angular, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
 - `lambda-route-latency`: local AWS Lambda adapter route latency reproduction.
   It invokes API Gateway HTTP API v2-style events directly against the mreact
   Lambda handler and records request/render timing phases for cold health

@@ -7,6 +7,12 @@ describe("router benchmark configuration", () => {
   it("includes every planned router/app framework adapter", () => {
     expect(routerBenchmarkAdapters.map((adapter) => adapter.name)).toEqual([
       "marko-run",
+      "vue",
+      "nuxt",
+      "svelte",
+      "svelte-kit",
+      "angular",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -172,6 +178,12 @@ describe("router benchmark configuration", () => {
   it("exposes low-cost extended probes for production router adapters", () => {
     const expectedAdapters = [
       "marko-run",
+      "vue",
+      "nuxt",
+      "svelte",
+      "svelte-kit",
+      "angular",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
