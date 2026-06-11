@@ -2001,6 +2001,8 @@ describe("docs-site example contract", () => {
     expect(css).toContain("--brand: oklch(");
     expect(css).toContain("--code-panel-bg: oklch(");
     expect(css).toContain("--inline-code-text: oklch(");
+    expect(css).toContain("--inline-code-text: oklch(0.48 0.18 58)");
+    expect(css.match(/--inline-code-text: oklch\(0\.82 0\.145 65\)/g)).toHaveLength(2);
     expect(css).not.toContain("--inline-code-bg");
     expect(css).not.toContain("--inline-code-border");
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
