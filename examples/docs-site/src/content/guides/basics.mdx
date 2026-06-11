@@ -1,0 +1,144 @@
+export const title = "Basics";
+export const description = "Learn the core Mreact model: routes render on the server, client interactivity is opt-in, and cell values drive fine-grained updates.";
+
+# Basics
+
+Mreact is a React-flavored framework with an app router, server-first rendering, and fine-grained reactive primitives for client interactivity. Start here when you want the mental model before choosing a route shape, a client boundary, or a state primitive.
+
+## The core model
+
+A Mreact app is a route tree. Route files render on the server by default, layouts wrap pages, and route module exports such as `metadata`, `loader`, `action`, and route handlers describe the work that belongs to the request.
+
+Client JavaScript is opt-in. A page can stay server-rendered, a small `.client.tsx` component can hydrate as an island, or a route can use `"use client"` when the whole screen should run in the browser. Mreact also infers common client needs from event handlers, reactive state, and browser-only route shapes.
+
+## Reactive values
+
+Use `cell()` for writable state. A cell stores one value, `.get()` reads it, and `.set()` writes either a replacement value or an updater function.
+
+```tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+export default function Counter() {
+  return (
+    <button type="button" onClick={() => count.set((value) => value + 1)}>
+      Count: {count.get()}
+    </button>
+  );
+}
+```
+
+Reads are dependency-tracked while reactive work is running. When `count.set()` runs, Mreact updates the stored value immediately, invalidates derived values synchronously, and schedules DOM bindings and effects in a microtask.
+
+## Derived values
+
+Use `computed()` when a value can be derived from other cells. A computed value is readonly and recalculates when the cells it reads change.
+
+```ts
+import { cell, computed } from "@reckona/mreact-reactive-core";
+
+const firstName = cell("Ada");
+const lastName = cell("Lovelace");
+const displayName = computed(() => `${firstName.get()} ${lastName.get()}`);
+
+displayName.get();
+```
+
+Pass an equality function when equivalent derived results should not notify downstream work.
+
+```ts
+const parity = computed(() => count.get() % 2, {
+  equals: (previous, next) => previous === next,
+});
+```
+
+## Effects
+
+Use `effect()` for side effects that should re-run after the values they read change. Effects return a dispose function.
+
+```ts
+import { cell, effect } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+const dispose = effect(() => {
+  console.log("count", count.get());
+});
+
+count.set(1);
+dispose();
+```
+
+Prefer using JSX for UI updates. Reach for `effect()` when you need to connect reactive values to logging, imperative integrations, subscriptions, or low-level runtime code.
+
+## DOM bindings
+
+Application code usually uses JSX. The compiler and low-level DOM integrations use `@reckona/mreact-reactive-dom` bindings such as `createRoot()`, `bindText()`, `bindProp()`, and `bindEvent()` to connect cells to DOM nodes without rerendering an entire component tree.
+
+```ts
+import { cell } from "@reckona/mreact-reactive-core";
+import { bindText, createRoot } from "@reckona/mreact-reactive-dom";
+
+const count = cell(0);
+
+createRoot(document.body, () => {
+  const text = document.createTextNode("");
+  bindText(text, () => count.get());
+  return text;
+});
+```
+
+Keep the dispose function returned by `createRoot()` when mounting manually. Bindings created inside that root are cleaned up with the root; bindings created outside a root need their own disposal path.
+
+## Client boundaries
+
+Put browser-only controls in `.client.tsx` files when the rest of a page should stay server-rendered.
+
+```tsx
+// src/app/cart/Quantity.client.tsx
+import { cell } from "@reckona/mreact-reactive-core";
+
+const quantity = cell(1);
+
+export default function Quantity() {
+  return (
+    <button type="button" onClick={() => quantity.set((value) => value + 1)}>
+      Quantity: {quantity.get()}
+    </button>
+  );
+}
+```
+
+```tsx
+// src/app/cart/page.tsx
+import Quantity from "./Quantity.client";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Cart</h1>
+      <Quantity />
+    </main>
+  );
+}
+```
+
+This keeps the page shell server-rendered while the quantity control hydrates in the browser.
+
+## When to use each primitive
+
+- Use `cell()` for local mutable state.
+- Use `computed()` for derived readonly state.
+- Use `effect()` for imperative side effects.
+- Use JSX for normal UI binding.
+- Use `@reckona/mreact-reactive-dom` only for low-level DOM integration or compiler-style output.
+- Use `.client.tsx` for small interactive islands.
+- Use route-level `"use client"` when the whole route is browser-owned.
+
+## Related pages
+
+- [Getting Started](/getting-started/)
+- [Project Structure](/guides/project-structure/)
+- [Server and Client Model](/guides/server-and-client-model/)
+- [React Compatibility](/guides/react-compatibility/)

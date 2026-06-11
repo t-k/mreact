@@ -9,6 +9,7 @@ const docsSiteRoot = join(root, "examples", "docs-site");
 const requiredSlugs = [
   "benchmarks",
   "getting-started",
+  "guides/basics",
   "guides/app-router",
   "guides/project-structure",
   "guides/environment-variables",
@@ -80,6 +81,9 @@ describe("docs-site example contract", () => {
       { text: "Benchmarks", slug: "benchmarks" },
       { text: "Getting Started", slug: "getting-started" },
     ],`);
+    expect(nav.indexOf('slug: "guides/basics"')).toBeLessThan(
+      nav.indexOf('slug: "guides/project-structure"'),
+    );
     expect(nav.indexOf('slug: "guides/project-structure"')).toBeLessThan(
       nav.indexOf('slug: "guides/app-router"'),
     );
@@ -127,6 +131,25 @@ describe("docs-site example contract", () => {
     expect(nav.indexOf('slug: "deployments/source-maps"')).toBeLessThan(
       nav.indexOf('slug: "deployments/logging-and-diagnostics"'),
     );
+  });
+
+  test("starts the guide section with Mreact basics", async () => {
+    const nav = await readDocsSite("src/nav.config.ts");
+    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const basics = await readDocsSite("src/content/guides/basics.mdx");
+
+    expect(nav).toContain('{ text: "Basics", slug: "guides/basics" }');
+    expect(nav.indexOf('slug: "guides/basics"')).toBeLessThan(
+      nav.indexOf('slug: "guides/project-structure"'),
+    );
+    expect(contentRegistry).toContain('from "./content/guides/basics.mdx"');
+    expect(contentRegistry).toContain('page("guides/basics"');
+    expect(basics).toContain('export const title = "Basics"');
+    expect(basics).toContain("cell");
+    expect(basics).toContain("computed");
+    expect(basics).toContain("effect");
+    expect(basics).toContain("DOM bindings");
+    expect(basics).toContain("Client boundaries");
   });
 
   test("removes the standalone Route Handlers guide from the public docs", async () => {

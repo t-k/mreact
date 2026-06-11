@@ -5,6 +5,7 @@ import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";
 import gettingStarted, * as gettingStartedMeta from "./content/getting-started.mdx";
 import guidesAppRouter, * as guidesAppRouterMeta from "./content/guides/app-router.mdx";
 import guidesAuthentication, * as guidesAuthenticationMeta from "./content/guides/authentication.mdx";
+import guidesBasics, * as guidesBasicsMeta from "./content/guides/basics.mdx";
 import guidesCacheAndRevalidation, * as guidesCacheAndRevalidationMeta from "./content/guides/cache-and-revalidation.mdx";
 import guidesCookiesAndSessions, * as guidesCookiesAndSessionsMeta from "./content/guides/cookies-and-sessions.mdx";
 import guidesCsp, * as guidesCspMeta from "./content/guides/csp.mdx";
@@ -199,6 +200,7 @@ export const docsPages = [
     ],
   }),
   page("getting-started", gettingStarted, gettingStartedMeta),
+  page("guides/basics", guidesBasics, guidesBasicsMeta),
   page("guides/app-router", guidesAppRouter, guidesAppRouterMeta),
   page("guides/project-structure", guidesProjectStructure, guidesProjectStructureMeta),
   page("guides/environment-variables", guidesEnvironmentVariables, guidesEnvironmentVariablesMeta),
