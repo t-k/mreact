@@ -2290,27 +2290,26 @@ async function buildServerModuleArtifacts(options: {
             return undefined;
           }
 
+          const shouldWriteRenderBundle =
+            options.prebundleServerComponents &&
+            options.actionRenderBundleExcludedFiles?.has(file) !== true;
+          const bundleCode = shouldWriteRenderBundle
+            ? await buildServerComponentBundleArtifactCode({
+                clientRouteInferenceCache: options.clientRouteInferenceCache,
+                code: output.code,
+                externalizeCompatVendor,
+                filename: absoluteFile,
+                define: options.define,
+                root: options.projectRoot,
+                serverOutput,
+                vitePlugins: options.vitePlugins,
+              })
+            : undefined;
+
           return [
             serverOutput,
             {
-              ...(options.prebundleServerComponents
-                ? {
-                    ...(options.actionRenderBundleExcludedFiles?.has(file) === true
-                      ? {}
-                      : {
-                          bundleCode: await buildServerComponentBundleArtifactCode({
-                            clientRouteInferenceCache: options.clientRouteInferenceCache,
-                            code: output.code,
-                            externalizeCompatVendor,
-                            filename: absoluteFile,
-                            define: options.define,
-                            root: options.projectRoot,
-                            serverOutput,
-                            vitePlugins: options.vitePlugins,
-                          }),
-                        }),
-                  }
-                : {}),
+              ...(bundleCode === undefined ? {} : { bundleCode }),
               code: output.code,
               metadata: output.metadata,
               sourceHash: hashText(code),
