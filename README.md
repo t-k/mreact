@@ -758,7 +758,7 @@ export async function loader() {
 
 ### Query Prefetch and Hydration
 
-`@reckona/mreact-query` provides a tiny query client. The router gives loaders a per-request `QueryClient`; after render it dehydrates the cache into HTML. Server code must get request-scoped query state through the loader context or `runWithQueryClient()` with installed `AsyncLocalStorage`; `runWithQueryClient()` throws on the server when no request scope storage is available instead of falling back to module-level state.
+`@reckona/mreact-query` provides a tiny query client. The router gives loaders a per-request `QueryClient`; after render it dehydrates the cache into HTML. Built adapters install the same request scope before loader, page, metadata, and document rendering, including Cloudflare Workers and Cloudflare Pages runtimes where `AsyncLocalStorage` is unavailable, so server-rendered helpers can call `getQueryClient()` during the request. Direct server integrations must get request-scoped query state through the loader context or `runWithQueryClient()` with installed `AsyncLocalStorage`; `runWithQueryClient()` throws on the server when no request scope storage is available instead of falling back to module-level state.
 
 ```tsx
 // src/app/query/page.tsx

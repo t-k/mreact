@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.156 - 2026-06-11
+
+### Fixed
+
+- Fixed Cloudflare Workers and Cloudflare Pages SSR so request-scoped query clients are available to page render helpers that call `getQueryClient()` during server rendering, not only to loaders or components that read `props.queryClient`.
+
 ## 0.0.155 - 2026-06-11
 
 ### Fixed
