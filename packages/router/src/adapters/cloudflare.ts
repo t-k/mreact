@@ -5,9 +5,11 @@ import {
   __MREACT_QUERY_STATE_SCRIPT_ID,
   createQueryClient,
   dehydrate,
+  installQueryAsyncStorage,
   isQueryClientScopeUnavailableError,
   runWithQueryClient,
   type DehydratedQueryClient,
+  type QueryAsyncStorage,
   type QueryClient,
 } from "@reckona/mreact-query";
 import type {
@@ -489,16 +491,90 @@ function injectCloudflareQueryStateScript(html: string, state: DehydratedQueryCl
     : `${html}${script}`;
 }
 
-function runWithCloudflareQueryClient<T>(queryClient: QueryClient, fn: () => T): T {
+async function runWithCloudflareQueryClient<T>(
+  queryClient: QueryClient,
+  fn: () => T,
+): Promise<Awaited<T>> {
   try {
-    return runWithQueryClient(queryClient, fn);
+    return await runWithQueryClient(queryClient, fn);
   } catch (error) {
     if (isQueryClientScopeUnavailableError(error)) {
-      return fn();
+      installQueryAsyncStorage(cloudflareQueryClientStorage);
+      return await runWithSerializedCloudflareQueryClient(queryClient, fn);
     }
 
     throw error;
   }
+}
+
+const cloudflareQueryClientStorage = createCloudflareQueryClientStorage();
+let cloudflareQueryClientFallbackQueue: Promise<void> = Promise.resolve();
+
+async function runWithSerializedCloudflareQueryClient<T>(
+  queryClient: QueryClient,
+  fn: () => T,
+): Promise<Awaited<T>> {
+  const previous = cloudflareQueryClientFallbackQueue;
+  let releaseCurrent!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseCurrent = resolve;
+  });
+  cloudflareQueryClientFallbackQueue = previous.then(() => current, () => current);
+
+  await previous;
+
+  try {
+    return await runWithQueryClient(queryClient, fn);
+  } finally {
+    releaseCurrent();
+  }
+}
+
+function createCloudflareQueryClientStorage(): QueryAsyncStorage<QueryClient> {
+  const stores: QueryClient[] = [];
+
+  return {
+    getStore() {
+      return stores.at(-1);
+    },
+    run<TResult>(store: QueryClient, callback: () => TResult): TResult {
+      stores.push(store);
+      let popSynchronously = true;
+
+      try {
+        const result = callback();
+
+        if (isPromiseLike(result)) {
+          popSynchronously = false;
+          return Promise.resolve(result).finally(() => {
+            removeCloudflareQueryClientStore(stores, store);
+          }) as TResult;
+        }
+
+        return result;
+      } finally {
+        if (popSynchronously) {
+          removeCloudflareQueryClientStore(stores, store);
+        }
+      }
+    },
+  };
+}
+
+function removeCloudflareQueryClientStore(stores: QueryClient[], store: QueryClient): void {
+  const index = stores.lastIndexOf(store);
+
+  if (index >= 0) {
+    stores.splice(index, 1);
+  }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return (
+    (typeof value === "object" || typeof value === "function") &&
+    value !== null &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 async function dispatchCloudflareServerRoute<Env>(
