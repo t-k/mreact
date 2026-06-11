@@ -60,13 +60,19 @@ for (const benchmarkCase of selectedPrimitiveCases) {
 }
 
 const env = await collectBenchmarkEnvironment([
+  "@analogjs/platform",
+  "@angular/core",
   "marko",
+  "nuxt",
+  "@sveltejs/kit",
   "@builder.io/qwik",
   "@qwik.dev/core",
   "react",
   "react-dom",
   "solid-js",
   "solid-js-2",
+  "svelte",
+  "vue",
 ]);
 const dir = await createDatedResultsDir();
 const markdown = formatBenchmarkMarkdown("Primitive Benchmark", env, rows, {

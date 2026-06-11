@@ -185,6 +185,12 @@ describe("primitive adapters", () => {
   it("includes every planned primitive framework adapter", () => {
     expect(primitiveAdapters.map((adapter) => adapter.name)).toEqual([
       "marko",
+      "vue",
+      "nuxt",
+      "svelte",
+      "svelte-kit",
+      "angular",
+      "analog",
       "qwik",
       "qwik-v2",
       "react",
