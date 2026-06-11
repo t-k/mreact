@@ -60,14 +60,14 @@ interface TemplateDefinition {
 }
 
 const internalPackageVersions = {
-  "@reckona/mreact-auth": "^0.0.157",
-  "@reckona/mreact-devtools": "^0.0.157",
-  "@reckona/mreact-forms": "^0.0.157",
-  "@reckona/mreact": "^0.0.157",
-  "@reckona/mreact-query": "^0.0.157",
-  "@reckona/mreact-reactive-core": "^0.0.157",
+  "@reckona/mreact-auth": "^0.0.158",
+  "@reckona/mreact-devtools": "^0.0.158",
+  "@reckona/mreact-forms": "^0.0.158",
+  "@reckona/mreact": "^0.0.158",
+  "@reckona/mreact-query": "^0.0.158",
+  "@reckona/mreact-reactive-core": "^0.0.158",
   "@reckona/mreact-reactive-dom": "^0.0.51",
-  "@reckona/mreact-router": "^0.0.157",
+  "@reckona/mreact-router": "^0.0.158",
   "@reckona/mreact-test-utils": "^0.0.51",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
@@ -1536,7 +1536,7 @@ find .lambda -type f -printf '%s\\n' | awk '{ total += $1 } END { printf "actual
 
 ## Server dependencies
 
-Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. The build writes \`.mreact/server/import-policy.json\` from server-side static imports, and generated Lambda handlers use \`importPolicy: "generated"\` by default. Those same packages must be present in the production \`node_modules\` copied into the Lambda artifact; the generated import policy permits imports, but it does not vendor missing dependencies.
+Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. The build writes \`.mreact/server/import-policy.json\` from server-side static imports, and generated Lambda handlers use \`importPolicy: "generated"\` by default. AWS Lambda request/control artifacts bundle the generated import-policy packages they use for loaders, middleware, route handlers, and metadata, reducing first-hit package resolution on sparse Lambda traffic. Packages listed in the generated import policy may still be needed by render-only modules, inferred server actions, custom handlers, or adapter code, so keep them installed in the production \`node_modules\` copied into the Lambda artifact.
 
 \`\`\`ts
 export const handler = await createPreloadedAwsLambdaRequestHandler({
@@ -1545,7 +1545,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 \`\`\`
 
-The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Static middleware matchers, loader redirects, request/control artifacts split from render artifacts, compiled module files, and optional \`hot-route-requests\` preload avoid unnecessary dependency evaluation on unmatched health checks and simple redirects. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, source analysis, page module load, page component render, layout module load, layout component render, response construction, and Lambda response conversion. Loader timing splits module load/evaluation from user loader execution with \`loaderModuleLoadMs\` and \`loaderExecutionMs\`; source analysis reports \`sourceAnalysisArtifactMs\` when a built analysis summary is reused; middleware timing similarly splits \`middlewareModuleLoadMs\` and \`middlewareExecutionMs\`.
+The generated handler uses top-level \`await\` with \`createPreloadedAwsLambdaRequestHandler()\` so the built runtime, middleware, route modules, layouts, and metadata are imported during the Lambda initialization phase instead of racing the first user request. Static middleware matchers, loader redirects, request/control artifacts split from render artifacts, AWS Lambda request/control package bundling, compiled module files, and optional \`hot-route-requests\` preload avoid unnecessary dependency evaluation on unmatched health checks and simple redirects. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, source analysis, page module load, page component render, layout module load, layout component render, response construction, and Lambda response conversion. Loader timing splits module load/evaluation from user loader execution with \`loaderModuleLoadMs\` and \`loaderExecutionMs\`; source analysis reports \`sourceAnalysisArtifactMs\` when a built analysis summary is reused; middleware timing similarly splits \`middlewareModuleLoadMs\` and \`middlewareExecutionMs\`.
 
 ## Streaming SSR
 
