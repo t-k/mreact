@@ -31,7 +31,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - Store raw samples, percentile summaries, and markdown reports under `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such as `001` or `002`.
 - The Benchmarks GitHub Actions workflow commits changed result directories back to the selected branch; do not rely on Actions artifacts for long-term access. A single workflow dispatch writes all selected public benchmark reports into the same run directory, so `all` produces `primitive.md`, `primitive-browser.md`, `non-router.md`, and `router.md` side by side. Microbenchmarks such as `html-escape` and `request-fastpaths` are local investigation tools and are not published by the workflow.
 - The router `app concurrent RSS delta` case measures the benchmark runner process. The mreact fixtures serve in-process, so their delta includes server-side allocation, while adapters that spawn child-process servers only expose the HTTP client side; treat the mreact number as an upper bound rather than a same-kind comparison.
-- The primitive Vue, Svelte, and Angular adapters currently use a shared lightweight DOM fixture for render-focused primitive rows; source-primitive rows remain unsupported until each framework has a native reactive source adapter.
+- The primitive Vue, Svelte, and Angular adapters use framework-runtime fixtures: Vue mounts `createApp` components, Svelte mounts compiler-generated components, and Angular mounts JIT standalone components with signals. Source-primitive rows remain unsupported unless the framework has a directly comparable fine-grained source primitive.
 - Treat benchmark numbers as same-machine comparisons, not absolute truth.
 
 ## Commands

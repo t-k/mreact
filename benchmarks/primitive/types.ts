@@ -19,6 +19,7 @@ export type PrimitiveCase = (
 ) => Promise<PrimitiveCaseResult> | PrimitiveCaseResult;
 
 export interface PrimitiveAdapter {
+  fixtureKind?: "framework-runtime" | "simple-dom";
   name:
     | "marko"
     | "vue"

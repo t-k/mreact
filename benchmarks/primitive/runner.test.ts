@@ -198,6 +198,19 @@ describe("primitive adapters", () => {
     ]);
   });
 
+  it("marks Vue, Svelte, and Angular primitive adapters as framework-runtime fixtures", () => {
+    const fixtureKinds = new Map(
+      primitiveAdapters.map((adapter) => [
+        adapter.name,
+        (adapter as { fixtureKind?: string }).fixtureKind,
+      ]),
+    );
+
+    expect(fixtureKinds.get("vue")).toBe("framework-runtime");
+    expect(fixtureKinds.get("svelte")).toBe("framework-runtime");
+    expect(fixtureKinds.get("angular")).toBe("framework-runtime");
+  });
+
   it("defines the expanded primitive case matrix with descriptions", () => {
     expect(primitiveCases.map((benchmarkCase) => benchmarkCase.name)).toEqual([
       "create 1k rows",
