@@ -824,6 +824,116 @@ export default function Page(props) {
     expect(collectBareRuntimeImports(requestModuleCode)).not.toContain("lambda-db");
   });
 
+  test("shares AWS Lambda runtime package code across route and middleware request artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-request-shared-chunks-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "users"), { recursive: true });
+    await mkdir(join(appDir, "families"), { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "lambda-db": "1.0.0" } }),
+    );
+    await writeFakePackage(
+      rootDir,
+      "lambda-db",
+      `const registryEntries = [];
+for (let index = 0; index < 32; index += 1) {
+  registryEntries.push("table-" + index);
+}
+export const registry = registryEntries;
+export function queryTitle(name) {
+  return "__LAMBDA_DB_MARKER__:" + registry.length + ":" + name;
+}
+export function verifySession(token) {
+  return registry.length > 0 && token === "ok";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `import { verifySession } from "lambda-db";
+
+export const config = { matcher: "/:path*" };
+
+export function middleware(request) {
+  verifySession(request.headers.get("cookie") ?? "ok");
+}
+`,
+    );
+    const loaderPageSource = (name: string) => `import { queryTitle } from "lambda-db";
+
+export function loader() {
+  return { title: queryTitle("${name}") };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}
+`;
+    await writeFile(join(appDir, "page.tsx"), loaderPageSource("root"));
+    await writeFile(join(appDir, "users", "page.tsx"), loaderPageSource("users"));
+    await writeFile(join(appDir, "families", "page.tsx"), loaderPageSource("families"));
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+
+    const modulesDir = join(outDir, "server", "server-modules");
+    const moduleFiles = (await readdir(modulesDir, { recursive: true })).filter((file) =>
+      file.endsWith(".mjs"),
+    );
+    const filesWithPackageBody: string[] = [];
+    for (const file of moduleFiles) {
+      if ((await readFile(join(modulesDir, file), "utf8")).includes("__LAMBDA_DB_MARKER__")) {
+        filesWithPackageBody.push(file);
+      }
+    }
+
+    // First hits of /users, /families, and middleware must share one evaluated
+    // copy of the runtime package instead of re-evaluating it per artifact.
+    expect(filesWithPackageBody).toHaveLength(1);
+
+    const usersArtifact = await readBuiltServerModuleArtifact<{
+      loader?: { code?: string; moduleFile?: string };
+    }>(outDir, "app/users/page.tsx");
+    const usersLoaderCode = usersArtifact?.loader?.code ?? "";
+    const usersLoaderModuleFile = usersArtifact?.loader?.moduleFile;
+    const middlewareArtifact = await readBuiltServerModuleArtifact<{
+      request?: { code?: string };
+    }>(outDir, "app/middleware.ts");
+
+    expect(usersLoaderCode).not.toContain("__LAMBDA_DB_MARKER__");
+    expect(collectBareRuntimeImports(usersLoaderCode)).not.toContain("lambda-db");
+    expect(middlewareArtifact?.request?.code ?? "").not.toContain("__LAMBDA_DB_MARKER__");
+    expect(collectBareRuntimeImports(middlewareArtifact?.request?.code ?? "")).not.toContain(
+      "lambda-db",
+    );
+
+    const relativeImports = (code: string) =>
+      [...code.matchAll(/from\s+["'](\.[^"']+)["']/g)].map((match) => match[1]);
+    const sharedWithMiddleware = relativeImports(usersLoaderCode).filter((specifier) =>
+      relativeImports(middlewareArtifact?.request?.code ?? "").includes(specifier),
+    );
+
+    // Middleware and loaders must reuse the same emitted runtime package chunk.
+    expect(sharedWithMiddleware.length).toBeGreaterThan(0);
+
+    if (usersLoaderModuleFile === undefined) {
+      throw new Error("Missing users loader moduleFile");
+    }
+
+    const usersLoaderModule = await import(
+      pathToFileURL(join(outDir, "server", usersLoaderModuleFile)).href
+    ) as { loader?: () => { title: string } };
+
+    expect(usersLoaderModule.loader?.().title).toBe("__LAMBDA_DB_MARKER__:32:users");
+  });
+
   test("includes route handlers and metadata convention routes in generated runtime import policies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-conventions-"));
     const appDir = join(rootDir, "app");

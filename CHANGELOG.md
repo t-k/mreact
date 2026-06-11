@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Fixed AWS Lambda route first-hit latency by emitting shared request chunks for runtime packages, so middleware, loader, and metadata artifacts evaluate one shared dependency graph per execution environment instead of re-evaluating a bundled copy on every route's first hit.
+
 ## 0.0.158 - 2026-06-11
 
 ### Fixed
