@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
@@ -9,6 +9,7 @@ import { render as renderSvelte } from "svelte/server";
 import { createSSRApp, h } from "vue";
 import { renderToString as renderVueToString } from "@vue/server-renderer";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import { measureRouteJavaScriptGzipBytes } from "../browser-probes.js";
 import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import {
   measureConcurrentRequests,
@@ -19,6 +20,7 @@ import type { AppFrameworkAdapter, AppFrameworkName } from "../types.js";
 type RendererKind = "html" | "svelte" | "vue";
 
 interface SimpleSsrAdapterOptions {
+  clientRuntimeFiles: readonly string[];
   name: AppFrameworkName;
   packageName: string;
   renderer: RendererKind;
@@ -146,6 +148,22 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
       validateNodeHtml("SSR HTML gzip probe", html, 1000);
       return gzipSync(html).length;
     },
+    async measureServerOnlyClientBundleBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return measureRouteJavaScriptGzipBytes(`${url}/server-only-bundle`);
+    },
+    async measureInteractiveClientBundleBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return measureRouteJavaScriptGzipBytes(`${url}/interactive-bundle`, {
+        assertInteractive: true,
+      });
+    },
+    async measureInteractiveClientBundleMinimalBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return measureRouteJavaScriptGzipBytes(`${url}/interactive-minimal-bundle`, {
+        assertInteractive: true,
+      });
+    },
     async measureConcurrentRequestThroughputOps(): Promise<number> {
       return (await ensureConcurrentRequestResult()).throughputOps;
     },
@@ -185,6 +203,25 @@ async function startFixtureServer(
         html = `<main><section data-a="${a}">A:${a}</section><section data-b="${b}">B:${b}</section></main>`;
       } else if (url.pathname === "/data-grid") {
         html = renderDynamicAttrGrid(200);
+      } else if (url.pathname === "/server-only-bundle") {
+        html = "<main><p>server only</p></main>";
+      } else if (
+        url.pathname === "/interactive-bundle" ||
+        url.pathname === "/interactive-minimal-bundle"
+      ) {
+        html = `<main><button type="button">count: 0</button></main><script type="module" src="/framework-runtime.js"></script><script src="/interactive.js"></script>`;
+      } else if (url.pathname === "/framework-runtime.js") {
+        response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+        response.end(await readClientRuntimePayload(options));
+        return;
+      } else if (url.pathname === "/interactive.js") {
+        response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+        response.end(`document.querySelector("button")?.addEventListener("click", (event) => {
+  const button = event.currentTarget;
+  const current = Number(button.textContent?.match(/\\d+/)?.[0] ?? "0");
+  button.textContent = "count: " + String(current + 1);
+});`);
+        return;
       } else {
         html = await renderNodePage(options.renderer, nodeCount, rootDir);
       }
@@ -211,6 +248,31 @@ async function startFixtureServer(
       });
     });
   });
+}
+
+const clientRuntimePayloadCache = new Map<string, Promise<string>>();
+
+function readClientRuntimePayload(options: SimpleSsrAdapterOptions): Promise<string> {
+  const key = `${options.packageName}\0${options.clientRuntimeFiles.join("\0")}`;
+  const cached = clientRuntimePayloadCache.get(key);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const payload = readClientRuntimePayloadUncached(options);
+  clientRuntimePayloadCache.set(key, payload);
+  return payload;
+}
+
+async function readClientRuntimePayloadUncached(options: SimpleSsrAdapterOptions): Promise<string> {
+  const packageDir = dirname(requireFromHere.resolve(`${options.packageName}/package.json`));
+  const chunks = await Promise.all(
+    options.clientRuntimeFiles.map(async (relativePath) => {
+      const code = await readFile(join(packageDir, relativePath), "utf8");
+      return `\n/* ${options.packageName}/${relativePath} */\n${code}\n`;
+    }),
+  );
+  return chunks.join("");
 }
 
 async function renderNodePage(

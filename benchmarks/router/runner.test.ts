@@ -273,6 +273,26 @@ describe("router benchmark configuration", () => {
     expect(adaptersWithBuildOutputProbes).toEqual(routerBenchmarkAdapters.map((adapter) => adapter.name));
   });
 
+  it("exposes client bundle probes for lightweight framework adapters", () => {
+    const lightweightAdapterNames = ["vue", "nuxt", "svelte", "svelte-kit", "angular", "analog"];
+    const requiredMethods = [
+      "measureServerOnlyClientBundleBytes",
+      "measureInteractiveClientBundleBytes",
+      "measureInteractiveClientBundleMinimalBytes",
+    ] as const;
+    const lightweightAdapters = routerBenchmarkAdapters.filter((adapter) =>
+      lightweightAdapterNames.includes(adapter.name),
+    );
+
+    for (const method of requiredMethods) {
+      expect(
+        lightweightAdapters
+          .filter((adapter) => adapter[method] !== undefined)
+          .map((adapter) => adapter.name),
+      ).toEqual(lightweightAdapterNames);
+    }
+  });
+
   it("ranks throughput high-to-low and size low-to-high", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("next-app-router", "app render 1000 nodes", "throughput", "ops/sec", 10),
