@@ -9,7 +9,7 @@ Mreact is a React-flavored framework with an app router, server-first rendering,
 
 A Mreact app is a route tree. Route files render on the server by default, layouts wrap pages, and route module exports such as `metadata`, `loader`, `action`, and route handlers describe the work that belongs to the request.
 
-Client JavaScript is opt-in. A page can stay server-rendered, a small `.client.tsx` component can hydrate as an island, or a route can use `"use client"` when the whole screen should run in the browser. Mreact also infers common client needs from event handlers, reactive state, and browser-only route shapes.
+Client JavaScript is inferred from the code that needs it. Event handlers, reactive state, and direct browser APIs usually make only the component path that uses them client-interactive, while the surrounding route can stay server-rendered. Use `.client.tsx` or route-level `"use client"` when you want to make that boundary explicit or when the whole screen should run in the browser.
 
 ## Reactive values
 
