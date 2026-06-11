@@ -3,6 +3,9 @@ export type PrimitiveBrowserFramework =
   | "mreact react-compat"
   | "react"
   | "solid"
+  | "vue"
+  | "svelte"
+  | "angular"
   | "marko"
   | "qwik";
 
@@ -23,6 +26,9 @@ export const primitiveBrowserFrameworks: PrimitiveBrowserFramework[] = [
   "mreact react-compat",
   "react",
   "solid",
+  "vue",
+  "svelte",
+  "angular",
   "marko",
   "qwik",
 ];

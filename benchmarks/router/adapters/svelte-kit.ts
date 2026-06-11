@@ -66,6 +66,7 @@ export default { plugins: [sveltekit()] };
     await writeSvelteServerOnlyPage(rootDir);
     await writeSvelteInteractivePage(rootDir, "src/routes/interactive-bundle/+page.svelte");
     await writeSvelteInteractivePage(rootDir, "src/routes/interactive-minimal-bundle/+page.svelte");
+    await writeSvelteTargetPage(rootDir);
   },
   build: (rootDir) => spawnAndWait("pnpm", ["exec", "vite", "build"], { cwd: rootDir }),
   buildOutputPaths: (rootDir) => [join(rootDir, ".svelte-kit", "bench")],
@@ -169,7 +170,16 @@ async function writeSvelteInteractivePage(rootDir: string, relativePath: string)
     `<script>
   let count = $state(0);
 </script>
-<main><button type="button" onclick={() => count += 1}>count: {count}</button></main>
+<main><button type="button" onclick={() => count += 1}>count: {count}</button><a href="/target">Details</a></main>
+`,
+  );
+}
+
+async function writeSvelteTargetPage(rootDir: string): Promise<void> {
+  await mkdir(join(rootDir, "src", "routes", "target"), { recursive: true });
+  await writeFile(
+    join(rootDir, "src", "routes", "target", "+page.svelte"),
+    `<main><h1>Navigation target</h1></main>
 `,
   );
 }

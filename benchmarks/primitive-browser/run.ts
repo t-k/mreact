@@ -7,6 +7,7 @@ import { dirname, extname, join, normalize } from "node:path";
 import { chromium } from "@playwright/test";
 import { build as viteBuild } from "vite";
 import { qwikVite } from "@builder.io/qwik/optimizer";
+import { compile } from "svelte/compiler";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { formatBenchmarkMarkdown } from "../shared/report.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
@@ -19,6 +20,8 @@ import {
 
 const requireFromHere = createRequire(import.meta.url);
 const qwikPackageDir = dirname(dirname(requireFromHere.resolve("@builder.io/qwik")));
+const sveltePackageDir = dirname(requireFromHere.resolve("svelte/package.json"));
+const vuePackageDir = dirname(requireFromHere.resolve("vue/package.json"));
 const browserWarmupRuns = parseNonNegativeInteger(
   process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "2",
   "MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS",
@@ -155,10 +158,13 @@ const env = await collectBenchmarkEnvironment([
   "@reckona/mreact-reactive-dom",
   "@playwright/test",
   "@builder.io/qwik",
+  "@angular/core",
   "marko",
   "react",
   "react-dom",
   "solid-js",
+  "svelte",
+  "vue",
   "vite",
 ]);
 const dir = await createDatedResultsDir();
@@ -189,6 +195,7 @@ async function createBrowserFixture(): Promise<{
   const outDir = join(rootDir, "dist");
   const sourceDir = join(rootDir, "src");
   await mkdir(sourceDir, { recursive: true });
+  await writeSvelteBrowserComponents(sourceDir);
   await writeFile(join(rootDir, "index.html"), `<main id="root"></main><script type="module" src="/src/bench.ts"></script>`);
   await writeFile(join(sourceDir, "bench.ts"), browserEntrySource());
 
@@ -261,6 +268,38 @@ async function createBrowserFixture(): Promise<{
           replacement: requireFromHere.resolve("react-dom/client"),
         },
         {
+          find: "zone.js",
+          replacement: requireFromHere.resolve("zone.js"),
+        },
+        {
+          find: /^@angular\/compiler$/,
+          replacement: requireFromHere.resolve("@angular/compiler"),
+        },
+        {
+          find: /^@angular\/core$/,
+          replacement: requireFromHere.resolve("@angular/core"),
+        },
+        {
+          find: /^@angular\/platform-browser$/,
+          replacement: requireFromHere.resolve("@angular/platform-browser"),
+        },
+        {
+          find: "svelte/internal/disclose-version",
+          replacement: join(sveltePackageDir, "src", "internal", "disclose-version.js"),
+        },
+        {
+          find: "svelte/internal/client",
+          replacement: join(sveltePackageDir, "src", "internal", "client", "index.js"),
+        },
+        {
+          find: /^svelte$/,
+          replacement: join(sveltePackageDir, "src", "index-client.js"),
+        },
+        {
+          find: /^vue$/,
+          replacement: join(vuePackageDir, "dist", "vue.runtime.esm-bundler.js"),
+        },
+        {
           find: "react-dom",
           replacement: requireFromHere.resolve("react-dom"),
         },
@@ -281,17 +320,48 @@ async function createBrowserFixture(): Promise<{
   return { gzipBytes: gzipSync(bundle).length, outDir, rootDir };
 }
 
+async function writeSvelteBrowserComponents(sourceDir: string): Promise<void> {
+  const svelteDir = join(sourceDir, "svelte");
+  await mkdir(svelteDir, { recursive: true });
+  await writeFile(
+    join(svelteDir, "Rows.mjs"),
+    compileSvelteComponent(
+      "Rows.svelte",
+      `<script>
+let { rows = [], selectedId = -1 } = $props();
+export function setRows(next) { rows = next; }
+export function setSelectedId(next) { selectedId = next; }
+</script>{#each rows as row (row.id)}<div data-key={row.id} class:selected={selectedId === row.id} data-selected={selectedId === row.id ? "true" : undefined}>{row.label}</div>{/each}`,
+    ),
+  );
+}
+
+function compileSvelteComponent(filename: string, source: string): string {
+  return compile(source, {
+    dev: false,
+    filename,
+    generate: "client",
+  }).js.code;
+}
+
 function browserEntrySource(): string {
   return String.raw`
+import "zone.js";
+import "@angular/compiler";
 import { batch, cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindList, bindText } from "@reckona/mreact-reactive-dom";
 import { Fragment, createElement, createRoot, flushSync, useState } from "@reckona/mreact-compat";
+import { ApplicationRef as AngularApplicationRef, ChangeDetectionStrategy as AngularChangeDetectionStrategy, Component as AngularComponent, createComponent as angularCreateComponent, signal as angularSignal } from "@angular/core";
+import { createApplication as angularCreateApplication } from "@angular/platform-browser";
 import { Fragment as ReactFragment, createElement as reactCreateElement, useState as reactUseState } from "react";
 import { flushSync as reactDomFlushSync } from "react-dom";
 import { createRoot as createReactRoot } from "react-dom/client";
 import { createComputed as solidCreateComputed, createRoot as createSolidRoot, createSignal as createSolidSignal, mapArray as solidMapArray } from "solid-js";
+import { flushSync as svelteFlushSync, mount as svelteMount, unmount as svelteUnmount } from "svelte";
+import { Fragment as VueFragment, createApp as createVueApp, h as vueH, nextTick as vueNextTick, ref as vueRef } from "vue";
 import { Fragment as QwikFragment, jsx as qwikJsx, render as qwikRender } from "@builder.io/qwik";
+import SvelteRows from "./svelte/Rows.mjs";
 
 function createRowsData(count) {
   return Array.from({ length: count }, (_unused, index) => ({
@@ -769,6 +839,237 @@ function createSolidSelectableRowsRoot(host, initialRows) {
   });
 }
 
+async function runVue(caseName, count) {
+  const rows = createRowsData(count);
+
+  if (caseName === "browser create 1k rows") {
+    const host = createHost();
+    const start = performance.now();
+    const mounted = mountVueRows(host, rows);
+    await vueNextTick();
+    const duration = performance.now() - start;
+    try {
+      validateRows(host, rows);
+      return duration;
+    } finally {
+      mounted.app.unmount();
+    }
+  }
+
+  const host = createHost();
+  const mounted = mountVueRows(host, rows);
+
+  try {
+    await vueNextTick();
+    validateRows(host, rows);
+
+    if (caseName === "browser update every 10th in 10k rows") {
+      const updatedRows = rows.map((row, index) =>
+        index % 10 === 0 ? { ...row, label: row.label + " updated" } : row,
+      );
+      const start = performance.now();
+      mounted.rows.value = updatedRows;
+      await vueNextTick();
+      const duration = performance.now() - start;
+      validateRows(host, updatedRows);
+      return duration;
+    }
+
+    if (caseName === "browser select row in 10k rows") {
+      const selectedId = Math.floor(count / 2);
+      const start = performance.now();
+      mounted.selectedId.value = selectedId;
+      await vueNextTick();
+      const duration = performance.now() - start;
+      validateSelectedRow(host, selectedId);
+      return duration;
+    }
+
+    if (caseName === "browser clear 10k rows") {
+      const start = performance.now();
+      mounted.rows.value = [];
+      await vueNextTick();
+      const duration = performance.now() - start;
+      validateRows(host, []);
+      return duration;
+    }
+
+    throw new Error("unknown vue browser case " + caseName);
+  } finally {
+    mounted.app.unmount();
+  }
+}
+
+function mountVueRows(host, initialRows) {
+  const rows = vueRef(initialRows);
+  const selectedId = vueRef(-1);
+  const app = createVueApp({
+    render() {
+      return vueH(
+        VueFragment,
+        null,
+        rows.value.map((row) =>
+          vueH(
+            "div",
+            {
+              class: selectedId.value === row.id ? "selected" : undefined,
+              "data-key": row.id,
+              "data-selected": selectedId.value === row.id ? "true" : undefined,
+              key: row.id,
+            },
+            row.label,
+          ),
+        ),
+      );
+    },
+  });
+  app.mount(host);
+  return { app, rows, selectedId };
+}
+
+async function runSvelte(caseName, count) {
+  const rows = createRowsData(count);
+
+  if (caseName === "browser create 1k rows") {
+    const host = createHost();
+    const start = performance.now();
+    const instance = svelteMount(SvelteRows, { target: host, props: { rows } });
+    const duration = performance.now() - start;
+    try {
+      validateRows(host, rows);
+      return duration;
+    } finally {
+      await svelteUnmount(instance);
+    }
+  }
+
+  const host = createHost();
+  const instance = svelteMount(SvelteRows, { target: host, props: { rows } });
+
+  try {
+    validateRows(host, rows);
+
+    if (caseName === "browser update every 10th in 10k rows") {
+      const updatedRows = rows.map((row, index) =>
+        index % 10 === 0 ? { ...row, label: row.label + " updated" } : row,
+      );
+      const start = performance.now();
+      svelteFlushSync(() => instance.setRows(updatedRows));
+      const duration = performance.now() - start;
+      validateRows(host, updatedRows);
+      return duration;
+    }
+
+    if (caseName === "browser select row in 10k rows") {
+      const selectedId = Math.floor(count / 2);
+      const start = performance.now();
+      svelteFlushSync(() => instance.setSelectedId(selectedId));
+      const duration = performance.now() - start;
+      validateSelectedRow(host, selectedId);
+      return duration;
+    }
+
+    if (caseName === "browser clear 10k rows") {
+      const start = performance.now();
+      svelteFlushSync(() => instance.setRows([]));
+      const duration = performance.now() - start;
+      validateRows(host, []);
+      return duration;
+    }
+
+    throw new Error("unknown svelte browser case " + caseName);
+  } finally {
+    await svelteUnmount(instance);
+  }
+}
+
+class AngularRowsComponent {
+  rows = angularSignal([]);
+  selectedId = angularSignal(-1);
+}
+
+AngularComponent({
+  changeDetection: AngularChangeDetectionStrategy.OnPush,
+  standalone: true,
+  template: '@for (row of rows(); track row.id) {<div [attr.data-key]="row.id" [class.selected]="selectedId() === row.id" [attr.data-selected]="selectedId() === row.id ? true : null">{{ row.label }}</div>}',
+})(AngularRowsComponent);
+
+async function runAngular(caseName, count) {
+  const rows = createRowsData(count);
+
+  if (caseName === "browser create 1k rows") {
+    const host = createHost();
+    const start = performance.now();
+    const mounted = await mountAngularRows(host, rows);
+    const duration = performance.now() - start;
+    try {
+      validateRows(host, rows);
+      return duration;
+    } finally {
+      destroyAngularRowsMount(mounted);
+    }
+  }
+
+  const host = createHost();
+  const mounted = await mountAngularRows(host, rows);
+
+  try {
+    validateRows(host, rows);
+
+    if (caseName === "browser update every 10th in 10k rows") {
+      const updatedRows = rows.map((row, index) =>
+        index % 10 === 0 ? { ...row, label: row.label + " updated" } : row,
+      );
+      const start = performance.now();
+      mounted.ref.instance.rows.set(updatedRows);
+      mounted.ref.changeDetectorRef.detectChanges();
+      const duration = performance.now() - start;
+      validateRows(host, updatedRows);
+      return duration;
+    }
+
+    if (caseName === "browser select row in 10k rows") {
+      const selectedId = Math.floor(count / 2);
+      const start = performance.now();
+      mounted.ref.instance.selectedId.set(selectedId);
+      mounted.ref.changeDetectorRef.detectChanges();
+      const duration = performance.now() - start;
+      validateSelectedRow(host, selectedId);
+      return duration;
+    }
+
+    if (caseName === "browser clear 10k rows") {
+      const start = performance.now();
+      mounted.ref.instance.rows.set([]);
+      mounted.ref.changeDetectorRef.detectChanges();
+      const duration = performance.now() - start;
+      validateRows(host, []);
+      return duration;
+    }
+
+    throw new Error("unknown angular browser case " + caseName);
+  } finally {
+    destroyAngularRowsMount(mounted);
+  }
+}
+
+async function mountAngularRows(host, rows) {
+  const app = await angularCreateApplication({ providers: [] });
+  const ref = angularCreateComponent(AngularRowsComponent, {
+    environmentInjector: app.injector,
+    hostElement: host,
+  });
+  ref.instance.rows.set(rows);
+  app.injector.get(AngularApplicationRef).attachView(ref.hostView);
+  ref.changeDetectorRef.detectChanges();
+  return { app, ref };
+}
+
+function destroyAngularRowsMount(mounted) {
+  mounted.ref.destroy();
+  mounted.app.destroy();
+}
+
 async function runQwik(caseName, count) {
   const host = createHost();
   const rows = createRowsData(count);
@@ -854,6 +1155,15 @@ globalThis.__mreactPrimitiveBrowserBench = {
     }
     if (framework === "solid") {
       return await runSolid(caseName, count);
+    }
+    if (framework === "vue") {
+      return await runVue(caseName, count);
+    }
+    if (framework === "svelte") {
+      return await runSvelte(caseName, count);
+    }
+    if (framework === "angular") {
+      return await runAngular(caseName, count);
     }
     if (framework === "qwik") {
       return await runQwik(caseName, count);

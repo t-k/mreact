@@ -8,6 +8,9 @@ describe("primitive browser benchmark configuration", () => {
       "mreact react-compat",
       "react",
       "solid",
+      "vue",
+      "svelte",
+      "angular",
       "marko",
       "qwik",
     ]);

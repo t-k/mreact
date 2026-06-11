@@ -52,6 +52,7 @@ export const nuxtAdapter = createProductionAppAdapter({
     await writeNuxtServerOnlyPage(rootDir);
     await writeNuxtInteractivePage(rootDir, "pages/interactive-bundle.vue");
     await writeNuxtInteractivePage(rootDir, "pages/interactive-minimal-bundle.vue");
+    await writeNuxtTargetPage(rootDir);
   },
   build: (rootDir) =>
     spawnAndWait("pnpm", ["exec", "nuxt", "build"], {
@@ -146,7 +147,15 @@ async function writeNuxtInteractivePage(rootDir: string, relativePath: string): 
     `<script setup>
 const count = ref(0);
 </script>
-<template><main><button type="button" @click="count += 1">count: {{ count }}</button></main></template>
+<template><main><button type="button" @click="count += 1">count: {{ count }}</button><NuxtLink to="/target">Details</NuxtLink></main></template>
+`,
+  );
+}
+
+async function writeNuxtTargetPage(rootDir: string): Promise<void> {
+  await writeFile(
+    join(rootDir, "pages", "target.vue"),
+    `<template><main><h1>Navigation target</h1></main></template>
 `,
   );
 }

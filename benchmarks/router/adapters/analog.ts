@@ -33,6 +33,7 @@ export const analogAdapter = createProductionAppAdapter({
       "interactive-minimal-bundle.page.ts",
       "InteractiveMinimalBundlePage",
     );
+    await writeAnalogTargetPage(rootDir);
   },
   build: async (rootDir) => {
     await spawnAndWait("pnpm", ["install", "--ignore-workspace", "--silent"], { cwd: rootDir });
@@ -376,10 +377,12 @@ async function writeAnalogInteractivePage(
   await writeFile(
     join(rootDir, "src", "app", "pages", fileName),
     `import { Component, signal } from "@angular/core";
+import { RouterLink } from "@angular/router";
 
 @Component({
   standalone: true,
-  template: \`<main><button type="button" (click)="increment()">count: {{ count() }}</button></main>\`,
+  imports: [RouterLink],
+  template: \`<main><button type="button" (click)="increment()">count: {{ count() }}</button><a routerLink="/target">Details</a></main>\`,
 })
 export default class ${className} {
   count = signal(0);
@@ -387,6 +390,20 @@ export default class ${className} {
     this.count.update((value) => value + 1);
   }
 }
+`,
+  );
+}
+
+async function writeAnalogTargetPage(rootDir: string): Promise<void> {
+  await writeFile(
+    join(rootDir, "src", "app", "pages", "target.page.ts"),
+    `import { Component } from "@angular/core";
+
+@Component({
+  standalone: true,
+  template: \`<main><h1>Navigation target</h1></main>\`,
+})
+export default class TargetPageComponent {}
 `,
   );
 }

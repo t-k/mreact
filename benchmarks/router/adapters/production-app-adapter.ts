@@ -6,7 +6,15 @@ import { fileURLToPath } from "node:url";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
-import { measureRouteJavaScriptGzipBytes } from "../browser-probes.js";
+import {
+  measureBackForwardRestore,
+  measureClientNavigation,
+  measureFirstInteractionAfterNetworkIdle,
+  measureFirstInteractionFromDomContentLoaded,
+  measureInitialPageLoadBeforeInteraction,
+  measureRouteJavaScriptGzipBytes,
+  measureSecondInteractionLatency,
+} from "../browser-probes.js";
 import {
   measureConcurrentRequests,
   type ConcurrentRequestProbeResult,
@@ -97,6 +105,10 @@ export function createProductionAppAdapter(
     return concurrentRequestResult;
   }
 
+  async function interactiveRouteUrl(): Promise<string> {
+    return new URL("/interactive-bundle", await ensureFixture(1000)).href;
+  }
+
   const adapter: AppFrameworkAdapter = {
     fixtureKind: "production-app",
     name: options.name,
@@ -155,6 +167,26 @@ export function createProductionAppAdapter(
       const url = await ensureFixture(1000);
       return measureRouteJavaScriptGzipBytes(`${url}/interactive-minimal-bundle`, {
         assertInteractive: true,
+      });
+    },
+    async measureClientNavigationMs(): Promise<number> {
+      return measureClientNavigation(await interactiveRouteUrl());
+    },
+    async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
+      return measureInitialPageLoadBeforeInteraction(await interactiveRouteUrl());
+    },
+    async measureFirstInteractionFromDomContentLoadedMs(): Promise<number> {
+      return measureFirstInteractionFromDomContentLoaded(await interactiveRouteUrl());
+    },
+    async measureFirstInteractionAfterNetworkIdleMs(): Promise<number> {
+      return measureFirstInteractionAfterNetworkIdle(await interactiveRouteUrl());
+    },
+    async measureSecondInteractionLatencyMs(): Promise<number> {
+      return measureSecondInteractionLatency(await interactiveRouteUrl());
+    },
+    async measureBackForwardRestoreMs(): Promise<number> {
+      return measureBackForwardRestore(await interactiveRouteUrl(), {
+        expectStateRestore: false,
       });
     },
     async measureConcurrentRequestThroughputOps(): Promise<number> {

@@ -71,6 +71,9 @@ describe("router benchmark configuration", () => {
 
     expect(adaptersWithFirstInteractionProbes).toEqual([
       "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -95,6 +98,9 @@ describe("router benchmark configuration", () => {
 
     expect(adaptersWithSplitProbes).toEqual([
       "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -112,6 +118,9 @@ describe("router benchmark configuration", () => {
       .map((adapter) => adapter.name);
 
     expect(adaptersWithNavigationProbes).toEqual([
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -206,6 +215,9 @@ describe("router benchmark configuration", () => {
 
   it("exposes browser navigation restoration probes for SPA-capable router adapters", () => {
     const expectedAdapters = [
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
