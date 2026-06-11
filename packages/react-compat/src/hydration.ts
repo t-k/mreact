@@ -43,6 +43,14 @@ export function applyStreamingHydrationFragments(
       continue;
     }
 
+    const completionMarker = Array.from(
+      root.querySelectorAll<Element>("[data-mreact-oob-complete]"),
+    ).find((candidate) => candidate.getAttribute("data-mreact-oob-complete") === id);
+
+    if (completionMarker === undefined) {
+      continue;
+    }
+
     const placeholder = root.querySelector<Element>(
       `[data-mreact-oob-placeholder="${escapeSelectorString(id)}"]`,
     );
@@ -53,6 +61,7 @@ export function applyStreamingHydrationFragments(
 
     placeholder.replaceWith(fragment.content.cloneNode(true));
     fragment.remove();
+    completionMarker.remove();
   }
 }
 

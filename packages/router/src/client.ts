@@ -3786,6 +3786,13 @@ function __mreactApplyOutOfOrderFragments(root) {
       continue;
     }
 
+    const completionMarker = Array.from(root.querySelectorAll("[data-mreact-oob-complete]"))
+      .find((candidate) => candidate.getAttribute("data-mreact-oob-complete") === id);
+
+    if (completionMarker === undefined) {
+      continue;
+    }
+
     const placeholder = Array.from(root.querySelectorAll("[data-mreact-oob-placeholder]"))
       .find((candidate) => candidate.getAttribute("data-mreact-oob-placeholder") === id);
 
@@ -3795,6 +3802,7 @@ function __mreactApplyOutOfOrderFragments(root) {
 
     placeholder.replaceWith(fragment.content.cloneNode(true));
     fragment.remove();
+    completionMarker.remove();
   }
 }
 

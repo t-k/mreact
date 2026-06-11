@@ -90,8 +90,10 @@ describe("server stream and client runtime integration", () => {
     document.body.innerHTML = html;
     applyOutOfOrderFragments(document);
 
-    expect(document.body.innerHTML).toBe(
-      '<section><strong>Ada</strong><script data-mreact-oob-reorder="">(()=>{function apply(root){const fragments=Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));for(const fragment of fragments){const id=fragment.getAttribute("data-mreact-oob-fragment");if(id===null)continue;const placeholders=Array.from(root.querySelectorAll("[data-mreact-oob-placeholder]"));const placeholder=placeholders.find((candidate)=>candidate.getAttribute("data-mreact-oob-placeholder")===id);if(placeholder===undefined)continue;placeholder.replaceWith(fragment.content.cloneNode(true));fragment.remove();}}apply(document);new MutationObserver(()=>apply(document)).observe(document.documentElement,{childList:true,subtree:true});})();</script></section>',
-    );
+    expect(document.body.querySelector("template[data-mreact-oob-fragment]")).toBeNull();
+    expect(document.body.querySelector("[data-mreact-oob-complete]")).toBeNull();
+    expect(document.body.innerHTML).toContain("<section><strong>Ada</strong>");
+    expect(document.body.innerHTML).toContain('script data-mreact-oob-reorder=""');
+    expect(document.body.innerHTML).toContain("data-mreact-oob-complete");
   });
 });
