@@ -7,14 +7,21 @@ import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/r
 
 const env = await collectBenchmarkEnvironment([
   "@builder.io/qwik",
+  "@analogjs/platform",
+  "@angular/core",
   "@qwik.dev/core",
   "@qwik.dev/router",
+  "@sveltejs/kit",
+  "@vue/server-renderer",
   "marko",
   "next",
+  "nuxt",
   "react",
   "react-dom",
   "solid-js",
   "solid-js-2",
+  "svelte",
+  "vue",
 ]);
 const rows = await runRouterBenchmarks(routerBenchmarkAdapters);
 const dir = await createDatedResultsDir();
