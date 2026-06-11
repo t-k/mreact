@@ -164,6 +164,46 @@ describe("docs-site example contract", () => {
     expect(basics).toContain("Client boundaries");
   });
 
+  test("keeps client inference language consistent across docs", async () => {
+    const basics = await readDocsSite("src/content/guides/basics.mdx");
+    const appRouter = await readDocsSite("src/content/guides/app-router.mdx");
+    const serverClientModel = await readDocsSite("src/content/guides/server-and-client-model.mdx");
+    const externalScripts = await readDocsSite("src/content/guides/external-scripts.mdx");
+    const i18n = await readDocsSite("src/content/guides/advanced/i18n.mdx");
+    const mdx = await readDocsSite("src/content/guides/advanced/mdx.mdx");
+    const vitePluginIntegration = await readDocsSite("src/content/guides/advanced/vite-plugin-integration.mdx");
+    const environmentVariables = await readDocsSite("src/content/guides/environment-variables.mdx");
+    const reactCompatibility = await readDocsSite("src/content/guides/react-compatibility.mdx");
+    const testing = await readDocsSite("src/content/guides/testing.mdx");
+    const config = await readDocsSite("src/content/reference/config.mdx");
+    const referenceEnvironmentVariables = await readDocsSite("src/content/reference/environment-variables.mdx");
+
+    expect(basics).not.toContain("client interactivity is opt-in");
+    expect(appRouter).toContain("Mreact infers client runtime needs from reactive state, event handlers, direct browser APIs, supported client-boundary markers, and navigation behavior.");
+    expect(appRouter).toContain("Use explicit client boundaries when inference cannot see the browser work or when you want to document the boundary.");
+    expect(appRouter).not.toContain("Use explicit client boundaries when a component should hydrate in the browser.");
+    expect(serverClientModel).toContain("become client-interactive through inference");
+    expect(serverClientModel).toContain("Prefer inference for ordinary counters, menus, and small controls.");
+    expect(serverClientModel).toContain("Use `.client.tsx` when inference cannot see the browser work");
+    expect(serverClientModel).not.toContain("become a small client island");
+    expect(serverClientModel).not.toContain("When a route becomes client-side");
+    expect(serverClientModel).not.toContain("Use `.client.tsx` when only part of a server page needs to hydrate.");
+    expect(serverClientModel).not.toContain("Small interactive widget**: `.client.tsx` boundary");
+    expect(externalScripts).toContain("Ordinary controls can rely on inference; use `.client.tsx` when the script bridge should be an explicit browser-only integration boundary.");
+    expect(i18n).toContain("Ordinary locale controls can rely on client inference.");
+    expect(i18n).not.toContain("A `.client.tsx` island should receive");
+    expect(mdx).toContain("Ordinary interactive components can rely on inference when the compiled route graph can see them.");
+    expect(mdx).not.toContain("import explicit `.client.tsx` components from MDX");
+    expect(vitePluginIntegration).toContain("client-interactive modules or explicit `.client.tsx` boundaries");
+    expect(vitePluginIntegration).not.toContain(".client.tsx` islands");
+    expect(environmentVariables).toContain("client-interactive code");
+    expect(referenceEnvironmentVariables).toContain("client-interactive code");
+    expect(reactCompatibility).toContain("let inference handle visible browser behavior");
+    expect(config).toContain("client-interactive boundary that inference can see");
+    expect(testing).toContain("Client-interactive components update after interaction");
+    expect(testing).not.toContain("Client islands update after interaction");
+  });
+
   test("removes the standalone Route Handlers guide from the public docs", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
@@ -763,12 +803,13 @@ describe("docs-site example contract", () => {
     expect(serverClientModel).toContain("## Server by default");
     expect(serverClientModel).toContain("JavaScript-free");
     expect(serverClientModel).toContain("navigation runtime");
-    expect(serverClientModel).toContain("## When a route becomes client-side");
+    expect(serverClientModel).toContain("## When code needs the browser");
     expect(serverClientModel).toContain('import { cell } from "@reckona/mreact-reactive-core";');
     expect(serverClientModel).toContain("onClick");
     expect(serverClientModel).toContain('## Client boundaries');
-    expect(serverClientModel).toContain("LikeButton.client.tsx");
-    expect(serverClientModel).toContain('import { LikeButton } from "./LikeButton.client";');
+    expect(serverClientModel).toContain("LikeButton.tsx");
+    expect(serverClientModel).toContain('import { LikeButton } from "./LikeButton";');
+    expect(serverClientModel).toContain("Prefer inference for ordinary counters, menus, and small controls.");
     expect(serverClientModel).toContain("## Route-level \"use client\"");
     expect(serverClientModel).toContain('"use client";');
     expect(serverClientModel).toContain("## SSR fallback behavior");
@@ -776,7 +817,8 @@ describe("docs-site example contract", () => {
     expect(serverClientModel).toContain("placeholder-only boundary");
     expect(serverClientModel).toContain("## Choosing the right boundary");
     expect(serverClientModel).toContain("- **Static page**: server route.");
-    expect(serverClientModel).toContain("- **Small interactive widget**: `.client.tsx` boundary.");
+    expect(serverClientModel).toContain("- **Small interactive widget**: inferred client-interactive component.");
+    expect(serverClientModel).toContain("- **Explicit integration boundary**: `.client.tsx`.");
     expect(serverClientModel).toContain("[App Router](/guides/app-router/)");
     expect(serverClientModel).toContain("[Link and Navigation](/guides/link-and-navigation/)");
     expect(serverClientModel).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
@@ -1161,7 +1203,9 @@ describe("docs-site example contract", () => {
     expect(i18nGuide).toContain("Vary: Accept-Language");
     expect(i18nGuide).toContain("Prefer locale prefixes");
     expect(i18nGuide).toContain("## Client boundaries");
-    expect(i18nGuide).toContain(".client.tsx");
+    expect(i18nGuide).toContain("Ordinary locale controls can rely on client inference.");
+    expect(i18nGuide).toContain("When you choose an explicit browser boundary");
+    expect(i18nGuide).toContain("LocaleSwitcher.tsx");
     expect(i18nGuide).toContain('import { cell } from "@reckona/mreact-reactive-core";');
     expect(i18nGuide).not.toContain('import { cell } from "@reckona/mreact";');
     expect(i18nGuide).toContain("serializable");

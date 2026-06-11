@@ -40,9 +40,9 @@ Route handlers use the same file-system matcher but return `Response` objects di
 
 ## Server by default
 
-Route modules are server-rendered by default. A route can stay JavaScript-free in the browser when it does not need client behavior. Mreact infers client runtime needs from route-level client code, client boundaries, signals, event handlers, and navigation behavior.
+Route modules are server-rendered by default. A route can stay JavaScript-free in the browser when it does not need client behavior. Mreact infers client runtime needs from reactive state, event handlers, direct browser APIs, supported client-boundary markers, and navigation behavior.
 
-Use explicit client boundaries when a component should hydrate in the browser. Keep server-only work in loaders, middleware, route handlers, metadata functions, and server actions.
+Use explicit client boundaries when inference cannot see the browser work or when you want to document the boundary. Keep server-only work in loaders, middleware, route handlers, metadata functions, and server actions.
 
 ## Where to go next
 

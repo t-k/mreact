@@ -160,7 +160,7 @@ If the app needs files, databases, queues, or emulators for E2E, start them in t
 - Loader redirects, `throwNotFound()`, auth redirects, and middleware decisions return the expected status and headers.
 - The page is not an empty or loading-only shell when the route is expected to SSR real content.
 - Hydration keeps the server-rendered content stable before user interaction.
-- Client islands update after interaction without forcing unrelated route content into the navigation runtime.
+- Client-interactive components update after interaction without forcing unrelated route content into the navigation runtime.
 - The navigation runtime only appears where `Link` navigation or a client boundary actually needs it.
 - Cache headers, cookies, CSP, and security headers match the deployment page that owns that policy.
 

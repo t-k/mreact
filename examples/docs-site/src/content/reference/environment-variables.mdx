@@ -21,7 +21,7 @@ Use this page when configuring framework behavior from CI, deployment platforms,
 
 ## Server-only application variables
 
-Read secrets from server-only modules, loaders, route handlers, middleware, and deployment adapters. Do not import secret-reading modules from `.client.tsx` files.
+Read secrets from server-only modules, loaders, route handlers, middleware, and deployment adapters. Do not import secret-reading modules from client-interactive code, including inferred interactive components, `.client.tsx` files, or route-level client modules.
 
 ```ts
 // src/lib/env.server.ts

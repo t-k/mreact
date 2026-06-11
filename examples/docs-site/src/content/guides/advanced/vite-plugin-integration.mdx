@@ -173,7 +173,7 @@ The production server bundler applies the import policy before a tsconfig path a
 
 Prefer deterministic plugins that work during SSR and production build. A plugin that depends on a running browser, a dev server websocket, or request-local state is usually dev-server-only and should not be required by production route artifacts.
 
-If a plugin emits code that touches `window`, `document`, or other browser globals, keep that output in client-only modules or `.client.tsx` islands. Server-side route code still runs in Node, Cloudflare Workers, AWS Lambda, or another server runtime.
+If a plugin emits code that touches `window`, `document`, or other browser globals, keep that output in client-interactive modules or explicit `.client.tsx` boundaries when inference cannot see the generated browser work. Server-side route code still runs in Node, Cloudflare Workers, AWS Lambda, or another server runtime.
 
 When a plugin transforms a module into JSX, use the automatic runtime and the Mreact JSX import source, for example `jsxImportSource: "@reckona/mreact"` and `jsxRuntime: "automatic"` for MDX.
 

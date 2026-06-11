@@ -3,7 +3,7 @@ export const description = "How Mreact decides what runs on the server and what 
 
 # Server and client model
 
-Mreact renders routes on the server by default and only ships browser runtime when the route or one of its boundaries needs it. Use this page to decide whether a feature should stay server-only, become a small client island, or turn the whole route into a client route.
+Mreact renders routes on the server by default and only ships browser runtime when a rendered code path needs it. Use this page to decide whether a feature should stay server-only, become client-interactive through inference, use an explicit client boundary, or turn the whole route into a client route.
 
 ## Server by default
 
@@ -11,16 +11,16 @@ A route with no client behavior can stay JavaScript-free in the browser. Loaders
 
 When a server-rendered route uses `Link` from `@reckona/mreact-router/link`, Mreact can still inject the navigation runtime so link prefetching, scroll behavior, and client navigation work without hydrating the whole route. Use `navigationRuntime` only when you need to override that automatic behavior.
 
-## When a route becomes client-side
+## When code needs the browser
 
-A route needs browser output when its render path reaches browser behavior such as reactive state, event handlers, browser globals, or a route-level `"use client"` directive.
+A component path becomes client-interactive when its render path reaches browser behavior such as reactive state, event handlers, browser globals, or a route-level `"use client"` directive. The surrounding route can still render on the server unless the route module itself opts into browser ownership.
 
 ```tsx
 import { cell } from "@reckona/mreact-reactive-core";
 
-const count = cell(0);
-
 export default function CounterPage() {
+  const count = cell(0);
+
   return (
     <main>
       <p>{count.get()}</p>
@@ -34,15 +34,15 @@ Mreact infers common client needs from supported route shapes and app-local stat
 
 ## Client boundaries
 
-Use `.client.tsx` when only part of a server page needs to hydrate. The page remains server-rendered, while the imported component becomes a client boundary.
+Start with ordinary app-local components. Mreact can infer client interactivity from supported static render shapes, so a page can remain server-rendered while a nested control hydrates in the browser.
 
 ```tsx
-// src/app/widgets/LikeButton.client.tsx
+// src/app/widgets/LikeButton.tsx
 import { cell } from "@reckona/mreact-reactive-core";
 
-const likes = cell(0);
-
 export default function LikeButton() {
+  const likes = cell(0);
+
   return (
     <button onClick={() => likes.set((value) => value + 1)}>
       {likes.get()} likes
@@ -53,7 +53,7 @@ export default function LikeButton() {
 
 ```tsx
 // src/app/widgets/page.tsx
-import { LikeButton } from "./LikeButton.client";
+import { LikeButton } from "./LikeButton";
 
 export default function WidgetsPage() {
   return (
@@ -66,7 +66,7 @@ export default function WidgetsPage() {
 }
 ```
 
-Use this pattern for counters, menus, analytics bridges, small controls, or isolated browser-only integrations inside an otherwise server-rendered page.
+Prefer inference for ordinary counters, menus, and small controls. Use `.client.tsx` when inference cannot see the browser work, when the boundary is a useful part of the design, or when you are isolating an integration that should be treated as explicitly browser-only.
 
 ## Reactive update scheduling
 
@@ -106,7 +106,7 @@ This is also the escape hatch when browser behavior is intentionally hidden behi
 
 ## SSR fallback behavior
 
-Client boundaries still participate in server rendering. Mreact emits a boundary marker and serialized props, and server-renderable children can remain visible in the initial HTML so the page can paint before hydration.
+Client-interactive boundaries still participate in server rendering. Mreact emits a boundary marker and serialized props, and server-renderable children can remain visible in the initial HTML so the page can paint before hydration.
 
 Guard browser globals directly when a component should keep SSR fallback content:
 
@@ -126,9 +126,10 @@ Unguarded browser access, or guards hidden behind aliases the analyzer cannot fo
 
 - **Static page**: server route.
 - **Page with `Link` navigation only**: server route plus navigation runtime.
-- **Small interactive widget**: `.client.tsx` boundary.
-- **Whole page is interactive**: route-level `"use client"`.
-- **Browser behavior is hidden behind dynamic dispatch**: explicit `"use client"`.
+- **Small interactive widget**: inferred client-interactive component.
+- **Explicit integration boundary**: `.client.tsx`.
+- **Whole page is browser-owned**: route-level `"use client"`.
+- **Browser behavior is hidden behind dynamic dispatch**: explicit `.client.tsx` or `"use client"`.
 
 ## Related pages
 

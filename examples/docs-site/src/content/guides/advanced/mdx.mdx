@@ -201,7 +201,7 @@ When you statically export the app, the generated HTML already contains the rend
 
 Treat MDX as server-rendered content by default. Markdown, headings, tables, and code blocks should not require a browser bundle.
 
-If a page needs interactive islands, import explicit `.client.tsx` components from MDX or from the wrapping route. Keep those components small and pass serializable props from the MDX content or loader data. Avoid putting data fetching, secrets, or server-only helpers inside client components.
+If a page needs interactivity, keep the interactive components small and pass serializable props from the MDX content or loader data. Ordinary interactive components can rely on inference when the compiled route graph can see them. Use explicit `.client.tsx` components only when the MDX/content pipeline hides the browser work from inference or when the boundary should be documented. Avoid putting data fetching, secrets, or server-only helpers inside client-interactive components.
 
 ## Content authoring notes
 

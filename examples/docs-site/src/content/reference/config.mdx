@@ -71,7 +71,7 @@ mreactRouter({
 });
 ```
 
-Prefer narrow package and source-directory allowances. If a dependency touches browser globals during server render, move that usage behind a client boundary instead of broadening the server import policy.
+Prefer narrow package and source-directory allowances. If a dependency touches browser globals during server render, move that usage behind a client-interactive boundary that inference can see, or an explicit boundary when the browser work is hidden, instead of broadening the server import policy.
 
 ## Related pages
 

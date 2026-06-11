@@ -9,7 +9,7 @@ Environment variables have two different jobs in an Mreact app: server-only runt
 
 Read secrets in server-only code paths such as loaders, middleware, route handlers, server actions, and `generateMetadata`. Good examples are database URLs, OIDC client secrets, private API tokens, session secrets, and webhook secrets.
 
-Keep secret reads in a server-only module. Do not import that module from `.client.tsx` files or route-level client code.
+Keep secret reads in a server-only module. Do not import that module from client-interactive code, including inferred interactive components, `.client.tsx` files, or route-level client code.
 
 ```ts
 // src/lib/server-env.ts

@@ -3,7 +3,7 @@ export const description = "Use typed message bundles, locale detection, route p
 
 # i18n
 
-Mreact gives you small i18n primitives instead of a full translation runtime. Keep route structure, locale negotiation, message loading, metadata, and client islands explicit so the app can stay server-rendered by default.
+Mreact gives you small i18n primitives instead of a full translation runtime. Keep route structure, locale negotiation, message loading, metadata, and browser-owned controls narrow so the app can stay server-rendered by default.
 
 ## What Mreact provides
 
@@ -46,7 +46,7 @@ export function isLocale(value: string): value is Locale {
 }
 ```
 
-Use `messages[locale]` in server components, loaders, metadata helpers, and small client islands. For large products, generate the same shape from a translation pipeline instead of editing message objects by hand.
+Use `messages[locale]` in server components, loaders, metadata helpers, and small client-interactive controls. For large products, generate the same shape from a translation pipeline instead of editing message objects by hand.
 
 ## Detect locale in a loader
 
@@ -225,11 +225,10 @@ Do not cache a header-negotiated response as if it were language-neutral HTML. T
 
 ## Client boundaries
 
-Keep i18n rendering on the server when the page is mostly static text. A `.client.tsx` island should receive the selected locale and any needed messages as serializable props.
+Keep i18n rendering on the server when the page is mostly static text. Ordinary locale controls can rely on client inference. When you choose an explicit browser boundary, pass the selected locale and any needed messages as serializable props.
 
 ```tsx
-// src/app/settings/LocaleSwitcher.client.tsx
-"use client";
+// src/app/settings/LocaleSwitcher.tsx
 
 import { cell } from "@reckona/mreact-reactive-core";
 import type { Locale } from "../i18n/messages.js";

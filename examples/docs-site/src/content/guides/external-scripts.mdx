@@ -3,14 +3,16 @@ export const description = "Integrate GTM, GA4, JSON-LD, noscript fallbacks, and
 
 # External scripts
 
-Use external scripts only when the route really needs a third-party runtime. Keep the integration explicit: route-owned head scripts go through `metadata.head`, body-only fallbacks stay in page JSX, and SPA page view tracking belongs in a small client island.
+Use external scripts only when the route really needs a third-party runtime. Keep the integration explicit: route-owned head scripts go through `metadata.head`, body-only fallbacks stay in page JSX, and SPA page view tracking belongs in a small browser bridge.
 
 ## Choose an integration path
 
 - Use `metadata.head` for route-owned `<script>`, `<link>`, `<meta>`, and structured data descriptors.
 - Use body JSX for markup that cannot live in the document head, such as a GTM `<noscript>` iframe fallback.
-- Use a `.client.tsx` island when the integration must observe client navigation, browser APIs, or user interaction.
+- Use a browser bridge component when the integration must observe client navigation or browser APIs.
 - Use an HTTP API when another service needs to call your app, rather than exposing a secret in the browser.
+
+Ordinary controls can rely on inference; use `.client.tsx` when the script bridge should be an explicit browser-only integration boundary.
 
 Do not put analytics secrets in client code. Public IDs such as a GTM container ID or GA4 measurement ID are safe to expose, but API secrets, write keys, and private webhook tokens are not.
 
