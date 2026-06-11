@@ -153,6 +153,11 @@ describe("docs-site example contract", () => {
     expect(basics).toContain("export default function Counter() {\n  const count = cell(0);");
     expect(basics).toContain("Top-level cells are shared module state");
     expect(basics).toContain("export default function Quantity() {\n  const quantity = cell(1);");
+    expect(basics).toContain("Mreact usually infers client interactivity");
+    expect(basics).toContain("Use `.client.tsx` when you want an explicit client boundary");
+    expect(basics).toContain("// src/app/cart/Quantity.tsx");
+    expect(basics).not.toContain("// src/app/cart/Quantity.client.tsx");
+    expect(basics).not.toContain("Put browser-only controls in `.client.tsx` files");
     expect(basics).toContain("DOM bindings");
     expect(basics).toContain("Client boundaries");
   });

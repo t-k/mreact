@@ -121,10 +121,10 @@ Keep the dispose function returned by `createRoot()` when mounting manually. Bin
 
 ## Client boundaries
 
-Put browser-only controls in `.client.tsx` files when the rest of a page should stay server-rendered.
+Mreact usually infers client interactivity from code that needs the browser, such as event handlers and reactive state. Keep ordinary interactive components in regular files first; the compiler can still keep the surrounding page server-rendered while hydrating the interactive part that needs the browser.
 
 ```tsx
-// src/app/cart/Quantity.client.tsx
+// src/app/cart/Quantity.tsx
 import { cell } from "@reckona/mreact-reactive-core";
 
 export default function Quantity() {
@@ -140,7 +140,7 @@ export default function Quantity() {
 
 ```tsx
 // src/app/cart/page.tsx
-import Quantity from "./Quantity.client";
+import Quantity from "./Quantity";
 
 export default function Page() {
   return (
@@ -154,6 +154,8 @@ export default function Page() {
 
 This keeps the page shell server-rendered while the quantity control hydrates in the browser.
 
+Use `.client.tsx` when you want an explicit client boundary instead of relying on inference. It is useful for documenting a boundary, isolating browser-only integrations, or handling code paths where browser behavior is hidden behind dynamic dispatch and inference cannot see it.
+
 ## When to use each primitive
 
 - Use `cell()` for local mutable state.
@@ -161,7 +163,8 @@ This keeps the page shell server-rendered while the quantity control hydrates in
 - Use `effect()` for imperative side effects.
 - Use JSX for normal UI binding.
 - Use `@reckona/mreact-reactive-dom` only for low-level DOM integration or compiler-style output.
-- Use `.client.tsx` for small interactive islands.
+- Rely on client inference for ordinary event handlers and reactive state.
+- Use `.client.tsx` when you want to make a client boundary explicit.
 - Use route-level `"use client"` when the whole route is browser-owned.
 
 ## Related pages
