@@ -448,7 +448,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         );
 
   const clientRouteInferenceCache = createClientRouteInferenceCache();
-  const [serverActionManifest, serverModules, generatedImportPolicy] = await Promise.all([
+  const [serverActionManifest, generatedImportPolicy] = await Promise.all([
     shouldTrackBuildPhases === false
       ? collectBuildServerActionManifest({
           files,
@@ -462,35 +462,6 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             projectRoot: project.projectRoot,
             routes,
             routesDir: project.routesDir,
-          }),
-        ),
-    shouldTrackBuildPhases === false
-      ? buildServerModuleArtifacts({
-          bundleCache: new Map(),
-          clientRouteInferenceCache: serverClientRouteInferenceCache,
-          define: viteDefine,
-          files,
-          prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
-          project,
-          projectRoot: project.projectRoot,
-          routes,
-          sourceAnalysis,
-          serverTransformCache,
-          vitePlugins,
-        })
-      : timeBuildPhase(timingSink, progressSink, "serverModules", () =>
-          buildServerModuleArtifacts({
-            bundleCache: new Map(),
-            clientRouteInferenceCache: serverClientRouteInferenceCache,
-            define: viteDefine,
-            files,
-            prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
-            project,
-            projectRoot: project.projectRoot,
-            routes,
-            sourceAnalysis,
-            serverTransformCache,
-            vitePlugins,
           }),
         ),
     shouldTrackBuildPhases === false
@@ -509,6 +480,46 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         ),
   ]);
+  const actionRenderBundleExcludedFiles = new Set(
+    [...serverActionManifest.routeReferences.entries()]
+      .filter(([, references]) => references.length > 0)
+      .map(([file]) => file),
+  );
+  const serverModules = await (
+    shouldTrackBuildPhases === false
+      ? buildServerModuleArtifacts({
+          actionRenderBundleExcludedFiles,
+          bundleRequestRuntimePackages: shouldBuildAwsLambda,
+          bundleCache: new Map(),
+          clientRouteInferenceCache: serverClientRouteInferenceCache,
+          define: viteDefine,
+          files,
+          prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
+          project,
+          projectRoot: project.projectRoot,
+          routes,
+          sourceAnalysis,
+          serverTransformCache,
+          vitePlugins,
+        })
+      : timeBuildPhase(timingSink, progressSink, "serverModules", () =>
+          buildServerModuleArtifacts({
+            actionRenderBundleExcludedFiles,
+            bundleRequestRuntimePackages: shouldBuildAwsLambda,
+            bundleCache: new Map(),
+            clientRouteInferenceCache: serverClientRouteInferenceCache,
+            define: viteDefine,
+            files,
+            prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
+            project,
+            projectRoot: project.projectRoot,
+            routes,
+            sourceAnalysis,
+            serverTransformCache,
+            vitePlugins,
+          }),
+        )
+  );
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(project.projectRoot, route.file),
@@ -1993,6 +2004,8 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
 }
 
 async function buildServerModuleArtifacts(options: {
+  actionRenderBundleExcludedFiles?: ReadonlySet<string> | undefined;
+  bundleRequestRuntimePackages: boolean;
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
   clientRouteInferenceCache: ClientRouteInferenceCache;
@@ -2091,6 +2104,7 @@ async function buildServerModuleArtifacts(options: {
           bundleCache: options.bundleCache,
           cacheDir: options.cacheDir,
           entries: requestBatchEntries,
+          externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
           importPolicy: requestModuleImportPolicy,
           define: options.define,
           vitePlugins: options.vitePlugins,
@@ -2119,6 +2133,7 @@ async function buildServerModuleArtifacts(options: {
               cacheDir: options.cacheDir,
               code: stripRouteLoaderOnlyExports(source, absoluteFile),
               filename: absoluteFile,
+              externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
               importPolicy: requestModuleImportPolicy,
               define: options.define,
               vitePlugins: options.vitePlugins,
@@ -2138,6 +2153,7 @@ async function buildServerModuleArtifacts(options: {
               cacheDir: options.cacheDir,
               code: stripRouteMetadataOnlyExports(source, absoluteFile),
               filename: absoluteFile,
+              externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
               importPolicy: requestModuleImportPolicy,
               label: "Metadata",
               define: options.define,
@@ -2161,6 +2177,7 @@ async function buildServerModuleArtifacts(options: {
                 bundleCache: options.bundleCache,
                 cacheDir: options.cacheDir,
                 filename: absoluteFile,
+                externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
                 importPolicy: requestModuleImportPolicy,
                 define: options.define,
                 routeKind: route?.kind,
@@ -2278,16 +2295,20 @@ async function buildServerModuleArtifacts(options: {
             {
               ...(options.prebundleServerComponents
                 ? {
-                    bundleCode: await buildServerComponentBundleArtifactCode({
-                      clientRouteInferenceCache: options.clientRouteInferenceCache,
-                      code: output.code,
-                      externalizeCompatVendor,
-                      filename: absoluteFile,
-                      define: options.define,
-                      root: options.projectRoot,
-                      serverOutput,
-                      vitePlugins: options.vitePlugins,
-                    }),
+                    ...(options.actionRenderBundleExcludedFiles?.has(file) === true
+                      ? {}
+                      : {
+                          bundleCode: await buildServerComponentBundleArtifactCode({
+                            clientRouteInferenceCache: options.clientRouteInferenceCache,
+                            code: output.code,
+                            externalizeCompatVendor,
+                            filename: absoluteFile,
+                            define: options.define,
+                            root: options.projectRoot,
+                            serverOutput,
+                            vitePlugins: options.vitePlugins,
+                          }),
+                        }),
                   }
                 : {}),
               code: output.code,
@@ -2476,6 +2497,7 @@ async function buildRequestModuleArtifactCode(options: {
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages: boolean;
   filename: string;
   importPolicy: AppRouterImportPolicy;
   routeKind?: AppRoute["kind"] | undefined;
@@ -2488,6 +2510,7 @@ async function buildRequestModuleArtifactCode(options: {
       code: options.source,
       define: options.define,
       file: options.filename,
+      externalizeAllowedPackages: options.externalizeAllowedPackages,
       importPolicy: options.importPolicy,
       vitePlugins: options.vitePlugins,
     });
@@ -2512,6 +2535,7 @@ async function buildRequestModuleArtifactCode(options: {
     cacheDir: options.cacheDir,
     code: stripRouteRequestOnlyExports(options.source, options.filename),
     define: options.define,
+    externalizeAllowedPackages: options.externalizeAllowedPackages,
     filename: options.filename,
     importPolicy: options.importPolicy,
     vitePlugins: options.vitePlugins,
@@ -2524,6 +2548,7 @@ async function bundleRouteLoaderModuleCode(options: {
   cacheDir?: string | undefined;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2540,6 +2565,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
   entries: readonly RouteRequestModuleBatchEntry[];
+  externalizeAllowedPackages?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Map<string, string>> {
@@ -2562,6 +2588,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
           cacheDir: options.cacheDir,
           code: entry.code,
           define: options.define,
+          externalizeAllowedPackages: options.externalizeAllowedPackages,
           filename: entry.filename,
           importPolicy: options.importPolicy,
           label: entry.label,
@@ -2594,6 +2621,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
         appDir: options.appDir,
         importPolicy: options.importPolicy,
         label: "Request artifact",
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
       }),
     ],
     root:
@@ -2613,6 +2641,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
             cacheDir: options.cacheDir,
             code: entry.code,
             define: options.define,
+            externalizeAllowedPackages: options.externalizeAllowedPackages,
             filename: entry.filename,
             importPolicy: options.importPolicy,
             label: entry.label,
@@ -2643,6 +2672,7 @@ export async function __bundleRouteRequestModuleBatchForTests(options: {
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
   entries: readonly RouteRequestModuleBatchEntry[];
+  externalizeAllowedPackages?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, string>> {
@@ -2652,6 +2682,7 @@ export async function __bundleRouteRequestModuleBatchForTests(options: {
       cacheDir: options.cacheDir,
       define: options.define,
       entries: options.entries,
+      externalizeAllowedPackages: options.externalizeAllowedPackages,
       importPolicy: options.importPolicy,
       vitePlugins: options.vitePlugins,
     }),
@@ -2664,6 +2695,7 @@ async function bundleRouteRequestModuleCode(options: {
   cacheDir?: string | undefined;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: "Loader" | "Metadata";
@@ -2683,6 +2715,7 @@ async function bundleRouteRequestModuleCode(options: {
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
         importPolicy: options.importPolicy,
         label: options.label,
       }),
@@ -2701,6 +2734,7 @@ function routeRequestBundleCacheKey(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: "Loader" | "Metadata";
@@ -2723,6 +2757,7 @@ function routeRequestBundleCacheKey(options: {
                 ? undefined
                 : resolve(options.importPolicy.projectRoot),
           },
+    externalizeAllowedPackages: options.externalizeAllowedPackages,
     label: options.label,
     platform: "node",
     target: "es2022",

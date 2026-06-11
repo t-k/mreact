@@ -2525,6 +2525,7 @@ export async function bundleMiddlewareModuleCode(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2539,6 +2540,7 @@ export async function bundleMiddlewareModuleCode(options: {
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
         importPolicy: options.importPolicy,
         label: "Middleware",
       }),

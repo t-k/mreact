@@ -773,6 +773,57 @@ export default function Login() {
     );
   });
 
+  test("bundles AWS Lambda request artifacts instead of deferring route runtime packages to first hit", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-request-runtime-bundle-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "lambda-db": "1.0.0" } }),
+    );
+    await writeFakePackage(
+      rootDir,
+      "lambda-db",
+      `export function queryTitle() {
+  return "__LAMBDA_DB_MARKER__";
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { queryTitle } from "lambda-db";
+
+export function loader() {
+  return { title: queryTitle() };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+    const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+      runtimePackages?: string[];
+    };
+    const requestArtifact = await readBuiltServerModuleArtifact<{
+      loader?: { code?: string };
+    }>(outDir, "app/page.tsx");
+    const requestModuleCode = requestArtifact?.loader?.code ?? "";
+
+    expect(policy.runtimePackages).toEqual(["lambda-db"]);
+    expect(requestModuleCode).toContain("__LAMBDA_DB_MARKER__");
+    expect(collectBareRuntimeImports(requestModuleCode)).not.toContain("lambda-db");
+  });
+
   test("includes route handlers and metadata convention routes in generated runtime import policies", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-import-policy-conventions-"));
     const appDir = join(rootDir, "app");
@@ -3884,6 +3935,64 @@ export default function Page() {
         }),
       ],
     });
+  });
+
+  test("keeps inferred server action implementation dependencies out of GET render artifacts", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-action-render-boundary-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "lambda-action-db": "1.0.0" } }),
+    );
+    await writeFakePackage(
+      rootDir,
+      "lambda-action-db",
+      `export const actionMarker = "__LAMBDA_ACTION_DB_MARKER__";\n`,
+    );
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `import { actionMarker } from "lambda-action-db";
+
+export async function save() {
+  return actionMarker;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { save } from "./actions";
+
+export default function Page() {
+  return <main><form action={save}><button type="submit">Save</button></form></main>;
+}
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleRenderFiles?: Record<string, string>;
+    };
+    const renderArtifact = JSON.parse(
+      await readFile(
+        join(outDir, "server", manifest.serverModuleRenderFiles?.["app/page.tsx"] ?? ""),
+        "utf8",
+      ),
+    ) as { string?: { code?: string; moduleFile?: string } };
+    const renderModuleCode =
+      renderArtifact.string?.moduleFile === undefined
+        ? (renderArtifact.string?.code ?? "")
+        : await readFile(join(outDir, "server", renderArtifact.string.moduleFile), "utf8");
+
+    expect(renderModuleCode).not.toContain("__LAMBDA_ACTION_DB_MARKER__");
+    expect(collectBareRuntimeImports(renderModuleCode)).not.toContain("lambda-action-db");
   });
 
   test("built form action lowering keeps same-name aliases scoped by occurrence", async () => {

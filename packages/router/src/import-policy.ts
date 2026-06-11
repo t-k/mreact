@@ -21,6 +21,7 @@ export interface AppRouterImportPolicy {
 export interface AppRouterImportPolicyPluginOptions {
   allowedSourceDirs?: readonly string[] | undefined;
   appDir: string;
+  externalizeAllowedPackages?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   label: string;
   projectRoot?: string | undefined;
@@ -110,10 +111,12 @@ export function createAppRouterImportPolicyPlugin(options: AppRouterImportPolicy
           return undefined;
         }
 
-        return {
-          external: true,
-          path: pathToFileURL(resolvedPackage).href,
-        };
+        return options.externalizeAllowedPackages === false
+          ? undefined
+          : {
+              external: true,
+              path: pathToFileURL(resolvedPackage).href,
+            };
       });
     },
   };

@@ -5,6 +5,7 @@
 ### Fixed
 
 - Fixed streamed out-of-order `<Await>` fragments so the browser waits for a parse-complete completion marker before replacing placeholders, preventing partially parsed list rows from being applied during Cloudflare Worker streaming.
+- Reduced AWS Lambda route first-hit work by bundling request/control runtime packages into Lambda request artifacts and by keeping inferred server action implementation graphs out of GET render artifacts.
 - Refreshed the Hacker News Cloudflare example to use the current Wrangler version, Cloudflare compatibility date, and `buildTargets: ["cloudflare"]` project configuration.
 
 ## 0.0.156 - 2026-06-11
