@@ -7,7 +7,7 @@
     "dev:router": "mreact-router dev --log=requests",
     "prepare:css": "node -e \"require('node:fs').mkdirSync('public',{recursive:true})\"",
     "dev:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --watch",
-    "build": "pnpm run prepare:css && pnpm run build:css && mreact-router build --target=cloudflare",
+    "build": "pnpm run prepare:css && pnpm run build:css && mreact-router build",
     "build:css": "tailwindcss -i ./src/app/globals.css -o ./public/styles.css --minify",
     "start": "mreact-router start .mreact --log=requests",
     "test": "vitest run src/hn/*.test.ts --passWithNoTests",
@@ -27,6 +27,6 @@
     "typescript": "^6.0.3",
     "vite": "^8.0.11",
     "vitest": "^4.1.6",
-    "wrangler": "^4.15.2"
+    "wrangler": "^4.92.0"
   }
 }

@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mreact-hacker-news",
   "main": ".mreact/cloudflare/worker.mjs",
-  "compatibility_date": "2026-05-18",
+  "compatibility_date": "2026-06-11",
   "assets": {
     "directory": ".mreact/client",
     "binding": "ASSETS",
