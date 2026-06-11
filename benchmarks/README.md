@@ -28,6 +28,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - Keep mreact-specific diagnostics out of cross-framework score tables.
 - Use warmup runs before measured runs, and report the median of measured samples
   as the primary value to reduce sensitivity to transient system load.
+- The Vue, Nuxt, Svelte, SvelteKit, Angular, and Analog adapters currently use a shared lightweight HTTP SSR fixture for render-focused rows; browser interaction and client-bundle rows remain unsupported until full framework app fixtures are added.
 - Store raw samples, percentile summaries, and markdown reports under `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such as `001` or `002`.
 - The Benchmarks GitHub Actions workflow commits changed result directories back to the selected branch; do not rely on Actions artifacts for long-term access. A single workflow dispatch writes all selected public benchmark reports into the same run directory, so `all` produces `primitive.md`, `primitive-browser.md`, `non-router.md`, and `router.md` side by side. Microbenchmarks such as `html-escape` and `request-fastpaths` are local investigation tools and are not published by the workflow.
 - The router `app concurrent RSS delta` case measures the benchmark runner process. The mreact fixtures serve in-process, so their delta includes server-side allocation, while adapters that spawn child-process servers only expose the HTTP client side; treat the mreact number as an upper bound rather than a same-kind comparison.
