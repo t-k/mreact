@@ -4,14 +4,14 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 
 ## Tracks
 
-- `primitive`: framework primitive comparison without routers. Current adapters: Marko, Vue, Nuxt, Svelte, SvelteKit, Angular, Analog, Qwik, React, Solid, and mreact.
+- `primitive`: framework primitive comparison without routers. Current adapters: Marko, Vue, Svelte, Angular, Qwik, React, Solid, and mreact.
 - `primitive-browser`: real Chromium primitive comparison for mreact and
   mreact react-compat. It mirrors the create/update/select/clear shape used by
   the Node+happy-dom primitive suite so happy-dom-specific rankings can be
   cross-checked against real browser DOM behavior.
 - `non-router`: package-level regression microbenchmarks for virtual, forms,
   query, store, auth, and other non-router packages.
-- `router`: production router/app framework comparison across Marko Run, Vue, Nuxt, Svelte, SvelteKit, Angular, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
+- `router`: production router/app framework comparison across Marko Run, Nuxt, SvelteKit, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router.
 - `lambda-route-latency`: local AWS Lambda adapter route latency reproduction.
   It invokes API Gateway HTTP API v2-style events directly against the mreact
   Lambda handler and records request/render timing phases for cold health
@@ -27,11 +27,11 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
 - Keep mreact-specific diagnostics out of cross-framework score tables.
 - Use warmup runs before measured runs, and report the median of measured samples
   as the primary value to reduce sensitivity to transient system load.
-- The Vue, Nuxt, Svelte, SvelteKit, Angular, and Analog router adapters currently use a shared lightweight HTTP SSR fixture. Their client-bundle rows are supported by serving each framework package's runtime payload plus the same minimal interactive button script; treat those rows as lightweight proxy measurements until full framework app fixtures are added.
+- The Nuxt, SvelteKit, and Analog router adapters currently use a shared lightweight HTTP SSR fixture. Their client-bundle rows are supported by serving each framework package's runtime payload plus the same minimal interactive button script; treat those rows as lightweight proxy measurements until full framework app fixtures are added.
 - Store raw samples, percentile summaries, and markdown reports under `benchmarks/results/<date>/<run>/`, where `<run>` is a same-day sequence such as `001` or `002`.
 - The Benchmarks GitHub Actions workflow commits changed result directories back to the selected branch; do not rely on Actions artifacts for long-term access. A single workflow dispatch writes all selected public benchmark reports into the same run directory, so `all` produces `primitive.md`, `primitive-browser.md`, `non-router.md`, and `router.md` side by side. Microbenchmarks such as `html-escape` and `request-fastpaths` are local investigation tools and are not published by the workflow.
 - The router `app concurrent RSS delta` case measures the benchmark runner process. The mreact fixtures serve in-process, so their delta includes server-side allocation, while adapters that spawn child-process servers only expose the HTTP client side; treat the mreact number as an upper bound rather than a same-kind comparison.
-- The primitive Vue, Nuxt, Svelte, SvelteKit, Angular, and Analog adapters currently use a shared lightweight DOM fixture for render-focused primitive rows; source-primitive rows remain unsupported until each framework has a native reactive source adapter.
+- The primitive Vue, Svelte, and Angular adapters currently use a shared lightweight DOM fixture for render-focused primitive rows; source-primitive rows remain unsupported until each framework has a native reactive source adapter.
 - Treat benchmark numbers as same-machine comparisons, not absolute truth.
 
 ## Commands

@@ -22,11 +22,8 @@ export interface PrimitiveAdapter {
   name:
     | "marko"
     | "vue"
-    | "nuxt"
     | "svelte"
-    | "svelte-kit"
     | "angular"
-    | "analog"
     | "qwik"
     | "qwik-v2"
     | "react"

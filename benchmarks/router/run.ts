@@ -8,7 +8,6 @@ import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/r
 const env = await collectBenchmarkEnvironment([
   "@builder.io/qwik",
   "@analogjs/platform",
-  "@angular/core",
   "@qwik.dev/core",
   "@qwik.dev/router",
   "@sveltejs/kit",

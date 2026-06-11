@@ -60,11 +60,8 @@ for (const benchmarkCase of selectedPrimitiveCases) {
 }
 
 const env = await collectBenchmarkEnvironment([
-  "@analogjs/platform",
   "@angular/core",
   "marko",
-  "nuxt",
-  "@sveltejs/kit",
   "@builder.io/qwik",
   "@qwik.dev/core",
   "react",
