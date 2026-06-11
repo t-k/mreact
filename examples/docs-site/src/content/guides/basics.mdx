@@ -18,9 +18,9 @@ Use `cell()` for writable state. A cell stores one value, `.get()` reads it, and
 ```tsx
 import { cell } from "@reckona/mreact-reactive-core";
 
-const count = cell(0);
-
 export default function Counter() {
+  const count = cell(0);
+
   return (
     <button type="button" onClick={() => count.set((value) => value + 1)}>
       Count: {count.get()}
@@ -28,6 +28,8 @@ export default function Counter() {
   );
 }
 ```
+
+Define local cells inside the component or owner function that owns the state. Top-level cells are shared module state, so reserve them for deliberate singletons such as app-wide stores or caches. Keeping `count` inside `Counter` gives each component instance its own counter and avoids accidental sharing across route renders or multiple mounted counters.
 
 Reads are dependency-tracked while reactive work is running. When `count.set()` runs, Mreact updates the stored value immediately, invalidates derived values synchronously, and schedules DOM bindings and effects in a microtask.
 
@@ -37,42 +39,60 @@ If you are coming from React, `count.get()` may look less natural than reading a
 
 Use `computed()` when a value can be derived from other cells. A computed value is readonly and recalculates when the cells it reads change.
 
-```ts
+```tsx
 import { cell, computed } from "@reckona/mreact-reactive-core";
 
-const firstName = cell("Ada");
-const lastName = cell("Lovelace");
-const displayName = computed(() => `${firstName.get()} ${lastName.get()}`);
+export default function ProfilePreview() {
+  const firstName = cell("Ada");
+  const lastName = cell("Lovelace");
+  const displayName = computed(() => `${firstName.get()} ${lastName.get()}`);
 
-displayName.get();
+  return <p>{displayName.get()}</p>;
+}
 ```
 
 Pass an equality function when equivalent derived results should not notify downstream work.
 
-```ts
-const parity = computed(() => count.get() % 2, {
-  equals: (previous, next) => previous === next,
-});
+```tsx
+import { cell, computed } from "@reckona/mreact-reactive-core";
+
+export default function ParityBadge() {
+  const count = cell(0);
+  const parity = computed(() => count.get() % 2, {
+    equals: (previous, next) => previous === next,
+  });
+
+  return (
+    <button type="button" onClick={() => count.set((value) => value + 1)}>
+      {parity.get() === 0 ? "Even" : "Odd"}
+    </button>
+  );
+}
 ```
 
 ## Effects
 
 Use `effect()` for side effects that should re-run after the values they read change. Effects return a dispose function.
 
-```ts
+```tsx
 import { cell, effect } from "@reckona/mreact-reactive-core";
 
-const count = cell(0);
+export default function DebugCounter() {
+  const count = cell(0);
 
-const dispose = effect(() => {
-  console.log("count", count.get());
-});
+  effect(() => {
+    console.log("count", count.get());
+  });
 
-count.set(1);
-dispose();
+  return (
+    <button type="button" onClick={() => count.set((value) => value + 1)}>
+      Count: {count.get()}
+    </button>
+  );
+}
 ```
 
-Prefer using JSX for UI updates. Reach for `effect()` when you need to connect reactive values to logging, imperative integrations, subscriptions, or low-level runtime code.
+Prefer using JSX for UI updates. Reach for `effect()` when you need to connect reactive values to logging, imperative integrations, subscriptions, or low-level runtime code. If you create an effect manually outside a component or cleanup owner, keep the dispose function and call it when that owner is torn down.
 
 ## DOM bindings
 
@@ -82,13 +102,19 @@ Application code usually uses JSX. The compiler and low-level DOM integrations u
 import { cell } from "@reckona/mreact-reactive-core";
 import { bindText, createRoot } from "@reckona/mreact-reactive-dom";
 
-const count = cell(0);
+export function mountCounter(root: HTMLElement) {
+  const count = cell(0);
 
-createRoot(document.body, () => {
-  const text = document.createTextNode("");
-  bindText(text, () => count.get());
-  return text;
-});
+  return createRoot(root, () => {
+    const button = document.createElement("button");
+    const text = document.createTextNode("");
+    button.type = "button";
+    button.addEventListener("click", () => count.set((value) => value + 1));
+    bindText(text, () => `Count: ${count.get()}`);
+    button.append(text);
+    return button;
+  });
+}
 ```
 
 Keep the dispose function returned by `createRoot()` when mounting manually. Bindings created inside that root are cleaned up with the root; bindings created outside a root need their own disposal path.
@@ -101,9 +127,9 @@ Put browser-only controls in `.client.tsx` files when the rest of a page should 
 // src/app/cart/Quantity.client.tsx
 import { cell } from "@reckona/mreact-reactive-core";
 
-const quantity = cell(1);
-
 export default function Quantity() {
+  const quantity = cell(1);
+
   return (
     <button type="button" onClick={() => quantity.set((value) => value + 1)}>
       Quantity: {quantity.get()}

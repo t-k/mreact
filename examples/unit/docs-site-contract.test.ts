@@ -150,6 +150,9 @@ describe("docs-site example contract", () => {
     expect(basics).toContain("effect");
     expect(basics).toContain("dependency graph");
     expect(basics).toContain("explicit tracked read");
+    expect(basics).toContain("export default function Counter() {\n  const count = cell(0);");
+    expect(basics).toContain("Top-level cells are shared module state");
+    expect(basics).toContain("export default function Quantity() {\n  const quantity = cell(1);");
     expect(basics).toContain("DOM bindings");
     expect(basics).toContain("Client boundaries");
   });
