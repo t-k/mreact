@@ -148,6 +148,8 @@ describe("docs-site example contract", () => {
     expect(basics).toContain("cell");
     expect(basics).toContain("computed");
     expect(basics).toContain("effect");
+    expect(basics).toContain("dependency graph");
+    expect(basics).toContain("explicit tracked read");
     expect(basics).toContain("DOM bindings");
     expect(basics).toContain("Client boundaries");
   });

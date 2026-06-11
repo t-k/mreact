@@ -31,6 +31,8 @@ export default function Counter() {
 
 Reads are dependency-tracked while reactive work is running. When `count.set()` runs, Mreact updates the stored value immediately, invalidates derived values synchronously, and schedules DOM bindings and effects in a microtask.
 
+If you are coming from React, `count.get()` may look less natural than reading a state variable directly. The method call is intentional: it is the explicit tracked read that lets Mreact record the current `cell` as a dependency of the active render, `computed()`, `effect()`, or DOM binding. That recorded dependency graph is how Mreact knows exactly which derived values and bindings to update after `count.set()` changes the value.
+
 ## Derived values
 
 Use `computed()` when a value can be derived from other cells. A computed value is readonly and recalculates when the cells it reads change.
