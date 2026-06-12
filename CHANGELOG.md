@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.160 - 2026-06-12
+
+### Changed
+
+- Updated the OXC parser and transform toolchain to 0.135.0, bringing stricter JavaScript and TypeScript syntax diagnostics, upstream parser hot-path improvements, and current transform/codegen fixes into the compiler path.
+- Refreshed the local development and deployment toolchain, including Vitest 4.1.8, Wrangler 4.100.0, Miniflare 4.20260611.0, Oxlint 1.69.0, Oxfmt 0.54.0, and the generated Cloudflare starter dependency ranges.
+- Expanded the benchmark harness with additional framework adapters, runtime-backed primitive adapter coverage, browser benchmark coverage for app frameworks, and lightweight router client bundle probes so future performance changes can be compared across a wider set of baselines.
+
 ## 0.0.159 - 2026-06-12
 
 ### Fixed
