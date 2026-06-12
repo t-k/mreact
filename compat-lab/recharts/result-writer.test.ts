@@ -41,4 +41,35 @@ describe("recharts compat result writer", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  test("distinguishes successful captures with visual differences", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
+
+    try {
+      await writeRunSummary({
+        outputDir: dir,
+        runId: "2026-06-12-002-recharts",
+        results: [
+          {
+            fixtureId: "recharts-line-tooltip-hover",
+            ok: true,
+            pixelDiffRatio: 0.008245,
+            reactDomSummary: { svgCount: 1, pathCount: 2, text: ["06-01"] },
+            compatDomSummary: { svgCount: 1, pathCount: 1, text: ["06-01"] },
+            artifacts: {
+              reactScreenshot: "react/recharts-line-tooltip-hover.png",
+              compatScreenshot: "compat/recharts-line-tooltip-hover.png",
+              diffScreenshot: "diff/recharts-line-tooltip-hover.png",
+            },
+          },
+        ],
+      });
+
+      await expect(readFile(join(dir, "summary.md"), "utf8")).resolves.toContain(
+        "captured_with_differences",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

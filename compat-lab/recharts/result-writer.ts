@@ -33,7 +33,7 @@ export async function writeRunSummary(input: WriteRunSummaryInput): Promise<void
 function renderSummary(input: WriteRunSummaryInput): string {
   const rows = input.results
     .map((result) => {
-      const status = result.ok ? "ok" : "failed";
+      const status = summaryStatus(result);
       return `| ${result.fixtureId} | ${status} | ${result.pixelDiffRatio.toFixed(6)} | ${result.reactDomSummary.svgCount} | ${result.compatDomSummary.svgCount} |`;
     })
     .join("\n");
@@ -44,6 +44,13 @@ function renderSummary(input: WriteRunSummaryInput): string {
 |---|---|---:|---:|---:|
 ${rows}
 `;
+}
+
+function summaryStatus(result: FixtureRunResult): "failed" | "matched" | "captured_with_differences" {
+  if (!result.ok) {
+    return "failed";
+  }
+  return result.pixelDiffRatio === 0 ? "matched" : "captured_with_differences";
 }
 
 function renderCoverageLedger(): string {

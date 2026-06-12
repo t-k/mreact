@@ -47,11 +47,15 @@ async function main(): Promise<void> {
 
   const runId = `${new Date().toISOString().slice(0, 10)}-${Date.now()}-recharts`;
   const outputDir = join(repoRoot, "docs.local", "compat-lab", runId);
-  const reactServer = await startViteServer("react");
-  const compatServer = await startViteServer("compat");
-  const browser = await chromium.launch({ headless: !args.headed });
+  let reactServer: { url: string; close(): Promise<void> } | undefined;
+  let compatServer: { url: string; close(): Promise<void> } | undefined;
+  let browser: Browser | undefined;
 
   try {
+    reactServer = await startViteServer("react");
+    compatServer = await startViteServer("compat");
+    browser = await chromium.launch({ headless: !args.headed });
+
     const results: FixtureRunResult[] = [];
     for (const fixture of selectedFixtures) {
       results.push(
@@ -69,8 +73,11 @@ async function main(): Promise<void> {
     await writeRunSummary({ outputDir, runId, results });
     console.log(`Recharts compat lab results: ${outputDir}`);
   } finally {
-    await browser.close();
-    await Promise.all([reactServer.close(), compatServer.close()]);
+    await Promise.all([
+      browser?.close() ?? Promise.resolve(),
+      reactServer?.close() ?? Promise.resolve(),
+      compatServer?.close() ?? Promise.resolve(),
+    ]);
   }
 }
 
