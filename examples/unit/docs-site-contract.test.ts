@@ -2160,6 +2160,7 @@ describe("docs-site example contract", () => {
     expect(workflow).toContain("steps.pages.outputs.base_path");
     expect(workflow).toContain("MREACT_DOCS_BASE_PATH");
     expect(workflow).toContain("examples/docs-site/dist");
+    expect(workflow).toContain("pnpm install --frozen-lockfile --prefer-offline");
     expect(workflow).toContain("pnpm --filter @reckona/example-docs-site build");
     expect(workflow).toContain("branches:\n      - main");
     expect(workflow).toContain("paths:");
