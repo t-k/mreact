@@ -7,6 +7,14 @@ import { rechartsPublicComponentFeatures } from "./public-features.js";
 import type { CompatFixture } from "./types.js";
 
 export type PropCoverageStatus = "vrt_covered" | "interaction_covered" | "debt";
+export type PropRiskCategory =
+  | "accessibility"
+  | "animation"
+  | "custom-renderer"
+  | "data-domain"
+  | "interaction"
+  | "layout"
+  | "style";
 
 export interface RechartsComponentApi {
   component: string;
@@ -18,6 +26,7 @@ export interface RechartsComponentApi {
 export interface RechartsPropCoverageRow {
   component: string;
   prop: string;
+  riskCategory: PropRiskCategory;
   status: PropCoverageStatus;
   fixtureIds: string[];
 }
@@ -108,6 +117,7 @@ export function buildRechartsApiCoverage(
       return {
         component: componentApi.component,
         prop,
+        riskCategory: classifyPropRisk(prop),
         status,
         fixtureIds,
       };
@@ -121,6 +131,7 @@ export function renderApiCoverageMarkdown(fixtures: CompatFixture[] = rechartsFi
   const covered = rows.filter((row) => row.status !== "debt").length;
   const debt = total - covered;
   const byComponent = groupRowsByComponent(rows);
+  const byRiskCategory = groupRowsByRiskCategory(rows);
 
   const componentRows = Array.from(byComponent.entries())
     .map(([component, componentRowsForName]) => {
@@ -132,7 +143,14 @@ export function renderApiCoverageMarkdown(fixtures: CompatFixture[] = rechartsFi
   const debtRows = rows
     .filter((row) => row.status === "debt")
     .slice(0, 200)
-    .map((row) => `| ${row.component} | ${row.prop} | debt |  |`)
+    .map((row) => `| ${row.component} | ${row.prop} | ${row.riskCategory} | debt |  |`)
+    .join("\n");
+
+  const riskRows = Array.from(byRiskCategory.entries())
+    .map(([riskCategory, riskRowsForName]) => {
+      const riskCovered = riskRowsForName.filter((row) => row.status !== "debt").length;
+      return `| ${riskCategory} | ${riskCovered} | ${riskRowsForName.length} | ${riskRowsForName.length - riskCovered} |`;
+    })
     .join("\n");
 
   return `# Recharts API Coverage
@@ -149,12 +167,83 @@ Coverage debt: ${debt}
 |---|---:|---:|---:|
 ${componentRows}
 
+## Risk Category Summary
+
+| Risk category | Covered props | Total props | Debt |
+|---|---:|---:|---:|
+${riskRows}
+
 ## Coverage Debt
 
-| Component | Prop | Status | Fixture |
-|---|---|---|---|
+| Component | Prop | Risk category | Status | Fixture |
+|---|---|---|---|---|
 ${debtRows}
 `;
+}
+
+function classifyPropRisk(prop: string): PropRiskCategory {
+  if (
+    prop.startsWith("on") ||
+    prop === "trigger" ||
+    prop === "active" ||
+    prop === "activeDot" ||
+    prop === "activeBar" ||
+    prop === "activeShape" ||
+    prop === "activeIndex" ||
+    prop === "cursor"
+  ) {
+    return "interaction";
+  }
+  if (prop.toLowerCase().includes("animation") || prop === "animateNewValues") {
+    return "animation";
+  }
+  if (
+    prop === "content" ||
+    prop === "formatter" ||
+    prop === "labelFormatter" ||
+    prop === "tickFormatter" ||
+    prop === "shape" ||
+    prop === "dot" ||
+    prop === "tick" ||
+    prop === "label" ||
+    prop === "labelLine" ||
+    prop === "valueAccessor"
+  ) {
+    return "custom-renderer";
+  }
+  if (
+    prop.toLowerCase().includes("radius") ||
+    prop.toLowerCase().includes("width") ||
+    prop.toLowerCase().includes("height") ||
+    prop === "layout" ||
+    prop === "margin" ||
+    prop === "padding" ||
+    prop === "position" ||
+    prop === "offset" ||
+    prop === "angle" ||
+    prop === "cx" ||
+    prop === "cy" ||
+    prop === "x" ||
+    prop === "y"
+  ) {
+    return "layout";
+  }
+  if (
+    prop.toLowerCase().includes("data") ||
+    prop.toLowerCase().includes("domain") ||
+    prop === "scale" ||
+    prop === "ticks" ||
+    prop === "range" ||
+    prop === "syncId" ||
+    prop === "syncMethod"
+  ) {
+    return "data-domain";
+  }
+  if (prop === "accessibilityLayer" || prop === "role" || prop === "tabIndex" || prop === "rootTabIndex") {
+    return "accessibility";
+  }
+
+  return "style";
 }
 
 function getIndexTypeExports(): TypeExport[] {
@@ -401,6 +490,16 @@ function groupRowsByComponent(
   const grouped = new Map<string, RechartsPropCoverageRow[]>();
   for (const row of rows) {
     grouped.set(row.component, [...(grouped.get(row.component) ?? []), row]);
+  }
+  return grouped;
+}
+
+function groupRowsByRiskCategory(
+  rows: RechartsPropCoverageRow[],
+): Map<PropRiskCategory, RechartsPropCoverageRow[]> {
+  const grouped = new Map<PropRiskCategory, RechartsPropCoverageRow[]>();
+  for (const row of rows) {
+    grouped.set(row.riskCategory, [...(grouped.get(row.riskCategory) ?? []), row]);
   }
   return grouped;
 }

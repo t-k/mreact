@@ -24,7 +24,7 @@ describe("recharts coverage ledger", () => {
     expect(statusByObligation.get("RC-TIP-001")).toBe("fixed");
     expect(statusByObligation.get("RC-POLAR-001")).toBe("fixed");
     expect(statusByObligation.get("RC-SYNC-001")).toBe("fixed");
-    expect(statusByObligation.get("RC-HIERARCHY-001")).toBe("known_tolerance");
+    expect(statusByObligation.get("RC-HIERARCHY-001")).toBe("vrt_covered");
   });
 
   test("obligation ids are unique", () => {

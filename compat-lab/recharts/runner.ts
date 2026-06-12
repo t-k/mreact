@@ -236,6 +236,24 @@ async function runInteractions(page: Page, interactions: CompatInteraction[]): P
         await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
         await page.waitForTimeout(450);
       }
+    } else if (interaction.run === "clickChartCenter") {
+      const box = await page.locator("svg").first().boundingBox();
+      if (box !== null) {
+        await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.waitForTimeout(100);
+      }
+    } else if (interaction.run === "hoverLegendFirstItem") {
+      const box = await page.locator(".recharts-legend-item").first().boundingBox();
+      if (box !== null) {
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.waitForTimeout(100);
+      }
+    } else if (interaction.run === "clickLegendFirstItem") {
+      const box = await page.locator(".recharts-legend-item").first().boundingBox();
+      if (box !== null) {
+        await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.waitForTimeout(100);
+      }
     } else if (interaction.run === "resizeViewport") {
       await page.setViewportSize({ width: 840, height: 640 });
       await page.waitForTimeout(100);

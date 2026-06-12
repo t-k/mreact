@@ -8,6 +8,7 @@ export type CompatRiskTag =
   | "resize-observer"
   | "event-delegation"
   | "pointer-hover"
+  | "pointer-click"
   | "ref"
   | "effect-timing"
   | "context"
@@ -18,7 +19,13 @@ export type CompatRiskTag =
 export interface CompatInteraction {
   name: string;
   description: string;
-  run: "hoverChartCenter" | "resizeViewport" | "waitForAnimationEnd";
+  run:
+    | "hoverChartCenter"
+    | "clickChartCenter"
+    | "hoverLegendFirstItem"
+    | "clickLegendFirstItem"
+    | "resizeViewport"
+    | "waitForAnimationEnd";
 }
 
 export interface CompatFixture {

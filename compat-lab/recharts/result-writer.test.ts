@@ -76,7 +76,7 @@ describe("recharts compat result writer", () => {
     }
   });
 
-  test("classifies the hierarchy flow antialiasing delta as a known tolerance", async () => {
+  test("classifies the resolved hierarchy flow fixture as a normal match", async () => {
     const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
 
     try {
@@ -87,7 +87,7 @@ describe("recharts compat result writer", () => {
           {
             fixtureId: "recharts-hierarchy-flow",
             ok: true,
-            pixelDiffRatio: 0.002072,
+            pixelDiffRatio: 0,
             reactDomSummary: {
               svgCount: 4,
               pathCount: 20,
@@ -115,8 +115,28 @@ describe("recharts compat result writer", () => {
 
       const summary = await readFile(join(dir, "summary.md"), "utf8");
 
-      expect(summary).toContain("matched_with_known_tolerance");
-      expect(summary).toContain("Funnel trapezoid edge antialiasing only");
+      expect(summary).toContain("| recharts-hierarchy-flow | matched | 0.000000 | 4 | 4 |  |");
+      expect(summary).not.toContain("matched_with_known_tolerance");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes API coverage risk categories", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
+
+    try {
+      await writeRunSummary({
+        outputDir: dir,
+        runId: "2026-06-13-001-recharts",
+        results: [],
+      });
+
+      const coverage = await readFile(join(dir, "api-coverage.md"), "utf8");
+
+      expect(coverage).toContain("## Risk Category Summary");
+      expect(coverage).toContain("| interaction |");
+      expect(coverage).toContain("| layout |");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

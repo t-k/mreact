@@ -32,8 +32,20 @@ describe("recharts api surface coverage", () => {
     const tooltipCursor = rows.find(
       (row) => row.component === "Tooltip" && row.prop === "cursor",
     );
+    const tooltipContent = rows.find(
+      (row) => row.component === "Tooltip" && row.prop === "content",
+    );
+    const tooltipDefaultIndex = rows.find(
+      (row) => row.component === "Tooltip" && row.prop === "defaultIndex",
+    );
+    const tooltipRisk = rows.find(
+      (row) => row.component === "Tooltip" && row.prop === "trigger",
+    );
     const legendIconType = rows.find(
       (row) => row.component === "Legend" && row.prop === "iconType",
+    );
+    const legendOnClick = rows.find(
+      (row) => row.component === "Legend" && row.prop === "onClick",
     );
     const xAxisTickFormatter = rows.find(
       (row) => row.component === "XAxis" && row.prop === "tickFormatter",
@@ -50,7 +62,11 @@ describe("recharts api surface coverage", () => {
     expect(lineDataKey?.status).toBe("interaction_covered");
     expect(syncId?.status).toBe("interaction_covered");
     expect(tooltipCursor?.status).toBe("interaction_covered");
+    expect(tooltipContent?.status).toBe("interaction_covered");
+    expect(tooltipDefaultIndex?.status).toBe("interaction_covered");
+    expect(tooltipRisk?.riskCategory).toBe("interaction");
     expect(legendIconType?.status).toBe("interaction_covered");
+    expect(legendOnClick?.status).toBe("interaction_covered");
     expect(xAxisTickFormatter?.status).toBe("interaction_covered");
     expect(yAxisDomain?.status).toBe("interaction_covered");
     expect(gridVerticalFill?.status).toBe("interaction_covered");

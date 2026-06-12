@@ -22,6 +22,7 @@ describe("recharts compat fixture registry", () => {
       "recharts-synced-tooltips",
       "recharts-animation-lifecycle",
       "recharts-cartesian-props-matrix",
+      "recharts-interaction-props-matrix",
     ]);
   });
 

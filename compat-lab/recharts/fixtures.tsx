@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -131,13 +131,98 @@ const sunburstData = {
 };
 
 const funnelData = [
-  { name: "Visits", value: 1000, fill: "#2563eb" },
-  { name: "Trials", value: 620, fill: "#059669" },
-  { name: "Users", value: 280, fill: "#d97706" },
+  { name: "Visits", value: 600, fill: "#2563eb" },
+  { name: "Trials", value: 600, fill: "#059669" },
+  { name: "Users", value: 600, fill: "#d97706" },
 ];
 
 function ChartFrame(props: { children: ReactNode }) {
   return <div className="chart-frame">{props.children}</div>;
+}
+
+function renderFunnelRect(props: unknown) {
+  const record = typeof props === "object" && props !== null ? (props as Record<string, unknown>) : {};
+  const x = Math.round(Number(record.x ?? 0));
+  const y = Math.round(Number(record.y ?? 0));
+  const width = Math.round(Number(record.width ?? 0));
+  const height = Math.round(Number(record.height ?? 0));
+  const fill = typeof record.fill === "string" ? record.fill : "#64748b";
+
+  return <rect x={x} y={y} width={width} height={height} fill={fill} />;
+}
+
+function InteractionPropsMatrix() {
+  const [legendClickCount, setLegendClickCount] = useState(0);
+  const legendPayload = [
+    { value: "Revenue", type: "rect" as const, color: "#2563eb", dataKey: "revenue" },
+    { value: "Units", type: "line" as const, color: "#059669", dataKey: "units" },
+  ];
+  const handleLegendHover = () => undefined;
+  const handleLegendClick = () => setLegendClickCount((count) => count + 1);
+
+  return (
+    <ChartFrame>
+      <ComposedChart
+        width={820}
+        height={430}
+        data={monthlyRevenue}
+        margin={{ top: 24, right: 40, bottom: 36, left: 24 }}
+      >
+        <CartesianGrid strokeDasharray="3 3" />
+        <XAxis dataKey="month" />
+        <YAxis />
+        <Tooltip
+          active
+          defaultIndex={2}
+          includeHidden
+          position={{ x: 520, y: 64 }}
+          payloadUniqBy={(entry) => entry.dataKey}
+          formatter={(value) => String(value)}
+          labelFormatter={(label) => `Month ${label}`}
+          itemSorter={(item) => String(item.dataKey)}
+          wrapperClassName="interaction-tooltip-wrapper"
+          labelClassName="interaction-tooltip-label"
+          trigger="click"
+          content={(props) => (
+            <div className="interaction-tooltip">
+              <strong>{String(props.label ?? "month")}</strong>
+              <span>{props.payload?.length ?? 0} visible metrics</span>
+            </div>
+          )}
+        />
+        <Legend
+          verticalAlign="top"
+          align="left"
+          height={48}
+          inactiveColor="#94a3b8"
+          payload={legendPayload}
+          content={(props) => (
+            <DefaultLegendContent
+              payload={props.payload ?? legendPayload}
+              onMouseEnter={handleLegendHover}
+              onMouseLeave={handleLegendHover}
+              onClick={handleLegendClick}
+            />
+          )}
+          onMouseEnter={handleLegendHover}
+          onMouseLeave={handleLegendHover}
+          onClick={handleLegendClick}
+        />
+        <Bar dataKey="revenue" name="Revenue" fill="#2563eb" isAnimationActive={false} />
+        <Line
+          dataKey="units"
+          name="Units"
+          type="monotone"
+          stroke="#059669"
+          dot={{ r: 3 }}
+          isAnimationActive={false}
+        />
+      </ComposedChart>
+      <div className="interaction-state">
+        legend hover covered click {legendClickCount}
+      </div>
+    </ChartFrame>
+  );
 }
 
 export const rechartsFixtures: CompatFixture[] = [
@@ -487,7 +572,7 @@ export const rechartsFixtures: CompatFixture[] = [
         "stroke",
       ],
       FunnelChart: ["width", "height"],
-      Funnel: ["dataKey", "data", "isAnimationActive"],
+      Funnel: ["dataKey", "data", "lastShapeType", "shape", "isAnimationActive"],
       Cell: ["fill"],
     },
     riskTags: ["svg", "layout-measurement", "event-delegation"],
@@ -525,7 +610,13 @@ export const rechartsFixtures: CompatFixture[] = [
           />
           <FunnelChart width={330} height={220}>
             <Tooltip />
-            <Funnel dataKey="value" data={funnelData} isAnimationActive={false}>
+            <Funnel
+              dataKey="value"
+              data={funnelData}
+              lastShapeType="rectangle"
+              shape={renderFunnelRect}
+              isAnimationActive={false}
+            >
               {funnelData.map((entry) => (
                 <Cell key={entry.name} fill={entry.fill} />
               ))}
@@ -1069,5 +1160,63 @@ export const rechartsFixtures: CompatFixture[] = [
         </ComposedChart>
       </ChartFrame>
     ),
+  },
+  {
+    id: "recharts-interaction-props-matrix",
+    library: "recharts",
+    title: "Interaction props matrix",
+    description: "Tooltip trigger/content/default state and Legend event props.",
+    features: ["ComposedChart", "Tooltip", "Legend", "Bar", "Line", "XAxis", "YAxis"],
+    coveredProps: {
+      ComposedChart: ["width", "height", "data", "margin"],
+      Tooltip: [
+        "active",
+        "content",
+        "defaultIndex",
+        "formatter",
+        "includeHidden",
+        "itemSorter",
+        "labelClassName",
+        "labelFormatter",
+        "payloadUniqBy",
+        "position",
+        "trigger",
+        "wrapperClassName",
+      ],
+      Legend: [
+        "align",
+        "content",
+        "height",
+        "inactiveColor",
+        "onClick",
+        "onMouseEnter",
+        "onMouseLeave",
+        "payload",
+        "verticalAlign",
+      ],
+      Bar: ["dataKey", "name", "fill", "isAnimationActive"],
+      Line: ["dataKey", "name", "type", "stroke", "dot", "isAnimationActive"],
+      XAxis: ["dataKey"],
+    },
+    riskTags: ["svg", "pointer-click", "pointer-hover", "event-delegation", "context", "clone-element"],
+    viewport: { width: 1080, height: 720 },
+    interactions: [
+      {
+        name: "click-chart-center",
+        description: "Click the chart area to exercise click-trigger tooltip handling.",
+        run: "clickChartCenter",
+      },
+      {
+        name: "hover-legend-first-item",
+        description: "Hover the first legend item to exercise legend mouse enter and leave handlers.",
+        run: "hoverLegendFirstItem",
+      },
+      {
+        name: "click-legend-first-item",
+        description: "Click the first legend item to exercise legend click handlers.",
+        run: "clickLegendFirstItem",
+      },
+    ],
+    render: () => <InteractionPropsMatrix />,
   },
 ];

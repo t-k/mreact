@@ -39,8 +39,7 @@ function renderSummary(input: WriteRunSummaryInput): string {
   const rows = input.results
     .map((result) => {
       const status = summaryStatus(result);
-      const note = knownToleranceNote(result) ?? "";
-      return `| ${result.fixtureId} | ${status} | ${result.pixelDiffRatio.toFixed(6)} | ${result.reactDomSummary.svgCount} | ${result.compatDomSummary.svgCount} | ${note} |`;
+      return `| ${result.fixtureId} | ${status} | ${result.pixelDiffRatio.toFixed(6)} | ${result.reactDomSummary.svgCount} | ${result.compatDomSummary.svgCount} |  |`;
     })
     .join("\n");
 
@@ -54,53 +53,11 @@ ${rows}
 
 function summaryStatus(
   result: FixtureRunResult,
-): "failed" | "matched" | "matched_with_known_tolerance" | "captured_with_differences" {
+): "failed" | "matched" | "captured_with_differences" {
   if (!result.ok) {
     return "failed";
   }
-  if (knownToleranceNote(result) !== undefined) {
-    return "matched_with_known_tolerance";
-  }
   return result.pixelDiffRatio === 0 ? "matched" : "captured_with_differences";
-}
-
-function knownToleranceNote(result: FixtureRunResult): string | undefined {
-  if (
-    result.fixtureId === "recharts-hierarchy-flow" &&
-    result.ok &&
-    result.pixelDiffRatio <= 0.003 &&
-    equivalentDomSummary(result.reactDomSummary, result.compatDomSummary)
-  ) {
-    return "Funnel trapezoid edge antialiasing only; DOM text, classes, and SVG/path counts match.";
-  }
-
-  return undefined;
-}
-
-function equivalentDomSummary(react: SummaryDom, compat: SummaryDom): boolean {
-  return (
-    react.svgCount === compat.svgCount &&
-    react.pathCount === compat.pathCount &&
-    optionalCountMatches(react.rectCount, compat.rectCount) &&
-    optionalCountMatches(react.circleCount, compat.circleCount) &&
-    stringArraysMatch(react.text, compat.text) &&
-    optionalStringArraysMatch(react.classes, compat.classes)
-  );
-}
-
-function optionalCountMatches(react: number | undefined, compat: number | undefined): boolean {
-  return react === undefined || compat === undefined || react === compat;
-}
-
-function optionalStringArraysMatch(
-  react: string[] | undefined,
-  compat: string[] | undefined,
-): boolean {
-  return react === undefined || compat === undefined || stringArraysMatch(react, compat);
-}
-
-function stringArraysMatch(react: string[], compat: string[]): boolean {
-  return react.length === compat.length && react.every((value, index) => value === compat[index]);
 }
 
 function renderCoverageLedger(): string {
