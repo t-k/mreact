@@ -33,6 +33,27 @@ const compatAliases =
       ]
     : reactAliases;
 
+const optimizeDeps =
+  runtime === "compat"
+    ? {
+        include: ["recharts"],
+        exclude: ["@reckona/mreact-compat", "@reckona/mreact-reactive-core", "@reckona/mreact-shared"],
+        rolldownOptions: {
+          external: [
+            "react",
+            "react-dom",
+            "react-dom/client",
+            "react-dom/server",
+            "react/jsx-runtime",
+            "react/jsx-dev-runtime",
+          ],
+        },
+      }
+    : {
+        include: ["recharts"],
+        exclude: [],
+      };
+
 export default defineConfig({
   cacheDir: resolve(repoRoot, "node_modules/.vite/compat-lab-recharts", runtime),
   define: {
@@ -43,24 +64,7 @@ export default defineConfig({
     jsxImportSource: "react",
   },
   optimizeDeps: {
-    include: ["recharts"],
-    exclude:
-      runtime === "compat"
-        ? ["@reckona/mreact-compat", "@reckona/mreact-reactive-core", "@reckona/mreact-shared"]
-        : [],
-    rolldownOptions:
-      runtime === "compat"
-        ? {
-            external: [
-              "react",
-              "react-dom",
-              "react-dom/client",
-              "react-dom/server",
-              "react/jsx-runtime",
-              "react/jsx-dev-runtime",
-            ],
-          }
-        : undefined,
+    ...optimizeDeps,
   },
   resolve: {
     alias: compatAliases,
