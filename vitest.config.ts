@@ -152,6 +152,7 @@ export default defineConfig({
       "size/**/*.test.ts",
       "benchmarks/**/*.test.ts",
       "examples/**/*.test.ts",
+      "compat-lab/**/*.test.ts",
     ],
   },
 });
