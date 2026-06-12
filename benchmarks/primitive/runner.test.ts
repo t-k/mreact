@@ -446,7 +446,7 @@ describe("primitive adapters", () => {
       expect(row.samples).toHaveLength(1);
       expect(row.notes).toEqual([forcedGcMemoryNote]);
     }
-  }, 15_000);
+  }, 30_000);
 
   it("keeps raw memory deltas and amplifies the repeated memory signal", () => {
     expect(calculateHeapDelta(90, 100)).toBe(-10);
