@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { Fragment, createElement } from "../src/index.js";
+import { createRoot, flushSync } from "../src/root.js";
 import {
   canRenderHostFiber,
   commitHostFiberRoot,
@@ -489,5 +490,128 @@ describe("host reconciler module", () => {
     expect(container.innerHTML).toBe(
       '<span data-key="a">A</span><span data-key="c">C</span>',
     );
+  });
+
+  test("removes SVG grandchildren when a component child collapses to null", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function ShapeLayer(props: { readonly visible: boolean }) {
+      return props.visible
+        ? [
+            createElement("path", { className: "recharts-radar-polygon", key: "radar" }),
+            createElement("path", { className: "recharts-line-curve", key: "line" }),
+          ]
+        : null;
+    }
+
+    flushSync(() => {
+      root.render(
+        createElement(
+          "svg",
+          null,
+          createElement("g", { className: "recharts-layer" }, createElement(ShapeLayer, { visible: true })),
+        ),
+      );
+    });
+    expect(container.querySelectorAll("path")).toHaveLength(2);
+
+    flushSync(() => {
+      root.render(
+        createElement(
+          "svg",
+          null,
+          createElement("g", { className: "recharts-layer" }, createElement(ShapeLayer, { visible: false })),
+        ),
+      );
+    });
+
+    expect(container.querySelectorAll("path")).toHaveLength(0);
+    expect(container.innerHTML).toBe('<svg><g class="recharts-layer"></g></svg>');
+    root.unmount();
+  });
+
+  test("removes stale keyed SVG grandchildren when a component child shifts its range", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function Trapezoids(props: { readonly ids: readonly number[] }) {
+      return props.ids.map((id) =>
+        createElement("path", {
+          className: `trapezoid-${id}`,
+          d: `M${id} ${id}`,
+          key: id,
+        }),
+      );
+    }
+
+    flushSync(() => {
+      root.render(
+        createElement(
+          "svg",
+          null,
+          createElement("g", { className: "recharts-funnel" }, createElement(Trapezoids, { ids: [1, 2, 3] })),
+        ),
+      );
+    });
+
+    flushSync(() => {
+      root.render(
+        createElement(
+          "svg",
+          null,
+          createElement("g", { className: "recharts-funnel" }, createElement(Trapezoids, { ids: [2, 3, 4] })),
+        ),
+      );
+    });
+
+    expect(Array.from(container.querySelectorAll("path"), (path) => path.getAttribute("class"))).toEqual([
+      "trapezoid-2",
+      "trapezoid-3",
+      "trapezoid-4",
+    ]);
+    root.unmount();
+  });
+
+  test("preserves unmanaged SVG children during descendant prop updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function ManagedPath(props: { readonly selected: boolean }) {
+      return createElement("path", {
+        className: props.selected ? "managed selected" : "managed",
+        d: "M0 0",
+      });
+    }
+
+    flushSync(() => {
+      root.render(
+        createElement(
+          "svg",
+          null,
+          createElement("g", { className: "recharts-layer" }, createElement(ManagedPath, { selected: false })),
+        ),
+      );
+    });
+
+    const unmanaged = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    unmanaged.setAttribute("class", "unmanaged");
+    container.querySelector("svg")?.appendChild(unmanaged);
+
+    flushSync(() => {
+      root.render(
+        createElement(
+          "svg",
+          null,
+          createElement("g", { className: "recharts-layer" }, createElement(ManagedPath, { selected: true })),
+        ),
+      );
+    });
+
+    expect(Array.from(container.querySelectorAll("path"), (path) => path.getAttribute("class"))).toEqual([
+      "managed selected",
+      "unmanaged",
+    ]);
+    root.unmount();
   });
 });
