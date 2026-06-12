@@ -32,6 +32,18 @@ export default defineConfig({
         replacement: new URL("./packages/vite-plugin/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact/jsx-runtime",
+        replacement: new URL("./packages/react/src/jsx-runtime.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@reckona/mreact/jsx-dev-runtime",
+        replacement: new URL("./packages/react/src/jsx-dev-runtime.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@reckona/mreact",
+        replacement: new URL("./packages/react/src/index.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-compiler/internal",
         replacement: new URL("./packages/compiler/src/internal.ts", import.meta.url).pathname,
       },
@@ -77,6 +89,23 @@ export default defineConfig({
       {
         find: "@reckona/mreact-server/buffer-sink",
         replacement: new URL("./packages/server/src/buffer-sink.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@reckona/mreact-shared/compiler-contract",
+        replacement: new URL("./packages/shared/src/compiler-contract.ts", import.meta.url)
+          .pathname,
+      },
+      {
+        find: "@reckona/mreact-shared/html-escape",
+        replacement: new URL("./packages/shared/src/html-escape.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@reckona/mreact-shared/url-safety",
+        replacement: new URL("./packages/shared/src/url-safety.ts", import.meta.url).pathname,
+      },
+      {
+        find: "@reckona/mreact-shared",
+        replacement: new URL("./packages/shared/src/index.ts", import.meta.url).pathname,
       },
       {
         find: "@reckona/mreact-reactive-dom",
