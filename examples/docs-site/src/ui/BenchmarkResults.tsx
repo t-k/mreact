@@ -27,6 +27,23 @@ interface BenchmarkBadge {
   readonly tone: "primary" | "secondary";
 }
 
+type BenchmarkFrameworkGroupId =
+  | "analog"
+  | "marko"
+  | "mreact"
+  | "next"
+  | "nuxt"
+  | "qwik"
+  | "react"
+  | "solid"
+  | "svelte"
+  | "tanstack";
+
+interface BenchmarkFrameworkGroup {
+  readonly id: BenchmarkFrameworkGroupId;
+  readonly label: string;
+}
+
 const benchmarkFilterOrder: readonly BenchmarkBadgeLabel[] = [
   "Size",
   "SSR",
@@ -62,6 +79,18 @@ const benchmarkBadgeClassNames: Readonly<Record<BenchmarkBadgeLabel, string>> = 
   Size: "is-size",
   Startup: "is-startup",
 };
+const benchmarkFrameworkGroups: readonly BenchmarkFrameworkGroup[] = [
+  { id: "mreact", label: "Mreact" },
+  { id: "react", label: "React" },
+  { id: "solid", label: "Solid" },
+  { id: "qwik", label: "Qwik" },
+  { id: "marko", label: "Marko" },
+  { id: "next", label: "Next.js" },
+  { id: "tanstack", label: "TanStack" },
+  { id: "svelte", label: "Svelte" },
+  { id: "analog", label: "Analog" },
+  { id: "nuxt", label: "Nuxt" },
+];
 const benchmarkResultsGitRef = "main";
 
 export function BenchmarkResults() {
@@ -135,26 +164,46 @@ export function BenchmarkResults() {
 
 function BenchmarkFilterBar() {
   return (
-    <div class="benchmark-filter-list" role="toolbar" aria-label="Benchmark filters">
-      <button
-        class="benchmark-filter is-active"
-        type="button"
-        data-benchmark-filter="all"
-        aria-pressed="true"
-      >
-        All
-      </button>
-      {benchmarkFilterLabels().map((label) => (
-        <button
-          class={`benchmark-filter benchmark-badge ${badgeColorClass(label)}`}
-          type="button"
-          data-benchmark-filter={badgeSlug(label)}
-          aria-pressed="false"
-          key={label}
-        >
-          {label}
-        </button>
-      ))}
+    <div class="benchmark-filter-groups" aria-label="Benchmark filters">
+      <div class="benchmark-filter-section">
+        <p class="benchmark-filter-heading">Categories</p>
+        <div class="benchmark-filter-list" role="toolbar" aria-label="Benchmark categories">
+          <button
+            class="benchmark-filter is-active"
+            type="button"
+            data-benchmark-filter="all"
+            aria-pressed="true"
+          >
+            All
+          </button>
+          {benchmarkFilterLabels().map((label) => (
+            <button
+              class={`benchmark-filter benchmark-badge ${badgeColorClass(label)}`}
+              type="button"
+              data-benchmark-filter={badgeSlug(label)}
+              aria-pressed="false"
+              key={label}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <fieldset class="benchmark-framework-filter-fieldset">
+        <legend>Frameworks</legend>
+        <div class="benchmark-framework-filter-list">
+          {benchmarkFrameworkFilterGroups().map((group) => (
+            <label class="benchmark-framework-filter" key={group.id}>
+              <input
+                type="checkbox"
+                value={group.id}
+                data-benchmark-framework-filter={group.id}
+              />
+              <span>{group.label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
     </div>
   );
 }
@@ -171,6 +220,22 @@ function benchmarkFilterLabels(): readonly BenchmarkBadgeLabel[] {
   }
 
   return benchmarkFilterOrder.filter((label) => usedLabels.has(label));
+}
+
+function benchmarkFrameworkFilterGroups(): readonly BenchmarkFrameworkGroup[] {
+  const usedGroups = new Set<BenchmarkFrameworkGroupId>();
+
+  for (const suite of benchmarkRankingSuites) {
+    for (const card of suite.cards) {
+      for (const row of card.rows) {
+        for (const group of frameworkGroupsForRow(row)) {
+          usedGroups.add(group);
+        }
+      }
+    }
+  }
+
+  return benchmarkFrameworkGroups.filter((group) => usedGroups.has(group.id));
 }
 
 function githubUrlForRunPath(path: string): string {
@@ -198,7 +263,7 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
     >
       <div class="benchmark-panel-heading">
         <h4 id={`${card.id}-title`}>{card.title}</h4>
-        <p>{card.rows.length} entries</p>
+        <p data-benchmark-visible-count>{formatEntryCount(card.rows.length)}</p>
       </div>
       <div class="benchmark-badge-list" aria-label="Benchmark categories">
         {badges.map((badge) => (
@@ -218,10 +283,12 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
       <div class="benchmark-chart" aria-label={`${card.title} ranking chart`}>
         {rankingRowsWithDisplayRank(card.rows).map((row) => {
           const width = Math.max(2, (valueAsNumber(row) / maxValue) * 100);
+          const frameworkGroups = frameworkGroupsForRow(row).join(" ");
 
           return (
             <div
               class={`benchmark-bar-row${isMreactFramework(row) ? " is-mreact" : ""}`}
+              data-benchmark-framework-groups={frameworkGroups}
               key={`${card.id}-${row.rank}-${row.framework}`}
             >
               <span class="benchmark-label">
@@ -392,6 +459,56 @@ function rankingRowsWithDisplayRank(rows: readonly BenchmarkRankingRow[]) {
 
 function isMreactFramework(row: BenchmarkRankingRow): boolean {
   return row.isMreact;
+}
+
+function frameworkGroupsForRow(row: BenchmarkRankingRow): readonly BenchmarkFrameworkGroupId[] {
+  const framework = row.framework.toLowerCase();
+
+  if (framework.startsWith("mreact")) {
+    return ["mreact"];
+  }
+
+  if (framework === "react") {
+    return ["react"];
+  }
+
+  if (framework.startsWith("solid")) {
+    return ["solid"];
+  }
+
+  if (framework.startsWith("qwik")) {
+    return ["qwik"];
+  }
+
+  if (framework.startsWith("marko")) {
+    return ["marko"];
+  }
+
+  if (framework.startsWith("next")) {
+    return ["next"];
+  }
+
+  if (framework.startsWith("tanstack")) {
+    return ["tanstack"];
+  }
+
+  if (framework.startsWith("svelte")) {
+    return ["svelte"];
+  }
+
+  if (framework.startsWith("analog")) {
+    return ["analog"];
+  }
+
+  if (framework.startsWith("nuxt")) {
+    return ["nuxt"];
+  }
+
+  return [];
+}
+
+function formatEntryCount(count: number): string {
+  return `${count} ${count === 1 ? "entry" : "entries"}`;
 }
 
 function valueAsNumber(row: BenchmarkRankingRow): number {
