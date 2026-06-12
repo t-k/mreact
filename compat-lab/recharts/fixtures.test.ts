@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { rechartsFixtures } from "./fixtures.js";
+import { rechartsPublicComponentFeatures } from "./public-features.js";
 
 describe("recharts compat fixture registry", () => {
   test("fixture ids are unique and stable", () => {
@@ -13,6 +14,13 @@ describe("recharts compat fixture registry", () => {
       "recharts-pie-cell-label",
       "recharts-responsive-resize",
       "recharts-composed-reference",
+      "recharts-scatter-error-brush",
+      "recharts-polar-radar-radial",
+      "recharts-hierarchy-flow",
+      "recharts-shape-primitives",
+      "recharts-axis-customized",
+      "recharts-synced-tooltips",
+      "recharts-animation-lifecycle",
     ]);
   });
 
@@ -32,5 +40,13 @@ describe("recharts compat fixture registry", () => {
     expect(tooltip?.interactions?.map((interaction) => interaction.name)).toEqual([
       "hover-chart-center",
     ]);
+  });
+
+  test("fixtures cover every public Recharts component export", () => {
+    const coveredFeatures = new Set(rechartsFixtures.flatMap((fixture) => fixture.features));
+
+    expect(
+      rechartsPublicComponentFeatures.filter((feature) => !coveredFeatures.has(feature)),
+    ).toEqual([]);
   });
 });

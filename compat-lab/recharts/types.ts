@@ -18,7 +18,7 @@ export type CompatRiskTag =
 export interface CompatInteraction {
   name: string;
   description: string;
-  run: "hoverChartCenter" | "resizeViewport";
+  run: "hoverChartCenter" | "resizeViewport" | "waitForAnimationEnd";
 }
 
 export interface CompatFixture {

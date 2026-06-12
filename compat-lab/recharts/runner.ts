@@ -239,6 +239,8 @@ async function runInteractions(page: Page, interactions: CompatInteraction[]): P
     } else if (interaction.run === "resizeViewport") {
       await page.setViewportSize({ width: 840, height: 640 });
       await page.waitForTimeout(100);
+    } else if (interaction.run === "waitForAnimationEnd") {
+      await page.waitForTimeout(400);
     }
   }
 }

@@ -12,10 +12,8 @@ describe("recharts coverage ledger", () => {
     }
   });
 
-  test("ledger keeps untracked rows for full feature expansion", () => {
-    expect(rechartsCoverageLedger.some((row) => row.status === "untracked")).toBe(true);
-    expect(rechartsCoverageLedger.map((row) => row.obligationId)).toContain("RC-SCATTER-001");
-    expect(rechartsCoverageLedger.map((row) => row.obligationId)).toContain("RC-BRUSH-001");
+  test("ledger has no untracked rows for the current Recharts coverage target", () => {
+    expect(rechartsCoverageLedger.filter((row) => row.status === "untracked")).toEqual([]);
   });
 
   test("obligation ids are unique", () => {
