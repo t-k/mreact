@@ -53,7 +53,7 @@ The `examples/` directory contains focused applications:
 | Example | Purpose |
 | --- | --- |
 | [examples/app-router](examples/app-router) | Full app-router tour covering routing, layouts, metadata, loaders, actions, middleware, forms, auth, i18n, and deployments |
-| [examples/hacker-news](examples/hacker-news) | Hacker News clone using streaming SSR, Tailwind CSS, router navigation, and Cloudflare Workers deployment |
+| [examples/hacker-news](examples/hacker-news) | Hacker News clone using streaming SSR, Tailwind CSS, router navigation, and Cloudflare Workers deployment.<br />Live demo: https://mreact-hacker-news.t-kaniwa-e16.workers.dev |
 | [examples/docs-site](examples/docs-site) | This documentation site with MDX, static export, Pagefind search, API reference rendering, and benchmark result cards |
 | [examples/react-libraries](examples/react-libraries) | React ecosystem libraries running through Mreact compatibility boundaries |
 | [examples/reactive-primitives](examples/reactive-primitives) | `cell`, `computed`, `effect`, and DOM updates |
