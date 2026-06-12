@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.161 - 2026-06-13
+
+### Added
+
+- Added a Recharts compatibility lab that compares React and mreact runtime screenshots, DOM summaries, coverage ledgers, and Recharts prop coverage reports across representative chart, tooltip, legend, polar, hierarchy, animation, and interaction fixtures.
+- Added published API reference site assets, documentation search/navigation assets, and benchmark result pages so the documentation site can expose package APIs and current performance runs through GitHub Pages.
+
+### Changed
+
+- Improved the benchmark workflow with framework filtering and refreshed benchmark result artifacts for the June 12 run, making cross-framework and mreact-specific benchmark comparisons easier to scan.
+- Expanded the root documentation site content around mreact's client inference model, docs navigation, API reference readability, and benchmark presentation.
+
+### Fixed
+
+- Fixed React-compatible class component lifecycle updates, PureComponent child reuse, nested SVG child reconciliation, and `cloneElement()` default prop handling so Recharts Line, Radar, Tooltip, Legend, polar, hierarchy, and synchronized tooltip fixtures now match React screenshots in the compatibility lab.
+
 ## 0.0.160 - 2026-06-12
 
 ### Changed
