@@ -21,6 +21,7 @@ benchmarks/results/
 !/docs/deploy/**
 .claude/
 .agents/
+.codex/
 
 # Local-only directories (never commit)
 /dogfood-output/
@@ -41,3 +42,4 @@ tsdoc-metadata.json
 *.swp
 .coverage-ledger/
 .data/
+agent-dags/
