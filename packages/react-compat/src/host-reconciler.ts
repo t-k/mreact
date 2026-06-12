@@ -1651,6 +1651,18 @@ function commitHostDirtyFiber(
     if (directTextChild !== undefined) {
       const text = syncDirectHostTextChild(element, directTextChild);
       subscribeReactiveHostTextBinding(props, text);
+    } else if (
+      fiber.hostChildListChanged ||
+      fiber.childListChanged ||
+      fiber.subtreeChildListChanged
+    ) {
+      const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
+      if (
+        !(childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !shouldPreserveContentEditableChildren(element, props, childNodes)
+      ) {
+        syncChildNodes(element, childNodes);
+      }
     } else if (fiber.subtreeFlags !== NoFlags) {
       commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
@@ -1793,7 +1805,7 @@ function commitHostAppendSuffix(
   path: string,
   options: RenderOptions,
 ): boolean {
-  const append = getPlacementAppendSuffix(fiber.child) ?? getAppendSuffix(fiber.alternate?.child, fiber.child);
+  const append = getAppendSuffix(fiber.alternate?.child, fiber.child);
 
   if (append === undefined) {
     return false;
@@ -1811,39 +1823,6 @@ function commitHostAppendSuffix(
   }
 
   return true;
-}
-
-function getPlacementAppendSuffix(next: Fiber | undefined): { fiber: Fiber; index: number } | undefined {
-  let nextCursor = next;
-  let index = 0;
-
-  while (nextCursor !== undefined) {
-    if ((nextCursor.flags & Placement) !== NoFlags) {
-      if (index === 0) {
-        return undefined;
-      }
-
-      let appendCursor: Fiber | undefined = nextCursor;
-
-      while (appendCursor !== undefined) {
-        if ((appendCursor.flags & Placement) === NoFlags) {
-          return undefined;
-        }
-        appendCursor = appendCursor.sibling;
-      }
-
-      return { fiber: nextCursor, index };
-    }
-
-    if (hasHostCommitWork(nextCursor)) {
-      return undefined;
-    }
-
-    nextCursor = nextCursor.sibling;
-    index += 1;
-  }
-
-  return undefined;
 }
 
 function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
@@ -2000,7 +1979,9 @@ function commitHostFiber(
       fiber.hydrateExisting !== true &&
       fiber.flags === NoFlags &&
       fiber.subtreeFlags === NoFlags &&
-      fiber.hostChildListChanged !== true
+      fiber.hostChildListChanged !== true &&
+      fiber.childListChanged !== true &&
+      fiber.subtreeChildListChanged !== true
     ) {
       fiber.memoizedProps = fiber.pendingProps;
       return [element];
@@ -2045,6 +2026,7 @@ function commitHostFiber(
     } else if (
       fiber.hostChildListChanged ||
       fiber.childListChanged ||
+      fiber.subtreeChildListChanged ||
       fiber.hydrateExisting === true ||
       (fiber.subtreeFlags & Placement) !== NoFlags
     ) {
