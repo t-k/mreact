@@ -1,10 +1,29 @@
 # Mreact
 
-Mreact is an experimental React-flavored framework for building server-rendered apps that stay small and fast.
+Mreact is a React-flavored framework for building server-rendered apps.
 
 It takes inspiration from Marko's compiler-first and streaming model, with additional influence from Solid and Qwik. It is not a resumability framework; instead, it uses compiler-assisted server/client splitting to keep server-rendered routes free of browser runtime when they do not need it.
 
-APIs may change.
+## Motivations
+
+- **Fine-grained reactivity** - Use a dependency graph to update only the parts that need to change.
+- **Automatic server/client boundary inference** - Infer which route modules and components need browser runtime so static server-rendered paths can stay server-only by default.
+- **Modular runtime** - Avoid shipping client runtime for routes that do not need it. A route with no client-side signals can stay server-rendered without a client route bundle.
+- **Compile-time over runtime** - Focus on the compiler rather than the runtime to avoid a fat runtime.
+- **Chunk-based streaming SSR** - Favor memory efficiency and incremental delivery by sending HTML in chunks instead of buffering the full document, similar to Marko's streaming model.
+- **Dual environment optimization** - Compile server and browser output separately. The server output specializes in HTML, loaders, middleware, metadata, and server actions, while the browser output specializes in DOM updates and route-local interactivity.
+
+## Status
+
+Experimental. APIs may change.
+
+We are dogfooding it in our own products and have tested deployments on Cloud Run, Cloudflare, and AWS Lambda.
+
+## Performance
+
+Mreact aims to stay small and fast: small client bundles, low server rendering cost, streaming-friendly HTML, and short deployment startup paths.
+
+See the [Benchmarks](https://t-k.github.io/mreact/benchmarks) page for the latest benchmark results.
 
 ## Documentation
 
@@ -26,40 +45,6 @@ cd my-app
 pnpm install
 pnpm dev
 ```
-
-Common variants:
-
-```bash
-npx @reckona/create-mreact-app my-app --template tailwind --src-dir
-npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy cloudflare
-npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy container
-npx @reckona/create-mreact-app my-app --template basic --src-dir --deploy aws-lambda
-npx @reckona/create-mreact-app my-dashboard --template dashboard
-```
-
-Upgrade an existing generated app:
-
-```bash
-npx @reckona/create-mreact-app upgrade --dry-run
-npx @reckona/create-mreact-app upgrade
-```
-
-Build and run production output:
-
-```bash
-pnpm build
-pnpm start
-```
-
-## What Mreact Focuses On
-
-- **Fine-grained reactivity** - `cell`, `computed`, and `effect` track dependencies so updates can target the DOM work that changed.
-- **Automatic server/client inference** - server-rendered routes stay JavaScript-free when possible, while event handlers, reactive state, browser APIs, and explicit boundaries add the required browser runtime.
-- **Streaming SSR** - HTML can flush in chunks instead of buffering the full document.
-- **App Router** - file-system routing, layouts, loaders, route handlers, middleware, metadata, server actions, cache helpers, and deployment adapters.
-- **React compatibility** - React-like packages and `.compat.tsx` boundaries cover common React ecosystem use cases.
-
-Read the full guides in the documentation site: <https://t-k.github.io/mreact/>
 
 ## Examples
 

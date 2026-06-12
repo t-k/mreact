@@ -266,10 +266,10 @@ describe("docs-site example contract", () => {
     expect(layout).toContain("data-pagefind-body");
     expect(overview).toContain("# Mreact");
     expect(overview).toContain(
-      "Mreact is an experimental [React](https://react.dev/)-flavored framework for building server-rendered apps that stay small and fast.",
+      "Mreact is a [React](https://react.dev/)-flavored framework for building server-rendered apps.",
     );
     expect(overview).toContain(
-      "It takes inspiration from [Marko](https://markojs.com/)'s HTML-first streaming model, with additional influence from [Solid](https://www.solidjs.com/) and [Qwik](https://qwik.dev/).",
+      "It takes inspiration from [Marko](https://markojs.com/)'s compiler-first and streaming model, with additional influence from [Solid](https://www.solidjs.com/) and [Qwik](https://qwik.dev/).",
     );
     expect(overview).toContain("It is not a resumability framework;");
     expect(overview).not.toContain("Solid-style fine-grained reactivity");
@@ -2008,7 +2008,7 @@ describe("docs-site example contract", () => {
     expect(rootReadme.split("\n").length).toBeLessThan(260);
     expect(rootReadme).toContain("## Documentation");
     expect(rootReadme).toContain(
-      "Mreact is an experimental React-flavored framework for building server-rendered apps that stay small and fast.",
+      "Mreact is a React-flavored framework for building server-rendered apps.",
     );
     expect(rootReadme).toContain(
       "It takes inspiration from Marko's compiler-first and streaming model, with additional influence from Solid and Qwik.",

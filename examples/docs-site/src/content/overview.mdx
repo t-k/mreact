@@ -3,16 +3,16 @@ export const description = "Why Mreact exists, what it optimizes for, and how ex
 
 # Mreact
 
-Mreact is an experimental [React](https://react.dev/)-flavored framework for building server-rendered apps that stay small and fast.
+Mreact is a [React](https://react.dev/)-flavored framework for building server-rendered apps.
 
-It takes inspiration from [Marko](https://markojs.com/)'s HTML-first streaming model, with additional influence from [Solid](https://www.solidjs.com/) and [Qwik](https://qwik.dev/). It is not a resumability framework; instead, it uses compiler-assisted server/client splitting to keep server-rendered routes free of browser runtime when they do not need it.
+It takes inspiration from [Marko](https://markojs.com/)'s compiler-first and streaming model, with additional influence from [Solid](https://www.solidjs.com/) and [Qwik](https://qwik.dev/). It is not a resumability framework; instead, it uses compiler-assisted server/client splitting to keep server-rendered routes free of browser runtime when they do not need it.
 
 ## Motivations
 
 - **Fine-grained reactivity** - Use a dependency graph to update only the parts that need to change.
 - **Automatic server/client boundary inference** - Infer which route modules and components need browser runtime so static server-rendered paths can stay server-only by default.
 - **Modular runtime** - Avoid shipping client runtime for routes that do not need it. A route with no client-side signals can stay server-rendered without a client route bundle.
-- **Compile-time over runtime** - Prefer compiler work over a large browser runtime.
+- **Compile-time over runtime** - Focus on the compiler rather than the runtime to avoid a fat runtime.
 - **Chunk-based streaming SSR** - Favor memory efficiency and incremental delivery by sending HTML in chunks instead of buffering the full document, similar to Marko's streaming model.
 - **Dual environment optimization** - Compile server and browser output separately. The server output specializes in HTML, loaders, middleware, metadata, and server actions, while the browser output specializes in DOM updates and route-local interactivity.
 
@@ -26,4 +26,4 @@ We are dogfooding it in our own products and have tested deployments on Cloud Ru
 
 Mreact aims to stay small and fast: small client bundles, low server rendering cost, streaming-friendly HTML, and short deployment startup paths.
 
-See the [Benchmarks](/benchmarks/) page for the latest benchmark results and what they measure.
+See the [Benchmarks](/benchmarks/) page for the latest benchmark results.
