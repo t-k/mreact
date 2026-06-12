@@ -1,4 +1,4 @@
-import { renderWithRootRuntime, useLayoutEffect, useRef, type RootRuntime } from "./hooks.js";
+import { renderWithRootRuntime, scheduleRuntimeRerender, useLayoutEffect, useRef, type RootRuntime } from "./hooks.js";
 import { isReactCompatElement, type ReactCompatElement, type ReactCompatNode } from "./element.js";
 import { withHydrationComponentStack, type RenderOptions } from "./hydration.js";
 import type { ReconcileNode, ReconcileResult } from "./reconcile-types.js";
@@ -168,6 +168,7 @@ interface ClassLifecycleSnapshot {
   nextState?: Record<string, unknown>;
   force?: boolean;
   snapshot?: unknown;
+  callbacks?: (() => void)[];
 }
 
 interface ClassUpdateContext {
@@ -269,6 +270,7 @@ export function renderClassComponentWithRuntime(
   options: {
     currentInstance?: ClassComponentInstance;
     hasDirtyDescendant?: boolean;
+    allowSkip?: boolean;
   } = {},
 ): ClassComponentRenderResult {
   return renderWithRootRuntime(runtime, path, () => {
@@ -319,6 +321,7 @@ export function renderClassComponentWithRuntime(
       didCommitRef.current &&
       snapshot?.force !== true &&
       options.hasDirtyDescendant !== true &&
+      options.allowSkip !== false &&
       instance.shouldComponentUpdate?.(props, nextState) === false;
 
     instance.props = props;
@@ -542,14 +545,17 @@ function enqueueClassSetState(
           ...nextPartial,
         };
 
-  classLifecycleSnapshots.set(instance, {
+  const nextSnapshot: ClassLifecycleSnapshot = {
     ...snapshot,
     previousState,
     nextState,
-  });
+  };
+  if (callback !== undefined) {
+    nextSnapshot.callbacks = [...(snapshot?.callbacks ?? []), callback.bind(instance)];
+  }
+  classLifecycleSnapshots.set(instance, nextSnapshot);
 
   markClassInstanceDirty(instance, updateContext);
-  callback?.call(instance);
 }
 
 function enqueueClassForceUpdate(
@@ -563,12 +569,17 @@ function enqueueClassForceUpdate(
     return;
   }
 
-  classLifecycleSnapshots.set(instance, {
+  const snapshot = classLifecycleSnapshots.get(instance);
+  const nextSnapshot: ClassLifecycleSnapshot = {
+    ...snapshot,
     previousState: instance.state ?? {},
     force: true,
-  });
+  };
+  if (callback !== undefined) {
+    nextSnapshot.callbacks = [...(snapshot?.callbacks ?? []), callback.bind(instance)];
+  }
+  classLifecycleSnapshots.set(instance, nextSnapshot);
   markClassInstanceDirty(instance, updateContext);
-  callback?.call(instance);
 }
 
 function markClassInstanceDirty(
@@ -582,7 +593,7 @@ function markClassInstanceDirty(
   if (runtimeInstance !== undefined) {
     runtimeInstance.dirty = true;
   }
-  updateContext.runtime.rerender();
+  scheduleRuntimeRerender(updateContext.runtime);
 }
 
 export function hasDirtyClassUpdate(
@@ -664,13 +675,16 @@ function installClassLifecycleEffects(
   replacedInstance?: ClassComponentInstance,
 ): void {
   useLayoutEffect(() => {
+    const lifecycleSnapshot = classLifecycleSnapshots.get(instance);
+
     if (replacedInstance !== undefined) {
       replacedInstance.componentWillUnmount?.();
       classUpdateContexts.delete(replacedInstance);
     }
 
     if (skipUpdate) {
-      classLifecycleSnapshots.delete(instance);
+      runClassUpdateCallbacks(lifecycleSnapshot);
+      deleteClassLifecycleSnapshotIfCurrent(instance, lifecycleSnapshot);
       return;
     }
 
@@ -678,14 +692,15 @@ function installClassLifecycleEffects(
       instance.componentDidUpdate?.(
         previousProps ?? {},
         previousState,
-        classLifecycleSnapshots.get(instance)?.snapshot,
+        lifecycleSnapshot?.snapshot,
       );
     } else {
       didCommitRef.current = true;
       instance.componentDidMount?.();
     }
 
-    classLifecycleSnapshots.delete(instance);
+    runClassUpdateCallbacks(lifecycleSnapshot);
+    deleteClassLifecycleSnapshotIfCurrent(instance, lifecycleSnapshot);
   });
 
   useLayoutEffect(() => {
@@ -695,6 +710,23 @@ function installClassLifecycleEffects(
       classUpdateContexts.delete(instance);
     };
   }, []);
+}
+
+function runClassUpdateCallbacks(snapshot: ClassLifecycleSnapshot | undefined): void {
+  const callbacks = snapshot?.callbacks ?? [];
+
+  for (const callback of callbacks) {
+    callback();
+  }
+}
+
+function deleteClassLifecycleSnapshotIfCurrent(
+  instance: ClassComponentInstance,
+  snapshot: ClassLifecycleSnapshot | undefined,
+): void {
+  if (classLifecycleSnapshots.get(instance) === snapshot) {
+    classLifecycleSnapshots.delete(instance);
+  }
 }
 
 function isErrorBoundaryClass(

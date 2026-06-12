@@ -1962,24 +1962,10 @@ function runActionStateDispatch(
   );
 }
 
-function scheduleInstanceUpdate(
+export function scheduleRuntimeRerender(
   runtime: RootRuntime,
-  instance: ComponentInstance,
   options: { deferSync?: boolean } = {},
 ): void {
-  if (instance.disposed === true) {
-    return;
-  }
-
-  instance.dirty = true;
-  if (
-    hookRenderState.currentRuntime === runtime &&
-    hookRenderState.currentInstance === instance
-  ) {
-    runtime.renderPhaseUpdate = true;
-    return;
-  }
-
   if (transitionDepth === 0) {
     syncVersion += 1;
     if (hookRenderState.hostCommitDepth > 0) {
@@ -2005,6 +1991,27 @@ function scheduleInstanceUpdate(
   if (currentTransitionContext !== undefined) {
     queueTransitionRerender(runtime, currentTransitionContext);
   }
+}
+
+function scheduleInstanceUpdate(
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+  options: { deferSync?: boolean } = {},
+): void {
+  if (instance.disposed === true) {
+    return;
+  }
+
+  instance.dirty = true;
+  if (
+    hookRenderState.currentRuntime === runtime &&
+    hookRenderState.currentInstance === instance
+  ) {
+    runtime.renderPhaseUpdate = true;
+    return;
+  }
+
+  scheduleRuntimeRerender(runtime, options);
 }
 
 function flushHostCommitRerenders(): void {

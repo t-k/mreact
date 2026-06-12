@@ -362,6 +362,13 @@ export const rechartsFixtures: CompatFixture[] = [
     ],
     riskTags: ["svg", "context", "layout-measurement", "clone-element"],
     viewport: { width: 960, height: 720 },
+    interactions: [
+      {
+        name: "wait-for-layout-settle",
+        description: "Wait for post-mount legend and chart measurement updates to settle.",
+        run: "waitForAnimationEnd",
+      },
+    ],
     render: () => (
       <ChartFrame>
         <div className="split-chart-row">
@@ -389,7 +396,7 @@ export const rechartsFixtures: CompatFixture[] = [
             startAngle={90}
             endAngle={-270}
           >
-            <RadialBar dataKey="value" background isAnimationActive={false} />
+            <RadialBar dataKey="value" background legendType="circle" isAnimationActive={false} />
             <Legend />
             <Tooltip />
           </RadialBarChart>
@@ -405,6 +412,13 @@ export const rechartsFixtures: CompatFixture[] = [
     features: ["Treemap", "Sankey", "SunburstChart", "FunnelChart", "Funnel", "Tooltip"],
     riskTags: ["svg", "layout-measurement", "event-delegation"],
     viewport: { width: 1080, height: 840 },
+    interactions: [
+      {
+        name: "wait-for-layout-settle",
+        description: "Wait for post-mount hierarchy and funnel layout updates to settle.",
+        run: "waitForAnimationEnd",
+      },
+    ],
     render: () => (
       <ChartFrame>
         <div className="grid-chart-panel">

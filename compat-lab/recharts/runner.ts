@@ -234,7 +234,7 @@ async function runInteractions(page: Page, interactions: CompatInteraction[]): P
       const box = await page.locator("svg").first().boundingBox();
       if (box !== null) {
         await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
-        await page.waitForTimeout(100);
+        await page.waitForTimeout(450);
       }
     } else if (interaction.run === "resizeViewport") {
       await page.setViewportSize({ width: 840, height: 640 });
