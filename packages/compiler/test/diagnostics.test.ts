@@ -319,6 +319,32 @@ describe("compiler diagnostics", () => {
     );
   });
 
+  test.each([
+    ["setter return type", "class C { set value(v): string {} }"],
+    ["optional setter parameter", "class C { set value(v?: string) {} }"],
+    ["duplicate switch default", "switch (value) { default: break; default: break; }"],
+  ])(
+    "reports stricter Oxc parser diagnostics for invalid TypeScript: %s",
+    (_name, invalidCode) => {
+      const output = transform({
+        code: `${invalidCode}
+export function App() { return <div />; }`,
+        filename: "App.tsx",
+        target: "client",
+        dev: true,
+        mode: "compat",
+        parser: "oxc",
+      });
+
+      expect(output.diagnostics).toContainEqual(
+        expect.objectContaining({
+          code: "MR_OXC_PARSE_ERROR",
+          level: "error",
+        }),
+      );
+    },
+  );
+
   test("reports compat import component references inside await boundary renderers without stream lowering", () => {
     const output = transform({
       code: `

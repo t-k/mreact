@@ -47,7 +47,7 @@ describe("Rust/Oxc compiler migration", () => {
     };
 
     expect(packageJson.dependencies).toMatchObject({
-      "oxc-parser": "0.129.0",
+      "oxc-parser": "0.135.0",
       "oxc-transform": "0.129.0",
     });
     expect(packageJson.dependencies).not.toHaveProperty("typescript");
