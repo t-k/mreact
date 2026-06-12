@@ -16,7 +16,7 @@ export interface Cell<T> extends ReadonlyCell<T> {
     set(value: T | ((prev: T) => T)): void;
 }
 
-// @public
+// @public (undocumented)
 export function cell<T>(initial: T): Cell<T>;
 
 // @public

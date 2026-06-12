@@ -16,13 +16,13 @@ import type { ServerOutputMode as ServerOutputMode_2 } from '@reckona/mreact-sha
 import type { SourceLocation as SourceLocation_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { TransformOutput as TransformOutput_2 } from '@reckona/mreact-shared/compiler-contract';
 
-// @public (undocumented)
+// @public
 export function analyzeBoundaryGraph(input: BoundaryGraphInput): Promise<BoundaryGraphResult>;
 
-// @public (undocumented)
+// @public
 export type BoundaryClassification = "client-boundary" | "client-route" | "server-action" | "server-only" | "server-render" | "shared" | "unknown";
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphClientBoundary {
     // (undocumented)
     exportNames?: readonly string[];
@@ -34,7 +34,7 @@ export interface BoundaryGraphClientBoundary {
     source: string;
 }
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphEntry {
     // (undocumented)
     file: string;
@@ -42,10 +42,10 @@ export interface BoundaryGraphEntry {
     kind: BoundaryGraphEntryKind;
 }
 
-// @public (undocumented)
+// @public
 export type BoundaryGraphEntryKind = "module" | "route-layout" | "route-page" | "route-template";
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphExport {
     // (undocumented)
     classification: BoundaryClassification;
@@ -53,7 +53,7 @@ export interface BoundaryGraphExport {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphInput {
     // (undocumented)
     entries: readonly BoundaryGraphEntry[];
@@ -66,7 +66,7 @@ export interface BoundaryGraphInput {
     }): Promise<string | undefined> | string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphModule {
     // (undocumented)
     classification: BoundaryClassification;
@@ -76,7 +76,7 @@ export interface BoundaryGraphModule {
     file: string;
 }
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphResult {
     // (undocumented)
     clientBoundaries: BoundaryGraphClientBoundary[];
@@ -90,7 +90,7 @@ export interface BoundaryGraphResult {
     trace: BoundaryGraphTraceEvent[];
 }
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphServerActionSite {
     // (undocumented)
     end: number;
@@ -112,7 +112,7 @@ export interface BoundaryGraphServerActionSite {
     start: number;
 }
 
-// @public (undocumented)
+// @public
 export interface BoundaryGraphTraceEvent {
     // (undocumented)
     classification: BoundaryClassification;
@@ -140,16 +140,16 @@ export interface BoundaryGraphTraceEvent {
     viaExportName?: string;
 }
 
-// @public (undocumented)
+// @public
 export type BoundaryGraphTraceKind = "client-boundary" | "export" | "module" | "server-action";
 
-// @public (undocumented)
+// @public
 export type BoundaryGraphTraceReason = "client-runtime-export" | "module-classification" | "node-builtin-import" | "rendered-import" | "server-action-expression" | "server-render-export" | "static-export" | "use-client-directive" | "unknown-module" | "use-server-directive";
 
-// @public (undocumented)
+// @public
 export type ClientReferenceMetadata = ClientReferenceMetadata_2;
 
-// @public (undocumented)
+// @public
 export interface ClientRouteModuleAnalysis {
     // (undocumented)
     clientRuntime: boolean;
@@ -181,101 +181,101 @@ export interface ClientRouteModuleAnalysis {
     topLevelExportRenderInfo: TopLevelExportRenderInfo[];
 }
 
-// @public (undocumented)
+// @public
 export interface ClientRouteStaticImportReference extends StaticImportReference {
     // (undocumented)
     specifiers: StaticImportSpecifierReference[];
 }
 
-// @public (undocumented)
+// @public
 export function collectClientRouteModuleAnalysis(input: {
     code: string;
     filename?: string | undefined;
 }): ClientRouteModuleAnalysis;
 
-// @public (undocumented)
+// @public
 export function collectFormActionExpressionReferences(input: {
     code: string;
     filename?: string | undefined;
 }): FormActionExpressionReference[];
 
-// @public (undocumented)
+// @public
 export function collectFormActionReferenceNames(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
 
-// @public (undocumented)
+// @public
 export function collectFormActionReferences(input: {
     code: string;
     filename?: string | undefined;
 }): FormActionReference[];
 
-// @public (undocumented)
+// @public
 export function collectIdentifierReferenceNames(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
 
-// @public (undocumented)
+// @public
 export function collectJsxComponentRootNames(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
 
-// @public (undocumented)
+// @public
 export function collectStaticExportReferences(input: {
     code: string;
     filename?: string | undefined;
 }): StaticExportReference[];
 
-// @public (undocumented)
+// @public
 export function collectStaticImportReferences(input: {
     code: string;
     filename?: string | undefined;
 }): StaticImportReference[];
 
-// @public (undocumented)
+// @public
 export function collectStaticModuleSpecifiers(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
 
-// @public (undocumented)
+// @public
 export function collectTopLevelExportRenderInfo(input: {
     code: string;
     filename?: string | undefined;
 }): TopLevelExportRenderInfo[];
 
-// @public (undocumented)
+// @public
 export function collectTopLevelValueExportNames(input: {
     code: string;
     filename?: string | undefined;
 }): string[];
 
-// @public (undocumented)
+// @public
 export type CompilerFrontend = CompilerFrontend_2;
 
-// @public (undocumented)
+// @public
 export type CompilerMetadata = ModuleMetadata_2["compiler"];
 
-// @public (undocumented)
+// @public
 export type CompileTarget = CompileTarget_2;
 
-// @public (undocumented)
+// @public
 export type ComponentMetadata = ComponentMetadata_2;
 
-// @public (undocumented)
+// @public
 export function demoteTopLevelExportDeclarations(input: {
     code: string;
     filename?: string | undefined;
     names: readonly string[];
 }): string;
 
-// @public (undocumented)
+// @public
 export type Diagnostic = Diagnostic_2;
 
-// @public (undocumented)
+// @public
 export interface FormActionExpressionReference {
     // (undocumented)
     end: number;
@@ -289,7 +289,7 @@ export interface FormActionExpressionReference {
     start: number;
 }
 
-// @public (undocumented)
+// @public
 export interface FormActionReference {
     // (undocumented)
     end: number;
@@ -299,39 +299,39 @@ export interface FormActionReference {
     start: number;
 }
 
-// @public (undocumented)
+// @public
 export function formatDiagnostic(filename: string, diagnostic: Diagnostic): string;
 
-// @public (undocumented)
+// @public
 export function hasClientRuntimeSyntax(input: {
     code: string;
     filename?: string | undefined;
 }): boolean;
 
-// @public (undocumented)
+// @public
 export function hasModuleDirective(input: {
     code: string;
     directive: string;
     filename?: string | undefined;
 }): boolean;
 
-// @public (undocumented)
+// @public
 export function hasTopLevelExportDeclaration(input: {
     code: string;
     filename?: string | undefined;
     names: readonly string[];
 }): boolean;
 
-// @public (undocumented)
+// @public
 export type ModuleMetadata = ModuleMetadata_2;
 
-// @public (undocumented)
+// @public
 export type RuntimeImport = RuntimeImport_2;
 
-// @public (undocumented)
+// @public
 export type ServerBootstrapMode = ServerBootstrapMode_2;
 
-// @public (undocumented)
+// @public
 export interface ServerEscapeOptions {
     // (undocumented)
     batchImportName: string;
@@ -339,13 +339,13 @@ export interface ServerEscapeOptions {
     batchImportSource: string;
 }
 
-// @public (undocumented)
+// @public
 export type ServerOutputMode = ServerOutputMode_2;
 
-// @public (undocumented)
+// @public
 export type SourceLocation = SourceLocation_2;
 
-// @public (undocumented)
+// @public
 export interface StaticExportReference {
     // (undocumented)
     exportAll: boolean;
@@ -357,7 +357,7 @@ export interface StaticExportReference {
     specifiers: StaticExportSpecifierReference[];
 }
 
-// @public (undocumented)
+// @public
 export interface StaticExportSpecifierReference {
     // (undocumented)
     exportedName: string;
@@ -365,7 +365,7 @@ export interface StaticExportSpecifierReference {
     localName: string;
 }
 
-// @public (undocumented)
+// @public
 export interface StaticImportReference {
     // (undocumented)
     localNames: string[];
@@ -375,7 +375,7 @@ export interface StaticImportReference {
     source: string;
 }
 
-// @public (undocumented)
+// @public
 export interface StaticImportSpecifierReference {
     // (undocumented)
     importedName: string;
@@ -385,20 +385,20 @@ export interface StaticImportSpecifierReference {
     localName: string;
 }
 
-// @public (undocumented)
+// @public
 export function stripTopLevelExportDeclarations(input: {
     code: string;
     filename?: string | undefined;
     names: readonly string[];
 }): string;
 
-// @public (undocumented)
+// @public
 export function stripUnusedStaticValueImports(input: {
     code: string;
     filename?: string | undefined;
 }): string;
 
-// @public (undocumented)
+// @public
 export interface TopLevelExportRenderInfo {
     // (undocumented)
     calledComponentRoots: string[];
@@ -410,10 +410,10 @@ export interface TopLevelExportRenderInfo {
     renderedComponentRoots: string[];
 }
 
-// @public (undocumented)
+// @public
 export function transform(input: TransformInput): TransformOutput;
 
-// @public (undocumented)
+// @public
 export interface TransformInput {
     // (undocumented)
     clientBoundaryFallbackImports?: readonly string[];
@@ -453,7 +453,7 @@ export interface TransformInput {
     target: CompileTarget;
 }
 
-// @public (undocumented)
+// @public
 export type TransformOutput = TransformOutput_2;
 
 // (No @packageDocumentation comment for this package)

@@ -13,16 +13,16 @@ import { SessionCookieOptions } from '@reckona/mreact-router/session';
 import { SessionRecord } from '@reckona/mreact-router/session';
 import { SessionStore } from '@reckona/mreact-router/session';
 
-// @public (undocumented)
+// @public
 export const __MREACT_AUTH_SESSION_SCRIPT_ID = "__mreact_auth_session";
 
-// @public (undocumented)
+// @public
 export function __resetAuthForTesting(): void;
 
-// @public (undocumented)
+// @public
 export type AuthClaimsSerializer = (data: unknown) => AuthSessionClaims | undefined;
 
-// @public (undocumented)
+// @public
 export interface AuthConfig {
     // (undocumented)
     forbiddenTo?: string | undefined;
@@ -32,7 +32,7 @@ export interface AuthConfig {
     serializeClaims?: AuthClaimsSerializer | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AuthGuardOptions extends SessionCookieOptions {
     // (undocumented)
     forbiddenTo?: string | undefined;
@@ -42,7 +42,7 @@ export interface AuthGuardOptions extends SessionCookieOptions {
     redirectTo?: string | undefined;
 }
 
-// @public (undocumented)
+// @public
 export interface AuthorizationPolicy {
     // (undocumented)
     permissions?: readonly string[] | undefined;
@@ -50,7 +50,7 @@ export interface AuthorizationPolicy {
     roles?: readonly string[] | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type AuthorizationResult = {
     authorized: true;
 } | {
@@ -67,13 +67,13 @@ export interface AuthRequestOptions {
     config?: AuthConfig | undefined;
 }
 
-// @public (undocumented)
+// @public
 export type AuthRequirement = string | readonly string[];
 
-// @public (undocumented)
+// @public
 export type AuthRequirementMode = "all" | "any";
 
-// @public (undocumented)
+// @public
 export interface AuthSessionClaims {
     // (undocumented)
     [claim: string]: unknown;
@@ -126,7 +126,7 @@ export { SessionRecord }
 
 export { SessionStore }
 
-// @public (undocumented)
+// @public
 export type TryAuthResult<TData> = {
     authorized: true;
     session: SessionRecord<TData>;
