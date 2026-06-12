@@ -36,14 +36,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Test router client build
         run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
       - name: Test
         run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
 
       - name: E2E smoke
         run: pnpm test:e2e:smoke
