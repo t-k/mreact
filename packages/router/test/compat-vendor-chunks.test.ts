@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
+import { rewriteCompatVendorPlaceholderImportsForRunner } from "../src/module-runner.js";
 import { startServer } from "../src/serve.js";
 
 // The react-compat server runtime must be emitted once as shared vendor
@@ -94,6 +95,15 @@ async function routeModuleSources(outDir: string): Promise<string[]> {
 }
 
 describe("compat server vendor chunks", () => {
+  test("rewrites compat placeholders to file URLs for the prerender runner", () => {
+    const code = `import { createElement } from "mreact-compat-vendor:index";`;
+    const rewritten = rewriteCompatVendorPlaceholderImportsForRunner(code);
+
+    expect(rewritten).toContain('from "file://');
+    expect(rewritten).not.toContain("mreact-compat-vendor:");
+    expect(rewritten).not.toContain('from "@reckona/mreact-compat"');
+  });
+
   test("emits shared compat chunks instead of inlining the runtime per route", async () => {
     const { appDir, outDir } = await createCompatApp();
     await buildApp({ appDir, outDir });

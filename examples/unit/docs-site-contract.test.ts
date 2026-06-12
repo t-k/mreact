@@ -1954,6 +1954,7 @@ describe("docs-site example contract", () => {
     const benchmarkFilters = await readDocsSite("public/docs-benchmarks.js");
     const benchmarkSync = await readDocsSite("scripts/sync-benchmark-results.ts");
     const layout = await readDocsSite("src/app/layout.tsx");
+    const rootReadme = await readFile(join(root, "README.md"), "utf8");
 
     expect(css).toContain("list-style: disc");
     expect(css).toContain("list-style: decimal");
@@ -1982,10 +1983,23 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain("browser create 1k rows");
     expect(benchmarkData).toContain("mreact-app-router");
     expect(benchmarks).toContain("Primitive DOM and reactivity work");
+    expect(benchmarks).toContain("Marko, Vue, Svelte, Angular, Qwik, React, Solid, and Mreact");
     expect(benchmarks).toContain("Browser runtime behavior");
     expect(benchmarks).toContain("App router and deployment paths");
+    expect(benchmarks).toContain(
+      "Marko Run, Nuxt, SvelteKit, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and Mreact app router",
+    );
+    expect(benchmarks).toContain("Package-level microbenchmarks");
     expect(benchmarks).toContain("Resumability-oriented frameworks");
     expect(benchmarks).toContain("Primitive DOM-update cases mostly measure already-active update paths");
+    expect(rootReadme).toContain("The repository contains several benchmark tracks:");
+    expect(rootReadme).toContain("Marko, Vue, Svelte, Angular, Qwik, React, Solid, and mreact");
+    expect(rootReadme).toContain(
+      "Marko Run, Nuxt, SvelteKit, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router",
+    );
+    expect(rootReadme).toContain("pnpm bench:primitive-browser");
+    expect(rootReadme).toContain("pnpm bench:non-router");
+    expect(rootReadme).toContain("pnpm bench:lambda-routes");
     expect(benchmarks.indexOf("## How to read results")).toBeLessThan(
       benchmarks.indexOf("## Latest results"),
     );

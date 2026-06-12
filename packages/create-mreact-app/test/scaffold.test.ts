@@ -192,7 +192,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.deploy).toBe("wrangler deploy");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=cloudflare");
     expect(packageJson.scripts?.dev).toBe("pnpm run build && wrangler dev");
-    expect(packageJson.devDependencies?.wrangler).toBeDefined();
+    expect(packageJson.devDependencies?.wrangler).toBe("^4.100.0");
     expect(packageJson.devDependencies?.["@cloudflare/workers-types"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@cloudflare/workers-types");
     expect(tsconfig.include).toContain("worker-env.d.ts");
@@ -270,8 +270,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.dependencies?.["@reckona/mreact-auth"]).toBeDefined();
     expect(packageJson.dependencies?.["@reckona/mreact-devtools"]).toBeDefined();
     expect(packageJson.dependencies?.["@reckona/mreact-query"]).toBeDefined();
-    expect(packageJson.devDependencies?.oxlint).toBeDefined();
-    expect(packageJson.devDependencies?.vitest).toBeDefined();
+    expect(packageJson.devDependencies?.oxlint).toBe("^1.69.0");
+    expect(packageJson.devDependencies?.vitest).toBe("^4.1.8");
     expect(packageJson.pnpm?.onlyBuiltDependencies).toEqual([
       "@parcel/watcher",
       "esbuild",

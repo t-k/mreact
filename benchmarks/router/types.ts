@@ -2,6 +2,9 @@ export type AppFrameworkName =
   | "mreact-app-router"
   | "mreact-app-router+mreact react-compat"
   | "mreact-app-router+log enabled"
+  | "nuxt"
+  | "svelte-kit"
+  | "analog"
   | "next-app-router"
   | "solid-start"
   | "tanstack-start"
@@ -50,6 +53,7 @@ export type AppFrameworkCaseName =
   | "app build output gzip bytes";
 
 export interface AppFrameworkAdapter {
+  fixtureKind?: "lightweight-proxy" | "production-app";
   name: AppFrameworkName;
   version: string;
   setup?: () => Promise<void>;

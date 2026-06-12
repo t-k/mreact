@@ -19,7 +19,19 @@ export type PrimitiveCase = (
 ) => Promise<PrimitiveCaseResult> | PrimitiveCaseResult;
 
 export interface PrimitiveAdapter {
-  name: "marko" | "qwik" | "qwik-v2" | "react" | "mreact react-compat" | "solid" | "solid-v2" | "mreact";
+  fixtureKind?: "framework-runtime" | "simple-dom";
+  name:
+    | "marko"
+    | "vue"
+    | "svelte"
+    | "angular"
+    | "qwik"
+    | "qwik-v2"
+    | "react"
+    | "mreact react-compat"
+    | "solid"
+    | "solid-v2"
+    | "mreact";
   version: string;
   cases: Partial<Record<PrimitiveCaseName, PrimitiveCase>>;
   bundleEntry?: string;

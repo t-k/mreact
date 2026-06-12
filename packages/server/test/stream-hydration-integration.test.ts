@@ -129,7 +129,7 @@ describe("server streaming hydration integration", () => {
     expect(document.body.querySelector("span[data-mreact-oob-placeholder]")).not.toBeNull();
     document.body.insertAdjacentHTML(
       "beforeend",
-      '<template data-mreact-oob-fragment="suspense-1"><button>Ada</button></template>',
+      '<template data-mreact-oob-fragment="suspense-1"><button>Ada</button></template><mreact-oob-complete hidden data-mreact-oob-complete="suspense-1"></mreact-oob-complete>',
     );
     await Promise.resolve();
 

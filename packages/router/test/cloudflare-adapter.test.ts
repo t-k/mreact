@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import { __resetQueryClientForTesting } from "@reckona/mreact-query";
+import { __resetQueryClientForTesting, getQueryClient } from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
 import {
   createCloudflareBuiltRequestHandler,
@@ -771,6 +771,65 @@ export async function POST(request: Request) {
       } else {
         globalWithStorage.AsyncLocalStorage = previous;
       }
+    }
+  });
+
+  test("provides Cloudflare query client scope to nested page render helpers when AsyncLocalStorage is unavailable", async () => {
+    __resetQueryClientForTesting();
+    const globalWithStorage = globalThis as {
+      AsyncLocalStorage?: unknown;
+    };
+    const previous = globalWithStorage.AsyncLocalStorage;
+    delete globalWithStorage.AsyncLocalStorage;
+
+    function readProfileNameFromScopedClient(): string | undefined {
+      return getQueryClient().getQueryData<{ name: string }>(["profile"])?.name;
+    }
+
+    try {
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {},
+        clientManifest: { routes: [] },
+        renderRoute: createCloudflareRouteModuleRenderer({
+          modules: {
+            "page.tsx": {
+              async loader({ queryClient }) {
+                const profile = await queryClient.fetchQuery({
+                  queryKey: ["profile"],
+                  queryFn: async () => ({ name: "Ada" }),
+                });
+
+                return { profile };
+              },
+              default() {
+                return `<main>${readProfileNameFromScopedClient()}</main>`;
+              },
+            },
+          },
+        }),
+        serverManifest: {
+          files: {},
+          routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+          version: 1,
+        },
+      });
+
+      const response = await handler.fetch(
+        new Request("https://app.example/"),
+        {},
+        createExecutionContext(),
+      );
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html).toContain("<main>Ada</main>");
+    } finally {
+      if (previous === undefined) {
+        delete globalWithStorage.AsyncLocalStorage;
+      } else {
+        globalWithStorage.AsyncLocalStorage = previous;
+      }
+      __resetQueryClientForTesting();
     }
   });
 

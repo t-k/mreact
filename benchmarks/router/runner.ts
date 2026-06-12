@@ -234,7 +234,10 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
       "Measures elapsed time until fetch resolves response headers for the real streaming route.",
     metric: "duration",
     unit: "ms",
-    invoke: async (adapter) => (await measureStreamingTimings(adapter)).firstByteMs,
+    invoke: async (adapter) =>
+      adapter.renderToRealStream === undefined
+        ? undefined
+        : (await measureStreamingTimings(adapter)).firstByteMs,
   },
   {
     name: "app streaming first chunk 1000 nodes",
@@ -242,7 +245,10 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
       "Measures elapsed time until the first response body chunk arrives for the real streaming route.",
     metric: "duration",
     unit: "ms",
-    invoke: async (adapter) => (await measureStreamingTimings(adapter)).firstChunkMs,
+    invoke: async (adapter) =>
+      adapter.renderToRealStream === undefined
+        ? undefined
+        : (await measureStreamingTimings(adapter)).firstChunkMs,
   },
   {
     name: "app streaming full body 1000 nodes",
@@ -250,7 +256,10 @@ const durationRouterBenchmarkCases: DurationRouterBenchmarkCase[] = [
       "Measures elapsed time until the complete real streaming response body is consumed and validated.",
     metric: "duration",
     unit: "ms",
-    invoke: async (adapter) => (await measureStreamingTimings(adapter)).fullBodyMs,
+    invoke: async (adapter) =>
+      adapter.renderToRealStream === undefined
+        ? undefined
+        : (await measureStreamingTimings(adapter)).fullBodyMs,
   },
   {
     name: "app real streaming 1000 nodes (async 50ms)",

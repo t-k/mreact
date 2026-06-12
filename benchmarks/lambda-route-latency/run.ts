@@ -61,6 +61,36 @@ for (let index = 1; index <= repeatCount; index += 1) {
 
 rows.push(await invokeScenario(handler, events, "first-login", "/login", 1));
 
+// AWS Lambda target app where middleware and route loaders share one heavy
+// runtime package. Measures per-environment route first hits, cross-route
+// first hits, and same-route re-hits against the lambda artifact layout.
+const sharedRootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-shared-runtime-pkg-"));
+
+await writeSharedRuntimePackageFixtureApp(sharedRootDir);
+await buildApp({
+  allowedSourceDirs: ["app"],
+  outDir: join(sharedRootDir, ".mreact"),
+  projectRoot: sharedRootDir,
+  routesDir: "app",
+  targets: ["aws-lambda"],
+});
+
+const sharedPackageHandler = createAwsLambdaRequestHandler({
+  logger,
+  outDir: join(sharedRootDir, ".mreact"),
+  timings: true,
+});
+
+rows.push(await invokeScenario(sharedPackageHandler, events, "shared-pkg-first-users", "/users", 1));
+rows.push(
+  await invokeScenario(sharedPackageHandler, events, "shared-pkg-cross-route-families", "/families", 1),
+);
+rows.push(await invokeScenario(sharedPackageHandler, events, "shared-pkg-cross-route-root", "/", 1));
+
+for (let index = 1; index <= repeatCount; index += 1) {
+  rows.push(await invokeScenario(sharedPackageHandler, events, "shared-pkg-rehit-users", "/users", index));
+}
+
 const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
 const dir = await createDatedResultsDir();
 const markdown = formatLambdaRouteLatencyMarkdown(env, rows);
@@ -124,6 +154,66 @@ export default function Login() {
 }
 `,
   );
+}
+
+async function writeSharedRuntimePackageFixtureApp(rootDir: string): Promise<void> {
+  const appDir = join(rootDir, "app");
+  const packageDir = join(rootDir, "node_modules", "lambda-db");
+  const heavyFunctions = Array.from(
+    { length: 4000 },
+    (_, index) => `export function dbHelper${index}(left, right) { return left * ${index} + right; }`,
+  ).join("\n");
+  const registry = `export const registry = [${Array.from({ length: 4000 }, (_, index) => `dbHelper${index}`).join(", ")}];`;
+
+  await mkdir(packageDir, { recursive: true });
+  await mkdir(join(appDir, "users"), { recursive: true });
+  await mkdir(join(appDir, "families"), { recursive: true });
+  await writeFile(
+    join(packageDir, "package.json"),
+    JSON.stringify({ exports: "./index.js", name: "lambda-db", type: "module" }),
+  );
+  await writeFile(
+    join(packageDir, "index.js"),
+    `${heavyFunctions}
+${registry}
+export function queryTitle(name) {
+  return "title:" + registry.length + ":" + name;
+}
+export function verifySession(token) {
+  return registry.length > 0 && token === "ok";
+}
+`,
+  );
+  await writeFile(
+    join(rootDir, "package.json"),
+    JSON.stringify({ dependencies: { "lambda-db": "1.0.0" } }),
+  );
+  await writeFile(
+    join(appDir, "middleware.ts"),
+    `import { verifySession } from "lambda-db";
+
+export const config = { matcher: "/:path*" };
+
+export function middleware(request) {
+  verifySession(request.headers.get("cookie") ?? "ok");
+}
+`,
+  );
+
+  const loaderPage = (name: string) => `import { queryTitle } from "lambda-db";
+
+export function loader() {
+  return { title: queryTitle("${name}") };
+}
+
+export default function Page(props) {
+  return <main>{props.data.title}</main>;
+}
+`;
+
+  await writeFile(join(appDir, "page.tsx"), loaderPage("root"));
+  await writeFile(join(appDir, "users", "page.tsx"), loaderPage("users"));
+  await writeFile(join(appDir, "families", "page.tsx"), loaderPage("families"));
 }
 
 async function invokeScenario(

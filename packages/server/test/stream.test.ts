@@ -414,6 +414,30 @@ describe("server streaming runtime", () => {
     expect(scriptIndex).toBeGreaterThan(fragmentClose);
   });
 
+  test("out-of-order boundary emits a completion marker after the OOB template", async () => {
+    const html = await renderToString((sink) => {
+      renderOutOfOrderBoundary(
+        sink,
+        "frag-1",
+        Promise.resolve("Ada"),
+        (boundarySink, value) => {
+          boundarySink.append(`<strong>${value}</strong>`);
+        },
+        {
+          placeholder(boundarySink) {
+            boundarySink.append("<span>Loading</span>");
+          },
+        },
+      );
+    });
+
+    const fragmentClose = html.indexOf("</template>", html.indexOf("oob-fragment"));
+    const markerIndex = html.indexOf('data-mreact-oob-complete="frag-1"');
+
+    expect(fragmentClose).toBeGreaterThan(-1);
+    expect(markerIndex).toBeGreaterThan(fragmentClose);
+  });
+
   test("async boundary renders catch content for rejected values", async () => {
     const sink = createStringSink();
 
@@ -454,7 +478,7 @@ describe("server streaming runtime", () => {
     });
 
     expect(html).toBe(
-      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -477,7 +501,7 @@ describe("server streaming runtime", () => {
     });
 
     expect(html).toBe(
-      '<div data-mreact-oob-placeholder="mreact-0"><ol><li>Loading</li></ol></div><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<div data-mreact-oob-placeholder="mreact-0"><ol><li>Loading</li></ol></div><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -502,7 +526,7 @@ describe("server streaming runtime", () => {
     });
 
     expect(html).toBe(
-      '<span data-mreact-oob-placeholder="mreact-1"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-1"><strong>load failed</strong></template>',
+      '<span data-mreact-oob-placeholder="mreact-1"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-1"><strong>load failed</strong></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-1"></mreact-oob-complete>',
     );
   });
 
@@ -521,6 +545,7 @@ describe("server streaming runtime", () => {
     renderOutOfOrderReorderScript(sink);
 
     expect(sink.toString()).toContain("data-mreact-oob-fragment");
+    expect(sink.toString()).toContain("data-mreact-oob-complete");
     expect(sink.toString()).toContain("data-mreact-oob-placeholder");
     expect(sink.toString()).toContain("MutationObserver");
   });

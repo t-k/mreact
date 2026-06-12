@@ -11,6 +11,6 @@
         "specifiers": ["renderOutOfOrderBoundary"]
       }
     ],
-    "serverStreamHtml": "<section>Before<span data-mreact-oob-placeholder=\"mreact-0\"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment=\"mreact-0\"><span>Ada</span></template>"
+    "serverStreamHtml": "<section>Before<span data-mreact-oob-placeholder=\"mreact-0\"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment=\"mreact-0\"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete=\"mreact-0\"></mreact-oob-complete>"
   }
 }

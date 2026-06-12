@@ -85,6 +85,7 @@ import {
   bundleRouterModules,
   type RouterCompatPlugin,
   type RouterBundleChunkOutput,
+  type RouterBundleModulesOutput,
   type RouterBundleOutput,
 } from "./bundle-pipeline.js";
 import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./route-styles.js";
@@ -478,7 +479,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
         );
 
   const clientRouteInferenceCache = createClientRouteInferenceCache();
-  const [serverActionManifest, serverModules, generatedImportPolicy] = await Promise.all([
+  const [serverActionManifest, generatedImportPolicy] = await Promise.all([
     shouldTrackBuildPhases === false
       ? collectBuildServerActionManifest({
           files,
@@ -492,35 +493,6 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             projectRoot: project.projectRoot,
             routes,
             routesDir: project.routesDir,
-          }),
-        ),
-    shouldTrackBuildPhases === false
-      ? buildServerModuleArtifacts({
-          bundleCache: new Map(),
-          clientRouteInferenceCache: serverClientRouteInferenceCache,
-          define: viteDefine,
-          files,
-          prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
-          project,
-          projectRoot: project.projectRoot,
-          routes,
-          sourceAnalysis,
-          serverTransformCache,
-          vitePlugins,
-        })
-      : timeBuildPhase(timingSink, progressSink, "serverModules", () =>
-          buildServerModuleArtifacts({
-            bundleCache: new Map(),
-            clientRouteInferenceCache: serverClientRouteInferenceCache,
-            define: viteDefine,
-            files,
-            prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
-            project,
-            projectRoot: project.projectRoot,
-            routes,
-            sourceAnalysis,
-            serverTransformCache,
-            vitePlugins,
           }),
         ),
     shouldTrackBuildPhases === false
@@ -539,6 +511,46 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         ),
   ]);
+  const actionRenderBundleExcludedFiles = new Set(
+    [...serverActionManifest.routeReferences.entries()]
+      .filter(([, references]) => references.length > 0)
+      .map(([file]) => file),
+  );
+  const { artifacts: serverModules, sharedChunks: serverModuleSharedChunks } = await (
+    shouldTrackBuildPhases === false
+      ? buildServerModuleArtifacts({
+          actionRenderBundleExcludedFiles,
+          bundleRequestRuntimePackages: shouldBuildAwsLambda,
+          bundleCache: new Map(),
+          clientRouteInferenceCache: serverClientRouteInferenceCache,
+          define: viteDefine,
+          files,
+          prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
+          project,
+          projectRoot: project.projectRoot,
+          routes,
+          sourceAnalysis,
+          serverTransformCache,
+          vitePlugins,
+        })
+      : timeBuildPhase(timingSink, progressSink, "serverModules", () =>
+          buildServerModuleArtifacts({
+            actionRenderBundleExcludedFiles,
+            bundleRequestRuntimePackages: shouldBuildAwsLambda,
+            bundleCache: new Map(),
+            clientRouteInferenceCache: serverClientRouteInferenceCache,
+            define: viteDefine,
+            files,
+            prebundleServerComponents: buildTargets.includes("node") || shouldBuildAwsLambda,
+            project,
+            projectRoot: project.projectRoot,
+            routes,
+            sourceAnalysis,
+            serverTransformCache,
+            vitePlugins,
+          }),
+        )
+  );
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(project.projectRoot, route.file),
@@ -549,12 +561,14 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           serverDir,
           serverModules,
           generatedImportPolicy.runtimePackages,
+          serverModuleSharedChunks,
         )
       : timeBuildPhase(timingSink, progressSink, "serverModuleArtifacts", () =>
           writeServerModuleArtifactFiles(
             serverDir,
             serverModules,
             generatedImportPolicy.runtimePackages,
+            serverModuleSharedChunks,
           ),
         ),
     shouldTrackBuildPhases === false
@@ -1073,6 +1087,7 @@ async function writeServerModuleArtifactFiles(
   serverDir: string,
   serverModules: Record<string, BuiltServerModuleArtifact>,
   portableRuntimePackages: readonly string[] = [],
+  sharedChunks: readonly SharedServerModuleChunk[] = [],
 ): Promise<{
   files: Record<string, string>;
   renderFiles: Record<string, string>;
@@ -1093,6 +1108,22 @@ async function writeServerModuleArtifactFiles(
     mkdir(join(modulesDir, "request"), { recursive: true }),
     mkdir(join(modulesDir, "render"), { recursive: true }),
   ]);
+
+  if (sharedChunks.length > 0) {
+    // Shared request chunks are referenced from externalized module code via
+    // "./chunks/..." imports, so they live next to server-modules/code files.
+    await mkdir(join(modulesDir, "code", "chunks"), { recursive: true });
+    await Promise.all(
+      sharedChunks.map((chunk) =>
+        writeFile(
+          join(modulesDir, "code", chunk.fileName),
+          rewriteCompatVendorPlaceholderImports(
+            rewritePortableRuntimePackageImports(chunk.code, portableRuntimePackages),
+          ),
+        ),
+      ),
+    );
+  }
 
   const usedCompatVendorEntries = collectCompatVendorEntryUsage(artifactEntries);
 
@@ -2023,6 +2054,8 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
 }
 
 async function buildServerModuleArtifacts(options: {
+  actionRenderBundleExcludedFiles?: ReadonlySet<string> | undefined;
+  bundleRequestRuntimePackages: boolean;
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
   clientRouteInferenceCache: ClientRouteInferenceCache;
@@ -2035,7 +2068,10 @@ async function buildServerModuleArtifacts(options: {
   sourceAnalysis: BuildSourceAnalysisScope;
   serverTransformCache: ServerTransformCache;
   vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<Record<string, BuiltServerModuleArtifact>> {
+}): Promise<{
+  artifacts: Record<string, BuiltServerModuleArtifact>;
+  sharedChunks: readonly SharedServerModuleChunk[];
+}> {
   const routeByFile = new Map(
     options.routes.map((route) => [relative(options.projectRoot, route.file), route]),
   );
@@ -2099,9 +2135,22 @@ async function buildServerModuleArtifacts(options: {
       });
     }
 
+    if (isMiddlewareFile(options.project.routesDir, absoluteFile)) {
+      // Middleware joins the batch when runtime packages are bundled so the
+      // auth/control dependency graph is shared with route loader artifacts.
+      if (options.bundleRequestRuntimePackages) {
+        requestBatchEntries.push({
+          code: source,
+          filename: absoluteFile,
+          key: routeRequestArtifactBatchKey(file, "request"),
+          label: "Middleware",
+        });
+      }
+      continue;
+    }
+
     if (
       requestArtifactFiles.has(file) &&
-      !isMiddlewareFile(options.project.routesDir, absoluteFile) &&
       route?.kind !== "server" &&
       route?.kind !== "metadata"
     ) {
@@ -2114,18 +2163,20 @@ async function buildServerModuleArtifacts(options: {
     }
   }
 
-  const requestBatchOutputs =
-    requestBatchEntries.length >= 3
+  const { codeByKey: requestBatchOutputs, sharedChunks } =
+    requestBatchEntries.length >= (options.bundleRequestRuntimePackages ? 2 : 3)
       ? await bundleRouteRequestModuleBatchCode({
           appDir: options.project.routesDir,
           bundleCache: options.bundleCache,
           cacheDir: options.cacheDir,
+          emitSharedChunks: options.bundleRequestRuntimePackages,
           entries: requestBatchEntries,
+          externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
           importPolicy: requestModuleImportPolicy,
           define: options.define,
           vitePlugins: options.vitePlugins,
         })
-      : new Map<string, string>();
+      : { codeByKey: new Map<string, string>(), sharedChunks: [] };
 
   const artifactEntries = await mapWithBuildConcurrency(
     Object.entries(options.files),
@@ -2149,6 +2200,7 @@ async function buildServerModuleArtifacts(options: {
               cacheDir: options.cacheDir,
               code: stripRouteLoaderOnlyExports(source, absoluteFile),
               filename: absoluteFile,
+              externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
               importPolicy: requestModuleImportPolicy,
               define: options.define,
               vitePlugins: options.vitePlugins,
@@ -2168,6 +2220,7 @@ async function buildServerModuleArtifacts(options: {
               cacheDir: options.cacheDir,
               code: stripRouteMetadataOnlyExports(source, absoluteFile),
               filename: absoluteFile,
+              externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
               importPolicy: requestModuleImportPolicy,
               label: "Metadata",
               define: options.define,
@@ -2191,6 +2244,7 @@ async function buildServerModuleArtifacts(options: {
                 bundleCache: options.bundleCache,
                 cacheDir: options.cacheDir,
                 filename: absoluteFile,
+                externalizeAllowedPackages: !options.bundleRequestRuntimePackages,
                 importPolicy: requestModuleImportPolicy,
                 define: options.define,
                 routeKind: route?.kind,
@@ -2303,23 +2357,26 @@ async function buildServerModuleArtifacts(options: {
             return undefined;
           }
 
+          const shouldWriteRenderBundle =
+            options.prebundleServerComponents &&
+            options.actionRenderBundleExcludedFiles?.has(file) !== true;
+          const bundleCode = shouldWriteRenderBundle
+            ? await buildServerComponentBundleArtifactCode({
+                clientRouteInferenceCache: options.clientRouteInferenceCache,
+                code: output.code,
+                externalizeCompatVendor,
+                filename: absoluteFile,
+                define: options.define,
+                root: options.projectRoot,
+                serverOutput,
+                vitePlugins: options.vitePlugins,
+              })
+            : undefined;
+
           return [
             serverOutput,
             {
-              ...(options.prebundleServerComponents
-                ? {
-                    bundleCode: await buildServerComponentBundleArtifactCode({
-                      clientRouteInferenceCache: options.clientRouteInferenceCache,
-                      code: output.code,
-                      externalizeCompatVendor,
-                      filename: absoluteFile,
-                      define: options.define,
-                      root: options.projectRoot,
-                      serverOutput,
-                      vitePlugins: options.vitePlugins,
-                    }),
-                  }
-                : {}),
+              ...(bundleCode === undefined ? {} : { bundleCode }),
               code: output.code,
               metadata: output.metadata,
               sourceHash: hashText(code),
@@ -2344,7 +2401,7 @@ async function buildServerModuleArtifacts(options: {
     }
   }
 
-  return artifacts;
+  return { artifacts, sharedChunks };
 }
 
 async function buildServerComponentBundleArtifactCode(options: {
@@ -2506,6 +2563,7 @@ async function buildRequestModuleArtifactCode(options: {
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages: boolean;
   filename: string;
   importPolicy: AppRouterImportPolicy;
   routeKind?: AppRoute["kind"] | undefined;
@@ -2518,6 +2576,7 @@ async function buildRequestModuleArtifactCode(options: {
       code: options.source,
       define: options.define,
       file: options.filename,
+      externalizeAllowedPackages: options.externalizeAllowedPackages,
       importPolicy: options.importPolicy,
       vitePlugins: options.vitePlugins,
     });
@@ -2542,6 +2601,7 @@ async function buildRequestModuleArtifactCode(options: {
     cacheDir: options.cacheDir,
     code: stripRouteRequestOnlyExports(options.source, options.filename),
     define: options.define,
+    externalizeAllowedPackages: options.externalizeAllowedPackages,
     filename: options.filename,
     importPolicy: options.importPolicy,
     vitePlugins: options.vitePlugins,
@@ -2554,6 +2614,7 @@ async function bundleRouteLoaderModuleCode(options: {
   cacheDir?: string | undefined;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2569,36 +2630,42 @@ async function bundleRouteRequestModuleBatchCode(options: {
   bundleCache?: Map<string, Promise<RouterBundleOutput>> | undefined;
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
+  emitSharedChunks?: boolean | undefined;
   entries: readonly RouteRequestModuleBatchEntry[];
+  externalizeAllowedPackages?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<Map<string, string>> {
+}): Promise<RouteRequestModuleBatchOutput> {
   if (options.entries.length === 0) {
-    return new Map();
+    return { codeByKey: new Map(), sharedChunks: [] };
   }
 
   if (options.entries.length === 1) {
     const entry = options.entries[0];
     if (entry === undefined) {
-      return new Map();
+      return { codeByKey: new Map(), sharedChunks: [] };
     }
 
-    return new Map([
-      [
-        entry.key,
-        await bundleRouteRequestModuleCode({
-          appDir: options.appDir,
-          bundleCache: options.bundleCache,
-          cacheDir: options.cacheDir,
-          code: entry.code,
-          define: options.define,
-          filename: entry.filename,
-          importPolicy: options.importPolicy,
-          label: entry.label,
-          vitePlugins: options.vitePlugins,
-        }),
-      ],
-    ]);
+    return {
+      codeByKey: new Map([
+        [
+          entry.key,
+          await bundleRouteRequestModuleCode({
+            appDir: options.appDir,
+            bundleCache: options.bundleCache,
+            cacheDir: options.cacheDir,
+            code: entry.code,
+            define: options.define,
+            externalizeAllowedPackages: options.externalizeAllowedPackages,
+            filename: entry.filename,
+            importPolicy: options.importPolicy,
+            label: entry.label,
+            vitePlugins: options.vitePlugins,
+          }),
+        ],
+      ]),
+      sharedChunks: [],
+    };
   }
 
   const namesByKey = new Map(
@@ -2609,13 +2676,15 @@ async function bundleRouteRequestModuleBatchCode(options: {
   );
   const output = await bundleRouterModules({
     cacheDir: options.cacheDir,
-    chunkFileNames: "request/chunks/[name].[hash].js",
+    // Externalized module code lives flat in server-modules/code, so shared
+    // chunks must be importable as "./chunks/..." from any entry file there.
+    chunkFileNames: "chunks/request.[hash].mjs",
     entries: options.entries.map((entry) => ({
       code: entry.code,
       filename: entry.filename,
       name: namesByKey.get(entry.key) ?? hashText(entry.key).slice(0, 8),
     })),
-    entryFileNames: "request/[name].js",
+    entryFileNames: "[name].mjs",
     define: options.define,
     platform: "node",
     plugins: [
@@ -2624,14 +2693,16 @@ async function bundleRouteRequestModuleBatchCode(options: {
         appDir: options.appDir,
         importPolicy: options.importPolicy,
         label: "Request artifact",
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
       }),
     ],
     root:
       options.importPolicy?.projectRoot ?? dirname(options.entries[0]?.filename ?? options.appDir),
     vitePlugins: options.vitePlugins,
   });
+  const sharedChunks = output.chunks.filter((chunk) => !chunk.isEntry);
 
-  if (output.chunks.some((chunk) => !chunk.isEntry)) {
+  if (sharedChunks.length > 0 && !canEmitSharedRequestChunks(options.emitSharedChunks, output)) {
     const fallbackEntries = await mapWithBuildConcurrency(
       options.entries,
       async (entry) =>
@@ -2643,6 +2714,7 @@ async function bundleRouteRequestModuleBatchCode(options: {
             cacheDir: options.cacheDir,
             code: entry.code,
             define: options.define,
+            externalizeAllowedPackages: options.externalizeAllowedPackages,
             filename: entry.filename,
             importPolicy: options.importPolicy,
             label: entry.label,
@@ -2650,21 +2722,46 @@ async function bundleRouteRequestModuleBatchCode(options: {
           }),
         ] as const,
     );
-    return new Map(fallbackEntries);
+    return { codeByKey: new Map(fallbackEntries), sharedChunks: [] };
   }
 
   const chunksByName = new Map(output.chunks.map((chunk) => [chunk.name, chunk]));
-  return new Map(
-    options.entries.map((entry) => {
-      const name = namesByKey.get(entry.key);
-      const chunk = name === undefined ? undefined : chunksByName.get(name);
+  return {
+    codeByKey: new Map(
+      options.entries.map((entry) => {
+        const name = namesByKey.get(entry.key);
+        const chunk = name === undefined ? undefined : chunksByName.get(name);
 
-      if (chunk === undefined) {
-        throw new Error(`Failed to compile request artifact for ${entry.filename}.`);
-      }
+        if (chunk === undefined) {
+          throw new Error(`Failed to compile request artifact for ${entry.filename}.`);
+        }
 
-      return [entry.key, chunk.code] as const;
-    }),
+        return [entry.key, chunk.code] as const;
+      }),
+    ),
+    sharedChunks: sharedChunks.map((chunk) => ({ code: chunk.code, fileName: chunk.fileName })),
+  };
+}
+
+function canEmitSharedRequestChunks(
+  emitSharedChunks: boolean | undefined,
+  output: RouterBundleModulesOutput,
+): boolean {
+  if (emitSharedChunks !== true) {
+    return false;
+  }
+
+  if (output.assets !== undefined && output.assets.length > 0) {
+    return false;
+  }
+
+  // Entry code is rewritten into content-addressed module files, so emitted
+  // imports may only target shared chunk files or external specifiers.
+  const entryFileNames = new Set(
+    output.chunks.filter((chunk) => chunk.isEntry).map((chunk) => chunk.fileName),
+  );
+  return output.chunks.every((chunk) =>
+    chunk.imports.every((specifier) => !entryFileNames.has(specifier)),
   );
 }
 
@@ -2673,18 +2770,22 @@ export async function __bundleRouteRequestModuleBatchForTests(options: {
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
   entries: readonly RouteRequestModuleBatchEntry[];
+  externalizeAllowedPackages?: boolean | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Record<string, string>> {
   return Object.fromEntries(
-    await bundleRouteRequestModuleBatchCode({
-      appDir: options.appDir,
-      cacheDir: options.cacheDir,
-      define: options.define,
-      entries: options.entries,
-      importPolicy: options.importPolicy,
-      vitePlugins: options.vitePlugins,
-    }),
+    (
+      await bundleRouteRequestModuleBatchCode({
+        appDir: options.appDir,
+        cacheDir: options.cacheDir,
+        define: options.define,
+        entries: options.entries,
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
+        importPolicy: options.importPolicy,
+        vitePlugins: options.vitePlugins,
+      })
+    ).codeByKey,
   );
 }
 
@@ -2694,9 +2795,10 @@ async function bundleRouteRequestModuleCode(options: {
   cacheDir?: string | undefined;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
-  label: "Loader" | "Metadata";
+  label: RouteRequestModuleBundleLabel;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
   const output = await bundleRouterModule({
@@ -2713,6 +2815,7 @@ async function bundleRouteRequestModuleCode(options: {
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
         importPolicy: options.importPolicy,
         label: options.label,
       }),
@@ -2731,9 +2834,10 @@ function routeRequestBundleCacheKey(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
-  label: "Loader" | "Metadata";
+  label: RouteRequestModuleBundleLabel;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): string {
   return stableCacheKey({
@@ -2753,6 +2857,7 @@ function routeRequestBundleCacheKey(options: {
                 ? undefined
                 : resolve(options.importPolicy.projectRoot),
           },
+    externalizeAllowedPackages: options.externalizeAllowedPackages,
     label: options.label,
     platform: "node",
     target: "es2022",
@@ -2832,7 +2937,19 @@ interface RouteRequestModuleBatchEntry {
   code: string;
   filename: string;
   key: string;
-  label: "Loader" | "Metadata";
+  label: RouteRequestModuleBundleLabel;
+}
+
+type RouteRequestModuleBundleLabel = "Loader" | "Metadata" | "Middleware";
+
+interface SharedServerModuleChunk {
+  code: string;
+  fileName: string;
+}
+
+interface RouteRequestModuleBatchOutput {
+  codeByKey: Map<string, string>;
+  sharedChunks: readonly SharedServerModuleChunk[];
 }
 
 async function writeCloudflareRouteModules(options: {

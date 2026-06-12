@@ -698,7 +698,7 @@ describe("compiler server stream JSX transform", () => {
     expect(output.code).toContain("hydration: true");
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<!--mreact-h:start:App--><section><!--mreact-h:start:mreact-0--><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span><!--mreact-h:end:mreact-0--></section><!--mreact-h:end:App--><template data-mreact-oob-fragment="mreact-0"><button>Ada</button></template>',
+      '<!--mreact-h:start:App--><section><!--mreact-h:start:mreact-0--><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span><!--mreact-h:end:mreact-0--></section><!--mreact-h:end:App--><template data-mreact-oob-fragment="mreact-0"><button>Ada</button></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -954,7 +954,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-0"><ol><li value="1">Ada</li></ol></template>',
+      '<span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-0"><ol><li value="1">Ada</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -990,7 +990,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<span data-mreact-oob-placeholder="mreact-0"><ol></ol></span><template data-mreact-oob-fragment="mreact-0"><ol><li value="1">Ada</li><li value="2">Grace</li></ol></template>',
+      '<span data-mreact-oob-placeholder="mreact-0"><ol></ol></span><template data-mreact-oob-fragment="mreact-0"><ol><li value="1">Ada</li><li value="2">Grace</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1040,7 +1040,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-0"><ol><li>Ada</li></ol></template>',
+      '<span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><template data-mreact-oob-fragment="mreact-0"><ol><li>Ada</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1074,7 +1074,7 @@ export function App() {
     expect(output.code).not.toContain("await _renderOutOfOrderBoundary");
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<section>Before<span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<section>Before<span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1113,7 +1113,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<main><div data-mreact-oob-placeholder="mreact-0"><ol start="1"><li>Loading 0</li></ol></div><div data-mreact-oob-placeholder="mreact-0-1"><ol start="3"><li>Loading 1</li></ol></div></main><template data-mreact-oob-fragment="mreact-0"><ol start="1"><li>story-1</li><li>story-2</li></ol></template><template data-mreact-oob-fragment="mreact-0-1"><ol start="3"><li>story-3</li></ol></template>',
+      '<main><div data-mreact-oob-placeholder="mreact-0"><ol start="1"><li>Loading 0</li></ol></div><div data-mreact-oob-placeholder="mreact-0-1"><ol start="3"><li>Loading 1</li></ol></div></main><template data-mreact-oob-fragment="mreact-0"><ol start="1"><li>story-1</li><li>story-2</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete><template data-mreact-oob-fragment="mreact-0-1"><ol start="3"><li>story-3</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0-1"></mreact-oob-complete>',
     );
   });
 
@@ -1129,7 +1129,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1145,7 +1145,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<section><div data-mreact-oob-placeholder="mreact-0"><ol><li>Loading</li></ol></div></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<section><div data-mreact-oob-placeholder="mreact-0"><ol><li>Loading</li></ol></div></section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1161,7 +1161,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><strong>load failed</strong></template>',
+      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span><p>After</p></section><template data-mreact-oob-fragment="mreact-0"><strong>load failed</strong></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1191,7 +1191,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<main><h1>Dashboard</h1><h2>Table statistics</h2><span data-mreact-oob-placeholder="mreact-0"><p>Loading table statistics...</p></span></main><template data-mreact-oob-fragment="mreact-0"><table><tbody><tr><td>admin_audit_logs</td></tr></tbody></table></template>',
+      '<main><h1>Dashboard</h1><h2>Table statistics</h2><span data-mreact-oob-placeholder="mreact-0"><p>Loading table statistics...</p></span></main><template data-mreact-oob-fragment="mreact-0"><table><tbody><tr><td>admin_audit_logs</td></tr></tbody></table></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 
@@ -1541,7 +1541,7 @@ export function App() {
     expect(output.code).toContain("renderOutOfOrderBoundary as _renderOutOfOrderBoundary$1");
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span>user</section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template>',
+      '<section><span data-mreact-oob-placeholder="mreact-0"><span>Loading</span></span>user</section><template data-mreact-oob-fragment="mreact-0"><span>Ada</span></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete>',
     );
   });
 

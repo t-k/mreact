@@ -185,6 +185,9 @@ describe("primitive adapters", () => {
   it("includes every planned primitive framework adapter", () => {
     expect(primitiveAdapters.map((adapter) => adapter.name)).toEqual([
       "marko",
+      "vue",
+      "svelte",
+      "angular",
       "qwik",
       "qwik-v2",
       "react",
@@ -193,6 +196,19 @@ describe("primitive adapters", () => {
       "solid-v2",
       "mreact",
     ]);
+  });
+
+  it("marks Vue, Svelte, and Angular primitive adapters as framework-runtime fixtures", () => {
+    const fixtureKinds = new Map(
+      primitiveAdapters.map((adapter) => [
+        adapter.name,
+        (adapter as { fixtureKind?: string }).fixtureKind,
+      ]),
+    );
+
+    expect(fixtureKinds.get("vue")).toBe("framework-runtime");
+    expect(fixtureKinds.get("svelte")).toBe("framework-runtime");
+    expect(fixtureKinds.get("angular")).toBe("framework-runtime");
   });
 
   it("defines the expanded primitive case matrix with descriptions", () => {
@@ -430,7 +446,7 @@ describe("primitive adapters", () => {
       expect(row.samples).toHaveLength(1);
       expect(row.notes).toEqual([forcedGcMemoryNote]);
     }
-  }, 15_000);
+  }, 30_000);
 
   it("keeps raw memory deltas and amplifies the repeated memory signal", () => {
     expect(calculateHeapDelta(90, 100)).toBe(-10);

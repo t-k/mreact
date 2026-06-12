@@ -1,5 +1,44 @@
 # Changelog
 
+## 0.0.160 - 2026-06-12
+
+### Changed
+
+- Updated the OXC parser and transform toolchain to 0.135.0, bringing stricter JavaScript and TypeScript syntax diagnostics, upstream parser hot-path improvements, and current transform/codegen fixes into the compiler path.
+- Refreshed the local development and deployment toolchain, including Vitest 4.1.8, Wrangler 4.100.0, Miniflare 4.20260611.0, Oxlint 1.69.0, Oxfmt 0.54.0, and the generated Cloudflare starter dependency ranges.
+- Expanded the benchmark harness with additional framework adapters, runtime-backed primitive adapter coverage, browser benchmark coverage for app frameworks, and lightweight router client bundle probes so future performance changes can be compared across a wider set of baselines.
+
+## 0.0.159 - 2026-06-12
+
+### Fixed
+
+- Fixed AWS Lambda route first-hit latency by emitting shared request chunks for runtime packages, so middleware, loader, and metadata artifacts evaluate one shared dependency graph per execution environment instead of re-evaluating a bundled copy on every route's first hit.
+
+## 0.0.158 - 2026-06-11
+
+### Fixed
+
+- Reduced AWS Lambda route first-hit work by bundling request/control runtime packages into Lambda request artifacts and by keeping inferred server action implementation graphs out of GET render artifacts.
+
+## 0.0.157 - 2026-06-11
+
+### Fixed
+
+- Fixed streamed out-of-order `<Await>` fragments so the browser waits for a parse-complete completion marker before replacing placeholders, preventing partially parsed list rows from being applied during Cloudflare Worker streaming.
+- Refreshed the Hacker News Cloudflare example to use the current Wrangler version, Cloudflare compatibility date, and `buildTargets: ["cloudflare"]` project configuration.
+
+## 0.0.156 - 2026-06-11
+
+### Fixed
+
+- Fixed Cloudflare Workers and Cloudflare Pages SSR so request-scoped query clients are available to page render helpers that call `getQueryClient()` during server rendering, not only to loaders or components that read `props.queryClient`.
+
+## 0.0.155 - 2026-06-11
+
+### Fixed
+
+- Fixed React-compatible vendor chunk loading for prerendered routes so server prerender modules can resolve shared compat vendor chunks instead of failing when the page runs during the build.
+
 ## 0.0.154 - 2026-06-10
 
 ### Changed

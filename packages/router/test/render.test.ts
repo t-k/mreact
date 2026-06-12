@@ -3806,6 +3806,9 @@ export default function Page() {
       '<main><span data-mreact-oob-placeholder="mreact-0"><em>loading</em></span></main>',
     );
     expect(html).toContain('data-mreact-oob-fragment="mreact-0"');
+    expect(html.indexOf('data-mreact-oob-complete="mreact-0"')).toBeGreaterThan(
+      html.indexOf('data-mreact-oob-fragment="mreact-0"'),
+    );
     expect(html).toContain("<strong>Ada</strong>");
   });
 

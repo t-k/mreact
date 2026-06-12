@@ -2537,6 +2537,7 @@ export async function bundleMiddlewareModuleCode(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  externalizeAllowedPackages?: boolean | undefined;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2551,6 +2552,7 @@ export async function bundleMiddlewareModuleCode(options: {
       fileImportMetaUrlPlugin(),
       createAppRouterImportPolicyPlugin({
         appDir: options.appDir,
+        externalizeAllowedPackages: options.externalizeAllowedPackages,
         importPolicy: options.importPolicy,
         label: "Middleware",
       }),
@@ -3512,9 +3514,12 @@ async function renderVisibleOutOfOrderFragment<T>(
   );
   await fragmentSink.drain();
 
-  sink.append(
-    `<template data-mreact-oob-fragment="${escapeHtmlAttribute(id)}">${fragmentSink.toString()}</template>`,
-  );
+  sink.append(renderVisibleOutOfOrderFragmentHtml(id, fragmentSink.toString()));
+}
+
+function renderVisibleOutOfOrderFragmentHtml(id: string, html: string): string {
+  const escapedId = escapeHtmlAttribute(id);
+  return `<template data-mreact-oob-fragment="${escapedId}">${html}</template><mreact-oob-complete hidden data-mreact-oob-complete="${escapedId}"></mreact-oob-complete>`;
 }
 
 async function appendServerStreamModule(

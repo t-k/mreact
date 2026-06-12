@@ -7,6 +7,9 @@ describe("router benchmark configuration", () => {
   it("includes every planned router/app framework adapter", () => {
     expect(routerBenchmarkAdapters.map((adapter) => adapter.name)).toEqual([
       "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -68,6 +71,9 @@ describe("router benchmark configuration", () => {
 
     expect(adaptersWithFirstInteractionProbes).toEqual([
       "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -92,6 +98,9 @@ describe("router benchmark configuration", () => {
 
     expect(adaptersWithSplitProbes).toEqual([
       "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -109,6 +118,9 @@ describe("router benchmark configuration", () => {
       .map((adapter) => adapter.name);
 
     expect(adaptersWithNavigationProbes).toEqual([
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -172,6 +184,9 @@ describe("router benchmark configuration", () => {
   it("exposes low-cost extended probes for production router adapters", () => {
     const expectedAdapters = [
       "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -200,6 +215,9 @@ describe("router benchmark configuration", () => {
 
   it("exposes browser navigation restoration probes for SPA-capable router adapters", () => {
     const expectedAdapters = [
+      "nuxt",
+      "svelte-kit",
+      "analog",
       "qwik-city",
       "qwik-router-v2",
       "solid-start",
@@ -259,6 +277,40 @@ describe("router benchmark configuration", () => {
       .map((adapter) => adapter.name);
 
     expect(adaptersWithBuildOutputProbes).toEqual(routerBenchmarkAdapters.map((adapter) => adapter.name));
+  });
+
+  it("exposes client bundle probes for production app framework adapters", () => {
+    const productionAppAdapterNames = ["nuxt", "svelte-kit", "analog"];
+    const requiredMethods = [
+      "measureServerOnlyClientBundleBytes",
+      "measureInteractiveClientBundleBytes",
+      "measureInteractiveClientBundleMinimalBytes",
+    ] as const;
+    const productionAppAdapters = routerBenchmarkAdapters.filter((adapter) =>
+      productionAppAdapterNames.includes(adapter.name),
+    );
+
+    for (const method of requiredMethods) {
+      expect(
+        productionAppAdapters
+          .filter((adapter) => adapter[method] !== undefined)
+          .map((adapter) => adapter.name),
+      ).toEqual(productionAppAdapterNames);
+    }
+  });
+
+  it("uses production app fixtures for Nuxt, SvelteKit, and Analog adapters", () => {
+    const fixtureKinds = Object.fromEntries(
+      routerBenchmarkAdapters
+        .filter((adapter) => ["nuxt", "svelte-kit", "analog"].includes(adapter.name))
+        .map((adapter) => [adapter.name, (adapter as { fixtureKind?: string }).fixtureKind]),
+    );
+
+    expect(fixtureKinds).toEqual({
+      nuxt: "production-app",
+      "svelte-kit": "production-app",
+      analog: "production-app",
+    });
   });
 
   it("ranks throughput high-to-low and size low-to-high", () => {
@@ -393,6 +445,43 @@ describe("router benchmark configuration", () => {
       value: 0,
     });
     expect(rows.find((row) => row.caseName === "app static cached route 1000 nodes")).toMatchObject(
+      {
+        status: "unsupported",
+        value: 0,
+      },
+    );
+  });
+
+  it("reports streaming timing probes as unsupported without a real async stream route", async () => {
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "analog",
+          version: "test",
+          async renderToString(nodeCount) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+          getServerUrl() {
+            return "http://127.0.0.1:1";
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(rows.find((row) => row.caseName === "app streaming first byte 1000 nodes")).toMatchObject(
+      {
+        status: "unsupported",
+        value: 0,
+      },
+    );
+    expect(rows.find((row) => row.caseName === "app streaming first chunk 1000 nodes")).toMatchObject(
+      {
+        status: "unsupported",
+        value: 0,
+      },
+    );
+    expect(rows.find((row) => row.caseName === "app streaming full body 1000 nodes")).toMatchObject(
       {
         status: "unsupported",
         value: 0,

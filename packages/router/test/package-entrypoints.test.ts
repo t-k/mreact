@@ -4,6 +4,8 @@ import { join } from "node:path";
 import * as ts from "typescript";
 import { describe, expect, test } from "vitest";
 
+const packageEntrypointTypeCheckTimeoutMs = 30_000;
+
 describe("router package entrypoints", () => {
   test("exposes stable session and native escape subpaths for workspace integrations", async () => {
     const manifest = JSON.parse(
@@ -75,7 +77,7 @@ export function Shared(props: { name: Promise<string> }) {
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("public entrypoint infers route loader data", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
@@ -134,7 +136,7 @@ data.count.toUpperCase();
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  }, 10_000);
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("public entrypoint infers page props from route loader data", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-page-types-"));
@@ -207,7 +209,7 @@ export default definePage<typeof loader>(function Page(props) {
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  }, 10_000);
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("public entrypoint exports throwNotFound as a never-returning helper", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-not-found-types-"));
@@ -257,7 +259,7 @@ const value: never = throwNotFound();
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  }, 10_000);
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("public entrypoint exposes typed route href helpers", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-href-types-"));
@@ -321,7 +323,7 @@ href("https://example.test/users/:id", { params: { id: "ada" } });
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  }, 10_000);
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("link subpath exports Link as a valid mreact JSX component", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
@@ -380,7 +382,7 @@ export function Navigation() {
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("public entrypoint exposes app-router route and children types", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-types-"));
@@ -462,7 +464,7 @@ routeHandlerContext.params.id.toUpperCase();
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("exposes modular client helper subpaths", async () => {
     const manifest = JSON.parse(
@@ -562,7 +564,7 @@ options.serverActionReferencesByFile = new Map([["page.tsx", [reference]]]);
     }
     // Whole-program public-surface type checks need the same headroom as the
     // sibling createProgram tests on single-worker CI runners.
-  }, 10_000);
+  }, packageEntrypointTypeCheckTimeoutMs);
 
   test("generated route declarations type-check Link href without a runtime helper import", () => {
     const directory = mkdtempSync(join(process.cwd(), "node_modules", ".tmp-mreact-link-routes-"));
@@ -659,7 +661,7 @@ export function Navigation() {
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  }, 10_000);
+  }, packageEntrypointTypeCheckTimeoutMs);
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {
