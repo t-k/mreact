@@ -16,6 +16,17 @@ describe("recharts coverage ledger", () => {
     expect(rechartsCoverageLedger.filter((row) => row.status === "untracked")).toEqual([]);
   });
 
+  test("ledger reflects resolved Recharts compatibility differences", () => {
+    const statusByObligation = new Map(
+      rechartsCoverageLedger.map((row) => [row.obligationId, row.status]),
+    );
+
+    expect(statusByObligation.get("RC-TIP-001")).toBe("fixed");
+    expect(statusByObligation.get("RC-POLAR-001")).toBe("fixed");
+    expect(statusByObligation.get("RC-SYNC-001")).toBe("fixed");
+    expect(statusByObligation.get("RC-HIERARCHY-001")).toBe("known_tolerance");
+  });
+
   test("obligation ids are unique", () => {
     const ids = rechartsCoverageLedger.map((row) => row.obligationId);
 

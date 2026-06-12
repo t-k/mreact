@@ -4,6 +4,7 @@ export type CoverageStatus =
   | "vrt_covered"
   | "interaction_covered"
   | "known_diff"
+  | "known_tolerance"
   | "blocked"
   | "fixed";
 
@@ -34,7 +35,7 @@ export const rechartsCoverageLedger: RechartsCoverageRow[] = [
     fixtureId: "recharts-line-tooltip-hover",
     vrt: true,
     interaction: true,
-    status: "known_diff",
+    status: "fixed",
   },
   {
     obligationId: "RC-AREA-001",
@@ -88,7 +89,7 @@ export const rechartsCoverageLedger: RechartsCoverageRow[] = [
     fixtureId: "recharts-polar-radar-radial",
     vrt: true,
     interaction: false,
-    status: "known_diff",
+    status: "fixed",
   },
   {
     obligationId: "RC-HIERARCHY-001",
@@ -97,7 +98,7 @@ export const rechartsCoverageLedger: RechartsCoverageRow[] = [
     fixtureId: "recharts-hierarchy-flow",
     vrt: true,
     interaction: false,
-    status: "known_diff",
+    status: "known_tolerance",
   },
   {
     obligationId: "RC-SHAPES-001",
@@ -133,6 +134,6 @@ export const rechartsCoverageLedger: RechartsCoverageRow[] = [
     fixtureId: "recharts-synced-tooltips",
     vrt: true,
     interaction: true,
-    status: "known_diff",
+    status: "fixed",
   },
 ];
