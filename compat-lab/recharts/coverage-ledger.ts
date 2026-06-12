@@ -136,4 +136,13 @@ export const rechartsCoverageLedger: RechartsCoverageRow[] = [
     interaction: true,
     status: "fixed",
   },
+  {
+    obligationId: "RC-PROPS-001",
+    feature: "Cartesian prop matrix for chart, axis, grid, legend, tooltip, and series props",
+    risk: "High-use Recharts props changing rendered SVG, tooltip, and legend output",
+    fixtureId: "recharts-cartesian-props-matrix",
+    vrt: true,
+    interaction: true,
+    status: "interaction_covered",
+  },
 ];

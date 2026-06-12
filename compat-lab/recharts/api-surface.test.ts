@@ -29,12 +29,32 @@ describe("recharts api surface coverage", () => {
     const rows = buildRechartsApiCoverage(rechartsFixtures);
     const lineDataKey = rows.find((row) => row.component === "Line" && row.prop === "dataKey");
     const syncId = rows.find((row) => row.component === "LineChart" && row.prop === "syncId");
+    const tooltipCursor = rows.find(
+      (row) => row.component === "Tooltip" && row.prop === "cursor",
+    );
+    const legendIconType = rows.find(
+      (row) => row.component === "Legend" && row.prop === "iconType",
+    );
+    const xAxisTickFormatter = rows.find(
+      (row) => row.component === "XAxis" && row.prop === "tickFormatter",
+    );
+    const yAxisDomain = rows.find((row) => row.component === "YAxis" && row.prop === "domain");
+    const gridVerticalFill = rows.find(
+      (row) => row.component === "CartesianGrid" && row.prop === "verticalFill",
+    );
+    const barRadius = rows.find((row) => row.component === "Bar" && row.prop === "radius");
     const lineAnimationId = rows.find(
       (row) => row.component === "Line" && row.prop === "animationId",
     );
 
     expect(lineDataKey?.status).toBe("interaction_covered");
     expect(syncId?.status).toBe("interaction_covered");
+    expect(tooltipCursor?.status).toBe("interaction_covered");
+    expect(legendIconType?.status).toBe("interaction_covered");
+    expect(xAxisTickFormatter?.status).toBe("interaction_covered");
+    expect(yAxisDomain?.status).toBe("interaction_covered");
+    expect(gridVerticalFill?.status).toBe("interaction_covered");
+    expect(barRadius?.status).toBe("interaction_covered");
     expect(lineAnimationId?.status).toBe("debt");
     expect(rows.some((row) => row.status === "debt")).toBe(true);
   });

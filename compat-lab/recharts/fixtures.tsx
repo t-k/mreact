@@ -758,4 +758,316 @@ export const rechartsFixtures: CompatFixture[] = [
       </ChartFrame>
     ),
   },
+  {
+    id: "recharts-cartesian-props-matrix",
+    library: "recharts",
+    title: "Cartesian props matrix",
+    description: "ComposedChart fixture covering high-value axis, grid, legend, tooltip, and series props.",
+    features: [
+      "ComposedChart",
+      "CartesianGrid",
+      "XAxis",
+      "YAxis",
+      "Legend",
+      "Tooltip",
+      "Bar",
+      "Line",
+      "Area",
+    ],
+    coveredProps: {
+      ComposedChart: [
+        "width",
+        "height",
+        "data",
+        "margin",
+        "barCategoryGap",
+        "barGap",
+        "barSize",
+        "maxBarSize",
+        "className",
+        "accessibilityLayer",
+        "role",
+        "tabIndex",
+        "title",
+        "desc",
+      ],
+      CartesianGrid: [
+        "horizontal",
+        "vertical",
+        "strokeDasharray",
+        "horizontalFill",
+        "verticalFill",
+        "syncWithTicks",
+        "horizontalValues",
+        "verticalValues",
+      ],
+      XAxis: [
+        "dataKey",
+        "type",
+        "allowDuplicatedCategory",
+        "allowDecimals",
+        "tickCount",
+        "axisLine",
+        "tickLine",
+        "tickSize",
+        "tickFormatter",
+        "height",
+        "mirror",
+        "orientation",
+        "ticks",
+        "padding",
+        "minTickGap",
+        "interval",
+        "reversed",
+        "angle",
+        "tickMargin",
+        "name",
+        "unit",
+        "label",
+        "className",
+      ],
+      YAxis: [
+        "yAxisId",
+        "type",
+        "dataKey",
+        "domain",
+        "allowDataOverflow",
+        "includeHidden",
+        "allowDecimals",
+        "tickCount",
+        "axisLine",
+        "tickLine",
+        "tickSize",
+        "tickFormatter",
+        "width",
+        "mirror",
+        "orientation",
+        "padding",
+        "minTickGap",
+        "interval",
+        "reversed",
+        "tickMargin",
+        "name",
+        "unit",
+        "label",
+        "className",
+      ],
+      Legend: [
+        "align",
+        "verticalAlign",
+        "layout",
+        "iconSize",
+        "iconType",
+        "wrapperStyle",
+        "formatter",
+        "payloadUniqBy",
+        "width",
+        "height",
+        "margin",
+      ],
+      Tooltip: [
+        "allowEscapeViewBox",
+        "animationDuration",
+        "animationEasing",
+        "cursor",
+        "filterNull",
+        "isAnimationActive",
+        "offset",
+        "reverseDirection",
+        "shared",
+        "trigger",
+        "useTranslate3d",
+        "wrapperStyle",
+        "contentStyle",
+        "itemStyle",
+        "labelStyle",
+        "separator",
+      ],
+      Bar: [
+        "dataKey",
+        "name",
+        "unit",
+        "stackId",
+        "barSize",
+        "maxBarSize",
+        "minPointSize",
+        "legendType",
+        "background",
+        "radius",
+        "label",
+        "isAnimationActive",
+      ],
+      Line: ["dataKey", "name", "unit", "yAxisId", "type", "stroke", "dot", "activeDot", "legendType", "isAnimationActive"],
+      Area: ["dataKey", "name", "type", "stroke", "fill", "fillOpacity", "connectNulls", "isAnimationActive"],
+    },
+    riskTags: ["svg", "pointer-hover", "event-delegation", "context", "layout-measurement"],
+    viewport: { width: 1080, height: 720 },
+    interactions: [
+      {
+        name: "hover-chart-center",
+        description: "Move the pointer to the center of the cartesian props matrix.",
+        run: "hoverChartCenter",
+      },
+    ],
+    render: () => (
+      <ChartFrame>
+        <ComposedChart
+          width={820}
+          height={430}
+          data={monthlyRevenue}
+          margin={{ top: 28, right: 60, bottom: 44, left: 28 }}
+          barCategoryGap="20%"
+          barGap={6}
+          barSize={24}
+          maxBarSize={36}
+          className="props-matrix-chart"
+          accessibilityLayer
+          role="img"
+          tabIndex={0}
+          title="Cartesian props matrix"
+          desc="A deterministic Recharts props matrix fixture"
+        >
+          <CartesianGrid
+            horizontal
+            vertical
+            strokeDasharray="4 2"
+            horizontalFill={["#f8fafc", "#ffffff"]}
+            verticalFill={["#eef2ff", "#ffffff"]}
+            syncWithTicks
+            horizontalValues={[0, 10000, 20000, 30000]}
+            verticalValues={["Jan", "Mar", "May"]}
+          />
+          <XAxis
+            dataKey="month"
+            type="category"
+            allowDuplicatedCategory
+            allowDecimals={false}
+            tickCount={6}
+            axisLine={{ stroke: "#475569" }}
+            tickLine={{ stroke: "#94a3b8" }}
+            tickSize={6}
+            tickFormatter={(value) => String(value).toUpperCase()}
+            height={58}
+            mirror={false}
+            orientation="bottom"
+            ticks={["Jan", "Mar", "May"]}
+            padding={{ left: 12, right: 12 }}
+            minTickGap={4}
+            interval={0}
+            reversed={false}
+            angle={0}
+            tickMargin={8}
+            name="Month"
+            unit=""
+            label={{ value: "Month", position: "insideBottom", offset: -10 }}
+            className="props-matrix-x-axis"
+          />
+          <YAxis
+            yAxisId="revenue"
+            type="number"
+            dataKey="revenue"
+            domain={[0, 30000]}
+            allowDataOverflow
+            includeHidden
+            allowDecimals={false}
+            tickCount={4}
+            axisLine={{ stroke: "#475569" }}
+            tickLine={{ stroke: "#94a3b8" }}
+            tickSize={6}
+            tickFormatter={(value) => `$${Number(value) / 1000}k`}
+            width={74}
+            mirror={false}
+            orientation="left"
+            padding={{ top: 8, bottom: 8 }}
+            minTickGap={4}
+            interval={0}
+            reversed={false}
+            tickMargin={8}
+            name="Revenue"
+            unit="$"
+            label={{ value: "Revenue", angle: -90, position: "insideLeft" }}
+            className="props-matrix-y-axis"
+          />
+          <YAxis
+            yAxisId="units"
+            orientation="right"
+            type="number"
+            domain={[0, 700]}
+            width={48}
+            tickCount={4}
+          />
+          <Tooltip
+            allowEscapeViewBox={{ x: true, y: true }}
+            animationDuration={0}
+            animationEasing="linear"
+            cursor={{ stroke: "#64748b", strokeWidth: 1 }}
+            filterNull
+            isAnimationActive={false}
+            offset={12}
+            reverseDirection={{ x: false, y: false }}
+            shared
+            trigger="hover"
+            useTranslate3d={false}
+            wrapperStyle={{ outline: "none" }}
+            contentStyle={{ borderColor: "#94a3b8", borderRadius: 4 }}
+            itemStyle={{ color: "#0f172a" }}
+            labelStyle={{ color: "#334155", fontWeight: 700 }}
+            separator=" = "
+          />
+          <Legend
+            align="right"
+            verticalAlign="top"
+            layout="vertical"
+            iconSize={10}
+            iconType="diamond"
+            wrapperStyle={{ right: 10, top: 8 }}
+            formatter={(value) => `Series ${value}`}
+            payloadUniqBy
+            width={150}
+            height={92}
+            margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          />
+          <Area
+            yAxisId="revenue"
+            dataKey="revenue"
+            name="Revenue area"
+            type="monotone"
+            stroke="#93c5fd"
+            fill="#dbeafe"
+            fillOpacity={0.45}
+            connectNulls
+            isAnimationActive={false}
+          />
+          <Bar
+            yAxisId="revenue"
+            dataKey="revenue"
+            name="Revenue"
+            unit="$"
+            stackId="sales"
+            barSize={24}
+            maxBarSize={36}
+            minPointSize={2}
+            legendType="rect"
+            background={{ fill: "#f8fafc" }}
+            radius={[4, 4, 0, 0]}
+            label={{ position: "top", fill: "#334155", formatter: (value: number) => `${value / 1000}k` }}
+            fill="#2563eb"
+            isAnimationActive={false}
+          />
+          <Line
+            yAxisId="units"
+            dataKey="units"
+            name="Units"
+            unit="u"
+            type="monotone"
+            stroke="#059669"
+            dot={{ r: 3, strokeWidth: 1 }}
+            activeDot={{ r: 5 }}
+            legendType="line"
+            isAnimationActive={false}
+          />
+        </ComposedChart>
+      </ChartFrame>
+    ),
+  },
 ];

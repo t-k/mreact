@@ -21,6 +21,7 @@ describe("recharts compat fixture registry", () => {
       "recharts-axis-customized",
       "recharts-synced-tooltips",
       "recharts-animation-lifecycle",
+      "recharts-cartesian-props-matrix",
     ]);
   });
 
