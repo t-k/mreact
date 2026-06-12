@@ -1,5 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { renderApiCoverageMarkdown } from "./api-surface.js";
 import { rechartsCoverageLedger } from "./coverage-ledger.js";
 import type { DomSummary } from "./dom-summary.js";
 
@@ -31,6 +32,7 @@ export async function writeRunSummary(input: WriteRunSummaryInput): Promise<void
   await writeFile(join(input.outputDir, "results.json"), `${JSON.stringify(input, null, 2)}\n`);
   await writeFile(join(input.outputDir, "summary.md"), renderSummary(input));
   await writeFile(join(input.outputDir, "coverage-ledger.md"), renderCoverageLedger());
+  await writeFile(join(input.outputDir, "api-coverage.md"), renderApiCoverageMarkdown());
 }
 
 function renderSummary(input: WriteRunSummaryInput): string {

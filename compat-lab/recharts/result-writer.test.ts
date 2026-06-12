@@ -37,6 +37,9 @@ describe("recharts compat result writer", () => {
       await expect(readFile(join(dir, "coverage-ledger.md"), "utf8")).resolves.toContain(
         "RC-BAR-001",
       );
+      await expect(readFile(join(dir, "api-coverage.md"), "utf8")).resolves.toContain(
+        "Recharts API Coverage",
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

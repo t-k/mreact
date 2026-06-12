@@ -27,6 +27,7 @@ export interface CompatFixture {
   title: string;
   description: string;
   features: string[];
+  coveredProps?: Record<string, string[]>;
   riskTags: CompatRiskTag[];
   viewport: { width: number; height: number };
   render: (runtime: CompatRuntime) => ReactNode;

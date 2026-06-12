@@ -147,6 +147,12 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Basic bar chart",
     description: "BarChart with Bar, XAxis, YAxis, and CartesianGrid.",
     features: ["BarChart", "Bar", "XAxis", "YAxis", "CartesianGrid"],
+    coveredProps: {
+      BarChart: ["width", "height", "data"],
+      Bar: ["dataKey", "fill", "isAnimationActive"],
+      XAxis: ["dataKey"],
+      CartesianGrid: ["strokeDasharray"],
+    },
     riskTags: ["svg", "layout-measurement"],
     viewport: { width: 960, height: 640 },
     render: () => (
@@ -166,6 +172,11 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Line chart tooltip hover",
     description: "LineChart with Tooltip and a hover interaction.",
     features: ["LineChart", "Line", "XAxis", "YAxis", "Tooltip"],
+    coveredProps: {
+      LineChart: ["width", "height", "data"],
+      Line: ["type", "dataKey", "stroke", "isAnimationActive"],
+      XAxis: ["dataKey"],
+    },
     riskTags: ["svg", "pointer-hover", "event-delegation", "effect-timing"],
     viewport: { width: 960, height: 640 },
     interactions: [
@@ -193,6 +204,11 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Area chart legend",
     description: "AreaChart with Legend and two series.",
     features: ["AreaChart", "Area", "Legend", "XAxis", "YAxis"],
+    coveredProps: {
+      AreaChart: ["width", "height", "data"],
+      Area: ["type", "dataKey", "stroke", "fill", "isAnimationActive"],
+      XAxis: ["dataKey"],
+    },
     riskTags: ["svg", "context", "clone-element"],
     viewport: { width: 960, height: 640 },
     render: () => (
@@ -225,6 +241,12 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Pie chart cells and labels",
     description: "PieChart with Cell colors and a center Label.",
     features: ["PieChart", "Pie", "Cell", "Label", "Tooltip"],
+    coveredProps: {
+      PieChart: ["width", "height"],
+      Pie: ["data", "dataKey", "nameKey", "cx", "cy", "outerRadius", "isAnimationActive"],
+      Cell: ["fill"],
+      Label: ["value", "position"],
+    },
     riskTags: ["svg", "clone-element"],
     viewport: { width: 960, height: 640 },
     render: () => (
@@ -255,6 +277,12 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Responsive container resize",
     description: "ResponsiveContainer reacts to viewport changes.",
     features: ["ResponsiveContainer", "BarChart", "Bar"],
+    coveredProps: {
+      ResponsiveContainer: ["width", "height"],
+      BarChart: ["data"],
+      Bar: ["dataKey", "fill", "isAnimationActive"],
+      XAxis: ["dataKey"],
+    },
     riskTags: ["resize-observer", "layout-measurement", "svg"],
     viewport: { width: 960, height: 640 },
     interactions: [
@@ -284,6 +312,13 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Composed chart reference line",
     description: "ComposedChart with Bar, Line, and ReferenceLine.",
     features: ["ComposedChart", "Bar", "Line", "ReferenceLine", "XAxis", "YAxis"],
+    coveredProps: {
+      ComposedChart: ["width", "height", "data"],
+      Bar: ["dataKey", "fill", "isAnimationActive"],
+      Line: ["type", "dataKey", "stroke", "isAnimationActive"],
+      ReferenceLine: ["y", "stroke", "label"],
+      XAxis: ["dataKey"],
+    },
     riskTags: ["svg", "context", "layout-measurement"],
     viewport: { width: 960, height: 640 },
     render: () => (
@@ -316,6 +351,19 @@ export const rechartsFixtures: CompatFixture[] = [
       "YAxis",
       "CartesianGrid",
     ],
+    coveredProps: {
+      ScatterChart: ["width", "height", "data"],
+      Scatter: ["name", "data", "fill", "isAnimationActive"],
+      ZAxis: ["dataKey", "range"],
+      ErrorBar: ["dataKey", "direction", "width", "stroke"],
+      ReferenceArea: ["x1", "x2", "y1", "y2", "stroke", "fill"],
+      ReferenceDot: ["x", "y", "r", "fill", "stroke"],
+      Brush: ["dataKey", "height", "travellerWidth"],
+      LabelList: ["dataKey", "position"],
+      XAxis: ["dataKey", "type", "name"],
+      YAxis: ["dataKey", "type", "name"],
+      CartesianGrid: ["strokeDasharray"],
+    },
     riskTags: ["svg", "layout-measurement", "event-delegation"],
     viewport: { width: 960, height: 640 },
     interactions: [
@@ -360,6 +408,21 @@ export const rechartsFixtures: CompatFixture[] = [
       "Legend",
       "Tooltip",
     ],
+    coveredProps: {
+      RadarChart: ["width", "height", "data", "outerRadius"],
+      Radar: ["name", "dataKey", "stroke", "fill", "fillOpacity", "isAnimationActive"],
+      RadialBarChart: [
+        "width",
+        "height",
+        "innerRadius",
+        "outerRadius",
+        "data",
+        "startAngle",
+        "endAngle",
+      ],
+      RadialBar: ["dataKey", "background", "legendType", "isAnimationActive"],
+      PolarAngleAxis: ["dataKey"],
+    },
     riskTags: ["svg", "context", "layout-measurement", "clone-element"],
     viewport: { width: 960, height: 720 },
     interactions: [
@@ -410,6 +473,23 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Hierarchy and flow charts",
     description: "Treemap, Sankey, SunburstChart, and FunnelChart.",
     features: ["Treemap", "Sankey", "SunburstChart", "FunnelChart", "Funnel", "Tooltip"],
+    coveredProps: {
+      Treemap: ["width", "height", "data", "dataKey", "nameKey", "isAnimationActive"],
+      Sankey: ["width", "height", "data", "nodePadding", "nodeWidth"],
+      SunburstChart: [
+        "width",
+        "height",
+        "data",
+        "dataKey",
+        "innerRadius",
+        "outerRadius",
+        "fill",
+        "stroke",
+      ],
+      FunnelChart: ["width", "height"],
+      Funnel: ["dataKey", "data", "isAnimationActive"],
+      Cell: ["fill"],
+    },
     riskTags: ["svg", "layout-measurement", "event-delegation"],
     viewport: { width: 1080, height: 840 },
     interactions: [
@@ -475,6 +555,20 @@ export const rechartsFixtures: CompatFixture[] = [
       "Symbols",
       "Trapezoid",
     ],
+    coveredProps: {
+      Surface: ["width", "height", "title", "desc"],
+      Text: ["x", "y", "fill"],
+      Sector: ["cx", "cy", "innerRadius", "outerRadius", "startAngle", "endAngle", "fill"],
+      Curve: ["type", "points", "stroke", "fill"],
+      Rectangle: ["x", "y", "width", "height", "radius", "fill"],
+      Polygon: ["points", "fill"],
+      Dot: ["cx", "cy", "r", "fill"],
+      Cross: ["x", "y", "width", "height", "stroke"],
+      Symbols: ["type", "cx", "cy", "size", "fill"],
+      Trapezoid: ["x", "y", "upperWidth", "lowerWidth", "height", "fill"],
+      DefaultLegendContent: ["payload"],
+      DefaultTooltipContent: ["label", "payload"],
+    },
     riskTags: ["svg", "clone-element"],
     viewport: { width: 960, height: 640 },
     render: () => (
@@ -529,6 +623,15 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Cartesian axis and customized overlays",
     description: "Direct CartesianAxis rendering and Customized overlay inside a chart.",
     features: ["CartesianAxis", "Customized", "LabelList", "LineChart", "Line", "XAxis", "YAxis"],
+    coveredProps: {
+      Surface: ["width", "height"],
+      CartesianAxis: ["x", "y", "width", "height", "orientation", "ticks", "stroke"],
+      LineChart: ["width", "height", "data"],
+      Line: ["type", "dataKey", "stroke", "isAnimationActive"],
+      XAxis: ["dataKey"],
+      LabelList: ["dataKey", "position"],
+      Customized: ["component"],
+    },
     riskTags: ["svg", "context", "clone-element"],
     viewport: { width: 960, height: 640 },
     render: () => (
@@ -575,6 +678,12 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Synchronized line chart tooltips",
     description: "Two LineChart instances connected with syncId and activated by hover.",
     features: ["LineChart", "Line", "XAxis", "YAxis", "Tooltip"],
+    coveredProps: {
+      LineChart: ["width", "height", "data", "syncId"],
+      Line: ["type", "dataKey", "stroke", "isAnimationActive"],
+      XAxis: ["dataKey"],
+      CartesianGrid: ["strokeDasharray"],
+    },
     riskTags: ["svg", "pointer-hover", "event-delegation", "context", "effect-timing"],
     viewport: { width: 960, height: 640 },
     interactions: [
@@ -616,6 +725,11 @@ export const rechartsFixtures: CompatFixture[] = [
     title: "Animated bar chart lifecycle",
     description: "BarChart with a short explicit animation duration and post-animation capture.",
     features: ["BarChart", "Bar", "XAxis", "YAxis", "Tooltip"],
+    coveredProps: {
+      BarChart: ["width", "height", "data"],
+      Bar: ["dataKey", "fill", "isAnimationActive", "animationBegin", "animationDuration", "animationEasing"],
+      XAxis: ["dataKey"],
+    },
     riskTags: ["svg", "animation", "effect-timing"],
     viewport: { width: 960, height: 640 },
     interactions: [
