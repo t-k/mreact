@@ -2173,6 +2173,7 @@ describe("docs-site example contract", () => {
     expect(benchmarkWorkflow).toContain("workflow_dispatch");
     expect(benchmarkWorkflow).toContain("git add -f benchmarks/results");
     expect(benchmarkWorkflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"');
+    expect(benchmarkWorkflow).toContain('gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"');
 
     const exportScript = await readDocsSite("scripts/export-static.ts");
     expect(exportScript).toContain("MREACT_DOCS_BASE_PATH");

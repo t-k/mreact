@@ -9,6 +9,7 @@ describe("benchmark GitHub workflow", () => {
       "utf8",
     );
 
+    expect(workflow).toContain("actions: write");
     expect(workflow).toContain("contents: write");
     expect(workflow).toContain("workflow_dispatch:");
     expect(workflow).toContain("type: choice");
@@ -24,6 +25,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("git add -f benchmarks/results");
     expect(workflow).toContain('git commit -m "Update benchmark results');
     expect(workflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"');
+    expect(workflow).toContain('gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"');
     expect(workflow).not.toContain("request-fastpaths");
     expect(workflow).not.toContain("actions/upload-artifact");
   });

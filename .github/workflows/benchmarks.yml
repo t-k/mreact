@@ -16,6 +16,7 @@ on:
           - router
 
 permissions:
+  actions: write
   contents: write
 
 concurrency:
@@ -142,3 +143,4 @@ jobs:
           git commit -m "Update benchmark results (${{ inputs.suite }}, ${{ steps.results.outputs.date }})"
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"
+          gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"
