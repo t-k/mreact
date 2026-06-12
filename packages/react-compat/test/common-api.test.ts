@@ -395,6 +395,53 @@ describe("react-compat common API subset", () => {
     expect(container.textContent).toBe("count:1");
   });
 
+  test("class setState during layout effect preserves rendered SVG children", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    class Animate extends Component<{
+      children: (style: { t: number }) => unknown;
+      onAnimationStart: () => void;
+    }> {
+      componentDidMount() {
+        this.props.onAnimationStart();
+      }
+
+      render() {
+        return this.props.children({ t: 0 });
+      }
+    }
+
+    class Series extends PureComponent<
+      Record<string, never>,
+      { isAnimationFinished: boolean }
+    > {
+      state = { isAnimationFinished: true };
+
+      render() {
+        return createElement(
+          "g",
+          { className: "series" },
+          createElement(
+            Animate,
+            {
+              onAnimationStart: () => this.setState({ isAnimationFinished: false }),
+            },
+            () => createElement("path", { className: "series-curve", d: "M0 0L10 10" }),
+          ),
+          this.state.isAnimationFinished
+            ? createElement("circle", { className: "series-dot", cx: 10, cy: 10, r: 2 })
+            : null,
+        );
+      }
+    }
+
+    root.render(createElement("svg", null, createElement(Series, {})));
+
+    expect(container.querySelector(".series")).not.toBeNull();
+    expect(container.querySelector(".series-curve")).not.toBeNull();
+  });
+
   test("lazy renders fallback first and resolved component after promise resolves", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -1041,6 +1088,20 @@ describe("react-compat common API subset", () => {
     expect(() => Children.only([child, "text"])).toThrow(
       "Expected exactly one child.",
     );
+  });
+
+  test("cloneElement preserves explicit undefined props without reapplying defaultProps", () => {
+    function Label(props: { label?: string; tone?: string }) {
+      return createElement("span", null, `${props.label}:${props.tone}`);
+    }
+
+    Label.defaultProps = { label: "default", tone: "neutral" };
+
+    const child = createElement(Label, { label: "custom", tone: undefined });
+    const cloned = cloneElement(child, { label: undefined });
+
+    expect(child.props).toEqual({ label: "custom", tone: "neutral" });
+    expect(cloned.props).toEqual({ label: undefined, tone: "neutral" });
   });
 
   test("class component instances preserve state across setState and root renders", () => {

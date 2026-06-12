@@ -154,8 +154,8 @@ export function createElementFromJsxConfig<P extends Record<string, unknown>>(
   const props = (typeof normalizedType === "string"
     ? copiedProps
     : applyDefaultProps(normalizedType, copiedProps)) as P & {
-      children?: ReactCompatNode;
-    };
+    children?: ReactCompatNode;
+  };
 
   if (hasChildren) {
     props.children = children;
@@ -275,10 +275,9 @@ export function cloneElement<P extends Record<string, unknown>>(
 ): ReactCompatElement<P> {
   const key = props === null || props.key === undefined ? element.key : String(props.key);
   const ref = props === null || props.ref === undefined ? element.ref : props.ref;
-  const nextProps = applyDefaultProps(
-    element.type,
-    copyElementProps(props, element.props),
-  ) as P & { children?: ReactCompatNode };
+  const nextProps = copyElementProps(props, element.props) as P & {
+    children?: ReactCompatNode;
+  };
 
   if (children.length === 1) {
     (nextProps as P & { children?: ReactCompatNode }).children = children[0];

@@ -1,0 +1,144 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { describe, expect, test } from "vitest";
+import { writeRunSummary } from "./result-writer.js";
+
+describe("recharts compat result writer", () => {
+  test("writes summary, results json, and coverage ledger markdown", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
+
+    try {
+      await writeRunSummary({
+        outputDir: dir,
+        runId: "2026-06-12-001-recharts",
+        results: [
+          {
+            fixtureId: "recharts-bar-basic",
+            ok: true,
+            pixelDiffRatio: 0,
+            reactDomSummary: { svgCount: 1, pathCount: 6, text: ["Jan"] },
+            compatDomSummary: { svgCount: 1, pathCount: 6, text: ["Jan"] },
+            artifacts: {
+              reactScreenshot: "react/recharts-bar-basic.png",
+              compatScreenshot: "compat/recharts-bar-basic.png",
+              diffScreenshot: "diff/recharts-bar-basic.png",
+            },
+          },
+        ],
+      });
+
+      await expect(readFile(join(dir, "summary.md"), "utf8")).resolves.toContain(
+        "recharts-bar-basic",
+      );
+      await expect(readFile(join(dir, "results.json"), "utf8")).resolves.toContain(
+        "\"pixelDiffRatio\": 0",
+      );
+      await expect(readFile(join(dir, "coverage-ledger.md"), "utf8")).resolves.toContain(
+        "RC-BAR-001",
+      );
+      await expect(readFile(join(dir, "api-coverage.md"), "utf8")).resolves.toContain(
+        "Recharts API Coverage",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("distinguishes successful captures with visual differences", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
+
+    try {
+      await writeRunSummary({
+        outputDir: dir,
+        runId: "2026-06-12-002-recharts",
+        results: [
+          {
+            fixtureId: "recharts-line-tooltip-hover",
+            ok: true,
+            pixelDiffRatio: 0.008245,
+            reactDomSummary: { svgCount: 1, pathCount: 2, text: ["06-01"] },
+            compatDomSummary: { svgCount: 1, pathCount: 1, text: ["06-01"] },
+            artifacts: {
+              reactScreenshot: "react/recharts-line-tooltip-hover.png",
+              compatScreenshot: "compat/recharts-line-tooltip-hover.png",
+              diffScreenshot: "diff/recharts-line-tooltip-hover.png",
+            },
+          },
+        ],
+      });
+
+      await expect(readFile(join(dir, "summary.md"), "utf8")).resolves.toContain(
+        "captured_with_differences",
+      );
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("classifies the resolved hierarchy flow fixture as a normal match", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
+
+    try {
+      await writeRunSummary({
+        outputDir: dir,
+        runId: "2026-06-12-003-recharts",
+        results: [
+          {
+            fixtureId: "recharts-hierarchy-flow",
+            ok: true,
+            pixelDiffRatio: 0,
+            reactDomSummary: {
+              svgCount: 4,
+              pathCount: 20,
+              rectCount: 1,
+              circleCount: 0,
+              text: ["React", "Compat", "Router", "Forms"],
+              classes: ["recharts-funnel-trapezoid", "recharts-trapezoid"],
+            },
+            compatDomSummary: {
+              svgCount: 4,
+              pathCount: 20,
+              rectCount: 1,
+              circleCount: 0,
+              text: ["React", "Compat", "Router", "Forms"],
+              classes: ["recharts-funnel-trapezoid", "recharts-trapezoid"],
+            },
+            artifacts: {
+              reactScreenshot: "react/recharts-hierarchy-flow.png",
+              compatScreenshot: "compat/recharts-hierarchy-flow.png",
+              diffScreenshot: "diff/recharts-hierarchy-flow.png",
+            },
+          },
+        ],
+      });
+
+      const summary = await readFile(join(dir, "summary.md"), "utf8");
+
+      expect(summary).toContain("| recharts-hierarchy-flow | matched | 0.000000 | 4 | 4 |  |");
+      expect(summary).not.toContain("matched_with_known_tolerance");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("writes API coverage risk categories", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "compat-lab-result-"));
+
+    try {
+      await writeRunSummary({
+        outputDir: dir,
+        runId: "2026-06-13-001-recharts",
+        results: [],
+      });
+
+      const coverage = await readFile(join(dir, "api-coverage.md"), "utf8");
+
+      expect(coverage).toContain("## Risk Category Summary");
+      expect(coverage).toContain("| interaction |");
+      expect(coverage).toContain("| layout |");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

@@ -1207,7 +1207,7 @@ function createHostFiberImpl(
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
       markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
-      fiber.child = current?.child;
+      fiber.child = getSkippedChild(current);
       fiber.memoizedState = previousMemoState;
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
@@ -1317,6 +1317,8 @@ function createHostFiberImpl(
       current?.tag === "class-component" && current.type === classType
         ? (current.stateNode as ClassComponentInstance)
         : undefined;
+    const hasCurrentClassFiber =
+      current?.tag === "class-component" && current.type === classType;
     const rendered = renderClassComponentWithRuntime(
       classType,
       node.props,
@@ -1331,12 +1333,13 @@ function createHostFiberImpl(
           previousClassChildKeys,
           `${path}.class`,
         ),
+        allowSkip: hasCurrentClassFiber,
       },
     );
     applyRef(node.ref, rendered.kind === "skip" ? current?.stateNode : rendered.instance);
 
     if (rendered.kind === "skip") {
-      fiber.child = current?.child;
+      fiber.child = getSkippedChild(current);
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
@@ -1414,7 +1417,7 @@ function createHostFiberImpl(
       !hasPendingAsyncChild(current?.child)
     ) {
       markActiveInstanceKeys(runtime, previousFunctionState.instanceKeys);
-      fiber.child = current?.child;
+      fiber.child = getSkippedChild(current);
       fiber.memoizedState = current?.memoizedState;
       fiber.stateNode = previousFunctionState;
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
@@ -1936,6 +1939,22 @@ function collectCommittedHostNodes(fiber: Fiber): Node[] {
   }
 
   return nodes;
+}
+
+function getSkippedChild(current: Fiber | undefined): Fiber | undefined {
+  const child = current?.child;
+  const alternateChild = current?.alternate?.child;
+
+  if (
+    child !== undefined &&
+    alternateChild !== undefined &&
+    collectCommittedHostNodes(child).length === 0 &&
+    collectCommittedHostNodes(alternateChild).length > 0
+  ) {
+    return alternateChild;
+  }
+
+  return child;
 }
 
 function finishHostPassthroughFiber(fiber: Fiber): void {
