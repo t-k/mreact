@@ -1,10 +1,10 @@
 # Mreact
 
-Mreact is a React-flavored framework inspired by Marko's compiler-first philosophy, with ideas from Solid and Qwik where they fit Mreact's model.
+Mreact is an experimental React-flavored framework for building server-rendered apps that stay small and fast.
 
-Mreact aims to stay small and fast: small client bundles, low server rendering cost, streaming-friendly HTML, and short deployment startup paths.
+It takes inspiration from Marko's compiler-first and streaming model, Solid's fine-grained reactivity, and Qwik's focus on avoiding unnecessary browser work. It is not a resumability framework; instead, it uses compiler-assisted server/client splitting, fine-grained updates, and route-level inference to keep server-rendered routes free of browser runtime when they do not need it.
 
-Mreact is experimental. APIs may change.
+APIs may change.
 
 ## Documentation
 

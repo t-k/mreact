@@ -265,7 +265,13 @@ describe("docs-site example contract", () => {
     expect(layout).not.toContain('class="site-sidebar-header"');
     expect(layout).toContain("data-pagefind-body");
     expect(overview).toContain("# Mreact");
-    expect(overview).toContain("Mreact is a [React](https://react.dev/)-flavored framework");
+    expect(overview).toContain(
+      "Mreact is an experimental [React](https://react.dev/)-flavored framework for building server-rendered apps that stay small and fast.",
+    );
+    expect(overview).toContain(
+      "It takes inspiration from [Marko](https://markojs.com/)'s HTML-first streaming model, [Solid](https://www.solidjs.com/)'s fine-grained reactivity, and [Qwik](https://qwik.dev/)'s focus on avoiding unnecessary browser work.",
+    );
+    expect(overview).toContain("It is not a resumability framework;");
     expect(overview).toContain("## Motivations");
     expect(overview).toContain("Automatic server/client boundary inference");
     expect(overview).toContain("## Status");
@@ -1998,6 +2004,11 @@ describe("docs-site example contract", () => {
     expect(benchmarks).toContain("Primitive DOM-update cases mostly measure already-active update paths");
     expect(rootReadme.split("\n").length).toBeLessThan(260);
     expect(rootReadme).toContain("## Documentation");
+    expect(rootReadme).toContain(
+      "Mreact is an experimental React-flavored framework for building server-rendered apps that stay small and fast.",
+    );
+    expect(rootReadme).toContain("It takes inspiration from Marko's compiler-first and streaming model");
+    expect(rootReadme).toContain("It is not a resumability framework;");
     expect(rootReadme).toContain("https://t-k.github.io/mreact/");
     expect(rootReadme).toContain("## Quick Start");
     expect(rootReadme).toContain("npx @reckona/create-mreact-app my-app --template basic --src-dir");
