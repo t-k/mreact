@@ -2162,6 +2162,13 @@ describe("docs-site example contract", () => {
     expect(workflow).toContain("examples/docs-site/dist");
     expect(workflow).toContain("pnpm --filter @reckona/example-docs-site build");
     expect(workflow).toContain("branches:\n      - main");
+    expect(workflow).toContain("paths:");
+    expect(workflow).toContain("- .github/workflows/docs-pages.yml");
+    expect(workflow).toContain("- examples/docs-site/**");
+    expect(workflow).toContain("- packages/**");
+    expect(workflow).toContain("- docs/api/**");
+    expect(workflow).toContain("- benchmarks/results/**");
+    expect(workflow).toContain("- pnpm-lock.yaml");
     expect(benchmarkWorkflow).toContain("workflow_dispatch");
     expect(benchmarkWorkflow).toContain("git add benchmarks/results");
     expect(benchmarkWorkflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"');

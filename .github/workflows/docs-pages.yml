@@ -4,6 +4,17 @@ on:
   push:
     branches:
       - main
+    paths:
+      - .github/workflows/docs-pages.yml
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - typedoc.json
+      - api-extractor.json
+      - docs/api/**
+      - benchmarks/results/**
+      - examples/docs-site/**
+      - packages/**
   workflow_dispatch:
 
 permissions:
