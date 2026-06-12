@@ -36,8 +36,11 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Test router build
+        run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+
       - name: Test
-        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
