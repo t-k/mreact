@@ -10,6 +10,7 @@ coverage/
 tmp/
 benchmarks/app-framework/.tmp/
 benchmarks/router/.tmp/
+benchmarks/results/
 
 # Private working notes and skill artifacts (never commit)
 /docs.local/
@@ -35,3 +36,8 @@ benchmarks/router/.tmp/
 AGENTS.override.md
 CLAUDE.local.md
 tsdoc-metadata.json
+.wrangler/
+.playwright-mcp/
+*.swp
+.coverage-ledger/
+.data/

@@ -2171,7 +2171,7 @@ describe("docs-site example contract", () => {
     expect(workflow).toContain("- benchmarks/results/**");
     expect(workflow).toContain("- pnpm-lock.yaml");
     expect(benchmarkWorkflow).toContain("workflow_dispatch");
-    expect(benchmarkWorkflow).toContain("git add benchmarks/results");
+    expect(benchmarkWorkflow).toContain("git add -f benchmarks/results");
     expect(benchmarkWorkflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"');
 
     const exportScript = await readDocsSite("scripts/export-static.ts");
