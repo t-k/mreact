@@ -1996,14 +1996,19 @@ describe("docs-site example contract", () => {
     expect(benchmarks).toContain("Package-level microbenchmarks");
     expect(benchmarks).toContain("Resumability-oriented frameworks");
     expect(benchmarks).toContain("Primitive DOM-update cases mostly measure already-active update paths");
-    expect(rootReadme).toContain("The repository contains several benchmark tracks:");
-    expect(rootReadme).toContain("Marko, Vue, Svelte, Angular, Qwik, React, Solid, and mreact");
-    expect(rootReadme).toContain(
-      "Marko Run, Nuxt, SvelteKit, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and mreact app router",
-    );
-    expect(rootReadme).toContain("pnpm bench:primitive-browser");
-    expect(rootReadme).toContain("pnpm bench:non-router");
-    expect(rootReadme).toContain("pnpm bench:lambda-routes");
+    expect(rootReadme.split("\n").length).toBeLessThan(260);
+    expect(rootReadme).toContain("## Documentation");
+    expect(rootReadme).toContain("https://t-k.github.io/mreact/");
+    expect(rootReadme).toContain("## Quick Start");
+    expect(rootReadme).toContain("npx @reckona/create-mreact-app my-app --template basic --src-dir");
+    expect(rootReadme).toContain("## Benchmarks");
+    expect(rootReadme).toContain("See the benchmark dashboard and interpretation notes:");
+    expect(rootReadme).toContain("https://t-k.github.io/mreact/benchmarks/");
+    expect(rootReadme).toContain("## Examples");
+    expect(rootReadme).toContain("## Development");
+    expect(rootReadme).not.toContain("## App Router Examples");
+    expect(rootReadme).not.toContain("### Client Interactivity");
+    expect(rootReadme).not.toContain("### Deployment Adapters");
     expect(benchmarks.indexOf("## How to read results")).toBeLessThan(
       benchmarks.indexOf("## Latest results"),
     );
