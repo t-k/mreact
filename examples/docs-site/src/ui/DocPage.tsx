@@ -1,3 +1,4 @@
+import { Link } from "@reckona/mreact-router/link";
 import type { DocsPage } from "../content-registry.js";
 import { navSectionForSlug, nextNavItem, previousNavItem } from "../nav.config.js";
 import { sitePath } from "../site-path.js";
@@ -16,11 +17,15 @@ export function DocPage(props: { page: DocsPage }) {
       <nav aria-label="Pagination" class="doc-footer">
         <span>
           {previous === undefined ? undefined : (
-            <a href={sitePath(previous.slug)}>Previous: {previous.text}</a>
+            <Link href={sitePath(previous.slug)} prefetch="intent">
+              Previous: {previous.text}
+            </Link>
           )}
         </span>
         <span>
-          {next === undefined ? undefined : <a href={sitePath(next.slug)}>Next: {next.text}</a>}
+          {next === undefined ? undefined : (
+            <Link href={sitePath(next.slug)} prefetch="viewport">Next: {next.text}</Link>
+          )}
         </span>
       </nav>
     </>

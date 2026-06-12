@@ -2147,6 +2147,17 @@ describe("docs-site example contract", () => {
     }
   });
 
+  test("prefetches adjacent docs pagination links without hydrating the whole page", async () => {
+    const docPage = await readDocsSite("src/ui/DocPage.tsx");
+
+    expect(docPage).toContain('import { Link } from "@reckona/mreact-router/link";');
+    expect(docPage).toContain('prefetch="viewport"');
+    expect(docPage).toContain('<Link href={sitePath(next.slug)} prefetch="viewport">');
+    expect(docPage).toContain('<Link href={sitePath(previous.slug)} prefetch="intent">');
+    expect(docPage).not.toContain("<a href={sitePath(next.slug)}");
+    expect(docPage).not.toContain("<a href={sitePath(previous.slug)}");
+  });
+
   test("has a GitHub Pages workflow that deploys the static docs output", async () => {
     const workflow = await readFile(join(root, ".github", "workflows", "docs-pages.yml"), "utf8");
     const benchmarkWorkflow = await readFile(

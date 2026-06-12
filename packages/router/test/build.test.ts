@@ -5646,6 +5646,51 @@ export default function Page() {
     expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
   });
 
+  test("prerendered static routes include navigation runtime for Link prefetch", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-prerender-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { Link } from "@reckona/mreact-router/link";
+
+export const prerender = true;
+
+export default function Page() {
+  return <main><Link href="/about" prefetch="viewport">About</Link></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home).toMatchObject({ navigation: true });
+    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
+      'data-mreact-prefetch="viewport"',
+    );
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
+      `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
+    );
+
+    await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
+    expect(await readFile(join(exportDir, "index.html"), "utf8")).toContain(
+      `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
+    );
+  });
+
   test("auto-injects navigation runtime when Link is rendered via a custom component", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-transitive-"));
     const appDir = join(rootDir, "app");
