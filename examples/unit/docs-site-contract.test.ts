@@ -270,6 +270,10 @@ describe("docs-site example contract", () => {
     expect(overview).toContain("Automatic server/client boundary inference");
     expect(overview).toContain("## Status");
     expect(overview).toContain("## Performance");
+    expect(overview).toContain(
+      "Mreact aims to stay small and fast: small client bundles, low server rendering cost, streaming-friendly HTML, and short deployment startup paths.",
+    );
+    expect(overview).not.toContain("Mreact is developed with performance in mind");
     expect(overview).toContain("[Benchmarks](/benchmarks/)");
     expect(await readDocsSite("package.json")).toContain("@reckona/example-docs-site");
   });
