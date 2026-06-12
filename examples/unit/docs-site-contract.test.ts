@@ -269,9 +269,12 @@ describe("docs-site example contract", () => {
       "Mreact is an experimental [React](https://react.dev/)-flavored framework for building server-rendered apps that stay small and fast.",
     );
     expect(overview).toContain(
-      "It takes inspiration from [Marko](https://markojs.com/)'s HTML-first streaming model, [Solid](https://www.solidjs.com/)'s fine-grained reactivity, and [Qwik](https://qwik.dev/)'s focus on avoiding unnecessary browser work.",
+      "It takes inspiration from [Marko](https://markojs.com/)'s HTML-first streaming model, with additional influence from [Solid](https://www.solidjs.com/) and [Qwik](https://qwik.dev/).",
     );
     expect(overview).toContain("It is not a resumability framework;");
+    expect(overview).not.toContain("Solid-style fine-grained reactivity");
+    expect(overview).not.toContain("Qwik City-style route ergonomics");
+    expect(overview).not.toContain("Qwik](https://qwik.dev/)'s focus on avoiding unnecessary browser work");
     expect(overview).toContain("## Motivations");
     expect(overview).toContain("Automatic server/client boundary inference");
     expect(overview).toContain("## Status");
@@ -2007,8 +2010,13 @@ describe("docs-site example contract", () => {
     expect(rootReadme).toContain(
       "Mreact is an experimental React-flavored framework for building server-rendered apps that stay small and fast.",
     );
-    expect(rootReadme).toContain("It takes inspiration from Marko's compiler-first and streaming model");
+    expect(rootReadme).toContain(
+      "It takes inspiration from Marko's compiler-first and streaming model, with additional influence from Solid and Qwik.",
+    );
     expect(rootReadme).toContain("It is not a resumability framework;");
+    expect(rootReadme).not.toContain("Solid-style fine-grained reactivity");
+    expect(rootReadme).not.toContain("Qwik City-style route ergonomics");
+    expect(rootReadme).not.toContain("Qwik's focus on avoiding unnecessary browser work");
     expect(rootReadme).toContain("https://t-k.github.io/mreact/");
     expect(rootReadme).toContain("## Quick Start");
     expect(rootReadme).toContain("npx @reckona/create-mreact-app my-app --template basic --src-dir");

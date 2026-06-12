@@ -2,7 +2,7 @@
 
 Mreact is an experimental React-flavored framework for building server-rendered apps that stay small and fast.
 
-It takes inspiration from Marko's compiler-first and streaming model, Solid's fine-grained reactivity, and Qwik's focus on avoiding unnecessary browser work. It is not a resumability framework; instead, it uses compiler-assisted server/client splitting, fine-grained updates, and route-level inference to keep server-rendered routes free of browser runtime when they do not need it.
+It takes inspiration from Marko's compiler-first and streaming model, with additional influence from Solid and Qwik. It is not a resumability framework; instead, it uses compiler-assisted server/client splitting to keep server-rendered routes free of browser runtime when they do not need it.
 
 APIs may change.
 
