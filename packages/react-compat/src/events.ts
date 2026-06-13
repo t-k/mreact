@@ -530,6 +530,12 @@ function createSyntheticEvent(
           pageY: mouseEvent.pageY,
           screenX: mouseEvent.screenX,
           screenY: mouseEvent.screenY,
+          button: mouseEvent.button,
+          buttons: mouseEvent.buttons,
+          ctrlKey: mouseEvent.ctrlKey,
+          shiftKey: mouseEvent.shiftKey,
+          altKey: mouseEvent.altKey,
+          metaKey: mouseEvent.metaKey,
           relatedTarget: mouseEvent.relatedTarget,
         }),
     ...(touchEvent === undefined

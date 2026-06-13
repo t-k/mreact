@@ -645,6 +645,65 @@ describe("react-compat render", () => {
     });
   });
 
+  test("copies mouse button and modifier fields onto pointer synthetic events", () => {
+    const container = document.createElement("div");
+    let seen:
+      | {
+          button: number | undefined;
+          buttons: number | undefined;
+          ctrlKey: boolean | undefined;
+          shiftKey: boolean | undefined;
+          altKey: boolean | undefined;
+          metaKey: boolean | undefined;
+        }
+      | undefined;
+
+    render(
+      createElement("button", {
+        onPointerDown: (event: {
+          button?: number;
+          buttons?: number;
+          ctrlKey?: boolean;
+          shiftKey?: boolean;
+          altKey?: boolean;
+          metaKey?: boolean;
+        }) => {
+          seen = {
+            button: event.button,
+            buttons: event.buttons,
+            ctrlKey: event.ctrlKey,
+            shiftKey: event.shiftKey,
+            altKey: event.altKey,
+            metaKey: event.metaKey,
+          };
+        },
+      }, "Open"),
+      container,
+    );
+
+    container.querySelector("button")?.dispatchEvent(
+      new MouseEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        buttons: 1,
+        ctrlKey: false,
+        shiftKey: true,
+        altKey: false,
+        metaKey: true,
+      }),
+    );
+
+    expect(seen).toEqual({
+      button: 0,
+      buttons: 1,
+      ctrlKey: false,
+      shiftKey: true,
+      altKey: false,
+      metaKey: true,
+    });
+  });
+
   test("delegates event listeners through the root container", () => {
     const container = document.createElement("div");
     const addedListeners: string[] = [];

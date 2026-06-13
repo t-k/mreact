@@ -15,6 +15,12 @@ export interface SyntheticEvent {
   pageY?: number;
   screenX?: number;
   screenY?: number;
+  button?: number;
+  buttons?: number;
+  ctrlKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
+  metaKey?: boolean;
   relatedTarget?: EventTarget | null;
   touches?: TouchList;
   changedTouches?: TouchList;
