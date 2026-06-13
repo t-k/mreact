@@ -10,6 +10,7 @@ import {
   createContext,
   createErrorBoundary,
   createElement,
+  createPortal,
   createRoot,
   forwardRef,
   flushSync,
@@ -599,6 +600,266 @@ describe("react-compat common API subset", () => {
     }
 
     expect(container.innerHTML).toBe("<p>B</p>");
+  });
+
+  test("useSyncExternalStore defers listener updates fired during host ref commit", () => {
+    const container = document.createElement("div");
+    let value = 0;
+    const listeners = new Set<() => void>();
+
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => value,
+      set(nextValue: number) {
+        value = nextValue;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    let reveal = () => undefined;
+
+    function Probe() {
+      const [visible, setVisible] = useState(false);
+      const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      reveal = () => setVisible(true);
+      return createElement(
+        "section",
+        null,
+        createElement("span", null, snapshot),
+        visible
+          ? createElement(
+              "button",
+              {
+                ref: (node: HTMLButtonElement | null) => {
+                  if (node !== null && value === 0) {
+                    store.set(1);
+                  }
+                },
+              },
+              "ready",
+            )
+          : null,
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+    reveal();
+
+    expect(container.innerHTML).toBe("<section><span>1</span><button>ready</button></section>");
+  });
+
+  test("useSyncExternalStore observes ref updates that happen before subscription mount", () => {
+    const container = document.createElement("div");
+    let value: HTMLButtonElement | null = null;
+    const listeners = new Set<() => void>();
+
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => value,
+      set(nextValue: HTMLButtonElement | null) {
+        if (Object.is(value, nextValue)) {
+          return;
+        }
+        value = nextValue;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function Probe() {
+      const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return createElement(
+        "section",
+        null,
+        createElement("span", null, snapshot === null ? "missing" : "ready"),
+        createElement("button", { ref: (node: HTMLButtonElement | null) => store.set(node) }, "target"),
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+
+    expect(container.innerHTML).toBe("<section><span>ready</span><button>target</button></section>");
+  });
+
+  test("useSyncExternalStore host ref updates do not duplicate portal children", () => {
+    const container = document.createElement("div");
+    const portalContainer = document.createElement("div");
+    let value = 0;
+    const listeners = new Set<() => void>();
+
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => value,
+      set(nextValue: number) {
+        value = nextValue;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function Probe() {
+      const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return createElement(
+        "section",
+        null,
+        createElement("span", null, snapshot),
+        createPortal(
+          createElement(
+            "button",
+            {
+              ref: (node: HTMLButtonElement | null) => {
+                if (node !== null && value === 0) {
+                  store.set(1);
+                }
+              },
+            },
+            "portal ready",
+          ),
+          portalContainer,
+        ),
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+
+    expect(container.innerHTML).toBe("<section><span>1</span></section>");
+    expect(portalContainer.innerHTML).toBe("<button>portal ready</button>");
+  });
+
+  test("portal children are replaced when their owner remounts", () => {
+    const container = document.createElement("div");
+    const portalContainer = document.createElement("div");
+    let remount = () => undefined;
+
+    function PortalOwner(props: { version: number }) {
+      return createPortal(
+        createElement("span", { "data-version": props.version }, `portal ${props.version}`),
+        portalContainer,
+      );
+    }
+
+    function Probe() {
+      const [version, setVersion] = useState(0);
+      remount = () => setVersion(1);
+      return createElement(
+        "section",
+        null,
+        createElement("p", null, version),
+        createElement(PortalOwner, { key: version, version }),
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+    remount();
+
+    expect(container.innerHTML).toBe("<section><p>1</p></section>");
+    expect(portalContainer.innerHTML).toBe('<span data-version="1">portal 1</span>');
+  });
+
+  test("portal child list updates replace owned children during dirty commits", () => {
+    const container = document.createElement("div");
+    const portalContainer = document.createElement("div");
+    let showSecond = () => undefined;
+
+    function Probe() {
+      const [expanded, setExpanded] = useState(false);
+      showSecond = () => setExpanded(true);
+      return createElement(
+        "section",
+        null,
+        "root",
+        createPortal(
+          expanded
+            ? [
+                createElement("span", { key: "first" }, "first"),
+                createElement("span", { key: "second" }, "second"),
+              ]
+            : createElement("span", { key: "first" }, "first"),
+          portalContainer,
+        ),
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+    showSecond();
+
+    expect(container.innerHTML).toBe("<section>root</section>");
+    expect(portalContainer.innerHTML).toBe("<span>first</span><span>second</span>");
+  });
+
+  test("pointer down handlers receive pointer metadata and can prevent default", () => {
+    const container = document.createElement("div");
+    const events: Array<{ button: number | undefined; defaultPrevented: boolean; pointerType: string | undefined }> = [];
+
+    function Probe() {
+      return createElement(
+        "button",
+        {
+          onPointerDown: (event: {
+            button?: number;
+            defaultPrevented: boolean;
+            pointerType?: string;
+            preventDefault(): void;
+          }) => {
+            event.preventDefault();
+            events.push({
+              button: event.button,
+              defaultPrevented: event.defaultPrevented,
+              pointerType: event.pointerType,
+            });
+          },
+        },
+        "toggle",
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+    container.querySelector("button")?.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        button: 0,
+        pointerType: "mouse",
+      }),
+    );
+
+    expect(events).toEqual([{ button: 0, defaultPrevented: true, pointerType: "mouse" }]);
+  });
+
+  test("focus event updates preserve the host element", () => {
+    const container = document.createElement("div");
+
+    function Probe() {
+      const [focused, setFocused] = useState(false);
+      return createElement(
+        "button",
+        {
+          "data-focused": focused ? "yes" : "no",
+          onFocus: () => setFocused(true),
+        },
+        "focus target",
+      );
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+    const before = container.querySelector("button");
+    before?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    const after = container.querySelector("button");
+
+    expect(after).toBe(before);
+    expect(after?.getAttribute("data-focused")).toBe("yes");
   });
 
   test("memo does not skip external store updates from its own hooks", () => {

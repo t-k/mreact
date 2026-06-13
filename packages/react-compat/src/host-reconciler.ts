@@ -1681,7 +1681,29 @@ function commitHostDirtyFiber(
 
     if (container instanceof Element) {
       setLogicalEventParent(container, parent);
-      commitHostDirtyChildren(fiber.child, container, container, `${path}.portal`, options);
+      const portalEventRoot =
+        eventRoot !== container && eventRoot.contains(container) ? eventRoot : container;
+
+      if (
+        fiber.childListChanged ||
+        fiber.subtreeChildListChanged ||
+        (fiber.subtreeFlags & Placement) !== NoFlags
+      ) {
+        const childNodes = commitHostChildren(
+          fiber.child,
+          container,
+          portalEventRoot,
+          `${path}.portal`,
+          options,
+        );
+        const previousNodes = Array.isArray(fiber.alternate?.memoizedState)
+          ? fiber.alternate.memoizedState.filter((node): node is Node => node instanceof Node)
+          : [];
+        syncOwnedChildNodes(container, previousNodes, childNodes);
+        fiber.memoizedState = childNodes;
+      } else {
+        commitHostDirtyChildren(fiber.child, container, portalEventRoot, `${path}.portal`, options);
+      }
     }
     fiber.memoizedProps = fiber.pendingProps;
     finishCommittedFiber(fiber);
@@ -1752,6 +1774,11 @@ function commitHostKeyedChildListMutationFiber(
   path: string,
   options: RenderOptions = {},
 ): boolean {
+  if (fiber.tag === "portal") {
+    commitHostDirtyFiber(fiber, parent, eventRoot, path, options);
+    return true;
+  }
+
   if (fiber.childListChanged) {
     const mutationParent =
       fiber.tag === "host-component" && isHostElement(fiber.stateNode)

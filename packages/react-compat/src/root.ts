@@ -6,7 +6,7 @@ import {
   type RenderPriority,
   type RootRuntime,
 } from "./hooks.js";
-import { removeChildIfPresent } from "./dom-children.js";
+import { collectOwnedChildNodes, removeChildIfPresent } from "./dom-children.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
@@ -532,7 +532,8 @@ function removeStalePortalNodes(
   snapshot: PortalRenderSnapshot,
   runtime: RootRuntime,
 ): void {
-  for (const [container, nodes] of snapshot.nodes) {
+  for (const container of snapshot.containers) {
+    const nodes = snapshot.nodes.get(container) ?? new Set(collectOwnedChildNodes(container));
     const currentNodes = runtime.portalNodes.get(container);
 
     for (const node of nodes) {

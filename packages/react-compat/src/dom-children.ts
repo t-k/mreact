@@ -1,5 +1,7 @@
 import { collectScopedNodes } from "./hydration.js";
 
+const ownedChildParentByNode = new WeakMap<Node, ParentNode>();
+
 export function syncChildNodes(parent: ParentNode, nextNodes: readonly Node[]): void {
   syncScopedChildNodes(parent, null, null, nextNodes);
 }
@@ -9,19 +11,28 @@ export function syncOwnedChildNodes(
   previousNodes: readonly Node[],
   nextNodes: readonly Node[],
 ): void {
+  const ownedPreviousNodes =
+    previousNodes.length === 0 ? collectOwnedChildNodes(parent) : previousNodes;
   const nextSet = new Set(nextNodes);
 
   for (const node of nextNodes) {
+    ownedChildParentByNode.set(node, parent);
     if (node.parentNode !== parent || node.nextSibling !== null) {
       parent.appendChild(node);
     }
   }
 
-  for (const child of previousNodes) {
+  for (const child of ownedPreviousNodes) {
     if (!nextSet.has(child)) {
       removeChildIfPresent(parent, child);
     }
   }
+}
+
+export function collectOwnedChildNodes(parent: ParentNode): Node[] {
+  return Array.from(parent.childNodes).filter(
+    (node) => ownedChildParentByNode.get(node) === parent,
+  );
 }
 
 export function syncScopedChildNodes(

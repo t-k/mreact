@@ -143,7 +143,7 @@ type HookSlot =
       update: (state: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
     }
-  | { kind: "store"; value: unknown; hasMounted?: boolean }
+  | { kind: "store"; value: unknown; hasMounted?: boolean; hostCommitValue?: unknown }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | { kind: "debug"; value: unknown }
@@ -191,6 +191,7 @@ let currentEventPriority: EventPriority = "default";
 let eventRerenderScheduled = false;
 let automaticRerenderScheduled = false;
 let effectFlushRerenderDepth = 0;
+let hostCommitRerenderDepth = 0;
 let strictMemoOwnerId = 0;
 const strictMemoObjectOwnerIds = new WeakMap<object, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
@@ -366,8 +367,6 @@ export function createRootRuntime(
       hookRenderState.currentInstance = undefined;
       if (committed) {
         flushProfilerCommits(this, profilerCommits);
-        flushHostCommitRerenders();
-        this.externalStoreUpdate = false;
       }
     },
     flushEffects() {
@@ -389,7 +388,9 @@ export function createRootRuntime(
         this.effectFlushPhase = undefined;
         this.profilerFlushDepth -= 1;
         if (this.profilerFlushDepth === 0) {
+          flushHostCommitRerenders();
           flushEffectFlushRerenders();
+          this.externalStoreUpdate = false;
         }
       }
     },
@@ -1312,11 +1313,23 @@ export function useSyncExternalStore<T>(
       const nextSnapshot = getSnapshot();
 
       if (!Object.is(slot.value, nextSnapshot)) {
+        if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
+          slot.hostCommitValue = slot.value;
+        }
         slot.value = nextSnapshot;
-        instance.dirty = true;
         runtime.externalStoreUpdate = true;
+        if (hookRenderState.hostCommitDepth > 0) {
+          updateHostCommitDirtyState(instance);
+          hookRenderState.queuedHostCommitRerenders.add(runtime);
+          return;
+        }
+        instance.dirty = true;
         if (runtime.profilerFlushDepth > 0) {
           hookRenderState.queuedEffectFlushRerenders.add(runtime);
+          return;
+        }
+        if (eventBatchDepth > 0) {
+          queueEventRerender(runtime);
           return;
         }
         runtime.rerender("sync");
@@ -2016,23 +2029,36 @@ function scheduleInstanceUpdate(
 
 function flushHostCommitRerenders(): void {
   if (
+    hostCommitRerenderDepth > 0 ||
     hookRenderState.hostCommitDepth > 0 ||
     hookRenderState.queuedHostCommitRerenders.size === 0
   ) {
     return;
   }
 
-  const runtimes = [...hookRenderState.queuedHostCommitRerenders];
-  hookRenderState.queuedHostCommitRerenders.clear();
-  for (const runtime of runtimes) {
-    const hasDirtyInstance = Array.from(runtime.instances.values()).some(
-      (instance) => instance.dirty,
-    );
-    clearHostCommitStateBaselines(runtime);
+  hostCommitRerenderDepth += 1;
+  try {
+    for (
+      let attempt = 0;
+      attempt < 3 && hookRenderState.queuedHostCommitRerenders.size > 0;
+      attempt += 1
+    ) {
+      const runtimes = [...hookRenderState.queuedHostCommitRerenders];
+      hookRenderState.queuedHostCommitRerenders.clear();
+      for (const runtime of runtimes) {
+        const hasDirtyInstance = Array.from(runtime.instances.values()).some(
+          (instance) => instance.dirty,
+        );
+        clearHostCommitStateBaselines(runtime);
 
-    if (hasDirtyInstance) {
-      runtime.rerender("sync");
+        if (hasDirtyInstance) {
+          runtime.rerender("sync");
+        }
+      }
     }
+    hookRenderState.queuedHostCommitRerenders.clear();
+  } finally {
+    hostCommitRerenderDepth -= 1;
   }
 }
 
@@ -2074,7 +2100,7 @@ function updateHostCommitDirtyState(
 ): void {
   instance.dirty = instance.hooks.some(
     (slot) =>
-      slot.kind === "state" &&
+      (slot.kind === "state" || slot.kind === "store") &&
       Object.hasOwn(slot, "hostCommitValue") &&
       !Object.is(slot.hostCommitValue, slot.value),
   );
@@ -2083,7 +2109,7 @@ function updateHostCommitDirtyState(
 function clearHostCommitStateBaselines(runtime: RootRuntime): void {
   for (const instance of runtime.instances.values()) {
     for (const slot of instance.hooks) {
-      if (slot.kind === "state") {
+      if (slot.kind === "state" || slot.kind === "store") {
         delete slot.hostCommitValue;
       }
     }
