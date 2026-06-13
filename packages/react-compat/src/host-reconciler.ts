@@ -110,6 +110,11 @@ interface FiberReconcileResult {
   consumed: number;
 }
 
+interface AppendSuffixCommitHint {
+  fiber: Fiber;
+  index: number;
+}
+
 interface ReactSuspenseBoundary {
   previousNodes?: Node[];
   consumed: number;
@@ -473,6 +478,7 @@ function reconcileKeyedRowHostChildren(
   let subtreeFlags = NoFlags;
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
+  let appendSuffix: AppendSuffixCommitHint | undefined;
   const canReuseUnchangedRows = hasSameKeyOrderPrefix(currentFirstChild, children);
   const row = createKeyedRowHostElementScratch();
 
@@ -484,12 +490,14 @@ function reconcileKeyedRowHostChildren(
     }
 
     let matchedCurrent: Fiber | undefined;
+    let matchedByAppendSuffix = false;
 
     if (skipRemainingKeyedLookup) {
       matchedCurrent = undefined;
     } else if (currentKeyed === undefined) {
       listShapeChanged = true;
       skipRemainingKeyedLookup = true;
+      matchedByAppendSuffix = true;
       matchedCurrent = undefined;
     } else if (currentKeyed?.key === row.key) {
       matchedCurrent = currentKeyed;
@@ -519,6 +527,10 @@ function reconcileKeyedRowHostChildren(
         ? createKeyedRowHostFiber(parent, undefined, row, options)
         : (canReuseUnchangedRows ? getReusableKeyedRowHostFiber(matchedCurrent, row) : undefined) ??
           createKeyedRowHostFiber(parent, matchedCurrent, row, options);
+
+    if (matchedByAppendSuffix && appendSuffix === undefined) {
+      appendSuffix = { fiber, index };
+    }
 
     if (first === undefined) {
       first = fiber;
@@ -551,7 +563,18 @@ function reconcileKeyedRowHostChildren(
   parent.subtreeFlags = subtreeFlags;
   parent.subtreeChildListChanged = subtreeChildListChanged;
   parent.childListChanged = listShapeChanged;
+  if (appendSuffix !== undefined && canStoreAppendSuffixCommitHint(parent)) {
+    parent.memoizedState = appendSuffix;
+  }
   return { fiber: first, consumed: 0 };
+}
+
+function canStoreAppendSuffixCommitHint(parent: Fiber): boolean {
+  return (
+    parent.tag === "fragment" ||
+    parent.tag === "host-component" ||
+    parent.tag === "host-root"
+  );
 }
 
 function markOptimizedChildForDeletion(parent: Fiber, _child: Fiber): void {
@@ -1904,17 +1927,28 @@ function commitHostAppendSuffix(
   path: string,
   options: RenderOptions,
 ): boolean {
-  const append = getAppendSuffix(fiber.alternate?.child, fiber.child);
+  const appendHint = readAppendSuffixCommitHint(fiber.memoizedState);
+  const append = appendHint ?? getAppendSuffix(fiber.alternate?.child, fiber.child);
 
   if (append === undefined) {
     return false;
+  }
+
+  if (appendHint !== undefined) {
+    fiber.memoizedState = undefined;
   }
 
   let cursor: Fiber | undefined = append.fiber;
   let index = append.index;
 
   while (cursor !== undefined) {
-    for (const node of commitHostFiber(cursor, parent, eventRoot, joinCommitPath(path, String(index)), options)) {
+    for (const node of commitHostFiber(
+      cursor,
+      parent,
+      eventRoot,
+      joinCommitPath(path, String(index)),
+      options,
+    )) {
       parent.appendChild(node);
     }
     cursor = cursor.sibling;
@@ -1922,6 +1956,17 @@ function commitHostAppendSuffix(
   }
 
   return true;
+}
+
+function readAppendSuffixCommitHint(value: unknown): AppendSuffixCommitHint | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+
+  const candidate = value as Partial<AppendSuffixCommitHint>;
+  return candidate.fiber !== undefined && typeof candidate.index === "number"
+    ? { fiber: candidate.fiber, index: candidate.index }
+    : undefined;
 }
 
 function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {

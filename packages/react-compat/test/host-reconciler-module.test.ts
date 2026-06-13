@@ -504,6 +504,60 @@ describe("host reconciler module", () => {
     expect(siblingReads).toBe(6);
   });
 
+  test("commits append-only keyed rows without rescanning unchanged siblings", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("span", { "data-key": "a", key: "a" }, "A"),
+        createElement("span", { "data-key": "b", key: "b" }, "B"),
+        createElement("span", { "data-key": "c", key: "c" }, "C"),
+      ]),
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement(Fragment, null, [
+        createElement("span", { "data-key": "a", key: "a" }, "A"),
+        createElement("span", { "data-key": "b", key: "b" }, "B"),
+        createElement("span", { "data-key": "c", key: "c" }, "C"),
+        createElement("span", { "data-key": "d", key: "d" }, "D"),
+        createElement("span", { "data-key": "e", key: "e" }, "E"),
+      ]),
+    );
+    const currentFirst = root.current.child?.child;
+    const updatedFirst = updated.child?.child;
+
+    if (currentFirst === undefined || updatedFirst === undefined) {
+      expect.fail("expected keyed row children");
+    }
+
+    Object.defineProperty(currentFirst, "sibling", {
+      configurable: true,
+      get() {
+        throw new Error("commit should not rescan the unchanged current prefix");
+      },
+    });
+    Object.defineProperty(updatedFirst, "sibling", {
+      configurable: true,
+      get() {
+        throw new Error("commit should not rescan the unchanged next prefix");
+      },
+    });
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="b">B</span><span data-key="c">C</span><span data-key="d">D</span><span data-key="e">E</span>',
+    );
+  });
+
   test("removes one keyed fragment child without resyncing unchanged siblings", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

@@ -866,6 +866,15 @@ function clearReactiveTextBinding(node: Text): void {
   reactiveTextBindingsByNode.delete(node);
 }
 
+function clearReactiveTextBindingSubscribers(binding: ReactiveTextBinding): void {
+  for (const node of binding.subscribers) {
+    if (reactiveTextBindingsByNode.get(node) === binding) {
+      reactiveTextBindingsByNode.delete(node);
+    }
+  }
+  binding.subscribers.clear();
+}
+
 function getStateTextBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveTextBinding {
   slot.textBinding ??= {
     value: slot.value,
@@ -2262,6 +2271,8 @@ function cleanupInstance(instance: ComponentInstance): void {
       slot.mounted = false;
       slot.cleanup?.();
       delete slot.cleanup;
+    } else if (slot?.kind === "state" && slot.textBinding !== undefined) {
+      clearReactiveTextBindingSubscribers(slot.textBinding);
     }
   }
 }

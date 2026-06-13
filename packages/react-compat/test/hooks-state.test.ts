@@ -113,6 +113,37 @@ describe("react-compat useState", () => {
     }
   });
 
+  test("clears compiler-proven direct text binding subscribers on unmount", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const container = document.createElement("div");
+    const reactiveTextBindingMeta = Symbol.for("modular.react.reactive_text_binding_meta");
+    let binding: { subscribers: Set<Text> } | undefined;
+
+    function Counter() {
+      const state = useState(0) as unknown as [
+        number,
+        (value: number) => void,
+      ] & Record<PropertyKey, unknown>;
+      const [count] = state;
+      binding = state[reactiveTextBindingMeta] as { subscribers: Set<Text> };
+      return createElement("p", { [reactiveTextBindingMeta]: binding }, count);
+    }
+
+    try {
+      const root = createRoot(container);
+      root.render(createElement(Counter, null));
+
+      expect(binding?.subscribers.size).toBe(1);
+
+      root.unmount();
+
+      expect(binding?.subscribers.size).toBe(0);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
   test("batches discrete event updates and flushes once after the handler", () => {
     const container = document.createElement("div");
     let renders = 0;
