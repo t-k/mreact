@@ -92,6 +92,7 @@ interface SuspenseFiberState {
 }
 
 const committedPortalContainers = new Set<Element>();
+const pendingHostRefAttachments: { ref: unknown; node: unknown }[] = [];
 
 interface FiberHydrationOptions extends RenderOptions {
   previousNodes?: readonly Node[];
@@ -243,11 +244,14 @@ export function commitHostFiberRoot(
   options: RenderOptions = {},
 ): void {
   runWithHostCommit(() => {
+    let committed = false;
     try {
       committedPortalContainers.clear();
+      pendingHostRefAttachments.length = 0;
       const commitPath = getRootCommitPath(options);
       if (!hasChildListMutation(finishedWork)) {
         commitHostDirtyChildren(finishedWork.child, root.container, root.container, commitPath, options);
+        committed = true;
         return;
       }
 
@@ -256,12 +260,19 @@ export function commitHostFiberRoot(
         finishedWork.subtreeChildListChanged &&
         commitHostKeyedChildListMutation(finishedWork.child, root.container, root.container, commitPath, options)
       ) {
+        committed = true;
         return;
       }
 
       const nodes = commitHostChildren(finishedWork.child, root.container, root.container, commitPath, options);
       syncChildNodes(root.container, nodes);
+      committed = true;
     } finally {
+      if (committed) {
+        flushPendingHostRefAttachments();
+      } else {
+        pendingHostRefAttachments.length = 0;
+      }
       committedPortalContainers.clear();
     }
   });
@@ -274,12 +285,20 @@ export function commitHydratingHostFiberRoot(
   options: FiberHydrationOptions = {},
 ): void {
   runWithHostCommit(() => {
+    let committed = false;
     try {
       committedPortalContainers.clear();
+      pendingHostRefAttachments.length = 0;
       const eventRoot = root.container;
       const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
       syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+      committed = true;
     } finally {
+      if (committed) {
+        flushPendingHostRefAttachments();
+      } else {
+        pendingHostRefAttachments.length = 0;
+      }
       committedPortalContainers.clear();
     }
   });
@@ -3257,7 +3276,22 @@ function applyChangedRef(previousRef: unknown, nextRef: unknown, node: unknown):
   }
 
   applyRef(previousRef, null);
-  applyRef(nextRef, node);
+  queueHostRefAttachment(nextRef, node);
+}
+
+function queueHostRefAttachment(ref: unknown, node: unknown): void {
+  if (ref === null || ref === undefined) {
+    return;
+  }
+
+  pendingHostRefAttachments.push({ ref, node });
+}
+
+function flushPendingHostRefAttachments(): void {
+  const pending = pendingHostRefAttachments.splice(0);
+  for (const { ref, node } of pending) {
+    applyRef(ref, node);
+  }
 }
 
 function isPortalHostContainer(value: unknown): value is ParentNode {

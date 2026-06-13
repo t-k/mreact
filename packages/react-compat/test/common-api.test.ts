@@ -90,6 +90,33 @@ describe("react-compat common API subset", () => {
     expect(calls).toEqual(["first:A", "first:null", "second:B"]);
   });
 
+  test("host callback refs attach after mounted nodes are connected", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const connectedStates: boolean[] = [];
+
+    try {
+      root.render(
+        createElement("div", null, [
+          createElement("button", {
+            key: "target",
+            ref: (node: HTMLButtonElement | null) => {
+              if (node !== null) {
+                connectedStates.push(node.isConnected);
+              }
+            },
+          }, "Measure"),
+        ]),
+      );
+
+      expect(connectedStates).toEqual([true]);
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
   test("createPortal can commit collection nodes into a custom document container", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
