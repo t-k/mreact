@@ -39,7 +39,8 @@ function renderSummary(input: WriteRunSummaryInput): string {
           ? "yes"
           : "no";
       const consoleIssues =
-        result.reactDomSummary.consoleMessages.length + result.compatDomSummary.consoleMessages.length;
+        result.reactDomSummary.consoleMessages.length +
+        result.compatDomSummary.consoleMessages.length;
 
       return `| ${result.fixtureId} | ${status} | ${result.pixelDiffRatio.toFixed(6)} | ${result.reactDomSummary.dialogCount} | ${result.compatDomSummary.dialogCount} | ${focusMatch} | ${consoleIssues} |  |`;
     })

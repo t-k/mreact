@@ -26,6 +26,7 @@
     "bench:all": "pnpm bench:primitive && pnpm bench:primitive-browser && pnpm bench:non-router && pnpm bench:router && pnpm bench:lambda-routes",
     "build": "tsc -b",
     "compat-lab:recharts": "pnpm build && tsx compat-lab/recharts/runner.ts",
+    "compat-lab:radix": "pnpm build && tsx compat-lab/radix/runner.ts",
     "docs:api": "pnpm build && typedoc --options typedoc.json",
     "docs:api:check": "pnpm build && typedoc --options typedoc.json --emit none",
     "api:report": "pnpm build && node scripts/generate-api-reports.mjs",
