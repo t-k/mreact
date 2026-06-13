@@ -1243,4 +1243,58 @@ describe("bindList", () => {
     expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
     dispose();
   });
+
+  test("replaces disjoint owned keyed rows without probing stale records", async () => {
+    const initialRows = [
+      { id: Symbol("a"), label: "0" },
+      { id: Symbol("b"), label: "1" },
+      { id: Symbol("c"), label: "2" },
+    ];
+    const replacementRows = [
+      { id: Symbol("d"), label: "3" },
+      { id: Symbol("e"), label: "4" },
+      { id: Symbol("f"), label: "5" },
+    ];
+    const probedKeys = new Set<symbol>(replacementRows.map((row) => row.id));
+    const items = cell(initialRows);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalGet = Map.prototype.get;
+    let mapGetCalls = 0;
+
+    try {
+      Map.prototype.get = function countedGet<K, V>(
+        this: Map<K, V>,
+        key: K,
+      ): V | undefined {
+        if (typeof key === "symbol" && probedKeys.has(key)) {
+          mapGetCalls += 1;
+        }
+        return originalGet.call(this, key);
+      };
+
+      items.set(replacementRows);
+      await flushEffects();
+    } finally {
+      Map.prototype.get = originalGet;
+    }
+
+    expect(mapGetCalls).toBe(0);
+    expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
+    dispose();
+  });
 });

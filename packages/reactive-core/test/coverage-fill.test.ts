@@ -303,6 +303,36 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     dispose();
   });
 
+  test("batched single-subscriber notifications skip notification depth bookkeeping", () => {
+    let observedNotificationDepth = -1;
+    const computation: ReactiveComputation = {
+      id: 1,
+      deps: new Set(),
+      disposed: false,
+      queued: false,
+      markDirty() {
+        observedNotificationDepth = runtimeState.notificationDepth;
+      },
+      run() {},
+      dispose() {},
+    };
+    const source: Source = {
+      subscribers: computation,
+    };
+
+    runtimeState.batchDepth = 1;
+    runtimeState.notificationDepth = 0;
+
+    try {
+      notifySubscribers(source);
+    } finally {
+      runtimeState.batchDepth = 0;
+      runtimeState.notificationDepth = 0;
+    }
+
+    expect(observedNotificationDepth).toBe(0);
+  });
+
   test("scheduler falls back to Promise.resolve when queueMicrotask is not available", async () => {
     const original = globalThis.queueMicrotask;
     // The default scheduler reads `typeof queueMicrotask === "function"` at

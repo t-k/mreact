@@ -10,6 +10,9 @@ export function registerPrimitiveBenchmarkAliases(parentUrl: URL): void {
     "@reckona/mreact-reactive-core/testing": pathToFileURL(
       join(process.cwd(), "packages", "reactive-core", "src", "testing.ts"),
     ).href,
+    "@reckona/mreact-reactive-core/internal": pathToFileURL(
+      join(process.cwd(), "packages", "reactive-core", "src", "internal.ts"),
+    ).href,
     "@reckona/mreact-reactive-dom": pathToFileURL(
       join(process.cwd(), "packages", "reactive-dom", "src", "index.ts"),
     ).href,

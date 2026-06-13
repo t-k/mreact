@@ -50,7 +50,7 @@ export function computed<T>(
       dirty = true;
 
       if (source.subscribers !== null) {
-        if (runtimeState.notificationDepth > 0) {
+        if (runtimeState.notificationDepth > 0 || runtimeState.batchDepth > 0) {
           computation.queued = true;
           runtimeState.pendingComputed.add(computation);
           return;

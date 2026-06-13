@@ -191,6 +191,13 @@ export function notifySubscribers(source: Source): void {
   }
 
   if (!(subscribers instanceof Set)) {
+    if (runtimeState.batchDepth > 0) {
+      if (!subscribers.disposed && !subscribers.queued) {
+        subscribers.markDirty();
+      }
+      return;
+    }
+
     runtimeState.notificationDepth += 1;
 
     try {

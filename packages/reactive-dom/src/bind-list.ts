@@ -1,4 +1,10 @@
-import { cell, effect, untrack, type Cell } from "@reckona/mreact-reactive-core";
+import { effect, untrack } from "@reckona/mreact-reactive-core";
+import {
+  notifySubscribers,
+  runtimeState,
+  trackSource,
+  type Source,
+} from "@reckona/mreact-reactive-core/internal";
 import {
   isDynamicHydrationEnabled,
   markDynamicNode,
@@ -107,7 +113,7 @@ interface KeyedRecord {
   dispose: Dispose;
   // Update state lives on the record so one shared update function replaces a
   // per-record closure; itemCell is null for primitive items.
-  itemCell: Cell<unknown> | null;
+  itemCell: KeyedItemCell | null;
   currentItem: unknown;
   currentIndex: number;
   currentItems: readonly unknown[];
@@ -208,6 +214,24 @@ function bindKeyedList<T>(
         records = new Map();
         ownsParent = true;
         recordNodeCount = 0;
+        return;
+      }
+
+      const replacedRecords = tryReplaceDisjointKeyedRecords(
+        insertionParent,
+        marker,
+        records,
+        currentKeyedItems,
+        currentItems,
+        renderItem,
+        options,
+        markRecordsForHydration,
+      );
+
+      if (replacedRecords !== undefined) {
+        records = replacedRecords.records;
+        recordNodeCount = replacedRecords.nodeCount;
+        ownsParent = true;
         return;
       }
 
@@ -614,7 +638,9 @@ function updateKeyedRecord(
     return false;
   }
 
-  record.itemCell?.set(nextItem);
+  if (record.itemCell !== null) {
+    setKeyedItemValue(record.itemCell, nextItem);
+  }
   record.currentItem = nextItem;
   record.currentIndex = nextIndex;
   record.currentItems = nextItems;
@@ -629,11 +655,11 @@ function createKeyedRecord<T>(
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
 ): KeyedRecord {
-  let itemCell: Cell<unknown> | null = null;
+  let itemCell: KeyedItemCell | null = null;
   let renderedItem: T = item;
 
   if (isObjectLike(item)) {
-    itemCell = cell<unknown>(item);
+    itemCell = createKeyedItemCell(item);
     renderedItem = (
       options.nestedObjectFallback === true
         ? createNestedFallbackItemProxy(itemCell)
@@ -656,33 +682,34 @@ function createKeyedRecord<T>(
   };
 }
 
-interface ItemProxyTarget {
-  cell: Cell<unknown>;
+interface KeyedItemCell {
+  value: unknown;
+  source?: Source | undefined;
 }
 
 // One shared handler for every keyed item proxy; the record's cell rides on
 // the proxy target instead of five fresh trap closures per row. Every trap
 // delegates to the cell value, so the target's own `cell` property is never
 // observable through the proxy.
-const ITEM_PROXY_HANDLER: ProxyHandler<ItemProxyTarget> = {
+const ITEM_PROXY_HANDLER: ProxyHandler<KeyedItemCell> = {
   get(target, property) {
-    const value = target.cell.get();
+    const value = getKeyedItemValue(target);
     return isObjectLike(value) ? Reflect.get(value, property, value) : undefined;
   },
   getOwnPropertyDescriptor(target, property) {
-    const value = target.cell.get();
+    const value = getKeyedItemValue(target);
     return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
   },
   has(target, property) {
-    const value = target.cell.get();
+    const value = getKeyedItemValue(target);
     return isObjectLike(value) && Reflect.has(value, property);
   },
   ownKeys(target) {
-    const value = target.cell.get();
+    const value = getKeyedItemValue(target);
     return isObjectLike(value) ? Reflect.ownKeys(value) : [];
   },
   set(target, property, nextValue) {
-    const value = target.cell.get();
+    const value = getKeyedItemValue(target);
     if (!isObjectLike(value)) {
       return false;
     }
@@ -690,17 +717,44 @@ const ITEM_PROXY_HANDLER: ProxyHandler<ItemProxyTarget> = {
   },
 };
 
-function createItemProxy<T extends object>(current: Cell<unknown>): T {
-  return new Proxy({ cell: current }, ITEM_PROXY_HANDLER) as unknown as T;
+function createKeyedItemCell(value: unknown): KeyedItemCell {
+  return { value };
 }
 
-function createNestedFallbackItemProxy<T extends object>(current: Cell<unknown>): T {
+function getKeyedItemValue(cell: KeyedItemCell): unknown {
+  if (runtimeState.activeTracker !== null) {
+    cell.source ??= { subscribers: null };
+    trackSource(cell.source);
+  }
+
+  return cell.value;
+}
+
+function setKeyedItemValue(cell: KeyedItemCell, next: unknown): void {
+  if (Object.is(cell.value, next)) {
+    return;
+  }
+
+  cell.value = next;
+
+  const source = cell.source;
+
+  if (source !== undefined && source.subscribers !== null) {
+    notifySubscribers(source);
+  }
+}
+
+function createItemProxy<T extends object>(current: KeyedItemCell): T {
+  return new Proxy(current, ITEM_PROXY_HANDLER) as unknown as T;
+}
+
+function createNestedFallbackItemProxy<T extends object>(current: KeyedItemCell): T {
   let childProxies: Map<PropertyKey, object> | undefined;
   let rawObjectProperties: Set<PropertyKey> | undefined;
 
   return new Proxy({} as T, {
     get(_target, property) {
-      const value = current.get();
+      const value = getKeyedItemValue(current);
       if (!isObjectLike(value)) {
         return undefined;
       }
@@ -741,19 +795,19 @@ function createNestedFallbackItemProxy<T extends object>(current: Cell<unknown>)
       return childProxy;
     },
     getOwnPropertyDescriptor(_target, property) {
-      const value = current.get();
+      const value = getKeyedItemValue(current);
       return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
     },
     has(_target, property) {
-      const value = current.get();
+      const value = getKeyedItemValue(current);
       return isObjectLike(value) && Reflect.has(value, property);
     },
     ownKeys() {
-      const value = current.get();
+      const value = getKeyedItemValue(current);
       return isObjectLike(value) ? Reflect.ownKeys(value) : [];
     },
     set(_target, property, nextValue) {
-      const value = current.get();
+      const value = getKeyedItemValue(current);
       if (!isObjectLike(value)) {
         return false;
       }
@@ -762,13 +816,13 @@ function createNestedFallbackItemProxy<T extends object>(current: Cell<unknown>)
   });
 }
 
-function createNestedItemProxy(current: Cell<unknown>, path: readonly PropertyKey[]): object {
+function createNestedItemProxy(current: KeyedItemCell, path: readonly PropertyKey[]): object {
   let childProxies: Map<PropertyKey, object> | undefined;
   let rawObjectProperties: Set<PropertyKey> | undefined;
 
   return new Proxy({} as object, {
     get(_target, property) {
-      const value = valueAtPath(current.get(), path);
+      const value = valueAtPath(getKeyedItemValue(current), path);
 
       if (!isObjectLike(value)) {
         return undefined;
@@ -810,19 +864,19 @@ function createNestedItemProxy(current: Cell<unknown>, path: readonly PropertyKe
       return childProxy;
     },
     getOwnPropertyDescriptor(_target, property) {
-      const value = valueAtPath(current.get(), path);
+      const value = valueAtPath(getKeyedItemValue(current), path);
       return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
     },
     has(_target, property) {
-      const value = valueAtPath(current.get(), path);
+      const value = valueAtPath(getKeyedItemValue(current), path);
       return isObjectLike(value) && Reflect.has(value, property);
     },
     ownKeys() {
-      const value = valueAtPath(current.get(), path);
+      const value = valueAtPath(getKeyedItemValue(current), path);
       return isObjectLike(value) ? Reflect.ownKeys(value) : [];
     },
     set(_target, property, nextValue) {
-      const value = valueAtPath(current.get(), path);
+      const value = valueAtPath(getKeyedItemValue(current), path);
       if (!isObjectLike(value)) {
         return false;
       }
@@ -867,6 +921,62 @@ function shouldProxyNestedValue(value: object): boolean {
 
 function isObjectLike(value: unknown): value is object {
   return typeof value === "object" && value !== null;
+}
+
+function tryReplaceDisjointKeyedRecords<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, KeyedRecord>,
+  currentKeyedItems: KeyedItems<T>,
+  currentItems: readonly T[],
+  renderItem: ListItemRenderer<T>,
+  options: BindListOptions<T>,
+  markRecordsForHydration: boolean,
+): { nodeCount: number; records: Map<unknown, KeyedRecord> } | undefined {
+  const keys = currentKeyedItems.keys;
+
+  if (keys.length !== records.size || keys.length === 0) {
+    return undefined;
+  }
+
+  for (const itemKey of keys) {
+    if (records.has(itemKey)) {
+      return undefined;
+    }
+  }
+
+  const items = currentKeyedItems.items;
+  const indexes = currentKeyedItems.indexes;
+  const nextRecords = new Map<unknown, KeyedRecord>();
+  const orderedNodes: Node[] = [];
+  let nodeCount = 0;
+
+  for (let slot = 0; slot < keys.length; slot += 1) {
+    const record = createKeyedRecord(
+      items[slot] as T,
+      indexes === null ? slot : (indexes[slot] as number),
+      currentItems,
+      renderItem,
+      options,
+      markRecordsForHydration,
+    );
+
+    nextRecords.set(keys[slot], record);
+    nodeCount += record.nodes.length;
+
+    for (const node of record.nodes) {
+      orderedNodes.push(node);
+    }
+  }
+
+  const disposeError = disposeStaleRecords(records, nextRecords);
+  parent.replaceChildren(...orderedNodes, marker);
+
+  if (disposeError !== undefined) {
+    throw disposeError;
+  }
+
+  return { nodeCount, records: nextRecords };
 }
 
 function tryRemoveKeyedRecords<T>(
