@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.165 - 2026-06-13
+
+### Added
+
+- Added a UI primitives compatibility lab that compares React and mreact DOM summaries, screenshots, interaction outcomes, and coverage-ledger obligations across Ark UI, Base UI, Headless UI, React Aria, React Spectrum, and Zag JS fixtures.
+
+### Changed
+
+- Limited benchmark result commits to the main branch so branch validation does not publish benchmark artifacts.
+- Extended `runWithEventPriority()` with an optional deferred-flush hook used by the React-compatible event runtime.
+
+### Fixed
+
+- Fixed React-compatible portal, ref, event, external store, host append, and text cleanup behavior for UI primitive libraries that rely on custom documents, forwarded refs, retained fibers, and precise child reconciliation.
+
 ## 0.0.164 - 2026-06-13
 
 ### Changed

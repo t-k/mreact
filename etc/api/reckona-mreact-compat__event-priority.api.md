@@ -8,7 +8,7 @@
 export type EventPriority = "discrete" | "continuous" | "default";
 
 // @public
-export function runWithEventPriority<T>(priority: EventPriority, callback: () => T): T;
+export function runWithEventPriority<T>(priority: EventPriority, callback: () => T, deferFlush?: (flush: () => void) => void): T;
 
 // (No @packageDocumentation comment for this package)
 

@@ -581,6 +581,7 @@ describe("docs-site example contract", () => {
     expect(compat).toContain("/api/modules/_reckona_mreact-compat.html");
     expect(compat).toContain("React 19.2.6");
     expect(compat).toContain("pnpm test:react-conformance");
+    expect(compat).toContain("pnpm compat-lab:ui-primitives");
     expect(compat).toContain("examples/react-libraries");
     expect(compat).not.toContain("@reckona/mreact-next");
   });
