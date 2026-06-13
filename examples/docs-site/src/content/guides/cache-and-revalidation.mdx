@@ -92,6 +92,8 @@ When a server action revalidates paths, Mreact deletes matching route cache entr
 
 The browser navigation runtime can keep prefetched navigation HTML so link-based navigation can avoid a request. After successful non-GET/HEAD mutations, Mreact clears affected cached navigation HTML so the next navigation re-requests loader-rendered pages.
 
+Query cross-tab sync lives at the `@reckona/mreact-query` browser cache layer and does not change the route HTML cache. Use it for same-origin query invalidations, successful query data handoff, and focus/reconnect refetch single-flight; use `revalidatePath()` and route cache adapters for rendered HTML.
+
 For browser-enhanced server action forms, a revalidation of the current route can use a single-flight mutation response. The action POST response carries fresh navigation HTML marked with `x-mreact-action-single-flight`, so the browser can update the visible route without a second GET. Unsupported server action flows still fall back to `x-mreact-revalidate`, redirect handling, or a later navigation request.
 
 ## Use a shared route cache
