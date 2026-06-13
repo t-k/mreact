@@ -117,6 +117,179 @@ describe("react-compat common API subset", () => {
     }
   });
 
+  test("discrete event updates flush after native document bubble listeners", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const observedDuringDocumentBubble: string[] = [];
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "button",
+        {
+          onPointerDown: (event: Event) => {
+            event.preventDefault();
+            setOpen(true);
+          },
+        },
+        open ? "open" : "closed",
+      );
+    }
+
+    const onDocumentPointerDown = () => {
+      observedDuringDocumentBubble.push(container.textContent ?? "");
+    };
+
+    try {
+      root.render(createElement(App, null));
+      document.addEventListener("pointerdown", onDocumentPointerDown);
+
+      container.querySelector("button")?.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerType: "mouse",
+          button: 0,
+        }),
+      );
+
+      expect(observedDuringDocumentBubble).toEqual(["closed"]);
+      expect(container.textContent).toBe("open");
+    } finally {
+      document.removeEventListener("pointerdown", onDocumentPointerDown);
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("host nodes are preserved when a discrete event mounts a portal sibling", () => {
+    const container = document.createElement("div");
+    const portalContainer = document.createElement("div");
+    document.body.append(container, portalContainer);
+    const root = createRoot(container);
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement(
+          "button",
+          {
+            "aria-expanded": open,
+            onPointerDown: (event: Event) => {
+              event.preventDefault();
+              setOpen(true);
+            },
+          },
+          "Open",
+        ),
+        open ? createPortal(createElement("div", { role: "listbox" }, "Options"), portalContainer) : null,
+      );
+    }
+
+    try {
+      root.render(createElement(App, null));
+      const button = container.querySelector("button");
+      button?.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerType: "mouse",
+          button: 0,
+        }),
+      );
+
+      expect(container.querySelector("button")).toBe(button);
+      expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
+      expect(portalContainer.textContent).toBe("Options");
+    } finally {
+      root.unmount();
+      container.remove();
+      portalContainer.remove();
+    }
+  });
+
+  test("unwrapped component host nodes are preserved when a discrete event mounts a portal sibling", () => {
+    const container = document.createElement("div");
+    const portalContainer = document.createElement("div");
+    document.body.append(container, portalContainer);
+    const root = createRoot(container);
+    let buttonElement: HTMLButtonElement | null = null;
+    const listeners = new Set<() => void>();
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => buttonElement,
+      set(nextButtonElement: HTMLButtonElement | null) {
+        if (Object.is(buttonElement, nextButtonElement)) {
+          return;
+        }
+        buttonElement = nextButtonElement;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function ListboxLike() {
+      const [open, setOpen] = useState(false);
+      const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return [
+        createElement(
+          "button",
+          {
+            "aria-expanded": open,
+            "data-ready": snapshot === null ? "false" : "true",
+            onPointerDown: (event: Event) => {
+              event.preventDefault();
+              setOpen(true);
+            },
+            ref: (node: HTMLButtonElement | null) => store.set(node),
+          },
+          "Open",
+        ),
+        open
+          ? createPortal(
+              createElement("div", { role: "listbox" }, "Options"),
+              portalContainer,
+            )
+          : null,
+      ];
+    }
+
+    try {
+      root.render(
+        createElement(
+          "div",
+          null,
+          createElement(ListboxLike, null),
+          createElement("span", null, "Status"),
+        ),
+      );
+      const button = container.querySelector("button");
+      button?.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerType: "mouse",
+          button: 0,
+        }),
+      );
+
+      expect(container.querySelector("button")).toBe(button);
+      expect(container.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
+      expect(portalContainer.textContent).toBe("Options");
+    } finally {
+      root.unmount();
+      container.remove();
+      portalContainer.remove();
+    }
+  });
+
   test("createPortal can commit collection nodes into a custom document container", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

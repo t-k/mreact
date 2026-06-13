@@ -266,10 +266,35 @@ export function ensureDelegatedEventListener(root: Element, eventName: string): 
       return;
     }
     markDispatchedDelegatedEvent(event, eventName);
-    runWithEventPriority(getEventPriority(eventName), () => {
+    const priority = getEventPriority(eventName);
+    runWithEventPriority(priority, () => {
       dispatchDelegatedEvent(root, eventName, event);
-    });
+    }, priority === "discrete" && shouldDeferDiscreteEventFlush(eventName) ? (flush) => {
+      deferFlushUntilNativeEventComplete(root, event, flush);
+    } : undefined);
   });
+}
+
+function shouldDeferDiscreteEventFlush(eventName: string): boolean {
+  return eventName === "pointerdown" || eventName === "mousedown" || eventName === "touchstart";
+}
+
+function deferFlushUntilNativeEventComplete(
+  root: Element,
+  event: Event,
+  flush: () => void,
+): void {
+  let flushed = false;
+  const flushOnce = (): void => {
+    if (flushed) {
+      return;
+    }
+    flushed = true;
+    flush();
+  };
+
+  root.ownerDocument.addEventListener(event.type, flushOnce, { once: true });
+  queueMicrotask(flushOnce);
 }
 
 function hasDispatchedDelegatedEvent(event: Event, eventName: string): boolean {

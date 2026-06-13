@@ -29,9 +29,7 @@ export function commitFiberRoot(
     });
   }
   commitHostFiberRoot(root, finishedWork, options);
-  if (hasRemovedAlternateChildren(finishedWork)) {
-    detachRemovedAlternateChildren(finishedWork);
-  }
+  detachDeletedFiberSubtrees(finishedWork);
   root.current = finishedWork;
   root.current.stateNode = root;
   markRootFinished(root, finishedWork.lanes);
@@ -47,68 +45,30 @@ export function detachFiberRefs(fiber: Fiber): void {
   }
 }
 
-function detachRemovedAlternateChildren(fiber: Fiber | undefined): void {
+function detachDeletedFiberSubtrees(fiber: Fiber | undefined): void {
   let cursor: Fiber | undefined = fiber;
 
   while (cursor !== undefined) {
-    const retained = collectRetainedAlternateChildren(cursor.child);
-    let alternateChild = cursor.alternate?.child;
-
-    while (alternateChild !== undefined) {
-      const nextAlternateChild = alternateChild.sibling;
-
-      if (!retained.has(alternateChild)) {
-        detachFiberSubtree(alternateChild, retained);
-      }
-
-      alternateChild = nextAlternateChild;
-    }
-
     if (cursor.deletions !== undefined) {
       for (const deleted of cursor.deletions) {
-        detachFiberSubtree(deleted, retained);
+        detachFiberSubtree(deleted);
       }
       cursor.deletions = undefined;
     }
 
-    detachRemovedAlternateChildren(cursor.child);
+    detachDeletedFiberSubtrees(cursor.child);
     cursor = cursor.sibling;
   }
 }
 
-function hasRemovedAlternateChildren(fiber: Fiber): boolean {
-  return (
-    fiber.childListChanged ||
-    fiber.subtreeChildListChanged ||
-    fiber.deletions !== undefined
-  );
-}
-
-function collectRetainedAlternateChildren(fiber: Fiber | undefined): Set<Fiber> {
-  const retained = new Set<Fiber>();
-  let cursor = fiber;
-
-  while (cursor !== undefined) {
-    retained.add(cursor);
-
-    if (cursor.alternate !== undefined) {
-      retained.add(cursor.alternate);
-    }
-
-    cursor = cursor.sibling;
-  }
-
-  return retained;
-}
-
-function detachFiberSubtree(fiber: Fiber, preserve: ReadonlySet<Fiber>): void {
+function detachFiberSubtree(fiber: Fiber): void {
   const stack = [fiber];
   const seen = new Set<Fiber>();
 
   while (stack.length > 0) {
     const current = stack.pop();
 
-    if (current === undefined || seen.has(current) || preserve.has(current)) {
+    if (current === undefined || seen.has(current)) {
       continue;
     }
 

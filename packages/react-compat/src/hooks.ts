@@ -1580,6 +1580,7 @@ export function startTransition(scope: TransitionScope): void {
 export function runWithEventPriority<T>(
   priority: EventPriority,
   callback: () => T,
+  deferFlush?: (flush: () => void) => void,
 ): T {
   const previousPriority = currentEventPriority;
   currentEventPriority = priority;
@@ -1592,7 +1593,14 @@ export function runWithEventPriority<T>(
     currentEventPriority = previousPriority;
 
     if (eventBatchDepth === 0) {
-      flushEventRerendersForPriority(priority);
+      const flush = () => {
+        flushEventRerendersForPriority(priority);
+      };
+      if (deferFlush === undefined) {
+        flush();
+      } else {
+        deferFlush(flush);
+      }
     }
   }
 }

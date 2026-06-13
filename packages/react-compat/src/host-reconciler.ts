@@ -92,7 +92,7 @@ interface SuspenseFiberState {
 }
 
 const committedPortalContainers = new Set<Element>();
-const pendingHostRefAttachments: { ref: unknown; node: unknown }[] = [];
+const pendingHostRefUpdates: { ref: unknown; node: unknown }[] = [];
 
 interface FiberHydrationOptions extends RenderOptions {
   previousNodes?: readonly Node[];
@@ -247,7 +247,7 @@ export function commitHostFiberRoot(
     let committed = false;
     try {
       committedPortalContainers.clear();
-      pendingHostRefAttachments.length = 0;
+      pendingHostRefUpdates.length = 0;
       const commitPath = getRootCommitPath(options);
       if (!hasChildListMutation(finishedWork)) {
         commitHostDirtyChildren(finishedWork.child, root.container, root.container, commitPath, options);
@@ -269,9 +269,9 @@ export function commitHostFiberRoot(
       committed = true;
     } finally {
       if (committed) {
-        flushPendingHostRefAttachments();
+        flushPendingHostRefUpdates();
       } else {
-        pendingHostRefAttachments.length = 0;
+        pendingHostRefUpdates.length = 0;
       }
       committedPortalContainers.clear();
     }
@@ -288,16 +288,16 @@ export function commitHydratingHostFiberRoot(
     let committed = false;
     try {
       committedPortalContainers.clear();
-      pendingHostRefAttachments.length = 0;
+      pendingHostRefUpdates.length = 0;
       const eventRoot = root.container;
       const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
       syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
       committed = true;
     } finally {
       if (committed) {
-        flushPendingHostRefAttachments();
+        flushPendingHostRefUpdates();
       } else {
-        pendingHostRefAttachments.length = 0;
+        pendingHostRefUpdates.length = 0;
       }
       committedPortalContainers.clear();
     }
@@ -3275,20 +3275,20 @@ function applyChangedRef(previousRef: unknown, nextRef: unknown, node: unknown):
     return;
   }
 
-  applyRef(previousRef, null);
-  queueHostRefAttachment(nextRef, node);
+  queueHostRefUpdate(previousRef, null);
+  queueHostRefUpdate(nextRef, node);
 }
 
-function queueHostRefAttachment(ref: unknown, node: unknown): void {
+function queueHostRefUpdate(ref: unknown, node: unknown): void {
   if (ref === null || ref === undefined) {
     return;
   }
 
-  pendingHostRefAttachments.push({ ref, node });
+  pendingHostRefUpdates.push({ ref, node });
 }
 
-function flushPendingHostRefAttachments(): void {
-  const pending = pendingHostRefAttachments.splice(0);
+function flushPendingHostRefUpdates(): void {
+  const pending = pendingHostRefUpdates.splice(0);
   for (const { ref, node } of pending) {
     applyRef(ref, node);
   }
