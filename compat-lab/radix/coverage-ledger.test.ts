@@ -18,6 +18,11 @@ describe("Radix coverage ledger", () => {
         "Dialog trigger and content ARIA state must match React",
         "Focus must move into the dialog and return to the trigger",
         "Close controls must unmount portaled content",
+        "Escape must close modal dialog content",
+        "Outside pointer interaction must close dismissible dialog content",
+        "Popover trigger must mount content and expose expanded state",
+        "DropdownMenu trigger must mount menu content and close on Escape",
+        "Tooltip must mount tooltip content from hover and focus interest",
       ]),
     );
   });

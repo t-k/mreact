@@ -44,7 +44,8 @@ body {
 
 .radix-trigger,
 .radix-close,
-.radix-field {
+.radix-field,
+.radix-menu-item {
   min-height: 40px;
   border: 1px solid #6f8d96;
   border-radius: 6px;
@@ -65,10 +66,7 @@ body {
   background: rgb(23 32 38 / 42%);
 }
 
-.radix-content {
-  position: fixed;
-  top: 50%;
-  left: 50%;
+.radix-surface {
   width: min(420px, calc(100vw - 48px));
   border: 1px solid #7d9ba3;
   border-radius: 8px;
@@ -76,7 +74,17 @@ body {
   color: #172026;
   background: #ffffff;
   box-shadow: 0 24px 80px rgb(23 32 38 / 24%);
+}
+
+.radix-modal-content {
+  position: fixed;
+  top: 50%;
+  left: 50%;
   transform: translate(-50%, -50%);
+}
+
+.radix-positioned-content {
+  width: 320px;
 }
 
 .radix-title {
@@ -94,4 +102,38 @@ body {
 
 .radix-field {
   margin-right: 8px;
+}
+
+.radix-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  border-color: transparent;
+  background: transparent;
+  outline: none;
+}
+
+.radix-menu-item[data-highlighted] {
+  color: #ffffff;
+  background: #1f6f7a;
+}
+
+.radix-menu-separator {
+  height: 1px;
+  margin: 6px 0;
+  background: #d7e2e5;
+}
+
+.radix-tooltip {
+  border: 1px solid #7d9ba3;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #ffffff;
+  background: #24343a;
+  box-shadow: 0 12px 32px rgb(23 32 38 / 22%);
+  font-size: 14px;
+}
+
+.radix-arrow {
+  fill: currentcolor;
 }

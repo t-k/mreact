@@ -51,7 +51,12 @@ const compatAliases =
 const optimizeDeps =
   runtime === "compat"
     ? {
-        include: ["@radix-ui/react-dialog"],
+        include: [
+          "@radix-ui/react-dialog",
+          "@radix-ui/react-dropdown-menu",
+          "@radix-ui/react-popover",
+          "@radix-ui/react-tooltip",
+        ],
         exclude: [
           "@reckona/mreact-compat",
           "@reckona/mreact-reactive-core",
@@ -69,7 +74,12 @@ const optimizeDeps =
         },
       }
     : {
-        include: ["@radix-ui/react-dialog"],
+        include: [
+          "@radix-ui/react-dialog",
+          "@radix-ui/react-dropdown-menu",
+          "@radix-ui/react-popover",
+          "@radix-ui/react-tooltip",
+        ],
         exclude: [],
       };
 

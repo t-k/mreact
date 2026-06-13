@@ -249,10 +249,25 @@ async function runInteractions(page: Page, interactions: RadixInteraction[]): Pr
         await close.click();
       }
       await page.waitForTimeout(150);
+    } else if (interaction.run === "clickPopoverTrigger") {
+      await page.locator("[data-testid='popover-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickDropdownTrigger") {
+      await page.locator("[data-testid='dropdown-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "hoverTooltipTrigger") {
+      await page.locator("[data-testid='tooltip-trigger']").hover();
+      await page.waitForTimeout(250);
+    } else if (interaction.run === "focusTooltipTrigger") {
+      await page.locator("[data-testid='tooltip-trigger']").focus();
+      await page.waitForTimeout(250);
     } else if (interaction.run === "pressEscape") {
       await page.keyboard.press("Escape");
       await page.waitForTimeout(150);
     } else if (interaction.run === "clickOutsideDialog") {
+      await page.mouse.click(24, 24);
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickOutsideOverlay") {
       await page.mouse.click(24, 24);
       await page.waitForTimeout(150);
     }
@@ -261,12 +276,27 @@ async function runInteractions(page: Page, interactions: RadixInteraction[]): Pr
 
 async function readDomSummary(page: Page, consoleMessages: string[]): Promise<RadixDomSummary> {
   return page.evaluate((capturedConsoleMessages) => {
-    const trigger = document.querySelector("[data-testid='dialog-trigger']");
+    const dialogTrigger = document.querySelector("[data-testid='dialog-trigger']");
+    const popoverTrigger = document.querySelector("[data-testid='popover-trigger']");
+    const dropdownTrigger = document.querySelector("[data-testid='dropdown-trigger']");
     const activeElement = document.activeElement;
     const activeElementTagName = activeElement?.tagName.toUpperCase() ?? "";
     const bodyText = Array.from(
       document.body.querySelectorAll(
-        "[data-testid='dialog-trigger'], [data-testid='dialog-content'], [data-testid='dialog-close'], [role='dialog']",
+        [
+          "[data-testid='dialog-trigger']",
+          "[data-testid='dialog-content']",
+          "[data-testid='dialog-close']",
+          "[data-testid='popover-trigger']",
+          "[data-testid='popover-content']",
+          "[data-testid='dropdown-trigger']",
+          "[data-testid='dropdown-content']",
+          "[data-testid='tooltip-trigger']",
+          "[data-testid='tooltip-content']",
+          "[role='dialog']",
+          "[role='menu']",
+          "[role='tooltip']",
+        ].join(", "),
       ),
     )
       .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
@@ -275,7 +305,12 @@ async function readDomSummary(page: Page, consoleMessages: string[]): Promise<Ra
     return {
       dialogCount: document.body.querySelectorAll("[role='dialog']").length,
       portalContentCount: document.body.querySelectorAll("[data-testid='dialog-content']").length,
-      triggerExpanded: trigger?.getAttribute("aria-expanded") ?? null,
+      popoverContentCount: document.body.querySelectorAll("[data-testid='popover-content']").length,
+      dropdownMenuCount: document.body.querySelectorAll("[role='menu']").length,
+      tooltipCount: document.body.querySelectorAll("[role='tooltip']").length,
+      triggerExpanded: dialogTrigger?.getAttribute("aria-expanded") ?? null,
+      popoverExpanded: popoverTrigger?.getAttribute("aria-expanded") ?? null,
+      dropdownExpanded: dropdownTrigger?.getAttribute("aria-expanded") ?? null,
       activeElementText:
         activeElementTagName === "BODY" || activeElementTagName === "HTML"
           ? ""
@@ -290,7 +325,12 @@ function summariesMatch(react: RadixDomSummary, compat: RadixDomSummary): boolea
   return (
     react.dialogCount === compat.dialogCount &&
     react.portalContentCount === compat.portalContentCount &&
+    react.popoverContentCount === compat.popoverContentCount &&
+    react.dropdownMenuCount === compat.dropdownMenuCount &&
+    react.tooltipCount === compat.tooltipCount &&
     react.triggerExpanded === compat.triggerExpanded &&
+    react.popoverExpanded === compat.popoverExpanded &&
+    react.dropdownExpanded === compat.dropdownExpanded &&
     react.activeElementText === compat.activeElementText &&
     react.consoleMessages.length === 0 &&
     compat.consoleMessages.length === 0
@@ -301,7 +341,12 @@ function emptyDomSummary(): RadixDomSummary {
   return {
     dialogCount: 0,
     portalContentCount: 0,
+    popoverContentCount: 0,
+    dropdownMenuCount: 0,
+    tooltipCount: 0,
     triggerExpanded: null,
+    popoverExpanded: null,
+    dropdownExpanded: null,
     activeElementText: "",
     bodyText: [],
     consoleMessages: [],

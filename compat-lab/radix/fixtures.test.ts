@@ -7,6 +7,14 @@ describe("Radix compat fixtures", () => {
       "radix-dialog-initial-closed",
       "radix-dialog-opens-from-trigger",
       "radix-dialog-closes-from-open-state",
+      "radix-dialog-closes-with-escape",
+      "radix-dialog-closes-on-outside-click",
+      "radix-popover-opens-from-trigger",
+      "radix-popover-closes-on-outside-click",
+      "radix-dropdown-menu-opens-from-trigger",
+      "radix-dropdown-menu-closes-with-escape",
+      "radix-tooltip-shows-on-hover",
+      "radix-tooltip-shows-on-focus",
     ]);
   });
 
@@ -25,5 +33,26 @@ describe("Radix compat fixtures", () => {
       "clickDialogTrigger",
       "clickDialogClose",
     ]);
+
+    expect(
+      radixFixtures
+        .find((fixture) => fixture.id === "radix-dialog-closes-with-escape")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickDialogTrigger", "pressEscape"]);
+    expect(
+      radixFixtures
+        .find((fixture) => fixture.id === "radix-popover-closes-on-outside-click")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickPopoverTrigger", "clickOutsideOverlay"]);
+    expect(
+      radixFixtures
+        .find((fixture) => fixture.id === "radix-dropdown-menu-closes-with-escape")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickDropdownTrigger", "pressEscape"]);
+    expect(
+      radixFixtures
+        .find((fixture) => fixture.id === "radix-tooltip-shows-on-hover")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["hoverTooltipTrigger"]);
   });
 });

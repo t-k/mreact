@@ -47,4 +47,18 @@ describe("Radix compat runner arguments", () => {
     );
     expect(normalizeActiveElementText("BUTTON", " Open dialog ")).toBe("Open dialog");
   });
+
+  test("selects expanded primitive fixtures", () => {
+    expect(
+      selectFixturesForRun({ fixtureId: undefined, headed: false }).map((fixture) => fixture.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "radix-dialog-closes-with-escape",
+        "radix-dialog-closes-on-outside-click",
+        "radix-popover-opens-from-trigger",
+        "radix-dropdown-menu-opens-from-trigger",
+        "radix-tooltip-shows-on-hover",
+      ]),
+    );
+  });
 });

@@ -19,7 +19,12 @@ describe("Radix result writer", () => {
           reactDomSummary: {
             dialogCount: 1,
             portalContentCount: 1,
+            popoverContentCount: 0,
+            dropdownMenuCount: 0,
+            tooltipCount: 0,
             triggerExpanded: "true",
+            popoverExpanded: null,
+            dropdownExpanded: null,
             activeElementText: "Close dialog",
             bodyText: ["Open dialog", "Radix dialog", "Close dialog"],
             consoleMessages: [],
@@ -27,7 +32,12 @@ describe("Radix result writer", () => {
           compatDomSummary: {
             dialogCount: 1,
             portalContentCount: 1,
+            popoverContentCount: 0,
+            dropdownMenuCount: 0,
+            tooltipCount: 0,
             triggerExpanded: "true",
+            popoverExpanded: null,
+            dropdownExpanded: null,
             activeElementText: "Close dialog",
             bodyText: ["Open dialog", "Radix dialog", "Close dialog"],
             consoleMessages: [],
@@ -45,8 +55,8 @@ describe("Radix result writer", () => {
     const results = JSON.parse(await readFile(join(dir, "results.json"), "utf8"));
 
     expect(summary).toContain("# Radix Compat Lab radix-test-run");
-    expect(summary).toContain("React dialogs");
-    expect(summary).toContain("Compat dialogs");
+    expect(summary).toContain("React overlays");
+    expect(summary).toContain("Compat overlays");
     expect(summary).toContain("Focus match");
     expect(summary).toContain("Console issues");
     expect(results.results[0].reactDomSummary.activeElementText).toBe("Close dialog");

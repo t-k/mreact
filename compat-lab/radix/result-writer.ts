@@ -41,14 +41,24 @@ function renderSummary(input: WriteRunSummaryInput): string {
       const consoleIssues =
         result.reactDomSummary.consoleMessages.length +
         result.compatDomSummary.consoleMessages.length;
+      const reactOverlayCount =
+        result.reactDomSummary.portalContentCount +
+        result.reactDomSummary.popoverContentCount +
+        result.reactDomSummary.dropdownMenuCount +
+        result.reactDomSummary.tooltipCount;
+      const compatOverlayCount =
+        result.compatDomSummary.portalContentCount +
+        result.compatDomSummary.popoverContentCount +
+        result.compatDomSummary.dropdownMenuCount +
+        result.compatDomSummary.tooltipCount;
 
-      return `| ${result.fixtureId} | ${status} | ${result.pixelDiffRatio.toFixed(6)} | ${result.reactDomSummary.dialogCount} | ${result.compatDomSummary.dialogCount} | ${focusMatch} | ${consoleIssues} |  |`;
+      return `| ${result.fixtureId} | ${status} | ${result.pixelDiffRatio.toFixed(6)} | ${reactOverlayCount} | ${compatOverlayCount} | ${focusMatch} | ${consoleIssues} |  |`;
     })
     .join("\n");
 
   return `# Radix Compat Lab ${input.runId}
 
-| Fixture | Status | Pixel diff ratio | React dialogs | Compat dialogs | Focus match | Console issues | Note |
+| Fixture | Status | Pixel diff ratio | React overlays | Compat overlays | Focus match | Console issues | Note |
 |---|---|---:|---:|---:|---|---:|---|
 ${rows}
 `;

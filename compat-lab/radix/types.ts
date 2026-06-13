@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 export type CompatRuntime = "react" | "compat";
 
 export type RadixRiskTag =
+  | "positioned-overlay"
   | "portal"
   | "aria-state"
   | "focus-management"
   | "event-delegation"
+  | "pointer-hover"
   | "escape-key"
   | "outside-click"
   | "effect-timing";
@@ -14,7 +16,16 @@ export type RadixRiskTag =
 export interface RadixInteraction {
   name: string;
   description: string;
-  run: "clickDialogTrigger" | "clickDialogClose" | "pressEscape" | "clickOutsideDialog";
+  run:
+    | "clickDialogTrigger"
+    | "clickDialogClose"
+    | "clickPopoverTrigger"
+    | "clickDropdownTrigger"
+    | "hoverTooltipTrigger"
+    | "focusTooltipTrigger"
+    | "pressEscape"
+    | "clickOutsideDialog"
+    | "clickOutsideOverlay";
 }
 
 export interface RadixFixture {
@@ -32,7 +43,12 @@ export interface RadixFixture {
 export interface RadixDomSummary {
   dialogCount: number;
   portalContentCount: number;
+  popoverContentCount: number;
+  dropdownMenuCount: number;
+  tooltipCount: number;
   triggerExpanded: string | null;
+  popoverExpanded: string | null;
+  dropdownExpanded: string | null;
   activeElementText: string;
   bodyText: string[];
   consoleMessages: string[];
