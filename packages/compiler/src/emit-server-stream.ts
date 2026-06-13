@@ -59,6 +59,7 @@ let currentReactSuspenseBoundaryHelperName: string = "_renderReactSuspenseBounda
 let currentReactSuspenseOutOfOrderBoundaryHelperName: string =
   "_renderReactSuspenseOutOfOrderBoundary";
 let currentCompatRenderToStringHelperName: string = "_renderCompatToString";
+let currentCompatChildHelperName: string | undefined;
 let currentPropChildrenCollectState: CollectHtmlState | undefined;
 
 export function emitServerStream(
@@ -78,6 +79,9 @@ export function emitServerStream(
     "_renderReactSuspenseOutOfOrderBoundary",
   );
   const compatRenderToStringHelperName = allocateHelperName(ir, "_renderCompatToString");
+  const compatChildHelperName = usesCompatChildRender(ir)
+    ? allocateHelperName(ir, "_renderCompatChild")
+    : undefined;
   const streamNodeHelperName = allocateHelperName(ir, "_renderStreamNode");
   const clientBoundaryHelperName = usesClientBoundary(ir, options.serverHydration === true)
     ? allocateHelperName(ir, "_renderClientBoundary")
@@ -94,6 +98,7 @@ export function emitServerStream(
   currentReactSuspenseBoundaryHelperName = reactSuspenseBoundaryHelperName;
   currentReactSuspenseOutOfOrderBoundaryHelperName = reactSuspenseOutOfOrderBoundaryHelperName;
   currentCompatRenderToStringHelperName = compatRenderToStringHelperName;
+  currentCompatChildHelperName = compatChildHelperName;
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
@@ -159,6 +164,9 @@ export function emitServerStream(
     renderReactSuspenseBoundary: reactSuspenseBoundaryHelperName,
     renderReactSuspenseOutOfOrderBoundary: reactSuspenseOutOfOrderBoundaryHelperName,
     renderToString: compatRenderToStringHelperName,
+    ...(compatChildHelperName === undefined
+      ? {}
+      : { renderChildToString: compatChildHelperName }),
   };
   const importLine = imports
     .map(
@@ -228,10 +236,17 @@ function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): Run
     });
   }
 
-  if (hasCompatComponentReference(ir) || hasReactNodeRender(ir) || hasRawJsxDynamicRender(ir)) {
+  const compatSpecifiers = [
+    ...(hasCompatComponentReference(ir) || hasReactNodeRender(ir) || hasRawJsxDynamicRender(ir)
+      ? ["renderToString"]
+      : []),
+    ...(usesCompatChildRender(ir) ? ["renderChildToString"] : []),
+  ];
+
+  if (compatSpecifiers.length > 0) {
     imports.push({
       source: "@reckona/mreact-compat",
-      specifiers: ["renderToString"],
+      specifiers: compatSpecifiers,
     });
   }
 
@@ -1122,6 +1137,10 @@ function collectHtmlParts(
       return [{ kind: "stream-node", code: node.code, escapeHelperName }];
     }
 
+    if (node.renderMode === "compat-child" && currentCompatChildHelperName !== undefined) {
+      return [{ kind: "raw-dynamic", code: `${currentCompatChildHelperName}(${node.code})` }];
+    }
+
     return [{ kind: "dynamic", code: node.code, escapeHelperName }];
   }
 
@@ -1595,11 +1614,14 @@ function collectHtmlAttributeParts(
     return [
       {
         kind: "raw-dynamic",
-        code: emitDynamicStyleAttributeExpression(
-          attr.code,
-          escapeHelperName,
-          escapeBatchHelperName,
-        ),
+        code:
+          attr.serialization === "compat"
+            ? emitCompatDynamicStyleAttributeExpression(attr.code, escapeHelperName)
+            : emitDynamicStyleAttributeExpression(
+                attr.code,
+                escapeHelperName,
+                escapeBatchHelperName,
+              ),
       },
     ];
   }
@@ -1617,7 +1639,10 @@ function collectHtmlAttributeParts(
   return [
     {
       kind: "raw-dynamic",
-      code: emitDynamicAttributeExpression(dynamicHtmlName, attr.code, escapeHelperName),
+      code:
+        attr.serialization === "compat" && !isUrlAttribute(dynamicHtmlName)
+          ? emitCompatDynamicAttributeExpression(dynamicHtmlName, attr.code, escapeHelperName)
+          : emitDynamicAttributeExpression(dynamicHtmlName, attr.code, escapeHelperName),
     },
   ];
 }
@@ -1765,6 +1790,35 @@ function emitDynamicAttributeExpression(
   return booleanishString
     ? `(() => { const _value = (${code}); return _value == null ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value) + ${stringLiteral('"')}; })()`
     : `(() => { const _value = (${code}); return _value == null || _value === false ? "" : ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value === true ? "" : _value) + ${stringLiteral('"')}; })()`;
+}
+
+function emitCompatDynamicAttributeExpression(
+  name: string,
+  code: string,
+  escapeHelperName: string,
+): string {
+  const lowerCased = name.toLowerCase();
+  const booleanishOrData =
+    lowerCased.startsWith("aria-") ||
+    lowerCased.startsWith("data-") ||
+    lowerCased === "contenteditable" ||
+    lowerCased === "draggable" ||
+    lowerCased === "spellcheck";
+  const booleanBranch = booleanishOrData
+    ? `return ${stringLiteral(` ${name}="`)} + (_value ? "true" : "false") + ${stringLiteral('"')};`
+    : `return _value ? ${stringLiteral(` ${name}=""`)} : "";`;
+
+  return `(() => { const _value = (${code}); if (_value == null || typeof _value === "function") return ""; if (typeof _value === "boolean") { ${booleanBranch} } if (typeof _value === "object") return ""; return ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value) + ${stringLiteral('"')}; })()`;
+}
+
+function emitCompatDynamicStyleAttributeExpression(
+  code: string,
+  escapeHelperName: string,
+): string {
+  const unitlessCheck =
+    '_styleName === "flex" || _styleName === "fontWeight" || _styleName === "lineHeight" || _styleName === "opacity" || _styleName === "order" || _styleName === "zIndex" || _styleName === "zoom"';
+
+  return `(() => { const _value = (${code}); if (_value == null || typeof _value !== "object") return ""; let _style = ""; for (const _styleName in _value) { const _styleValue = _value[_styleName]; if (_styleValue == null || typeof _styleValue === "boolean" || _styleValue === "") continue; const _cssName = _styleName.startsWith("--") ? _styleName : _styleName.replace(/[A-Z]/g, (_char) => "-" + _char.toLowerCase()); const _css = typeof _styleValue !== "number" || _styleValue === 0 || (${unitlessCheck}) ? String(_styleValue) : _styleValue + "px"; _style += (_style === "" ? "" : ";") + ${escapeHelperName}(_cssName) + ":" + ${escapeHelperName}(_css); } return _style === "" ? "" : ${stringLiteral(' style="')} + _style + ${stringLiteral('"')}; })()`;
 }
 
 function emitDynamicStyleAttributeExpression(
@@ -2445,6 +2499,47 @@ function containsReactNodeRender(node: JsxNodeIr): boolean {
       ...(node.placeholderChildren ?? []),
       ...(node.catchChildren ?? []),
     ].some(containsReactNodeRender);
+  }
+
+  return false;
+}
+
+function usesCompatChildRender(ir: ModuleIr): boolean {
+  return ir.components.some((component) => containsCompatChildRender(component.root));
+}
+
+function containsCompatChildRender(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return node.renderMode === "compat-child";
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.children.some(containsCompatChildRender) ||
+      node.props.some(
+        (prop) => prop.kind === "render-prop" && prop.children.some(containsCompatChildRender),
+      )
+    );
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsCompatChildRender);
+  }
+
+  if (node.kind === "list") {
+    return node.children.some(containsCompatChildRender);
+  }
+
+  if (node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsCompatChildRender);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsCompatChildRender);
   }
 
   return false;

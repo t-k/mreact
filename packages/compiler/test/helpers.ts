@@ -17,6 +17,7 @@ import {
   createElement,
   PureComponent,
   hydrateRoot,
+  renderChildToString,
   renderContextConsumerToString,
   renderContextProviderToString,
   renderToString,
@@ -484,6 +485,10 @@ function extractReactCompatRuntimeEntries(code: string): { localName: string; va
 function getReactCompatRuntimeValue(importedName: string): unknown {
   if (importedName === "renderToString") {
     return renderToString;
+  }
+
+  if (importedName === "renderChildToString") {
+    return renderChildToString;
   }
 
   if (importedName === "renderContextProviderToString") {

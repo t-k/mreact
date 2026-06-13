@@ -249,12 +249,8 @@ function analyzeOxcToIr(
       : undefined;
   const localJsxReturnFunctionNames =
     target === "server" ? collectOxcLocalJsxReturnFunctionNames(program) : new Set<string>();
-  // Stream emit keeps interpreting compat trees for now; only the string
-  // pipeline lowers createElement calls.
   const compatCreateElementNames =
-    target === "server" && options?.serverOutput !== "stream"
-      ? collectCompatCreateElementNames(program)
-      : new Set<string>();
+    target === "server" ? collectCompatCreateElementNames(program) : new Set<string>();
   const localJsxHelperHtmlParameters =
     target === "server"
       ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
@@ -281,7 +277,12 @@ function analyzeOxcToIr(
 
     if (
       isOxcJsxComponentStatement(statement, localJsxReturnFunctionNames) ||
-      isCompatCreateElementComponentStatement(code, statement, compatCreateElementNames) ||
+      isCompatCreateElementComponentStatement(
+        code,
+        statement,
+        compatCreateElementNames,
+        options?.serverOutput,
+      ) ||
       (options?.compatReactNodeReturn === true && isOxcExportedFunctionLike(statement))
     ) {
       const declaration = readObject(readObject(statement).declaration);
@@ -561,6 +562,7 @@ function isCompatCreateElementComponentStatement(
   code: string,
   statement: unknown,
   names: ReadonlySet<string>,
+  serverOutput?: AnalyzeModuleOptions["serverOutput"],
 ): boolean {
   if (names.size === 0) {
     return false;
@@ -580,6 +582,10 @@ function isCompatCreateElementComponentStatement(
     }
 
     return readCompatCreateElementPlainComponent(code, declaration, names) !== undefined;
+  }
+
+  if (serverOutput === "stream") {
+    return false;
   }
 
   return readCompatCreateElementPlainComponent(code, statement, names) !== undefined;
@@ -644,7 +650,9 @@ function analyzeOxcComponent(
   if (object.type !== "ExportNamedDeclaration") {
     const plainComponent =
       readOxcPlainComponent(statement) ??
-      readCompatCreateElementPlainComponent(code, statement, compatCreateElementNames);
+      (serverOutput === "stream"
+        ? undefined
+        : readCompatCreateElementPlainComponent(code, statement, compatCreateElementNames));
 
     if (plainComponent === undefined) {
       return [];

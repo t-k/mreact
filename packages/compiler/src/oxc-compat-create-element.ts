@@ -493,6 +493,45 @@ function lowerCreateElementChild(
     }
   }
 
+  if (child.type === "ConditionalExpression") {
+    const whenTrue = lowerCreateElementDynamicBranch(code, readObject(child.consequent), scope);
+    const whenFalse = lowerCreateElementDynamicBranch(code, readObject(child.alternate), scope);
+
+    if (whenTrue !== undefined && whenFalse !== undefined) {
+      return [
+        {
+          kind: "conditional",
+          conditionCode: readSource(code, readObject(child.test)),
+          whenTrue,
+          whenFalse,
+        },
+      ];
+    }
+  }
+
+  if (child.type === "LogicalExpression" && child.operator === "&&") {
+    const whenTrue = lowerCreateElementDynamicBranch(code, readObject(child.right), scope);
+
+    if (whenTrue !== undefined) {
+      const conditionValueName = logicalConditionValueName(readObject(child.left));
+
+      return [
+        {
+          kind: "conditional",
+          conditionCode: readSource(code, readObject(child.left)),
+          conditionValueName,
+          whenTrue,
+          whenFalse: [
+            {
+              kind: "expr",
+              code: renderableFalsyConditionValueCode(conditionValueName),
+            },
+          ],
+        },
+      ];
+    }
+  }
+
   // Provably-string expressions escape directly (and stay batchable); the
   // interpreter would emit the same escaped bytes for them.
   if (isProvablyStringExpression(child, scope)) {
@@ -503,6 +542,28 @@ function lowerCreateElementChild(
   // and falls back to the interpreter for element values, so children that
   // evaluate to react nodes keep rendering instead of stringifying.
   return [{ kind: "expr", code: readSource(code, child), renderMode: "compat-child" }];
+}
+
+function lowerCreateElementDynamicBranch(
+  code: string,
+  expression: Record<string, unknown>,
+  scope: CompatCreateElementScope,
+): JsxNodeIr[] | undefined {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (unwrapped.type === "Literal" && (unwrapped.value === null || unwrapped.value === false)) {
+    return [];
+  }
+
+  return lowerCreateElementChild(code, unwrapped, scope);
+}
+
+function logicalConditionValueName(expression: Record<string, unknown>): string {
+  return `__mreactLogical_${typeof expression.start === "number" ? expression.start : "value"}`;
+}
+
+function renderableFalsyConditionValueCode(name: string): string {
+  return `((typeof ${name} === "number" || typeof ${name} === "bigint") ? ${name} : null)`;
 }
 
 function isProvablyStringExpression(

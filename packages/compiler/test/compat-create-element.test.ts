@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createElement, renderChildToString, renderToString } from "@reckona/mreact-compat";
 import { transform } from "../src/index.js";
-import { runServerComponent } from "./helpers.js";
+import { runServerComponent, runServerStreamComponent } from "./helpers.js";
 
 // Runs compiled output whose emitted imports include the compat child
 // helper; plain runServerComponent strips imports, so the helper binding is
@@ -37,12 +37,16 @@ function runCompiledWithCompatHelpers(code: string, exportName = "App"): string 
 // the server string pipeline instead of being interpreted per request, with
 // byte parity against the interpreter for the lowered shapes.
 
-function compile(code: string): { code: string; diagnostics: unknown[] } {
+function compile(
+  code: string,
+  serverOutput: "string" | "stream" = "string",
+): { code: string; diagnostics: unknown[] } {
   const output = transform({
     code,
     filename: "page.tsx",
     target: "server",
     dev: false,
+    serverOutput,
   });
   return { code: output.code, diagnostics: output.diagnostics };
 }
@@ -271,5 +275,96 @@ export default function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code, "default")).toBe("shadowed:main");
+  });
+
+  test("compiles compat createElement trees through stream output", async () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+const cells = [
+  { label: "A&B", title: { nested: true }, bg: "red", width: 10 },
+  { label: "<C>", title: "plain", bg: "blue", width: 0 },
+];
+export function App() {
+  return createElement("main", null, cells.map((cell, i) => createElement(
+    "div",
+    {
+      key: i,
+      title: cell.title,
+      "data-live": i === 0,
+      style: { backgroundColor: cell.bg, width: cell.width, opacity: 0.5 },
+    },
+    cell.label,
+  )));
+}`;
+    const output = compile(source, "stream");
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createElement(");
+
+    const cells = [
+      { label: "A&B", title: { nested: true }, bg: "red", width: 10 },
+      { label: "<C>", title: "plain", bg: "blue", width: 0 },
+    ];
+    const interpreted = renderToString(() =>
+      createElement(
+        "main",
+        null,
+        cells.map((cell, i) =>
+          createElement(
+            "div",
+            {
+              key: i,
+              title: cell.title,
+              "data-live": i === 0,
+              style: { backgroundColor: cell.bg, width: cell.width, opacity: 0.5 },
+            },
+            cell.label,
+          ),
+        ),
+      ),
+    );
+    await expect(runServerStreamComponent(output.code)).resolves.toBe(interpreted);
+  });
+
+  test("compiles element-bearing conditional createElement children", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+const rows = [
+  { label: "hot & ready", active: true, count: 1 },
+  { label: "cold <idle>", active: false, count: 0 },
+];
+export function App() {
+  return createElement("ul", null, rows.map((row, i) => createElement(
+    "li",
+    { key: i },
+    row.active ? createElement("strong", null, String(row.label)) : createElement("span", null, String(row.label)),
+    row.count && createElement("em", null, "count:" + row.count),
+  )));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("renderChildToString");
+    expect(output.code).not.toContain("createElement(");
+
+    const rows = [
+      { label: "hot & ready", active: true, count: 1 },
+      { label: "cold <idle>", active: false, count: 0 },
+    ];
+    const interpreted = renderToString(() =>
+      createElement(
+        "ul",
+        null,
+        rows.map((row, i) =>
+          createElement(
+            "li",
+            { key: i },
+            row.active
+              ? createElement("strong", null, String(row.label))
+              : createElement("span", null, String(row.label)),
+            row.count && createElement("em", null, "count:" + row.count),
+          ),
+        ),
+      ),
+    );
+    expect(runCompiledWithCompatHelpers(output.code)).toBe(interpreted);
   });
 });
