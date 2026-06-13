@@ -353,19 +353,25 @@ async function fetchQueryWithCrossTabLeader<TData>(
     input.options.singleFlightHandoffTimeoutMs ?? defaultSingleFlightHandoffTimeoutMs,
   );
 
-  const leaderResult = await lockManager.request(
-    lockName,
-    { ifAvailable: true },
-    async (lock) => {
-      if (lock === null) {
-        return { leader: false as const };
-      }
+  let leaderResult: { data: TData; leader: true } | { leader: false };
+  try {
+    leaderResult = await lockManager.request(
+      lockName,
+      { ifAvailable: true },
+      async (lock) => {
+        if (lock === null) {
+          return { leader: false as const };
+        }
 
-      const data = await input.originalFetchQuery(input.fetchOptions);
-      input.postSuccess(input.fetchOptions.queryKey, data);
-      return { data, leader: true as const };
-    },
-  );
+        const data = await input.originalFetchQuery(input.fetchOptions);
+        input.postSuccess(input.fetchOptions.queryKey, data);
+        return { data, leader: true as const };
+      },
+    );
+  } catch (error) {
+    handoffWaiter.cancel();
+    throw error;
+  }
 
   if (leaderResult.leader) {
     handoffWaiter.cancel();
@@ -587,7 +593,8 @@ function normalizeMessage(value: unknown): QuerySyncMessage | undefined {
     Array.isArray(message.queryKey) &&
     typeof message.queryHash === "string" &&
     message.queryHash === hashQueryKey(message.queryKey) &&
-    typeof message.updatedAt === "number"
+    typeof message.updatedAt === "number" &&
+    Number.isFinite(message.updatedAt)
   ) {
     return message as Extract<QuerySyncMessage, { type: "success" }>;
   }

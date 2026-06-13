@@ -458,6 +458,38 @@ describe("cross-tab query sync", () => {
     }
   });
 
+  it("clears the handoff waiter timer when the Web Lock leader fetch rejects", async () => {
+    vi.useFakeTimers();
+    installNamedLockManager();
+    const channel = uniqueChannelName();
+    const client = createQueryClient();
+    const dispose = syncQueryClientAcrossTabs(client, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+      singleFlight: true,
+      singleFlightHandoffTimeoutMs: 60_000,
+    });
+    const failure = new Error("leader failed");
+
+    try {
+      await expect(client.fetchQuery({
+        queryKey: ["profile"],
+        queryFn: async () => {
+          throw failure;
+        },
+      })).rejects.toBe(failure);
+
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      if (vi.getTimerCount() > 0) {
+        vi.runOnlyPendingTimers();
+        await Promise.resolve();
+      }
+      dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it("does not broadcast keyless invalidations across an includeQuery boundary", async () => {
     const channel = uniqueChannelName();
     const first = createQueryClient();
@@ -664,6 +696,30 @@ describe("cross-tab query sync", () => {
     } finally {
       disposeFirst();
       disposeSecond();
+    }
+  });
+
+  it("ignores success messages with non-finite updatedAt values", async () => {
+    const channel = uniqueChannelName();
+    const client = createQueryClient();
+    const dispose = syncQueryClientAcrossTabs(client, {
+      broadcastQueryData: true,
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+
+    try {
+      postSuccessMessage(channel, {
+        data: { name: "poisoned" },
+        queryHash: hashQueryKey(["profile"]),
+        queryKey: ["profile"],
+        updatedAt: Number.POSITIVE_INFINITY,
+      });
+      await delay(20);
+
+      expect(client.getQueryData(["profile"])).toBeUndefined();
+    } finally {
+      dispose();
     }
   });
 
@@ -889,6 +945,25 @@ function postMalformedSuccess(
     senderId: `malformed-${Math.random()}`,
     type: "success",
     updatedAt: Date.now(),
+    version: 1,
+  });
+  broadcast.close();
+}
+
+function postSuccessMessage(
+  channel: string,
+  message: {
+    data: unknown;
+    queryHash: string;
+    queryKey: readonly unknown[];
+    updatedAt: number;
+  },
+): void {
+  const broadcast = new BroadcastChannel(channel);
+  broadcast.postMessage({
+    ...message,
+    senderId: `success-${Math.random()}`,
+    type: "success",
     version: 1,
   });
   broadcast.close();
