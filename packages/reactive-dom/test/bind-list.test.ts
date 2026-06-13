@@ -1348,4 +1348,60 @@ describe("bindList", () => {
     expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
     dispose();
   });
+
+  test("appends keyed rows without map-get probing the unchanged prefix", async () => {
+    const initialRows = [
+      { id: 0, label: "0" },
+      { id: 1, label: "1" },
+      { id: 2, label: "2" },
+    ];
+    const appendedRows = [
+      ...initialRows,
+      { id: 3, label: "3" },
+      { id: 4, label: "4" },
+    ];
+    const prefixKeys = new Set(initialRows.map((row) => row.id));
+    const items = cell(initialRows);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalGet = Map.prototype.get;
+    let prefixMapGetCalls = 0;
+
+    try {
+      Map.prototype.get = function countedGet<K, V>(
+        this: Map<K, V>,
+        key: K,
+      ): V | undefined {
+        if (typeof key === "number" && prefixKeys.has(key)) {
+          prefixMapGetCalls += 1;
+        }
+        return originalGet.call(this, key);
+      };
+
+      items.set(appendedRows);
+      await flushEffects();
+    } finally {
+      Map.prototype.get = originalGet;
+    }
+
+    expect(prefixMapGetCalls).toBe(0);
+    expect(parent.innerHTML).toBe(
+      "<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->",
+    );
+    dispose();
+  });
 });

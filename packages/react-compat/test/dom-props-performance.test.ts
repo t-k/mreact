@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test } from "vitest";
-import { applyProps } from "../src/dom-props.js";
+import { applyPostChildFormProps, applyProps } from "../src/dom-props.js";
 
 type FormConstructors = Pick<
   typeof globalThis,
@@ -188,6 +188,28 @@ describe("react-compat DOM prop performance", () => {
 
     expect(toLowerCaseCalls).toBe(0);
   });
+
+  test("post-child form props do not inspect ordinary element props", () => {
+    const div = document.createElement("div");
+    let propDescriptorReads = 0;
+    const props = new Proxy(
+      {
+        children: "row",
+        "data-key": 1,
+      },
+      {
+        getOwnPropertyDescriptor(target, property) {
+          propDescriptorReads += 1;
+          return Reflect.getOwnPropertyDescriptor(target, property);
+        },
+      },
+    );
+
+    applyPostChildFormProps(div, props);
+
+    expect(propDescriptorReads).toBe(0);
+  });
+
 });
 
 function installCountingFormConstructors(hasInstance: () => boolean): void {

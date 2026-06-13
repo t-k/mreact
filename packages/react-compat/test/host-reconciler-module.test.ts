@@ -453,6 +453,57 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("reconciles append-only keyed rows without pre-counting unchanged siblings", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+      createElement("div", { "data-key": 1, key: 1 }, "Row 1"),
+      createElement("div", { "data-key": 2, key: 2 }, "Row 2"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const first = root.current.child;
+    const second = first?.sibling;
+    const third = second?.sibling;
+
+    if (first === undefined || second === undefined || third === undefined) {
+      expect.fail("expected three row fibers");
+    }
+
+    let siblingReads = 0;
+
+    const countSiblingReads = (fiber: typeof first, sibling: typeof first | undefined) => {
+      Object.defineProperty(fiber, "sibling", {
+        configurable: true,
+        get() {
+          siblingReads += 1;
+          return sibling;
+        },
+        set(next) {
+          sibling = next;
+        },
+      });
+    };
+
+    countSiblingReads(first, second);
+    countSiblingReads(second, third);
+    countSiblingReads(third, undefined);
+
+    renderHostFiberRoot(root, [
+      createElement("div", { "data-key": 0, key: 0 }, "Row 0"),
+      createElement("div", { "data-key": 1, key: 1 }, "Row 1"),
+      createElement("div", { "data-key": 2, key: 2 }, "Row 2"),
+      createElement("div", { "data-key": 3, key: 3 }, "Row 3"),
+    ]);
+
+    expect(siblingReads).toBe(6);
+  });
+
   test("removes one keyed fragment child without resyncing unchanged siblings", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

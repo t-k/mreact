@@ -106,13 +106,17 @@ function reconcileSameKeyOrderChildren(
   }
 
   let cursor: Fiber | undefined = currentFirstChild;
+  let matchedCount = 0;
 
   for (const child of children) {
+    if (cursor === undefined) {
+      break;
+    }
+
     const key = getNodeKey(child);
 
     if (
       key === undefined ||
-      cursor === undefined ||
       cursor.key !== key ||
       !isReactCompatElement(child) ||
       !canReuseElementFiber(cursor, child)
@@ -121,9 +125,10 @@ function reconcileSameKeyOrderChildren(
     }
 
     cursor = cursor.sibling;
+    matchedCount += 1;
   }
 
-  if (cursor !== undefined) {
+  if (matchedCount === 0 || cursor !== undefined) {
     return undefined;
   }
 
@@ -131,9 +136,11 @@ function reconcileSameKeyOrderChildren(
   let first: Fiber | undefined;
   let previous: Fiber | undefined;
 
-  for (const child of children) {
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index] as ReactCompatNode;
     const key = getNodeKey(child) as string;
-    const fiber = reconcileSingleChild(parent, cursor, child, key) as Fiber;
+    const matchedCurrent: Fiber | undefined = index < matchedCount ? cursor : undefined;
+    const fiber = reconcileSingleChild(parent, matchedCurrent, child, key) as Fiber;
 
     fiber.lanes |= parent.lanes;
     fiber.return = parent;
@@ -146,7 +153,7 @@ function reconcileSameKeyOrderChildren(
     }
 
     previous = fiber;
-    cursor = cursor?.sibling;
+    cursor = matchedCurrent?.sibling;
   }
 
   parent.child = first;

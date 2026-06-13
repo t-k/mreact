@@ -435,10 +435,7 @@ function reconcileKeyedRowHostChildren(
   let subtreeFlags = NoFlags;
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
-  const currentSiblingCount = countFiberSiblings(currentFirstChild);
-  const canReuseUnchangedRows =
-    currentSiblingCount === children.length ||
-    isKeyedAppendOnly(currentFirstChild, children, currentSiblingCount);
+  const canReuseUnchangedRows = hasSameKeyOrderPrefix(currentFirstChild, children);
   const row = createKeyedRowHostElementScratch();
 
   for (let index = 0; index < children.length; index += 1) {
@@ -514,33 +511,21 @@ function reconcileKeyedRowHostChildren(
   return { fiber: first, consumed: 0 };
 }
 
-function countFiberSiblings(first: Fiber): number {
-  let count = 0;
-  let cursor: Fiber | undefined = first;
-
-  while (cursor !== undefined) {
-    count += 1;
-    cursor = cursor.sibling;
-  }
-
-  return count;
-}
-
-function isKeyedAppendOnly(
+function hasSameKeyOrderPrefix(
   currentFirstChild: Fiber,
   children: readonly ReactCompatNode[],
-  currentSiblingCount: number,
 ): boolean {
-  if (children.length <= currentSiblingCount) {
-    return false;
-  }
-
   let current: Fiber | undefined = currentFirstChild;
 
-  for (let index = 0; index < currentSiblingCount; index += 1) {
-    if (current === undefined || current.key !== getNodeKey(children[index])) {
+  for (let index = 0; index < children.length; index += 1) {
+    if (current === undefined) {
+      return true;
+    }
+
+    if (current.key !== getNodeKey(children[index])) {
       return false;
     }
+
     current = current.sibling;
   }
 

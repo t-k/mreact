@@ -442,27 +442,23 @@ function tryAppendKeyedRecords<T>(
     return undefined;
   }
 
-  const previousKeys = records.keys();
+  const previousRecords = records[Symbol.iterator]();
 
   for (let slot = 0; slot < records.size; slot += 1) {
-    const previousKey = previousKeys.next();
+    const previousRecord = previousRecords.next();
     const itemKey = keys[slot];
 
-    if (previousKey.done || !Object.is(previousKey.value, itemKey)) {
+    if (previousRecord.done || !Object.is(previousRecord.value[0], itemKey)) {
       return undefined;
     }
 
-    const record = records.get(itemKey);
+    const record = previousRecord.value[1];
+    const item = items[slot];
+    const sourceIndex = indexes === null ? slot : (indexes[slot] as number);
 
     if (
-      record === undefined ||
-      !updateKeyedRecord(
-        record,
-        renderArity,
-        items[slot],
-        indexes === null ? slot : (indexes[slot] as number),
-        currentItems,
-      )
+      !canSkipKeyedRecordUpdate(record, renderArity, item, sourceIndex, currentItems) &&
+      !updateKeyedRecord(record, renderArity, item, sourceIndex, currentItems)
     ) {
       return undefined;
     }
@@ -507,6 +503,20 @@ function tryAppendKeyedRecords<T>(
   }
 
   return { appendedNodeCount, records };
+}
+
+function canSkipKeyedRecordUpdate(
+  record: KeyedRecord,
+  renderArity: number,
+  nextItem: unknown,
+  nextIndex: number,
+  nextItems: readonly unknown[],
+): boolean {
+  return (
+    Object.is(record.currentItem, nextItem) &&
+    (renderArity < 2 || record.currentIndex === nextIndex) &&
+    (renderArity < 3 || record.currentItems === nextItems)
+  );
 }
 
 function reconcileKeyedRecordOrder(
