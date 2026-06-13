@@ -11,7 +11,8 @@ export type RadixRiskTag =
   | "pointer-hover"
   | "escape-key"
   | "outside-click"
-  | "effect-timing";
+  | "effect-timing"
+  | "layout-measurement";
 
 export interface RadixInteraction {
   name: string;
@@ -19,7 +20,28 @@ export interface RadixInteraction {
   run:
     | "clickDialogTrigger"
     | "clickDialogClose"
+    | "clickAccordionTrigger"
+    | "clickAlertDialogTrigger"
+    | "clickCheckbox"
+    | "clickCollapsibleTrigger"
+    | "rightClickContextMenuTarget"
+    | "submitForm"
+    | "hoverHoverCardTrigger"
+    | "clickMenubarTrigger"
+    | "hoverNavigationTrigger"
+    | "inputOtpValue"
+    | "clickPasswordToggle"
     | "clickPopoverTrigger"
+    | "clickRadioSecondItem"
+    | "clickSelectTrigger"
+    | "clickSelectSecondItem"
+    | "incrementSlider"
+    | "clickSwitch"
+    | "clickTabsSecondTrigger"
+    | "clickToastTrigger"
+    | "clickToggle"
+    | "clickToggleGroupSecond"
+    | "clickToolbarButton"
     | "clickDropdownTrigger"
     | "hoverTooltipTrigger"
     | "focusTooltipTrigger"
@@ -43,6 +65,7 @@ export interface RadixFixture {
 export interface RadixDomSummary {
   dialogCount: number;
   portalContentCount: number;
+  smokeContentCount: number;
   popoverContentCount: number;
   dropdownMenuCount: number;
   tooltipCount: number;

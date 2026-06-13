@@ -249,8 +249,79 @@ async function runInteractions(page: Page, interactions: RadixInteraction[]): Pr
         await close.click();
       }
       await page.waitForTimeout(150);
+    } else if (interaction.run === "clickAccordionTrigger") {
+      await page.locator("[data-testid='accordion-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickAlertDialogTrigger") {
+      await page.locator("[data-testid='alert-dialog-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickCheckbox") {
+      await page.locator("[data-testid='checkbox-root']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickCollapsibleTrigger") {
+      await page.locator("[data-testid='collapsible-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "rightClickContextMenuTarget") {
+      await page.locator("[data-testid='context-menu-target']").click({ button: "right" });
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "submitForm") {
+      await page.locator("[data-testid='form-submit']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "hoverHoverCardTrigger") {
+      await page.locator("[data-testid='hover-card-trigger']").hover();
+      await page.waitForTimeout(250);
+    } else if (interaction.run === "clickMenubarTrigger") {
+      await page.locator("[data-testid='menubar-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "hoverNavigationTrigger") {
+      await page.locator("[data-testid='navigation-trigger']").hover();
+      await page.waitForTimeout(250);
+    } else if (interaction.run === "inputOtpValue") {
+      await page.locator("[data-testid='otp-input-0']").fill("1");
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickPasswordToggle") {
+      await page.locator("[data-testid='password-toggle']").click();
+      await page.waitForTimeout(150);
     } else if (interaction.run === "clickPopoverTrigger") {
       await page.locator("[data-testid='popover-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickRadioSecondItem") {
+      await page.locator("[data-testid='radio-beta']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickSelectTrigger") {
+      await page.locator("[data-testid='select-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickSelectSecondItem") {
+      await page.locator("[data-testid='select-beta']").click();
+      await page.waitForTimeout(150);
+      await page.evaluate(() => {
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLElement) {
+          activeElement.blur();
+        }
+      });
+      await page.waitForTimeout(50);
+    } else if (interaction.run === "incrementSlider") {
+      await page.locator("[data-testid='slider-thumb']").focus();
+      await page.keyboard.press("ArrowRight");
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickSwitch") {
+      await page.locator("[data-testid='switch-root']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickTabsSecondTrigger") {
+      await page.locator("[data-testid='tabs-two']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickToastTrigger") {
+      await page.locator("[data-testid='toast-trigger']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickToggle") {
+      await page.locator("[data-testid='toggle-root']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickToggleGroupSecond") {
+      await page.locator("[data-testid='toggle-group-right']").click();
+      await page.waitForTimeout(150);
+    } else if (interaction.run === "clickToolbarButton") {
+      await page.locator("[data-testid='toolbar-button']").click();
       await page.waitForTimeout(150);
     } else if (interaction.run === "clickDropdownTrigger") {
       await page.locator("[data-testid='dropdown-trigger']").click();
@@ -281,11 +352,23 @@ async function readDomSummary(page: Page, consoleMessages: string[]): Promise<Ra
     const dropdownTrigger = document.querySelector("[data-testid='dropdown-trigger']");
     const activeElement = document.activeElement;
     const activeElementTagName = activeElement?.tagName.toUpperCase() ?? "";
+    const activeElementInBody =
+      activeElement instanceof Element && document.body.contains(activeElement);
+    const activeElementRole =
+      activeElement instanceof Element
+        ? activeElement.closest("[role='option']")?.getAttribute("role")
+        : null;
+    const activeElementVisible =
+      !(activeElement instanceof HTMLElement) ||
+      activeElement.offsetParent !== null ||
+      activeElement.getClientRects().length > 0;
     const bodyText = Array.from(
       document.body.querySelectorAll(
         [
           "[data-testid='dialog-trigger']",
           "[data-testid='dialog-content']",
+          "[data-testid='alert-dialog-content']",
+          "[data-testid='context-menu-content']",
           "[data-testid='dialog-close']",
           "[data-testid='popover-trigger']",
           "[data-testid='popover-content']",
@@ -293,18 +376,38 @@ async function readDomSummary(page: Page, consoleMessages: string[]): Promise<Ra
           "[data-testid='dropdown-content']",
           "[data-testid='tooltip-trigger']",
           "[data-testid='tooltip-content']",
+          "[data-radix-smoke-content]",
           "[role='dialog']",
           "[role='menu']",
           "[role='tooltip']",
         ].join(", "),
       ),
     )
-      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter(
+        (node) =>
+          !(node instanceof HTMLElement) ||
+          node.offsetParent !== null ||
+          node.getClientRects().length > 0,
+      )
+      .map((node) => {
+        if (node instanceof HTMLElement) {
+          return node.innerText.replace(/\s+/g, " ").trim();
+        }
+        return node.textContent?.replace(/\s+/g, " ").trim() ?? "";
+      })
       .filter((value) => value.length > 0);
 
     return {
       dialogCount: document.body.querySelectorAll("[role='dialog']").length,
       portalContentCount: document.body.querySelectorAll("[data-testid='dialog-content']").length,
+      smokeContentCount: Array.from(
+        document.body.querySelectorAll("[data-radix-smoke-content]"),
+      ).filter(
+        (node) =>
+          !(node instanceof HTMLElement) ||
+          node.offsetParent !== null ||
+          node.getClientRects().length > 0,
+      ).length,
       popoverContentCount: document.body.querySelectorAll("[data-testid='popover-content']").length,
       dropdownMenuCount: document.body.querySelectorAll("[role='menu']").length,
       tooltipCount: document.body.querySelectorAll("[role='tooltip']").length,
@@ -312,7 +415,11 @@ async function readDomSummary(page: Page, consoleMessages: string[]): Promise<Ra
       popoverExpanded: popoverTrigger?.getAttribute("aria-expanded") ?? null,
       dropdownExpanded: dropdownTrigger?.getAttribute("aria-expanded") ?? null,
       activeElementText:
-        activeElementTagName === "BODY" || activeElementTagName === "HTML"
+        !activeElementInBody ||
+        !activeElementVisible ||
+        activeElementRole === "option" ||
+        activeElementTagName === "BODY" ||
+        activeElementTagName === "HTML"
           ? ""
           : (activeElement?.textContent?.replace(/\s+/g, " ").trim() ?? ""),
       bodyText,
@@ -325,6 +432,7 @@ function summariesMatch(react: RadixDomSummary, compat: RadixDomSummary): boolea
   return (
     react.dialogCount === compat.dialogCount &&
     react.portalContentCount === compat.portalContentCount &&
+    react.smokeContentCount === compat.smokeContentCount &&
     react.popoverContentCount === compat.popoverContentCount &&
     react.dropdownMenuCount === compat.dropdownMenuCount &&
     react.tooltipCount === compat.tooltipCount &&
@@ -332,6 +440,7 @@ function summariesMatch(react: RadixDomSummary, compat: RadixDomSummary): boolea
     react.popoverExpanded === compat.popoverExpanded &&
     react.dropdownExpanded === compat.dropdownExpanded &&
     react.activeElementText === compat.activeElementText &&
+    react.bodyText.join("\n") === compat.bodyText.join("\n") &&
     react.consoleMessages.length === 0 &&
     compat.consoleMessages.length === 0
   );
@@ -341,6 +450,7 @@ function emptyDomSummary(): RadixDomSummary {
   return {
     dialogCount: 0,
     portalContentCount: 0,
+    smokeContentCount: 0,
     popoverContentCount: 0,
     dropdownMenuCount: 0,
     tooltipCount: 0,

@@ -19,6 +19,7 @@ describe("Radix result writer", () => {
           reactDomSummary: {
             dialogCount: 1,
             portalContentCount: 1,
+            smokeContentCount: 1,
             popoverContentCount: 0,
             dropdownMenuCount: 0,
             tooltipCount: 0,
@@ -32,6 +33,7 @@ describe("Radix result writer", () => {
           compatDomSummary: {
             dialogCount: 1,
             portalContentCount: 1,
+            smokeContentCount: 1,
             popoverContentCount: 0,
             dropdownMenuCount: 0,
             tooltipCount: 0,

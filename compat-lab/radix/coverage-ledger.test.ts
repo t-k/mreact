@@ -26,4 +26,41 @@ describe("Radix coverage ledger", () => {
       ]),
     );
   });
+
+  test("has a smoke obligation for every official Radix primitive component", () => {
+    expect(radixCoverageLedger.map((row) => row.feature)).toEqual(
+      expect.arrayContaining([
+        "Accordion",
+        "AlertDialog",
+        "AspectRatio",
+        "Avatar",
+        "Checkbox",
+        "Collapsible",
+        "ContextMenu",
+        "Dialog.Portal",
+        "DropdownMenu.Trigger",
+        "Form",
+        "HoverCard",
+        "Label",
+        "Menubar",
+        "NavigationMenu",
+        "OneTimePasswordField",
+        "PasswordToggleField",
+        "Popover.Trigger",
+        "Progress",
+        "RadioGroup",
+        "ScrollArea",
+        "Select",
+        "Separator",
+        "Slider",
+        "Switch",
+        "Tabs",
+        "Toast",
+        "Toggle",
+        "ToggleGroup",
+        "Toolbar",
+        "Tooltip.Trigger",
+      ]),
+    );
+  });
 });

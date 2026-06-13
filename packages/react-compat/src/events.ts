@@ -99,10 +99,7 @@ export function toEventNames(propName: string): string[] {
   return eventNames;
 }
 
-export function forEachEventName(
-  propName: string,
-  callback: (eventName: string) => void,
-): void {
+export function forEachEventName(propName: string, callback: (eventName: string) => void): void {
   const directEventName = directNativeEventName(propName);
 
   if (directEventName !== undefined) {
@@ -123,10 +120,7 @@ export function forEachEventName(
   }
 }
 
-export function ensureDelegatedEventListenersForProp(
-  root: Element,
-  propName: string,
-): void {
+export function ensureDelegatedEventListenersForProp(root: Element, propName: string): void {
   const directEventName = directNativeEventName(propName);
 
   if (directEventName !== undefined) {
@@ -206,16 +200,11 @@ export function toEventPropNames(eventName: string): string[] {
   return [propName];
 }
 
-export function setLogicalEventParent(
-  container: Element,
-  parent: ParentNode,
-): void {
+export function setLogicalEventParent(container: Element, parent: ParentNode): void {
   logicalEventParents.set(container, parent);
 }
 
-export function getEventPriority(
-  eventName: string,
-): "discrete" | "continuous" | "default" {
+export function getEventPriority(eventName: string): "discrete" | "continuous" | "default" {
   if (discreteEventNames.has(eventName)) {
     return "discrete";
   }
@@ -263,10 +252,7 @@ const continuousEventNames = new Set([
   "wheel",
 ]);
 
-export function ensureDelegatedEventListener(
-  root: Element,
-  eventName: string,
-): void {
+export function ensureDelegatedEventListener(root: Element, eventName: string): void {
   const listeners = delegatedRootListeners.get(root) ?? new Set<string>();
 
   if (listeners.has(eventName)) {
@@ -296,11 +282,7 @@ function markDispatchedDelegatedEvent(event: Event, eventName: string): void {
   dispatchedDelegatedEvents.set(event, events);
 }
 
-function dispatchDelegatedEvent(
-  root: Element,
-  eventName: string,
-  event: Event,
-): void {
+function dispatchDelegatedEvent(root: Element, eventName: string, event: Event): void {
   const path = getEventPath(root, event);
   const propNames = toEventPropNames(eventName);
   const state = {
@@ -393,11 +375,7 @@ function dispatchEventPropNames(
   state: { defaultPrevented: boolean; propagationStopped: boolean },
 ): void {
   for (const propName of propNames) {
-    if (
-      propName === "onChange" &&
-      event.type === "change" &&
-      isTextInputChangeTarget(target)
-    ) {
+    if (propName === "onChange" && event.type === "change" && isTextInputChangeTarget(target)) {
       continue;
     }
 
@@ -458,9 +436,7 @@ function dispatchMouseTransitionEvent(
 
 function isInternalMouseTransition(event: Event, target: Element): boolean {
   const relatedTarget =
-    event instanceof MouseEvent && event.relatedTarget instanceof Node
-      ? event.relatedTarget
-      : null;
+    event instanceof MouseEvent && event.relatedTarget instanceof Node ? event.relatedTarget : null;
 
   return relatedTarget !== null && target.contains(relatedTarget);
 }
@@ -505,6 +481,10 @@ function createSyntheticEvent(
   syntheticType = nativeEvent.type,
 ): SyntheticEvent {
   const mouseEvent = nativeEvent instanceof MouseEvent ? nativeEvent : undefined;
+  const pointerEvent =
+    "pointerId" in nativeEvent || "pointerType" in nativeEvent
+      ? (nativeEvent as PointerEvent)
+      : undefined;
   const touchEvent = nativeEvent instanceof TouchEvent ? nativeEvent : undefined;
   const keyboardEvent = nativeEvent instanceof KeyboardEvent ? nativeEvent : undefined;
 
@@ -537,6 +517,13 @@ function createSyntheticEvent(
           altKey: mouseEvent.altKey,
           metaKey: mouseEvent.metaKey,
           relatedTarget: mouseEvent.relatedTarget,
+        }),
+    ...(pointerEvent === undefined
+      ? {}
+      : {
+          pointerId: pointerEvent.pointerId,
+          pointerType: pointerEvent.pointerType,
+          isPrimary: pointerEvent.isPrimary,
         }),
     ...(touchEvent === undefined
       ? {}

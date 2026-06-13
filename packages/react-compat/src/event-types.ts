@@ -9,6 +9,9 @@ export interface SyntheticEvent {
   type: string;
   target: EventTarget | null;
   currentTarget: EventTarget | null;
+  pointerId?: number;
+  pointerType?: string;
+  isPrimary?: boolean;
   clientX?: number;
   clientY?: number;
   pageX?: number;
