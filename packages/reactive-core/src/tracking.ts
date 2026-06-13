@@ -100,12 +100,14 @@ export function trackIncrementalSource(
     return;
   }
 
+  const alreadyTrackedByComputation = source.trackedBy === computation;
+
   source.trackedBy = computation;
   source.trackedVersion = trackingVersion;
   computation.trackingCount = (computation.trackingCount ?? 0) + 1;
   computation.trackingTouchedDeps?.push(source);
 
-  if (computation.deps.has(source)) {
+  if (alreadyTrackedByComputation || computation.deps.has(source)) {
     return;
   }
 

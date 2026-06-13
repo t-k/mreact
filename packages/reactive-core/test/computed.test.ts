@@ -121,6 +121,44 @@ describe("computed", () => {
     expect(pushCalls).toBe(0);
   });
 
+  test("stable flat computed fan-in reruns do not probe the dependency set", () => {
+    const first = cell(0);
+    const second = cell(0);
+    const third = cell(0);
+    const total = computed(() => first.get() + second.get() + third.get());
+
+    expect(total.get()).toBe(0);
+
+    const originalHas = Set.prototype.has;
+    let sourceHasCalls = 0;
+
+    try {
+      Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "subscribers" in value
+        ) {
+          sourceHasCalls += 1;
+        }
+
+        return originalHas.call(this, value);
+      };
+
+      batch(() => {
+        first.set(1);
+        second.set(2);
+        third.set(3);
+      });
+
+      expect(total.get()).toBe(6);
+    } finally {
+      Set.prototype.has = originalHas;
+    }
+
+    expect(sourceHasCalls).toBe(0);
+  });
+
   test("nested computed reruns preserve direct dependencies read before the nested read", () => {
     const source = cell(1);
     const parity = computed(() => source.get() % 2);
