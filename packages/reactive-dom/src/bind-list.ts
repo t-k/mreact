@@ -969,7 +969,7 @@ function tryReplaceDisjointKeyedRecords<T>(
     }
   }
 
-  const disposeError = disposeStaleRecords(records, nextRecords);
+  const disposeError = disposeRecordValues(records.values());
   parent.replaceChildren(...orderedNodes, marker);
 
   if (disposeError !== undefined) {
@@ -1062,6 +1062,20 @@ function disposeStaleRecords(
       } catch (error) {
         firstError ??= error;
       }
+    }
+  }
+
+  return firstError;
+}
+
+function disposeRecordValues(records: Iterable<KeyedRecord>): unknown {
+  let firstError: unknown;
+
+  for (const record of records) {
+    try {
+      record.dispose();
+    } catch (error) {
+      firstError ??= error;
     }
   }
 

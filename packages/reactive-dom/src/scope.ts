@@ -1,6 +1,6 @@
 import type { Dispose } from "./types.js";
 
-interface DomScope {
+export interface DomScope {
   disposers?: Set<Dispose> | undefined;
   disposed: boolean;
 }
@@ -22,6 +22,10 @@ export function createScope(): DomScope {
   return {
     disposed: false,
   };
+}
+
+export function hasScopeDisposers(scope: DomScope): boolean {
+  return scope.disposers !== undefined && scope.disposers.size > 0;
 }
 
 export function registerDispose(dispose: Dispose): Dispose {
