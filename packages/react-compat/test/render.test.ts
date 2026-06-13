@@ -202,9 +202,7 @@ describe("react-compat render", () => {
       container,
     );
 
-    expect(container.innerHTML).toBe(
-      '<div contenteditable="true"><p dir="auto"><br></p></div>',
-    );
+    expect(container.innerHTML).toBe('<div contenteditable="true"><p dir="auto"><br></p></div>');
   });
 
   test("preserves contentEditable attributes inserted by a ref initializer across updates", () => {
@@ -260,11 +258,15 @@ describe("react-compat render", () => {
           __self: { component: "Trans" },
           __source: { fileName: "Trans.jsx", lineNumber: 12 },
         },
-        createElement("a", {
-          href: "/msgs",
-          __self: { component: "TransLink" },
-          __source: { fileName: "Trans.jsx", lineNumber: 13 },
-        }, "there"),
+        createElement(
+          "a",
+          {
+            href: "/msgs",
+            __self: { component: "TransLink" },
+            __source: { fileName: "Trans.jsx", lineNumber: 13 },
+          },
+          "there",
+        ),
       ),
       container,
     );
@@ -318,14 +320,10 @@ describe("react-compat render", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
-    flushSync(() =>
-      root.render(createElement("div", { className: "row", "data-key": 1 }, "A")),
-    );
+    flushSync(() => root.render(createElement("div", { className: "row", "data-key": 1 }, "A")));
 
     const setAttribute = vi.spyOn(Element.prototype, "setAttribute");
-    flushSync(() =>
-      root.render(createElement("div", { className: "row", "data-key": 1 }, "A")),
-    );
+    flushSync(() => root.render(createElement("div", { className: "row", "data-key": 1 }, "A")));
 
     expect(setAttribute).not.toHaveBeenCalled();
   });
@@ -334,9 +332,7 @@ describe("react-compat render", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
-    flushSync(() =>
-      root.render(createElement("div", { "data-key": 1, title: "row" }, "A")),
-    );
+    flushSync(() => root.render(createElement("div", { "data-key": 1, title: "row" }, "A")));
 
     const originalKeys = Object.keys;
     let objectKeyCalls = 0;
@@ -345,9 +341,7 @@ describe("react-compat render", () => {
       return originalKeys(value);
     }) as typeof Object.keys;
     try {
-      flushSync(() =>
-        root.render(createElement("div", { "data-key": 1, title: "row" }, "A")),
-      );
+      flushSync(() => root.render(createElement("div", { "data-key": 1, title: "row" }, "A")));
     } finally {
       Object.keys = originalKeys;
     }
@@ -359,9 +353,7 @@ describe("react-compat render", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
-    flushSync(() =>
-      root.render(createElement("div", { "data-key": 1, title: "row" }, "A")),
-    );
+    flushSync(() => root.render(createElement("div", { "data-key": 1, title: "row" }, "A")));
 
     const originalEntries = Object.entries;
     let objectEntriesCalls = 0;
@@ -370,9 +362,7 @@ describe("react-compat render", () => {
       return originalEntries(value);
     }) as typeof Object.entries;
     try {
-      flushSync(() =>
-        root.render(createElement("div", { "data-key": 1, title: "updated" }, "A")),
-      );
+      flushSync(() => root.render(createElement("div", { "data-key": 1, title: "updated" }, "A")));
     } finally {
       Object.entries = originalEntries;
     }
@@ -398,11 +388,7 @@ describe("react-compat render", () => {
     const hasAttribute = vi.spyOn(Element.prototype, "hasAttribute");
 
     render(
-      createElement(
-        "div",
-        { className: undefined, "data-selected": undefined },
-        "row",
-      ),
+      createElement("div", { className: undefined, "data-selected": undefined }, "row"),
       container,
     );
 
@@ -617,21 +603,25 @@ describe("react-compat render", () => {
       | undefined;
 
     render(
-      createElement("button", {
-        onClick: (event: {
-          nativeEvent: Event;
-          currentTarget: EventTarget | null;
-          preventDefault(): void;
-          isDefaultPrevented(): boolean;
-        }) => {
-          event.preventDefault();
-          seen = {
-            nativeEvent: event.nativeEvent instanceof Event,
-            currentTarget: event.currentTarget,
-            defaultPrevented: event.isDefaultPrevented(),
-          };
+      createElement(
+        "button",
+        {
+          onClick: (event: {
+            nativeEvent: Event;
+            currentTarget: EventTarget | null;
+            preventDefault(): void;
+            isDefaultPrevented(): boolean;
+          }) => {
+            event.preventDefault();
+            seen = {
+              nativeEvent: event.nativeEvent instanceof Event,
+              currentTarget: event.currentTarget,
+              defaultPrevented: event.isDefaultPrevented(),
+            };
+          },
         },
-      }, "Click"),
+        "Click",
+      ),
       container,
     );
 
@@ -642,6 +632,86 @@ describe("react-compat render", () => {
       nativeEvent: true,
       currentTarget: button,
       defaultPrevented: true,
+    });
+  });
+
+  test("copies pointer, mouse button, and modifier fields onto pointer synthetic events", () => {
+    const container = document.createElement("div");
+    let seen:
+      | {
+          pointerId: number | undefined;
+          pointerType: string | undefined;
+          isPrimary: boolean | undefined;
+          button: number | undefined;
+          buttons: number | undefined;
+          ctrlKey: boolean | undefined;
+          shiftKey: boolean | undefined;
+          altKey: boolean | undefined;
+          metaKey: boolean | undefined;
+        }
+      | undefined;
+
+    render(
+      createElement(
+        "button",
+        {
+          onPointerDown: (event: {
+            pointerId?: number;
+            pointerType?: string;
+            isPrimary?: boolean;
+            button?: number;
+            buttons?: number;
+            ctrlKey?: boolean;
+            shiftKey?: boolean;
+            altKey?: boolean;
+            metaKey?: boolean;
+          }) => {
+            seen = {
+              pointerId: event.pointerId,
+              pointerType: event.pointerType,
+              isPrimary: event.isPrimary,
+              button: event.button,
+              buttons: event.buttons,
+              ctrlKey: event.ctrlKey,
+              shiftKey: event.shiftKey,
+              altKey: event.altKey,
+              metaKey: event.metaKey,
+            };
+          },
+        },
+        "Open",
+      ),
+      container,
+    );
+
+    const event = new MouseEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+      buttons: 1,
+      ctrlKey: false,
+      shiftKey: true,
+      altKey: false,
+      metaKey: true,
+    });
+    Object.defineProperties(event, {
+      pointerId: { value: 7 },
+      pointerType: { value: "mouse" },
+      isPrimary: { value: true },
+    });
+
+    container.querySelector("button")?.dispatchEvent(event);
+
+    expect(seen).toEqual({
+      pointerId: 7,
+      pointerType: "mouse",
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
+      ctrlKey: false,
+      shiftKey: true,
+      altKey: false,
+      metaKey: true,
     });
   });
 
@@ -661,10 +731,7 @@ describe("react-compat render", () => {
     };
 
     try {
-      render(
-        createElement("button", { onClick: () => undefined }, "Click"),
-        container,
-      );
+      render(createElement("button", { onClick: () => undefined }, "Click"), container);
     } finally {
       HTMLElement.prototype.addEventListener = originalAddEventListener;
     }
@@ -723,25 +790,32 @@ describe("react-compat render", () => {
       createElement(
         "div",
         {
-          onClick: () => { calls.push("parent:bubble"); },
-          onClickCapture: () => { calls.push("parent:capture"); },
+          onClick: () => {
+            calls.push("parent:bubble");
+          },
+          onClickCapture: () => {
+            calls.push("parent:capture");
+          },
         },
-        createElement("button", {
-          onClick: () => { calls.push("child:bubble"); },
-          onClickCapture: () => { calls.push("child:capture"); },
-        }, "Click"),
+        createElement(
+          "button",
+          {
+            onClick: () => {
+              calls.push("child:bubble");
+            },
+            onClickCapture: () => {
+              calls.push("child:capture");
+            },
+          },
+          "Click",
+        ),
       ),
       container,
     );
 
     container.querySelector("button")?.click();
 
-    expect(calls).toEqual([
-      "parent:capture",
-      "child:capture",
-      "child:bubble",
-      "parent:bubble",
-    ]);
+    expect(calls).toEqual(["parent:capture", "child:capture", "child:bubble", "parent:bubble"]);
   });
 
   test("capture stopPropagation prevents target and bubble handlers", () => {
@@ -752,16 +826,26 @@ describe("react-compat render", () => {
       createElement(
         "div",
         {
-          onClick: () => { calls.push("parent:bubble"); },
+          onClick: () => {
+            calls.push("parent:bubble");
+          },
           onClickCapture: (event: { stopPropagation(): void }) => {
             calls.push("parent:capture");
             event.stopPropagation();
           },
         },
-        createElement("button", {
-          onClick: () => { calls.push("child:bubble"); },
-          onClickCapture: () => { calls.push("child:capture"); },
-        }, "Click"),
+        createElement(
+          "button",
+          {
+            onClick: () => {
+              calls.push("child:bubble");
+            },
+            onClickCapture: () => {
+              calls.push("child:capture");
+            },
+          },
+          "Click",
+        ),
       ),
       container,
     );
@@ -776,13 +860,19 @@ describe("react-compat render", () => {
     const calls: string[] = [];
 
     render(
-      createElement("button", { onDoubleClick: () => { calls.push("double"); } }, "Click"),
+      createElement(
+        "button",
+        {
+          onDoubleClick: () => {
+            calls.push("double");
+          },
+        },
+        "Click",
+      ),
       container,
     );
 
-    container.querySelector("button")?.dispatchEvent(
-      new MouseEvent("dblclick", { bubbles: true }),
-    );
+    container.querySelector("button")?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
 
     expect(calls).toEqual(["double"]);
   });
@@ -795,12 +885,20 @@ describe("react-compat render", () => {
       createElement(
         "label",
         {
-          onFocus: () => { calls.push("parent:focus"); },
-          onBlur: () => { calls.push("parent:blur"); },
+          onFocus: () => {
+            calls.push("parent:focus");
+          },
+          onBlur: () => {
+            calls.push("parent:blur");
+          },
         },
         createElement("input", {
-          onFocus: () => { calls.push("input:focus"); },
-          onBlur: () => { calls.push("input:blur"); },
+          onFocus: () => {
+            calls.push("input:focus");
+          },
+          onBlur: () => {
+            calls.push("input:blur");
+          },
         }),
       ),
       container,
@@ -810,12 +908,7 @@ describe("react-compat render", () => {
     input?.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     input?.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
 
-    expect(calls).toEqual([
-      "input:focus",
-      "parent:focus",
-      "input:blur",
-      "parent:blur",
-    ]);
+    expect(calls).toEqual(["input:focus", "parent:focus", "input:blur", "parent:blur"]);
   });
 
   test("normalizes text input events to onChange handlers", () => {
@@ -868,10 +961,18 @@ describe("react-compat render", () => {
     const calls: string[] = [];
 
     render(
-      createElement("button", {
-        onMouseOver: () => { calls.push("over"); },
-        onMouseOut: () => { calls.push("out"); },
-      }, "Hover"),
+      createElement(
+        "button",
+        {
+          onMouseOver: () => {
+            calls.push("over");
+          },
+          onMouseOut: () => {
+            calls.push("out");
+          },
+        },
+        "Hover",
+      ),
       container,
     );
 
@@ -890,13 +991,25 @@ describe("react-compat render", () => {
       createElement(
         "div",
         {
-          onMouseEnter: () => { calls.push("parent:enter"); },
-          onMouseLeave: () => { calls.push("parent:leave"); },
+          onMouseEnter: () => {
+            calls.push("parent:enter");
+          },
+          onMouseLeave: () => {
+            calls.push("parent:leave");
+          },
         },
-        createElement("button", {
-          onMouseEnter: () => { calls.push("child:enter"); },
-          onMouseLeave: () => { calls.push("child:leave"); },
-        }, "Hover"),
+        createElement(
+          "button",
+          {
+            onMouseEnter: () => {
+              calls.push("child:enter");
+            },
+            onMouseLeave: () => {
+              calls.push("child:leave");
+            },
+          },
+          "Hover",
+        ),
       ),
       container,
     );
@@ -905,20 +1018,11 @@ describe("react-compat render", () => {
     const child = container.querySelector("button");
 
     child?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-    parent?.dispatchEvent(
-      new MouseEvent("mouseover", { bubbles: true, relatedTarget: child }),
-    );
-    child?.dispatchEvent(
-      new MouseEvent("mouseout", { bubbles: true, relatedTarget: parent }),
-    );
+    parent?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: child }));
+    child?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: parent }));
     parent?.dispatchEvent(new MouseEvent("mouseout", { bubbles: true }));
 
-    expect(calls).toEqual([
-      "parent:enter",
-      "child:enter",
-      "child:leave",
-      "parent:leave",
-    ]);
+    expect(calls).toEqual(["parent:enter", "child:enter", "child:leave", "parent:leave"]);
   });
 
   test("normalizes React multi-word and composition event names", () => {
@@ -927,14 +1031,30 @@ describe("react-compat render", () => {
 
     render(
       createElement("input", {
-        onBeforeInput: () => { calls.push("beforeinput"); },
-        onCompositionStart: () => { calls.push("compositionstart"); },
-        onCompositionUpdate: () => { calls.push("compositionupdate"); },
-        onCompositionEnd: () => { calls.push("compositionend"); },
-        onContextMenu: () => { calls.push("contextmenu"); },
-        onDrag: () => { calls.push("drag"); },
-        onDragEnter: () => { calls.push("dragenter"); },
-        onTouchStart: () => { calls.push("touchstart"); },
+        onBeforeInput: () => {
+          calls.push("beforeinput");
+        },
+        onCompositionStart: () => {
+          calls.push("compositionstart");
+        },
+        onCompositionUpdate: () => {
+          calls.push("compositionupdate");
+        },
+        onCompositionEnd: () => {
+          calls.push("compositionend");
+        },
+        onContextMenu: () => {
+          calls.push("contextmenu");
+        },
+        onDrag: () => {
+          calls.push("drag");
+        },
+        onDragEnter: () => {
+          calls.push("dragenter");
+        },
+        onTouchStart: () => {
+          calls.push("touchstart");
+        },
       }),
       container,
     );
@@ -969,13 +1089,25 @@ describe("react-compat render", () => {
       createElement(
         "div",
         {
-          onPointerEnter: () => { calls.push("parent:enter"); },
-          onPointerLeave: () => { calls.push("parent:leave"); },
+          onPointerEnter: () => {
+            calls.push("parent:enter");
+          },
+          onPointerLeave: () => {
+            calls.push("parent:leave");
+          },
         },
-        createElement("button", {
-          onPointerEnter: () => { calls.push("child:enter"); },
-          onPointerLeave: () => { calls.push("child:leave"); },
-        }, "Hover"),
+        createElement(
+          "button",
+          {
+            onPointerEnter: () => {
+              calls.push("child:enter");
+            },
+            onPointerLeave: () => {
+              calls.push("child:leave");
+            },
+          },
+          "Hover",
+        ),
       ),
       container,
     );
@@ -984,20 +1116,11 @@ describe("react-compat render", () => {
     const child = container.querySelector("button");
 
     child?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-    parent?.dispatchEvent(
-      new MouseEvent("pointerover", { bubbles: true, relatedTarget: child }),
-    );
-    child?.dispatchEvent(
-      new MouseEvent("pointerout", { bubbles: true, relatedTarget: parent }),
-    );
+    parent?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: child }));
+    child?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: parent }));
     parent?.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
 
-    expect(calls).toEqual([
-      "parent:enter",
-      "child:enter",
-      "child:leave",
-      "parent:leave",
-    ]);
+    expect(calls).toEqual(["parent:enter", "child:enter", "child:leave", "parent:leave"]);
   });
 
   test("synthetic event exposes React-compatible base fields", () => {
@@ -1016,39 +1139,43 @@ describe("react-compat render", () => {
       | undefined;
 
     render(
-      createElement("button", {
-        onClick: (event: {
-          bubbles: boolean;
-          cancelable: boolean;
-          defaultPrevented: boolean;
-          eventPhase: number;
-          isTrusted: boolean;
-          isPersistent(): boolean;
-          persist(): void;
-          preventDefault(): void;
-          timeStamp: number;
-        }) => {
-          const persistentBefore = event.isPersistent();
-          event.persist();
-          event.preventDefault();
-          seen = {
-            bubbles: event.bubbles,
-            cancelable: event.cancelable,
-            defaultPrevented: event.defaultPrevented,
-            eventPhase: event.eventPhase,
-            isTrusted: event.isTrusted,
-            persistentBefore,
-            persistentAfter: event.isPersistent(),
-            timeStamp: event.timeStamp,
-          };
+      createElement(
+        "button",
+        {
+          onClick: (event: {
+            bubbles: boolean;
+            cancelable: boolean;
+            defaultPrevented: boolean;
+            eventPhase: number;
+            isTrusted: boolean;
+            isPersistent(): boolean;
+            persist(): void;
+            preventDefault(): void;
+            timeStamp: number;
+          }) => {
+            const persistentBefore = event.isPersistent();
+            event.persist();
+            event.preventDefault();
+            seen = {
+              bubbles: event.bubbles,
+              cancelable: event.cancelable,
+              defaultPrevented: event.defaultPrevented,
+              eventPhase: event.eventPhase,
+              isTrusted: event.isTrusted,
+              persistentBefore,
+              persistentAfter: event.isPersistent(),
+              timeStamp: event.timeStamp,
+            };
+          },
         },
-      }, "Click"),
+        "Click",
+      ),
       container,
     );
 
-    container.querySelector("button")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(seen).toEqual({
       bubbles: true,
@@ -1070,9 +1197,21 @@ describe("react-compat render", () => {
     render(
       createElement(
         "section",
-        { onClick: () => { calls.push("owner"); } },
+        {
+          onClick: () => {
+            calls.push("owner");
+          },
+        },
         createPortal(
-          createElement("button", { onClick: () => { calls.push("portal"); } }, "Portal"),
+          createElement(
+            "button",
+            {
+              onClick: () => {
+                calls.push("portal");
+              },
+            },
+            "Portal",
+          ),
           portalTarget,
         ),
       ),
@@ -1173,9 +1312,7 @@ describe("react-compat render", () => {
       useLayoutEffect(() => {
         setMounted(true);
       }, []);
-      return mounted
-        ? createPortal(createElement("strong", null, "Portal"), document.body)
-        : null;
+      return mounted ? createPortal(createElement("strong", null, "Portal"), document.body) : null;
     }
 
     function App() {
@@ -1291,6 +1428,124 @@ describe("react-compat render", () => {
     document.body.replaceChildren();
   });
 
+  test("removes portaled content after an interaction inside the portal closes it", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, "Open"),
+        open
+          ? createPortal(
+              createElement("button", { onClick: () => setOpen(false) }, "Portal close"),
+              document.body,
+            )
+          : null,
+      );
+    }
+
+    root.render(createElement(App, null));
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(document.body.querySelector("button")?.textContent).toBe("Portal close");
+
+    document.body
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(document.body.querySelector("button")).toBeNull();
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
+  test("applies multiple owner state updates from a portaled interaction", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      const [value, setValue] = useState("alpha");
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, value),
+        open
+          ? createPortal(
+              createElement(
+                "button",
+                {
+                  onClick: () => {
+                    setValue("beta");
+                    setOpen(false);
+                  },
+                },
+                "Beta option",
+              ),
+              document.body,
+            )
+          : null,
+      );
+    }
+
+    root.render(createElement(App, null));
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    document.body
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(container.querySelector("button")?.textContent).toBe("beta");
+    expect(document.body.querySelector("button")).toBeNull();
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
+  test("removes portal nodes when a stable child component stops returning a portal", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function PortalGate(props: { open: boolean; onClose(): void }) {
+      return props.open
+        ? createPortal(
+            createElement("button", { onClick: props.onClose }, "Portal close"),
+            document.body,
+          )
+        : null;
+    }
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, "Open"),
+        createElement(PortalGate, { open, onClose: () => setOpen(false) }),
+      );
+    }
+
+    root.render(createElement(App, null));
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    expect(document.body.querySelector("button")?.textContent).toBe("Portal close");
+
+    document.body
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(document.body.querySelector("button")).toBeNull();
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
   test("does not redispatch the same native event through a portal listener mounted during bubbling", () => {
     const container = document.createElement("div");
     document.body.append(container);
@@ -1302,25 +1557,37 @@ describe("react-compat render", () => {
       return createElement(
         "section",
         null,
-        createElement("button", {
-          onClick: () => {
-            calls.push("trigger");
-            setOpen(true);
+        createElement(
+          "button",
+          {
+            onClick: () => {
+              calls.push("trigger");
+              setOpen(true);
+            },
           },
-        }, "Open"),
+          "Open",
+        ),
         open
           ? createPortal(
-            createElement("div", { onClick: () => { calls.push("portal"); } }, "Portal"),
-            document.body,
-          )
+              createElement(
+                "div",
+                {
+                  onClick: () => {
+                    calls.push("portal");
+                  },
+                },
+                "Portal",
+              ),
+              document.body,
+            )
           : null,
       );
     }
 
     root.render(createElement(App, null));
-    container.querySelector("button")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    container
+      .querySelector("button")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(calls).toEqual(["trigger"]);
     expect(document.body.querySelector("div:last-child")?.textContent).toBe("Portal");
@@ -1373,6 +1640,7 @@ describe("react-compat render", () => {
     root.render(createElement(App, null));
 
     expect(container.querySelector(".layer")?.innerHTML).toBe('<path class="curve"></path>');
+    expect(container.querySelector("svg")?.childNodes).toHaveLength(1);
   });
 
   test("same-root SVG portal events dispatch from the portal target", () => {
@@ -1394,9 +1662,9 @@ describe("react-compat render", () => {
     }
 
     root.render(createElement(App, null));
-    container.querySelector<SVGPathElement>(".curve")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true }),
-    );
+    container
+      .querySelector<SVGPathElement>(".curve")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(onClick).toHaveBeenCalledTimes(1);
   });
@@ -1430,7 +1698,15 @@ describe("react-compat render", () => {
 
     hydrateRoot(
       container,
-      createElement("button", { onClick: () => { clicks += 1; } }, "client"),
+      createElement(
+        "button",
+        {
+          onClick: () => {
+            clicks += 1;
+          },
+        },
+        "client",
+      ),
     );
 
     expect(container.firstChild).toBe(button);
@@ -1498,7 +1774,9 @@ describe("react-compat render", () => {
 
     root.render(renderSections(sections.toReversed()));
 
-    expect(container.innerHTML).toBe("<dl><dt>api</dt><dd>API</dd><dt>intro</dt><dd>Intro</dd></dl>");
+    expect(container.innerHTML).toBe(
+      "<dl><dt>api</dt><dd>API</dd><dt>intro</dt><dd>Intro</dd></dl>",
+    );
     expect(container.querySelectorAll("dt")[0]).toBe(apiTerm);
     expect(container.querySelectorAll("dd")[0]).toBe(apiDescription);
     expect(container.querySelectorAll("dt")[1]).toBe(introTerm);
@@ -1513,10 +1791,7 @@ describe("react-compat render", () => {
       createElement("div", { key: 0, "data-key": 0 }, "0"),
       createElement("div", { key: 1, "data-key": 1 }, "1"),
     ];
-    const nextRows = [
-      ...firstRows,
-      createElement("div", { key: 2, "data-key": 2 }, "2"),
-    ];
+    const nextRows = [...firstRows, createElement("div", { key: 2, "data-key": 2 }, "2")];
 
     root.render(createElement(Fragment, null, firstRows));
     const firstRowFiber = getFiberRootForContainer(container)?.current.child?.child;
@@ -1570,11 +1845,7 @@ describe("react-compat render", () => {
     const withRefRoot = createRoot(withRefContainer);
 
     withRefRoot.render(
-      createElement(
-        "main",
-        null,
-        createElement("span", { ref: () => undefined }, "A"),
-      ),
+      createElement("main", null, createElement("span", { ref: () => undefined }, "A")),
     );
 
     const withRefFiberRoot = getFiberRootForContainer(withRefContainer);
