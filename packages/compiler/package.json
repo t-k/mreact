@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-compiler",
-  "version": "0.0.163",
+  "version": "0.0.164",
   "description": "Compiler passes and OXC-backed JSX analysis for mreact.",
   "keywords": [
     "compiler",
