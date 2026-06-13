@@ -52,6 +52,35 @@ function countFiberSubtree(fiber: Fiber | undefined): number {
   return count;
 }
 
+function findFiberByKey(fiber: Fiber | undefined, key: string): Fiber | undefined {
+  const seen = new Set<Fiber>();
+  const stack = fiber === undefined ? [] : [fiber];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+
+    if (current === undefined || seen.has(current)) {
+      continue;
+    }
+
+    seen.add(current);
+
+    if (current.key === key) {
+      return current;
+    }
+
+    if (current.child !== undefined) {
+      stack.push(current.child);
+    }
+
+    if (current.sibling !== undefined) {
+      stack.push(current.sibling);
+    }
+  }
+
+  return undefined;
+}
+
 describe("react-compat render", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -1804,6 +1833,27 @@ describe("react-compat render", () => {
     expect(nextFirstRowFiber).toBe(firstRowFiber);
     expect(nextSecondRowFiber).toBe(secondRowFiber);
     expect(container.children).toHaveLength(3);
+  });
+
+  test("clears removed direct keyed row fibers from the retained alternate tree", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const rows = Array.from({ length: 20 }, (_, index) =>
+      createElement("div", { key: index, "data-key": index }, `Row ${index}`),
+    );
+
+    root.render(createElement(Fragment, null, rows));
+    root.render(createElement(Fragment, null, rows.filter((row) => row.key !== "10")));
+
+    const deletedFiber = findFiberByKey(
+      getFiberRootForContainer(container)?.current.alternate?.child?.child,
+      "10",
+    );
+
+    expect(deletedFiber?.memoizedProps).toBeUndefined();
+    expect(deletedFiber?.pendingProps).toBeUndefined();
+    expect(deletedFiber?.stateNode).toBeUndefined();
   });
 
   test("render detaches refs for removed host children through the Fiber commit path", () => {

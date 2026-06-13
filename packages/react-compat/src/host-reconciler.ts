@@ -27,7 +27,7 @@ import {
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./host-event-binder.js";
-import { NoFlags, Placement, Update } from "./fiber-flags.js";
+import { ChildDeletion, NoFlags, Placement, Update } from "./fiber-flags.js";
 import {
   createHostElement,
   hostElementMatches,
@@ -324,6 +324,9 @@ function reconcileHostChild(
 
   if (node === null || node === undefined || typeof node === "boolean") {
     parent.childListChanged = currentFirstChild !== undefined;
+    if (currentFirstChild !== undefined) {
+      markOptimizedChildrenForDeletion(parent, currentFirstChild);
+    }
     return { fiber: undefined, consumed: 0 };
   }
 
@@ -345,6 +348,8 @@ function reconcileHostChild(
   let previous: Fiber | undefined;
   let consumed = 0;
   let skipRemainingKeyedLookup = false;
+  const usedCurrentChildren =
+    currentFirstChild === undefined ? undefined : new Set<Fiber>();
 
   for (let index = 0; index < childCount; index += 1) {
     const child = children === undefined ? node : children[index];
@@ -397,7 +402,18 @@ function reconcileHostChild(
     const fiber = result.fiber;
 
     if (fiber === undefined) {
+      if (matchedCurrent !== undefined) {
+        usedCurrentChildren?.add(matchedCurrent);
+        markOptimizedChildForDeletion(parent, matchedCurrent);
+      }
       continue;
+    }
+
+    if (matchedCurrent !== undefined) {
+      usedCurrentChildren?.add(matchedCurrent);
+      if (fiber !== matchedCurrent && fiber.alternate !== matchedCurrent) {
+        markOptimizedChildForDeletion(parent, matchedCurrent);
+      }
     }
 
     if (key === undefined) {
@@ -428,6 +444,7 @@ function reconcileHostChild(
     previous = fiber;
   }
 
+  markUnusedCurrentChildrenForDeletion(parent, currentFirstChild, usedCurrentChildren);
   parent.childListChanged = childFiberListShapeChanged(currentFirstChild, first);
 
   return { fiber: first, consumed };
@@ -484,11 +501,15 @@ function reconcileKeyedRowHostChildren(
       currentKeyed?.sibling?.key === row.key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
+      const deleted = currentKeyed;
+      const matched = currentKeyed.sibling;
       listShapeChanged = true;
-      matchedCurrent = currentKeyed.sibling;
-      currentKeyed = currentKeyed.sibling.sibling;
+      markOptimizedChildForDeletion(parent, deleted);
+      matchedCurrent = matched;
+      currentKeyed = matched.sibling;
     } else if (canSkipRemainingKeyedLookup(currentKeyed, children, index)) {
       listShapeChanged = true;
+      markOptimizedChildrenForDeletion(parent, currentKeyed);
       skipRemainingKeyedLookup = true;
       currentKeyed = undefined;
       matchedCurrent = undefined;
@@ -526,6 +547,7 @@ function reconcileKeyedRowHostChildren(
 
   if (currentKeyed !== undefined) {
     listShapeChanged = true;
+    markOptimizedChildrenForDeletion(parent, currentKeyed);
   }
 
   parent.hasRefSubtree = hasRefSubtree;
@@ -533,6 +555,34 @@ function reconcileKeyedRowHostChildren(
   parent.subtreeChildListChanged = subtreeChildListChanged;
   parent.childListChanged = listShapeChanged;
   return { fiber: first, consumed: 0 };
+}
+
+function markOptimizedChildForDeletion(parent: Fiber, _child: Fiber): void {
+  parent.flags |= ChildDeletion;
+}
+
+function markOptimizedChildrenForDeletion(parent: Fiber, _firstChild: Fiber): void {
+  parent.flags |= ChildDeletion;
+}
+
+function markUnusedCurrentChildrenForDeletion(
+  parent: Fiber,
+  firstChild: Fiber | undefined,
+  used: ReadonlySet<Fiber> | undefined,
+): void {
+  if (firstChild === undefined || used === undefined) {
+    return;
+  }
+
+  let cursor: Fiber | undefined = firstChild;
+
+  while (cursor !== undefined) {
+    if (!used.has(cursor)) {
+      parent.flags |= ChildDeletion;
+      return;
+    }
+    cursor = cursor.sibling;
+  }
 }
 
 function countFiberSiblings(first: Fiber): number {
