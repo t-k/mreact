@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.163 - 2026-06-13
+
+### Added
+
+- Added a Radix UI compatibility lab that compares React and mreact runtime DOM summaries and screenshots across Radix primitives, interactions, and coverage-ledger obligations.
+
+### Changed
+
+- Updated benchmark workflow dispatch authentication and refreshed June 13 benchmark result artifacts so benchmark pages can reflect the latest run data.
+
+### Fixed
+
+- Fixed React-compatible synthetic pointer and mouse events so button, coordinate, modifier, key, pointer, touch, and related-target fields are preserved for Radix-style interaction handlers.
+
 ## 0.0.162 - 2026-06-13
 
 ### Fixed
