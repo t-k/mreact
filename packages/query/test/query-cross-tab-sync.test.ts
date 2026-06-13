@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createQuery,
   createQueryClient,
+  hashQueryKey,
   syncQueryClientAcrossTabs,
 } from "../src/index.js";
 
@@ -357,6 +358,111 @@ describe("cross-tab query sync", () => {
     }
   });
 
+  it("uses separate Web Locks for separate channels with the same query key", async () => {
+    const locks = installNamedLockManager();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      channel: `${uniqueChannelName()}:a`,
+      includeQuery: (queryKey) => queryKey[0] === "shared-key",
+      singleFlight: true,
+      singleFlightHandoffTimeoutMs: 120,
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel: `${uniqueChannelName()}:b`,
+      includeQuery: (queryKey) => queryKey[0] === "shared-key",
+      singleFlight: true,
+      singleFlightHandoffTimeoutMs: 120,
+    });
+    let calls = 0;
+    const queryKey = ["shared-key"];
+
+    try {
+      const [firstResult, secondResult] = await Promise.all([
+        first.fetchQuery({
+          queryKey,
+          queryFn: async () => {
+            calls += 1;
+            await delay(20);
+            return { channel: "a" };
+          },
+        }),
+        second.fetchQuery({
+          queryKey,
+          queryFn: async () => {
+            calls += 1;
+            return { channel: "b" };
+          },
+        }),
+      ]);
+
+      expect(firstResult).toEqual({ channel: "a" });
+      expect(secondResult).toEqual({ channel: "b" });
+      expect(calls).toBe(2);
+      expect(locks.blockedRequests()).toBe(0);
+    } finally {
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
+  it("ignores success messages whose query hash does not match the query key", async () => {
+    const firstApi = await import("../src/index.js?hash-mismatch-a") as typeof import("../src/index.js");
+    const secondApi = await import("../src/index.js?hash-mismatch-b") as typeof import("../src/index.js");
+    const channel = uniqueChannelName();
+    const first = firstApi.createQueryClient();
+    const second = secondApi.createQueryClient();
+    installRetainedLockManager();
+    const includeWaitingOrAllowed = (queryKey: readonly unknown[]) =>
+      queryKey[0] === "waiting" || queryKey[0] === "allowed";
+    const disposeFirst = firstApi.syncQueryClientAcrossTabs(first, {
+      channel,
+      includeQuery: includeWaitingOrAllowed,
+      singleFlight: true,
+      singleFlightHandoffTimeoutMs: 50,
+    });
+    const disposeSecond = secondApi.syncQueryClientAcrossTabs(second, {
+      channel,
+      includeQuery: includeWaitingOrAllowed,
+      singleFlight: true,
+      singleFlightHandoffTimeoutMs: 50,
+    });
+    let calls = 0;
+
+    try {
+      const leaderFetch = first.fetchQuery({
+        queryKey: ["waiting"],
+        queryFn: async () => {
+          calls += 1;
+          await delay(20);
+          return { source: "leader" };
+        },
+      });
+      await delay(0);
+      const fetchResult = second.fetchQuery({
+        queryKey: ["waiting"],
+        queryFn: async () => {
+          calls += 1;
+          return { source: "fallback" };
+        },
+      });
+      await delay(0);
+      postMalformedSuccess(channel, {
+        data: { source: "poisoned-waiter" },
+        queryHash: hashQueryKey(["waiting"]),
+        queryKey: ["allowed"],
+      });
+
+      await expect(leaderFetch).resolves.toEqual({ source: "leader" });
+      await expect(fetchResult).resolves.toEqual({ source: "leader" });
+      expect(calls).toBe(1);
+      expect(second.getQueryData(["allowed"])).toBeUndefined();
+    } finally {
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
   it("single-flights focus revalidation and shares the successful data", async () => {
     const channel = uniqueChannelName();
     const first = createQueryClient();
@@ -505,6 +611,62 @@ function installRetainedLockManager(): void {
     configurable: true,
     value: lockManager,
   });
+}
+
+function installNamedLockManager(): { blockedRequests(): number } {
+  const lockedNames = new Set<string>();
+  let blockedRequests = 0;
+  const lockManager = {
+    async request<T>(
+      name: string,
+      optionsOrCallback: { ifAvailable?: boolean | undefined } | ((lock: unknown) => T | Promise<T>),
+      maybeCallback?: (lock: unknown | null) => T | Promise<T>,
+    ): Promise<T> {
+      if (typeof optionsOrCallback === "function") {
+        return optionsOrCallback({});
+      }
+
+      if (lockedNames.has(name)) {
+        blockedRequests += 1;
+        return maybeCallback?.(null) as T | Promise<T>;
+      }
+
+      lockedNames.add(name);
+      try {
+        return await maybeCallback?.({}) as T;
+      } finally {
+        lockedNames.delete(name);
+      }
+    },
+  };
+
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: lockManager,
+  });
+
+  return {
+    blockedRequests: () => blockedRequests,
+  };
+}
+
+function postMalformedSuccess(
+  channel: string,
+  message: {
+    data: unknown;
+    queryHash: string;
+    queryKey: readonly unknown[];
+  },
+): void {
+  const broadcast = new BroadcastChannel(channel);
+  broadcast.postMessage({
+    ...message,
+    senderId: `malformed-${Math.random()}`,
+    type: "success",
+    updatedAt: Date.now(),
+    version: 1,
+  });
+  broadcast.close();
 }
 
 function uniqueChannelName(): string {

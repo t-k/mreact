@@ -305,7 +305,7 @@ async function fetchQueryWithCrossTabLeader<TData>(
     return data as TData;
   }
 
-  const lockName = `mreact-query:fetch:${queryHash}`;
+  const lockName = `mreact-query:fetch:${input.options.channel}:${queryHash}`;
   const handoffWaiter = createSuccessWaiter(
     input.waiters,
     queryHash,
@@ -478,6 +478,7 @@ function normalizeMessage(value: unknown): QuerySyncMessage | undefined {
     message.type === "success" &&
     Array.isArray(message.queryKey) &&
     typeof message.queryHash === "string" &&
+    message.queryHash === hashQueryKey(message.queryKey) &&
     typeof message.updatedAt === "number"
   ) {
     return message as Extract<QuerySyncMessage, { type: "success" }>;
