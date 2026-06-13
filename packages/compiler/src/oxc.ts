@@ -71,8 +71,10 @@ import {
   type OxcChildAnalysisContext,
 } from "./oxc-child-analysis.js";
 import {
+  analyzeCompatCreateElementFunctionRoot,
   analyzeCompatCreateElementRoot,
   collectCompatCreateElementNames,
+  collectCompatRenderToStringNames,
   collectFunctionShadowedNames,
   hasLowerableCompatCreateElementReturn,
 } from "./oxc-compat-create-element.js";
@@ -251,6 +253,22 @@ function analyzeOxcToIr(
     target === "server" ? collectOxcLocalJsxReturnFunctionNames(program) : new Set<string>();
   const compatCreateElementNames =
     target === "server" ? collectCompatCreateElementNames(program) : new Set<string>();
+  const compatRenderToStringNames =
+    target === "server" ? collectCompatRenderToStringNames(program) : new Set<string>();
+  const compatCreateElementLocalFunctionLikes =
+    target === "server"
+      ? collectCompatCreateElementLocalFunctionLikes(program)
+      : new Map<string, Record<string, unknown>>();
+  const compatRenderToStringLowerableTargets =
+    target === "server"
+      ? collectCompatRenderToStringLowerableTargets(
+          code,
+          body,
+          compatCreateElementNames,
+          compatRenderToStringNames,
+          compatCreateElementLocalFunctionLikes,
+        )
+      : new Set<string>();
   const localJsxHelperHtmlParameters =
     target === "server"
       ? collectLocalJsxHelperHtmlParameters(program, localJsxReturnFunctionNames)
@@ -281,6 +299,9 @@ function analyzeOxcToIr(
         code,
         statement,
         compatCreateElementNames,
+        compatRenderToStringNames,
+        compatCreateElementLocalFunctionLikes,
+        compatRenderToStringLowerableTargets,
         options?.serverOutput,
       ) ||
       (options?.compatReactNodeReturn === true && isOxcExportedFunctionLike(statement))
@@ -347,6 +368,9 @@ function analyzeOxcToIr(
       diagnostics,
       options?.bodyStatementJsx ?? "dom-node",
       compatCreateElementNames,
+      compatRenderToStringNames,
+      compatCreateElementLocalFunctionLikes,
+      compatRenderToStringLowerableTargets,
       moduleRenderValueBindings,
       options?.compatReactNodeReturn === true,
       options?.serverOutput,
@@ -558,37 +582,292 @@ function readCompatCreateElementPlainComponent(
   return undefined;
 }
 
+function collectCompatCreateElementLocalFunctionLikes(
+  program: unknown,
+): Map<string, Record<string, unknown>> {
+  const functionLikes = new Map<string, Record<string, unknown>>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    const object = readObject(statement);
+    const declaration =
+      object.type === "ExportNamedDeclaration" ? readObject(object.declaration) : object;
+
+    if (declaration.type === "FunctionDeclaration") {
+      const id = readObject(declaration.id);
+
+      if (typeof id.name === "string") {
+        functionLikes.set(id.name, declaration);
+      }
+      continue;
+    }
+
+    if (declaration.type !== "VariableDeclaration") {
+      continue;
+    }
+
+    for (const declarator of readArray(declaration.declarations)) {
+      const declaratorObject = readObject(declarator);
+      const id = readObject(declaratorObject.id);
+      const initializer = unwrapOxcComponentFunctionLikeInitializer(
+        readObject(declaratorObject.init),
+      );
+
+      if (typeof id.name === "string" && initializer !== undefined) {
+        functionLikes.set(id.name, initializer);
+      }
+    }
+  }
+
+  return functionLikes;
+}
+
+function collectCompatRenderToStringLowerableTargets(
+  code: string,
+  body: readonly unknown[],
+  createElementNames: ReadonlySet<string>,
+  renderToStringNames: ReadonlySet<string>,
+  localFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
+): Set<string> {
+  const targets = new Set<string>();
+
+  if (createElementNames.size === 0 || renderToStringNames.size === 0) {
+    return targets;
+  }
+
+  for (const statement of body) {
+    const functionLike = unwrapOxcStatementFunctionLike(statement);
+
+    if (functionLike === undefined) {
+      continue;
+    }
+
+    const targetName = readCompatRenderToStringWrapperTargetName(
+      code,
+      functionLike,
+      renderToStringNames,
+    );
+    const targetFunctionLike =
+      targetName === undefined ? undefined : localFunctionLikes.get(targetName);
+
+    if (
+      targetName !== undefined &&
+      targetFunctionLike !== undefined &&
+      analyzeCompatCreateElementFunctionRoot(code, targetFunctionLike, createElementNames) !==
+        undefined
+    ) {
+      targets.add(targetName);
+    }
+  }
+
+  return targets;
+}
+
+function unwrapOxcStatementFunctionLike(statement: unknown): Record<string, unknown> | undefined {
+  const object = readObject(statement);
+  const declaration =
+    object.type === "ExportNamedDeclaration" || object.type === "ExportDefaultDeclaration"
+      ? readObject(object.declaration)
+      : object;
+
+  if (declaration.type === "FunctionDeclaration") {
+    return declaration;
+  }
+
+  if (declaration.type !== "VariableDeclaration") {
+    return unwrapOxcComponentFunctionLikeInitializer(declaration);
+  }
+
+  for (const declarator of readArray(declaration.declarations)) {
+    const initializer = unwrapOxcComponentFunctionLikeInitializer(
+      readObject(readObject(declarator).init),
+    );
+
+    if (initializer !== undefined) {
+      return initializer;
+    }
+  }
+
+  return undefined;
+}
+
+function readCompatRenderToStringWrapperTargetName(
+  code: string,
+  functionLike: Record<string, unknown>,
+  renderToStringNames: ReadonlySet<string>,
+): string | undefined {
+  const expression = readCompatRenderToStringWrapperReturnExpression(functionLike);
+
+  if (expression === undefined) {
+    return undefined;
+  }
+
+  return readCompatRenderToStringTargetName(
+    expression,
+    renderToStringNames,
+    collectFunctionShadowedNames(functionLike, renderToStringNames),
+  );
+}
+
+function readCompatRenderToStringWrapperReturnExpression(
+  functionLike: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const body = unwrapOxcParentheses(readObject(functionLike.body));
+
+  if (body.type !== "BlockStatement") {
+    return body;
+  }
+
+  for (const statement of readArray(body.body)) {
+    const statementObject = readObject(statement);
+
+    if (statementObject.type === "ReturnStatement") {
+      return unwrapOxcParentheses(readObject(statementObject.argument));
+    }
+  }
+
+  return undefined;
+}
+
+function readCompatRenderToStringTargetName(
+  expression: Record<string, unknown>,
+  renderToStringNames: ReadonlySet<string>,
+  shadowedNames: ReadonlySet<string>,
+): string | undefined {
+  if (
+    renderToStringNames.size === 0 ||
+    expression.type !== "CallExpression" ||
+    expression.optional === true
+  ) {
+    return undefined;
+  }
+
+  const callee = unwrapOxcParentheses(readObject(expression.callee));
+
+  if (
+    callee.type !== "Identifier" ||
+    typeof callee.name !== "string" ||
+    !renderToStringNames.has(callee.name) ||
+    shadowedNames.has(callee.name)
+  ) {
+    return undefined;
+  }
+
+  const args = readArray(expression.arguments);
+
+  if (args.length !== 1) {
+    return undefined;
+  }
+
+  const target = unwrapOxcParentheses(readObject(args[0]));
+
+  return target.type === "Identifier" && typeof target.name === "string" ? target.name : undefined;
+}
+
+function hasCompatRenderToStringWrapperReturn(
+  code: string,
+  functionLike: Record<string, unknown>,
+  renderToStringNames: ReadonlySet<string>,
+): boolean {
+  return (
+    readCompatRenderToStringWrapperTargetName(code, functionLike, renderToStringNames) !== undefined
+  );
+}
+
+function analyzeCompatRenderToStringWrapperRoot(
+  code: string,
+  functionLike: Record<string, unknown>,
+  returnExpression: Record<string, unknown>,
+  createElementNames: ReadonlySet<string>,
+  renderToStringNames: ReadonlySet<string>,
+  localFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
+): ComponentIr["root"] | undefined {
+  const targetName = readCompatRenderToStringTargetName(
+    returnExpression,
+    renderToStringNames,
+    collectFunctionShadowedNames(functionLike, renderToStringNames),
+  );
+
+  if (targetName === undefined) {
+    return undefined;
+  }
+
+  const targetFunctionLike = localFunctionLikes.get(targetName);
+  const lowered =
+    targetFunctionLike === undefined
+      ? undefined
+      : analyzeCompatCreateElementFunctionRoot(code, targetFunctionLike, createElementNames);
+
+  if (lowered !== undefined) {
+    return lowered;
+  }
+
+  return {
+    kind: "expr",
+    code: normalizeOxcExpressionCode(readSource(code, returnExpression)),
+    renderMode: "html",
+  };
+}
+
 function isCompatCreateElementComponentStatement(
   code: string,
   statement: unknown,
   names: ReadonlySet<string>,
+  renderToStringNames: ReadonlySet<string>,
+  localFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
+  renderToStringLowerableTargets: ReadonlySet<string>,
   serverOutput?: AnalyzeModuleOptions["serverOutput"],
 ): boolean {
-  if (names.size === 0) {
+  if (names.size === 0 && renderToStringNames.size === 0) {
     return false;
   }
 
   const object = readObject(statement);
 
   if (object.type === "ExportDefaultDeclaration") {
-    return readCompatCreateElementFunctionLike(code, readObject(object.declaration), names) !== undefined;
+    const functionLike = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
+
+    return (
+      readCompatCreateElementFunctionLike(code, readObject(object.declaration), names) !==
+        undefined ||
+      (functionLike !== undefined &&
+        hasCompatRenderToStringWrapperReturn(code, functionLike, renderToStringNames))
+    );
   }
 
   if (object.type === "ExportNamedDeclaration") {
     const declaration = readObject(object.declaration);
 
     if (declaration.type === "FunctionDeclaration") {
-      return hasLowerableCompatCreateElementReturn(code, declaration, names);
+      return (
+        hasLowerableCompatCreateElementReturn(code, declaration, names) ||
+        hasCompatRenderToStringWrapperReturn(code, declaration, renderToStringNames)
+      );
     }
 
     return readCompatCreateElementPlainComponent(code, declaration, names) !== undefined;
   }
 
+  const plainComponent = readCompatCreateElementPlainComponent(code, statement, names);
+
   if (serverOutput === "stream") {
+    return (
+      plainComponent !== undefined &&
+      renderToStringLowerableTargets.has(plainComponent.name) &&
+      localFunctionLikes.get(plainComponent.name) === plainComponent.initializer
+    );
+  }
+
+  if (plainComponent !== undefined) {
+    return true;
+  }
+
+  const functionLike = unwrapOxcStatementFunctionLike(statement);
+
+  if (functionLike === undefined) {
     return false;
   }
 
-  return readCompatCreateElementPlainComponent(code, statement, names) !== undefined;
+  return hasCompatRenderToStringWrapperReturn(code, functionLike, renderToStringNames);
 }
 
 function analyzeOxcComponent(
@@ -599,6 +878,9 @@ function analyzeOxcComponent(
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
   compatCreateElementNames: ReadonlySet<string>,
+  compatRenderToStringNames: ReadonlySet<string>,
+  compatCreateElementLocalFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
+  compatRenderToStringLowerableTargets: ReadonlySet<string>,
   moduleRenderValueBindings: Set<string>,
   compatReactNodeReturn: boolean,
   serverOutput: AnalyzeModuleOptions["serverOutput"],
@@ -616,7 +898,8 @@ function analyzeOxcComponent(
     if (
       declaration === undefined ||
       (!hasOxcFunctionLikeComponentReturn(declaration) &&
-        !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames))
+        !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames) &&
+        !hasCompatRenderToStringWrapperReturn(code, declaration, compatRenderToStringNames))
     ) {
       return [];
     }
@@ -634,6 +917,8 @@ function analyzeOxcComponent(
         diagnostics,
         bodyStatementJsx,
         compatCreateElementNames,
+        compatRenderToStringNames,
+        compatCreateElementLocalFunctionLikes,
         moduleRenderValueBindings,
         compatReactNodeReturn,
         serverOutput,
@@ -658,6 +943,10 @@ function analyzeOxcComponent(
       return [];
     }
 
+    if (compatRenderToStringLowerableTargets.has(plainComponent.name)) {
+      return [];
+    }
+
     return [
       {
         ...analyzeOxcFunctionLikeComponent(
@@ -670,6 +959,8 @@ function analyzeOxcComponent(
           diagnostics,
           bodyStatementJsx,
           compatCreateElementNames,
+          compatRenderToStringNames,
+          compatCreateElementLocalFunctionLikes,
           moduleRenderValueBindings,
           compatReactNodeReturn,
           serverOutput,
@@ -706,6 +997,8 @@ function analyzeOxcComponent(
         diagnostics,
         bodyStatementJsx,
         compatCreateElementNames,
+        compatRenderToStringNames,
+        compatCreateElementLocalFunctionLikes,
         moduleRenderValueBindings,
         compatReactNodeReturn,
         serverOutput,
@@ -723,7 +1016,8 @@ function analyzeOxcComponent(
     (!compatReactNodeReturn &&
       !hasComponentReturn(declaration.body) &&
       !hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames) &&
-      !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames))
+      !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames) &&
+      !hasCompatRenderToStringWrapperReturn(code, declaration, compatRenderToStringNames))
   ) {
     return [];
   }
@@ -745,6 +1039,8 @@ function analyzeOxcComponent(
       diagnostics,
       bodyStatementJsx,
       compatCreateElementNames,
+      compatRenderToStringNames,
+      compatCreateElementLocalFunctionLikes,
       moduleRenderValueBindings,
       compatReactNodeReturn,
       serverOutput,
@@ -795,6 +1091,8 @@ function analyzeOxcFunctionLikeComponent(
   diagnostics: Diagnostic[],
   bodyStatementJsx: OxcBodyStatementJsxMode,
   compatCreateElementNames: ReadonlySet<string>,
+  compatRenderToStringNames: ReadonlySet<string>,
+  compatCreateElementLocalFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
   moduleRenderValueBindings: Set<string>,
   compatReactNodeReturn: boolean,
   serverOutput: AnalyzeModuleOptions["serverOutput"],
@@ -881,6 +1179,14 @@ function analyzeOxcFunctionLikeComponent(
           names: compatCreateElementNames,
           shadowed: collectFunctionShadowedNames(functionLike, compatCreateElementNames),
         })) ??
+    analyzeCompatRenderToStringWrapperRoot(
+      code,
+      functionLike,
+      returnExpression,
+      compatCreateElementNames,
+      compatRenderToStringNames,
+      compatCreateElementLocalFunctionLikes,
+    ) ??
     (isJsxRoot(returnExpression.type) || returnExpression.type === "JSXFragment"
       ? analyzeOxcJsxNode(code, returnExpression, childAnalysisContext)
       : isOxcComponentCallExpression(returnExpression)

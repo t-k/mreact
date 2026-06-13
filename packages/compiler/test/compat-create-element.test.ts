@@ -14,11 +14,16 @@ function runCompiledWithCompatHelpers(code: string, exportName = "App"): string 
     .replace(/^export default function /gm, "function ")
     .replace(/^export function /gm, "function ")
     .replace(/^export /gm, "");
-  const exportsMatch = [...runnable.matchAll(/function (\w+)\(/g)].map((match) => match[1]);
+  const functionExports = [
+    ...code.matchAll(/^export (?:(default) )?function ([A-Za-z_$][\w$]*)\s*\(/gm),
+  ].map((match) => ({
+    exportName: match[1] === "default" ? "default" : String(match[2]),
+    localName: String(match[2]),
+  }));
   const moduleFactory = new Function(
     aliasName,
     "createElement",
-    `${runnable}\nreturn { ${exportsMatch.map((name) => `${name}: ${name}`).join(", ")} };`,
+    `${runnable}\nreturn { ${functionExports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ")} };`,
   ) as (
     helper: typeof renderChildToString,
     create: typeof createElement,
@@ -366,5 +371,56 @@ export function App() {
       ),
     );
     expect(runCompiledWithCompatHelpers(output.code)).toBe(interpreted);
+  });
+
+  test("compiles renderToString wrappers around lowerable local createElement views", async () => {
+    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
+const items = [0, 1, 2];
+function View() {
+  return createElement("main", null, items.map((index) => createElement("span", { key: index }, index)));
+}
+export default function Page() {
+  return renderToString(View);
+}`;
+    const stringOutput = compile(source);
+    const streamOutput = compile(source, "stream");
+
+    expect(stringOutput.diagnostics).toEqual([]);
+    expect(streamOutput.diagnostics).toEqual([]);
+    expect(stringOutput.code).not.toContain("renderToString(View)");
+    expect(streamOutput.code).not.toContain("renderToString(View)");
+    expect(stringOutput.code).not.toContain("createElement(");
+    expect(streamOutput.code).not.toContain("createElement(");
+
+    const items = [0, 1, 2];
+    const interpreted = renderToString(function View() {
+      return createElement(
+        "main",
+        null,
+        items.map((index) => createElement("span", { key: index }, index)),
+      );
+    });
+    expect(runCompiledWithCompatHelpers(stringOutput.code, "default")).toBe(interpreted);
+    await expect(runServerStreamComponent(streamOutput.code, "default")).resolves.toBe(interpreted);
+  });
+
+  test("keeps renderToString wrappers for non-lowerable local views", async () => {
+    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
+function Row(props) {
+  return createElement("span", null, props.label);
+}
+function View() {
+  return createElement("main", null, createElement(Row, { label: "x" }));
+}
+export default function Page() {
+  return renderToString(View);
+}`;
+    const output = compile(source, "stream");
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("renderToString(View)");
+    await expect(runServerStreamComponent(output.code, "default")).resolves.toBe(
+      "<main><span>x</span></main>",
+    );
   });
 });

@@ -8,6 +8,7 @@ import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-n
 // interpreter semantics never get half-applied.
 
 const COMPAT_CREATE_ELEMENT_SOURCES = new Set(["react", "@reckona/mreact-compat"]);
+const COMPAT_RENDER_TO_STRING_SOURCES = new Set(["@reckona/mreact-compat"]);
 
 export function collectCompatCreateElementNames(program: unknown): Set<string> {
   const names = new Set<string>();
@@ -36,6 +37,41 @@ export function collectCompatCreateElementNames(program: unknown): Set<string> {
       const local = readObject(specifierObject.local);
 
       if (imported.name === "createElement" && typeof local.name === "string") {
+        names.add(local.name);
+      }
+    }
+  }
+
+  return names;
+}
+
+export function collectCompatRenderToStringNames(program: unknown): Set<string> {
+  const names = new Set<string>();
+
+  for (const statement of readArray(readObject(program).body)) {
+    const declaration = readObject(statement);
+
+    if (declaration.type !== "ImportDeclaration") {
+      continue;
+    }
+
+    const source = readObject(declaration.source);
+
+    if (typeof source.value !== "string" || !COMPAT_RENDER_TO_STRING_SOURCES.has(source.value)) {
+      continue;
+    }
+
+    for (const specifier of readArray(declaration.specifiers)) {
+      const specifierObject = readObject(specifier);
+
+      if (specifierObject.type !== "ImportSpecifier") {
+        continue;
+      }
+
+      const imported = readObject(specifierObject.imported);
+      const local = readObject(specifierObject.local);
+
+      if (imported.name === "renderToString" && typeof local.name === "string") {
         names.add(local.name);
       }
     }
@@ -363,6 +399,40 @@ export function analyzeCompatCreateElementRoot(
   return lowerCreateElementCall(code, unwrapOxcParentheses(expression), scope);
 }
 
+export function analyzeCompatCreateElementFunctionRoot(
+  code: string,
+  functionLike: Record<string, unknown>,
+  names: ReadonlySet<string>,
+): JsxNodeIr | undefined {
+  if (names.size === 0) {
+    return undefined;
+  }
+
+  const shadowed = collectFunctionShadowedNames(functionLike, names);
+  const scope: CompatCreateElementScope = { names, shadowed };
+  const body = unwrapOxcParentheses(readObject(functionLike.body));
+
+  if (body.type !== "BlockStatement") {
+    return lowerCreateElementCall(code, body, scope);
+  }
+
+  for (const statement of readArray(body.body)) {
+    const statementObject = readObject(statement);
+
+    if (statementObject.type !== "ReturnStatement") {
+      continue;
+    }
+
+    return lowerCreateElementCall(
+      code,
+      unwrapOxcParentheses(readObject(statementObject.argument)),
+      scope,
+    );
+  }
+
+  return undefined;
+}
+
 function lowerCreateElementCall(
   code: string,
   expression: Record<string, unknown>,
@@ -684,31 +754,7 @@ export function hasLowerableCompatCreateElementReturn(
   functionLike: Record<string, unknown>,
   names: ReadonlySet<string>,
 ): boolean {
-  if (names.size === 0) {
-    return false;
-  }
-
-  const shadowed = collectFunctionShadowedNames(functionLike, names);
-  const scope: CompatCreateElementScope = { names, shadowed };
-  const body = unwrapOxcParentheses(readObject(functionLike.body));
-
-  if (body.type !== "BlockStatement") {
-    return lowerCreateElementCall(code, body, scope) !== undefined;
-  }
-
-  for (const statement of readArray(body.body)) {
-    const statementObject = readObject(statement);
-
-    if (statementObject.type !== "ReturnStatement") {
-      continue;
-    }
-
-    const argument = unwrapOxcParentheses(readObject(statementObject.argument));
-
-    return lowerCreateElementCall(code, argument, scope) !== undefined;
-  }
-
-  return false;
+  return analyzeCompatCreateElementFunctionRoot(code, functionLike, names) !== undefined;
 }
 
 export function collectFunctionShadowedNames(
