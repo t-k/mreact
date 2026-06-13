@@ -1,0 +1,1110 @@
+[
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.3,
+    "summary": {
+      "count": 7,
+      "min": 1.9000000001396984,
+      "max": 4,
+      "mean": 2.5714,
+      "median": 2.3,
+      "p75": 2.9,
+      "p95": 4,
+      "p99": 4,
+      "standardDeviation": 0.6713
+    },
+    "samples": [
+      2.8999999999068677,
+      4,
+      2.199999999953434,
+      2.300000000046566,
+      1.9000000001396984,
+      2,
+      2.699999999953434
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact react-compat",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.6,
+    "summary": {
+      "count": 7,
+      "min": 2.5999999998603016,
+      "max": 6.899999999906868,
+      "mean": 4.4714,
+      "median": 4.6,
+      "p75": 6.3,
+      "p95": 6.9,
+      "p99": 6.9,
+      "standardDeviation": 1.5434
+    },
+    "samples": [
+      6.899999999906868,
+      4.600000000093132,
+      4.600000000093132,
+      6.300000000046566,
+      3.5999999998603016,
+      2.699999999953434,
+      2.5999999998603016
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "react",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3,
+    "summary": {
+      "count": 7,
+      "min": 2.9000000001396984,
+      "max": 3.5999999998603016,
+      "mean": 3.1857,
+      "median": 3,
+      "p75": 3.5,
+      "p95": 3.6,
+      "p99": 3.6,
+      "standardDeviation": 0.2587
+    },
+    "samples": [
+      3.5999999998603016,
+      3.300000000046566,
+      3.5,
+      3,
+      3,
+      2.9000000001396984,
+      3
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "solid",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 1.6,
+    "summary": {
+      "count": 7,
+      "min": 1.3999999999068677,
+      "max": 2.6000000000931323,
+      "mean": 1.8429,
+      "median": 1.6,
+      "p75": 2.6,
+      "p95": 2.6,
+      "p99": 2.6,
+      "standardDeviation": 0.4836
+    },
+    "samples": [
+      1.5999999998603016,
+      2.6000000000931323,
+      2.5999999998603016,
+      1.3999999999068677,
+      1.5,
+      1.6000000000931323,
+      1.6000000000931323
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "vue",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.2,
+    "summary": {
+      "count": 7,
+      "min": 2.699999999953434,
+      "max": 7.5,
+      "mean": 3.7,
+      "median": 3.2,
+      "p75": 3.6,
+      "p95": 7.5,
+      "p99": 7.5,
+      "standardDeviation": 1.5766
+    },
+    "samples": [
+      3.6000000000931323,
+      7.5,
+      3.2000000001862645,
+      3.199999999953434,
+      2.699999999953434,
+      2.800000000046566,
+      2.8999999999068677
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "svelte",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.4,
+    "summary": {
+      "count": 7,
+      "min": 3.199999999953434,
+      "max": 20.199999999953434,
+      "mean": 6.6571,
+      "median": 4.4,
+      "p75": 5.9,
+      "p95": 20.2,
+      "p99": 20.2,
+      "standardDeviation": 5.603
+    },
+    "samples": [
+      20.199999999953434,
+      4.100000000093132,
+      5.899999999906868,
+      3.199999999953434,
+      3.3999999999068677,
+      4.399999999906868,
+      5.400000000139698
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "angular",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.8,
+    "summary": {
+      "count": 7,
+      "min": 4.300000000046566,
+      "max": 8,
+      "mean": 5.8571,
+      "median": 4.8,
+      "p75": 7.9,
+      "p95": 8,
+      "p99": 8,
+      "standardDeviation": 1.5296
+    },
+    "samples": [
+      6.800000000046566,
+      4.699999999953434,
+      7.899999999906868,
+      4.800000000046566,
+      4.300000000046566,
+      4.5,
+      8
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "marko",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added."
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "qwik",
+    "version": "workspace",
+    "caseName": "browser create 1k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.9,
+    "summary": {
+      "count": 7,
+      "min": 2.699999999953434,
+      "max": 7.800000000046566,
+      "mean": 3.8429,
+      "median": 2.9,
+      "p75": 4.1,
+      "p95": 7.8,
+      "p99": 7.8,
+      "standardDeviation": 1.7037
+    },
+    "samples": [
+      3.8999999999068677,
+      2.699999999953434,
+      2.699999999953434,
+      4.100000000093132,
+      2.8999999999068677,
+      2.800000000046566,
+      7.800000000046566
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.9,
+    "summary": {
+      "count": 7,
+      "min": 0.8000000000465661,
+      "max": 1.9000000001396984,
+      "mean": 1.1,
+      "median": 0.9,
+      "p75": 1.4,
+      "p95": 1.9,
+      "p99": 1.9,
+      "standardDeviation": 0.378
+    },
+    "samples": [
+      1.9000000001396984,
+      0.8000000000465661,
+      1,
+      0.8000000000465661,
+      0.9000000001396984,
+      0.8999999999068677,
+      1.4000000001396984
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact react-compat",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.1,
+    "summary": {
+      "count": 7,
+      "min": 4.899999999906868,
+      "max": 5.600000000093132,
+      "mean": 5.1429,
+      "median": 5.1,
+      "p75": 5.4,
+      "p95": 5.6,
+      "p99": 5.6,
+      "standardDeviation": 0.2556
+    },
+    "samples": [
+      5.600000000093132,
+      5.199999999953434,
+      5.399999999906868,
+      4.900000000139698,
+      5.099999999860302,
+      4.899999999906868,
+      4.900000000139698
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "react",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.8,
+    "summary": {
+      "count": 7,
+      "min": 2.699999999953434,
+      "max": 3.5,
+      "mean": 2.9286,
+      "median": 2.8,
+      "p75": 3,
+      "p95": 3.5,
+      "p99": 3.5,
+      "standardDeviation": 0.2603
+    },
+    "samples": [
+      3.5,
+      3,
+      3,
+      2.800000000046566,
+      2.800000000046566,
+      2.699999999953434,
+      2.7000000001862645
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "solid",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 7.6,
+    "summary": {
+      "count": 7,
+      "min": 6.699999999953434,
+      "max": 7.800000000046566,
+      "mean": 7.3571,
+      "median": 7.6,
+      "p75": 7.7,
+      "p95": 7.8,
+      "p99": 7.8,
+      "standardDeviation": 0.4238
+    },
+    "samples": [
+      6.800000000046566,
+      6.699999999953434,
+      7.199999999953434,
+      7.699999999953434,
+      7.800000000046566,
+      7.600000000093132,
+      7.699999999953434
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "vue",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 11.2,
+    "summary": {
+      "count": 7,
+      "min": 10.399999999906868,
+      "max": 21.199999999953434,
+      "mean": 13.6,
+      "median": 11.2,
+      "p75": 18.3,
+      "p95": 21.2,
+      "p99": 21.2,
+      "standardDeviation": 4.05
+    },
+    "samples": [
+      10.399999999906868,
+      18.300000000046566,
+      13,
+      10.599999999860302,
+      10.5,
+      21.199999999953434,
+      11.200000000186265
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "svelte",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.4,
+    "summary": {
+      "count": 7,
+      "min": 2.199999999953434,
+      "max": 3.199999999953434,
+      "mean": 2.5429,
+      "median": 2.4,
+      "p75": 2.7,
+      "p95": 3.2,
+      "p99": 3.2,
+      "standardDeviation": 0.3245
+    },
+    "samples": [
+      3.199999999953434,
+      2.2999999998137355,
+      2.699999999953434,
+      2.699999999953434,
+      2.3999999999068677,
+      2.300000000046566,
+      2.199999999953434
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "angular",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.3,
+    "summary": {
+      "count": 7,
+      "min": 4.099999999860302,
+      "max": 4.600000000093132,
+      "mean": 4.3143,
+      "median": 4.3,
+      "p75": 4.5,
+      "p95": 4.6,
+      "p99": 4.6,
+      "standardDeviation": 0.1807
+    },
+    "samples": [
+      4.5,
+      4.600000000093132,
+      4.400000000139698,
+      4.100000000093132,
+      4.300000000046566,
+      4.099999999860302,
+      4.199999999953434
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "marko",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added."
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "qwik",
+    "version": "workspace",
+    "caseName": "browser update every 10th in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 11.2,
+    "summary": {
+      "count": 7,
+      "min": 9,
+      "max": 19.300000000046566,
+      "mean": 13.1714,
+      "median": 11.2,
+      "p75": 17.4,
+      "p95": 19.3,
+      "p99": 19.3,
+      "standardDeviation": 4.1524
+    },
+    "samples": [
+      16.799999999813735,
+      11.199999999953434,
+      19.300000000046566,
+      9.399999999906868,
+      9,
+      17.4000000001397,
+      9.100000000093132
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.9,
+    "summary": {
+      "count": 7,
+      "min": 0.7999999998137355,
+      "max": 1,
+      "mean": 0.9,
+      "median": 0.9,
+      "p75": 1,
+      "p95": 1,
+      "p99": 1,
+      "standardDeviation": 0.0756
+    },
+    "samples": [
+      0.8999999999068677,
+      0.7999999998137355,
+      1,
+      1,
+      0.8999999999068677,
+      0.9000000001396984,
+      0.8000000000465661
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact react-compat",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.7,
+    "summary": {
+      "count": 7,
+      "min": 3.699999999953434,
+      "max": 3.800000000046566,
+      "mean": 3.7143,
+      "median": 3.7,
+      "p75": 3.7,
+      "p95": 3.8,
+      "p99": 3.8,
+      "standardDeviation": 0.035
+    },
+    "samples": [
+      3.800000000046566,
+      3.699999999953434,
+      3.7000000001862645,
+      3.699999999953434,
+      3.699999999953434,
+      3.699999999953434,
+      3.699999999953434
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "react",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.5,
+    "summary": {
+      "count": 7,
+      "min": 2.2999999998137355,
+      "max": 3.6000000000931323,
+      "mean": 2.6429,
+      "median": 2.5,
+      "p75": 2.8,
+      "p95": 3.6,
+      "p99": 3.6,
+      "standardDeviation": 0.417
+    },
+    "samples": [
+      2.3999999999068677,
+      2.3999999999068677,
+      3.6000000000931323,
+      2.5,
+      2.800000000046566,
+      2.5,
+      2.2999999998137355
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "solid",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0.9,
+    "summary": {
+      "count": 7,
+      "min": 0.8000000000465661,
+      "max": 1,
+      "mean": 0.8857,
+      "median": 0.9,
+      "p75": 0.9,
+      "p95": 1,
+      "p99": 1,
+      "standardDeviation": 0.0639
+    },
+    "samples": [
+      0.9000000001396984,
+      0.9000000001396984,
+      1,
+      0.9000000001396984,
+      0.8000000000465661,
+      0.8000000000465661,
+      0.8999999999068677
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "vue",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 9.7,
+    "summary": {
+      "count": 7,
+      "min": 9.5,
+      "max": 12.399999999906868,
+      "mean": 10.2,
+      "median": 9.7,
+      "p75": 10.3,
+      "p95": 12.4,
+      "p99": 12.4,
+      "standardDeviation": 0.9502
+    },
+    "samples": [
+      10.300000000046566,
+      9.5,
+      10.300000000046566,
+      9.600000000093132,
+      9.700000000186265,
+      9.599999999860302,
+      12.399999999906868
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "svelte",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 3.8,
+    "summary": {
+      "count": 7,
+      "min": 3.699999999953434,
+      "max": 4,
+      "mean": 3.8429,
+      "median": 3.8,
+      "p75": 3.9,
+      "p95": 4,
+      "p99": 4,
+      "standardDeviation": 0.0904
+    },
+    "samples": [
+      4,
+      3.9000000001396984,
+      3.800000000046566,
+      3.800000000046566,
+      3.800000000046566,
+      3.699999999953434,
+      3.8999999999068677
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "angular",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4,
+    "summary": {
+      "count": 7,
+      "min": 3.800000000046566,
+      "max": 4.100000000093132,
+      "mean": 3.9857,
+      "median": 4,
+      "p75": 4.1,
+      "p95": 4.1,
+      "p99": 4.1,
+      "standardDeviation": 0.1125
+    },
+    "samples": [
+      4.100000000093132,
+      3.9000000001396984,
+      3.800000000046566,
+      4,
+      4.100000000093132,
+      3.9000000001396984,
+      4.099999999860302
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "marko",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added."
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "qwik",
+    "version": "workspace",
+    "caseName": "browser select row in 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 9.1,
+    "summary": {
+      "count": 7,
+      "min": 8.699999999953434,
+      "max": 19.199999999953434,
+      "mean": 11.6714,
+      "median": 9.1,
+      "p75": 15.6,
+      "p95": 19.2,
+      "p99": 19.2,
+      "standardDeviation": 3.8462
+    },
+    "samples": [
+      11.400000000139698,
+      8.800000000046566,
+      15.599999999860302,
+      8.699999999953434,
+      8.899999999906868,
+      19.199999999953434,
+      9.099999999860302
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.5,
+    "summary": {
+      "count": 7,
+      "min": 2.3999999999068677,
+      "max": 2.5,
+      "mean": 2.4571,
+      "median": 2.5,
+      "p75": 2.5,
+      "p95": 2.5,
+      "p99": 2.5,
+      "standardDeviation": 0.0495
+    },
+    "samples": [
+      2.5,
+      2.5,
+      2.3999999999068677,
+      2.4000000001396984,
+      2.5,
+      2.3999999999068677,
+      2.5
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "mreact react-compat",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.2,
+    "summary": {
+      "count": 7,
+      "min": 4,
+      "max": 7.300000000046566,
+      "mean": 4.5714,
+      "median": 4.2,
+      "p75": 4.2,
+      "p95": 7.3,
+      "p99": 7.3,
+      "standardDeviation": 1.117
+    },
+    "samples": [
+      4.2000000001862645,
+      4.199999999953434,
+      7.300000000046566,
+      4.199999999953434,
+      4.100000000093132,
+      4,
+      4
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "react",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 8.9,
+    "summary": {
+      "count": 7,
+      "min": 8.699999999953434,
+      "max": 9.600000000093132,
+      "mean": 8.9571,
+      "median": 8.9,
+      "p75": 9,
+      "p95": 9.6,
+      "p99": 9.6,
+      "standardDeviation": 0.2821
+    },
+    "samples": [
+      9,
+      8.900000000139698,
+      8.699999999953434,
+      9.600000000093132,
+      8.900000000139698,
+      8.699999999953434,
+      8.900000000139698
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "solid",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 2.4,
+    "summary": {
+      "count": 7,
+      "min": 2.300000000046566,
+      "max": 2.5,
+      "mean": 2.4143,
+      "median": 2.4,
+      "p75": 2.5,
+      "p95": 2.5,
+      "p99": 2.5,
+      "standardDeviation": 0.0639
+    },
+    "samples": [
+      2.5,
+      2.3999999999068677,
+      2.5,
+      2.3999999999068677,
+      2.3999999999068677,
+      2.3999999999068677,
+      2.300000000046566
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "vue",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 4.7,
+    "summary": {
+      "count": 7,
+      "min": 4.599999999860302,
+      "max": 20.4000000001397,
+      "mean": 7.1286,
+      "median": 4.7,
+      "p75": 5.8,
+      "p95": 20.4,
+      "p99": 20.4,
+      "standardDeviation": 5.4339
+    },
+    "samples": [
+      5.800000000046566,
+      5.199999999953434,
+      4.600000000093132,
+      20.4000000001397,
+      4.699999999953434,
+      4.599999999860302,
+      4.600000000093132
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "svelte",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 8.6,
+    "summary": {
+      "count": 7,
+      "min": 7.800000000046566,
+      "max": 12.5,
+      "mean": 9.2286,
+      "median": 8.6,
+      "p75": 11.2,
+      "p95": 12.5,
+      "p99": 12.5,
+      "standardDeviation": 1.7252
+    },
+    "samples": [
+      8.700000000186265,
+      8.600000000093132,
+      7.900000000139698,
+      11.199999999953434,
+      7.800000000046566,
+      12.5,
+      7.899999999906868
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "angular",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 8.6,
+    "summary": {
+      "count": 7,
+      "min": 8.400000000139698,
+      "max": 40.10000000009313,
+      "mean": 13.1143,
+      "median": 8.6,
+      "p75": 8.9,
+      "p95": 40.1,
+      "p99": 40.1,
+      "standardDeviation": 11.0178
+    },
+    "samples": [
+      8.700000000186265,
+      8.899999999906868,
+      8.400000000139698,
+      8.5,
+      8.600000000093132,
+      40.10000000009313,
+      8.599999999860302
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "marko",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "unsupported",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 0,
+    "notes": [
+      "Marko's standalone browser primitive fixture requires the Marko client compiler/runtime integration; keep Marko covered by router browser probes until a stable standalone harness is added."
+    ]
+  },
+  {
+    "suite": "primitive-browser",
+    "framework": "qwik",
+    "version": "workspace",
+    "caseName": "browser clear 10k rows",
+    "status": "completed",
+    "metric": "duration",
+    "unit": "ms",
+    "value": 5.7,
+    "summary": {
+      "count": 7,
+      "min": 5.599999999860302,
+      "max": 5.899999999906868,
+      "mean": 5.7286,
+      "median": 5.7,
+      "p75": 5.8,
+      "p95": 5.9,
+      "p99": 5.9,
+      "standardDeviation": 0.103
+    },
+    "samples": [
+      5.600000000093132,
+      5.599999999860302,
+      5.699999999953434,
+      5.7999999998137355,
+      5.699999999953434,
+      5.800000000046566,
+      5.899999999906868
+    ],
+    "notes": [
+      "bundle gzip bytes: 468736"
+    ]
+  }
+]
