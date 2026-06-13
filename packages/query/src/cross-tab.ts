@@ -14,23 +14,23 @@ import type {
 /** Configures optional same-origin query cache coordination across browser tabs. */
 export interface CrossTabQuerySyncOptions {
   /**
-   * BroadcastChannel name. Include a session or tenant identifier before enabling data sharing for sensitive data.
+   * BroadcastChannel name. Query messages require a non-default name scoped to a session, user, or tenant.
    */
   channel?: string | undefined;
   /**
-   * Broadcast successful query data to other tabs. Defaults to false so sensitive data is not shared implicitly.
+   * Broadcast successful query data to other tabs. Requires scoped `channel` and `includeQuery`.
    */
   broadcastQueryData?: boolean | undefined;
   /**
-   * Broadcast query invalidation calls to other tabs. Defaults to true.
+   * Broadcast query-keyed invalidation calls to other tabs when scoped query sync is enabled. Defaults to true.
    */
   broadcastInvalidations?: boolean | undefined;
   /**
-   * Broadcast query removal calls to other tabs. Defaults to true.
+   * Broadcast query-keyed removal calls to other tabs when scoped query sync is enabled. Defaults to true.
    */
   broadcastRemovals?: boolean | undefined;
   /**
-   * Use Web Locks plus BroadcastChannel result handoff to avoid duplicate same-query fetches across tabs.
+   * Use Web Locks plus BroadcastChannel result handoff to avoid duplicate same-query fetches across tabs. Requires scoped `channel` and `includeQuery`.
    */
   singleFlight?: boolean | undefined;
   /**
@@ -38,7 +38,7 @@ export interface CrossTabQuerySyncOptions {
    */
   singleFlightHandoffTimeoutMs?: number | undefined;
   /**
-   * Restricts which query keys participate in cross-tab sync.
+   * Allowlist for query keys that participate in cross-tab sync. Required for any query message.
    */
   includeQuery?: ((queryKey: QueryKey) => boolean) | undefined;
 }
@@ -54,7 +54,7 @@ type QuerySyncMessage =
       version: 1;
     }
   | {
-      queryKey?: QueryKey | undefined;
+      queryKey: QueryKey;
       senderId: string;
       type: "invalidate" | "remove";
       version: 1;
@@ -77,6 +77,11 @@ interface BrowserLockManager {
   ): Promise<T>;
 }
 
+interface PendingSuccessWaiter {
+  cancel(): void;
+  promise: Promise<Extract<QuerySyncMessage, { type: "success" }> | undefined>;
+}
+
 const defaultChannelName = "mreact-query:v1";
 const defaultSingleFlightHandoffTimeoutMs = 1_000;
 const localSingleFlights = new Map<string, Promise<unknown>>();
@@ -90,7 +95,7 @@ export function syncQueryClientAcrossTabs(
   client: QueryClient,
   options: CrossTabQuerySyncOptions = {},
 ): () => void {
-  if (typeof BroadcastChannel === "undefined") {
+  if (!isBrowserWithBroadcastChannel()) {
     return () => undefined;
   }
 
@@ -101,7 +106,10 @@ export function syncQueryClientAcrossTabs(
   const originalSetQueryData = client.setQueryData.bind(client) as QueryClient["setQueryData"];
   const originalInvalidateQueries = client.invalidateQueries.bind(client) as QueryClient["invalidateQueries"];
   const originalRemoveQueries = client.removeQueries.bind(client) as QueryClient["removeQueries"];
-  const broadcastQueryData = options.broadcastQueryData === true || options.singleFlight === true;
+  const canSyncQueryMessages = scopedQuerySyncAllowed(options);
+  const canShareQueryData = canSyncQueryMessages;
+  const singleFlight = options.singleFlight === true && canShareQueryData;
+  const broadcastQueryData = canShareQueryData && (options.broadcastQueryData === true || singleFlight);
   const broadcastInvalidations = options.broadcastInvalidations !== false;
   const broadcastRemovals = options.broadcastRemovals !== false;
 
@@ -113,7 +121,7 @@ export function syncQueryClientAcrossTabs(
     }
 
     if (message.type === "success") {
-      if (!queryIncluded(message.queryKey, options)) {
+      if (!canShareQueryData || !queryIncluded(message.queryKey, options)) {
         return;
       }
 
@@ -122,16 +130,16 @@ export function syncQueryClientAcrossTabs(
       return;
     }
 
-    if (message.queryKey !== undefined && !queryIncluded(message.queryKey, options)) {
+    if (!canSyncQueryMessages || !queryIncluded(message.queryKey, options)) {
       return;
     }
 
     if (message.type === "invalidate") {
-      originalInvalidateQueries(message.queryKey === undefined ? {} : { queryKey: message.queryKey });
+      originalInvalidateQueries({ queryKey: message.queryKey });
       return;
     }
 
-    originalRemoveQueries(message.queryKey === undefined ? {} : { queryKey: message.queryKey });
+    originalRemoveQueries({ queryKey: message.queryKey });
   });
 
   const wrappedFetchQuery = (async <TData>(
@@ -141,7 +149,7 @@ export function syncQueryClientAcrossTabs(
       return originalFetchQuery(fetchOptions);
     }
 
-    if (options.singleFlight === true) {
+    if (singleFlight) {
       return fetchQueryWithSingleFlight({
         client,
         fetchOptions,
@@ -169,11 +177,11 @@ export function syncQueryClientAcrossTabs(
   const wrappedInvalidateQueries = ((invalidateOptions: InvalidateQueriesOptions = {}): void => {
     originalInvalidateQueries(invalidateOptions);
 
-    if (!broadcastInvalidations) {
+    if (!broadcastInvalidations || !canSyncQueryMessages) {
       return;
     }
 
-    if (invalidateOptions.queryKey !== undefined && !queryIncluded(invalidateOptions.queryKey, options)) {
+    if (invalidateOptions.queryKey === undefined || !queryIncluded(invalidateOptions.queryKey, options)) {
       return;
     }
 
@@ -188,11 +196,11 @@ export function syncQueryClientAcrossTabs(
   const wrappedRemoveQueries = ((removeOptions: InvalidateQueriesOptions = {}): void => {
     originalRemoveQueries(removeOptions);
 
-    if (!broadcastRemovals) {
+    if (!broadcastRemovals || !canSyncQueryMessages) {
       return;
     }
 
-    if (removeOptions.queryKey !== undefined && !queryIncluded(removeOptions.queryKey, options)) {
+    if (removeOptions.queryKey === undefined || !queryIncluded(removeOptions.queryKey, options)) {
       return;
     }
 
@@ -258,7 +266,7 @@ async function fetchQueryWithSingleFlight<TData>(input: {
   waiters: Map<string, Set<SuccessWaiter>>;
 }): Promise<TData> {
   const queryHash = hashQueryKey(input.fetchOptions.queryKey);
-  const localSingleFlightKey = `${input.options.channel ?? defaultChannelName}:${queryHash}`;
+  const localSingleFlightKey = `${input.options.channel}:${queryHash}`;
   const current = localSingleFlights.get(localSingleFlightKey) as Promise<TData> | undefined;
 
   if (current !== undefined) {
@@ -298,6 +306,11 @@ async function fetchQueryWithCrossTabLeader<TData>(
   }
 
   const lockName = `mreact-query:fetch:${queryHash}`;
+  const handoffWaiter = createSuccessWaiter(
+    input.waiters,
+    queryHash,
+    input.options.singleFlightHandoffTimeoutMs ?? defaultSingleFlightHandoffTimeoutMs,
+  );
 
   const leaderResult = await lockManager.request(
     lockName,
@@ -314,14 +327,11 @@ async function fetchQueryWithCrossTabLeader<TData>(
   );
 
   if (leaderResult.leader) {
+    handoffWaiter.cancel();
     return leaderResult.data as TData;
   }
 
-  const handoff = await waitForSuccess(
-    input.waiters,
-    queryHash,
-    input.options.singleFlightHandoffTimeoutMs ?? defaultSingleFlightHandoffTimeoutMs,
-  );
+  const handoff = await handoffWaiter.promise;
 
   if (handoff !== undefined) {
     return handoff.data as TData;
@@ -360,29 +370,48 @@ function applyRemoteSuccess(
   setQueryData(message.queryKey, message.data);
 }
 
-function waitForSuccess(
+function createSuccessWaiter(
   waiters: Map<string, Set<SuccessWaiter>>,
   queryHash: string,
   timeoutMs: number,
-): Promise<Extract<QuerySyncMessage, { type: "success" }> | undefined> {
-  return new Promise((resolve, reject) => {
-    const waiter: SuccessWaiter = {
-      reject,
-      resolve: (message) => {
-        clearTimeout(timeout);
+): PendingSuccessWaiter {
+  let settled = false;
+  let timeout: ReturnType<typeof setTimeout>;
+  let waiter: SuccessWaiter;
+  const promise = new Promise<Extract<QuerySyncMessage, { type: "success" }> | undefined>(
+    (resolve, reject) => {
+      waiter = {
+        reject,
+        resolve: (message) => {
+          settled = true;
+          clearTimeout(timeout);
+          removeSuccessWaiter(waiters, queryHash, waiter);
+          resolve(message);
+        },
+      };
+      timeout = setTimeout(() => {
+        settled = true;
         removeSuccessWaiter(waiters, queryHash, waiter);
-        resolve(message);
-      },
-    };
-    const timeout = setTimeout(() => {
-      removeSuccessWaiter(waiters, queryHash, waiter);
-      resolve(undefined);
-    }, Math.max(0, timeoutMs));
+        resolve(undefined);
+      }, Math.max(0, timeoutMs));
 
-    const current = waiters.get(queryHash) ?? new Set<SuccessWaiter>();
-    current.add(waiter);
-    waiters.set(queryHash, current);
-  });
+      const current = waiters.get(queryHash) ?? new Set<SuccessWaiter>();
+      current.add(waiter);
+      waiters.set(queryHash, current);
+    },
+  );
+
+  return {
+    cancel() {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      removeSuccessWaiter(waiters, queryHash, waiter);
+    },
+    promise,
+  };
 }
 
 function resolveSuccessWaiters(
@@ -456,12 +485,25 @@ function normalizeMessage(value: unknown): QuerySyncMessage | undefined {
 
   if (
     (message.type === "invalidate" || message.type === "remove") &&
-    (message.queryKey === undefined || Array.isArray(message.queryKey))
+    Array.isArray(message.queryKey)
   ) {
     return message as Extract<QuerySyncMessage, { type: "invalidate" | "remove" }>;
   }
 
   return undefined;
+}
+
+function scopedQuerySyncAllowed(options: CrossTabQuerySyncOptions): boolean {
+  return options.channel !== undefined &&
+    options.channel.length > 0 &&
+    options.channel !== defaultChannelName &&
+    typeof options.includeQuery === "function";
+}
+
+function isBrowserWithBroadcastChannel(): boolean {
+  return typeof document !== "undefined" &&
+    typeof window !== "undefined" &&
+    typeof BroadcastChannel !== "undefined";
 }
 
 function webLocks(): BrowserLockManager | undefined {

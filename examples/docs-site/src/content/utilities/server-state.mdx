@@ -179,9 +179,9 @@ syncQueryClientAcrossTabs(client, {
 });
 ```
 
-Invalidations and removals are broadcast by default. Successful query data is not broadcast unless you set `broadcastQueryData: true` or enable `singleFlight`, because `singleFlight` hands the leader's successful data to follower tabs. Scope the `channel` to the current authenticated user, tenant, or equivalent isolation boundary before sharing data. Use `includeQuery` to keep sensitive or unrelated query keys out of the channel.
+The adapter only sends or receives query messages when `channel` is a non-default name scoped to the current authenticated user, tenant, or equivalent isolation boundary and `includeQuery` explicitly allows the query key. Invalidations and removals with a query key are broadcast inside that scope by default, while keyless invalidations and removals stay local. Successful query data is not broadcast unless you set `broadcastQueryData: true` or enable `singleFlight`, because `singleFlight` hands the leader's successful data to follower tabs. Use `includeQuery` to keep sensitive or unrelated query keys out of the channel.
 
-With `singleFlight: true`, focus and reconnect revalidation still uses normal `createQuery()` options such as `refetchOnWindowFocus` and `refetchOnReconnect`; the cross-tab adapter wraps `fetchQuery()` so same-key browser refetches can share one in-flight request. Without `BroadcastChannel` or Web Locks support, local query behavior continues without cross-tab coordination.
+With `singleFlight: true`, focus and reconnect revalidation still uses normal `createQuery()` options such as `refetchOnWindowFocus` and `refetchOnReconnect`; the cross-tab adapter wraps `fetchQuery()` so same-key browser refetches can share one in-flight request. Without a browser `document`, `BroadcastChannel`, Web Locks, or the required scope options, local query behavior continues without cross-tab coordination.
 
 ## Infinite queries
 

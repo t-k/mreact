@@ -44,7 +44,7 @@ hydrate(getQueryClient(), state);
 - Mutation lifecycle hooks run in this order: `onMutate`, `mutationFn`, state update, `onSuccess`, query invalidation, then `onSettled`. On failure, state updates before `onError` and `onSettled`. The value returned by `onMutate` is passed to `onError` and `onSettled`, which supports optimistic rollback without external bookkeeping.
 - `dehydrate()` and `hydrate()` move query state from server to client while preserving each successful query's `updatedAt` timestamp for `staleTime` checks.
 - `getQueryClient()` returns the browser singleton query client.
-- `syncQueryClientAcrossTabs()` optionally coordinates same-origin browser tabs with `BroadcastChannel` and Web Locks. Invalidations and removals are broadcast by default; successful query data is shared only when `broadcastQueryData` or `singleFlight` is explicitly enabled.
+- `syncQueryClientAcrossTabs()` optionally coordinates same-origin browser tabs with `BroadcastChannel` and Web Locks. Query messages require a non-default scoped channel and an `includeQuery` allowlist; successful query data is shared only when `broadcastQueryData` or `singleFlight` is explicitly enabled within that scope.
 
 ## Router Usage
 
@@ -78,8 +78,9 @@ const queryClient = getQueryClient();
 
 const disposeQuerySync = syncQueryClientAcrossTabs(queryClient, {
   channel: `mreact-query:v1:user:${sessionId}`,
+  includeQuery: (queryKey) => queryKey[0] === "dashboard",
   singleFlight: true,
 });
 ```
 
-By default, the adapter broadcasts `invalidateQueries()` and `removeQueries()` calls but does not broadcast query data. Set `broadcastQueryData: true` only when the channel name is scoped to the current authenticated user, tenant, or other isolation boundary. `singleFlight: true` uses Web Locks when available and shares successful fetch results over the channel so only one tab needs to perform a same-key fetch; without `BroadcastChannel` or Web Locks support, the local query behavior remains unchanged.
+The adapter only sends or receives query messages when `channel` is a non-default name scoped to the current authenticated user, tenant, or other isolation boundary and `includeQuery` explicitly allows the query key. `invalidateQueries({ queryKey })` and `removeQueries({ queryKey })` are broadcast inside that scope by default; keyless invalidations and removals stay local. Set `broadcastQueryData: true` or `singleFlight: true` only for query keys that are safe to share inside the channel. `singleFlight: true` uses Web Locks when available and shares successful fetch results over the channel so only one tab needs to perform a same-key fetch; without a browser `document`, `BroadcastChannel`, Web Locks, or the required scope options, the local query behavior remains unchanged.

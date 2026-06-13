@@ -187,7 +187,7 @@ After the route renders, Mreact can dehydrate the request query cache for client
 
 This is not a cross-request server cache. Each incoming request gets its own QueryClient. Use route cache or application-level caching when data should be reused across requests.
 
-For browser-only coordination after hydration, `@reckona/mreact-query` also provides `syncQueryClientAcrossTabs()`. That adapter works across same-origin browser tabs and is separate from the per-request loader client: use it when focus or reconnect refetches should single-flight across tabs, and scope its channel to the current user or tenant before sharing query data.
+For browser-only coordination after hydration, `@reckona/mreact-query` also provides `syncQueryClientAcrossTabs()`. That adapter works across same-origin browser tabs and is separate from the per-request loader client: use it when focus or reconnect refetches should single-flight across tabs, and provide both a user- or tenant-scoped channel and an `includeQuery` allowlist before sharing query data.
 
 ## Use loader data in metadata
 

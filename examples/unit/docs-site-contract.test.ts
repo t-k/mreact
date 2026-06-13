@@ -572,6 +572,9 @@ describe("docs-site example contract", () => {
     expect(query).toContain("Web Locks");
     expect(query).toContain("singleFlight: true");
     expect(query).toContain("channel: `mreact-query:v1:user:${sessionId}`");
+    expect(query).toContain("includeQuery: (queryKey) => queryKey[0] === \"dashboard\"");
+    expect(query).toContain("non-default name scoped to the current authenticated user");
+    expect(query).toContain("keyless invalidations and removals stay local");
     expect(query).toContain("window.setInterval");
     expect(query).toContain("observer.refetch()");
     expect(query).toContain("SWR-style");
@@ -1316,6 +1319,7 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("Each incoming request gets its own QueryClient");
     expect(dataLoading).toContain("same-origin browser tabs");
     expect(dataLoading).toContain("syncQueryClientAcrossTabs");
+    expect(dataLoading).toContain("includeQuery");
     expect(dataLoading).toContain("## Use loader data in metadata");
     expect(dataLoading).toContain("generateMetadata");
     expect(dataLoading).toContain("{ data }: { data: UserData }");

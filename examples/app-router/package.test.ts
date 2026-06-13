@@ -117,6 +117,7 @@ describe("mreact app-router example", () => {
     expect(source).toContain("export async function loader");
     expect(source).toContain("createQuery");
     expect(source).toContain("syncQueryClientAcrossTabs");
+    expect(source).toContain("includeQuery");
     expect(source).toContain("singleFlight: true");
     expect(source).toContain("refetchOnWindowFocus: true");
     expect(source).toContain("refetchOnReconnect: true");
