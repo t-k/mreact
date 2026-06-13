@@ -55,8 +55,14 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test router client build
+        run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+
       - name: Test
-        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
 
       - name: Format
         run: pnpm format
@@ -69,6 +75,9 @@ jobs:
 
       - name: Standalone tarball smoke
         run: pnpm publish:standalone-smoke
+
+      - name: Test router build
+        run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
   native-artifacts:
     name: Native artifacts (${{ matrix.os }})
