@@ -18,8 +18,11 @@ export interface Source {
 export interface ReactiveComputation {
   readonly id: number;
   deps: Set<Source>;
+  orderedDeps?: Source[] | undefined;
   trackingAddedDeps?: Source[] | undefined;
   trackingCount?: number | undefined;
+  trackingOrderedIndex?: number | undefined;
+  trackingOrderedMismatch?: boolean | undefined;
   trackingTouchedDeps?: Source[] | undefined;
   trackingVersion?: number | undefined;
   disposed: boolean;
