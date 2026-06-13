@@ -50,7 +50,7 @@ export function computed<T>(
       dirty = true;
 
       if (source.subscribers !== null) {
-        if (runtimeState.notificationDepth > 0) {
+        if (runtimeState.notificationDepth > 0 || runtimeState.batchDepth > 0) {
           computation.queued = true;
           runtimeState.pendingComputed.add(computation);
           return;
@@ -74,6 +74,7 @@ export function computed<T>(
       computation.queued = false;
       runtimeState.pendingComputed.delete(computation);
       cleanupDeps(computation);
+      computation.orderedDeps = undefined;
       source.subscribers = null;
     },
   };
@@ -114,19 +115,51 @@ export function computed<T>(
     const previousDepsSize = computation.deps.size;
     const nextTrackingVersion = nextTrackingVersionFor(computation);
 
-    computation.trackingAddedDeps = [];
+    computation.trackingAddedDeps = undefined;
     computation.trackingCount = 0;
+    computation.trackingOrderedIndex =
+      computation.orderedDeps === undefined ? undefined : 0;
+    computation.trackingOrderedMismatch = false;
     computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
 
     try {
       const nextValue = fn();
 
-      const addedDeps = computation.trackingAddedDeps;
+      const addedDeps = computation.trackingAddedDeps as Source[] | undefined;
       const trackedCount = computation.trackingCount ?? 0;
+      const addedDepsCount = addedDeps?.length ?? 0;
+      const orderedMismatch = computation.trackingOrderedMismatch as boolean | undefined;
 
-      if (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0) {
+      if (trackedCount !== previousDepsSize || addedDepsCount > 0) {
+        const orderedIndex = computation.trackingOrderedIndex;
+
+        if (
+          computation.trackingTouchedDeps === undefined &&
+          orderedIndex !== undefined &&
+          orderedIndex > 0 &&
+          computation.orderedDeps !== undefined
+        ) {
+          computation.trackingTouchedDeps = computation.orderedDeps.slice(0, orderedIndex);
+        }
+
         cleanupUntrackedDeps(computation, nextTrackingVersion);
+      }
+
+      if (
+        orderedMismatch !== true &&
+        trackedCount === previousDepsSize &&
+        addedDepsCount === 0
+      ) {
+        // Keep the previous stable order.
+      } else if (
+        previousDepsSize === 0 &&
+        addedDeps !== undefined &&
+        trackedCount === addedDeps.length
+      ) {
+        computation.orderedDeps = addedDeps;
+      } else {
+        computation.orderedDeps = undefined;
       }
 
       value = nextValue;
@@ -142,6 +175,8 @@ export function computed<T>(
     } finally {
       computation.trackingAddedDeps = undefined;
       computation.trackingCount = undefined;
+      computation.trackingOrderedIndex = undefined;
+      computation.trackingOrderedMismatch = undefined;
       computation.trackingTouchedDeps = undefined;
       runtimeState.activeTracker = previousTracker;
     }

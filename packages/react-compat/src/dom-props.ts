@@ -283,6 +283,10 @@ export function applyPostChildFormProps(
   props: Record<string, unknown>,
   previousProps?: Record<string, unknown>,
 ): void {
+  if (!isPostChildFormElement(element)) {
+    return;
+  }
+
   if (element instanceof HTMLInputElement) {
     if (hasOwnProp(props, "checked")) {
       const checked = props.checked !== null && props.checked !== undefined && props.checked !== false;
@@ -320,6 +324,16 @@ export function applyPostChildFormProps(
       option.selected = option.value === value;
     }
   }
+}
+
+function isPostChildFormElement(
+  element: Element,
+): element is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
+  return (
+    element instanceof HTMLInputElement ||
+    element instanceof HTMLTextAreaElement ||
+    element instanceof HTMLSelectElement
+  );
 }
 
 function postChildFormValue(

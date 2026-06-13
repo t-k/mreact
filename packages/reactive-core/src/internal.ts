@@ -6,5 +6,9 @@ export { registerCleanup, withCleanupScope } from "./cleanup-scope.js";
 export { flushQueuedComputations, schedulePendingFlush, setScheduler } from "./scheduler.js";
 /** Computed flush helper used by batched reactive updates. */
 export { flushPendingComputed } from "./tracking.js";
+/** Low-level source helpers used by reactive DOM keyed item proxies. */
+export { notifySubscribers, trackSource } from "./tracking.js";
 /** Shared global runtime state helper for singleton package state. */
 export { getGlobalRuntimeState } from "./runtime-state.js";
+export { runtimeState } from "./state.js";
+export type { Source } from "./state.js";

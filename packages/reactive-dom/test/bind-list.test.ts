@@ -1243,4 +1243,165 @@ describe("bindList", () => {
     expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
     dispose();
   });
+
+  test("replaces disjoint owned keyed rows without probing stale records", async () => {
+    const initialRows = [
+      { id: Symbol("a"), label: "0" },
+      { id: Symbol("b"), label: "1" },
+      { id: Symbol("c"), label: "2" },
+    ];
+    const replacementRows = [
+      { id: Symbol("d"), label: "3" },
+      { id: Symbol("e"), label: "4" },
+      { id: Symbol("f"), label: "5" },
+    ];
+    const probedKeys = new Set<symbol>(replacementRows.map((row) => row.id));
+    const items = cell(initialRows);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalGet = Map.prototype.get;
+    let mapGetCalls = 0;
+
+    try {
+      Map.prototype.get = function countedGet<K, V>(
+        this: Map<K, V>,
+        key: K,
+      ): V | undefined {
+        if (typeof key === "symbol" && probedKeys.has(key)) {
+          mapGetCalls += 1;
+        }
+        return originalGet.call(this, key);
+      };
+
+      items.set(replacementRows);
+      await flushEffects();
+    } finally {
+      Map.prototype.get = originalGet;
+    }
+
+    expect(mapGetCalls).toBe(0);
+    expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
+    dispose();
+  });
+
+  test("replaces disjoint owned keyed rows without probing stale keys during disposal", async () => {
+    const initialRows = [
+      { id: Symbol("a"), label: "0" },
+      { id: Symbol("b"), label: "1" },
+      { id: Symbol("c"), label: "2" },
+    ];
+    const replacementRows = [
+      { id: Symbol("d"), label: "3" },
+      { id: Symbol("e"), label: "4" },
+      { id: Symbol("f"), label: "5" },
+    ];
+    const staleKeys = new Set<symbol>(initialRows.map((row) => row.id));
+    const items = cell(initialRows);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalHas = Map.prototype.has;
+    let staleKeyHasCalls = 0;
+
+    try {
+      Map.prototype.has = function countedHas<K, V>(this: Map<K, V>, key: K): boolean {
+        if (typeof key === "symbol" && staleKeys.has(key)) {
+          staleKeyHasCalls += 1;
+        }
+        return originalHas.call(this, key);
+      };
+
+      items.set(replacementRows);
+      await flushEffects();
+    } finally {
+      Map.prototype.has = originalHas;
+    }
+
+    expect(staleKeyHasCalls).toBe(0);
+    expect(parent.innerHTML).toBe("<li>3</li><li>4</li><li>5</li><!--list-->");
+    dispose();
+  });
+
+  test("appends keyed rows without map-get probing the unchanged prefix", async () => {
+    const initialRows = [
+      { id: 0, label: "0" },
+      { id: 1, label: "1" },
+      { id: 2, label: "2" },
+    ];
+    const appendedRows = [
+      ...initialRows,
+      { id: 3, label: "3" },
+      { id: 4, label: "4" },
+    ];
+    const prefixKeys = new Set(initialRows.map((row) => row.id));
+    const items = cell(initialRows);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    const originalGet = Map.prototype.get;
+    let prefixMapGetCalls = 0;
+
+    try {
+      Map.prototype.get = function countedGet<K, V>(
+        this: Map<K, V>,
+        key: K,
+      ): V | undefined {
+        if (typeof key === "number" && prefixKeys.has(key)) {
+          prefixMapGetCalls += 1;
+        }
+        return originalGet.call(this, key);
+      };
+
+      items.set(appendedRows);
+      await flushEffects();
+    } finally {
+      Map.prototype.get = originalGet;
+    }
+
+    expect(prefixMapGetCalls).toBe(0);
+    expect(parent.innerHTML).toBe(
+      "<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->",
+    );
+    dispose();
+  });
 });

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.164 - 2026-06-13
+
+### Changed
+
+- Improved primitive reactive runtime performance for keyed row replacement, keyed list append paths, stable computed fan-in recalculation, and source writes with subscribers.
+- Improved React-compatible primitive row updates by trimming keyed append reconciliation work and avoiding form-specific post-child prop handling for ordinary host elements.
+
 ## 0.0.163 - 2026-06-13
 
 ### Added

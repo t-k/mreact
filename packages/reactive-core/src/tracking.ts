@@ -67,6 +67,7 @@ export function cleanupDeps(computation: ReactiveComputation): void {
   }
 
   computation.deps.clear();
+  computation.orderedDeps = undefined;
 }
 
 export function nextTrackingVersionFor(computation: ReactiveComputation): number {
@@ -100,18 +101,41 @@ export function trackIncrementalSource(
     return;
   }
 
+  const orderedIndex = computation.trackingOrderedIndex;
+  const orderedDeps = computation.orderedDeps;
+
+  if (
+    orderedIndex !== undefined &&
+    computation.trackingOrderedMismatch !== true &&
+    orderedDeps !== undefined
+  ) {
+    if (orderedDeps[orderedIndex] === source) {
+      computation.trackingOrderedIndex = orderedIndex + 1;
+      computation.trackingCount = (computation.trackingCount ?? 0) + 1;
+      return;
+    }
+
+    computation.trackingOrderedMismatch = true;
+
+    if (orderedIndex > 0) {
+      computation.trackingTouchedDeps = orderedDeps.slice(0, orderedIndex);
+    }
+  }
+
+  const alreadyTrackedByComputation = source.trackedBy === computation;
+
   source.trackedBy = computation;
   source.trackedVersion = trackingVersion;
   computation.trackingCount = (computation.trackingCount ?? 0) + 1;
   computation.trackingTouchedDeps?.push(source);
 
-  if (computation.deps.has(source)) {
+  if (alreadyTrackedByComputation || computation.deps.has(source)) {
     return;
   }
 
   addSourceSubscriber(source, computation);
   computation.deps.add(source);
-  computation.trackingAddedDeps?.push(source);
+  (computation.trackingAddedDeps ??= []).push(source);
 }
 
 export function preserveIncrementalTracking(computation: ReactiveComputation): void {
@@ -191,6 +215,13 @@ export function notifySubscribers(source: Source): void {
   }
 
   if (!(subscribers instanceof Set)) {
+    if (runtimeState.batchDepth > 0) {
+      if (!subscribers.disposed && !subscribers.queued) {
+        subscribers.markDirty();
+      }
+      return;
+    }
+
     runtimeState.notificationDepth += 1;
 
     try {

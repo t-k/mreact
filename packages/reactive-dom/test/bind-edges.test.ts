@@ -9,6 +9,7 @@ import {
   bindSpreadProps,
   bindText,
 } from "../src/index.js";
+import { createScopedRenderNodes } from "../src/render-scope.js";
 import { createScope, disposeScope, registerDispose, withScope } from "../src/scope.js";
 
 describe("reactive-dom: edge branches in bind helpers", () => {
@@ -310,6 +311,15 @@ describe("reactive-dom scope: edge branches", () => {
     } finally {
       globalThis.Set = OriginalSet;
     }
+  });
+
+  test("createScopedRenderNodes reuses an inert disposer when no cleanup is registered", () => {
+    const first = createScopedRenderNodes(() => document.createTextNode("a"));
+    const second = createScopedRenderNodes(() => document.createTextNode("b"));
+
+    expect(first.dispose).toBe(second.dispose);
+    first.dispose();
+    second.dispose();
   });
 
   test("registerDispose-wrapped dispose called twice runs the underlying dispose only once", () => {

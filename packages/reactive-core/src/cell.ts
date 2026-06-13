@@ -1,5 +1,6 @@
 import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
+import { runtimeState } from "./state.js";
 import { notifySubscribers, sourceSubscriberCount, trackSource } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
@@ -94,7 +95,15 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
     emitCellSetEvent(state.source, previous, resolved);
   }
 
-  if (state.source.subscribers !== null) {
+  const subscribers = state.source.subscribers;
+  if (subscribers !== null) {
+    if (runtimeState.batchDepth > 0 && !(subscribers instanceof Set)) {
+      if (!subscribers.disposed && !subscribers.queued) {
+        subscribers.markDirty();
+      }
+      return;
+    }
+
     notifySubscribers(state.source);
   }
 }

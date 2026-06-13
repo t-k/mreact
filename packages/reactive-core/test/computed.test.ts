@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { setScheduler } from "../src/internal.js";
 import { batch, cell, computed, effect, untrack } from "../src/index.js";
+import { runtimeState, type ReactiveComputation } from "../src/state.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("computed", () => {
@@ -121,6 +122,100 @@ describe("computed", () => {
     expect(pushCalls).toBe(0);
   });
 
+  test("stable flat computed fan-in reruns do not probe the dependency set", () => {
+    const first = cell(0);
+    const second = cell(0);
+    const third = cell(0);
+    const total = computed(() => first.get() + second.get() + third.get());
+
+    expect(total.get()).toBe(0);
+
+    const originalHas = Set.prototype.has;
+    let sourceHasCalls = 0;
+
+    try {
+      Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "subscribers" in value
+        ) {
+          sourceHasCalls += 1;
+        }
+
+        return originalHas.call(this, value);
+      };
+
+      batch(() => {
+        first.set(1);
+        second.set(2);
+        third.set(3);
+      });
+
+      expect(total.get()).toBe(6);
+    } finally {
+      Set.prototype.has = originalHas;
+    }
+
+    expect(sourceHasCalls).toBe(0);
+  });
+
+  test("stable flat computed fan-in reruns do not allocate added dependency tracking", () => {
+    const first = cell(0);
+    const second = cell(0);
+    const third = cell(0);
+    let runs = 0;
+    const addedDepsTrackingDuringStableRun: unknown[] = [];
+    const total = computed(() => {
+      runs += 1;
+
+      if (runs > 1) {
+        addedDepsTrackingDuringStableRun.push(
+          (runtimeState.activeTracker as ReactiveComputation | null)?.trackingAddedDeps,
+        );
+      }
+
+      return first.get() + second.get() + third.get();
+    });
+
+    expect(total.get()).toBe(0);
+
+    batch(() => {
+      first.set(1);
+      second.set(2);
+      third.set(3);
+    });
+
+    expect(total.get()).toBe(6);
+    expect(addedDepsTrackingDuringStableRun).toEqual([undefined]);
+  });
+
+  test("stable ordered computed fan-in reruns do not rewrite source tracking versions", () => {
+    const first = cell(0);
+    const second = cell(0);
+    const third = cell(0);
+    let capturedComputation: ReactiveComputation | undefined;
+    const total = computed(() => {
+      capturedComputation =
+        (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      return first.get() + second.get() + third.get();
+    });
+
+    expect(total.get()).toBe(0);
+
+    const deps = [...(capturedComputation?.deps ?? [])];
+    const trackedVersions = deps.map((dep) => dep.trackedVersion);
+
+    batch(() => {
+      first.set(1);
+      second.set(2);
+      third.set(3);
+    });
+
+    expect(total.get()).toBe(6);
+    expect(deps.map((dep) => dep.trackedVersion)).toEqual(trackedVersions);
+  });
+
   test("nested computed reruns preserve direct dependencies read before the nested read", () => {
     const source = cell(1);
     const parity = computed(() => source.get() % 2);
@@ -225,6 +320,22 @@ describe("computed", () => {
     first.set(2);
 
     expect(value.get()).toBe(10);
+  });
+
+  test("keeps prefix dependencies when a stable ordered computed drops a suffix", () => {
+    const includeSecond = cell(true);
+    const first = cell(1);
+    const second = cell(10);
+    const value = computed(() =>
+      includeSecond.get() ? first.get() + second.get() : first.get(),
+    );
+
+    expect(value.get()).toBe(11);
+    includeSecond.set(false);
+    expect(value.get()).toBe(1);
+    first.set(2);
+
+    expect(value.get()).toBe(2);
   });
 
   test("read inside untrack inside computed is not subscribed", () => {
