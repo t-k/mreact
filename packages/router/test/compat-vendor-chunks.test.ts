@@ -31,8 +31,13 @@ async function createCompatApp(): Promise<{ appDir: string; outDir: string }> {
   );
   const page = (label: string) => `import { createElement, renderToString } from "@reckona/mreact-compat";
 
+function Row(props) {
+  const tag = "span";
+  return createElement(tag, null, props.label);
+}
+
 function View() {
-  return createElement("main", { id: "${label}" }, "compat:${label}");
+  return createElement("main", { id: "${label}" }, createElement(Row, { label: "compat:${label}" }));
 }
 
 export default function Page() {
@@ -137,8 +142,8 @@ describe("compat server vendor chunks", () => {
     try {
       const first = await (await fetch(`${server.url}/`)).text();
       const second = await (await fetch(`${server.url}/second`)).text();
-      expect(first).toContain('<main id="one">compat:one</main>');
-      expect(second).toContain('<main id="two">compat:two</main>');
+      expect(first).toContain('<main id="one"><span>compat:one</span></main>');
+      expect(second).toContain('<main id="two"><span>compat:two</span></main>');
     } finally {
       await server.close();
     }
