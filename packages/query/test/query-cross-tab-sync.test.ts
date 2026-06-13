@@ -122,6 +122,120 @@ describe("cross-tab query sync", () => {
       disposeSecond();
     }
   });
+
+  it("single-flights focus revalidation and shares the successful data", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      channel,
+      singleFlight: true,
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel,
+      singleFlight: true,
+    });
+    let calls = 0;
+    const queryKey = ["focused-profile"];
+    const firstObserver = createQuery(first, {
+      autoFetch: false,
+      queryKey,
+      refetchOnWindowFocus: true,
+      staleTime: Number.POSITIVE_INFINITY,
+      queryFn: async () => {
+        calls += 1;
+        await delay(20);
+        return { name: "fresh-from-focus" };
+      },
+    });
+    const secondObserver = createQuery(second, {
+      autoFetch: false,
+      queryKey,
+      refetchOnWindowFocus: true,
+      staleTime: Number.POSITIVE_INFINITY,
+      queryFn: async () => {
+        calls += 1;
+        return { name: "unused-follower-focus" };
+      },
+    });
+
+    try {
+      first.setQueryData(queryKey, { name: "cached-first" });
+      second.setQueryData(queryKey, { name: "cached-second" });
+
+      window.dispatchEvent(new Event("focus"));
+
+      await waitFor(() =>
+        firstObserver.result.get().data?.name === "fresh-from-focus" &&
+        secondObserver.result.get().data?.name === "fresh-from-focus"
+      );
+      expect(firstObserver.result.get().data).toEqual({ name: "fresh-from-focus" });
+      expect(secondObserver.result.get().data).toEqual({ name: "fresh-from-focus" });
+      expect(calls).toBe(1);
+    } finally {
+      firstObserver.dispose();
+      secondObserver.dispose();
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
+  it("single-flights reconnect revalidation and shares the successful data", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      channel,
+      singleFlight: true,
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel,
+      singleFlight: true,
+    });
+    let calls = 0;
+    const queryKey = ["reconnected-notifications"];
+    const firstObserver = createQuery(first, {
+      autoFetch: false,
+      queryKey,
+      refetchOnReconnect: true,
+      staleTime: Number.POSITIVE_INFINITY,
+      queryFn: async () => {
+        calls += 1;
+        await delay(20);
+        return { unread: 7 };
+      },
+    });
+    const secondObserver = createQuery(second, {
+      autoFetch: false,
+      queryKey,
+      refetchOnReconnect: true,
+      staleTime: Number.POSITIVE_INFINITY,
+      queryFn: async () => {
+        calls += 1;
+        return { unread: 99 };
+      },
+    });
+
+    try {
+      first.setQueryData(queryKey, { unread: 0 });
+      second.setQueryData(queryKey, { unread: 1 });
+
+      window.dispatchEvent(new Event("online"));
+
+      await waitFor(() =>
+        firstObserver.result.get().data?.unread === 7 &&
+        secondObserver.result.get().data?.unread === 7
+      );
+      expect(firstObserver.result.get().data).toEqual({ unread: 7 });
+      expect(secondObserver.result.get().data).toEqual({ unread: 7 });
+      expect(calls).toBe(1);
+    } finally {
+      firstObserver.dispose();
+      secondObserver.dispose();
+      disposeFirst();
+      disposeSecond();
+    }
+  });
 });
 
 function uniqueChannelName(): string {
