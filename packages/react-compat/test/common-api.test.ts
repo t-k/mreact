@@ -68,6 +68,133 @@ describe("react-compat common API subset", () => {
     expect(ref.current).toBe(container.querySelector("button"));
   });
 
+  test("host callback refs update when the ref prop changes without replacing the node", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let mountedNode: HTMLButtonElement | null = null;
+    const firstRef = (node: HTMLButtonElement | null) => {
+      calls.push(`first:${node === null ? "null" : node.textContent}`);
+      if (node !== null) {
+        mountedNode = node;
+      }
+    };
+    const secondRef = (node: HTMLButtonElement | null) => {
+      calls.push(`second:${node === null ? "null" : node.textContent}`);
+    };
+
+    root.render(createElement("button", { ref: firstRef }, "A"));
+    root.render(createElement("button", { ref: secondRef }, "B"));
+
+    expect(container.querySelector("button")).toBe(mountedNode);
+    expect(calls).toEqual(["first:A", "first:null", "second:B"]);
+  });
+
+  test("createPortal can commit collection nodes into a custom document container", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class CollectionNode {
+      nodeType = 8;
+      parentNode: CollectionNode | CollectionDocument | null = null;
+      firstChild: CollectionNode | null = null;
+      lastChild: CollectionNode | null = null;
+      nextSibling: CollectionNode | null = null;
+      previousSibling: CollectionNode | null = null;
+      readonly ownerDocument: CollectionDocument;
+
+      constructor(
+        readonly tagName: string,
+        ownerDocument: CollectionDocument,
+      ) {
+        this.ownerDocument = ownerDocument;
+      }
+
+      appendChild(child: CollectionNode) {
+        if (this.lastChild !== null) {
+          this.lastChild.nextSibling = child;
+          child.previousSibling = this.lastChild;
+        } else {
+          this.firstChild = child;
+        }
+        this.lastChild = child;
+        child.parentNode = this;
+        child.nextSibling = null;
+        return child;
+      }
+
+      insertBefore(child: CollectionNode, reference: CollectionNode | null) {
+        if (reference === null) {
+          return this.appendChild(child);
+        }
+        child.parentNode = this;
+        child.nextSibling = reference;
+        child.previousSibling = reference.previousSibling;
+        if (reference.previousSibling !== null) {
+          reference.previousSibling.nextSibling = child;
+        } else {
+          this.firstChild = child;
+        }
+        reference.previousSibling = child;
+        return child;
+      }
+
+      removeChild(child: CollectionNode) {
+        if (child.previousSibling !== null) {
+          child.previousSibling.nextSibling = child.nextSibling;
+        } else {
+          this.firstChild = child.nextSibling;
+        }
+        if (child.nextSibling !== null) {
+          child.nextSibling.previousSibling = child.previousSibling;
+        } else {
+          this.lastChild = child.previousSibling;
+        }
+        child.parentNode = null;
+        child.nextSibling = null;
+        child.previousSibling = null;
+        return child;
+      }
+
+      setAttribute() {}
+      setAttributeNS() {}
+      removeAttribute() {}
+    }
+
+    class CollectionDocument extends CollectionNode {
+      constructor() {
+        super("#document-fragment", undefined as unknown as CollectionDocument);
+        this.ownerDocument = this;
+      }
+
+      createElement(tagName: string) {
+        return new CollectionNode(tagName, this);
+      }
+    }
+
+    const collectionDocument = new CollectionDocument();
+
+    root.render(
+      createPortal(
+        createElement(
+          "item",
+          {
+            ref: (node: CollectionNode | null) => {
+              calls.push(node === null ? "null" : node.tagName);
+            },
+          },
+          createElement("leaf", null),
+        ),
+        collectionDocument as unknown as Element,
+      ),
+    );
+
+    expect(collectionDocument.firstChild?.tagName).toBe("item");
+    expect(collectionDocument.firstChild?.firstChild?.tagName).toBe("leaf");
+    expect(calls).toEqual(["item"]);
+  });
+
   test("useImperativeHandle exposes a stable custom ref value and cleans up on unmount", () => {
     const container = document.createElement("div");
     const ref = { current: null as { focus(): void; label: string } | null };

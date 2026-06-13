@@ -31,9 +31,11 @@ import { NoFlags, Placement, Update } from "./fiber-flags.js";
 import {
   createHostElement,
   hostElementMatches,
+  isDomHostElement,
   isHostElement,
   namespaceForHostChildren,
   namespaceForHostElement,
+  type CustomHostDocument,
   type HostNamespace,
 } from "./dom-host-rules.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
@@ -96,7 +98,7 @@ interface FiberHydrationOptions extends RenderOptions {
   resumeId?: string;
   consumeResumeMarkers?: boolean;
   namespace?: HostNamespace;
-  documentRef?: Document;
+  documentRef?: Document | CustomHostDocument;
 }
 
 const SKIP_COMMIT_PATH = "\0";
@@ -942,7 +944,7 @@ function createHostFiberImpl(
         ? existing
         : current?.tag === "host-text" && current.stateNode instanceof Text
           ? current.stateNode
-          : getDocumentRef(options).createTextNode("");
+          : createHostTextNode(getDocumentRef(options));
 
     if (existing instanceof Text && existing.data !== String(node)) {
       reportRecoverable(
@@ -1642,13 +1644,12 @@ function commitHostDirtyFiber(
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
+    if (isDomHostElement(element) && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
         preserveHydrationAttributes: fiber.hydrateExisting,
       });
-      applyChangedRef(previousProps?.ref, props.ref, element);
     }
 
     if (directTextChild !== undefined) {
@@ -1661,16 +1662,19 @@ function commitHostDirtyFiber(
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
-        !(childNodes.length === 0 && committedPortalContainers.has(element)) &&
-        !shouldPreserveContentEditableChildren(element, props, childNodes)
+        !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
-        syncChildNodes(element, childNodes);
+        syncChildNodes(element as ParentNode, childNodes);
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
       commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    applyPostChildFormProps(element, props, previousProps);
+    if (isDomHostElement(element)) {
+      applyPostChildFormProps(element, props, previousProps);
+    }
+    applyChangedRef(previousProps?.ref, props.ref, element);
     fiber.memoizedProps = props;
     finishCommittedFiber(fiber);
     return;
@@ -1679,10 +1683,17 @@ function commitHostDirtyFiber(
   if (fiber.tag === "portal") {
     const container = fiber.stateNode;
 
-    if (container instanceof Element) {
-      setLogicalEventParent(container, parent);
+    if (isPortalHostContainer(container)) {
+      if (container instanceof Element) {
+        setLogicalEventParent(container, parent);
+      }
       const portalEventRoot =
-        eventRoot !== container && eventRoot.contains(container) ? eventRoot : container;
+        container instanceof Element && eventRoot !== container && eventRoot.contains(container)
+          ? eventRoot
+          : container instanceof Element
+          ? container
+          : eventRoot;
+      const portalOptions = withPortalDocumentRef(options, container);
 
       if (
         fiber.childListChanged ||
@@ -1691,18 +1702,22 @@ function commitHostDirtyFiber(
       ) {
         const childNodes = commitHostChildren(
           fiber.child,
-          container,
+          container as ParentNode,
           portalEventRoot,
           `${path}.portal`,
-          options,
+          portalOptions,
         );
-        const previousNodes = Array.isArray(fiber.alternate?.memoizedState)
-          ? fiber.alternate.memoizedState.filter((node): node is Node => node instanceof Node)
-          : [];
-        syncOwnedChildNodes(container, previousNodes, childNodes);
+        const previousNodes = committedHostNodesFromState(fiber.alternate?.memoizedState);
+        syncOwnedChildNodes(container as ParentNode, previousNodes, childNodes);
         fiber.memoizedState = childNodes;
       } else {
-        commitHostDirtyChildren(fiber.child, container, portalEventRoot, `${path}.portal`, options);
+        commitHostDirtyChildren(
+          fiber.child,
+          container as ParentNode,
+          portalEventRoot,
+          `${path}.portal`,
+          portalOptions,
+        );
       }
     }
     fiber.memoizedProps = fiber.pendingProps;
@@ -2058,13 +2073,12 @@ function commitHostFiber(
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (!propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
+    if (isDomHostElement(element) && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
         preserveHydrationAttributes: fiber.hydrateExisting,
       });
-      applyChangedRef(previousProps?.ref, props.ref, element);
     }
     if (directTextChild !== undefined) {
       const text = syncDirectHostTextChild(element, directTextChild);
@@ -2078,16 +2092,19 @@ function commitHostFiber(
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
-        !(childNodes.length === 0 && committedPortalContainers.has(element)) &&
-        !shouldPreserveContentEditableChildren(element, props, childNodes)
+        !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
-        syncChildNodes(element, childNodes);
+        syncChildNodes(element as ParentNode, childNodes);
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    applyPostChildFormProps(element, props, previousProps);
+    if (isDomHostElement(element)) {
+      applyPostChildFormProps(element, props, previousProps);
+    }
+    applyChangedRef(previousProps?.ref, props.ref, element);
     fiber.memoizedProps = props;
     finishCommittedFiber(fiber);
     return [element];
@@ -2180,25 +2197,30 @@ function commitHostFiber(
   if (fiber.tag === "portal") {
     const container = fiber.stateNode;
 
-    if (!(container instanceof Element)) {
+    if (!isPortalHostContainer(container)) {
       return [];
     }
 
-    setLogicalEventParent(container, parent);
-    committedPortalContainers.add(container);
+    if (container instanceof Element) {
+      setLogicalEventParent(container, parent);
+      committedPortalContainers.add(container);
+    }
     const portalEventRoot =
-      eventRoot !== container && eventRoot.contains(container) ? eventRoot : container;
+      container instanceof Element && eventRoot !== container && eventRoot.contains(container)
+        ? eventRoot
+        : container instanceof Element
+        ? container
+        : eventRoot;
+    const portalOptions = withPortalDocumentRef(options, container);
     const childNodes = commitHostChildren(
       fiber.child,
-      container,
+      container as ParentNode,
       portalEventRoot,
       `${path}.portal`,
-      options,
+      portalOptions,
     );
-    const previousNodes = Array.isArray(fiber.alternate?.memoizedState)
-      ? fiber.alternate.memoizedState.filter((node): node is Node => node instanceof Node)
-      : [];
-    syncOwnedChildNodes(container, previousNodes, childNodes);
+    const previousNodes = committedHostNodesFromState(fiber.alternate?.memoizedState);
+    syncOwnedChildNodes(container as ParentNode, previousNodes, childNodes);
     fiber.memoizedState = childNodes;
     fiber.memoizedProps = fiber.pendingProps;
     finishCommittedFiber(fiber);
@@ -3010,8 +3032,16 @@ function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
   return Array.isArray(node) ? node : [node];
 }
 
-function getDocumentRef(options: FiberHydrationOptions): Document {
+function getDocumentRef(options: FiberHydrationOptions): Document | CustomHostDocument {
   return options.documentRef ?? document;
+}
+
+function createHostTextNode(documentRef: Document | CustomHostDocument): Text {
+  if ("createTextNode" in documentRef && typeof documentRef.createTextNode === "function") {
+    return documentRef.createTextNode("");
+  }
+
+  return document.createTextNode("");
 }
 
 function collectExistingKeyedFibers(
@@ -3228,4 +3258,47 @@ function applyChangedRef(previousRef: unknown, nextRef: unknown, node: unknown):
 
   applyRef(previousRef, null);
   applyRef(nextRef, node);
+}
+
+function isPortalHostContainer(value: unknown): value is ParentNode {
+  if (value instanceof Element) {
+    return true;
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<ParentNode> & {
+    ownerDocument?: { createElement?: unknown };
+  };
+  return (
+    typeof candidate.appendChild === "function" &&
+    typeof candidate.insertBefore === "function" &&
+    typeof candidate.removeChild === "function" &&
+    typeof candidate.ownerDocument?.createElement === "function"
+  );
+}
+
+function withPortalDocumentRef(
+  options: RenderOptions,
+  container: ParentNode,
+): RenderOptions & { documentRef?: Document | CustomHostDocument } {
+  const ownerDocument = (container as { ownerDocument?: unknown }).ownerDocument;
+  if (
+    typeof ownerDocument === "object" &&
+    ownerDocument !== null &&
+    typeof (ownerDocument as { createElement?: unknown }).createElement === "function"
+  ) {
+    return {
+      ...options,
+      documentRef: ownerDocument as Document | CustomHostDocument,
+    };
+  }
+
+  return options;
+}
+
+function committedHostNodesFromState(state: unknown): Node[] {
+  return Array.isArray(state) ? state as Node[] : [];
 }

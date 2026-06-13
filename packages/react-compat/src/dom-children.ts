@@ -30,6 +30,10 @@ export function syncOwnedChildNodes(
 }
 
 export function collectOwnedChildNodes(parent: ParentNode): Node[] {
+  if (!("childNodes" in parent)) {
+    return [];
+  }
+
   return Array.from(parent.childNodes).filter(
     (node) => ownedChildParentByNode.get(node) === parent,
   );

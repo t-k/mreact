@@ -1,6 +1,21 @@
 export type HostElement = HTMLElement | SVGElement;
 export type HostNamespace = "html" | "svg";
 
+export interface CustomHostElement {
+  ownerDocument?: CustomHostDocument;
+  appendChild(child: unknown): unknown;
+  insertBefore(newNode: unknown, referenceNode: unknown): unknown;
+  removeChild(child: unknown): unknown;
+  setAttribute?(name: string, value: string): void;
+  setAttributeNS?(namespace: string | null, name: string, value: string): void;
+  removeAttribute?(name: string): void;
+}
+
+export interface CustomHostDocument {
+  createElement(tagName: string): CustomHostElement;
+  createElementNS?(namespace: string, tagName: string): CustomHostElement;
+}
+
 const htmlNamespace = "http://www.w3.org/1999/xhtml";
 const svgNamespace = "http://www.w3.org/2000/svg";
 
@@ -52,18 +67,22 @@ const isUnitlessNumberStyle = new Set([
 ]);
 
 export function createHostElement(
-  documentRef: Document,
+  documentRef: Document | CustomHostDocument,
   tagName: string,
   namespace: HostNamespace,
 ): HostElement {
   if (namespaceForHostElement(namespace, tagName) === "svg") {
-    return documentRef.createElementNS(svgNamespace, tagName);
+    return documentRef.createElementNS?.(svgNamespace, tagName) as HostElement;
   }
 
-  return documentRef.createElement(tagName);
+  return documentRef.createElement(tagName) as HostElement;
 }
 
 export function isHostElement(value: unknown): value is HostElement {
+  return isDomHostElement(value) || isCustomHostElement(value);
+}
+
+export function isDomHostElement(value: unknown): value is HTMLElement | SVGElement {
   return value instanceof HTMLElement || value instanceof SVGElement;
 }
 
@@ -90,6 +109,10 @@ export function hostElementMatches(
   tagName: string,
   namespace: HostNamespace,
 ): boolean {
+  if (!isDomHostElement(element)) {
+    return false;
+  }
+
   return element.tagName.toLowerCase() === tagName && element.namespaceURI === namespaceUri(namespace);
 }
 
@@ -112,4 +135,20 @@ export function styleNameToCssName(name: string): string {
 
 function namespaceUri(namespace: HostNamespace): string {
   return namespace === "svg" ? svgNamespace : htmlNamespace;
+}
+
+function isCustomHostElement(value: unknown): value is CustomHostElement {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Partial<CustomHostElement> & {
+    ownerDocument?: { createElement?: unknown };
+  };
+  return (
+    typeof candidate.appendChild === "function" &&
+    typeof candidate.insertBefore === "function" &&
+    typeof candidate.removeChild === "function" &&
+    typeof candidate.ownerDocument?.createElement === "function"
+  );
 }
