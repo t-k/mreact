@@ -22,6 +22,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/primitive.md")');
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/router.md")');
     expect(workflow).toContain("Commit benchmark results");
+    expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
     expect(workflow).toContain("git add -f benchmarks/results");
     expect(workflow).toContain('git commit -m "Update benchmark results');
     expect(workflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"');
