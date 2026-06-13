@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.162 - 2026-06-13
+
+### Fixed
+
+- Improved React-compatible server output for `createElement()` conditionals and `renderToString(View)` wrappers so App Router string and stream routes can compile lowerable compat trees directly instead of paying per-request compat renderer overhead.
+
 ## 0.0.161 - 2026-06-13
 
 ### Added
