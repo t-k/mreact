@@ -61,6 +61,7 @@ type QuerySyncMessage =
     };
 
 interface SuccessWaiter {
+  cancel(): void;
   reject(error: Error): void;
   resolve(message: Extract<QuerySyncMessage, { type: "success" }>): void;
 }
@@ -82,8 +83,24 @@ interface PendingSuccessWaiter {
   promise: Promise<Extract<QuerySyncMessage, { type: "success" }> | undefined>;
 }
 
+interface ClientSyncLayer {
+  fetchQuery: QueryClient["fetchQuery"];
+  invalidateQueries: QueryClient["invalidateQueries"];
+  removeQueries: QueryClient["removeQueries"];
+  setQueryData: QueryClient["setQueryData"];
+}
+
+interface ClientSyncStack {
+  baseFetchQuery: QueryClient["fetchQuery"];
+  baseInvalidateQueries: QueryClient["invalidateQueries"];
+  baseRemoveQueries: QueryClient["removeQueries"];
+  baseSetQueryData: QueryClient["setQueryData"];
+  layers: ClientSyncLayer[];
+}
+
 const defaultChannelName = "mreact-query:v1";
 const defaultSingleFlightHandoffTimeoutMs = 1_000;
+const clientSyncStacks = new WeakMap<QueryClient, ClientSyncStack>();
 const localSingleFlights = new Map<string, Promise<unknown>>();
 
 /**
@@ -102,6 +119,7 @@ export function syncQueryClientAcrossTabs(
   const channel = new BroadcastChannel(options.channel ?? defaultChannelName);
   const senderId = createClientId();
   const waiters = new Map<string, Set<SuccessWaiter>>();
+  const stack = getClientSyncStack(client);
   const originalFetchQuery = client.fetchQuery.bind(client) as QueryClient["fetchQuery"];
   const originalSetQueryData = client.setQueryData.bind(client) as QueryClient["setQueryData"];
   const originalInvalidateQueries = client.invalidateQueries.bind(client) as QueryClient["invalidateQueries"];
@@ -110,8 +128,10 @@ export function syncQueryClientAcrossTabs(
   const canShareQueryData = canSyncQueryMessages;
   const singleFlight = options.singleFlight === true && canShareQueryData;
   const broadcastQueryData = canShareQueryData && (options.broadcastQueryData === true || singleFlight);
+  const broadcastQueryDataWithoutWebLocks = canShareQueryData && options.broadcastQueryData === true;
   const broadcastInvalidations = options.broadcastInvalidations !== false;
   const broadcastRemovals = options.broadcastRemovals !== false;
+  let disposed = false;
 
   channel.addEventListener("message", (event) => {
     const message = normalizeMessage(event.data);
@@ -145,6 +165,10 @@ export function syncQueryClientAcrossTabs(
   const wrappedFetchQuery = (async <TData>(
     fetchOptions: FetchQueryOptions<TData>,
   ): Promise<TData> => {
+    if (disposed) {
+      return originalFetchQuery(fetchOptions);
+    }
+
     if (!queryIncluded(fetchOptions.queryKey, options)) {
       return originalFetchQuery(fetchOptions);
     }
@@ -153,6 +177,7 @@ export function syncQueryClientAcrossTabs(
       return fetchQueryWithSingleFlight({
         client,
         fetchOptions,
+        broadcastQueryDataWithoutWebLocks,
         originalFetchQuery,
         options,
         postSuccess,
@@ -168,6 +193,11 @@ export function syncQueryClientAcrossTabs(
   }) as QueryClient["fetchQuery"];
 
   const wrappedSetQueryData = (<TData>(queryKey: QueryKey, data: TData): void => {
+    if (disposed) {
+      originalSetQueryData(queryKey, data);
+      return;
+    }
+
     originalSetQueryData(queryKey, data);
     if (broadcastQueryData && queryIncluded(queryKey, options)) {
       postSuccess(queryKey, data);
@@ -175,6 +205,11 @@ export function syncQueryClientAcrossTabs(
   }) as QueryClient["setQueryData"];
 
   const wrappedInvalidateQueries = ((invalidateOptions: InvalidateQueriesOptions = {}): void => {
+    if (disposed) {
+      originalInvalidateQueries(invalidateOptions);
+      return;
+    }
+
     originalInvalidateQueries(invalidateOptions);
 
     if (!broadcastInvalidations || !canSyncQueryMessages) {
@@ -194,6 +229,11 @@ export function syncQueryClientAcrossTabs(
   }) as QueryClient["invalidateQueries"];
 
   const wrappedRemoveQueries = ((removeOptions: InvalidateQueriesOptions = {}): void => {
+    if (disposed) {
+      originalRemoveQueries(removeOptions);
+      return;
+    }
+
     originalRemoveQueries(removeOptions);
 
     if (!broadcastRemovals || !canSyncQueryMessages) {
@@ -212,27 +252,24 @@ export function syncQueryClientAcrossTabs(
     });
   }) as QueryClient["removeQueries"];
 
-  client.fetchQuery = wrappedFetchQuery;
-  client.setQueryData = wrappedSetQueryData;
-  client.invalidateQueries = wrappedInvalidateQueries;
-  client.removeQueries = wrappedRemoveQueries;
+  const layer: ClientSyncLayer = {
+    fetchQuery: wrappedFetchQuery,
+    invalidateQueries: wrappedInvalidateQueries,
+    removeQueries: wrappedRemoveQueries,
+    setQueryData: wrappedSetQueryData,
+  };
+  stack.layers.push(layer);
+  applyClientSyncLayer(client, layer);
 
   return () => {
+    if (disposed) {
+      return;
+    }
+
+    disposed = true;
     rejectSuccessWaiters(waiters, new Error("Cross-tab query sync disposed."));
     channel.close();
-
-    if (client.fetchQuery === wrappedFetchQuery) {
-      client.fetchQuery = originalFetchQuery;
-    }
-    if (client.setQueryData === wrappedSetQueryData) {
-      client.setQueryData = originalSetQueryData;
-    }
-    if (client.invalidateQueries === wrappedInvalidateQueries) {
-      client.invalidateQueries = originalInvalidateQueries;
-    }
-    if (client.removeQueries === wrappedRemoveQueries) {
-      client.removeQueries = originalRemoveQueries;
-    }
+    removeClientSyncLayer(client, stack, layer);
   };
 
   function postSuccess(queryKey: QueryKey, data: unknown): void {
@@ -258,6 +295,7 @@ export function syncQueryClientAcrossTabs(
 }
 
 async function fetchQueryWithSingleFlight<TData>(input: {
+  broadcastQueryDataWithoutWebLocks: boolean;
   client: QueryClient;
   fetchOptions: FetchQueryOptions<TData>;
   originalFetchQuery: QueryClient["fetchQuery"];
@@ -289,6 +327,7 @@ async function fetchQueryWithSingleFlight<TData>(input: {
 
 async function fetchQueryWithCrossTabLeader<TData>(
   input: {
+    broadcastQueryDataWithoutWebLocks: boolean;
     client: QueryClient;
     fetchOptions: FetchQueryOptions<TData>;
     originalFetchQuery: QueryClient["fetchQuery"];
@@ -301,7 +340,9 @@ async function fetchQueryWithCrossTabLeader<TData>(
   const lockManager = webLocks();
   if (lockManager === undefined) {
     const data = await input.originalFetchQuery(input.fetchOptions);
-    input.postSuccess(input.fetchOptions.queryKey, data);
+    if (input.broadcastQueryDataWithoutWebLocks) {
+      input.postSuccess(input.fetchOptions.queryKey, data);
+    }
     return data as TData;
   }
 
@@ -355,6 +396,10 @@ function applyRemoteSuccess(
   message: Extract<QuerySyncMessage, { type: "success" }>,
 ): void {
   const existing = client.getQueryEntry(message.queryKey);
+  if (existing?.isFetching === true) {
+    return;
+  }
+
   if (existing !== undefined && existing.updatedAt > message.updatedAt) {
     return;
   }
@@ -376,23 +421,44 @@ function createSuccessWaiter(
   timeoutMs: number,
 ): PendingSuccessWaiter {
   let settled = false;
-  let timeout: ReturnType<typeof setTimeout>;
-  let waiter: SuccessWaiter;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let waiter: SuccessWaiter | undefined;
   const promise = new Promise<Extract<QuerySyncMessage, { type: "success" }> | undefined>(
     (resolve, reject) => {
-      waiter = {
-        reject,
-        resolve: (message) => {
-          settled = true;
+      const settle = (): boolean => {
+        if (settled) {
+          return false;
+        }
+
+        settled = true;
+        if (timeout !== undefined) {
           clearTimeout(timeout);
+        }
+        if (waiter !== undefined) {
           removeSuccessWaiter(waiters, queryHash, waiter);
-          resolve(message);
+        }
+        return true;
+      };
+
+      waiter = {
+        cancel: () => {
+          settle();
+        },
+        reject: (error) => {
+          if (settle()) {
+            reject(error);
+          }
+        },
+        resolve: (message) => {
+          if (settle()) {
+            resolve(message);
+          }
         },
       };
       timeout = setTimeout(() => {
-        settled = true;
-        removeSuccessWaiter(waiters, queryHash, waiter);
-        resolve(undefined);
+        if (settle()) {
+          resolve(undefined);
+        }
       }, Math.max(0, timeoutMs));
 
       const current = waiters.get(queryHash) ?? new Set<SuccessWaiter>();
@@ -403,12 +469,7 @@ function createSuccessWaiter(
 
   return {
     cancel() {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearTimeout(timeout);
-      removeSuccessWaiter(waiters, queryHash, waiter);
+      waiter?.cancel();
     },
     promise,
   };
@@ -458,6 +519,53 @@ function entryIsUsable<TData>(
     entry.status === "success" &&
     !entry.stale &&
     Date.now() - entry.updatedAt < (staleTime ?? 0);
+}
+
+function getClientSyncStack(client: QueryClient): ClientSyncStack {
+  const existing = clientSyncStacks.get(client);
+  if (existing !== undefined) {
+    return existing;
+  }
+
+  const stack: ClientSyncStack = {
+    baseFetchQuery: client.fetchQuery,
+    baseInvalidateQueries: client.invalidateQueries,
+    baseRemoveQueries: client.removeQueries,
+    baseSetQueryData: client.setQueryData,
+    layers: [],
+  };
+  clientSyncStacks.set(client, stack);
+  return stack;
+}
+
+function applyClientSyncLayer(client: QueryClient, layer: ClientSyncLayer): void {
+  client.fetchQuery = layer.fetchQuery;
+  client.setQueryData = layer.setQueryData;
+  client.invalidateQueries = layer.invalidateQueries;
+  client.removeQueries = layer.removeQueries;
+}
+
+function removeClientSyncLayer(
+  client: QueryClient,
+  stack: ClientSyncStack,
+  layer: ClientSyncLayer,
+): void {
+  const index = stack.layers.indexOf(layer);
+  if (index !== -1) {
+    stack.layers.splice(index, 1);
+  }
+
+  const current = stack.layers.at(-1);
+  if (current !== undefined) {
+    applyClientSyncLayer(client, current);
+    return;
+  }
+
+  client.fetchQuery = stack.baseFetchQuery;
+  client.setQueryData = stack.baseSetQueryData;
+  client.invalidateQueries = stack.baseInvalidateQueries;
+  client.removeQueries = stack.baseRemoveQueries;
+  clientSyncStacks.delete(client);
 }
 
 function queryIncluded(queryKey: QueryKey, options: CrossTabQuerySyncOptions): boolean {

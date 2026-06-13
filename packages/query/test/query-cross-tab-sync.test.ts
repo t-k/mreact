@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createQuery,
   createQueryClient,
@@ -45,6 +45,86 @@ describe("cross-tab query sync", () => {
     }
   });
 
+  it("broadcasts removals to another query client on the same channel", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+
+    try {
+      second.setQueryData(["profile"], { name: "cached" });
+
+      first.removeQueries({ queryKey: ["profile"] });
+
+      await waitFor(() => second.getQueryData(["profile"]) === undefined);
+      expect(second.getQueryData(["profile"])).toBeUndefined();
+    } finally {
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
+  it("does not broadcast invalidations when invalidation broadcasting is disabled", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      broadcastInvalidations: false,
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+
+    try {
+      second.setQueryData(["profile"], { name: "cached" });
+
+      first.invalidateQueries({ queryKey: ["profile"] });
+      await delay(20);
+
+      expect(second.getQueryEntry(["profile"])?.stale).toBe(false);
+    } finally {
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
+  it("does not broadcast removals when removal broadcasting is disabled", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      broadcastRemovals: false,
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+
+    try {
+      second.setQueryData(["profile"], { name: "cached" });
+
+      first.removeQueries({ queryKey: ["profile"] });
+      await delay(20);
+
+      expect(second.getQueryData(["profile"])).toEqual({ name: "cached" });
+    } finally {
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
   it("shares successful query data when data broadcasting is explicitly enabled", async () => {
     const channel = uniqueChannelName();
     const first = createQueryClient();
@@ -75,6 +155,49 @@ describe("cross-tab query sync", () => {
       });
     } finally {
       observer.dispose();
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
+  it("does not cancel an in-flight local fetch when remote success data arrives", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      broadcastQueryData: true,
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      broadcastQueryData: true,
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+    let resolveLocalFetch: ((data: { name: string }) => void) | undefined;
+    let localSignal: AbortSignal | undefined;
+
+    try {
+      const localFetch = second.fetchQuery({
+        queryKey: ["profile"],
+        queryFn: ({ signal }) => {
+          localSignal = signal;
+          return new Promise<{ name: string }>((resolve, reject) => {
+            resolveLocalFetch = resolve;
+            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+          });
+        },
+      });
+
+      await waitFor(() => localSignal !== undefined);
+      first.setQueryData(["profile"], { name: "remote" });
+      await delay(20);
+
+      expect(localSignal?.aborted).toBe(false);
+      resolveLocalFetch?.({ name: "local" });
+      await expect(localFetch).resolves.toEqual({ name: "local" });
+      expect(second.getQueryData(["profile"])).toEqual({ name: "local" });
+    } finally {
       disposeFirst();
       disposeSecond();
     }
@@ -251,6 +374,87 @@ describe("cross-tab query sync", () => {
     } finally {
       disposeFirst();
       disposeSecond();
+    }
+  });
+
+  it("does not broadcast single-flight success data when Web Locks are unavailable", async () => {
+    const channel = uniqueChannelName();
+    const first = createQueryClient();
+    const second = createQueryClient();
+    const disposeFirst = syncQueryClientAcrossTabs(first, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+      singleFlight: true,
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(second, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+      singleFlight: true,
+    });
+
+    try {
+      await first.fetchQuery({
+        queryKey: ["profile"],
+        queryFn: async () => ({ name: "local-only" }),
+      });
+      await delay(20);
+
+      expect(second.getQueryData(["profile"])).toBeUndefined();
+    } finally {
+      disposeFirst();
+      disposeSecond();
+    }
+  });
+
+  it("restores the original client methods when multiple installs are disposed out of order", () => {
+    const channel = uniqueChannelName();
+    const client = createQueryClient();
+    const originalFetchQuery = client.fetchQuery;
+    const originalSetQueryData = client.setQueryData;
+    const originalInvalidateQueries = client.invalidateQueries;
+    const originalRemoveQueries = client.removeQueries;
+    const disposeFirst = syncQueryClientAcrossTabs(client, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+    const disposeSecond = syncQueryClientAcrossTabs(client, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+    });
+
+    disposeFirst();
+    disposeSecond();
+
+    expect(client.fetchQuery).toBe(originalFetchQuery);
+    expect(client.setQueryData).toBe(originalSetQueryData);
+    expect(client.invalidateQueries).toBe(originalInvalidateQueries);
+    expect(client.removeQueries).toBe(originalRemoveQueries);
+  });
+
+  it("clears single-flight handoff timers when disposed", async () => {
+    vi.useFakeTimers();
+    installUnavailableLockManager();
+    const channel = uniqueChannelName();
+    const client = createQueryClient();
+    const dispose = syncQueryClientAcrossTabs(client, {
+      channel,
+      includeQuery: (queryKey) => queryKey[0] === "profile",
+      singleFlight: true,
+      singleFlightHandoffTimeoutMs: 60_000,
+    });
+
+    try {
+      const pendingFetch = client.fetchQuery({
+        queryKey: ["profile"],
+        queryFn: async () => ({ name: "unused" }),
+      });
+
+      expect(vi.getTimerCount()).toBe(1);
+      dispose();
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(pendingFetch).rejects.toThrow("Cross-tab query sync disposed.");
+    } finally {
+      vi.useRealTimers();
     }
   });
 
@@ -604,6 +808,27 @@ function installRetainedLockManager(): void {
         locked = false;
       }, 20);
       return result as T;
+    },
+  };
+
+  Object.defineProperty(navigator, "locks", {
+    configurable: true,
+    value: lockManager,
+  });
+}
+
+function installUnavailableLockManager(): void {
+  const lockManager = {
+    async request<T>(
+      _name: string,
+      optionsOrCallback: { ifAvailable?: boolean | undefined } | ((lock: unknown) => T | Promise<T>),
+      maybeCallback?: (lock: unknown | null) => T | Promise<T>,
+    ): Promise<T> {
+      if (typeof optionsOrCallback === "function") {
+        return optionsOrCallback({});
+      }
+
+      return maybeCallback?.(null) as T | Promise<T>;
     },
   };
 
