@@ -42,4 +42,18 @@ describe("docs-site utility package labels", () => {
       expect(source).toContain(`# ${utility.heading}`);
     }
   });
+
+  test("Server State avoids duplicating the explicit client boundary marker", () => {
+    const source = readFileSync(
+      join(import.meta.dirname, "content/utilities/server-state.mdx"),
+      "utf8",
+    );
+    const summaryExample = source.slice(
+      source.indexOf("// src/app/dashboard/summary.client.tsx"),
+      source.indexOf("export function DashboardLiveSummary"),
+    );
+
+    expect(summaryExample).toContain("// src/app/dashboard/summary.client.tsx");
+    expect(summaryExample).not.toContain('"use client";');
+  });
 });
