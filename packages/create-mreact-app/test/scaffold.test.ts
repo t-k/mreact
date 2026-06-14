@@ -19,6 +19,7 @@ describe("create-mreact-app scaffolder", () => {
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
       dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
     };
     const tsconfig = JSON.parse(await readFile(join(directory, "tsconfig.json"), "utf8")) as {
       compilerOptions?: { types?: string[] };
@@ -114,9 +115,15 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
+    expect(packageJson.devDependencies?.["@types/node"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
+    expect(tsconfig.compilerOptions?.types).toContain("node");
     expect(viteConfig).toContain("mreactRouter({");
-    expect(viteConfig).toContain("projectRoot: __dirname");
+    expect(viteConfig).toContain('import { dirname } from "node:path";');
+    expect(viteConfig).toContain('import { fileURLToPath } from "node:url";');
+    expect(viteConfig).toContain("const projectRoot = dirname(fileURLToPath(import.meta.url));");
+    expect(viteConfig).toContain("projectRoot,");
+    expect(viteConfig).not.toContain("__dirname");
     expect(viteConfig).toContain('routesDir: "src/app"');
     expect(viteConfig).toContain('publicDir: "public"');
     expect(viteConfig).toContain('allowedSourceDirs: ["src"]');
@@ -621,7 +628,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("AWS App Runner");
     expect(deployDocs).toContain("HOST=0.0.0.0");
     expect(deployDocs).toContain("MREACT_ROUTER_HOST_POLICY=strict");
-    expect(deployDocs).toContain("projectRoot: __dirname");
+    expect(deployDocs).toContain("const projectRoot = dirname(fileURLToPath(import.meta.url));");
+    expect(deployDocs).toContain("projectRoot,");
+    expect(deployDocs).not.toContain("__dirname");
     expect(deployDocs).toContain("assetBaseUrl");
   });
 
@@ -667,7 +676,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("`src/` is not required at runtime");
     expect(deployDocs).toContain("Streaming SSR");
     expect(deployDocs).toContain("S3 + CloudFront");
-    expect(deployDocs).toContain("projectRoot: __dirname");
+    expect(deployDocs).toContain("const projectRoot = dirname(fileURLToPath(import.meta.url));");
+    expect(deployDocs).toContain("projectRoot,");
+    expect(deployDocs).not.toContain("__dirname");
     expect(deployDocs).toContain("assetBaseUrl");
     expect(readme).toContain("AWS Lambda deploy files are included.");
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {

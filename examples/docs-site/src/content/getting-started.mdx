@@ -64,7 +64,7 @@ my-app/
   package.json
 ```
 
-The generated `vite.config.ts` wires the Mreact router plugin to those paths. The generated `tsconfig.json` includes app-router global types, so route layouts can use `<Slot />` without adding a local import. The generated `package.json` includes scripts for development, production build, type checking, linting, tests, and production serving.
+The generated `vite.config.ts` wires the Mreact router plugin to those paths as an ESM config. The generated `tsconfig.json` includes Node types for that config and app-router global types so route layouts can use `<Slot />` without adding a local import. The generated `package.json` includes scripts for development, production build, type checking, linting, tests, and production serving.
 
 ## Try the counter
 

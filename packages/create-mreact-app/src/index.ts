@@ -85,6 +85,7 @@ const typescriptVersion = "^6.0.3";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";
+const nodeTypesVersion = "^25.7.0";
 const oxlintVersion = "^1.69.0";
 const playwrightVersion = "^1.60.0";
 const tsxVersion = "^4.21.0";
@@ -355,6 +356,7 @@ function appRouterTemplate(
         },
         devDependencies: {
           "@playwright/test": playwrightVersion,
+          "@types/node": nodeTypesVersion,
           oxlint: oxlintVersion,
           tsx: tsxVersion,
           typescript: typescriptVersion,
@@ -389,6 +391,7 @@ function appRouterTemplate(
           jsx: "react-jsx",
           jsxImportSource: "@reckona/mreact",
           types: [
+            "node",
             "@reckona/mreact-router/app-router-globals",
             ...(options.cloudflare ? ["@cloudflare/workers-types"] : []),
           ],
@@ -553,13 +556,17 @@ function templatePaths(srcDir: boolean): { routesDir: string; sourceDir: string 
 }
 
 function viteConfigSource(paths: { routesDir: string; sourceDir: string }): string {
-  return `import { defineConfig } from "vite";
+  return `import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "${paths.routesDir}",
       publicDir: "public",
       allowedSourceDirs: ["${paths.sourceDir}"],
@@ -1428,8 +1435,13 @@ mirror. To serve them from a CDN, upload that directory to your static origin
 and configure the router:
 
 \`\`\`ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 mreactRouter({
-  projectRoot: __dirname,
+  projectRoot,
   routesDir: "src/app",
   publicDir: "public",
   allowedSourceDirs: ["src"],
@@ -1591,8 +1603,13 @@ assets to S3 + CloudFront. Upload \`.mreact/client\` to your static origin and
 configure the router:
 
 \`\`\`ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 mreactRouter({
-  projectRoot: __dirname,
+  projectRoot,
   routesDir: "src/app",
   publicDir: "public",
   allowedSourceDirs: ["src"],

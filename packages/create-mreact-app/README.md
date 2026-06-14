@@ -31,7 +31,7 @@ npx @reckona/create-mreact-app upgrade --dry-run
 npx @reckona/create-mreact-app upgrade
 ```
 
-Generated apps include an explicit `vite.config.ts` with the mreact router plugin, a `tsconfig.json` that enables the app-router global types for route files, and `dev`, `build`, `typecheck`, `lint`, `test`, and `start` scripts. The default route directory is `app`.
+Generated apps include an explicit ESM `vite.config.ts` with the mreact router plugin, a `tsconfig.json` that enables Node types for that config plus app-router global types for route files, and `dev`, `build`, `typecheck`, `lint`, `test`, and `start` scripts. The default route directory is `app`.
 
 ## Templates
 
