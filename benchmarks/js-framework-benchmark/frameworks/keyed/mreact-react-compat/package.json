@@ -1,10 +1,10 @@
 {
-  "name": "js-framework-benchmark-mreact",
+  "name": "js-framework-benchmark-mreact-react-compat",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/assets/index.js",
+  "main": "dist/main.js",
   "js-framework-benchmark": {
-    "frameworkVersionFromPackage": "@reckona/mreact-reactive-dom",
+    "frameworkVersionFromPackage": "@reckona/mreact-compat",
     "frameworkHomeURL": "https://github.com/t-k/mreact",
     "language": "TypeScript"
   },
@@ -19,8 +19,7 @@
     "url": "https://github.com/t-k/mreact.git"
   },
   "dependencies": {
-    "@reckona/mreact-reactive-core": "0.0.168",
-    "@reckona/mreact-reactive-dom": "0.0.168"
+    "@reckona/mreact-compat": "0.0.168"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

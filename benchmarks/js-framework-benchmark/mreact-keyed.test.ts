@@ -10,6 +10,14 @@ const fixtureRoot = join(
   "keyed",
   "mreact",
 );
+const reactCompatFixtureRoot = join(
+  process.cwd(),
+  "benchmarks",
+  "js-framework-benchmark",
+  "frameworks",
+  "keyed",
+  "mreact-react-compat",
+);
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
   test("declares the metadata and build command expected by js-framework-benchmark", async () => {
@@ -50,5 +58,56 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("bindList(");
     expect(main).toContain("key: (row) => row.id");
     expect(main).not.toContain("data.set(data.get().map");
+  });
+});
+
+describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
+  test("declares react-compat metadata and build command expected by js-framework-benchmark", async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(reactCompatFixtureRoot, "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+      "js-framework-benchmark"?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
+    expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
+      "@reckona/mreact-compat",
+    );
+    expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
+      "https://github.com/t-k/mreact",
+    );
+  });
+
+  test("keeps official action button ids and table target shape", async () => {
+    const html = await readFile(join(reactCompatFixtureRoot, "index.html"), "utf8");
+
+    expect(html).toContain('id="main"');
+    expect(html).toContain('id="run"');
+    expect(html).toContain('id="runlots"');
+    expect(html).toContain('id="add"');
+    expect(html).toContain('id="update"');
+    expect(html).toContain('id="clear"');
+    expect(html).toContain('id="swaprows"');
+    expect(html).toContain('class="table table-hover table-striped test-data"');
+    expect(html).toContain('src="dist/main.js"');
+    expect(html).not.toContain("/src/main.ts");
+  });
+
+  test("uses react-compatible state and keyed row elements", async () => {
+    const main = await readFile(join(reactCompatFixtureRoot, "src", "main.ts"), "utf8");
+
+    expect(main).toContain("createElement");
+    expect(main).toContain("createRoot");
+    expect(main).toContain("flushSync");
+    expect(main).toContain("memo");
+    expect(main).toContain("useState");
+    expect(main).toContain('from "@reckona/mreact-compat"');
+    expect(main).toContain("setRows?.(updateEveryTenth");
+    expect(main).toContain("key: row.id");
+    expect(main).toContain("createElement(Row");
+    expect(main).toContain("previous.selected === next.selected && previous.row === next.row");
+    expect(main).not.toContain("function node");
+    expect(main).not.toContain("@reckona/mreact-reactive-dom");
   });
 });

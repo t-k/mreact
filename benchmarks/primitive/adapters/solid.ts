@@ -24,9 +24,9 @@ import type { PrimitiveAdapter, PrimitiveCaseResult, PrimitiveRunContext } from 
 // @ts-expect-error solid-js does not publish declarations for dist subpaths.
 import * as solidClientRuntime from "solid-js/dist/solid.js";
 
-const { createComputed, createRoot, createSignal, mapArray } = solidClientRuntime as Pick<
+const { batch, createComputed, createRoot, createSignal, mapArray } = solidClientRuntime as Pick<
   typeof Solid,
-  "createComputed" | "createRoot" | "createSignal" | "mapArray"
+  "batch" | "createComputed" | "createRoot" | "createSignal" | "mapArray"
 >;
 
 export const solidAdapterDebugHooks: {
@@ -331,9 +331,11 @@ function runComputedFanIn({ count, document }: PrimitiveRunContext): PrimitiveCa
     return {
       dispose,
       setAll(next: number) {
-        for (const [, setValue] of signals) {
-          setValue(next);
-        }
+        batch(() => {
+          for (const [, setValue] of signals) {
+            setValue(next);
+          }
+        });
       },
     };
   });
@@ -360,9 +362,11 @@ function runSourceWrite({ count }: PrimitiveRunContext): PrimitiveCaseResult {
     return {
       dispose,
       setAll(next: number) {
-        for (let index = 0; index < signals.length; index += 1) {
-          signals[index]![1](next);
-        }
+        batch(() => {
+          for (let index = 0; index < signals.length; index += 1) {
+            signals[index]![1](next);
+          }
+        });
       },
       sum() {
         let total = 0;
@@ -409,9 +413,11 @@ function runSourceWriteWithSubscriber({ count }: PrimitiveRunContext): Primitive
         return observedTotal;
       },
       setAll(next: number) {
-        for (let index = 0; index < signals.length; index += 1) {
-          signals[index]![1](next);
-        }
+        batch(() => {
+          for (let index = 0; index < signals.length; index += 1) {
+            signals[index]![1](next);
+          }
+        });
       },
     };
   });
