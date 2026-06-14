@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { createRouteMatcher, matchRoute, scanAppRoutes } from "../src/routes.js";
+import {
+  compileRouteMatcherArtifact,
+  createRouteMatcher,
+  matchRoute,
+  scanAppRoutes,
+} from "../src/routes.js";
 
 describe("mreact app route scanning", () => {
   test("scans pages and server routes from app directory", async () => {
@@ -171,6 +176,39 @@ describe("mreact app route scanning", () => {
       slug: ["guides", "install"],
     });
     expect(routes.map((route) => route.path)).toEqual(originalOrder);
+  });
+
+  test("compiled matcher artifact matches without reading route segments", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-routes-compiled-artifact-"));
+    await mkdir(join(appDir, "docs", "$...slug"), { recursive: true });
+    await mkdir(join(appDir, "docs", "$id"), { recursive: true });
+    await mkdir(join(appDir, "docs", "new"), { recursive: true });
+    await writeFile(
+      join(appDir, "docs", "$...slug", "page.mreact.tsx"),
+      "export default function DocsSlug() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "$id", "page.mreact.tsx"),
+      "export default function DocsId() { return <main />; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "new", "page.mreact.tsx"),
+      "export default function DocsNew() { return <main />; }",
+    );
+    const routes = await scanAppRoutes({ appDir });
+    const artifact = compileRouteMatcherArtifact(routes);
+    const routesWithBrokenSegments = routes.map((route) => ({
+      ...route,
+      segments: [{ kind: "static" as const, value: "broken" }],
+    }));
+    const matcher = createRouteMatcher(routesWithBrokenSegments, artifact);
+
+    expect(matcher.match("/docs/new")?.route.path).toBe("/docs/new");
+    expect(matcher.match("/docs/intro")?.params).toEqual({ id: "intro" });
+    expect(matcher.match("/docs/guides/install")?.params).toEqual({
+      slug: ["guides", "install"],
+    });
+    expect(matcher.match("/docs/%ZZ")).toBeUndefined();
   });
 
   test("scans route-local dynamic Open Graph image conventions", async () => {

@@ -15,6 +15,7 @@ import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
 export interface BindListOptions<T> {
+  itemMode?: "reactive" | "static";
   key?: (item: T, index: number, items: readonly T[]) => unknown;
   nestedObjectFallback?: boolean;
 }
@@ -668,7 +669,7 @@ function createKeyedRecord<T>(
   let itemCell: KeyedItemCell | null = null;
   let renderedItem: T = item;
 
-  if (isObjectLike(item)) {
+  if (options.itemMode !== "static" && isObjectLike(item)) {
     itemCell = createKeyedItemCell(item);
     renderedItem = (
       options.nestedObjectFallback === true

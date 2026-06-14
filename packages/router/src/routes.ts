@@ -80,6 +80,25 @@ export interface RouteMatcher {
   match(pathname: string): MatchedRoute | undefined;
 }
 
+export type CompiledRouteMatcherSegment =
+  | { kind: "static"; value: string }
+  | { kind: "dynamic"; name: string }
+  | { kind: "catch-all"; name: string };
+
+export interface CompiledRouteMatcherEntry {
+  catchAllIndex: number;
+  exactLength?: number;
+  minimumLength: number;
+  routeIndex: number;
+  segments: readonly CompiledRouteMatcherSegment[];
+  suffixLength?: number;
+}
+
+export interface CompiledRouteMatcherArtifact {
+  routes: readonly CompiledRouteMatcherEntry[];
+  version: 1;
+}
+
 /**
  * Scans an app directory and returns sorted app-router route definitions.
  */
@@ -121,7 +140,33 @@ export function matchRoute(
   return createRouteMatcher(routes).match(pathname);
 }
 
-export function createRouteMatcher(routes: readonly AppRoute[]): RouteMatcher {
+export function compileRouteMatcherArtifact(
+  routes: readonly AppRoute[],
+): CompiledRouteMatcherArtifact {
+  const sortedRoutes = routes
+    .map((route, routeIndex) => ({ route, routeIndex }))
+    .sort((left, right) => compareRoutes(left.route, right.route));
+
+  return {
+    version: 1,
+    routes: sortedRoutes.map(({ route, routeIndex }) =>
+      compileRouteMatcherEntry(route, routeIndex),
+    ),
+  };
+}
+
+export function createRouteMatcher(
+  routes: readonly AppRoute[],
+  artifact?: CompiledRouteMatcherArtifact | undefined,
+): RouteMatcher {
+  if (artifact?.version === 1) {
+    return {
+      match(pathname) {
+        return matchCompiledRoutes(routes, artifact, pathname);
+      },
+    };
+  }
+
   const sortedRoutes = [...routes].sort(compareRoutes);
   const nativeMatcher = createNativeRouteMatcher(sortedRoutes);
 
@@ -134,6 +179,143 @@ export function createRouteMatcher(routes: readonly AppRoute[]): RouteMatcher {
       return matchSortedRoutes(sortedRoutes, pathname);
     },
   };
+}
+
+function compileRouteMatcherEntry(
+  route: AppRoute,
+  routeIndex: number,
+): CompiledRouteMatcherEntry {
+  const catchAllIndex = route.segments.findIndex((segment) => segment.kind === "catch-all");
+  const shared = {
+    catchAllIndex,
+    minimumLength: catchAllIndex === -1 ? route.segments.length : catchAllIndex + 1,
+    routeIndex,
+    segments: route.segments.map((segment) => ({ ...segment })),
+  };
+
+  return catchAllIndex === -1
+    ? {
+        ...shared,
+        exactLength: route.segments.length,
+      }
+    : {
+        ...shared,
+        suffixLength: route.segments.length - catchAllIndex - 1,
+      };
+}
+
+function matchCompiledRoutes(
+  routes: readonly AppRoute[],
+  artifact: CompiledRouteMatcherArtifact,
+  pathname: string,
+): MatchedRoute | undefined {
+  const normalized = normalizePath(pathname);
+  const pathnameSegments = normalized === "/" ? [] : normalized.slice(1).split("/");
+
+  for (const compiledRoute of artifact.routes) {
+    const route = routes[compiledRoute.routeIndex];
+    if (route === undefined) {
+      continue;
+    }
+
+    if (
+      compiledRoute.exactLength !== undefined &&
+      compiledRoute.exactLength !== pathnameSegments.length
+    ) {
+      continue;
+    }
+
+    if (pathnameSegments.length < compiledRoute.minimumLength) {
+      continue;
+    }
+
+    const params: Record<string, readonly string[] | string> = {};
+    let matched = true;
+
+    for (const [index, segment] of compiledRoute.segments.entries()) {
+      const value = pathnameSegments[index];
+
+      if (value === undefined) {
+        matched = false;
+        break;
+      }
+
+      if (segment.kind === "static" && segment.value !== value) {
+        matched = false;
+        break;
+      }
+
+      if (segment.kind === "dynamic") {
+        const decoded = safeDecodeURIComponent(value);
+        if (decoded === undefined) {
+          matched = false;
+          break;
+        }
+        params[segment.name] = decoded;
+      }
+
+      if (segment.kind === "catch-all") {
+        const suffixLength = compiledRoute.suffixLength ?? 0;
+        const catchAllEnd = pathnameSegments.length - suffixLength;
+
+        if (catchAllEnd <= index) {
+          matched = false;
+          break;
+        }
+
+        const decodedParts: string[] = [];
+        for (let partIndex = index; partIndex < catchAllEnd; partIndex += 1) {
+          const decoded = safeDecodeURIComponent(pathnameSegments[partIndex] ?? "");
+          if (decoded === undefined) {
+            matched = false;
+            break;
+          }
+          decodedParts.push(decoded);
+        }
+        if (!matched) {
+          break;
+        }
+        params[segment.name] = decodedParts;
+
+        for (let suffixIndex = 0; suffixIndex < suffixLength; suffixIndex += 1) {
+          const suffixSegment = compiledRoute.segments[index + 1 + suffixIndex];
+          const suffixValue = pathnameSegments[catchAllEnd + suffixIndex];
+
+          if (suffixSegment === undefined || suffixValue === undefined) {
+            matched = false;
+            break;
+          }
+
+          if (suffixSegment.kind === "static" && suffixSegment.value !== suffixValue) {
+            matched = false;
+            break;
+          }
+
+          if (suffixSegment.kind === "dynamic") {
+            const decoded = safeDecodeURIComponent(suffixValue);
+            if (decoded === undefined) {
+              matched = false;
+              break;
+            }
+            params[suffixSegment.name] = decoded;
+          }
+
+          if (suffixSegment.kind === "catch-all") {
+            matched = false;
+            break;
+          }
+        }
+
+        break;
+      }
+    }
+
+    if (matched) {
+      return { route, params };
+    }
+  }
+
+  return undefined;
 }
 
 function matchSortedRoutes(

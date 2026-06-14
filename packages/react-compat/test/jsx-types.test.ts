@@ -80,6 +80,50 @@ createElement(Label, { label: "wrong" });
       rmSync(directory, { force: true, recursive: true });
     }
   });
+
+  test("accepts component props interfaces without a Record intersection", () => {
+    const directory = mkdtempSync(join(tmpdir(), "mreact-create-element-props-"));
+    const filename = join(directory, "App.ts");
+
+    writeFileSync(
+      filename,
+      `
+import { createElement, memo } from "@reckona/mreact-compat";
+
+interface RowData {
+  id: number;
+  label: string;
+}
+
+interface RowProps {
+  readonly row: RowData;
+  readonly selected: boolean;
+}
+
+function Row(props: RowProps) {
+  return createElement("tr", { className: props.selected ? "danger" : "" }, props.row.label);
+}
+
+const MemoRow = memo(Row, (previous, next) => previous.row === next.row && previous.selected === next.selected);
+const row = { id: 1, label: "Ada" };
+
+createElement(Row, { row, selected: true });
+createElement(MemoRow, { key: row.id, row, selected: false });
+// @ts-expect-error required props remain enforced.
+createElement(Row, { row });
+// @ts-expect-error invalid prop names remain rejected.
+createElement(MemoRow, { row, selected: true, missing: "nope" });
+`,
+    );
+
+    try {
+      const diagnostics = collectTypeDiagnostics(filename);
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
 });
 
 function collectTypeDiagnostics(

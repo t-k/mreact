@@ -38,7 +38,7 @@ export namespace JSX {
 }
 
 /** Creates a JSX element with development metadata arguments. */
-export function jsxDEV<P extends Record<string, unknown>>(
+export function jsxDEV<P extends object>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
   key: unknown,

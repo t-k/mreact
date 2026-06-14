@@ -975,7 +975,7 @@ async function materializeBuiltRuntime(options: {
       references,
     ]),
   );
-  const routeMatcher = createRouteMatcher(routes);
+  const routeMatcher = createRouteMatcher(routes, serverManifest.routeMatcher);
   const clientScripts = new Map(
     clientManifest.routes.flatMap((route) =>
       route.client && route.script !== undefined ? [[route.path, route.script]] : [],

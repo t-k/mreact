@@ -51,8 +51,8 @@ import {
   resolveCompatVendorEntryFiles,
   sourceReferencesCompatVendorSpecifier,
 } from "./module-runner.js";
-import { scanAppRoutes } from "./routes.js";
-import type { AppRoute } from "./routes.js";
+import { compileRouteMatcherArtifact, scanAppRoutes } from "./routes.js";
+import type { AppRoute, CompiledRouteMatcherArtifact } from "./routes.js";
 import { appFileConventionForRootFilename } from "./file-conventions.js";
 import {
   resolveAppRouterProjectOptions,
@@ -275,6 +275,7 @@ export interface BuiltServerManifest {
   files: Record<string, string>;
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
   publicAssetBaseUrl?: string;
+  routeMatcher?: CompiledRouteMatcherArtifact;
   routesDir?: string;
   routeServerActionReferences?: Record<string, BuiltServerActionExpressionReference[]>;
   serverActionManifest?: BuiltServerActionReference[];
@@ -694,6 +695,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...(project.assetBaseUrl === undefined ? {} : { assetBaseUrl: project.assetBaseUrl }),
     version: 1,
     routes: serverRoutes,
+    routeMatcher: compileRouteMatcherArtifact(serverRoutes),
     routesDir: relative(project.projectRoot, project.routesDir),
     files,
     prerenderedRoutes,

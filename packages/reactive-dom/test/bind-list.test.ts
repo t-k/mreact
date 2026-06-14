@@ -784,6 +784,99 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("keeps static keyed row snapshots while preserving append remove and reverse identity", async () => {
+    const items = cell([
+      { id: "a", label: "A" },
+      { id: "b", label: "B" },
+      { id: "c", label: "C" },
+    ]);
+    const selectedId = cell("");
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const label = document.createTextNode("");
+        const selected = document.createTextNode("");
+        bindText(label, () => item.label);
+        bindText(selected, () => (selectedId.get() === item.id ? " selected" : ""));
+        li.append(label, selected);
+        return li;
+      },
+      { itemMode: "static", key: (item) => item.id },
+    );
+
+    const nodeA = parent.childNodes[0];
+    const nodeB = parent.childNodes[1];
+    const nodeC = parent.childNodes[2];
+
+    items.set([
+      { id: "a", label: "A updated" },
+      { id: "b", label: "B updated" },
+      { id: "c", label: "C updated" },
+      { id: "d", label: "D" },
+    ]);
+    selectedId.set("b");
+    await flushEffects();
+
+    expect(parent.textContent).toBe("AB selectedCD");
+    expect(parent.childNodes[0]).toBe(nodeA);
+    expect(parent.childNodes[1]).toBe(nodeB);
+    expect(parent.childNodes[2]).toBe(nodeC);
+    const nodeD = parent.childNodes[3];
+
+    items.set([
+      { id: "d", label: "D updated" },
+      { id: "b", label: "B latest" },
+    ]);
+    selectedId.set("d");
+    await flushEffects();
+
+    expect(parent.textContent).toBe("D selectedB");
+    expect(parent.childNodes[0]).toBe(nodeD);
+    expect(parent.childNodes[1]).toBe(nodeB);
+
+    items.set([]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<!--list-->");
+
+    dispose();
+  });
+
+  test("keeps reactive keyed rows updating object field reads by default", async () => {
+    const items = cell([{ id: "a", label: "A" }]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        bindText(text, () => item.label);
+        li.append(text);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    items.set([{ id: "a", label: "A updated" }]);
+    await flushEffects();
+
+    expect(parent.textContent).toBe("A updated");
+
+    dispose();
+  });
+
   test("keeps nested object properties readable in keyed rows after async list population", async () => {
     const members = cell<
       readonly {

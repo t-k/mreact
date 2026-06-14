@@ -7563,6 +7563,61 @@ export default function Page({ data }) {
     expect(response.status).toBe(404);
   });
 
+  test("uses built compiled route matcher artifact instead of request-time route segments", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-route-matcher-artifact-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "users", "$id"), { recursive: true });
+    await mkdir(join(appDir, "users", "settings"), { recursive: true });
+    await writeFile(
+      join(appDir, "users", "$id", "page.mreact.tsx"),
+      "export default function UserPage(props) { return <main>User {props.params.id}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "users", "settings", "page.mreact.tsx"),
+      "export default function SettingsPage() { return <main>Settings</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+
+    const serverManifestFile = join(outDir, "server", "manifest.json");
+    const serverManifest = JSON.parse(await readFile(serverManifestFile, "utf8")) as {
+      routeMatcher?: { routes?: unknown[]; version?: number };
+      routes: Array<{ segments: unknown[] }>;
+    };
+    expect(serverManifest.routeMatcher).toMatchObject({
+      version: 1,
+      routes: expect.any(Array),
+    });
+
+    await writeFile(
+      serverManifestFile,
+      JSON.stringify(
+        {
+          ...serverManifest,
+          routes: serverManifest.routes.map((route) => ({
+            ...route,
+            segments: [{ kind: "static", value: "broken" }],
+          })),
+        },
+        null,
+        2,
+      ),
+    );
+
+    const dynamicResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/users/ada"),
+    });
+    const staticResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/users/settings"),
+    });
+
+    expect(await dynamicResponse.text()).toContain("<main>User ada</main>");
+    expect(await staticResponse.text()).toContain("<main>Settings</main>");
+  });
+
   test("uses built route source analysis summaries during first render", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-route-analysis-summary-"));
     const appDir = join(rootDir, "app");

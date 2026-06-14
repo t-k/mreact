@@ -31,8 +31,10 @@ export const Children: {
     only(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>;
 };
 
+// Warning: (ae-forgotten-export) The symbol "ReactReservedProps" needs to be exported by the entry point index.d.ts
+//
 // @public
-export function cloneElement<P extends Record<string, unknown>>(element: ReactCompatElement<P>, props: Partial<P> | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
+export function cloneElement<P extends object>(element: ReactCompatElement<P>, props: (Partial<P> & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
 // @public
 export interface Component<P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>> {
@@ -58,10 +60,8 @@ export const Component: ComponentConstructor;
 // @public
 export function createContext<T>(defaultValue: T): ReactCompatContext<T>;
 
-// Warning: (ae-forgotten-export) The symbol "ReactReservedProps" needs to be exported by the entry point index.d.ts
-//
 // @public
-export function createElement<P extends Record<string, unknown>>(type: ElementType<P>, config: (P & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
+export function createElement<P extends object>(type: ElementType<P>, config: (P & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
 // @public
 export function createErrorBoundary(options: ErrorBoundaryOptions, children: ReactCompatNode): ReactCompatElement<ErrorBoundaryOptions & {

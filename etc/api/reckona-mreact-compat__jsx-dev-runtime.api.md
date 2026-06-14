@@ -32,7 +32,7 @@ export { JSX_2 as JSX }
 // Warning: (ae-forgotten-export) The symbol "ElementType" needs to be exported by the entry point jsx-dev-runtime.d.ts
 //
 // @public
-export function jsxDEV<P extends Record<string, unknown>>(type: ElementType<P>, props: (P & {
+export function jsxDEV<P extends object>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;

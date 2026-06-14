@@ -96,7 +96,7 @@ export interface ReactCompatPortal {
 }
 
 /** Creates a React-compatible element from a type, config object, and children. */
-export function createElement<P extends Record<string, unknown>>(
+export function createElement<P extends object>(
   type: ElementType<P>,
   config: (P & ReactReservedProps) | null,
   ...children: ReactCompatNode[]
@@ -151,7 +151,7 @@ export function createElement<P extends Record<string, unknown>>(
 }
 
 /** Creates a React-compatible element from JSX runtime arguments. */
-export function createElementFromJsxConfig<P extends Record<string, unknown>>(
+export function createElementFromJsxConfig<P extends object>(
   type: ElementType<P>,
   config: (P & ReactReservedProps & { children?: ReactCompatNode }) | null,
   keyArgument?: unknown,
@@ -282,9 +282,9 @@ export function lazy<P>(
 export const StrictMode = STRICT_MODE_TYPE;
 
 /** Clones an existing element with merged props and optional replacement children. */
-export function cloneElement<P extends Record<string, unknown>>(
+export function cloneElement<P extends object>(
   element: ReactCompatElement<P>,
-  props: Partial<P> | null,
+  props: (Partial<P> & ReactReservedProps) | null,
   ...children: ReactCompatNode[]
 ): ReactCompatElement<P> {
   const key = props === null || props.key === undefined ? element.key : String(props.key);
@@ -309,8 +309,8 @@ export function cloneElement<P extends Record<string, unknown>>(
 }
 
 function copyElementProps(
-  source: Record<string, unknown> | null | undefined,
-  base?: Record<string, unknown>,
+  source: object | null | undefined,
+  base?: object,
   omitChildren = false,
 ): Record<string, unknown> {
   const props: Record<PropertyKey, unknown> = {};
@@ -329,10 +329,11 @@ function copyElementProps(
 }
 
 function copyOwnStringElementProps(
-  source: Record<string, unknown>,
+  source: object,
   target: Record<string, unknown>,
   omitChildren: boolean,
 ): void {
+  const stringSource = source as Record<string, unknown>;
   for (const name in source) {
     if (!hasOwnProperty.call(source, name)) {
       continue;
@@ -345,13 +346,13 @@ function copyOwnStringElementProps(
       name !== "__source" &&
       (!omitChildren || name !== "children")
     ) {
-      target[name] = source[name];
+      target[name] = stringSource[name];
     }
   }
 }
 
 function copyOwnSymbolElementProps(
-  source: Record<string, unknown>,
+  source: object,
   target: Record<PropertyKey, unknown>,
 ): void {
   const symbolSource = source as Record<PropertyKey, unknown>;

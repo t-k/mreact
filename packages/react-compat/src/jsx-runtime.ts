@@ -95,7 +95,7 @@ declare global {
 }
 
 /** Creates a single-child JSX element for the automatic JSX runtime. */
-export function jsx<P extends Record<string, unknown>>(
+export function jsx<P extends object>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
   key?: unknown,
@@ -104,7 +104,7 @@ export function jsx<P extends Record<string, unknown>>(
 }
 
 /** Creates a multi-child JSX element for the automatic JSX runtime. */
-export function jsxs<P extends Record<string, unknown>>(
+export function jsxs<P extends object>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
   key?: unknown,
@@ -112,7 +112,7 @@ export function jsxs<P extends Record<string, unknown>>(
   return createElementFromJsx(type, props, key);
 }
 
-function createElementFromJsx<P extends Record<string, unknown>>(
+function createElementFromJsx<P extends object>(
   type: ElementType<P>,
   props: (P & { children?: ReactCompatNode; key?: unknown; ref?: unknown }) | null,
   key: unknown,

@@ -66,6 +66,7 @@ async function runCreateRows({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
+    { itemMode: "static" },
   );
 
   try {
@@ -96,7 +97,7 @@ async function runReplaceAllRows({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
-    { key: (row) => row.id },
+    { itemMode: "static", key: (row) => row.id },
   );
 
   try {
@@ -241,7 +242,7 @@ async function runAppendRows({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
-    { key: (row) => row.id },
+    { itemMode: "static", key: (row) => row.id },
   );
 
   try {
@@ -277,7 +278,7 @@ async function runRemoveRow({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
-    { key: (row) => row.id },
+    { itemMode: "static", key: (row) => row.id },
   );
 
   try {
@@ -311,7 +312,7 @@ async function runClearRows({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
-    { key: (row) => row.id },
+    { itemMode: "static", key: (row) => row.id },
   );
 
   try {
@@ -346,7 +347,7 @@ async function runKeyedReverse({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
-    { key: (row) => row.id },
+    { itemMode: "static", key: (row) => row.id },
   );
 
   try {
@@ -526,7 +527,7 @@ async function runRepeatedMemory({
     marker,
     () => rowsCell.get(),
     (row) => createRowElement(document, row),
-    { key: (row) => row.id },
+    { itemMode: "static", key: (row) => row.id },
   );
   const before = await readHeapUsedAfterForcedGc();
 

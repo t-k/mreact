@@ -17,7 +17,7 @@ export const Fragment: unique symbol;
 // Warning: (ae-forgotten-export) The symbol "ReactCompatElement" needs to be exported by the entry point jsx-runtime.d.ts
 //
 // @public
-export function jsx<P extends Record<string, unknown>>(type: ElementType<P>, props: (P & {
+export function jsx<P extends object>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
@@ -104,7 +104,7 @@ export interface JSXIntrinsicElements {
 }
 
 // @public
-export function jsxs<P extends Record<string, unknown>>(type: ElementType<P>, props: (P & {
+export function jsxs<P extends object>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
