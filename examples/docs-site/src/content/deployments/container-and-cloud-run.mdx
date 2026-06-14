@@ -24,38 +24,78 @@ mreact-router start .mreact
 
 ## Containerfile shape
 
-Keep the runtime image focused on production files: package metadata, lockfile, production dependencies, and `.mreact`. The exact package-manager commands depend on your app, but the final command should serve the built output.
+Build the app inside the container instead of copying a local `node_modules` directory into the image. A practical Containerfile has a build stage with full dependencies, runs the Node build target there, and copies only production dependencies plus the generated output into the runtime stage.
 
 ```dockerfile
+FROM node:24-bookworm-slim AS deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+FROM deps AS builder
+WORKDIR /app
+COPY . .
+RUN pnpm build
+
+FROM node:24-bookworm-slim AS prod-deps
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile
+
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
+RUN corepack enable
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV MREACT_ROUTER_HOST_POLICY=strict
-ENV PORT=8080
-COPY package.json pnpm-lock.yaml ./
-COPY node_modules ./node_modules
-COPY .mreact ./.mreact
+COPY --from=prod-deps /app/package.json ./package.json
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=builder /app/.mreact ./.mreact
 EXPOSE 8080
 CMD ["pnpm", "start"]
 ```
 
-Use your container builder of choice. For local checks with podman, publish the same port and pass the same environment variables you expect in production.
+This shape assumes `pnpm build` writes the Node target into `.mreact` and `pnpm start` runs `mreact-router start .mreact`. Keep `@reckona/mreact-router` available to the runtime command through production dependencies, or replace the command with the path your package exposes. If your build emits generated CSS or public assets, make sure they are produced before the `builder` stage finishes so they are included in the generated output; copy extra runtime files explicitly only when the server reads them outside `.mreact`.
+
+Keep the container build context small and avoid leaking local artifacts into the build.
+
+```text
+node_modules
+.mreact
+dist
+.git
+.env*
+```
+
+Use your container builder of choice. For local checks with podman, publish the same port and pass the same environment variables you expect in production. The local `MREACT_ROUTER_ALLOWED_HOSTS` value should match the Host header you use for the check.
 
 ```bash
-pnpm build
 podman build -t mreact-app .
 podman run --rm -p 8080:8080 \
   -e HOST=0.0.0.0 \
   -e PORT=8080 \
   -e MREACT_ROUTER_HOST_POLICY=strict \
-  -e MREACT_ROUTER_ALLOWED_HOSTS=localhost \
+  -e MREACT_ROUTER_ALLOWED_HOSTS=localhost:8080 \
   mreact-app
 ```
 
+For pnpm workspaces, prefer producing a deployable package directory before building the image, or adapt the Containerfile to copy the workspace files required by the selected app and local packages. A workspace image should still keep the same contract: build inside a builder stage, then copy production dependencies and `.mreact` into a small runtime stage.
+
 ## Cloud Run
 
-Cloud Run injects `PORT` automatically. A common local default is `PORT=8080`, but the deployed service should read the platform value. Configure the service URL and custom domains in `MREACT_ROUTER_ALLOWED_HOSTS`, and use a simple health check path such as `/` or a lightweight route handler.
+Cloud Run injects `PORT` automatically, so do not hard-code it in the service configuration. A common local default is `PORT=8080`, but the deployed service should read the platform value. Configure the generated service URL and any custom domains in `MREACT_ROUTER_ALLOWED_HOSTS`, and use a simple health check path such as `/` or a lightweight route handler.
+
+```bash
+gcloud run deploy mreact-app \
+  --image=REGION-docker.pkg.dev/PROJECT/REPOSITORY/mreact-app:TAG \
+  --region=REGION \
+  --allow-unauthenticated \
+  --set-env-vars=HOST=0.0.0.0,MREACT_ROUTER_HOST_POLICY=strict,MREACT_ROUTER_ALLOWED_HOSTS=app.example.com,MREACT_SERVER_ACTION_SECRET=replace-with-a-stable-secret
+```
+
+If you rely on the generated `run.app` hostname instead of a custom domain, deploy once, read the service URL, and update `MREACT_ROUTER_ALLOWED_HOSTS` to that hostname. Keep `MREACT_SERVER_ACTION_SECRET` stable across revisions when the app uses server actions and may run more than one instance.
 
 Cloud Run can scale to multiple instances, so use durable session storage and a shared route cache when route HTML cache needs to survive across instances.
 
