@@ -58,9 +58,9 @@ export const sidebar: readonly NavGroup[] = [
   {
     text: "Utilities",
     items: [
-      { text: "Virtualized Lists", slug: "utilities/virtualized-lists" },
-      { text: "Store", slug: "utilities/store" },
-      { text: "Server State", slug: "utilities/server-state" },
+      { text: "Virtualized Lists (@reckona/mreact-virtual)", slug: "utilities/virtualized-lists" },
+      { text: "Store (@reckona/mreact-store)", slug: "utilities/store" },
+      { text: "Server State (@reckona/mreact-query)", slug: "utilities/server-state" },
     ],
   },
   {
