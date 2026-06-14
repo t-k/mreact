@@ -15,18 +15,44 @@ The build emits `.mreact/cloudflare/worker.mjs`, route modules, server route mod
 
 ## Cloudflare Pages advanced mode
 
-For Pages advanced mode, package the generated worker and static assets, then deploy the packaged directory.
+Use Pages advanced mode when you want Cloudflare Pages to host the static assets and run the generated Worker as `_worker.js`. Build the Cloudflare target, package the generated worker and static assets, then deploy the packaged directory to a named Pages project.
 
 ```bash
+mreact-router build --target=cloudflare
 mreact-router package cloudflare-pages --from .mreact --out .mreact/pages
-wrangler pages deploy .mreact/pages
+wrangler pages deploy .mreact/pages --project-name=mreact-app --branch=main
 ```
 
 Pages provides the `ASSETS` binding to `_worker.js`. Mreact serves only allowed manifest assets, route-linked CSS, generated client assets, and copied public files from that binding, which keeps traversal-style asset requests out of the static asset path.
 
 ## Workers deployment
 
-For Workers, point the Worker entry to `.mreact/cloudflare/worker.mjs` and bind static assets from `.mreact/client` according to your Cloudflare deployment shape. Use the Pages package path when you want Mreact to assemble the advanced-mode output directory.
+Use Workers when you want an ordinary Worker service with a `wrangler.jsonc` entrypoint and an explicit static assets binding. Point `main` at the generated Worker and bind `.mreact/client` as `ASSETS`.
+
+```jsonc
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mreact-app",
+  "main": ".mreact/cloudflare/worker.mjs",
+  "compatibility_date": "2026-06-11",
+  "assets": {
+    "directory": ".mreact/client",
+    "binding": "ASSETS",
+  },
+}
+```
+
+Build, smoke-test locally, then deploy.
+
+```bash
+mreact-router build --target=cloudflare
+wrangler dev
+wrangler deploy
+```
+
+If your build script also generates CSS or public assets, run that script before `mreact-router build`. The Hacker News example does this through `pnpm --filter @reckona/example-hacker-news worker:check`, which builds Tailwind CSS, emits the Worker, and imports the generated Worker for a smoke test.
+
+Choose Workers when you manage a Worker service directly or need Worker-specific routing, service bindings, custom routes, or environment separation in `wrangler.jsonc`. Choose Pages advanced mode when you want Pages' project workflow and a deployable directory containing `_worker.js` plus static assets.
 
 ## Environment bindings
 
@@ -54,7 +80,17 @@ export async function GET(
 - Use `clientSourceMaps: "hidden"` and upload `.mreact/source-maps/client/` from CI when you need Sentry symbolication.
 - Configure `nodejs_compat` only when your packaged Worker graph needs Cloudflare's Node.js compatibility runtime.
 - Keep CSP, cache headers, and host behavior explicit because Cloudflare can also add edge headers.
-- Test route handlers, streaming pages, 404s, static assets, and server action forms after deployment.
+- Test route handlers, dynamic server-rendered pages, streaming pages, 404s, copied public files, generated route assets, and server action forms after deployment.
+
+```bash
+APP_URL=https://mreact-app.example.workers.dev
+curl -fsS "$APP_URL/"
+curl -fsS "$APP_URL/api/health"
+curl -fsS -I "$APP_URL/robots.txt"
+curl -sS -o /dev/null -w "%{http_code}\n" "$APP_URL/not-found-check"
+```
+
+Replace `/api/health` and `/robots.txt` with routes or copied public files that your app actually provides. The not-found check should print `404`.
 
 ## Related pages
 

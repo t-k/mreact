@@ -22,6 +22,16 @@ find .lambda -type l | wc -l
 du -sh .lambda
 ```
 
+Create the deployment zip from inside `.lambda` so the handler, package metadata, production `node_modules`, and `.mreact` sit at the archive root.
+
+```bash
+(
+  cd .lambda
+  zip -r ../mreact-lambda.zip .
+)
+unzip -l mreact-lambda.zip | head
+```
+
 ## Generated handler
 
 The default generated handler uses `createPreloadedAwsLambdaRequestHandler()` so route runtime work can happen during Lambda initialization instead of racing the first user request.
@@ -35,7 +45,77 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 ```
 
-Use a custom handler when you need adapter options such as `allowedHosts`, `serverActions.authorize`, `onResponse`, or a custom error handler. Package it with `mreact-router package aws-lambda --handler src/lambda.ts`.
+The generated package writes `mreact-lambda-artifact.json` with `"handler": "mreact-handler.handler"`. Use that value as the Lambda handler.
+
+Use a custom handler when you need adapter options such as `allowedHosts`, `serverActions.authorize`, `onResponse`, or a custom error handler. Package it with the handler entry so the bundled output still lands at `mreact-handler.mjs`.
+
+```bash
+mreact-router package aws-lambda --from .mreact --out .lambda --handler src/lambda.ts
+```
+
+```ts
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+
+export const handler = await createPreloadedAwsLambdaRequestHandler({
+  allowedHosts: ["app.example.com"],
+  importPolicy: "generated",
+  outDir: ".mreact",
+  timings: process.env.MREACT_ROUTER_TIMINGS === "1",
+});
+```
+
+## Function URL deployment
+
+For a direct smoke-testable deployment, create or update a Lambda function and attach a Function URL with payload format 2.0. The example below uses the generated non-streaming handler. Use a role that already has the basic Lambda execution permissions for CloudWatch Logs.
+
+```bash
+aws lambda create-function \
+  --function-name mreact-app \
+  --runtime nodejs24.x \
+  --architectures arm64 \
+  --role arn:aws:iam::123456789012:role/mreact-lambda-role \
+  --handler mreact-handler.handler \
+  --zip-file fileb://mreact-lambda.zip \
+  --environment "Variables={MREACT_SERVER_ACTION_SECRET=replace-with-a-stable-secret}"
+
+aws lambda create-function-url-config \
+  --function-name mreact-app \
+  --auth-type NONE \
+  --invoke-mode BUFFERED
+
+aws lambda add-permission \
+  --function-name mreact-app \
+  --statement-id function-url-public \
+  --action lambda:InvokeFunctionUrl \
+  --principal "*" \
+  --function-url-auth-type NONE
+```
+
+For updates, rebuild the zip and replace the function code and environment together.
+
+```bash
+aws lambda update-function-code \
+  --function-name mreact-app \
+  --zip-file fileb://mreact-lambda.zip
+
+aws lambda update-function-configuration \
+  --function-name mreact-app \
+  --environment "Variables={MREACT_SERVER_ACTION_SECRET=replace-with-a-stable-secret,MREACT_ROUTER_TIMINGS=1}"
+```
+
+Function URLs do not give you a stable custom domain by themselves. Use a custom domain in front of the function, or configure the adapter `allowedHosts` for the hostname that users actually request when absolute URLs, redirects, metadata, or auth callbacks depend on the public origin.
+
+Smoke-test the deployed URL before routing real traffic.
+
+```bash
+FUNCTION_URL=$(aws lambda get-function-url-config --function-name mreact-app --query FunctionUrl --output text)
+FUNCTION_URL=${FUNCTION_URL%/}
+curl -fsS "$FUNCTION_URL/"
+curl -fsS "$FUNCTION_URL/api/health"
+curl -sS -o /dev/null -w "%{http_code}\n" "$FUNCTION_URL/not-found-check"
+```
+
+Replace `/api/health` with a lightweight route your app provides. The not-found check should print `404`. If your app uses server actions, submit one deployed form after every release because the form token, nonce cookie, and `MREACT_SERVER_ACTION_SECRET` must agree across instances.
 
 ## Cold start and preload
 
@@ -50,6 +130,7 @@ Measure before changing preload. Compare cold start, first request, and warm req
 - Keep database clients, SDKs, and secrets in server-only modules.
 - Upload hidden source maps from CI when client stack traces need symbolication.
 - Use [Logging and Diagnostics](/deployments/logging-and-diagnostics/) temporarily for adapter timings while diagnosing latency.
+- Keep the unzipped `.lambda` artifact under AWS Lambda's size limits and check both `du -sh .lambda` and the final zip size before upload.
 
 ## Related pages
 
