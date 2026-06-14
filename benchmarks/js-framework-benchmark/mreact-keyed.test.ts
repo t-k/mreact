@@ -38,6 +38,8 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(html).toContain('id="clear"');
     expect(html).toContain('id="swaprows"');
     expect(html).toContain('class="table table-hover table-striped test-data"');
+    expect(html).toContain('src="dist/main.js"');
+    expect(html).not.toContain("/src/main.ts");
   });
 
   test("updates row labels through keyed row state instead of replacing the data array", async () => {
