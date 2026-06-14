@@ -12,6 +12,7 @@ on:
           - all
           - primitive
           - primitive-browser
+          - js-framework
           - non-router
           - router
 
@@ -69,7 +70,7 @@ jobs:
           fi
 
       - name: Install Playwright Chromium
-        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' || inputs.suite == 'router' }}
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' || inputs.suite == 'js-framework' || inputs.suite == 'router' }}
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Build Linux native addon
@@ -87,6 +88,12 @@ jobs:
         env:
           MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
         run: NODE_ENV=production pnpm bench:primitive-browser
+
+      - name: Run js-framework-benchmark keyed DOM benchmarks
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'js-framework' }}
+        env:
+          MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
+        run: NODE_ENV=production pnpm bench:js-framework
 
       - name: Run non-router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'non-router' }}
@@ -109,6 +116,9 @@ jobs:
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive-browser" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")
+          fi
+          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "js-framework" ]; then
+            files+=("${{ steps.results.outputs.dir }}/js-framework-benchmark.md")
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "non-router" ]; then
             files+=("${{ steps.results.outputs.dir }}/non-router.md")

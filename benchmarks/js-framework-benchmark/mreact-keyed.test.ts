@@ -111,3 +111,29 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).not.toContain("@reckona/mreact-reactive-dom");
   });
 });
+
+describe("js-framework-benchmark official runner", () => {
+  test("maps primitive benchmark peers to upstream keyed DOM fixtures when available", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain('official: "keyed/marko"');
+    expect(runner).toContain('official: "keyed/vue"');
+    expect(runner).toContain('official: "keyed/svelte"');
+    expect(runner).toContain('official: "keyed/angular-cf"');
+    expect(runner).toContain('official: "keyed/qwik"');
+    expect(runner).toContain('official: "keyed/react-hooks"');
+    expect(runner).toContain('official: "keyed/mreact-react-compat"');
+    expect(runner).toContain('official: "keyed/solid"');
+    expect(runner).toContain('official: "keyed/mreact"');
+    expect(runner).toContain("qwik-v2");
+    expect(runner).toContain("solid-v2");
+  });
+});
