@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.167 - 2026-06-14
+
+### Changed
+
+- Updated the benchmark documentation data and presentation so Router results appear before primitive results, and Router client bundle gzip byte rankings are shown first.
+- Improved React-compatible keyed append and reorder commits by avoiding deleted-subtree cleanup work when the update does not delete fibers.
+
 ## 0.0.166 - 2026-06-14
 
 ### Added
