@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router-native-linux-x64-gnu",
-  "version": "0.0.165",
+  "version": "0.0.166",
   "description": "Linux x64 glibc native addon package for mreact router hot paths.",
   "keywords": [
     "jsx",

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.166 - 2026-06-14
+
+### Added
+
+- Added `syncQueryClientAcrossTabs()` to `@reckona/mreact-query`, allowing same-origin browser tabs to share scoped query invalidations, removals, optional successful data updates, and Web Locks-backed focus/reconnect single-flight handoffs when callers provide a scoped channel and query allowlist.
+
+### Changed
+
+- Refreshed the query cross-tab sync documentation and June 13 benchmark artifacts so the docs site covers the new browser cache coordination behavior and current benchmark run data.
+
+### Fixed
+
+- Fixed AWS Lambda App Router builds for dynamic routes with inferred server action forms so stable form-action placeholders can keep render server modules prebuilt instead of forcing a production dynamic server transform path.
+
 ## 0.0.165 - 2026-06-13
 
 ### Added
