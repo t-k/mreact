@@ -299,7 +299,18 @@ export interface ReactCompatElement<P = Record<string, unknown>> {
 }
 
 // @public
-export type ReactCompatNode = ReactCompatElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+
+// @public
+export interface ReactCompatRenderableElement {
+    $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
+    key: string | null;
+    props: {
+        children?: ReactCompatNode;
+    };
+    ref: unknown;
+    type: unknown;
+}
 
 // @public
 export function readEventHydrationManifest(root?: ParentNode): EventHydrationManifest | undefined;

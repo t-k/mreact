@@ -26,6 +26,7 @@ export type {
   ElementType,
   ReactCompatElement,
   ReactCompatNode,
+  ReactCompatRenderableElement,
 } from "./element.js";
 /** DOM and form event types exported by the JSX runtime. */
 export type {

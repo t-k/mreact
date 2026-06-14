@@ -53,9 +53,23 @@ export type ElementType<P = Record<string, unknown>> =
   | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>)
   | (new (props: P) => { render(): ReactCompatNode });
 
+/** Element-shaped renderable value accepted regardless of its original prop shape. */
+export interface ReactCompatRenderableElement {
+  /** React-compatible element marker. */
+  $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
+  /** Host tag, component, or special element type. */
+  type: unknown;
+  /** Normalized React key. */
+  key: string | null;
+  /** Normalized React ref. */
+  ref: unknown;
+  /** Element props with children widened to the renderable node surface. */
+  props: { children?: ReactCompatNode };
+}
+
 /** Renderable value accepted by the React-compatible renderer. */
 export type ReactCompatNode =
-  | ReactCompatElement
+  | ReactCompatRenderableElement
   | ReactCompatPortal
   | string
   | number
