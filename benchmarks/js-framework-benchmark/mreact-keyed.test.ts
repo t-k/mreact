@@ -128,11 +128,11 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/vue"');
     expect(runner).toContain('official: "keyed/svelte"');
     expect(runner).toContain('official: "keyed/angular-cf"');
-    expect(runner).toContain('official: "keyed/qwik"');
     expect(runner).toContain('official: "keyed/react-hooks"');
     expect(runner).toContain('official: "keyed/mreact-react-compat"');
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
+    expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");
   });

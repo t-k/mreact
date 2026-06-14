@@ -35,10 +35,6 @@ const frameworkMappings = [
     official: "keyed/angular-cf",
   },
   {
-    primitive: "qwik",
-    official: "keyed/qwik",
-  },
-  {
     primitive: "react",
     official: "keyed/react-hooks",
   },
@@ -57,6 +53,7 @@ const frameworkMappings = [
 ];
 
 const unsupportedPrimitiveAdapters = [
+  "qwik: krausest/js-framework-benchmark keyed/qwik currently fails the official isKeyed check and is categorized as non-keyed.",
   "qwik-v2: krausest/js-framework-benchmark does not currently provide a matching Qwik v2 keyed fixture.",
   "solid-v2: krausest/js-framework-benchmark does not currently provide a matching Solid v2 keyed fixture.",
 ];
