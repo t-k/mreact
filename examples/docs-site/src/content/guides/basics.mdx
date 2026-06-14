@@ -119,6 +119,8 @@ export function mountCounter(root: HTMLElement) {
 
 Keep the dispose function returned by `createRoot()` when mounting manually. Bindings created inside that root are cleaned up with the root; bindings created outside a root need their own disposal path.
 
+Use `bindList()` for low-level list bindings. Keyed lists use reactive object rows by default, so replacing an item with the same key can update field reads inside that row without recreating its DOM. Pass `itemMode: "static"` when the renderer treats each item as an immutable snapshot and you want append, remove, clear, and reverse paths to preserve keyed DOM identity without per-row object tracking.
+
 ## Client boundaries
 
 Mreact usually infers client interactivity from code that needs the browser, such as event handlers and reactive state. Keep ordinary interactive components in regular files first; the compiler can still keep the surrounding page server-rendered while hydrating the interactive part that needs the browser.

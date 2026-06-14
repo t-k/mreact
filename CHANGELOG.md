@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.0.169 - 2026-06-15
+
+### Added
+
+- Added `bindList()` `itemMode: "static"` for low-level DOM integrations that render immutable keyed row snapshots while preserving append, remove, clear, and reverse DOM identity without per-row object tracking.
+
+### Changed
+
+- Built App Router server manifests now include a compiled route matcher artifact, letting production runtimes preserve dynamic params, nested routes, catch-all routes, route handlers, metadata routes, and not-found behavior without request-time route ordering and segment compilation.
+
+### Fixed
+
+- Fixed `@reckona/mreact-compat` `ReactCompatNode` typing so nested `createElement()` calls with heterogeneous intrinsic props, event-handler props, and concrete function component return elements type-check without local widening casts while preserving top-level component prop validation.
+- Fixed `@reckona/mreact-compat` `createElement()`, JSX runtime, `memo()`, and `cloneElement()` typing so ordinary props interfaces without `Record<string, unknown>` index signatures are accepted while required and unknown props remain checked.
+
 ## 0.0.168 - 2026-06-14
 
 ### Fixed
