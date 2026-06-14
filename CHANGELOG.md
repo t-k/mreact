@@ -1,14 +1,16 @@
 # Changelog
 
+## 0.0.168 - 2026-06-14
+
+### Fixed
+
+- Fixed `create-mreact-app --src-dir` generated TypeScript projects so `npm run typecheck` recognizes the generated ESM `vite.config.ts` path helpers by adding Node types and avoiding `__dirname`.
+
 ## 0.0.167 - 2026-06-14
 
 ### Changed
 
 - Improved React-compatible keyed append and reorder commits by avoiding deleted-subtree cleanup work when the update does not delete fibers.
-
-### Fixed
-
-- Fixed `create-mreact-app --src-dir` generated TypeScript projects so `npm run typecheck` recognizes the generated ESM `vite.config.ts` path helpers by adding Node types and avoiding `__dirname`.
 
 ## 0.0.166 - 2026-06-14
 
