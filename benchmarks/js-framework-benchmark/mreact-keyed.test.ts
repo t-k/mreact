@@ -136,4 +136,34 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");
   });
+
+  test("skips Playwright browser downloads during official dependency installation", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"');
+  });
+
+  test("compiles the official webdriver runner after installing dependencies", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain(
+      'await run("npm", ["run", "compile"], join(checkoutRoot, "webdriver-ts"));',
+    );
+  });
 });

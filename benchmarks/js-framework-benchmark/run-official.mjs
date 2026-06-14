@@ -105,6 +105,7 @@ async function installOfficialDependencies() {
   await run("npm", ["ci", "--ignore-scripts"], checkoutRoot);
   await run("npm", ["ci"], join(checkoutRoot, "server"));
   await run("npm", ["ci"], join(checkoutRoot, "webdriver-ts"));
+  await run("npm", ["run", "compile"], join(checkoutRoot, "webdriver-ts"));
 }
 
 function parseFrameworks(value, fallback) {
@@ -292,7 +293,7 @@ async function run(command, args, cwd) {
 }
 
 function officialEnv() {
-  const env = { ...process.env };
+  const env = { ...process.env, PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1" };
   delete env.NODE_ENV;
   return env;
 }
