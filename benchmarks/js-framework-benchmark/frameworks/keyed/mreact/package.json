@@ -19,8 +19,8 @@
     "url": "https://github.com/t-k/mreact.git"
   },
   "dependencies": {
-    "@reckona/mreact-reactive-core": "0.0.168",
-    "@reckona/mreact-reactive-dom": "0.0.168"
+    "@reckona/mreact-reactive-core": "0.0.169",
+    "@reckona/mreact-reactive-dom": "0.0.169"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

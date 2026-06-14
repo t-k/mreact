@@ -30,6 +30,8 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
       "@reckona/mreact-reactive-dom",
     );
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("0.0.169");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );
@@ -57,6 +59,7 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
     expect(main).toContain("bindList(");
     expect(main).toContain("key: (row) => row.id");
+    expect(main).toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
   });
 });
@@ -74,6 +77,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
       "@reckona/mreact-compat",
     );
+    expect(packageJson.dependencies?.["@reckona/mreact-compat"]).toBe("0.0.169");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );

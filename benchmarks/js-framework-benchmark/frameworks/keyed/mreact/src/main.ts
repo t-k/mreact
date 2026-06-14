@@ -199,7 +199,10 @@ const marker = document.createComment("mreact rows");
 tbody.append(marker);
 createRoot(tbody, () => {
   tbody.append(marker);
-  bindList(tbody, marker, () => data.get(), renderRow, { key: (row) => row.id });
+  bindList(tbody, marker, () => data.get(), renderRow, {
+    itemMode: "static",
+    key: (row) => row.id,
+  });
   return marker;
 });
 

@@ -3301,6 +3301,10 @@ function hasDirtyInstance(
     return true;
   }
 
+  if (keys.length === 0) {
+    return false;
+  }
+
   if (keys.some(
     (key) =>
       (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,

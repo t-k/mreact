@@ -38,6 +38,16 @@ describe("host reconciler module", () => {
     expect(reconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
   });
 
+  test("does not scan runtime instances for hookless memo subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("if (keys.length === 0) {");
+    expect(hostReconcilerSource).toContain("return false;");
+  });
+
   test("uses production host fast paths when no process global exists", async () => {
     // Browsers without bundler define rewriting have no process global at all.
     // The fast-path gate must treat that as production instead of silently

@@ -1114,6 +1114,55 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("swaps keyed list items with targeted moves instead of replacing the owned parent", async () => {
+    const items = cell([0, 1, 2, 3, 4]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes).slice(0, 5);
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+
+    items.set([0, 3, 2, 1, 4]);
+    await flushEffects();
+
+    expect(parentReplacements).toBe(0);
+    expect(parentInsertions).toBe(2);
+    expect(Array.from(parent.childNodes).slice(0, 5)).toEqual([
+      originalNodes[0],
+      originalNodes[3],
+      originalNodes[2],
+      originalNodes[1],
+      originalNodes[4],
+    ]);
+    expect(parent.innerHTML).toBe("<li>0</li><li>3</li><li>2</li><li>1</li><li>4</li><!--list-->");
+
+    dispose();
+  });
+
   test("removes keyed list items without replacing or reinserting retained nodes", async () => {
     const items = cell([0, 1, 2, 3]);
     const parent = document.createElement("ul");

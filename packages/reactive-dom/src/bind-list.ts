@@ -22,6 +22,7 @@ export interface BindListOptions<T> {
 
 type ListItemRenderer<T> = (item: T, index: number, items: readonly T[]) => RenderValue;
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
+const MAX_TARGETED_OWNED_PARENT_MOVES = 32;
 
 /** Binds a reactive list of items to DOM nodes before a marker node. */
 export function bindList<T>(
@@ -339,6 +340,22 @@ function bindKeyedList<T>(
       }
       ownsParent = true;
     } else if (ownsCurrentParent) {
+      if (
+        reusedAllRecords &&
+        nextRecords.size === records.size &&
+        reconcileKeyedRecordOrderWithMoveLimit(
+          insertionParent,
+          marker,
+          orderedRecords,
+          MAX_TARGETED_OWNED_PARENT_MOVES,
+        )
+      ) {
+        records = nextRecords;
+        recordNodeCount = orderedNodes.length;
+        ownsParent = true;
+        return;
+      }
+
       const disposeError = disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
       if (disposeError !== undefined) {
@@ -525,11 +542,34 @@ function reconcileKeyedRecordOrder(
   marker: ChildNode,
   orderedRecords: readonly KeyedRecord[],
 ): void {
+  reconcileKeyedRecordOrderWithMoveLimit(parent, marker, orderedRecords, Number.POSITIVE_INFINITY);
+}
+
+function reconcileKeyedRecordOrderWithMoveLimit(
+  parent: ParentNode,
+  marker: ChildNode,
+  orderedRecords: readonly KeyedRecord[],
+  maxMovedNodes: number,
+): boolean {
   const previousOrder: number[] = [];
   for (let index = 0; index < orderedRecords.length; index += 1) {
     previousOrder.push(orderedRecords[index]?.prevIndex ?? -1);
   }
   const stableIndexes = new Set(longestIncreasingSubsequenceIndexes(previousOrder));
+
+  let movedNodes = 0;
+  for (let index = 0; index < orderedRecords.length; index += 1) {
+    const record = orderedRecords[index];
+
+    if (record !== undefined && !stableIndexes.has(index)) {
+      movedNodes += record.nodes.length;
+
+      if (movedNodes > maxMovedNodes) {
+        return false;
+      }
+    }
+  }
+
   let anchor: ChildNode = marker;
 
   for (let index = orderedRecords.length - 1; index >= 0; index -= 1) {
@@ -552,6 +592,8 @@ function reconcileKeyedRecordOrder(
 
     anchor = firstNode;
   }
+
+  return true;
 }
 
 function longestIncreasingSubsequenceIndexes(values: readonly number[]): number[] {
