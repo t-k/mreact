@@ -138,6 +138,47 @@ describe("router benchmark report", () => {
       sectionIndex(markdown, "app client bundle gzip bytes (server-only page)"),
     ).toBeLessThan(sectionIndex(markdown, "app nested layouts depth 5"));
   });
+
+  it("shows client bundle gzip byte rankings first", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow("mreact-app-router", "app render 1000 nodes", "throughput", "ops/sec", 20),
+      completedRow(
+        "mreact-app-router",
+        "app client bundle gzip bytes (interactive page)",
+        "size",
+        "gzip bytes",
+        100,
+      ),
+      completedRow(
+        "mreact-app-router",
+        "app client bundle gzip bytes (interactive page, minimal opt-out)",
+        "size",
+        "gzip bytes",
+        80,
+      ),
+      completedRow(
+        "mreact-app-router",
+        "app client bundle gzip bytes (server-only page)",
+        "size",
+        "gzip bytes",
+        0,
+      ),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(
+      sectionIndex(markdown, "app client bundle gzip bytes (server-only page)"),
+    ).toBeLessThan(sectionIndex(markdown, "app client bundle gzip bytes (interactive page)"));
+    expect(
+      sectionIndex(markdown, "app client bundle gzip bytes (interactive page)"),
+    ).toBeLessThan(
+      sectionIndex(markdown, "app client bundle gzip bytes (interactive page, minimal opt-out)"),
+    );
+    expect(
+      sectionIndex(markdown, "app client bundle gzip bytes (interactive page, minimal opt-out)"),
+    ).toBeLessThan(sectionIndex(markdown, "app render 1000 nodes"));
+  });
 });
 
 const testEnvironment: BenchmarkEnvironment = {

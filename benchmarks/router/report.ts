@@ -82,6 +82,7 @@ interface ReportRankingSection {
 }
 
 function reportRankingSections(rows: readonly RouterBenchmarkRow[]): ReportRankingSection[] {
+  const promotedSections: ReportRankingSection[] = [];
   const crossFrameworkSections: ReportRankingSection[] = [];
   const mreactOnlySections: ReportRankingSection[] = [];
 
@@ -89,15 +90,23 @@ function reportRankingSections(rows: readonly RouterBenchmarkRow[]): ReportRanki
     const rankedRows = rankCompletedRows(rows, benchmarkCase.name);
     const section = { benchmarkCase, rankedRows };
 
-    if (isMreactVariantOnlyRanking(benchmarkCase.name, rankedRows)) {
+    if (promotedRouterRankingCaseNames.has(benchmarkCase.name)) {
+      promotedSections.push(section);
+    } else if (isMreactVariantOnlyRanking(benchmarkCase.name, rankedRows)) {
       mreactOnlySections.push(section);
     } else {
       crossFrameworkSections.push(section);
     }
   }
 
-  return [...crossFrameworkSections, ...mreactOnlySections];
+  return [...promotedSections, ...crossFrameworkSections, ...mreactOnlySections];
 }
+
+const promotedRouterRankingCaseNames = new Set<RouterBenchmarkCaseName>([
+  "app client bundle gzip bytes (server-only page)",
+  "app client bundle gzip bytes (interactive page)",
+  "app client bundle gzip bytes (interactive page, minimal opt-out)",
+]);
 
 const mreactVariantOnlyRankingCaseNames = new Set<RouterBenchmarkCaseName>([
   "app server cold start",

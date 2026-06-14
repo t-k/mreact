@@ -57,14 +57,14 @@ interface BenchmarkSource {
 
 const benchmarkSources: readonly BenchmarkSource[] = [
   {
-    id: "primitive",
-    source: "primitive.md",
-    title: "Primitive benchmarks",
-  },
-  {
     id: "router",
     source: "router.md",
     title: "Router benchmarks",
+  },
+  {
+    id: "primitive",
+    source: "primitive.md",
+    title: "Primitive benchmarks",
   },
   {
     id: "primitive-browser",

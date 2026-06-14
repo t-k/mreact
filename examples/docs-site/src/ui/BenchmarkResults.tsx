@@ -91,6 +91,11 @@ const benchmarkFrameworkGroups: readonly BenchmarkFrameworkGroup[] = [
   { id: "analog", label: "Analog" },
   { id: "nuxt", label: "Nuxt" },
 ];
+const benchmarkSuiteDisplayOrder: readonly string[] = [
+  "router",
+  "primitive",
+  "primitive-browser",
+];
 const benchmarkResultsGitRef = "main";
 
 export function BenchmarkResults() {
@@ -134,7 +139,7 @@ export function BenchmarkResults() {
 
       <BenchmarkFilterBar />
 
-      {benchmarkRankingSuites.map((suite) => (
+      {orderedBenchmarkRankingSuites().map((suite) => (
         <section
           class="benchmark-ranking-suite"
           aria-labelledby={`${suite.id}-rankings`}
@@ -211,7 +216,7 @@ function BenchmarkFilterBar() {
 function benchmarkFilterLabels(): readonly BenchmarkBadgeLabel[] {
   const usedLabels = new Set<BenchmarkBadgeLabel>();
 
-  for (const suite of benchmarkRankingSuites) {
+  for (const suite of orderedBenchmarkRankingSuites()) {
     for (const card of suite.cards) {
       for (const badge of classifyBenchmarkCard(card)) {
         usedLabels.add(badge.label);
@@ -225,7 +230,7 @@ function benchmarkFilterLabels(): readonly BenchmarkBadgeLabel[] {
 function benchmarkFrameworkFilterGroups(): readonly BenchmarkFrameworkGroup[] {
   const usedGroups = new Set<BenchmarkFrameworkGroupId>();
 
-  for (const suite of benchmarkRankingSuites) {
+  for (const suite of orderedBenchmarkRankingSuites()) {
     for (const card of suite.cards) {
       for (const row of card.rows) {
         for (const group of frameworkGroupsForRow(row)) {
@@ -236,6 +241,19 @@ function benchmarkFrameworkFilterGroups(): readonly BenchmarkFrameworkGroup[] {
   }
 
   return benchmarkFrameworkGroups.filter((group) => usedGroups.has(group.id));
+}
+
+function orderedBenchmarkRankingSuites() {
+  return [...benchmarkRankingSuites].sort(
+    (left, right) =>
+      suiteDisplayOrder(left.id) - suiteDisplayOrder(right.id) ||
+      left.title.localeCompare(right.title),
+  );
+}
+
+function suiteDisplayOrder(id: string): number {
+  const index = benchmarkSuiteDisplayOrder.indexOf(id);
+  return index === -1 ? benchmarkSuiteDisplayOrder.length : index;
 }
 
 function githubUrlForRunPath(path: string): string {
