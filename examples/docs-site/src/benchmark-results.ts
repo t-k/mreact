@@ -40,1000 +40,14 @@ export const latestBenchmarkRun: BenchmarkRunMeta = {
   "arch": "linux x64",
   "cpuCount": 4,
   "cpuModel": "AMD EPYC 9V74 80-Core Processor",
-  "date": "2026-06-10",
-  "gitCommit": "7486a8314dd7bc681c7622e1d35a1b849882b028",
+  "date": "2026-06-14",
+  "gitCommit": "5c41fd4999dc9a1881af434f063c0c01263a7f61",
   "nodeVersion": "v24.16.0",
-  "path": "benchmarks/results/2026-06-10/004",
+  "path": "benchmarks/results/2026-06-14/001",
   "pnpmVersion": "10.19.0"
 };
 
 export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
-  {
-    "id": "primitive",
-    "title": "Primitive benchmarks",
-    "source": "primitive.md",
-    "cardCount": 15,
-    "cards": [
-      {
-        "id": "primitive-create-1k-rows",
-        "title": "create 1k rows",
-        "description": "Creates 1,000 DOM rows from an empty host and validates the final DOM.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "create 1k rows",
-            "value": "8.9671",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "react",
-            "caseName": "create 1k rows",
-            "value": "9.9406",
-            "diff": "+10.86%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "create 1k rows",
-            "value": "10.1228",
-            "diff": "+12.89%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "solid",
-            "caseName": "create 1k rows",
-            "value": "11.4197",
-            "diff": "+27.35%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "mreact react-compat",
-            "caseName": "create 1k rows",
-            "value": "12.7464",
-            "diff": "+42.15%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 6,
-            "framework": "qwik",
-            "caseName": "create 1k rows",
-            "value": "12.9724",
-            "diff": "+44.67%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "marko",
-            "caseName": "create 1k rows",
-            "value": "14.6713",
-            "diff": "+63.61%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-replace-all-1k-rows",
-        "title": "replace all 1k rows",
-        "description": "Replaces an existing 1,000-row keyed list with a fresh 1,000-row dataset.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "solid-v2",
-            "caseName": "replace all 1k rows",
-            "value": "11.4373",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "mreact react-compat",
-            "caseName": "replace all 1k rows",
-            "value": "11.8706",
-            "diff": "+3.79%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 3,
-            "framework": "solid",
-            "caseName": "replace all 1k rows",
-            "value": "11.9942",
-            "diff": "+4.87%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "mreact",
-            "caseName": "replace all 1k rows",
-            "value": "12.1767",
-            "diff": "+6.46%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 5,
-            "framework": "react",
-            "caseName": "replace all 1k rows",
-            "value": "14.8911",
-            "diff": "+30.2%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "marko",
-            "caseName": "replace all 1k rows",
-            "value": "18.5177",
-            "diff": "+61.91%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "qwik",
-            "caseName": "replace all 1k rows",
-            "value": "19.5351",
-            "diff": "+70.8%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-update-every-10th-in-10k-rows",
-        "title": "update every 10th in 10k rows",
-        "description": "Updates the text of every tenth row in a 10,000-row keyed list while preserving the existing row nodes.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "update every 10th in 10k rows",
-            "value": "3.7251",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "mreact react-compat",
-            "caseName": "update every 10th in 10k rows",
-            "value": "6.3986",
-            "diff": "+71.77%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 3,
-            "framework": "react",
-            "caseName": "update every 10th in 10k rows",
-            "value": "6.4437",
-            "diff": "+72.98%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "marko",
-            "caseName": "update every 10th in 10k rows",
-            "value": "43.6399",
-            "diff": "+1071.51%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "qwik",
-            "caseName": "update every 10th in 10k rows",
-            "value": "106.5802",
-            "diff": "+2761.14%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "solid-v2",
-            "caseName": "update every 10th in 10k rows",
-            "value": "145.2282",
-            "diff": "+3798.64%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "solid",
-            "caseName": "update every 10th in 10k rows",
-            "value": "159.0139",
-            "diff": "+4168.71%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-select-row-in-10k-rows",
-        "title": "select row in 10k rows",
-        "description": "Selects one row in a 10,000-row list by toggling selection attributes without changing row text.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "select row in 10k rows",
-            "value": "0.119",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "mreact react-compat",
-            "caseName": "select row in 10k rows",
-            "value": "4.2647",
-            "diff": "+3483.78%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 3,
-            "framework": "react",
-            "caseName": "select row in 10k rows",
-            "value": "4.591",
-            "diff": "+3757.98%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "marko",
-            "caseName": "select row in 10k rows",
-            "value": "40.8164",
-            "diff": "+34199.5%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "solid",
-            "caseName": "select row in 10k rows",
-            "value": "43.4012",
-            "diff": "+36371.6%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "solid-v2",
-            "caseName": "select row in 10k rows",
-            "value": "55.224",
-            "diff": "+46306.72%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "qwik",
-            "caseName": "select row in 10k rows",
-            "value": "114.624",
-            "diff": "+96222.69%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-append-1k-rows-to-10k-rows",
-        "title": "append 1k rows to 10k rows",
-        "description": "Appends 1,000 keyed rows to an existing 10,000-row list and validates the 11,000-row DOM.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "12.1642",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "mreact react-compat",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "16.8082",
-            "diff": "+38.18%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 3,
-            "framework": "react",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "32.949",
-            "diff": "+170.87%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "marko",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "64.2304",
-            "diff": "+428.03%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "qwik",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "116.954",
-            "diff": "+861.46%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "solid",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "148.4942",
-            "diff": "+1120.75%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "solid-v2",
-            "caseName": "append 1k rows to 10k rows",
-            "value": "149.9683",
-            "diff": "+1132.87%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-remove-row-from-1k-rows",
-        "title": "remove row from 1k rows",
-        "description": "Removes one keyed row from the middle of an existing 1,000-row list.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "remove row from 1k rows",
-            "value": "0.3049",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "react",
-            "caseName": "remove row from 1k rows",
-            "value": "0.4544",
-            "diff": "+49.03%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "mreact react-compat",
-            "caseName": "remove row from 1k rows",
-            "value": "0.7913",
-            "diff": "+159.53%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 4,
-            "framework": "marko",
-            "caseName": "remove row from 1k rows",
-            "value": "1.5085",
-            "diff": "+394.75%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "solid-v2",
-            "caseName": "remove row from 1k rows",
-            "value": "3.4482",
-            "diff": "+1030.93%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "solid",
-            "caseName": "remove row from 1k rows",
-            "value": "4.2638",
-            "diff": "+1298.43%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "qwik",
-            "caseName": "remove row from 1k rows",
-            "value": "7.6847",
-            "diff": "+2420.4%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-clear-10k-rows",
-        "title": "clear 10k rows",
-        "description": "Clears an existing 10,000-row list and validates that no row elements remain.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "solid",
-            "caseName": "clear 10k rows",
-            "value": "34.3703",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "solid-v2",
-            "caseName": "clear 10k rows",
-            "value": "34.4118",
-            "diff": "+0.12%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "mreact",
-            "caseName": "clear 10k rows",
-            "value": "40.5503",
-            "diff": "+17.98%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 4,
-            "framework": "mreact react-compat",
-            "caseName": "clear 10k rows",
-            "value": "47.0036",
-            "diff": "+36.76%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 5,
-            "framework": "react",
-            "caseName": "clear 10k rows",
-            "value": "63.3564",
-            "diff": "+84.33%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "qwik",
-            "caseName": "clear 10k rows",
-            "value": "64.6565",
-            "diff": "+88.12%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "marko",
-            "caseName": "clear 10k rows",
-            "value": "73.7999",
-            "diff": "+114.72%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-keyed-reverse-1k-rows",
-        "title": "keyed reverse 1k rows",
-        "description": "Reverses 1,000 keyed rows and verifies that DOM node identity is preserved.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "keyed reverse 1k rows",
-            "value": "3.9247",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "solid",
-            "caseName": "keyed reverse 1k rows",
-            "value": "4.246",
-            "diff": "+8.19%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "keyed reverse 1k rows",
-            "value": "4.4201",
-            "diff": "+12.62%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "mreact react-compat",
-            "caseName": "keyed reverse 1k rows",
-            "value": "6.2551",
-            "diff": "+59.38%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 5,
-            "framework": "react",
-            "caseName": "keyed reverse 1k rows",
-            "value": "6.4557",
-            "diff": "+64.49%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "marko",
-            "caseName": "keyed reverse 1k rows",
-            "value": "8.1193",
-            "diff": "+106.88%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "qwik",
-            "caseName": "keyed reverse 1k rows",
-            "value": "11.4303",
-            "diff": "+191.24%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-create-1k-event-targets",
-        "title": "create 1k event targets",
-        "description": "Creates 1,000 button event targets and measures initial interactive wiring cost without dispatching events.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "solid-v2",
-            "caseName": "create 1k event targets",
-            "value": "12.1497",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "solid",
-            "caseName": "create 1k event targets",
-            "value": "12.6204",
-            "diff": "+3.87%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "react",
-            "caseName": "create 1k event targets",
-            "value": "13.6561",
-            "diff": "+12.4%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "mreact",
-            "caseName": "create 1k event targets",
-            "value": "14.6135",
-            "diff": "+20.28%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 5,
-            "framework": "mreact react-compat",
-            "caseName": "create 1k event targets",
-            "value": "16.4482",
-            "diff": "+35.38%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 6,
-            "framework": "qwik",
-            "caseName": "create 1k event targets",
-            "value": "17.4022",
-            "diff": "+43.23%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "marko",
-            "caseName": "create 1k event targets",
-            "value": "21.7701",
-            "diff": "+79.18%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-source-write-with-subscriber-1k",
-        "title": "source write with subscriber 1k",
-        "description": "Updates 1,000 fine-grained source values when each source has one live non-DOM subscriber, separating direct source write overhead from aggregate computed fan-in and framework-level array update work.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "source write with subscriber 1k",
-            "value": "0.1479",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "solid-v2",
-            "caseName": "source write with subscriber 1k",
-            "value": "0.2561",
-            "diff": "+73.16%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid",
-            "caseName": "source write with subscriber 1k",
-            "value": "0.2973",
-            "diff": "+101.01%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-text-binding-update-1k",
-        "title": "text binding update 1k",
-        "description": "Updates one reactive text value that is bound to 1,000 text nodes.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "text binding update 1k",
-            "value": "0.2807",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "solid",
-            "caseName": "text binding update 1k",
-            "value": "0.2939",
-            "diff": "+4.7%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "text binding update 1k",
-            "value": "0.3105",
-            "diff": "+10.62%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "react",
-            "caseName": "text binding update 1k",
-            "value": "0.9403",
-            "diff": "+234.98%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "mreact react-compat",
-            "caseName": "text binding update 1k",
-            "value": "1.4141",
-            "diff": "+403.78%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 6,
-            "framework": "marko",
-            "caseName": "text binding update 1k",
-            "value": "1.9158",
-            "diff": "+582.51%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "qwik",
-            "caseName": "text binding update 1k",
-            "value": "2.6432",
-            "diff": "+841.65%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-computed-fan-out-1k",
-        "title": "computed fan-out 1k",
-        "description": "Updates one source value that fans out through a derived value into 1,000 displayed text nodes.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "mreact",
-            "caseName": "computed fan-out 1k",
-            "value": "0.2893",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "solid",
-            "caseName": "computed fan-out 1k",
-            "value": "0.307",
-            "diff": "+6.12%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "computed fan-out 1k",
-            "value": "0.3106",
-            "diff": "+7.36%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "react",
-            "caseName": "computed fan-out 1k",
-            "value": "0.788",
-            "diff": "+172.38%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "mreact react-compat",
-            "caseName": "computed fan-out 1k",
-            "value": "1.2353",
-            "diff": "+327%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 6,
-            "framework": "marko",
-            "caseName": "computed fan-out 1k",
-            "value": "1.7844",
-            "diff": "+516.8%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 7,
-            "framework": "qwik",
-            "caseName": "computed fan-out 1k",
-            "value": "2.4626",
-            "diff": "+751.23%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-computed-fan-in-1k",
-        "title": "computed fan-in 1k",
-        "description": "Updates the inputs feeding one aggregate and validates one derived aggregate text output. Caveat: this is not a direct cross-framework source-write comparison because mreact, Solid, and Solid v2 update 1,000 fine-grained sources, while React, Marko, and Qwik update one array/props payload.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "marko",
-            "caseName": "computed fan-in 1k",
-            "value": "0.0469",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "qwik",
-            "caseName": "computed fan-in 1k",
-            "value": "0.0715",
-            "diff": "+52.45%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "computed fan-in 1k",
-            "value": "0.0848",
-            "diff": "+80.81%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "react",
-            "caseName": "computed fan-in 1k",
-            "value": "0.1064",
-            "diff": "+126.87%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
-            "framework": "mreact",
-            "caseName": "computed fan-in 1k",
-            "value": "0.11",
-            "diff": "+134.54%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 6,
-            "framework": "mreact react-compat",
-            "caseName": "computed fan-in 1k",
-            "value": "0.1192",
-            "diff": "+154.16%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 7,
-            "framework": "solid",
-            "caseName": "computed fan-in 1k",
-            "value": "36.4632",
-            "diff": "+77646.7%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-source-write-1k",
-        "title": "source write 1k",
-        "description": "Updates 1,000 fine-grained source values without subscribers, derived values, DOM writes, or framework-level re-render work, then validates the final source values. Frameworks without an equivalent source primitive report this case as unsupported.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "solid",
-            "caseName": "source write 1k",
-            "value": "0.0117",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "mreact",
-            "caseName": "source write 1k",
-            "value": "0.0167",
-            "diff": "+42.74%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "source write 1k",
-            "value": "0.0466",
-            "diff": "+298.29%",
-            "unit": "ms",
-            "isMreact": false
-          }
-        ]
-      },
-      {
-        "id": "primitive-repeated-create-update-clear-memory",
-        "title": "repeated create update clear memory",
-        "description": "Reports heap growth after repeatedly creating, updating, and clearing 1,000-row lists.",
-        "rows": [
-          {
-            "rank": 1,
-            "framework": "qwik",
-            "caseName": "repeated create update clear memory",
-            "value": "74120",
-            "diff": "best",
-            "unit": "bytes",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "marko",
-            "caseName": "repeated create update clear memory",
-            "value": "81160",
-            "diff": "+9.5%",
-            "unit": "bytes",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
-            "framework": "solid-v2",
-            "caseName": "repeated create update clear memory",
-            "value": "92112",
-            "diff": "+24.27%",
-            "unit": "bytes",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "mreact",
-            "caseName": "repeated create update clear memory",
-            "value": "98848",
-            "diff": "+33.36%",
-            "unit": "bytes",
-            "isMreact": true
-          },
-          {
-            "rank": 5,
-            "framework": "solid",
-            "caseName": "repeated create update clear memory",
-            "value": "112784",
-            "diff": "+52.16%",
-            "unit": "bytes",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
-            "framework": "mreact react-compat",
-            "caseName": "repeated create update clear memory",
-            "value": "283416",
-            "diff": "+282.37%",
-            "unit": "bytes",
-            "isMreact": true
-          },
-          {
-            "rank": 7,
-            "framework": "react",
-            "caseName": "repeated create update clear memory",
-            "value": "364296",
-            "diff": "+391.49%",
-            "unit": "bytes",
-            "isMreact": false
-          }
-        ]
-      }
-    ]
-  },
   {
     "id": "router",
     "title": "Router benchmarks",
@@ -1049,89 +63,116 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app render 1000 nodes",
-            "value": "1593",
+            "value": "1844",
             "diff": "best",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app render 1000 nodes",
-            "value": "1565",
-            "diff": "-1.76%",
+            "value": "1739",
+            "diff": "-5.69%",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app render 1000 nodes",
-            "value": "1564",
-            "diff": "-1.82%",
+            "value": "1666",
+            "diff": "-9.65%",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "marko-run",
+            "framework": "nuxt",
             "caseName": "app render 1000 nodes",
-            "value": "786",
-            "diff": "-50.66%",
+            "value": "810",
+            "diff": "-56.07%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
+            "framework": "marko-run",
             "caseName": "app render 1000 nodes",
-            "value": "729",
-            "diff": "-54.24%",
+            "value": "788",
+            "diff": "-57.27%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "qwik-city",
+            "framework": "tanstack-start",
             "caseName": "app render 1000 nodes",
-            "value": "493",
-            "diff": "-69.05%",
+            "value": "735",
+            "diff": "-60.14%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "solid-start",
+            "framework": "svelte-kit",
             "caseName": "app render 1000 nodes",
-            "value": "415",
-            "diff": "-73.95%",
+            "value": "677",
+            "diff": "-63.29%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "qwik-city",
             "caseName": "app render 1000 nodes",
-            "value": "382",
-            "diff": "-76.02%",
+            "value": "509",
+            "diff": "-72.4%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "solid-start",
             "caseName": "app render 1000 nodes",
-            "value": "312",
-            "diff": "-80.41%",
+            "value": "407",
+            "diff": "-77.93%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "qwik-router-v2",
+            "caseName": "app render 1000 nodes",
+            "value": "371",
+            "diff": "-79.88%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "tanstack-start-solid",
+            "caseName": "app render 1000 nodes",
+            "value": "308",
+            "diff": "-83.3%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app render 1000 nodes",
+            "value": "117",
+            "diff": "-93.66%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app render 1000 nodes",
-            "value": "81",
-            "diff": "-94.92%",
+            "value": "84",
+            "diff": "-95.44%",
             "unit": "ops/sec",
             "isMreact": false
           }
@@ -1146,26 +187,26 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app streaming 1000 nodes",
-            "value": "1453",
+            "value": "1490",
             "diff": "best",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app streaming 1000 nodes",
-            "value": "1393",
-            "diff": "-4.13%",
+            "value": "1476",
+            "diff": "-0.94%",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app streaming 1000 nodes",
-            "value": "1327",
-            "diff": "-8.67%",
+            "value": "1453",
+            "diff": "-2.48%",
             "unit": "ops/sec",
             "isMreact": true
           },
@@ -1173,62 +214,89 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "marko-run",
             "caseName": "app streaming 1000 nodes",
-            "value": "966",
-            "diff": "-33.52%",
+            "value": "1025",
+            "diff": "-31.21%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
+            "framework": "nuxt",
             "caseName": "app streaming 1000 nodes",
-            "value": "737",
-            "diff": "-49.28%",
+            "value": "1015",
+            "diff": "-31.88%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "qwik-city",
+            "framework": "svelte-kit",
             "caseName": "app streaming 1000 nodes",
-            "value": "436",
-            "diff": "-69.99%",
+            "value": "816",
+            "diff": "-45.23%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "solid-start",
+            "framework": "tanstack-start",
             "caseName": "app streaming 1000 nodes",
-            "value": "408",
-            "diff": "-71.92%",
+            "value": "747",
+            "diff": "-49.87%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "qwik-city",
             "caseName": "app streaming 1000 nodes",
-            "value": "328",
-            "diff": "-77.43%",
+            "value": "440",
+            "diff": "-70.47%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "solid-start",
             "caseName": "app streaming 1000 nodes",
-            "value": "325",
-            "diff": "-77.63%",
+            "value": "412",
+            "diff": "-72.35%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "qwik-router-v2",
+            "caseName": "app streaming 1000 nodes",
+            "value": "333",
+            "diff": "-77.65%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "tanstack-start-solid",
+            "caseName": "app streaming 1000 nodes",
+            "value": "323",
+            "diff": "-78.32%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app streaming 1000 nodes",
+            "value": "122",
+            "diff": "-91.81%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app streaming 1000 nodes",
-            "value": "82",
-            "diff": "-94.36%",
+            "value": "88",
+            "diff": "-94.09%",
             "unit": "ops/sec",
             "isMreact": false
           }
@@ -1243,26 +311,26 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "0.9907",
+            "value": "0.9671",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "1.0071",
-            "diff": "+1.66%",
+            "value": "0.9708",
+            "diff": "+0.38%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "1.0243",
-            "diff": "+3.39%",
+            "value": "0.9871",
+            "diff": "+2.07%",
             "unit": "ms",
             "isMreact": true
           },
@@ -1270,8 +338,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "marko-run",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "1.4818",
-            "diff": "+49.57%",
+            "value": "1.3827",
+            "diff": "+42.97%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1279,8 +347,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 5,
             "framework": "qwik-city",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "1.7209",
-            "diff": "+73.71%",
+            "value": "1.5574",
+            "diff": "+61.04%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1288,8 +356,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 6,
             "framework": "solid-start",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "2.592",
-            "diff": "+161.63%",
+            "value": "2.5163",
+            "diff": "+160.19%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1297,35 +365,53 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 7,
             "framework": "next-app-router",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "3.2868",
-            "diff": "+231.77%",
+            "value": "3.0532",
+            "diff": "+215.71%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "tanstack-start",
+            "framework": "nuxt",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "52.425",
-            "diff": "+5191.71%",
+            "value": "52.0348",
+            "diff": "+5280.5%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "tanstack-start",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "54.013",
-            "diff": "+5352%",
+            "value": "52.357",
+            "diff": "+5313.81%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "svelte-kit",
+            "caseName": "app streaming first byte 1000 nodes",
+            "value": "52.4398",
+            "diff": "+5322.38%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "tanstack-start-solid",
+            "caseName": "app streaming first byte 1000 nodes",
+            "value": "54.3168",
+            "diff": "+5516.46%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "qwik-router-v2",
             "caseName": "app streaming first byte 1000 nodes",
-            "value": "54.3094",
-            "diff": "+5381.92%",
+            "value": "55.2067",
+            "diff": "+5608.48%",
             "unit": "ms",
             "isMreact": false
           }
@@ -1340,7 +426,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "0.9944",
+            "value": "0.9736",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -1349,8 +435,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "1.0418",
-            "diff": "+4.77%",
+            "value": "0.9859",
+            "diff": "+1.26%",
             "unit": "ms",
             "isMreact": true
           },
@@ -1358,8 +444,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "1.0432",
-            "diff": "+4.91%",
+            "value": "1.0059",
+            "diff": "+3.32%",
             "unit": "ms",
             "isMreact": true
           },
@@ -1367,8 +453,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "marko-run",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "1.4844",
-            "diff": "+49.28%",
+            "value": "1.3194",
+            "diff": "+35.52%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1376,8 +462,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 5,
             "framework": "qwik-city",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "1.7253",
-            "diff": "+73.5%",
+            "value": "1.4591",
+            "diff": "+49.87%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1385,8 +471,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 6,
             "framework": "solid-start",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "2.6693",
-            "diff": "+168.43%",
+            "value": "2.4815",
+            "diff": "+154.88%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1394,35 +480,53 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 7,
             "framework": "next-app-router",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "3.5608",
-            "diff": "+258.09%",
+            "value": "3.3813",
+            "diff": "+247.3%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "tanstack-start",
+            "framework": "nuxt",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "52.5628",
-            "diff": "+5185.88%",
+            "value": "52.0759",
+            "diff": "+5248.8%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "tanstack-start",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "54.2758",
-            "diff": "+5358.15%",
+            "value": "52.3698",
+            "diff": "+5278.99%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "svelte-kit",
+            "caseName": "app streaming first chunk 1000 nodes",
+            "value": "52.62",
+            "diff": "+5304.68%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
             "framework": "qwik-router-v2",
             "caseName": "app streaming first chunk 1000 nodes",
-            "value": "54.8972",
-            "diff": "+5420.64%",
+            "value": "53.9934",
+            "diff": "+5445.75%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "tanstack-start-solid",
+            "caseName": "app streaming first chunk 1000 nodes",
+            "value": "54.1139",
+            "diff": "+5458.12%",
             "unit": "ms",
             "isMreact": false
           }
@@ -1435,9 +539,9 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "50.6618",
+            "value": "50.6034",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -1446,80 +550,98 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "51.1342",
-            "diff": "+0.93%",
+            "value": "50.8781",
+            "diff": "+0.54%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router",
+            "framework": "solid-start",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "51.5682",
-            "diff": "+1.79%",
+            "value": "51.449",
+            "diff": "+1.67%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "solid-start",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "52.1226",
-            "diff": "+2.88%",
+            "value": "51.5001",
+            "diff": "+1.77%",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 5,
             "framework": "marko-run",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "52.2881",
-            "diff": "+3.21%",
+            "value": "52.0886",
+            "diff": "+2.93%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "tanstack-start",
+            "framework": "nuxt",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "52.5368",
-            "diff": "+3.7%",
+            "value": "52.094",
+            "diff": "+2.95%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-city",
+            "framework": "tanstack-start",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "53.1694",
-            "diff": "+4.95%",
+            "value": "52.3946",
+            "diff": "+3.54%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "svelte-kit",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "54.6196",
-            "diff": "+7.81%",
+            "value": "52.6929",
+            "diff": "+4.13%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "qwik-city",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "54.621",
-            "diff": "+7.81%",
+            "value": "53.0292",
+            "diff": "+4.79%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "tanstack-start-solid",
+            "caseName": "app streaming full body 1000 nodes",
+            "value": "54.4396",
+            "diff": "+7.58%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app streaming full body 1000 nodes",
+            "value": "54.7039",
+            "diff": "+8.1%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "next-app-router",
             "caseName": "app streaming full body 1000 nodes",
-            "value": "59.6893",
-            "diff": "+17.82%",
+            "value": "60.0949",
+            "diff": "+18.76%",
             "unit": "ms",
             "isMreact": false
           }
@@ -1532,9 +654,9 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "50.8196",
+            "value": "50.8806",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -1543,80 +665,98 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "marko-run",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "51.6791",
-            "diff": "+1.69%",
+            "value": "51.2693",
+            "diff": "+0.76%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "51.8598",
-            "diff": "+2.05%",
+            "value": "51.59",
+            "diff": "+1.39%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "solid-start",
-            "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "51.9384",
-            "diff": "+2.2%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "52.0893",
-            "diff": "+2.5%",
+            "value": "51.9008",
+            "diff": "+2.01%",
             "unit": "ms",
             "isMreact": true
           },
           {
-            "rank": 6,
-            "framework": "tanstack-start",
+            "rank": 5,
+            "framework": "nuxt",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "52.5687",
-            "diff": "+3.44%",
+            "value": "52.0842",
+            "diff": "+2.37%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "solid-start",
+            "caseName": "app real streaming 1000 nodes (async 50ms)",
+            "value": "52.3983",
+            "diff": "+2.98%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-city",
+            "framework": "tanstack-start",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "53.2835",
-            "diff": "+4.85%",
+            "value": "52.4537",
+            "diff": "+3.09%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "svelte-kit",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "54.8444",
-            "diff": "+7.92%",
+            "value": "52.6744",
+            "diff": "+3.53%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "qwik-city",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "55.2209",
-            "diff": "+8.66%",
+            "value": "53.2383",
+            "diff": "+4.63%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "tanstack-start-solid",
+            "caseName": "app real streaming 1000 nodes (async 50ms)",
+            "value": "54.2031",
+            "diff": "+6.53%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app real streaming 1000 nodes (async 50ms)",
+            "value": "54.4032",
+            "diff": "+6.92%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "next-app-router",
             "caseName": "app real streaming 1000 nodes (async 50ms)",
-            "value": "64.4319",
-            "diff": "+26.79%",
+            "value": "60.5929",
+            "diff": "+19.09%",
             "unit": "ms",
             "isMreact": false
           }
@@ -1631,80 +771,80 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "50.6634",
+            "value": "50.5763",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router",
+            "framework": "marko-run",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "50.7513",
-            "diff": "+0.17%",
+            "value": "50.993",
+            "diff": "+0.82%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 3,
-            "framework": "marko-run",
-            "caseName": "app parallel async boundaries 2x50ms",
-            "value": "51.2623",
-            "diff": "+1.18%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 4,
-            "framework": "solid-start",
-            "caseName": "app parallel async boundaries 2x50ms",
-            "value": "51.4073",
-            "diff": "+1.47%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 5,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "51.5889",
-            "diff": "+1.83%",
+            "value": "51.5191",
+            "diff": "+1.86%",
             "unit": "ms",
             "isMreact": true
           },
           {
-            "rank": 6,
-            "framework": "tanstack-start",
+            "rank": 4,
+            "framework": "mreact-app-router",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "52.251",
-            "diff": "+3.13%",
+            "value": "51.5347",
+            "diff": "+1.89%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 5,
+            "framework": "svelte-kit",
+            "caseName": "app parallel async boundaries 2x50ms",
+            "value": "51.7929",
+            "diff": "+2.41%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "solid-start",
+            "caseName": "app parallel async boundaries 2x50ms",
+            "value": "52.0331",
+            "diff": "+2.88%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-city",
+            "framework": "nuxt",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "52.3859",
-            "diff": "+3.4%",
+            "value": "52.0397",
+            "diff": "+2.89%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "tanstack-start",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "53.0824",
-            "diff": "+4.77%",
+            "value": "52.1011",
+            "diff": "+3.01%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "next-app-router",
+            "framework": "qwik-city",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "53.5576",
-            "diff": "+5.71%",
+            "value": "52.2215",
+            "diff": "+3.25%",
             "unit": "ms",
             "isMreact": false
           },
@@ -1712,8 +852,26 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 10,
             "framework": "tanstack-start-solid",
             "caseName": "app parallel async boundaries 2x50ms",
-            "value": "53.6864",
-            "diff": "+5.97%",
+            "value": "52.7606",
+            "diff": "+4.32%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app parallel async boundaries 2x50ms",
+            "value": "52.9973",
+            "diff": "+4.79%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "next-app-router",
+            "caseName": "app parallel async boundaries 2x50ms",
+            "value": "53.4292",
+            "diff": "+5.64%",
             "unit": "ms",
             "isMreact": false
           }
@@ -1728,7 +886,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app static cached route 1000 nodes",
-            "value": "1543",
+            "value": "1591",
             "diff": "best",
             "unit": "ops/sec",
             "isMreact": true
@@ -1737,8 +895,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app static cached route 1000 nodes",
-            "value": "1527",
-            "diff": "-1.04%",
+            "value": "1581",
+            "diff": "-0.63%",
             "unit": "ops/sec",
             "isMreact": true
           },
@@ -1746,17 +904,44 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app static cached route 1000 nodes",
-            "value": "1406",
-            "diff": "-8.88%",
+            "value": "1535",
+            "diff": "-3.52%",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 4,
+            "framework": "nuxt",
+            "caseName": "app static cached route 1000 nodes",
+            "value": "1041",
+            "diff": "-34.57%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "svelte-kit",
+            "caseName": "app static cached route 1000 nodes",
+            "value": "813",
+            "diff": "-48.9%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
             "framework": "next-app-router",
             "caseName": "app static cached route 1000 nodes",
-            "value": "395",
-            "diff": "-74.4%",
+            "value": "402",
+            "diff": "-74.73%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "analog",
+            "caseName": "app static cached route 1000 nodes",
+            "value": "126",
+            "diff": "-92.08%",
             "unit": "ops/sec",
             "isMreact": false
           }
@@ -1771,7 +956,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "1084",
+            "value": "1142",
             "diff": "best",
             "unit": "ops/sec",
             "isMreact": true
@@ -1780,8 +965,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "1062",
-            "diff": "-2.03%",
+            "value": "1133",
+            "diff": "-0.79%",
             "unit": "ops/sec",
             "isMreact": true
           },
@@ -1789,71 +974,98 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "893",
-            "diff": "-17.62%",
+            "value": "962",
+            "diff": "-15.76%",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "marko-run",
+            "framework": "nuxt",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "598",
-            "diff": "-44.83%",
+            "value": "798",
+            "diff": "-30.12%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
+            "framework": "marko-run",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "529",
-            "diff": "-51.2%",
+            "value": "619",
+            "diff": "-45.8%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "solid-start",
+            "framework": "svelte-kit",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "454",
-            "diff": "-58.12%",
+            "value": "560",
+            "diff": "-50.96%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "tanstack-start-solid",
+            "framework": "tanstack-start",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "389",
-            "diff": "-64.11%",
+            "value": "544",
+            "diff": "-52.36%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-city",
+            "framework": "solid-start",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "346",
-            "diff": "-68.08%",
+            "value": "478",
+            "diff": "-58.14%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "qwik-router-v2",
+            "framework": "tanstack-start-solid",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "231",
-            "diff": "-78.69%",
+            "value": "379",
+            "diff": "-66.81%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "qwik-city",
+            "caseName": "app dynamic-attr grid 200 cells",
+            "value": "345",
+            "diff": "-69.79%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app dynamic-attr grid 200 cells",
+            "value": "233",
+            "diff": "-79.6%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app dynamic-attr grid 200 cells",
+            "value": "145",
+            "diff": "-87.3%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app dynamic-attr grid 200 cells",
-            "value": "117",
-            "diff": "-89.21%",
+            "value": "115",
+            "diff": "-89.93%",
             "unit": "ops/sec",
             "isMreact": false
           }
@@ -1868,7 +1080,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app dynamic route params data",
-            "value": "1078",
+            "value": "1135",
             "diff": "best",
             "unit": "ops/sec",
             "isMreact": true
@@ -1877,8 +1089,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app dynamic route params data",
-            "value": "1044",
-            "diff": "-3.15%",
+            "value": "1126",
+            "diff": "-0.79%",
             "unit": "ops/sec",
             "isMreact": true
           },
@@ -1886,71 +1098,98 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app dynamic route params data",
-            "value": "901",
-            "diff": "-16.42%",
+            "value": "954",
+            "diff": "-15.95%",
             "unit": "ops/sec",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "marko-run",
+            "framework": "nuxt",
             "caseName": "app dynamic route params data",
-            "value": "589",
-            "diff": "-45.36%",
+            "value": "778",
+            "diff": "-31.45%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
+            "framework": "marko-run",
             "caseName": "app dynamic route params data",
-            "value": "492",
-            "diff": "-54.36%",
+            "value": "614",
+            "diff": "-45.9%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "solid-start",
+            "framework": "svelte-kit",
             "caseName": "app dynamic route params data",
-            "value": "437",
-            "diff": "-59.46%",
+            "value": "561",
+            "diff": "-50.57%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "tanstack-start-solid",
+            "framework": "tanstack-start",
             "caseName": "app dynamic route params data",
-            "value": "348",
-            "diff": "-67.72%",
+            "value": "482",
+            "diff": "-57.53%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-city",
+            "framework": "solid-start",
             "caseName": "app dynamic route params data",
-            "value": "318",
-            "diff": "-70.5%",
+            "value": "453",
+            "diff": "-60.09%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "qwik-router-v2",
+            "framework": "tanstack-start-solid",
             "caseName": "app dynamic route params data",
-            "value": "248",
-            "diff": "-76.99%",
+            "value": "354",
+            "diff": "-68.81%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "qwik-city",
+            "caseName": "app dynamic route params data",
+            "value": "327",
+            "diff": "-71.19%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app dynamic route params data",
+            "value": "239",
+            "diff": "-78.94%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app dynamic route params data",
+            "value": "137",
+            "diff": "-87.93%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app dynamic route params data",
             "value": "114",
-            "diff": "-89.42%",
+            "diff": "-89.96%",
             "unit": "ops/sec",
             "isMreact": false
           }
@@ -1965,7 +1204,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "1159.1874",
+            "value": "1239.3378",
             "diff": "best",
             "unit": "ops/sec",
             "isMreact": true
@@ -1974,8 +1213,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "1103.1699",
-            "diff": "-4.83%",
+            "value": "1194.4953",
+            "diff": "-3.62%",
             "unit": "ops/sec",
             "isMreact": true
           },
@@ -1983,8 +1222,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "1074.9295",
-            "diff": "-7.27%",
+            "value": "1115.5148",
+            "diff": "-9.99%",
             "unit": "ops/sec",
             "isMreact": true
           },
@@ -1992,8 +1231,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "marko-run",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "959.4286",
-            "diff": "-17.23%",
+            "value": "950.3153",
+            "diff": "-23.32%",
             "unit": "ops/sec",
             "isMreact": false
           },
@@ -2001,53 +1240,80 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 5,
             "framework": "tanstack-start",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "849.864",
-            "diff": "-26.68%",
+            "value": "790.2528",
+            "diff": "-36.24%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "qwik-city",
+            "framework": "nuxt",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "517.2683",
-            "diff": "-55.38%",
+            "value": "679.6294",
+            "diff": "-45.16%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "solid-start",
+            "framework": "svelte-kit",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "468.9266",
-            "diff": "-59.55%",
+            "value": "642.7959",
+            "diff": "-48.13%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "tanstack-start-solid",
+            "framework": "qwik-city",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "380.5115",
-            "diff": "-67.17%",
+            "value": "528.5242",
+            "diff": "-57.35%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "qwik-router-v2",
+            "framework": "solid-start",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "315.258",
-            "diff": "-72.8%",
+            "value": "515.2377",
+            "diff": "-58.43%",
             "unit": "ops/sec",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "tanstack-start-solid",
+            "caseName": "app concurrent throughput 100 connections",
+            "value": "439.2242",
+            "diff": "-64.56%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app concurrent throughput 100 connections",
+            "value": "314.3553",
+            "diff": "-74.64%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app concurrent throughput 100 connections",
+            "value": "115.7141",
+            "diff": "-90.66%",
+            "unit": "ops/sec",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app concurrent throughput 100 connections",
-            "value": "84.255",
-            "diff": "-92.73%",
+            "value": "85.2907",
+            "diff": "-93.12%",
             "unit": "ops/sec",
             "isMreact": false
           }
@@ -2060,91 +1326,118 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "marko-run",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "159.7842",
+            "value": "151.8204",
             "diff": "best",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "162.7183",
-            "diff": "+1.84%",
+            "value": "157.721",
+            "diff": "+3.89%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "tanstack-start",
+            "framework": "marko-run",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "168.1909",
-            "diff": "+5.26%",
+            "value": "158.4883",
+            "diff": "+4.39%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "170.5385",
-            "diff": "+6.73%",
+            "value": "168.6305",
+            "diff": "+11.07%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 5,
-            "framework": "mreact-app-router",
+            "framework": "nuxt",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "175.7165",
-            "diff": "+9.97%",
+            "value": "180.8923",
+            "diff": "+19.15%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "qwik-city",
+            "framework": "tanstack-start",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "288.8164",
-            "diff": "+80.75%",
+            "value": "238.6407",
+            "diff": "+57.19%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "solid-start",
+            "framework": "svelte-kit",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "314.524",
-            "diff": "+96.84%",
+            "value": "276.0636",
+            "diff": "+81.84%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "qwik-city",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "378.6739",
-            "diff": "+136.99%",
+            "value": "296.5922",
+            "diff": "+95.36%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "solid-start",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "473.285",
-            "diff": "+196.2%",
+            "value": "345.447",
+            "diff": "+127.54%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "qwik-router-v2",
+            "caseName": "app concurrent p99 latency 100 connections",
+            "value": "354.8204",
+            "diff": "+133.71%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "tanstack-start-solid",
+            "caseName": "app concurrent p99 latency 100 connections",
+            "value": "406.6286",
+            "diff": "+167.84%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app concurrent p99 latency 100 connections",
+            "value": "963.4149",
+            "diff": "+534.58%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app concurrent p99 latency 100 connections",
-            "value": "2366.8012",
-            "diff": "+1381.25%",
+            "value": "2340.2039",
+            "diff": "+1441.43%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2157,24 +1450,6 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "marko-run",
-            "caseName": "app concurrent RSS delta 100 connections",
-            "value": "0",
-            "diff": "",
-            "unit": "bytes",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
-            "framework": "solid-start",
-            "caseName": "app concurrent RSS delta 100 connections",
-            "value": "0",
-            "diff": "",
-            "unit": "bytes",
-            "isMreact": false
-          },
-          {
-            "rank": 3,
             "framework": "tanstack-start",
             "caseName": "app concurrent RSS delta 100 connections",
             "value": "0",
@@ -2183,17 +1458,26 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 4,
-            "framework": "qwik-city",
+            "rank": 2,
+            "framework": "mreact-app-router",
             "caseName": "app concurrent RSS delta 100 connections",
-            "value": "131072",
+            "value": "0",
             "diff": "",
             "unit": "bytes",
-            "isMreact": false
+            "isMreact": true
           },
           {
-            "rank": 5,
+            "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
+            "caseName": "app concurrent RSS delta 100 connections",
+            "value": "0",
+            "diff": "",
+            "unit": "bytes",
+            "isMreact": true
+          },
+          {
+            "rank": 4,
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app concurrent RSS delta 100 connections",
             "value": "262144",
             "diff": "",
@@ -2201,46 +1485,82 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": true
           },
           {
-            "rank": 6,
-            "framework": "mreact-app-router",
+            "rank": 5,
+            "framework": "nuxt",
             "caseName": "app concurrent RSS delta 100 connections",
-            "value": "1318912",
+            "value": "393216",
             "diff": "",
             "unit": "bytes",
-            "isMreact": true
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "qwik-router-v2",
+            "caseName": "app concurrent RSS delta 100 connections",
+            "value": "524288",
+            "diff": "",
+            "unit": "bytes",
+            "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-router-v2",
+            "framework": "marko-run",
             "caseName": "app concurrent RSS delta 100 connections",
-            "value": "4063232",
+            "value": "561152",
             "diff": "",
             "unit": "bytes",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "analog",
             "caseName": "app concurrent RSS delta 100 connections",
-            "value": "8650752",
+            "value": "655360",
             "diff": "",
             "unit": "bytes",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "tanstack-start-solid",
+            "framework": "solid-start",
             "caseName": "app concurrent RSS delta 100 connections",
-            "value": "12451840",
+            "value": "2854912",
             "diff": "",
             "unit": "bytes",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "svelte-kit",
+            "caseName": "app concurrent RSS delta 100 connections",
+            "value": "9961472",
+            "diff": "",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-city",
+            "caseName": "app concurrent RSS delta 100 connections",
+            "value": "11403264",
+            "diff": "",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "tanstack-start-solid",
+            "caseName": "app concurrent RSS delta 100 connections",
+            "value": "23330816",
+            "diff": "",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app concurrent RSS delta 100 connections",
-            "value": "89145344",
+            "value": "124133376",
             "diff": "",
             "unit": "bytes",
             "isMreact": false
@@ -2254,73 +1574,73 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "next-app-router",
+            "framework": "solid-start",
             "caseName": "app loader client navigation route-to-route",
-            "value": "38.9",
+            "value": "47.9",
             "diff": "best",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 2,
-            "framework": "solid-start",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app loader client navigation route-to-route",
-            "value": "43.1",
-            "diff": "+10.8%",
+            "value": "52.5",
+            "diff": "+9.6%",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "tanstack-start",
             "caseName": "app loader client navigation route-to-route",
-            "value": "52.2",
-            "diff": "+34.19%",
+            "value": "53",
+            "diff": "+10.65%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 4,
             "framework": "mreact-app-router",
             "caseName": "app loader client navigation route-to-route",
-            "value": "52.9",
-            "diff": "+35.99%",
+            "value": "54",
+            "diff": "+12.73%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
-            "caseName": "app loader client navigation route-to-route",
-            "value": "55.3",
-            "diff": "+42.16%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 6,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app loader client navigation route-to-route",
-            "value": "58.3",
-            "diff": "+49.87%",
+            "value": "56.7",
+            "diff": "+18.37%",
             "unit": "ms",
             "isMreact": true
           },
           {
-            "rank": 7,
-            "framework": "qwik-city",
+            "rank": 6,
+            "framework": "next-app-router",
             "caseName": "app loader client navigation route-to-route",
-            "value": "92.9",
-            "diff": "+138.82%",
+            "value": "66.9",
+            "diff": "+39.67%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "qwik-router-v2",
+            "caseName": "app loader client navigation route-to-route",
+            "value": "95.5",
+            "diff": "+99.37%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "qwik-city",
             "caseName": "app loader client navigation route-to-route",
-            "value": "107.9",
-            "diff": "+177.38%",
+            "value": "104.7",
+            "diff": "+118.58%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2333,73 +1653,100 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "solid-start",
             "caseName": "app client navigation back-forward restore",
-            "value": "7.5",
+            "value": "7.1",
             "diff": "best",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 2,
-            "framework": "solid-start",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app client navigation back-forward restore",
-            "value": "7.6",
-            "diff": "+1.33%",
+            "value": "7.2",
+            "diff": "+1.41%",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 3,
             "framework": "mreact-app-router",
             "caseName": "app client navigation back-forward restore",
-            "value": "7.6",
-            "diff": "+1.33%",
+            "value": "7.4",
+            "diff": "+4.23%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app client navigation back-forward restore",
-            "value": "7.7",
-            "diff": "+2.67%",
+            "value": "7.5",
+            "diff": "+5.63%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 5,
-            "framework": "next-app-router",
+            "framework": "svelte-kit",
             "caseName": "app client navigation back-forward restore",
-            "value": "9.5",
-            "diff": "+26.67%",
+            "value": "7.9",
+            "diff": "+11.27%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "tanstack-start",
+            "framework": "next-app-router",
             "caseName": "app client navigation back-forward restore",
-            "value": "10.5",
-            "diff": "+40%",
+            "value": "8.4",
+            "diff": "+18.31%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-router-v2",
+            "framework": "tanstack-start",
             "caseName": "app client navigation back-forward restore",
-            "value": "56",
-            "diff": "+646.67%",
+            "value": "10.1",
+            "diff": "+42.25%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
+            "framework": "analog",
+            "caseName": "app client navigation back-forward restore",
+            "value": "11.2",
+            "diff": "+57.75%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "nuxt",
+            "caseName": "app client navigation back-forward restore",
+            "value": "31.5",
+            "diff": "+343.66%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
             "framework": "qwik-city",
             "caseName": "app client navigation back-forward restore",
-            "value": "106.4",
-            "diff": "+1318.67%",
+            "value": "104.1",
+            "diff": "+1366.2%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "qwik-router-v2",
+            "caseName": "app client navigation back-forward restore",
+            "value": "395.9",
+            "diff": "+5476.06%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2412,73 +1759,100 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "svelte-kit",
             "caseName": "app client navigation route-to-route",
-            "value": "54.5",
+            "value": "52.4",
             "diff": "best",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 2,
-            "framework": "solid-start",
-            "caseName": "app client navigation route-to-route",
-            "value": "54.6",
-            "diff": "+0.18%",
             "unit": "ms",
             "isMreact": false
           },
           {
-            "rank": 3,
-            "framework": "mreact-app-router",
+            "rank": 2,
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app client navigation route-to-route",
-            "value": "55.1",
-            "diff": "+1.1%",
+            "value": "54",
+            "diff": "+3.05%",
             "unit": "ms",
             "isMreact": true
           },
           {
-            "rank": 4,
-            "framework": "mreact-app-router+log enabled",
+            "rank": 3,
+            "framework": "solid-start",
             "caseName": "app client navigation route-to-route",
-            "value": "55.4",
-            "diff": "+1.65%",
+            "value": "54.5",
+            "diff": "+4.01%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "mreact-app-router",
+            "caseName": "app client navigation route-to-route",
+            "value": "55.3",
+            "diff": "+5.53%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
+            "framework": "analog",
             "caseName": "app client navigation route-to-route",
-            "value": "56.9",
-            "diff": "+4.4%",
+            "value": "55.6",
+            "diff": "+6.11%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "next-app-router",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app client navigation route-to-route",
-            "value": "58.4",
-            "diff": "+7.16%",
+            "value": "55.7",
+            "diff": "+6.3%",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 7,
-            "framework": "qwik-city",
+            "framework": "tanstack-start",
             "caseName": "app client navigation route-to-route",
-            "value": "115.3",
-            "diff": "+111.56%",
+            "value": "56.4",
+            "diff": "+7.63%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
+            "framework": "next-app-router",
+            "caseName": "app client navigation route-to-route",
+            "value": "58.3",
+            "diff": "+11.26%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "nuxt",
+            "caseName": "app client navigation route-to-route",
+            "value": "104.9",
+            "diff": "+100.19%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "qwik-city",
+            "caseName": "app client navigation route-to-route",
+            "value": "114.1",
+            "diff": "+117.75%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
             "framework": "qwik-router-v2",
             "caseName": "app client navigation route-to-route",
-            "value": "116.4",
-            "diff": "+113.58%",
+            "value": "117.7",
+            "diff": "+124.62%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2493,7 +1867,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router",
             "caseName": "app initial page load JS before interaction",
-            "value": "534.0095",
+            "value": "533.5755",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -2502,35 +1876,35 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app initial page load JS before interaction",
-            "value": "535.0486",
-            "diff": "+0.19%",
+            "value": "533.9162",
+            "diff": "+0.06%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "marko-run",
             "caseName": "app initial page load JS before interaction",
-            "value": "538.629",
-            "diff": "+0.87%",
+            "value": "537.7757",
+            "diff": "+0.79%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "marko-run",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app initial page load JS before interaction",
-            "value": "540.0614",
-            "diff": "+1.13%",
+            "value": "537.9377",
+            "diff": "+0.82%",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 5,
             "framework": "solid-start",
             "caseName": "app initial page load JS before interaction",
-            "value": "543.3765",
-            "diff": "+1.75%",
+            "value": "541.8991",
+            "diff": "+1.56%",
             "unit": "ms",
             "isMreact": false
           },
@@ -2538,35 +1912,62 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 6,
             "framework": "tanstack-start",
             "caseName": "app initial page load JS before interaction",
-            "value": "548.9825",
-            "diff": "+2.8%",
+            "value": "548.3728",
+            "diff": "+2.77%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-city",
+            "framework": "svelte-kit",
             "caseName": "app initial page load JS before interaction",
-            "value": "562.9077",
-            "diff": "+5.41%",
+            "value": "559.116",
+            "diff": "+4.79%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "qwik-city",
             "caseName": "app initial page load JS before interaction",
-            "value": "569.3717",
-            "diff": "+6.62%",
+            "value": "561.3039",
+            "diff": "+5.2%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
+            "framework": "qwik-router-v2",
+            "caseName": "app initial page load JS before interaction",
+            "value": "567.9762",
+            "diff": "+6.45%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "nuxt",
+            "caseName": "app initial page load JS before interaction",
+            "value": "580.3211",
+            "diff": "+8.76%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "analog",
+            "caseName": "app initial page load JS before interaction",
+            "value": "602.6941",
+            "diff": "+12.95%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "next-app-router",
             "caseName": "app initial page load JS before interaction",
-            "value": "623.9198",
-            "diff": "+16.84%",
+            "value": "624",
+            "diff": "+16.95%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2581,80 +1982,107 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "solid-start",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "30.8",
+            "value": "27.3",
             "diff": "best",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 2,
-            "framework": "tanstack-start",
+            "framework": "analog",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "31.6",
-            "diff": "+2.6%",
+            "value": "28",
+            "diff": "+2.56%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 3,
-            "framework": "marko-run",
+            "framework": "nuxt",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "31.8",
-            "diff": "+3.25%",
+            "value": "33.1",
+            "diff": "+21.25%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "mreact-app-router",
+            "framework": "marko-run",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "35.2",
-            "diff": "+14.29%",
+            "value": "34.2",
+            "diff": "+25.27%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "37.7",
-            "diff": "+22.4%",
+            "value": "35.7",
+            "diff": "+30.77%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 6,
+            "framework": "svelte-kit",
+            "caseName": "app first interaction from DOMContentLoaded",
+            "value": "36.7",
+            "diff": "+34.43%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "38.1",
-            "diff": "+23.7%",
+            "value": "37",
+            "diff": "+35.53%",
             "unit": "ms",
             "isMreact": true
           },
           {
-            "rank": 7,
-            "framework": "next-app-router",
-            "caseName": "app first interaction from DOMContentLoaded",
-            "value": "45.7",
-            "diff": "+48.38%",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
             "rank": 8,
-            "framework": "qwik-city",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "52.6",
-            "diff": "+70.78%",
+            "value": "37",
+            "diff": "+35.53%",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 9,
+            "framework": "tanstack-start",
+            "caseName": "app first interaction from DOMContentLoaded",
+            "value": "41.7",
+            "diff": "+52.75%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "next-app-router",
+            "caseName": "app first interaction from DOMContentLoaded",
+            "value": "44",
+            "diff": "+61.17%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
             "framework": "qwik-router-v2",
             "caseName": "app first interaction from DOMContentLoaded",
-            "value": "58.1",
-            "diff": "+88.64%",
+            "value": "58.4",
+            "diff": "+113.92%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "qwik-city",
+            "caseName": "app first interaction from DOMContentLoaded",
+            "value": "64.1",
+            "diff": "+134.8%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2667,9 +2095,9 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "next-app-router",
+            "framework": "analog",
             "caseName": "app first interaction after networkidle",
-            "value": "20.8",
+            "value": "21.5",
             "diff": "best",
             "unit": "ms",
             "isMreact": false
@@ -2678,71 +2106,98 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "solid-start",
             "caseName": "app first interaction after networkidle",
-            "value": "22.2",
-            "diff": "+6.73%",
+            "value": "22.5",
+            "diff": "+4.65%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 3,
-            "framework": "marko-run",
+            "framework": "tanstack-start",
             "caseName": "app first interaction after networkidle",
-            "value": "24.5",
-            "diff": "+17.79%",
+            "value": "22.9",
+            "diff": "+6.51%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "next-app-router",
             "caseName": "app first interaction after networkidle",
-            "value": "26.3",
-            "diff": "+26.44%",
+            "value": "23.4",
+            "diff": "+8.84%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app first interaction after networkidle",
-            "value": "26.7",
-            "diff": "+28.37%",
+            "value": "26.4",
+            "diff": "+22.79%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 6,
-            "framework": "mreact-app-router",
+            "framework": "marko-run",
             "caseName": "app first interaction after networkidle",
-            "value": "27",
-            "diff": "+29.81%",
-            "unit": "ms",
-            "isMreact": true
-          },
-          {
-            "rank": 7,
-            "framework": "tanstack-start",
-            "caseName": "app first interaction after networkidle",
-            "value": "32.9",
-            "diff": "+58.17%",
+            "value": "26.5",
+            "diff": "+23.26%",
             "unit": "ms",
             "isMreact": false
           },
           {
-            "rank": 8,
-            "framework": "qwik-router-v2",
+            "rank": 7,
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app first interaction after networkidle",
-            "value": "48.6",
-            "diff": "+133.65%",
+            "value": "26.7",
+            "diff": "+24.19%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 8,
+            "framework": "svelte-kit",
+            "caseName": "app first interaction after networkidle",
+            "value": "27.1",
+            "diff": "+26.05%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 9,
+            "framework": "mreact-app-router+mreact react-compat",
+            "caseName": "app first interaction after networkidle",
+            "value": "29.1",
+            "diff": "+35.35%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 10,
+            "framework": "nuxt",
+            "caseName": "app first interaction after networkidle",
+            "value": "30.4",
+            "diff": "+41.4%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
             "framework": "qwik-city",
             "caseName": "app first interaction after networkidle",
-            "value": "54.4",
-            "diff": "+161.54%",
+            "value": "41.9",
+            "diff": "+94.88%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "qwik-router-v2",
+            "caseName": "app first interaction after networkidle",
+            "value": "46.5",
+            "diff": "+116.28%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2755,9 +2210,9 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "tanstack-start",
+            "framework": "qwik-router-v2",
             "caseName": "app second interaction latency",
-            "value": "29.4",
+            "value": "25.7",
             "diff": "best",
             "unit": "ms",
             "isMreact": false
@@ -2766,8 +2221,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "next-app-router",
             "caseName": "app second interaction latency",
-            "value": "29.6",
-            "diff": "+0.68%",
+            "value": "29.9",
+            "diff": "+16.34%",
             "unit": "ms",
             "isMreact": false
           },
@@ -2775,35 +2230,35 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app second interaction latency",
-            "value": "30.1",
-            "diff": "+2.38%",
+            "value": "29.9",
+            "diff": "+16.34%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "tanstack-start",
             "caseName": "app second interaction latency",
-            "value": "30.6",
-            "diff": "+4.08%",
+            "value": "30",
+            "diff": "+16.73%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 5,
             "framework": "mreact-app-router",
             "caseName": "app second interaction latency",
-            "value": "30.8",
-            "diff": "+4.76%",
+            "value": "30.7",
+            "diff": "+19.46%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 6,
-            "framework": "marko-run",
+            "framework": "svelte-kit",
             "caseName": "app second interaction latency",
-            "value": "31",
-            "diff": "+5.44%",
+            "value": "30.9",
+            "diff": "+20.23%",
             "unit": "ms",
             "isMreact": false
           },
@@ -2811,26 +2266,53 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 7,
             "framework": "solid-start",
             "caseName": "app second interaction latency",
-            "value": "31",
-            "diff": "+5.44%",
+            "value": "30.9",
+            "diff": "+20.23%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app second interaction latency",
-            "value": "42.2",
-            "diff": "+43.54%",
+            "value": "30.9",
+            "diff": "+20.23%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 9,
+            "framework": "nuxt",
+            "caseName": "app second interaction latency",
+            "value": "31",
+            "diff": "+20.62%",
             "unit": "ms",
             "isMreact": false
           },
           {
-            "rank": 9,
+            "rank": 10,
+            "framework": "marko-run",
+            "caseName": "app second interaction latency",
+            "value": "31.1",
+            "diff": "+21.01%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "analog",
+            "caseName": "app second interaction latency",
+            "value": "31.2",
+            "diff": "+21.4%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "qwik-city",
             "caseName": "app second interaction latency",
-            "value": "47.5",
-            "diff": "+61.56%",
+            "value": "48.9",
+            "diff": "+90.27%",
             "unit": "ms",
             "isMreact": false
           }
@@ -2879,42 +2361,69 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
           },
           {
             "rank": 5,
-            "framework": "tanstack-start",
+            "framework": "analog",
             "caseName": "app SSR HTML gzip bytes 1000 nodes",
-            "value": "3515",
-            "diff": "+53.43%",
+            "value": "2664",
+            "diff": "+16.28%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 6,
-            "framework": "qwik-city",
+            "framework": "svelte-kit",
             "caseName": "app SSR HTML gzip bytes 1000 nodes",
-            "value": "6100",
-            "diff": "+166.26%",
+            "value": "2749",
+            "diff": "+19.99%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 7,
-            "framework": "qwik-router-v2",
+            "framework": "nuxt",
             "caseName": "app SSR HTML gzip bytes 1000 nodes",
-            "value": "6927",
-            "diff": "+202.36%",
+            "value": "2891",
+            "diff": "+26.19%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "solid-start",
+            "framework": "tanstack-start",
             "caseName": "app SSR HTML gzip bytes 1000 nodes",
-            "value": "9348",
-            "diff": "+308.03%",
+            "value": "3516",
+            "diff": "+53.47%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 9,
+            "framework": "qwik-city",
+            "caseName": "app SSR HTML gzip bytes 1000 nodes",
+            "value": "6099",
+            "diff": "+166.22%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "qwik-router-v2",
+            "caseName": "app SSR HTML gzip bytes 1000 nodes",
+            "value": "6925",
+            "diff": "+202.27%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "solid-start",
+            "caseName": "app SSR HTML gzip bytes 1000 nodes",
+            "value": "9351",
+            "diff": "+308.16%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "tanstack-start-solid",
             "caseName": "app SSR HTML gzip bytes 1000 nodes",
             "value": "9785",
@@ -2923,11 +2432,11 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 10,
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app SSR HTML gzip bytes 1000 nodes",
-            "value": "14921",
-            "diff": "+551.29%",
+            "value": "14925",
+            "diff": "+551.46%",
             "unit": "gzip bytes",
             "isMreact": false
           }
@@ -2940,6 +2449,15 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
+            "framework": "svelte-kit",
+            "caseName": "app client bundle gzip bytes (server-only page)",
+            "value": "0",
+            "diff": "",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "0",
@@ -2948,7 +2466,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": true
           },
           {
-            "rank": 2,
+            "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "0",
@@ -2957,7 +2475,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": true
           },
           {
-            "rank": 3,
+            "rank": 4,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "0",
@@ -2966,7 +2484,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": true
           },
           {
-            "rank": 4,
+            "rank": 5,
             "framework": "marko-run",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "1600",
@@ -2975,7 +2493,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 5,
+            "rank": 6,
             "framework": "solid-start",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "20211",
@@ -2984,16 +2502,16 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 6,
+            "rank": 7,
             "framework": "qwik-city",
             "caseName": "app client bundle gzip bytes (server-only page)",
-            "value": "25534",
+            "value": "25533",
             "diff": "",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
-            "rank": 7,
+            "rank": 8,
             "framework": "qwik-router-v2",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "51246",
@@ -3002,7 +2520,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 8,
+            "rank": 9,
             "framework": "tanstack-start-solid",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "57974",
@@ -3011,7 +2529,25 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 9,
+            "rank": 10,
+            "framework": "nuxt",
+            "caseName": "app client bundle gzip bytes (server-only page)",
+            "value": "65534",
+            "diff": "",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "analog",
+            "caseName": "app client bundle gzip bytes (server-only page)",
+            "value": "90673",
+            "diff": "",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "tanstack-start",
             "caseName": "app client bundle gzip bytes (server-only page)",
             "value": "104797",
@@ -3020,10 +2556,10 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 10,
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app client bundle gzip bytes (server-only page)",
-            "value": "145613",
+            "value": "145595",
             "diff": "",
             "unit": "gzip bytes",
             "isMreact": false
@@ -3048,8 +2584,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app client bundle gzip bytes (interactive page)",
-            "value": "10561",
-            "diff": "+320.92%",
+            "value": "10721",
+            "diff": "+327.3%",
             "unit": "gzip bytes",
             "isMreact": true
           },
@@ -3057,8 +2593,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app client bundle gzip bytes (interactive page)",
-            "value": "10561",
-            "diff": "+320.92%",
+            "value": "10721",
+            "diff": "+327.3%",
             "unit": "gzip bytes",
             "isMreact": true
           },
@@ -3066,31 +2602,40 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "solid-start",
             "caseName": "app client bundle gzip bytes (interactive page)",
-            "value": "19241",
-            "diff": "+666.88%",
+            "value": "19240",
+            "diff": "+666.84%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 5,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "svelte-kit",
             "caseName": "app client bundle gzip bytes (interactive page)",
-            "value": "34447",
-            "diff": "+1272.94%",
+            "value": "32288",
+            "diff": "+1186.89%",
             "unit": "gzip bytes",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 6,
             "framework": "qwik-city",
             "caseName": "app client bundle gzip bytes (interactive page)",
-            "value": "35114",
-            "diff": "+1299.52%",
+            "value": "35085",
+            "diff": "+1298.37%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 7,
+            "framework": "mreact-app-router+mreact react-compat",
+            "caseName": "app client bundle gzip bytes (interactive page)",
+            "value": "35466",
+            "diff": "+1313.55%",
+            "unit": "gzip bytes",
+            "isMreact": true
+          },
+          {
+            "rank": 8,
             "framework": "qwik-router-v2",
             "caseName": "app client bundle gzip bytes (interactive page)",
             "value": "52899",
@@ -3099,7 +2644,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 8,
+            "rank": 9,
             "framework": "tanstack-start-solid",
             "caseName": "app client bundle gzip bytes (interactive page)",
             "value": "56111",
@@ -3108,7 +2653,25 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 9,
+            "rank": 10,
+            "framework": "nuxt",
+            "caseName": "app client bundle gzip bytes (interactive page)",
+            "value": "68098",
+            "diff": "+2614.15%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "analog",
+            "caseName": "app client bundle gzip bytes (interactive page)",
+            "value": "90841",
+            "diff": "+3520.61%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "tanstack-start",
             "caseName": "app client bundle gzip bytes (interactive page)",
             "value": "103195",
@@ -3117,11 +2680,11 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 10,
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app client bundle gzip bytes (interactive page)",
-            "value": "149261",
-            "diff": "+5849.02%",
+            "value": "149264",
+            "diff": "+5849.14%",
             "unit": "gzip bytes",
             "isMreact": false
           }
@@ -3145,8 +2708,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
-            "value": "5775",
-            "diff": "+130.17%",
+            "value": "5932",
+            "diff": "+136.43%",
             "unit": "gzip bytes",
             "isMreact": true
           },
@@ -3154,8 +2717,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
-            "value": "5775",
-            "diff": "+130.17%",
+            "value": "5932",
+            "diff": "+136.43%",
             "unit": "gzip bytes",
             "isMreact": true
           },
@@ -3163,8 +2726,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "solid-start",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
-            "value": "19241",
-            "diff": "+666.88%",
+            "value": "19240",
+            "diff": "+666.84%",
             "unit": "gzip bytes",
             "isMreact": false
           },
@@ -3172,22 +2735,31 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 5,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
-            "value": "29779",
-            "diff": "+1086.89%",
+            "value": "30799",
+            "diff": "+1127.54%",
             "unit": "gzip bytes",
             "isMreact": true
           },
           {
             "rank": 6,
-            "framework": "qwik-city",
+            "framework": "svelte-kit",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
-            "value": "35114",
-            "diff": "+1299.52%",
+            "value": "32288",
+            "diff": "+1186.89%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 7,
+            "framework": "qwik-city",
+            "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
+            "value": "35085",
+            "diff": "+1298.37%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
             "framework": "qwik-router-v2",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
             "value": "52899",
@@ -3196,7 +2768,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 8,
+            "rank": 9,
             "framework": "tanstack-start-solid",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
             "value": "56111",
@@ -3205,7 +2777,25 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 9,
+            "rank": 10,
+            "framework": "nuxt",
+            "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
+            "value": "68103",
+            "diff": "+2614.35%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
+            "framework": "analog",
+            "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
+            "value": "90841",
+            "diff": "+3520.61%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
             "framework": "tanstack-start",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
             "value": "103195",
@@ -3214,11 +2804,11 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "isMreact": false
           },
           {
-            "rank": 10,
+            "rank": 13,
             "framework": "next-app-router",
             "caseName": "app client bundle gzip bytes (interactive page, minimal opt-out)",
-            "value": "149261",
-            "diff": "+5849.02%",
+            "value": "149264",
+            "diff": "+5849.14%",
             "unit": "gzip bytes",
             "isMreact": false
           }
@@ -3233,7 +2823,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app build output gzip bytes",
-            "value": "65473",
+            "value": "65849",
             "diff": "best",
             "unit": "gzip bytes",
             "isMreact": true
@@ -3242,8 +2832,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app build output gzip bytes",
-            "value": "65503",
-            "diff": "+0.05%",
+            "value": "65887",
+            "diff": "+0.06%",
             "unit": "gzip bytes",
             "isMreact": true
           },
@@ -3252,7 +2842,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "framework": "marko-run",
             "caseName": "app build output gzip bytes",
             "value": "77143",
-            "diff": "+17.82%",
+            "diff": "+17.15%",
             "unit": "gzip bytes",
             "isMreact": false
           },
@@ -3260,8 +2850,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 4,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app build output gzip bytes",
-            "value": "106286",
-            "diff": "+62.34%",
+            "value": "112536",
+            "diff": "+70.9%",
             "unit": "gzip bytes",
             "isMreact": true
           },
@@ -3269,8 +2859,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 5,
             "framework": "tanstack-start-solid",
             "caseName": "app build output gzip bytes",
-            "value": "152668",
-            "diff": "+133.18%",
+            "value": "152667",
+            "diff": "+131.84%",
             "unit": "gzip bytes",
             "isMreact": false
           },
@@ -3278,8 +2868,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 6,
             "framework": "tanstack-start",
             "caseName": "app build output gzip bytes",
-            "value": "160534",
-            "diff": "+145.19%",
+            "value": "160537",
+            "diff": "+143.8%",
             "unit": "gzip bytes",
             "isMreact": false
           },
@@ -3287,35 +2877,62 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 7,
             "framework": "solid-start",
             "caseName": "app build output gzip bytes",
-            "value": "167585",
-            "diff": "+155.96%",
+            "value": "167587",
+            "diff": "+154.5%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 8,
-            "framework": "qwik-router-v2",
+            "framework": "svelte-kit",
             "caseName": "app build output gzip bytes",
-            "value": "181228",
-            "diff": "+176.8%",
+            "value": "177868",
+            "diff": "+170.11%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 9,
-            "framework": "qwik-city",
+            "framework": "qwik-router-v2",
             "caseName": "app build output gzip bytes",
-            "value": "278363",
-            "diff": "+325.16%",
+            "value": "181242",
+            "diff": "+175.24%",
             "unit": "gzip bytes",
             "isMreact": false
           },
           {
             "rank": 10,
+            "framework": "qwik-city",
+            "caseName": "app build output gzip bytes",
+            "value": "278367",
+            "diff": "+322.74%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 11,
             "framework": "next-app-router",
             "caseName": "app build output gzip bytes",
-            "value": "418702",
-            "diff": "+539.5%",
+            "value": "419541",
+            "diff": "+537.13%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 12,
+            "framework": "analog",
+            "caseName": "app build output gzip bytes",
+            "value": "529966",
+            "diff": "+704.82%",
+            "unit": "gzip bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 13,
+            "framework": "nuxt",
+            "caseName": "app build output gzip bytes",
+            "value": "550413",
+            "diff": "+735.87%",
             "unit": "gzip bytes",
             "isMreact": false
           }
@@ -3330,7 +2947,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router",
             "caseName": "app hydration 100 islands",
-            "value": "838.2011",
+            "value": "822.2374",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3339,8 +2956,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app hydration 100 islands",
-            "value": "845.0697",
-            "diff": "+0.82%",
+            "value": "833.3237",
+            "diff": "+1.35%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3348,8 +2965,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app hydration 100 islands",
-            "value": "860.4536",
-            "diff": "+2.65%",
+            "value": "853.0406",
+            "diff": "+3.75%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3362,19 +2979,19 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app dev cold start",
-            "value": "4.5885",
+            "value": "4.0564",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app dev cold start",
-            "value": "16.4157",
-            "diff": "+257.76%",
+            "value": "4.5277",
+            "diff": "+11.62%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3382,8 +2999,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router",
             "caseName": "app dev cold start",
-            "value": "17.2069",
-            "diff": "+275%",
+            "value": "17.0837",
+            "diff": "+321.15%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3398,7 +3015,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app dev first request latency",
-            "value": "40.2861",
+            "value": "35.4475",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3407,8 +3024,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app dev first request latency",
-            "value": "62.6673",
-            "diff": "+55.56%",
+            "value": "73.0297",
+            "diff": "+106.02%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3416,8 +3033,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app dev first request latency",
-            "value": "85.2803",
-            "diff": "+111.69%",
+            "value": "86.6959",
+            "diff": "+144.58%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3432,7 +3049,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app dev HMR update latency",
-            "value": "28.3564",
+            "value": "27.4438",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3441,8 +3058,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app dev HMR update latency",
-            "value": "36.1026",
-            "diff": "+27.32%",
+            "value": "34.7031",
+            "diff": "+26.45%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3450,8 +3067,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app dev HMR update latency",
-            "value": "90.2372",
-            "diff": "+218.23%",
+            "value": "87.972",
+            "diff": "+220.55%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3466,7 +3083,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router",
             "caseName": "app 1000 route match latency",
-            "value": "8.6492",
+            "value": "9.5142",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3475,8 +3092,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app 1000 route match latency",
-            "value": "18.4158",
-            "diff": "+112.92%",
+            "value": "14.7251",
+            "diff": "+54.77%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3484,8 +3101,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app 1000 route match latency",
-            "value": "22.7105",
-            "diff": "+162.57%",
+            "value": "22.0471",
+            "diff": "+131.73%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3500,26 +3117,26 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router",
             "caseName": "app 1000 route cold start",
-            "value": "422.9836",
+            "value": "429.6458",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app 1000 route cold start",
-            "value": "437.3454",
-            "diff": "+3.4%",
+            "value": "442.6362",
+            "diff": "+3.02%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app 1000 route cold start",
-            "value": "447.26",
-            "diff": "+5.74%",
+            "value": "447.3329",
+            "diff": "+4.12%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3534,7 +3151,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router",
             "caseName": "app 1000 route build time",
-            "value": "14749.8365",
+            "value": "14241.5461",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3543,8 +3160,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app 1000 route build time",
-            "value": "21520.8521",
-            "diff": "+45.91%",
+            "value": "20511.1488",
+            "diff": "+44.02%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3552,8 +3169,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app 1000 route build time",
-            "value": "25758.6902",
-            "diff": "+74.64%",
+            "value": "23946.1768",
+            "diff": "+68.14%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3568,7 +3185,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app 1000 route RSS delta",
-            "value": "349491200",
+            "value": "306913280",
             "diff": "best",
             "unit": "bytes",
             "isMreact": true
@@ -3577,8 +3194,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app 1000 route RSS delta",
-            "value": "437903360",
-            "diff": "+25.3%",
+            "value": "469200896",
+            "diff": "+52.88%",
             "unit": "bytes",
             "isMreact": true
           },
@@ -3586,8 +3203,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router",
             "caseName": "app 1000 route RSS delta",
-            "value": "648949760",
-            "diff": "+85.68%",
+            "value": "619655168",
+            "diff": "+101.9%",
             "unit": "bytes",
             "isMreact": true
           }
@@ -3602,7 +3219,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app server action form POST roundtrip",
-            "value": "49.6418",
+            "value": "46.4561",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3611,8 +3228,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app server action form POST roundtrip",
-            "value": "50.8614",
-            "diff": "+2.46%",
+            "value": "46.5698",
+            "diff": "+0.24%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3620,8 +3237,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router",
             "caseName": "app server action form POST roundtrip",
-            "value": "58.821",
-            "diff": "+18.49%",
+            "value": "52.6761",
+            "diff": "+13.39%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3634,19 +3251,19 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app nested layouts depth 5",
-            "value": "39.5082",
+            "value": "37.4392",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router",
             "caseName": "app nested layouts depth 5",
-            "value": "43.127",
-            "diff": "+9.16%",
+            "value": "38.455",
+            "diff": "+2.71%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3654,8 +3271,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app nested layouts depth 5",
-            "value": "50.3718",
-            "diff": "+27.5%",
+            "value": "47.7274",
+            "diff": "+27.48%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3670,7 +3287,7 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact-app-router+log enabled",
             "caseName": "app Cloudflare Worker request latency",
-            "value": "2.3623",
+            "value": "2.3833",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
@@ -3679,8 +3296,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact-app-router",
             "caseName": "app Cloudflare Worker request latency",
-            "value": "2.6839",
-            "diff": "+13.61%",
+            "value": "3.024",
+            "diff": "+26.88%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3688,8 +3305,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app Cloudflare Worker request latency",
-            "value": "3.2002",
-            "diff": "+35.47%",
+            "value": "3.2125",
+            "diff": "+34.79%",
             "unit": "ms",
             "isMreact": true
           }
@@ -3702,30 +3319,1367 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "mreact-app-router+log enabled",
+            "framework": "mreact-app-router+mreact react-compat",
             "caseName": "app server cold start",
-            "value": "264.3706",
+            "value": "264.1567",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact-app-router+mreact react-compat",
+            "framework": "mreact-app-router",
             "caseName": "app server cold start",
-            "value": "265.9304",
-            "diff": "+0.59%",
+            "value": "265.6086",
+            "diff": "+0.55%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 3,
-            "framework": "mreact-app-router",
+            "framework": "mreact-app-router+log enabled",
             "caseName": "app server cold start",
-            "value": "266.1276",
-            "diff": "+0.66%",
+            "value": "266.0718",
+            "diff": "+0.72%",
             "unit": "ms",
             "isMreact": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "primitive",
+    "title": "Primitive benchmarks",
+    "source": "primitive.md",
+    "cardCount": 15,
+    "cards": [
+      {
+        "id": "primitive-create-1k-rows",
+        "title": "create 1k rows",
+        "description": "Creates 1,000 DOM rows from an empty host and validates the final DOM.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "create 1k rows",
+            "value": "8.1425",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "react",
+            "caseName": "create 1k rows",
+            "value": "8.5033",
+            "diff": "+4.43%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "solid",
+            "caseName": "create 1k rows",
+            "value": "9.9467",
+            "diff": "+22.16%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "qwik",
+            "caseName": "create 1k rows",
+            "value": "10.8251",
+            "diff": "+32.95%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "vue",
+            "caseName": "create 1k rows",
+            "value": "10.9482",
+            "diff": "+34.46%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "solid-v2",
+            "caseName": "create 1k rows",
+            "value": "12.7978",
+            "diff": "+57.17%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "mreact react-compat",
+            "caseName": "create 1k rows",
+            "value": "13.2115",
+            "diff": "+62.25%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 8,
+            "framework": "marko",
+            "caseName": "create 1k rows",
+            "value": "15.2946",
+            "diff": "+87.84%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "svelte",
+            "caseName": "create 1k rows",
+            "value": "15.7428",
+            "diff": "+93.34%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "angular",
+            "caseName": "create 1k rows",
+            "value": "16.1271",
+            "diff": "+98.06%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-replace-all-1k-rows",
+        "title": "replace all 1k rows",
+        "description": "Replaces an existing 1,000-row keyed list with a fresh 1,000-row dataset.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "vue",
+            "caseName": "replace all 1k rows",
+            "value": "9.74",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "solid-v2",
+            "caseName": "replace all 1k rows",
+            "value": "9.7978",
+            "diff": "+0.59%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "solid",
+            "caseName": "replace all 1k rows",
+            "value": "10.4092",
+            "diff": "+6.87%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "mreact react-compat",
+            "caseName": "replace all 1k rows",
+            "value": "10.5755",
+            "diff": "+8.58%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 5,
+            "framework": "mreact",
+            "caseName": "replace all 1k rows",
+            "value": "11.3176",
+            "diff": "+16.2%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 6,
+            "framework": "svelte",
+            "caseName": "replace all 1k rows",
+            "value": "13.7231",
+            "diff": "+40.89%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "react",
+            "caseName": "replace all 1k rows",
+            "value": "14.7808",
+            "diff": "+51.75%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "qwik",
+            "caseName": "replace all 1k rows",
+            "value": "15.9982",
+            "diff": "+64.25%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "marko",
+            "caseName": "replace all 1k rows",
+            "value": "18.622",
+            "diff": "+91.19%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "angular",
+            "caseName": "replace all 1k rows",
+            "value": "24.3776",
+            "diff": "+150.28%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-update-every-10th-in-10k-rows",
+        "title": "update every 10th in 10k rows",
+        "description": "Updates the text of every tenth row in a 10,000-row keyed list while preserving the existing row nodes.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "update every 10th in 10k rows",
+            "value": "3.303",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "svelte",
+            "caseName": "update every 10th in 10k rows",
+            "value": "6.1524",
+            "diff": "+86.27%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "react",
+            "caseName": "update every 10th in 10k rows",
+            "value": "6.7607",
+            "diff": "+104.68%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "mreact react-compat",
+            "caseName": "update every 10th in 10k rows",
+            "value": "6.7759",
+            "diff": "+105.14%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 5,
+            "framework": "angular",
+            "caseName": "update every 10th in 10k rows",
+            "value": "6.9143",
+            "diff": "+109.33%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "vue",
+            "caseName": "update every 10th in 10k rows",
+            "value": "25.9385",
+            "diff": "+685.3%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "marko",
+            "caseName": "update every 10th in 10k rows",
+            "value": "42.3203",
+            "diff": "+1181.27%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "qwik",
+            "caseName": "update every 10th in 10k rows",
+            "value": "108.4099",
+            "diff": "+3182.16%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "solid",
+            "caseName": "update every 10th in 10k rows",
+            "value": "141.5495",
+            "diff": "+4185.48%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "solid-v2",
+            "caseName": "update every 10th in 10k rows",
+            "value": "145.3994",
+            "diff": "+4302.04%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-select-row-in-10k-rows",
+        "title": "select row in 10k rows",
+        "description": "Selects one row in a 10,000-row list by toggling selection attributes without changing row text.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "select row in 10k rows",
+            "value": "0.1394",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "mreact react-compat",
+            "caseName": "select row in 10k rows",
+            "value": "4.002",
+            "diff": "+2770.88%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 3,
+            "framework": "react",
+            "caseName": "select row in 10k rows",
+            "value": "4.8211",
+            "diff": "+3358.46%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "angular",
+            "caseName": "select row in 10k rows",
+            "value": "5.4945",
+            "diff": "+3841.54%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "svelte",
+            "caseName": "select row in 10k rows",
+            "value": "10.7207",
+            "diff": "+7590.6%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "vue",
+            "caseName": "select row in 10k rows",
+            "value": "19.9079",
+            "diff": "+14181.13%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "marko",
+            "caseName": "select row in 10k rows",
+            "value": "42.4972",
+            "diff": "+30385.8%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "solid",
+            "caseName": "select row in 10k rows",
+            "value": "49.469",
+            "diff": "+35387.09%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "solid-v2",
+            "caseName": "select row in 10k rows",
+            "value": "52.9331",
+            "diff": "+37872.09%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "qwik",
+            "caseName": "select row in 10k rows",
+            "value": "110.8721",
+            "diff": "+79435.22%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-append-1k-rows-to-10k-rows",
+        "title": "append 1k rows to 10k rows",
+        "description": "Appends 1,000 keyed rows to an existing 10,000-row list and validates the 11,000-row DOM.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "9.4645",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "mreact react-compat",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "13.7872",
+            "diff": "+45.67%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 3,
+            "framework": "svelte",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "21.0963",
+            "diff": "+122.9%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "react",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "29.5814",
+            "diff": "+212.55%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "vue",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "34.1088",
+            "diff": "+260.39%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "angular",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "41.9591",
+            "diff": "+343.33%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "marko",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "58.3942",
+            "diff": "+516.98%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "qwik",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "128.556",
+            "diff": "+1258.3%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "solid-v2",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "145.63",
+            "diff": "+1438.7%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "solid",
+            "caseName": "append 1k rows to 10k rows",
+            "value": "158.1494",
+            "diff": "+1570.97%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-remove-row-from-1k-rows",
+        "title": "remove row from 1k rows",
+        "description": "Removes one keyed row from the middle of an existing 1,000-row list.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "remove row from 1k rows",
+            "value": "0.227",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "svelte",
+            "caseName": "remove row from 1k rows",
+            "value": "0.2296",
+            "diff": "+1.15%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "react",
+            "caseName": "remove row from 1k rows",
+            "value": "0.4312",
+            "diff": "+89.96%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "angular",
+            "caseName": "remove row from 1k rows",
+            "value": "0.5603",
+            "diff": "+146.83%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "mreact react-compat",
+            "caseName": "remove row from 1k rows",
+            "value": "0.8116",
+            "diff": "+257.53%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 6,
+            "framework": "vue",
+            "caseName": "remove row from 1k rows",
+            "value": "1.1701",
+            "diff": "+415.46%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "marko",
+            "caseName": "remove row from 1k rows",
+            "value": "1.3081",
+            "diff": "+476.26%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "solid-v2",
+            "caseName": "remove row from 1k rows",
+            "value": "3.4498",
+            "diff": "+1419.74%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "solid",
+            "caseName": "remove row from 1k rows",
+            "value": "3.6981",
+            "diff": "+1529.12%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "qwik",
+            "caseName": "remove row from 1k rows",
+            "value": "5.1851",
+            "diff": "+2184.19%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-clear-10k-rows",
+        "title": "clear 10k rows",
+        "description": "Clears an existing 10,000-row list and validates that no row elements remain.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "solid",
+            "caseName": "clear 10k rows",
+            "value": "31.5097",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "solid-v2",
+            "caseName": "clear 10k rows",
+            "value": "32.6773",
+            "diff": "+3.71%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "mreact",
+            "caseName": "clear 10k rows",
+            "value": "35.9192",
+            "diff": "+13.99%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 4,
+            "framework": "vue",
+            "caseName": "clear 10k rows",
+            "value": "37.9585",
+            "diff": "+20.47%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "mreact react-compat",
+            "caseName": "clear 10k rows",
+            "value": "46.9849",
+            "diff": "+49.11%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 6,
+            "framework": "svelte",
+            "caseName": "clear 10k rows",
+            "value": "56.2081",
+            "diff": "+78.38%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "qwik",
+            "caseName": "clear 10k rows",
+            "value": "61.4461",
+            "diff": "+95.01%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "react",
+            "caseName": "clear 10k rows",
+            "value": "63.2689",
+            "diff": "+100.79%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "marko",
+            "caseName": "clear 10k rows",
+            "value": "69.7214",
+            "diff": "+121.27%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "angular",
+            "caseName": "clear 10k rows",
+            "value": "98.9182",
+            "diff": "+213.93%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-keyed-reverse-1k-rows",
+        "title": "keyed reverse 1k rows",
+        "description": "Reverses 1,000 keyed rows and verifies that DOM node identity is preserved.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "keyed reverse 1k rows",
+            "value": "3.3108",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "solid",
+            "caseName": "keyed reverse 1k rows",
+            "value": "4.1916",
+            "diff": "+26.6%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "solid-v2",
+            "caseName": "keyed reverse 1k rows",
+            "value": "4.4462",
+            "diff": "+34.29%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "vue",
+            "caseName": "keyed reverse 1k rows",
+            "value": "5.0416",
+            "diff": "+52.28%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "angular",
+            "caseName": "keyed reverse 1k rows",
+            "value": "5.8249",
+            "diff": "+75.94%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "react",
+            "caseName": "keyed reverse 1k rows",
+            "value": "6.2182",
+            "diff": "+87.82%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "mreact react-compat",
+            "caseName": "keyed reverse 1k rows",
+            "value": "6.2277",
+            "diff": "+88.1%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 8,
+            "framework": "marko",
+            "caseName": "keyed reverse 1k rows",
+            "value": "7.5231",
+            "diff": "+127.23%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "qwik",
+            "caseName": "keyed reverse 1k rows",
+            "value": "9.3477",
+            "diff": "+182.34%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "svelte",
+            "caseName": "keyed reverse 1k rows",
+            "value": "41.573",
+            "diff": "+1155.68%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-create-1k-event-targets",
+        "title": "create 1k event targets",
+        "description": "Creates 1,000 button event targets and measures initial interactive wiring cost without dispatching events.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "create 1k event targets",
+            "value": "10.7916",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "solid-v2",
+            "caseName": "create 1k event targets",
+            "value": "12.019",
+            "diff": "+11.37%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "solid",
+            "caseName": "create 1k event targets",
+            "value": "12.9374",
+            "diff": "+19.88%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "vue",
+            "caseName": "create 1k event targets",
+            "value": "14.118",
+            "diff": "+30.82%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "react",
+            "caseName": "create 1k event targets",
+            "value": "14.5294",
+            "diff": "+34.64%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "mreact react-compat",
+            "caseName": "create 1k event targets",
+            "value": "16.1479",
+            "diff": "+49.63%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 7,
+            "framework": "svelte",
+            "caseName": "create 1k event targets",
+            "value": "20.151",
+            "diff": "+86.73%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "marko",
+            "caseName": "create 1k event targets",
+            "value": "21.6935",
+            "diff": "+101.02%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "qwik",
+            "caseName": "create 1k event targets",
+            "value": "22.5558",
+            "diff": "+109.01%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "angular",
+            "caseName": "create 1k event targets",
+            "value": "23.0117",
+            "diff": "+113.24%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-source-write-with-subscriber-1k",
+        "title": "source write with subscriber 1k",
+        "description": "Updates 1,000 fine-grained source values when each source has one live non-DOM subscriber, separating direct source write overhead from aggregate computed fan-in and framework-level array update work.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "solid-v2",
+            "caseName": "source write with subscriber 1k",
+            "value": "0.2882",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "mreact",
+            "caseName": "source write with subscriber 1k",
+            "value": "0.3742",
+            "diff": "+29.84%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 3,
+            "framework": "solid",
+            "caseName": "source write with subscriber 1k",
+            "value": "0.3976",
+            "diff": "+37.96%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-text-binding-update-1k",
+        "title": "text binding update 1k",
+        "description": "Updates one reactive text value that is bound to 1,000 text nodes.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "solid",
+            "caseName": "text binding update 1k",
+            "value": "0.3066",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "mreact",
+            "caseName": "text binding update 1k",
+            "value": "0.3167",
+            "diff": "+3.29%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 3,
+            "framework": "solid-v2",
+            "caseName": "text binding update 1k",
+            "value": "0.3376",
+            "diff": "+10.11%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "svelte",
+            "caseName": "text binding update 1k",
+            "value": "0.7399",
+            "diff": "+141.32%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "react",
+            "caseName": "text binding update 1k",
+            "value": "0.7792",
+            "diff": "+154.14%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "angular",
+            "caseName": "text binding update 1k",
+            "value": "0.9941",
+            "diff": "+224.23%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "mreact react-compat",
+            "caseName": "text binding update 1k",
+            "value": "1.2554",
+            "diff": "+309.46%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 8,
+            "framework": "marko",
+            "caseName": "text binding update 1k",
+            "value": "1.832",
+            "diff": "+497.52%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "qwik",
+            "caseName": "text binding update 1k",
+            "value": "2.283",
+            "diff": "+644.62%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "vue",
+            "caseName": "text binding update 1k",
+            "value": "3.4392",
+            "diff": "+1021.72%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-computed-fan-out-1k",
+        "title": "computed fan-out 1k",
+        "description": "Updates one source value that fans out through a derived value into 1,000 displayed text nodes.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "solid",
+            "caseName": "computed fan-out 1k",
+            "value": "0.3055",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "solid-v2",
+            "caseName": "computed fan-out 1k",
+            "value": "0.3113",
+            "diff": "+1.9%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "mreact",
+            "caseName": "computed fan-out 1k",
+            "value": "0.3181",
+            "diff": "+4.12%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 4,
+            "framework": "svelte",
+            "caseName": "computed fan-out 1k",
+            "value": "0.7422",
+            "diff": "+142.95%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "angular",
+            "caseName": "computed fan-out 1k",
+            "value": "0.7573",
+            "diff": "+147.89%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "react",
+            "caseName": "computed fan-out 1k",
+            "value": "0.7791",
+            "diff": "+155.02%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "mreact react-compat",
+            "caseName": "computed fan-out 1k",
+            "value": "1.2562",
+            "diff": "+311.19%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 8,
+            "framework": "marko",
+            "caseName": "computed fan-out 1k",
+            "value": "1.7394",
+            "diff": "+469.36%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "qwik",
+            "caseName": "computed fan-out 1k",
+            "value": "2.3919",
+            "diff": "+682.95%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "vue",
+            "caseName": "computed fan-out 1k",
+            "value": "3.4334",
+            "diff": "+1023.86%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-computed-fan-in-1k",
+        "title": "computed fan-in 1k",
+        "description": "Updates the inputs feeding one aggregate and validates one derived aggregate text output. Caveat: this is not a direct cross-framework source-write comparison because mreact, Solid, and Solid v2 update 1,000 fine-grained sources, while React, Marko, and Qwik update one array/props payload.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "angular",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0243",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "svelte",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0379",
+            "diff": "+55.97%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "marko",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0488",
+            "diff": "+100.82%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "qwik",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0743",
+            "diff": "+205.76%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "vue",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0864",
+            "diff": "+255.56%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
+            "framework": "solid-v2",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0866",
+            "diff": "+256.38%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "react",
+            "caseName": "computed fan-in 1k",
+            "value": "0.0997",
+            "diff": "+310.29%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "mreact",
+            "caseName": "computed fan-in 1k",
+            "value": "0.1108",
+            "diff": "+355.97%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 9,
+            "framework": "mreact react-compat",
+            "caseName": "computed fan-in 1k",
+            "value": "0.117",
+            "diff": "+381.48%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 10,
+            "framework": "solid",
+            "caseName": "computed fan-in 1k",
+            "value": "97.437",
+            "diff": "+400875.31%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-source-write-1k",
+        "title": "source write 1k",
+        "description": "Updates 1,000 fine-grained source values without subscribers, derived values, DOM writes, or framework-level re-render work, then validates the final source values. Frameworks without an equivalent source primitive report this case as unsupported.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "mreact",
+            "caseName": "source write 1k",
+            "value": "0.0113",
+            "diff": "best",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "solid",
+            "caseName": "source write 1k",
+            "value": "0.0117",
+            "diff": "+3.54%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "solid-v2",
+            "caseName": "source write 1k",
+            "value": "0.0542",
+            "diff": "+379.65%",
+            "unit": "ms",
+            "isMreact": false
+          }
+        ]
+      },
+      {
+        "id": "primitive-repeated-create-update-clear-memory",
+        "title": "repeated create update clear memory",
+        "description": "Reports heap growth after repeatedly creating, updating, and clearing 1,000-row lists.",
+        "rows": [
+          {
+            "rank": 1,
+            "framework": "svelte",
+            "caseName": "repeated create update clear memory",
+            "value": "15744",
+            "diff": "best",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 2,
+            "framework": "qwik",
+            "caseName": "repeated create update clear memory",
+            "value": "67096",
+            "diff": "+326.17%",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 3,
+            "framework": "solid-v2",
+            "caseName": "repeated create update clear memory",
+            "value": "67328",
+            "diff": "+327.64%",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 4,
+            "framework": "mreact",
+            "caseName": "repeated create update clear memory",
+            "value": "70480",
+            "diff": "+347.66%",
+            "unit": "bytes",
+            "isMreact": true
+          },
+          {
+            "rank": 5,
+            "framework": "mreact react-compat",
+            "caseName": "repeated create update clear memory",
+            "value": "79904",
+            "diff": "+407.52%",
+            "unit": "bytes",
+            "isMreact": true
+          },
+          {
+            "rank": 6,
+            "framework": "marko",
+            "caseName": "repeated create update clear memory",
+            "value": "81320",
+            "diff": "+416.51%",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "solid",
+            "caseName": "repeated create update clear memory",
+            "value": "87936",
+            "diff": "+458.54%",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "vue",
+            "caseName": "repeated create update clear memory",
+            "value": "329496",
+            "diff": "+1992.84%",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 9,
+            "framework": "react",
+            "caseName": "repeated create update clear memory",
+            "value": "330864",
+            "diff": "+2001.52%",
+            "unit": "bytes",
+            "isMreact": false
+          },
+          {
+            "rank": 10,
+            "framework": "angular",
+            "caseName": "repeated create update clear memory",
+            "value": "360696",
+            "diff": "+2191.01%",
+            "unit": "bytes",
+            "isMreact": false
           }
         ]
       }
@@ -3755,8 +4709,8 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 2,
             "framework": "mreact",
             "caseName": "browser create 1k rows",
-            "value": "2.3",
-            "diff": "+43.75%",
+            "value": "2.4",
+            "diff": "+50%",
             "unit": "ms",
             "isMreact": true
           },
@@ -3764,28 +4718,55 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 3,
             "framework": "qwik",
             "caseName": "browser create 1k rows",
-            "value": "2.9",
-            "diff": "+81.25%",
+            "value": "2.7",
+            "diff": "+68.75%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "react",
+            "framework": "vue",
             "caseName": "browser create 1k rows",
-            "value": "3.5",
-            "diff": "+118.75%",
+            "value": "3.3",
+            "diff": "+106.25%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 5,
+            "framework": "react",
+            "caseName": "browser create 1k rows",
+            "value": "3.4",
+            "diff": "+112.5%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
             "framework": "mreact react-compat",
             "caseName": "browser create 1k rows",
-            "value": "3.9",
-            "diff": "+143.75%",
+            "value": "3.5",
+            "diff": "+118.75%",
             "unit": "ms",
             "isMreact": true
+          },
+          {
+            "rank": 7,
+            "framework": "svelte",
+            "caseName": "browser create 1k rows",
+            "value": "3.8",
+            "diff": "+137.5%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "angular",
+            "caseName": "browser create 1k rows",
+            "value": "4.6",
+            "diff": "+187.5%",
+            "unit": "ms",
+            "isMreact": false
           }
         ]
       },
@@ -3798,44 +4779,71 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "mreact",
             "caseName": "browser update every 10th in 10k rows",
-            "value": "1.1",
+            "value": "1.5",
             "diff": "best",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "react",
+            "framework": "svelte",
             "caseName": "browser update every 10th in 10k rows",
-            "value": "2.8",
-            "diff": "+154.55%",
+            "value": "2.5",
+            "diff": "+66.67%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 3,
-            "framework": "mreact react-compat",
+            "framework": "react",
             "caseName": "browser update every 10th in 10k rows",
-            "value": "4.9",
-            "diff": "+345.45%",
+            "value": "2.9",
+            "diff": "+93.33%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 4,
-            "framework": "solid",
+            "framework": "angular",
             "caseName": "browser update every 10th in 10k rows",
-            "value": "8.1",
-            "diff": "+636.36%",
+            "value": "3.9",
+            "diff": "+160%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 5,
+            "framework": "mreact react-compat",
+            "caseName": "browser update every 10th in 10k rows",
+            "value": "5.1",
+            "diff": "+240%",
+            "unit": "ms",
+            "isMreact": true
+          },
+          {
+            "rank": 6,
+            "framework": "solid",
+            "caseName": "browser update every 10th in 10k rows",
+            "value": "6.7",
+            "diff": "+346.67%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
             "framework": "qwik",
             "caseName": "browser update every 10th in 10k rows",
-            "value": "16.9",
-            "diff": "+1436.36%",
+            "value": "8.7",
+            "diff": "+480%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "vue",
+            "caseName": "browser update every 10th in 10k rows",
+            "value": "11.1",
+            "diff": "+640%",
             "unit": "ms",
             "isMreact": false
           }
@@ -3848,46 +4856,73 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "solid",
-            "caseName": "browser select row in 10k rows",
-            "value": "0.9",
-            "diff": "best",
-            "unit": "ms",
-            "isMreact": false
-          },
-          {
-            "rank": 2,
             "framework": "mreact",
             "caseName": "browser select row in 10k rows",
             "value": "1",
-            "diff": "+11.11%",
+            "diff": "best",
             "unit": "ms",
             "isMreact": true
+          },
+          {
+            "rank": 2,
+            "framework": "solid",
+            "caseName": "browser select row in 10k rows",
+            "value": "1",
+            "diff": "0%",
+            "unit": "ms",
+            "isMreact": false
           },
           {
             "rank": 3,
             "framework": "react",
             "caseName": "browser select row in 10k rows",
-            "value": "2.4",
-            "diff": "+166.67%",
+            "value": "2.5",
+            "diff": "+150%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 4,
+            "framework": "svelte",
+            "caseName": "browser select row in 10k rows",
+            "value": "3",
+            "diff": "+200%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 5,
+            "framework": "angular",
+            "caseName": "browser select row in 10k rows",
+            "value": "3.5",
+            "diff": "+250%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
             "framework": "mreact react-compat",
             "caseName": "browser select row in 10k rows",
-            "value": "3.7",
-            "diff": "+311.11%",
+            "value": "4",
+            "diff": "+300%",
             "unit": "ms",
             "isMreact": true
           },
           {
-            "rank": 5,
+            "rank": 7,
             "framework": "qwik",
             "caseName": "browser select row in 10k rows",
-            "value": "9.3",
-            "diff": "+933.33%",
+            "value": "8.1",
+            "diff": "+710%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "vue",
+            "caseName": "browser select row in 10k rows",
+            "value": "9.8",
+            "diff": "+880%",
             "unit": "ms",
             "isMreact": false
           }
@@ -3900,46 +4935,73 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
         "rows": [
           {
             "rank": 1,
-            "framework": "solid",
+            "framework": "mreact",
             "caseName": "browser clear 10k rows",
-            "value": "2.4",
+            "value": "2.3",
             "diff": "best",
             "unit": "ms",
-            "isMreact": false
+            "isMreact": true
           },
           {
             "rank": 2,
-            "framework": "mreact",
+            "framework": "solid",
             "caseName": "browser clear 10k rows",
-            "value": "2.8",
-            "diff": "+16.67%",
+            "value": "2.4",
+            "diff": "+4.35%",
             "unit": "ms",
-            "isMreact": true
+            "isMreact": false
           },
           {
             "rank": 3,
             "framework": "mreact react-compat",
             "caseName": "browser clear 10k rows",
-            "value": "4.6",
-            "diff": "+91.67%",
+            "value": "4.1",
+            "diff": "+78.26%",
             "unit": "ms",
             "isMreact": true
           },
           {
             "rank": 4,
-            "framework": "qwik",
+            "framework": "vue",
             "caseName": "browser clear 10k rows",
-            "value": "6.1",
-            "diff": "+154.17%",
+            "value": "4.8",
+            "diff": "+108.7%",
             "unit": "ms",
             "isMreact": false
           },
           {
             "rank": 5,
+            "framework": "qwik",
+            "caseName": "browser clear 10k rows",
+            "value": "6",
+            "diff": "+160.87%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 6,
             "framework": "react",
             "caseName": "browser clear 10k rows",
-            "value": "6.3",
-            "diff": "+162.5%",
+            "value": "6.8",
+            "diff": "+195.65%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 7,
+            "framework": "angular",
+            "caseName": "browser clear 10k rows",
+            "value": "8.3",
+            "diff": "+260.87%",
+            "unit": "ms",
+            "isMreact": false
+          },
+          {
+            "rank": 8,
+            "framework": "svelte",
+            "caseName": "browser clear 10k rows",
+            "value": "8.5",
+            "diff": "+269.57%",
             "unit": "ms",
             "isMreact": false
           }
