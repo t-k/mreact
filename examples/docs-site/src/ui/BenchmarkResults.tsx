@@ -93,7 +93,8 @@ const benchmarkFrameworkGroups: readonly BenchmarkFrameworkGroup[] = [
 ];
 const benchmarkSuiteDisplayOrder: readonly string[] = [
   "router",
-  "primitive",
+  "primitive-dom",
+  "primitive-reactivity",
   "primitive-browser",
 ];
 const benchmarkResultsGitRef = "main";

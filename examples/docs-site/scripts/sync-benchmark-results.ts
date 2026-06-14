@@ -51,9 +51,18 @@ interface BenchmarkEnvironment {
 
 interface BenchmarkSource {
   readonly id: string;
+  readonly cardFilter?: (card: BenchmarkRankingCard) => boolean;
   readonly source: string;
   readonly title: string;
 }
+
+const primitiveReactivityCaseNames = new Set([
+  "source write with subscriber 1k",
+  "text binding update 1k",
+  "computed fan-out 1k",
+  "computed fan-in 1k",
+  "source write 1k",
+]);
 
 const benchmarkSources: readonly BenchmarkSource[] = [
   {
@@ -62,9 +71,16 @@ const benchmarkSources: readonly BenchmarkSource[] = [
     title: "Router benchmarks",
   },
   {
-    id: "primitive",
+    id: "primitive-dom",
+    cardFilter: (card) => !primitiveReactivityCaseNames.has(card.title),
     source: "primitive.md",
-    title: "Primitive benchmarks",
+    title: "Primitive DOM benchmarks",
+  },
+  {
+    id: "primitive-reactivity",
+    cardFilter: (card) => primitiveReactivityCaseNames.has(card.title),
+    source: "primitive.md",
+    title: "Primitive reactivity microbenchmarks",
   },
   {
     id: "primitive-browser",
@@ -84,7 +100,11 @@ const env = await readJson<BenchmarkEnvironment>(join(latestRun.absolutePath, "e
 const suites = await Promise.all(
   benchmarkSources.map(async (source) => {
     const markdown = await readFile(join(latestRun.absolutePath, source.source), "utf8");
-    const cards = parseRankingCards(source.id, markdown);
+    const cards = parseRankingCards(source.id, markdown).filter(source.cardFilter ?? (() => true));
+
+    if (cards.length === 0) {
+      throw new Error(`No benchmark ranking cards remain for ${source.id}.`);
+    }
 
     return {
       id: source.id,
