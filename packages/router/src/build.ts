@@ -92,6 +92,7 @@ import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
+import { prepareRouteServerActionPlaceholders } from "./actions.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 import { prependTailwindSourceDirectives } from "./tailwind-source.js";
@@ -511,15 +512,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         ),
   ]);
-  const actionRenderBundleExcludedFiles = new Set(
-    [...serverActionManifest.routeReferences.entries()]
-      .filter(([, references]) => references.length > 0)
-      .map(([file]) => file),
-  );
   const { artifacts: serverModules, sharedChunks: serverModuleSharedChunks } = await (
     shouldTrackBuildPhases === false
       ? buildServerModuleArtifacts({
-          actionRenderBundleExcludedFiles,
           bundleRequestRuntimePackages: shouldBuildAwsLambda,
           bundleCache: new Map(),
           clientRouteInferenceCache: serverClientRouteInferenceCache,
@@ -529,13 +524,13 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           project,
           projectRoot: project.projectRoot,
           routes,
+          serverActionReferencesByFile: serverActionManifest.routeReferences,
           sourceAnalysis,
           serverTransformCache,
           vitePlugins,
         })
       : timeBuildPhase(timingSink, progressSink, "serverModules", () =>
           buildServerModuleArtifacts({
-            actionRenderBundleExcludedFiles,
             bundleRequestRuntimePackages: shouldBuildAwsLambda,
             bundleCache: new Map(),
             clientRouteInferenceCache: serverClientRouteInferenceCache,
@@ -545,6 +540,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             project,
             projectRoot: project.projectRoot,
             routes,
+            serverActionReferencesByFile: serverActionManifest.routeReferences,
             sourceAnalysis,
             serverTransformCache,
             vitePlugins,
@@ -988,6 +984,16 @@ function buildSourceAnalysisForFile(
   file: string,
 ): BuildSourceAnalysis | undefined {
   return sourceAnalysis.byFile.get(relative(projectRoot, file).split(sep).join("/"));
+}
+
+function canUseBuildServerActionPlaceholders(
+  references: readonly BuiltServerActionExpressionReference[],
+): boolean {
+  return references.every(
+    (reference) =>
+      reference.expression === reference.exportName &&
+      /^[A-Za-z_$][\w$]*$/u.test(reference.expression),
+  );
 }
 
 async function buildPublicAssetManifest(
@@ -2062,7 +2068,6 @@ function routePathFromParams(route: AppRoute, params: StaticParams): string {
 }
 
 async function buildServerModuleArtifacts(options: {
-  actionRenderBundleExcludedFiles?: ReadonlySet<string> | undefined;
   bundleRequestRuntimePackages: boolean;
   bundleCache: Map<string, Promise<RouterBundleOutput>>;
   cacheDir?: string | undefined;
@@ -2073,6 +2078,7 @@ async function buildServerModuleArtifacts(options: {
   project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
+  serverActionReferencesByFile: ReadonlyMap<string, readonly BuiltServerActionExpressionReference[]>;
   sourceAnalysis: BuildSourceAnalysisScope;
   serverTransformCache: ServerTransformCache;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2193,6 +2199,14 @@ async function buildServerModuleArtifacts(options: {
       const route = routeByFile.get(file);
       const routeAnalysis = options.sourceAnalysis.byRouteFile.get(file);
       const artifact: BuiltServerModuleArtifact = {};
+      const routeActionReferences = options.serverActionReferencesByFile.get(file) ?? [];
+      const renderSource =
+        routeActionReferences.length === 0
+          ? source
+          : prepareRouteServerActionPlaceholders({
+              code: source,
+              formActionReferences: routeActionReferences,
+            });
 
       if (
         requestArtifactFiles.has(file) ||
@@ -2282,8 +2296,11 @@ async function buildServerModuleArtifacts(options: {
           ? (["stream", "string"] as const)
           : (["string"] as const);
       const code =
-        routeAnalysis?.routeCode ??
-        (route === undefined ? source : stripRouteBuildExports(source, absoluteFile));
+        routeActionReferences.length === 0 && routeAnalysis !== undefined
+          ? routeAnalysis.routeCode
+          : route === undefined
+            ? renderSource
+            : stripRouteBuildExports(renderSource, absoluteFile);
       const clientInference =
         routeAnalysis === undefined
           ? await inferClientRouteModule({
@@ -2367,7 +2384,8 @@ async function buildServerModuleArtifacts(options: {
 
           const shouldWriteRenderBundle =
             options.prebundleServerComponents &&
-            options.actionRenderBundleExcludedFiles?.has(file) !== true;
+            (routeActionReferences.length === 0 ||
+              canUseBuildServerActionPlaceholders(routeActionReferences));
           const bundleCode = shouldWriteRenderBundle
             ? await buildServerComponentBundleArtifactCode({
                 clientRouteInferenceCache: options.clientRouteInferenceCache,

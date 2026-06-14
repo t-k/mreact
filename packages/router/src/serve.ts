@@ -358,6 +358,7 @@ async function preloadBuiltAppRuntimeWithRuntime(options: {
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,
+    serverActionReferencesByFile: options.runtime.serverActionReferencesByFile,
     includeRenderModules: plan.includeRenderModules,
   });
 }

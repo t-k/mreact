@@ -47,6 +47,7 @@ import {
   type AppRouterServerActionOptions,
   type PreparedFormActionReference,
   dispatchServerActionRequest,
+  prepareRouteServerActionPlaceholders,
   prepareRouteServerActions,
 } from "./actions.js";
 import { serverActionCookie } from "./csrf.js";
@@ -76,10 +77,12 @@ import {
   hasLoaderExport,
   isStreamRouteSource,
   routeClosureMayUseAwaitBoundary,
+  stripRouteBuildExports,
+  stripRouteModuleExports,
   stripRouteClientOnlyExports,
+  stripRouteClientSource,
   stripRouteLoaderOnlyExports,
   stripRouteMetadataOnlyExports,
-  stripRouteModuleExports,
 } from "./route-source.js";
 import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
 import {
@@ -231,6 +234,10 @@ export async function preloadBuiltRequestModules(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
+  serverActionReferencesByFile?: ReadonlyMap<
+    string,
+    readonly PreparedFormActionReference[]
+  > | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<void> {
   const clientRouteInferenceCache = createClientRouteInferenceCache();
@@ -276,21 +283,31 @@ export async function preloadBuiltRequestModules(options: {
     }
 
     if (options.includeRenderModules !== false) {
+      const actionReferences = options.serverActionReferencesByFile?.get(route.file) ?? [];
+      const analysisCode =
+        actionReferences.length === 0
+          ? code
+          : prepareRouteServerActionPlaceholders({
+              code,
+              formActionReferences: actionReferences,
+            });
       const analysis = await analyzeRouteSource({
         appDir: options.appDir,
         artifact: options.serverModules?.get(route.file)?.analysis,
-        code,
+        buildRenderCode: analysisCode !== code,
+        code: analysisCode,
         filename: route.file,
         routePath: route.path,
         clientRouteInferenceCache,
-        serverModuleCacheVersion: options.serverModuleCacheVersion,
+        serverModuleCacheVersion:
+          actionReferences.length === 0 ? options.serverModuleCacheVersion : undefined,
         serverSourceFiles: options.serverSourceFiles,
         vitePlugins: options.vitePlugins,
       });
       await preloadBuiltPageRouteModules({
         ...options,
         analysis,
-        code,
+        code: analysisCode,
         file: route.file,
       });
     }
@@ -1017,6 +1034,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       appDir: options.appDir,
       code: originalCode,
       formActionReferences: options.serverActionReferencesByFile?.get(matched.route.file),
+      placeholders: true,
       pageFile: matched.route.file,
       request: options.request,
     });
@@ -1031,6 +1049,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         ? originalAnalysis
         : await analyzeRouteSource({
             appDir: options.appDir,
+            buildRenderCode: preparedActions.htmlReplacements !== undefined,
             code,
             filename: matched.route.file,
             routePath: matched.route.path,
@@ -1049,7 +1068,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     const dataPromise = routeAnalysis.hasLoader
       ? loadRouteDataWithInstrumentation({
           appDir: options.appDir,
-          code,
+          code: originalCode,
           context: {
             env: options.env,
             params: matched.params,
@@ -1226,13 +1245,16 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
         html = injectQueryState(html, dehydrate(queryClient));
         const response = withOptionalActionCookie(
           htmlResponse(
-            `<!DOCTYPE html>${clientNavigationHeadTags({
-              assetBaseUrl: options.assetBaseUrl,
-              currentStyleSheets: clientStyleSheets,
-              currentScript: clientRoute ? clientScript : undefined,
-              currentNavigationScript: clientRoute ? undefined : navigationScript,
-              routeScripts: options.clientScripts,
-            })}${html}`,
+            applyActionHtmlReplacements(
+              `<!DOCTYPE html>${clientNavigationHeadTags({
+                assetBaseUrl: options.assetBaseUrl,
+                currentStyleSheets: clientStyleSheets,
+                currentScript: clientRoute ? clientScript : undefined,
+                currentNavigationScript: clientRoute ? undefined : navigationScript,
+                routeScripts: options.clientScripts,
+              })}${html}`,
+              preparedActions.htmlReplacements,
+            ),
             {
               headers: responseHeadersForMetadata(metadata, options.request, {
                 "x-mreact-stream": "1",
@@ -1249,7 +1271,7 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
       let streamData: unknown;
       let streamDataPromise = dataPromise ?? Promise.resolve(undefined);
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
-      if (loadingFile === undefined || routeLoaderMayReturnControlResponse(code)) {
+      if (loadingFile === undefined || routeLoaderMayReturnControlResponse(originalCode)) {
         try {
           streamData = dataPromise === undefined ? undefined : await dataPromise;
         } finally {
@@ -1508,13 +1530,16 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
 
     const response = withOptionalActionCookie(
       htmlResponse(
-        `<!DOCTYPE html>${clientNavigationHeadTags({
-          assetBaseUrl: options.assetBaseUrl,
-          currentStyleSheets: clientStyleSheets,
-          currentScript: clientRoute ? clientScript : undefined,
-          currentNavigationScript: clientRoute ? undefined : navigationScript,
-          routeScripts: options.clientScripts,
-        })}${html}`,
+        applyActionHtmlReplacements(
+          `<!DOCTYPE html>${clientNavigationHeadTags({
+            assetBaseUrl: options.assetBaseUrl,
+            currentStyleSheets: clientStyleSheets,
+            currentScript: clientRoute ? clientScript : undefined,
+            currentNavigationScript: clientRoute ? undefined : navigationScript,
+            routeScripts: options.clientScripts,
+          })}${html}`,
+          preparedActions.htmlReplacements,
+        ),
         {
           headers: responseHeadersForMetadata(metadata, options.request),
         },
@@ -1630,6 +1655,23 @@ function withOptionalActionCookie(
   }
 
   return response;
+}
+
+function applyActionHtmlReplacements(
+  html: string,
+  replacements: readonly (readonly [string, string])[] | undefined,
+): string {
+  if (replacements === undefined || replacements.length === 0) {
+    return html;
+  }
+
+  let next = html;
+
+  for (const [placeholder, value] of replacements) {
+    next = next.replaceAll(placeholder, escapeHtmlAttribute(value));
+  }
+
+  return next;
 }
 
 function modulePreloadTags(script: string | undefined, assetBaseUrl: string | undefined): string {
@@ -2768,6 +2810,7 @@ function warnProductionDynamicServerTransform(
 async function analyzeRouteSource(options: {
   appDir: string;
   artifact?: BuiltRouteSourceAnalysisSummary | undefined;
+  buildRenderCode?: boolean | undefined;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   define?: UserConfig["define"] | undefined;
@@ -2791,7 +2834,7 @@ async function analyzeRouteSource(options: {
     return analysis;
   }
 
-  const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+  const cacheKey = `${options.serverModuleCacheVersion ?? "dev"}\0${options.filename}\0${sourceHash}\0${options.buildRenderCode === true ? "build-render" : "render"}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
   const cached = readRouterRuntimeCacheEntry(
     routeSourceAnalysisCache,
     cacheKey,
@@ -2838,6 +2881,7 @@ function routeSourceAnalysisFromArtifact(
 
 async function analyzeRouteSourceUncached(options: {
   appDir: string;
+  buildRenderCode?: boolean | undefined;
   clientRouteInferenceCache: ClientRouteInferenceCache;
   code: string;
   define?: UserConfig["define"] | undefined;
@@ -2846,11 +2890,14 @@ async function analyzeRouteSourceUncached(options: {
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteSourceAnalysis> {
-  const routeCode = stripRouteModuleExports(options.code, options.filename);
+  const routeCode =
+    options.buildRenderCode === true
+      ? stripRouteBuildExports(options.code, options.filename)
+      : stripRouteModuleExports(options.code, options.filename);
   const clientInference = await inferClientRouteModule({
     appDir: options.appDir,
     cache: options.clientRouteInferenceCache,
-    code: routeCode,
+    code: stripRouteClientSource({ code: options.code, filename: options.filename }),
     filename: options.filename,
     routePath: options.routePath,
     vitePlugins: options.vitePlugins,
@@ -2956,6 +3003,7 @@ async function loadServerModule(
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
   const prebuiltCode = prebuiltServerComponentModuleCode(artifact, code, codeHash);
+  const usesPrebuiltCompiledCode = artifact?.code === code;
   if (
     artifact !== undefined &&
     prebuiltServerModuleOutputMatches(artifact, code, codeHash) &&
@@ -2990,7 +3038,7 @@ async function loadServerModule(
               label: "Server component",
             }),
           ],
-    ...(prebuiltCode === undefined
+    ...(prebuiltCode === undefined && !usesPrebuiltCompiledCode
       ? {
           resolveDir: dirname(sourcefile),
           serverSourceTransform: {
@@ -3002,6 +3050,7 @@ async function loadServerModule(
           },
         }
       : {}),
+    ...(usesPrebuiltCompiledCode ? { resolveDir: dirname(sourcefile) } : {}),
     sourcefile,
     vitePlugins,
   });
@@ -3611,6 +3660,7 @@ async function loadServerStreamModule(
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
   const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash, outputOptions);
+  const usesPrebuiltCompiledCode = artifactCode?.code === code;
   if (
     artifactCode !== undefined &&
     prebuiltServerModuleOutputOptionsMatch(artifactCode, outputOptions) &&
@@ -3646,7 +3696,7 @@ async function loadServerStreamModule(
               label: "Server stream component",
             }),
           ],
-    ...(prebuiltCode === undefined
+    ...(prebuiltCode === undefined && !usesPrebuiltCompiledCode
       ? {
           resolveDir: dirname(sourcefile),
           serverSourceTransform: {
@@ -3658,6 +3708,7 @@ async function loadServerStreamModule(
           },
         }
       : {}),
+    ...(usesPrebuiltCompiledCode ? { resolveDir: dirname(sourcefile) } : {}),
     sourcefile,
     vitePlugins,
   });

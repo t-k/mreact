@@ -43,6 +43,8 @@ const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldNonce = "__mreact_action_nonce";
 const formFieldActionToken = "__mreact_action_token";
+const csrfTokenPlaceholder = "__mreact_action_csrf_placeholder__";
+const actionNoncePlaceholder = "__mreact_action_nonce_placeholder__";
 const actionTokenSecret = process.env.MREACT_SERVER_ACTION_SECRET ?? defaultActionTokenSecret();
 // Bounded default replay store for form-action nonces. The previous
 // implementation was an unbounded Set that grew with every successful
@@ -175,6 +177,7 @@ export interface PreparedRouteActions {
   code: string;
   csrfToken?: string;
   diagnostics?: ServerActionInferenceDiagnostic[] | undefined;
+  htmlReplacements?: readonly (readonly [string, string])[] | undefined;
   // True when the cookie should be (re)set on the response. False means
   // the incoming request already carried a valid CSRF cookie that the
   // render is reusing -- skipping Set-Cookie avoids cookie thrash across
@@ -185,6 +188,7 @@ export interface PreparedRouteActions {
 
 interface ActionReference {
   exportName: string;
+  expression?: string | undefined;
   inferred: boolean;
   moduleId: string;
 }
@@ -210,6 +214,7 @@ export async function prepareRouteServerActions(options: {
   appDir: string;
   code: string;
   formActionReferences?: readonly PreparedFormActionReference[] | undefined;
+  placeholders?: boolean | undefined;
   pageFile: string;
   request?: Request | undefined;
 }): Promise<PreparedRouteActions> {
@@ -248,10 +253,13 @@ export async function prepareRouteServerActions(options: {
   const csrfToken = existingToken ?? randomUUID();
   const csrfTokenIsNew = existingToken === undefined;
   const actionNonce = randomUUID();
+  const usePlaceholders =
+    options.placeholders === true && canUseStableFormActionPlaceholders(references);
   const lowered = lowerFormActions({
     actionNonce,
     code: options.code,
     csrfToken,
+    placeholders: usePlaceholders,
     references,
   });
 
@@ -271,7 +279,43 @@ export async function prepareRouteServerActions(options: {
     csrfTokenIsNew,
     diagnostics,
     hasFormActions: true,
+    ...(usePlaceholders
+      ? { htmlReplacements: formActionHtmlReplacements({ actionNonce, csrfToken, references }) }
+      : {}),
   };
+}
+
+export function prepareRouteServerActionPlaceholders(options: {
+  code: string;
+  formActionReferences: readonly PreparedFormActionReference[];
+}): string {
+  const references = formActionReferenceMap(options.code, options.formActionReferences);
+
+  if (references.size === 0) {
+    return options.code;
+  }
+
+  if (!canUseStableFormActionPlaceholders(references)) {
+    return options.code;
+  }
+
+  return lowerFormActions({
+    actionNonce: actionNoncePlaceholder,
+    code: options.code,
+    csrfToken: csrfTokenPlaceholder,
+    placeholders: true,
+    references,
+  });
+}
+
+function canUseStableFormActionPlaceholders(
+  references: ReadonlyMap<string, ActionReference>,
+): boolean {
+  return [...references.values()].every(
+    (reference) =>
+      reference.expression === reference.exportName &&
+      /^[A-Za-z_$][\w$]*$/u.test(reference.expression),
+  );
 }
 
 function formActionReferenceMap(
@@ -287,6 +331,7 @@ function formActionReferenceMap(
         formActionOccurrenceKey(reference),
         {
           exportName: reference.exportName,
+          expression: reference.expression,
           inferred: reference.inferred,
           moduleId: reference.moduleId,
         },
@@ -820,6 +865,7 @@ function lowerFormActions(options: {
   actionNonce: string;
   code: string;
   csrfToken: string;
+  placeholders?: boolean | undefined;
   references: Map<string, ActionReference>;
 }): string {
   let code = options.code;
@@ -837,6 +883,7 @@ function lowerFormActions(options: {
       actionNonce: options.actionNonce,
       csrfToken: options.csrfToken,
       opening,
+      placeholders: options.placeholders === true,
       reference,
       referenceName: formReference.expression,
     });
@@ -849,6 +896,39 @@ function lowerFormActions(options: {
   }
 
   return code;
+}
+
+function formActionHtmlReplacements(options: {
+  actionNonce: string;
+  csrfToken: string;
+  references: ReadonlyMap<string, ActionReference>;
+}): readonly (readonly [string, string])[] {
+  const replacements: Array<readonly [string, string]> = [
+    [csrfTokenPlaceholder, options.csrfToken],
+    [actionNoncePlaceholder, options.actionNonce],
+  ];
+  const seenTokens = new Set<string>();
+
+  for (const reference of options.references.values()) {
+    const placeholder = actionTokenPlaceholder(reference);
+
+    if (seenTokens.has(placeholder)) {
+      continue;
+    }
+
+    seenTokens.add(placeholder);
+    replacements.push([
+      placeholder,
+      formActionToken({
+        csrfToken: options.csrfToken,
+        exportName: reference.exportName,
+        moduleId: reference.moduleId,
+        nonce: options.actionNonce,
+      }),
+    ]);
+  }
+
+  return replacements;
 }
 
 function formActionOccurrenceKey(reference: {
@@ -875,6 +955,7 @@ function lowerFormActionOpening(options: {
   actionNonce: string;
   csrfToken: string;
   opening: string;
+  placeholders: boolean;
   reference: ActionReference;
   referenceName: string;
 }): string {
@@ -897,20 +978,37 @@ function lowerFormActionOpening(options: {
   const hidden = [
     hiddenInput(formFieldModuleId, options.reference.moduleId),
     hiddenInput(formFieldExportName, options.reference.exportName),
-    hiddenInput(formCsrfFieldName, options.csrfToken),
-    hiddenInput(formFieldNonce, options.actionNonce),
+    hiddenInput(
+      formCsrfFieldName,
+      options.placeholders ? csrfTokenPlaceholder : options.csrfToken,
+    ),
+    hiddenInput(
+      formFieldNonce,
+      options.placeholders ? actionNoncePlaceholder : options.actionNonce,
+    ),
     hiddenInput(
       formFieldActionToken,
-      formActionToken({
-        csrfToken: options.csrfToken,
-        exportName: options.reference.exportName,
-        moduleId: options.reference.moduleId,
-        nonce: options.actionNonce,
-      }),
+      options.placeholders
+        ? actionTokenPlaceholder(options.reference)
+        : formActionToken({
+            csrfToken: options.csrfToken,
+            exportName: options.reference.exportName,
+            moduleId: options.reference.moduleId,
+            nonce: options.actionNonce,
+          }),
     ),
   ].join("");
 
   return `<form${attrs} method="post" action="/_mreact/actions">${hidden}`;
+}
+
+function actionTokenPlaceholder(reference: ActionReference): string {
+  return `__mreact_action_token_${createHash("sha256")
+    .update(reference.moduleId)
+    .update("\0")
+    .update(reference.exportName)
+    .digest("hex")
+    .slice(0, 16)}__`;
 }
 
 function escapeRegExp(value: string): string {

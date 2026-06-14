@@ -7390,6 +7390,108 @@ export default function Page({ data }) {
     expect(await response.text()).toContain("<main>module-file</main>");
   });
 
+  test("uses prebuilt render server modules for dynamic routes with request and metadata exports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-dynamic-loader-render-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const lambdaOutDir = join(rootDir, ".lambda");
+    await mkdir(join(appDir, "families", "$id"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "families", "$id", "billing-actions.ts"),
+      `export async function saveBillingNote() {
+  return { ok: true };
+}`,
+    );
+    await writeFile(
+      join(appDir, "families", "$id", "page.tsx"),
+      `import { saveBillingNote } from "./billing-actions";
+
+export function loader({ params }) {
+  return { id: params.id };
+}
+
+export const metadata = { title: "Family detail" };
+
+export default function Page({ data }) {
+  return <main>Family {data.id}<form action={saveBillingNote}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+    await packageAwsLambdaArtifact({
+      fromDir: outDir,
+      outDir: lambdaOutDir,
+      skipRuntimeDependencyCheck: true,
+    });
+    const manifest = JSON.parse(
+      await readFile(join(lambdaOutDir, ".mreact", "server", "manifest.json"), "utf8"),
+    ) as { serverModuleRenderFiles?: Record<string, string> };
+    const renderArtifactFile = manifest.serverModuleRenderFiles?.["app/families/$id/page.tsx"];
+    const renderArtifact = JSON.parse(
+      await readFile(join(lambdaOutDir, ".mreact", "server", renderArtifactFile ?? ""), "utf8"),
+    ) as { string?: { code?: string; moduleFile?: string } };
+    if (renderArtifact.string === undefined) {
+      throw new Error("Expected prebuilt render code for an inferred server action route");
+    }
+    const renderModulePath =
+      renderArtifact.string.moduleFile === undefined
+        ? undefined
+        : join(lambdaOutDir, ".mreact", "server", renderArtifact.string.moduleFile);
+    const renderModuleCode =
+      renderModulePath === undefined
+        ? (renderArtifact.string.code ?? "")
+        : await readFile(renderModulePath, "utf8");
+
+    expect(renderModuleCode).toContain("Family ");
+    if (renderModulePath === undefined) {
+      renderArtifact.string.code = renderModuleCode.replaceAll("Family ", "Prebuilt family ");
+      await writeFile(
+        join(lambdaOutDir, ".mreact", "server", renderArtifactFile ?? ""),
+        JSON.stringify(renderArtifact),
+      );
+    } else {
+      await writeFile(renderModulePath, renderModuleCode.replaceAll("Family ", "Prebuilt family "));
+    }
+    await rename(appDir, join(rootDir, "app.moved"));
+    await rename(outDir, join(rootDir, ".mreact.moved"));
+    await mkdir(join(lambdaOutDir, "node_modules", "@reckona"), { recursive: true });
+    await symlink(
+      join(process.cwd(), "packages", "router"),
+      join(lambdaOutDir, "node_modules", "@reckona", "mreact-router"),
+    );
+
+    const smokeOutput = await runNodeModuleScript(
+      [
+        `process.env.NODE_ENV = "production";`,
+        `const mod = await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, "mreact-handler.mjs")).href)});`,
+        `const result = await mod.handler({`,
+        `  headers: { host: "lambda.test", "x-forwarded-proto": "https" },`,
+        `  rawPath: "/families/42",`,
+        `  rawQueryString: "",`,
+        `  requestContext: { http: { method: "GET" } },`,
+        `  version: "2.0",`,
+        `});`,
+        `console.log(JSON.stringify(result));`,
+      ].join("\n"),
+      lambdaOutDir,
+    );
+    const result = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "{}") as {
+      body: string;
+      statusCode: number;
+    };
+
+    expect(result.statusCode).toBe(200);
+    expect(result.body).toContain("<main>Prebuilt family 42");
+    expect(smokeOutput).not.toContain("dynamic server transform path ran in production");
+  });
+
   test("preloads built request modules serially to limit peak memory", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-serial-"));
     const appDir = join(rootDir, "app");
