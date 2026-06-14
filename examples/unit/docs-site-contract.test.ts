@@ -510,9 +510,13 @@ describe("docs-site example contract", () => {
     const compat = await readDocsSite("src/content/guides/react-compatibility.mdx");
 
     expect(nav).toContain('text: "Utilities"');
-    expect(nav).toContain('{ text: "Virtualized Lists", slug: "utilities/virtualized-lists" }');
-    expect(nav).toContain('{ text: "Store", slug: "utilities/store" }');
-    expect(nav).toContain('{ text: "Server State", slug: "utilities/server-state" }');
+    expect(nav).toContain(
+      '{ text: "Virtualized Lists (@reckona/mreact-virtual)", slug: "utilities/virtualized-lists" }',
+    );
+    expect(nav).toContain('{ text: "Store (@reckona/mreact-store)", slug: "utilities/store" }');
+    expect(nav).toContain(
+      '{ text: "Server State (@reckona/mreact-query)", slug: "utilities/server-state" }',
+    );
     expect(nav).toContain('{ text: "React Compatibility", slug: "guides/react-compatibility" }');
     expect(nav).not.toContain("mreact-next");
     expect(nav).not.toContain("Mreact Next");
@@ -524,8 +528,8 @@ describe("docs-site example contract", () => {
     expect(contentRegistry).not.toContain('page("reference/packages/query"');
     expect(contentRegistry).toContain('page("guides/react-compatibility"');
 
-    expect(virtual).toContain('export const title = "Virtualized Lists"');
-    expect(virtual).toContain("# Virtualized Lists");
+    expect(virtual).toContain('export const title = "Virtualized Lists (@reckona/mreact-virtual)"');
+    expect(virtual).toContain("# Virtualized Lists (@reckona/mreact-virtual)");
     expect(virtual).toContain("@reckona/mreact-virtual");
     expect(virtual).toContain("API reference:");
     expect(virtual).toContain("/api/modules/_reckona_mreact-virtual.html");
@@ -550,8 +554,8 @@ describe("docs-site example contract", () => {
     expect(store).toContain("request-isolated");
     expect(store).toContain("@reckona/mreact-query");
 
-    expect(query).toContain('export const title = "Server State"');
-    expect(query).toContain("# Server State");
+    expect(query).toContain('export const title = "Server State (@reckona/mreact-query)"');
+    expect(query).toContain("# Server State (@reckona/mreact-query)");
     expect(query).toContain("@reckona/mreact-query");
     expect(query).toContain("API reference:");
     expect(query).toContain("/api/modules/_reckona_mreact-query.html");
