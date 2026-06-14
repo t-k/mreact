@@ -52,11 +52,7 @@ export function detachFiberRefs(fiber: Fiber): void {
 }
 
 function mayHaveDeletedFiberSubtrees(fiber: Fiber): boolean {
-  return (
-    fiber.childListChanged ||
-    fiber.subtreeChildListChanged ||
-    ((fiber.flags | fiber.subtreeFlags) & ChildDeletion) !== 0
-  );
+  return ((fiber.flags | fiber.subtreeFlags) & ChildDeletion) !== 0;
 }
 
 function collectRetainedFiberPairs(fiber: Fiber | undefined): Set<Fiber> {

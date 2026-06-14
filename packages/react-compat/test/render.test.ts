@@ -1835,6 +1835,47 @@ describe("react-compat render", () => {
     expect(container.children).toHaveLength(3);
   });
 
+  test("append-only keyed rows skip deleted subtree cleanup", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const firstRows = Array.from({ length: 3 }, (_, index) =>
+      createElement("div", { key: index, "data-key": index }, String(index)),
+    );
+    const nextRows = [
+      ...firstRows,
+      createElement("div", { key: 3, "data-key": 3 }, "3"),
+    ];
+
+    root.render(createElement(Fragment, null, firstRows));
+
+    const originalAdd = Set.prototype.add;
+    let retainedFiberAdds = 0;
+
+    try {
+      Set.prototype.add = function countedAdd<T>(this: Set<T>, value: T): Set<T> {
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "tag" in value &&
+          "pendingProps" in value &&
+          "memoizedProps" in value
+        ) {
+          retainedFiberAdds += 1;
+        }
+
+        return originalAdd.call(this, value);
+      };
+
+      root.render(createElement(Fragment, null, nextRows));
+    } finally {
+      Set.prototype.add = originalAdd;
+    }
+
+    expect(retainedFiberAdds).toBeLessThanOrEqual(1);
+    expect(container.children).toHaveLength(4);
+  });
+
   test("clears removed direct keyed row fibers from the retained alternate tree", () => {
     vi.stubEnv("NODE_ENV", "production");
     const container = document.createElement("div");
