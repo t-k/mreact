@@ -72,6 +72,17 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
 }
 
 // @public
+export interface CrossTabQuerySyncOptions {
+    broadcastInvalidations?: boolean | undefined;
+    broadcastQueryData?: boolean | undefined;
+    broadcastRemovals?: boolean | undefined;
+    channel?: string | undefined;
+    includeQuery?: ((queryKey: QueryKey) => boolean) | undefined;
+    singleFlight?: boolean | undefined;
+    singleFlightHandoffTimeoutMs?: number | undefined;
+}
+
+// @public
 export function dehydrate(client: QueryClient): DehydratedQueryClient;
 
 // @public
@@ -294,6 +305,9 @@ export interface QuerySubscriptionOptions {
 
 // @public
 export function runWithQueryClient<T>(client: QueryClient, fn: () => T): T;
+
+// @public
+export function syncQueryClientAcrossTabs(client: QueryClient, options?: CrossTabQuerySyncOptions): () => void;
 
 // (No @packageDocumentation comment for this package)
 

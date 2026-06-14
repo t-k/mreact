@@ -566,6 +566,15 @@ describe("docs-site example contract", () => {
     expect(query).toContain("## SSR first render with browser revalidation");
     expect(query).toContain("refetchOnWindowFocus: true");
     expect(query).toContain("refetchOnReconnect: true");
+    expect(query).toContain("## Cross-tab sync");
+    expect(query).toContain("syncQueryClientAcrossTabs");
+    expect(query).toContain("BroadcastChannel");
+    expect(query).toContain("Web Locks");
+    expect(query).toContain("singleFlight: true");
+    expect(query).toContain("channel: `mreact-query:v1:user:${sessionId}`");
+    expect(query).toContain("includeQuery: (queryKey) => queryKey[0] === \"dashboard\"");
+    expect(query).toContain("non-default name scoped to the current authenticated user");
+    expect(query).toContain("keyless invalidations and removals stay local");
     expect(query).toContain("window.setInterval");
     expect(query).toContain("observer.refetch()");
     expect(query).toContain("SWR-style");
@@ -1309,6 +1318,9 @@ describe("docs-site example contract", () => {
     expect(dataLoading).toContain("lives only for the current request");
     expect(dataLoading).toContain("This is not a cross-request server cache");
     expect(dataLoading).toContain("Each incoming request gets its own QueryClient");
+    expect(dataLoading).toContain("same-origin browser tabs");
+    expect(dataLoading).toContain("syncQueryClientAcrossTabs");
+    expect(dataLoading).toContain("includeQuery");
     expect(dataLoading).toContain("## Use loader data in metadata");
     expect(dataLoading).toContain("generateMetadata");
     expect(dataLoading).toContain("{ data }: { data: UserData }");
@@ -1439,6 +1451,8 @@ describe("docs-site example contract", () => {
     expect(cacheGuide).toContain("x-mreact-revalidate");
     expect(cacheGuide).toContain("## Client navigation cache");
     expect(cacheGuide).toContain("prefetched navigation HTML");
+    expect(cacheGuide).toContain("Query cross-tab sync");
+    expect(cacheGuide).toContain("does not change the route HTML cache");
     expect(cacheGuide).toContain("single-flight mutation response");
     expect(cacheGuide).toContain("x-mreact-action-single-flight");
     expect(cacheGuide).toContain("without a second GET");

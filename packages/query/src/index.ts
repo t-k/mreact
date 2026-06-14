@@ -4,6 +4,10 @@ import { hydrateQueryDataSymbol, type HydratableQueryClient } from "./hydration-
 import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./query-lifecycle.js";
 
 export { hashQueryKey } from "./query-lifecycle.js";
+export {
+  syncQueryClientAcrossTabs,
+  type CrossTabQuerySyncOptions,
+} from "./cross-tab.js";
 
 /** Represents the structured key used to identify cached query data. */
 export type QueryKey = readonly unknown[];

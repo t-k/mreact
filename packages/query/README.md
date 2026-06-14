@@ -11,6 +11,7 @@ import {
   dehydrate,
   getQueryClient,
   hydrate,
+  syncQueryClientAcrossTabs,
 } from "@reckona/mreact-query";
 
 const queryClient = createQueryClient();
@@ -43,6 +44,7 @@ hydrate(getQueryClient(), state);
 - Mutation lifecycle hooks run in this order: `onMutate`, `mutationFn`, state update, `onSuccess`, query invalidation, then `onSettled`. On failure, state updates before `onError` and `onSettled`. The value returned by `onMutate` is passed to `onError` and `onSettled`, which supports optimistic rollback without external bookkeeping.
 - `dehydrate()` and `hydrate()` move query state from server to client while preserving each successful query's `updatedAt` timestamp for `staleTime` checks.
 - `getQueryClient()` returns the browser singleton query client.
+- `syncQueryClientAcrossTabs()` optionally coordinates same-origin browser tabs with `BroadcastChannel` and Web Locks. Query messages require a non-default scoped channel and an `includeQuery` allowlist; successful query data is shared only when `broadcastQueryData` or `singleFlight` is explicitly enabled within that scope.
 
 ## Router Usage
 
@@ -66,3 +68,19 @@ feed.result.get().pages.flatMap((page) => page.items);
 ```
 
 Set `refetchOnWindowFocus` or `refetchOnReconnect` when a browser observer should refresh on visibility/focus or network reconnect. Dispose observers when a component unmounts so browser listeners are removed.
+
+## Cross-Tab Sync
+
+Use `syncQueryClientAcrossTabs()` when multiple same-origin tabs should observe each other's invalidations or avoid duplicate focus/reconnect refetches. The function mutates the provided client and returns a disposer that restores the original methods.
+
+```ts
+const queryClient = getQueryClient();
+
+const disposeQuerySync = syncQueryClientAcrossTabs(queryClient, {
+  channel: `mreact-query:v1:user:${sessionId}`,
+  includeQuery: (queryKey) => queryKey[0] === "dashboard",
+  singleFlight: true,
+});
+```
+
+The adapter only sends or receives query messages when `channel` is a non-default name scoped to the current authenticated user, tenant, or other namespace and `includeQuery` explicitly allows the query key. Channel names are not secrets or authorization boundaries: any trusted or untrusted script running in the same origin can open the same `BroadcastChannel`, observe shared successful data, or send messages for allowed keys. Use data sharing only when the whole same-origin runtime is trusted, and do not share tokens, authorization-bearing data, sensitive PII, or query keys that reveal sensitive information. `invalidateQueries({ queryKey })` and `removeQueries({ queryKey })` are broadcast inside that namespace by default; keyless invalidations and removals stay local. Set `broadcastQueryData: true` only for query keys whose successful data is safe to share inside the channel. `singleFlight: true` uses Web Locks when available and hands the leader's successful fetch result to follower tabs so only one tab needs to perform a same-key fetch; without Web Locks or the required scope options, `singleFlight` falls back to local fetch behavior without leader election or implicit result handoff.

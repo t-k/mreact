@@ -163,6 +163,26 @@ export function DashboardLiveSummary(props: { initialSummary: DashboardSummary }
 
 `refetchOnWindowFocus` listens for focus and visible-tab transitions. `refetchOnReconnect` listens for the browser `online` event. Mreact Query does not currently have a built-in `refetchInterval` option, so use a small client-side timer when the view needs periodic polling. Always dispose long-lived observers and timers when integrating outside a component cleanup lifecycle.
 
+## Cross-tab sync
+
+Use `syncQueryClientAcrossTabs()` when same-origin browser tabs should observe each other's invalidations or avoid duplicate focus/reconnect refetches. The adapter uses `BroadcastChannel` for cache messages and Web Locks for `singleFlight` leader selection when the browser supports it.
+
+```ts
+import { getQueryClient, syncQueryClientAcrossTabs } from "@reckona/mreact-query";
+
+const client = getQueryClient();
+
+syncQueryClientAcrossTabs(client, {
+  channel: `mreact-query:v1:user:${sessionId}`,
+  includeQuery: (queryKey) => queryKey[0] === "dashboard",
+  singleFlight: true,
+});
+```
+
+The adapter only sends or receives query messages when `channel` is a non-default name scoped to the current authenticated user, tenant, or equivalent namespace and `includeQuery` explicitly allows the query key. Channel names are not secrets or authorization boundaries: any trusted or untrusted script running in the same origin can open the same `BroadcastChannel`, observe shared successful data, or send messages for allowed keys. Use data sharing only when the whole same-origin runtime is trusted, and do not share tokens, authorization-bearing data, sensitive PII, or query keys that reveal sensitive information. Invalidations and removals with a query key are broadcast inside that namespace by default, while keyless invalidations and removals stay local. Successful query data is not broadcast unless you set `broadcastQueryData: true` or enable `singleFlight` in a browser with Web Locks, because `singleFlight` hands the leader's successful data to follower tabs. Use `includeQuery` to keep sensitive or unrelated query keys out of the channel.
+
+With `singleFlight: true`, focus and reconnect revalidation still uses normal `createQuery()` options such as `refetchOnWindowFocus` and `refetchOnReconnect`; the cross-tab adapter wraps `fetchQuery()` so same-key browser refetches can share one in-flight request. Without Web Locks or the required scope options, `singleFlight` falls back to local fetch behavior without leader election or implicit result handoff. `broadcastQueryData: true` is separate from Web Locks and still shares successful data when the scoped channel and allowlist are configured.
+
 ## Infinite queries
 
 Use `createInfiniteQuery()` for cursor timelines and feeds that should not hand-roll page state or concurrent next-page dedupe.
@@ -222,6 +242,7 @@ Use `gcTime` on short-lived browser views when idle cache entries should be evic
 - `dehydrate()`
 - `hydrate()`
 - `hashQueryKey()`
+- `syncQueryClientAcrossTabs()`
 
 API reference: these links open the generated TypeDoc pages inside this docs site.
 
@@ -231,3 +252,4 @@ API reference: these links open the generated TypeDoc pages inside this docs sit
 - [createQuery()](/api/functions/_reckona_mreact-query.createQuery.html)
 - [createInfiniteQuery()](/api/functions/_reckona_mreact-query.createInfiniteQuery.html)
 - [createMutation()](/api/functions/_reckona_mreact-query.createMutation.html)
+- [syncQueryClientAcrossTabs()](/api/functions/_reckona_mreact-query.syncQueryClientAcrossTabs.html)
