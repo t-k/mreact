@@ -122,7 +122,7 @@ async function main() {
     await installOfficialDependencies();
     server = startServer();
     await waitForServer();
-    await run("npm", ["run", "rebuild", "--", "--frameworks", ...selectedFrameworks], checkoutRoot);
+    await rebuildSelectedFrameworks();
     await resetOfficialRunOutput();
     await run("npm", ["run", "bench", "--", "--runner", "playwright", "--headless", "true", ...selectedFrameworks, ...benchmarkArgs()], checkoutRoot);
   } finally {
@@ -133,6 +133,24 @@ async function main() {
 
   await copyResults();
   await writeSummary();
+}
+
+async function rebuildSelectedFrameworks() {
+  if (selectedBenchmarks.length === 0) {
+    await run("npm", ["run", "rebuild", "--", "--frameworks", ...selectedFrameworks], checkoutRoot);
+    return;
+  }
+
+  console.log("Using js-framework-benchmark build-only rebuild path for scoped benchmark run.");
+  await run("node", ["--input-type=module", "-e", buildOnlyRebuildScript()], checkoutRoot);
+}
+
+function buildOnlyRebuildScript() {
+  return [
+    'import { rebuildFrameworks } from "./cli/rebuild-build-single.js";',
+    `const frameworks = ${JSON.stringify(selectedFrameworks)};`,
+    "if (!rebuildFrameworks(frameworks, false)) process.exit(1);",
+  ].join("\n");
 }
 
 async function resetOfficialRunOutput() {

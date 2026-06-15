@@ -205,4 +205,21 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain("MREACT_JS_FRAMEWORK_LOCAL_PACKAGES=0");
     expect(runner).toContain("return defaultValue;");
   });
+
+  test("uses build-only official rebuild path for scoped benchmark iterations", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain("await rebuildSelectedFrameworks();");
+    expect(runner).toContain("selectedBenchmarks.length === 0");
+    expect(runner).toContain('import { rebuildFrameworks } from "./cli/rebuild-build-single.js";');
+    expect(runner).toContain("build-only rebuild path");
+  });
 });
