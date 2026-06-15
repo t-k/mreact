@@ -45,7 +45,7 @@ export function effect(fn: () => void | (() => void)): () => void {
 
       computation.trackingAddedDeps = undefined;
       computation.trackingCount = 0;
-      computation.trackingTouchedDeps = [];
+      computation.trackingTouchedDeps = undefined;
       computation.trackingVersion = nextTrackingVersion;
       runtimeState.activeTracker = computation;
 

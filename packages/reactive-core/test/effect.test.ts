@@ -64,6 +64,23 @@ describe("effect", () => {
     expect(addedDepsAllocated).toBe(false);
   });
 
+  test("does not allocate touched dependency tracking for stable effect dependencies", async () => {
+    const count = cell(0);
+    let touchedDepsAllocated = false;
+
+    const dispose = effect(() => {
+      const computation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      touchedDepsAllocated ||= computation?.trackingTouchedDeps !== undefined;
+      count.get();
+    });
+
+    count.set(1);
+    await flushEffects();
+    dispose();
+
+    expect(touchedDepsAllocated).toBe(false);
+  });
+
   test("initial run does not probe cleanup touched dependency set", () => {
     const count = cell(0);
     const originalHas = Set.prototype.has;
