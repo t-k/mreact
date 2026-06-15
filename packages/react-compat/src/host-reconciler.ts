@@ -1311,17 +1311,15 @@ function createHostFiberImpl(
 
     const memoType = node.type;
     const memoPath = `${path}.memo`;
+    const previousMemoFiber =
+      current?.tag === "memo" && current.type === memoType ? current : undefined;
     const previousMemoState =
-      current?.tag === "memo"
-        ? (current.memoizedState as MemoFiberState | undefined)
+      previousMemoFiber !== undefined
+        ? (previousMemoFiber.memoizedState as MemoFiberState | undefined)
         : undefined;
-    const fiber =
-      current?.tag === "memo" && current.type === memoType
-        ? createWorkInProgress(current, node.props)
-        : createFiber("memo", node.props, key);
-    fiber.type = memoType;
 
     if (
+      previousMemoFiber !== undefined &&
       previousMemoState !== undefined &&
       !(
         memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
@@ -1333,16 +1331,20 @@ function createHostFiberImpl(
       ) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
-      if (memoStateNeedsActiveInstanceMark(previousMemoState)) {
-        markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
-      }
-      fiber.child = getSkippedChild(current);
+      const fiber = getMemoBailoutFiber(runtime, previousMemoFiber, node.props, previousMemoState);
+      fiber.child = getSkippedChild(previousMemoFiber);
       fiber.memoizedState = previousMemoState;
       return {
         fiber,
         consumed: options.previousNodes?.length ?? 0,
       };
     }
+
+    const fiber =
+      previousMemoFiber !== undefined
+        ? createWorkInProgress(previousMemoFiber, node.props)
+        : createFiber("memo", node.props, key);
+    fiber.type = memoType;
 
     const renderedElement: ReactCompatElement = {
       ...node,
@@ -3099,11 +3101,8 @@ function tryReuseMemoBailout(
     return undefined;
   }
 
-  const fiber = createWorkInProgress(current, node.props);
+  const fiber = getMemoBailoutFiber(runtime, current, node.props, previousMemoState);
   fiber.type = node.type;
-  if (memoStateNeedsActiveInstanceMark(previousMemoState)) {
-    markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
-  }
   fiber.child = getSkippedChild(current);
   fiber.memoizedState = previousMemoState;
   return {
@@ -3444,6 +3443,37 @@ function memoStateNeedsEffectCheck(state: MemoFiberState): boolean {
 
 function memoStateNeedsActiveInstanceMark(state: MemoFiberState): boolean {
   return state.hasRetainedInstanceDependencies !== false;
+}
+
+function getMemoBailoutFiber(
+  runtime: RootRuntime,
+  current: Fiber,
+  pendingProps: unknown,
+  state: MemoFiberState,
+): Fiber {
+  if (canReuseMemoBailoutFiber(current, state)) {
+    current.pendingProps = pendingProps;
+    current.flags = NoFlags;
+    current.subtreeFlags = NoFlags;
+    current.childListChanged = false;
+    current.subtreeChildListChanged = false;
+    current.hostChildListChanged = false;
+    return current;
+  }
+
+  const fiber = createWorkInProgress(current, pendingProps);
+  if (memoStateNeedsActiveInstanceMark(state)) {
+    markActiveInstanceKeys(runtime, state.instanceKeys);
+  }
+  return fiber;
+}
+
+function canReuseMemoBailoutFiber(current: Fiber, state: MemoFiberState): boolean {
+  return (
+    state.hasRetainedInstanceDependencies === false &&
+    current.hasRefSubtree !== true &&
+    current.hydrateExisting !== true
+  );
 }
 
 function hasDirtyInstanceDependencies(

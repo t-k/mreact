@@ -83,8 +83,18 @@ describe("host reconciler module", () => {
     );
 
     expect(hostReconcilerSource).toContain("hasRetainedInstanceDependencies:");
-    expect(hostReconcilerSource).toContain("memoStateNeedsActiveInstanceMark(previousMemoState)");
+    expect(hostReconcilerSource).toContain("memoStateNeedsActiveInstanceMark(state)");
     expect(hostReconcilerSource).toContain("function hasRetainedInstanceDependencies(");
+  });
+
+  test("reuses dependency-free memo bailout fibers without creating work in progress", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function getMemoBailoutFiber(");
+    expect(hostReconcilerSource).toContain("canReuseMemoBailoutFiber(current, state)");
   });
 
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
