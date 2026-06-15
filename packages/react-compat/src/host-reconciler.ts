@@ -78,6 +78,8 @@ import {
 interface MemoFiberState {
   props: Record<string, unknown>;
   instanceKeys: string[];
+  hasDirtyInstanceDependencies: boolean;
+  hasUnflushedEffectDependencies: boolean;
 }
 
 interface FunctionFiberState {
@@ -1281,8 +1283,14 @@ function createHostFiberImpl(
 
     if (
       previousMemoState !== undefined &&
-      !hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath) &&
-      !hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys) &&
+      !(
+        memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
+        hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath)
+      ) &&
+      !(
+        memoStateNeedsEffectCheck(previousMemoState) &&
+        hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys)
+      ) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
       markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
@@ -1310,9 +1318,17 @@ function createHostFiberImpl(
       fiber.child.sibling = undefined;
       bubbleHostChild(fiber, fiber.child);
     }
+    const instanceKeys = collectInstanceKeys(runtime, memoPath);
     fiber.memoizedState = {
       props: { ...node.props },
-      instanceKeys: collectInstanceKeys(runtime, memoPath),
+      instanceKeys,
+      hasDirtyInstanceDependencies:
+        hasDirtyInstanceDependencies(runtime, instanceKeys) ||
+        hasClassComponentDescendant(fiber.child),
+      hasUnflushedEffectDependencies: hasUnflushedEffectDependencies(
+        runtime,
+        instanceKeys,
+      ),
     };
     return { fiber, consumed: childResult.consumed };
   }
@@ -2082,6 +2098,26 @@ function collectCommittedHostNodes(fiber: Fiber): Node[] {
   return nodes;
 }
 
+function hasCommittedHostNode(fiber: Fiber): boolean {
+  if (
+    (fiber.tag === "host-component" || fiber.tag === "host-text") &&
+    fiber.stateNode instanceof Node
+  ) {
+    return true;
+  }
+
+  let child = fiber.child;
+
+  while (child !== undefined) {
+    if (hasCommittedHostNode(child)) {
+      return true;
+    }
+    child = child.sibling;
+  }
+
+  return false;
+}
+
 function getSkippedChild(current: Fiber | undefined): Fiber | undefined {
   const child = current?.child;
   const alternateChild = current?.alternate?.child;
@@ -2089,8 +2125,8 @@ function getSkippedChild(current: Fiber | undefined): Fiber | undefined {
   if (
     child !== undefined &&
     alternateChild !== undefined &&
-    collectCommittedHostNodes(child).length === 0 &&
-    collectCommittedHostNodes(alternateChild).length > 0
+    !hasCommittedHostNode(child) &&
+    hasCommittedHostNode(alternateChild)
   ) {
     return alternateChild;
   }
@@ -3288,6 +3324,97 @@ function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): 
   }
 }
 
+type RuntimeHookSlotLike = {
+  kind?: string;
+};
+
+type RuntimeEffectHookSlotLike = RuntimeHookSlotLike & {
+  mounted?: boolean;
+  disposed?: boolean;
+};
+
+interface RuntimeInstanceLike {
+  hooks?: readonly (RuntimeHookSlotLike | undefined)[];
+  contextDependencies?: unknown;
+}
+
+function memoStateNeedsDirtyInstanceCheck(state: MemoFiberState): boolean {
+  return state.hasDirtyInstanceDependencies !== false;
+}
+
+function memoStateNeedsEffectCheck(state: MemoFiberState): boolean {
+  return state.hasUnflushedEffectDependencies !== false;
+}
+
+function hasDirtyInstanceDependencies(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const instance = runtime.instances.get(key) as RuntimeInstanceLike | undefined;
+
+    if (instance === undefined || instance.contextDependencies !== undefined) {
+      return true;
+    }
+
+    if (instance.hooks?.some(isDirtyCapableHookSlot) === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isDirtyCapableHookSlot(slot: RuntimeHookSlotLike | undefined): boolean {
+  if (slot === undefined) {
+    return false;
+  }
+
+  return (
+    slot.kind !== "ref" &&
+    slot.kind !== "memo" &&
+    slot.kind !== "debug" &&
+    slot.kind !== "effect"
+  );
+}
+
+function hasUnflushedEffectDependencies(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const instance = runtime.instances.get(key) as RuntimeInstanceLike | undefined;
+
+    if (instance === undefined) {
+      return true;
+    }
+
+    if (instance.hooks?.some((slot) => slot?.kind === "effect") === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasClassComponentDescendant(fiber: Fiber | undefined): boolean {
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    if (cursor.tag === "class-component") {
+      return true;
+    }
+
+    if (hasClassComponentDescendant(cursor.child)) {
+      return true;
+    }
+
+    cursor = cursor.sibling;
+  }
+
+  return false;
+}
+
 function hasDirtyInstance(
   runtime: RootRuntime | undefined,
   keys: readonly string[],
@@ -3340,7 +3467,7 @@ function hasDirtyInstance(
 function hasUnflushedMountEffectInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
   return keys.some((key) => {
     const instance = runtime.instances.get(key) as
-      | { hooks?: readonly ({ kind?: string; mounted?: boolean; disposed?: boolean } | undefined)[] }
+      | { hooks?: readonly (RuntimeEffectHookSlotLike | undefined)[] }
       | undefined;
 
     return instance?.hooks?.some(

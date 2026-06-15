@@ -50,6 +50,32 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("return false;");
   });
 
+  test("uses a boolean committed host node probe for skipped children", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function hasCommittedHostNode(");
+    expect(hostReconcilerSource).toContain("!hasCommittedHostNode(child)");
+    expect(hostReconcilerSource).toContain("hasCommittedHostNode(alternateChild)");
+    expect(hostReconcilerSource).not.toContain("collectCommittedHostNodes(child).length");
+    expect(hostReconcilerSource).not.toContain("collectCommittedHostNodes(alternateChild).length");
+  });
+
+  test("skips dirty instance scans for hookless memo subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("hasDirtyInstanceDependencies:");
+    expect(hostReconcilerSource).toContain("hasUnflushedEffectDependencies:");
+    expect(hostReconcilerSource).toContain("memoStateNeedsDirtyInstanceCheck(previousMemoState)");
+    expect(hostReconcilerSource).toContain("memoStateNeedsEffectCheck(previousMemoState)");
+    expect(hostReconcilerSource).toContain("function hasDirtyInstanceDependencies(");
+  });
+
   test("uses production host fast paths when no process global exists", async () => {
     // Browsers without bundler define rewriting have no process global at all.
     // The fast-path gate must treat that as production instead of silently
