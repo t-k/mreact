@@ -382,7 +382,20 @@ function copyInternalElementSymbolProps(
 }
 
 function normalizeElementType<P>(type: ElementType<P>): ElementType<P> {
+  if (isKnownElementTypeRecord(type)) {
+    return type;
+  }
+
   return isReactCompatContextProviderShorthand(type) ? (type.Provider as ElementType<P>) : type;
+}
+
+function isKnownElementTypeRecord<P>(type: ElementType<P>): boolean {
+  if (typeof type !== "object" || type === null) {
+    return false;
+  }
+
+  const marker = (type as { $$typeof?: unknown }).$$typeof;
+  return marker === FORWARD_REF_TYPE || marker === MEMO_TYPE || marker === LAZY_TYPE;
 }
 
 function applyDefaultProps(
