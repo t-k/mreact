@@ -3,7 +3,7 @@ import {
   createRoot,
   flushSync,
   memo,
-  useState,
+  useReducer,
   type ReactCompatNode,
 } from "@reckona/mreact-compat";
 
@@ -68,11 +68,22 @@ interface RowData {
   readonly label: string;
 }
 
-type StateSetter<T> = (value: T | ((previous: T) => T)) => void;
+interface AppState {
+  readonly rows: readonly RowData[];
+  readonly selected: number | null;
+}
+
+type AppAction =
+  | { readonly type: "run"; readonly count: number }
+  | { readonly type: "add" }
+  | { readonly type: "update" }
+  | { readonly type: "clear" }
+  | { readonly type: "swap" }
+  | { readonly type: "remove"; readonly id: number }
+  | { readonly type: "select"; readonly id: number };
 
 let nextId = 1;
-let setRows: StateSetter<readonly RowData[]> | undefined;
-let setSelected: StateSetter<number | null> | undefined;
+let dispatchApp: ((action: AppAction) => void) | undefined;
 
 function random(max: number): number {
   return Math.round(Math.random() * 1000) % max;
@@ -128,48 +139,60 @@ function swapRows(rows: readonly RowData[]): readonly RowData[] {
   return next;
 }
 
-function setData(count: number): void {
+function reduceAppState(state: AppState, action: AppAction): AppState {
+  switch (action.type) {
+    case "run":
+      return { rows: buildData(action.count), selected: null };
+    case "add":
+      return { rows: [...state.rows, ...buildData(1_000)], selected: state.selected };
+    case "update":
+      return { rows: updateEveryTenth(state.rows), selected: state.selected };
+    case "clear":
+      return { rows: [], selected: null };
+    case "swap":
+      return { rows: swapRows(state.rows), selected: state.selected };
+    case "remove":
+      return {
+        rows: state.rows.filter((row) => row.id !== action.id),
+        selected: state.selected,
+      };
+    case "select":
+      return { rows: state.rows, selected: action.id };
+  }
+}
+
+function dispatchBenchAction(action: AppAction): void {
   flushSync(() => {
-    setRows?.(buildData(count));
-    setSelected?.(null);
+    dispatchApp?.(action);
   });
+}
+
+function setData(count: number): void {
+  dispatchBenchAction({ type: "run", count });
 }
 
 function addRows(): void {
-  flushSync(() => {
-    setRows?.((rows) => [...rows, ...buildData(1_000)]);
-  });
+  dispatchBenchAction({ type: "add" });
 }
 
 function updateRows(): void {
-  flushSync(() => {
-    setRows?.(updateEveryTenth);
-  });
+  dispatchBenchAction({ type: "update" });
 }
 
 function clearRows(): void {
-  flushSync(() => {
-    setRows?.([]);
-    setSelected?.(null);
-  });
+  dispatchBenchAction({ type: "clear" });
 }
 
 function swapRowsAtBenchPositions(): void {
-  flushSync(() => {
-    setRows?.(swapRows);
-  });
+  dispatchBenchAction({ type: "swap" });
 }
 
 function removeRow(id: number): void {
-  flushSync(() => {
-    setRows?.((rows) => rows.filter((row) => row.id !== id));
-  });
+  dispatchBenchAction({ type: "remove", id });
 }
 
 function selectRow(id: number): void {
-  flushSync(() => {
-    setSelected?.(id);
-  });
+  dispatchBenchAction({ type: "select", id });
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -220,13 +243,13 @@ const Row = memo(
 );
 
 function App(): ReactCompatNode {
-  const [rows, updateRowsState] = useState<readonly RowData[]>([]);
-  const [selected, updateSelected] = useState<number | null>(null);
+  const [state, dispatch] = useReducer(reduceAppState, { rows: [], selected: null });
 
-  setRows = updateRowsState;
-  setSelected = updateSelected;
+  dispatchApp = dispatch;
 
-  return rows.map((row) => createElement(Row, { key: row.id, row, selected: selected === row.id }));
+  return state.rows.map((row) =>
+    createElement(Row, { key: row.id, row, selected: state.selected === row.id }),
+  );
 }
 
 const root = createRoot(requireElement("tbody"));
