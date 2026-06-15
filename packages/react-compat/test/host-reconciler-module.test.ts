@@ -35,6 +35,8 @@ describe("host reconciler module", () => {
     );
 
     expect(hostReconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
+    expect(hostReconcilerSource).not.toContain("for (const [key, instance] of runtime.instances)");
+    expect(hostReconcilerSource).toContain("runtime.instanceKeysByPrefix.get(prefix)");
     expect(reconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
   });
 

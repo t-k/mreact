@@ -3316,12 +3316,21 @@ function hasDirtyInstance(
     return false;
   }
 
-  for (const [key, instance] of runtime.instances) {
-    if (
-      (key === prefix || key.startsWith(`${prefix}.`)) &&
-      (instance as { dirty?: boolean }).dirty === true
-    ) {
-      return true;
+  // Resolve dirty descendants through the prefix index instead of scanning
+  // every runtime instance. The previous full-map scan made memo/function
+  // bailout O(total instances) per node, i.e. O(n^2) for large keyed lists
+  // (js-framework-benchmark update-every-10th / select). The index is the same
+  // source of truth used by collectRuntimeInstanceKeys.
+  const keysUnderPrefix = runtime.instanceKeysByPrefix.get(prefix);
+
+  if (keysUnderPrefix !== undefined) {
+    for (const key of keysUnderPrefix) {
+      if (
+        (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty ===
+        true
+      ) {
+        return true;
+      }
     }
   }
 
