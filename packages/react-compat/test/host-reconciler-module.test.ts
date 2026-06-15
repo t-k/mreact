@@ -109,6 +109,19 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("checks class descendants once when recording memo state", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const memoStateStart = hostReconcilerSource.indexOf("const hasClassDescendant =");
+    const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
+    const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
+
+    expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
+    expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
+  });
+
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
     const hooksSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/hooks.ts"),
