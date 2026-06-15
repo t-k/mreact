@@ -57,6 +57,8 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
 
     expect(main).toContain("batch(() =>");
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
+    expect(main).toContain("createTemplate");
+    expect(main).toContain("const createRowTemplate = createTemplate(");
     expect(main).toContain("bindList(");
     expect(main).toContain("key: (row) => row.id");
     expect(main).toContain('itemMode: "static"');

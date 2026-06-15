@@ -3,6 +3,7 @@ import {
   bindEvent,
   bindList,
   bindText,
+  createTemplate,
   createRoot,
 } from "@reckona/mreact-reactive-dom";
 
@@ -164,24 +165,21 @@ function requireElement<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
+const createRowTemplate = createTemplate(
+  '<tr><td class="col-md-1"></td><td class="col-md-4"><a></a></td><td class="col-md-1"><a><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
+);
+
 function renderRow(row: Row): HTMLTableRowElement {
-  const tr = document.createElement("tr");
-  const idCell = document.createElement("td");
-  const labelCell = document.createElement("td");
-  const removeCell = document.createElement("td");
-  const spacerCell = document.createElement("td");
-  const selectLink = document.createElement("a");
-  const removeLink = document.createElement("a");
-  const removeIcon = document.createElement("span");
+  const fragment = createRowTemplate();
+  const tr = fragment.firstElementChild as HTMLTableRowElement;
+  const idCell = tr.firstElementChild as HTMLTableCellElement;
+  const labelCell = idCell.nextElementSibling as HTMLTableCellElement;
+  const removeCell = labelCell.nextElementSibling as HTMLTableCellElement;
+  const selectLink = labelCell.firstElementChild as HTMLAnchorElement;
+  const removeLink = removeCell.firstElementChild as HTMLAnchorElement;
   const idText = document.createTextNode(String(row.id));
   const labelText = document.createTextNode("");
 
-  idCell.className = "col-md-1";
-  labelCell.className = "col-md-4";
-  removeCell.className = "col-md-1";
-  spacerCell.className = "col-md-6";
-  removeIcon.className = "glyphicon glyphicon-remove";
-  removeIcon.setAttribute("aria-hidden", "true");
   rowElements.set(row.id, tr);
 
   bindText(labelText, () => row.label.get());
@@ -190,10 +188,6 @@ function renderRow(row: Row): HTMLTableRowElement {
 
   idCell.append(idText);
   selectLink.append(labelText);
-  labelCell.append(selectLink);
-  removeLink.append(removeIcon);
-  removeCell.append(removeLink);
-  tr.append(idCell, labelCell, removeCell, spacerCell);
 
   return tr;
 }
