@@ -2214,6 +2214,10 @@ function cleanupInactiveInstances(runtime: RootRuntime): void {
     return;
   }
 
+  if (activeInstanceKeys.size === runtime.instances.size) {
+    return;
+  }
+
   for (const [key, instance] of runtime.instances) {
     if (!activeInstanceKeys.has(key)) {
       cleanupInstance(instance);
