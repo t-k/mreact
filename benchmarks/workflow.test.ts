@@ -20,6 +20,10 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("playwright install --with-deps chromium");
     expect(workflow).toContain("benchmarks/results");
     expect(workflow).toContain("MREACT_BENCHMARK_RESULTS_DIR");
+    expect(workflow).toContain("js_frameworks:");
+    expect(workflow).toContain("js_benchmarks:");
+    expect(workflow).toContain("MREACT_JS_FRAMEWORKS: ${{ inputs.js_frameworks }}");
+    expect(workflow).toContain("MREACT_JS_FRAMEWORK_BENCHMARKS: ${{ inputs.js_benchmarks }}");
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/primitive.md")');
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/js-framework-benchmark.md")');
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/router.md")');
