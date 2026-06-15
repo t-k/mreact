@@ -222,4 +222,28 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('import { rebuildFrameworks } from "./cli/rebuild-build-single.js";');
     expect(runner).toContain("build-only rebuild path");
   });
+
+  test("reports selected benchmark results with rankings and diff from best", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain("## Rankings");
+    expect(runner).toContain(
+      "Lower values are better for all js-framework-benchmark metrics reported here.",
+    );
+    expect(runner).toContain("| rank | framework | case | value | diff vs 1st | unit |");
+    expect(runner).toContain("formatJsFrameworkRankingSections(resultRows)");
+    expect(runner).toContain("formatDiffVsBest(row, bestRow)");
+    expect(runner).toContain("## Results");
+    expect(runner).toContain(
+      "| suite | framework | case | status | metric | unit | value | diff vs 1st |",
+    );
+  });
 });

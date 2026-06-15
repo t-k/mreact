@@ -99,6 +99,57 @@ const unsupportedPrimitiveAdapters = [
   "solid-v2: krausest/js-framework-benchmark does not currently provide a matching Solid v2 keyed fixture.",
 ];
 
+const resultMetricDescriptors = [
+  {
+    key: "run1kTotal",
+    caseId: "01_run1k",
+    caseName: "create 1k total",
+    sourceMetric: "total",
+    metric: "duration",
+    unit: "ms",
+  },
+  {
+    key: "updateScript",
+    caseId: "03_update10th1k_x16",
+    caseName: "update every 10th script",
+    sourceMetric: "script",
+    metric: "duration",
+    unit: "ms",
+  },
+  {
+    key: "selectScript",
+    caseId: "04_select1k",
+    caseName: "select script",
+    sourceMetric: "script",
+    metric: "duration",
+    unit: "ms",
+  },
+  {
+    key: "swapTotal",
+    caseId: "05_swap1k",
+    caseName: "swap total",
+    sourceMetric: "total",
+    metric: "duration",
+    unit: "ms",
+  },
+  {
+    key: "create10kTotal",
+    caseId: "07_create10k",
+    caseName: "create 10k total",
+    sourceMetric: "total",
+    metric: "duration",
+    unit: "ms",
+  },
+  {
+    key: "compressedSize",
+    caseId: "42_size-compressed",
+    caseName: "compressed size",
+    sourceMetric: "DEFAULT",
+    metric: "size",
+    unit: "kB",
+  },
+];
+
 const selectedFrameworks = parseFrameworks(
   process.env.MREACT_JS_FRAMEWORKS,
   frameworkMappings.map((mapping) => mapping.official),
@@ -379,7 +430,8 @@ async function copyResults() {
 }
 
 async function writeSummary() {
-  const rows = await collectResultRows();
+  const frameworkRows = await collectResultRows();
+  const resultRows = toResultRows(frameworkRows);
   const lines = [
     "# js-framework-benchmark Results",
     "",
@@ -398,15 +450,21 @@ async function writeSummary() {
     "",
     ...unsupportedPrimitiveAdapters.map((entry) => `- ${entry}`),
     "",
-    "## Selected Results",
-    "",
-    "| framework | create 1k total | update every 10th script | select script | swap total | create 10k total | compressed size |",
-    "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ...rows.map((row) =>
-      `| ${row.framework} | ${format(row.run1kTotal)} | ${format(row.updateScript)} | ${format(row.selectScript)} | ${format(row.swapTotal)} | ${format(row.create10kTotal)} | ${format(row.compressedSize)} |`,
-    ),
-    "",
     `Raw JSON files are stored in \`${relativePath(officialResultDir)}\`.`,
+    "",
+    "## Rankings",
+    "",
+    "Lower values are better for all js-framework-benchmark metrics reported here.",
+    "",
+    ...formatJsFrameworkRankingSections(resultRows),
+    "## Results",
+    "",
+    "| suite | framework | case | status | metric | unit | value | diff vs 1st |",
+    "| --- | --- | --- | --- | --- | --- | ---: | ---: |",
+    ...resultRows.map((row) => {
+      const bestRow = rankJsFrameworkRows(resultRows, row.caseName)[0];
+      return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${formatDiffVsBest(row, bestRow)} |`;
+    }),
     "",
   ];
 
@@ -415,22 +473,135 @@ async function writeSummary() {
 
 async function collectResultRows() {
   const files = await readdir(officialResultDir);
-  const run1kSuffix = "_01_run1k.json";
-  const frameworkNames = new Set(
-    files
-      .filter((file) => file.endsWith(run1kSuffix))
-      .map((file) => file.slice(0, -run1kSuffix.length)),
-  );
+  const caseIds = new Set(resultMetricDescriptors.map((descriptor) => descriptor.caseId));
+  const frameworkNames = new Set();
+
+  for (const file of files) {
+    if (!file.endsWith(".json")) {
+      continue;
+    }
+
+    for (const caseId of caseIds) {
+      const suffix = `_${caseId}.json`;
+      if (file.endsWith(suffix)) {
+        frameworkNames.add(file.slice(0, -suffix.length));
+      }
+    }
+  }
 
   return [...frameworkNames].sort().map((framework) => ({
     framework,
-    run1kTotal: readMetric(files, framework, "01_run1k", "total"),
-    updateScript: readMetric(files, framework, "03_update10th1k_x16", "script"),
-    selectScript: readMetric(files, framework, "04_select1k", "script"),
-    swapTotal: readMetric(files, framework, "05_swap1k", "total"),
-    create10kTotal: readMetric(files, framework, "07_create10k", "total"),
-    compressedSize: readMetric(files, framework, "42_size-compressed", "DEFAULT"),
+    ...Object.fromEntries(
+      resultMetricDescriptors.map((descriptor) => [
+        descriptor.key,
+        readMetric(files, framework, descriptor.caseId, descriptor.sourceMetric),
+      ]),
+    ),
   }));
+}
+
+function toResultRows(frameworkRows) {
+  return frameworkRows.flatMap((frameworkRow) =>
+    resultMetricDescriptors.flatMap((descriptor) => {
+      const value = frameworkRow[descriptor.key];
+
+      if (typeof value !== "number") {
+        return [];
+      }
+
+      return [
+        {
+          framework: frameworkRow.framework,
+          caseName: descriptor.caseName,
+          status: "completed",
+          metric: descriptor.metric,
+          unit: descriptor.unit,
+          value,
+        },
+      ];
+    }),
+  );
+}
+
+function formatJsFrameworkRankingSections(resultRows) {
+  const lines = [];
+
+  for (const descriptor of resultMetricDescriptors) {
+    const rankedRows = rankJsFrameworkRows(resultRows, descriptor.caseName);
+
+    if (rankedRows.length === 0) {
+      continue;
+    }
+
+    lines.push(`### ${descriptor.caseName}`, "");
+    lines.push("| rank | framework | case | value | diff vs 1st | unit |");
+    lines.push("| ---: | --- | --- | ---: | ---: | --- |");
+
+    const bestRow = rankedRows[0];
+    rankedRows.forEach((row, index) => {
+      lines.push(
+        `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
+      );
+    });
+    lines.push("");
+  }
+
+  if (lines.length === 0) {
+    lines.push("| rank | framework | case | value | diff vs 1st | unit |");
+    lines.push("| ---: | --- | --- | ---: | ---: | --- |");
+    lines.push("|  | no completed results |  |  |  |  |");
+    lines.push("");
+  }
+
+  return lines;
+}
+
+function rankJsFrameworkRows(resultRows, caseName) {
+  return [...resultRows]
+    .filter((row) => row.caseName === caseName && row.status === "completed")
+    .sort((left, right) => {
+      const valueOrder = left.value - right.value;
+
+      if (valueOrder !== 0) {
+        return valueOrder;
+      }
+
+      return left.framework.localeCompare(right.framework);
+    });
+}
+
+function formatDiffVsBest(row, bestRow) {
+  if (
+    row.status !== "completed" ||
+    bestRow === undefined ||
+    bestRow.status !== "completed" ||
+    row.metric !== bestRow.metric ||
+    row.caseName !== bestRow.caseName ||
+    bestRow.value === 0
+  ) {
+    return "";
+  }
+
+  if (row.framework === bestRow.framework && row.value === bestRow.value) {
+    return "best";
+  }
+
+  return formatPercent((row.value / bestRow.value - 1) * 100);
+}
+
+function formatPercent(value) {
+  const rounded = Math.round(value * 100) / 100;
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}%`;
+}
+
+function escapeMarkdownTableCell(value) {
+  return value.replace(/\|/g, "\\|").replace(/[\n\r]+/g, " ");
+}
+
+function formatFrameworkCell(value) {
+  const escaped = escapeMarkdownTableCell(value);
+  return value.includes("mreact") ? `**${escaped}**` : escaped;
 }
 
 function readMetric(files, framework, caseId, metric) {
