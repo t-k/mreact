@@ -281,6 +281,36 @@ describe("js-framework-benchmark official runner", () => {
     );
   });
 
+  test("uses official js-framework-benchmark case labels in summaries", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain('caseName: "create rows"');
+    expect(runner).toContain('caseName: "replace all rows"');
+    expect(runner).toContain('caseName: "partial update"');
+    expect(runner).toContain('caseName: "select row"');
+    expect(runner).toContain('caseName: "swap rows"');
+    expect(runner).toContain('caseName: "remove row"');
+    expect(runner).toContain('caseName: "create many rows"');
+    expect(runner).toContain('caseName: "append rows to large table"');
+    expect(runner).toContain('caseName: "clear rows"');
+    expect(runner).toContain('caseName: "ready memory"');
+    expect(runner).toContain('caseName: "run memory"');
+    expect(runner).toContain('caseName: "repeated clear memory"');
+    expect(runner).toContain('caseName: "startup time"');
+    expect(runner).toContain('caseName: "consistently interactive"');
+    expect(runner).toContain('caseName: "script bootup time"');
+    expect(runner).toContain('caseName: "main thread work cost"');
+    expect(runner).toContain('caseName: "total byte weight"');
+  });
+
   test("copies official Chrome traces next to the js-framework results", async () => {
     const runner = await readFile(
       join(
