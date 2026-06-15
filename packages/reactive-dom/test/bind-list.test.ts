@@ -3,10 +3,50 @@
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList, bindText } from "../src/index.js";
+import { bindEvent, bindList, bindText } from "../src/index.js";
 import { registerDispose } from "../src/scope.js";
 
 describe("bindList", () => {
+  test("promotes delegated row events after mount without detached fallback listeners", () => {
+    const items = cell([1, 2]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("list");
+    const calls: number[] = [];
+    let buttonClickFallbacks = 0;
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const button = document.createElement("button");
+        const addEventListener = button.addEventListener.bind(button);
+        button.addEventListener = ((type, listener, options) => {
+          if (type === "click") {
+            buttonClickFallbacks += 1;
+          }
+          addEventListener(type, listener, options);
+        }) as typeof button.addEventListener;
+        bindEvent(button, "click", () => {
+          calls.push(item);
+        });
+        button.textContent = String(item);
+        return button;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    expect(buttonClickFallbacks).toBe(0);
+
+    (parent.firstElementChild as HTMLButtonElement).click();
+    expect(calls).toEqual([1]);
+
+    dispose();
+    parent.remove();
+  });
+
   test("renders a simple unkeyed list and redraws on update", async () => {
     const items = cell(["A", "B"]);
     const parent = document.createElement("ul");

@@ -23,12 +23,39 @@ type EventElement = HTMLElement & {
   __mreactEventBindings?: EventBinding | EventBinding[];
   __mreactHasEvents?: true;
 };
+type DeferredDelegatedEventPromotion = () => void;
 
 const delegatedEventTypes = " change click input keydown keyup pointerdown pointermove pointerup submit ";
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
 const pendingDisconnectedPromotions = new Set<() => void>();
+let currentDeferredDelegatedEventPromotions:
+  | DeferredDelegatedEventPromotion[]
+  | undefined;
 let disconnectedPromotionFlushQueued = false;
+
+export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
+  promote(): void;
+  value: T;
+} {
+  const previousPromotions = currentDeferredDelegatedEventPromotions;
+  const promotions: DeferredDelegatedEventPromotion[] = [];
+  currentDeferredDelegatedEventPromotions = promotions;
+
+  try {
+    const value = fn();
+    return {
+      promote() {
+        for (const promote of promotions) {
+          promote();
+        }
+      },
+      value,
+    };
+  } finally {
+    currentDeferredDelegatedEventPromotions = previousPromotions;
+  }
+}
 
 /** Binds an event handler to an element and returns a disposer. */
 export function bindEvent<K extends keyof HTMLElementEventMap>(
@@ -115,6 +142,15 @@ function addDelegatedEventListener(
     delegatedRoot = element.ownerDocument;
     retainDelegatedRoot(delegatedRoot, type);
   };
+  const disposeDeferredPromotion = addDeferredDelegatedEventPromotion(element, type);
+
+  if (disposeDeferredPromotion !== undefined) {
+    return () => {
+      removeDelegatedElementListener(element, type, listener);
+      disposeDeferredPromotion();
+    };
+  }
+
   const disposeDisconnectedFallback = addDisconnectedFallback(
     element,
     type,
@@ -130,6 +166,37 @@ function addDelegatedEventListener(
     }
 
     disposeDisconnectedFallback();
+  };
+}
+
+function addDeferredDelegatedEventPromotion(
+  element: HTMLElement,
+  type: string,
+): Dispose | undefined {
+  const promotions = currentDeferredDelegatedEventPromotions;
+
+  if (promotions === undefined) {
+    return undefined;
+  }
+
+  let active = true;
+  let delegatedRoot: EventTarget | undefined;
+  const promote = () => {
+    if (!active || delegatedRoot !== undefined || !element.isConnected) {
+      return;
+    }
+
+    delegatedRoot = element.ownerDocument;
+    retainDelegatedRoot(delegatedRoot, type);
+  };
+  promotions.push(promote);
+
+  return () => {
+    active = false;
+
+    if (delegatedRoot !== undefined) {
+      releaseDelegatedRoot(delegatedRoot, type);
+    }
   };
 }
 

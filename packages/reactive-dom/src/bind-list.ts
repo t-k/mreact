@@ -10,6 +10,7 @@ import {
   markDynamicNode,
   markDynamicNodes,
 } from "./dynamic-node.js";
+import { withDeferredDelegatedEventPromotions } from "./bind-event.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -76,9 +77,20 @@ function bindUnkeyedList<T>(
 
   const dispose = effect(() => {
     const currentItems = items();
-    const next = createScopedRenderNodes(() =>
-      currentItems.map((item, index) => renderItem(item as T, index, currentItems)),
-    );
+    const insertionParent = marker.parentNode as ListParentNode | null;
+    const deferred =
+      insertionParent?.isConnected === true
+        ? withDeferredDelegatedEventPromotions(() =>
+            createScopedRenderNodes(() =>
+              currentItems.map((item, index) => renderItem(item as T, index, currentItems)),
+            ),
+          )
+        : undefined;
+    const next =
+      deferred?.value ??
+      createScopedRenderNodes(() =>
+        currentItems.map((item, index) => renderItem(item as T, index, currentItems)),
+      );
 
     if (isSameNodeList(current, next.nodes)) {
       next.dispose();
@@ -88,8 +100,6 @@ function bindUnkeyedList<T>(
     clear();
     current = markRecordsForHydration ? markDynamicNodes(next.nodes) : next.nodes;
     disposeCurrentScope = next.dispose;
-
-    const insertionParent = marker.parentNode as ListParentNode | null;
 
     if (insertionParent === null) {
       current = [];
@@ -101,6 +111,7 @@ function bindUnkeyedList<T>(
     for (const node of current) {
       insertionParent.insertBefore(node, marker);
     }
+    deferred?.promote();
   });
 
   return registerDispose(() => {
@@ -113,6 +124,7 @@ interface KeyedRecord {
   nodes: Node[];
   prevIndex?: number | undefined;
   dispose: Dispose;
+  promoteEvents?: (() => void) | undefined;
   // Update state lives on the record so one shared update function replaces a
   // per-record closure; itemCell is null for primitive items.
   itemCell: KeyedItemCell | null;
@@ -302,6 +314,7 @@ function bindKeyedList<T>(
           renderItem,
           options,
           markRecordsForHydration,
+          insertionParent.isConnected,
         );
       } else {
         record = existingRecord;
@@ -315,6 +328,7 @@ function bindKeyedList<T>(
             renderItem,
             options,
             markRecordsForHydration,
+            insertionParent.isConnected,
           );
         }
       }
@@ -335,6 +349,7 @@ function bindKeyedList<T>(
     if (canClaimEmptyParent) {
       const disposeError = disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
+      promoteRecordEvents(nextRecords.values());
       if (disposeError !== undefined) {
         throw disposeError;
       }
@@ -358,6 +373,7 @@ function bindKeyedList<T>(
 
       const disposeError = disposeStaleRecords(records, nextRecords);
       insertionParent.replaceChildren(...orderedNodes, marker);
+      promoteRecordEvents(nextRecords.values());
       if (disposeError !== undefined) {
         throw disposeError;
       }
@@ -368,6 +384,7 @@ function bindKeyedList<T>(
       }
 
       reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords);
+      promoteRecordEvents(nextRecords.values());
       ownsParent =
         insertionParent.childNodes.length === orderedNodes.length + 1 &&
         marker.nextSibling === null;
@@ -502,6 +519,7 @@ function tryAppendKeyedRecords<T>(
       renderItem,
       options,
       markRecordsForHydration,
+      parent.isConnected,
     );
 
     records.set(keys[slot], record);
@@ -514,6 +532,7 @@ function tryAppendKeyedRecords<T>(
         parent.insertBefore(node, marker);
       }
     }
+    promoteRecordEvents([record]);
   }
 
   if (appendToParentTail && appendedNodeCount > 0) {
@@ -707,6 +726,7 @@ function createKeyedRecord<T>(
   renderItem: ListItemRenderer<T>,
   options: BindListOptions<T>,
   markRecordsForHydration: boolean,
+  deferEventPromotion: boolean,
 ): KeyedRecord {
   let itemCell: KeyedItemCell | null = null;
   let renderedItem: T = item;
@@ -720,19 +740,36 @@ function createKeyedRecord<T>(
     ) as T;
   }
 
-  const scoped = untrack(() =>
-    createScopedRenderNodes(() => renderItem(renderedItem, index, items)),
-  );
+  const deferred = deferEventPromotion
+    ? untrack(() =>
+        withDeferredDelegatedEventPromotions(() =>
+          createScopedRenderNodes(() => renderItem(renderedItem, index, items)),
+        ),
+      )
+    : undefined;
+  const scoped =
+    deferred?.value ??
+    untrack(() =>
+      createScopedRenderNodes(() => renderItem(renderedItem, index, items)),
+    );
   const nodes = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
 
   return {
     nodes,
     dispose: scoped.dispose,
+    promoteEvents: deferred?.promote,
     itemCell,
     currentItem: item,
     currentIndex: index,
     currentItems: items,
   };
+}
+
+function promoteRecordEvents(records: Iterable<KeyedRecord>): void {
+  for (const record of records) {
+    record.promoteEvents?.();
+    record.promoteEvents = undefined;
+  }
 }
 
 interface KeyedItemCell {
@@ -1012,6 +1049,7 @@ function tryReplaceDisjointKeyedRecords<T>(
       renderItem,
       options,
       markRecordsForHydration,
+      parent.isConnected,
     );
 
     nextRecords.set(keys[slot], record);
@@ -1024,6 +1062,7 @@ function tryReplaceDisjointKeyedRecords<T>(
 
   const disposeError = disposeRecordValues(records.values());
   parent.replaceChildren(...orderedNodes, marker);
+  promoteRecordEvents(nextRecords.values());
 
   if (disposeError !== undefined) {
     throw disposeError;
