@@ -97,6 +97,18 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("canReuseMemoBailoutFiber(current, state)");
   });
 
+  test("keeps memo state props without snapshot spread copies", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("fiber.memoizedState = {");
+    expect(hostReconcilerSource).not.toContain(
+      "fiber.memoizedState = {\n      props: { ...node.props }",
+    );
+  });
+
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
     const hooksSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/hooks.ts"),

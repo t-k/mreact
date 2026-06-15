@@ -1421,7 +1421,7 @@ function createHostFiberImpl(
     }
     const instanceKeys = collectInstanceKeys(runtime, memoPath);
     fiber.memoizedState = {
-      props: { ...node.props },
+      props: node.props as Record<string, unknown>,
       instanceKeys,
       hasDirtyInstanceDependencies:
         hasDirtyInstanceDependencies(runtime, instanceKeys) ||
