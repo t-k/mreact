@@ -129,7 +129,10 @@ export function trackIncrementalSource(
   computation.trackingCount = (computation.trackingCount ?? 0) + 1;
   computation.trackingTouchedDeps?.push(source);
 
-  if (alreadyTrackedByComputation || computation.deps.has(source)) {
+  if (
+    alreadyTrackedByComputation ||
+    (computation.deps.size > 0 && computation.deps.has(source))
+  ) {
     return;
   }
 

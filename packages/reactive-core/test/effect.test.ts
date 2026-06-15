@@ -64,6 +64,35 @@ describe("effect", () => {
     expect(addedDepsAllocated).toBe(false);
   });
 
+  test("initial run does not probe cleanup touched dependency set", () => {
+    const count = cell(0);
+    const originalHas = Set.prototype.has;
+    let sourceHasCalls = 0;
+
+    try {
+      Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "subscribers" in value
+        ) {
+          sourceHasCalls += 1;
+        }
+
+        return originalHas.call(this, value);
+      };
+
+      const dispose = effect(() => {
+        count.get();
+      });
+      dispose();
+    } finally {
+      Set.prototype.has = originalHas;
+    }
+
+    expect(sourceHasCalls).toBe(0);
+  });
+
   test("cleans up before rerun and once on dispose", async () => {
     const events: string[] = [];
     const count = cell(0);

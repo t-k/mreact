@@ -133,7 +133,10 @@ function finishIncrementalTracking(
   const addedDeps = computation.trackingAddedDeps;
   const trackedCount = computation.trackingCount ?? 0;
 
-  if (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0) {
+  if (
+    previousDepsSize > 0 &&
+    (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0)
+  ) {
     cleanupUntrackedDeps(computation, trackingVersion);
   }
 
