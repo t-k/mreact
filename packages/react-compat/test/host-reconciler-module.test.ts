@@ -145,20 +145,6 @@ describe("host reconciler module", () => {
     expect(bailoutIndex).toBeLessThan(pathIndex);
   });
 
-  test("skips child commit path segment allocation when commit paths are disabled", async () => {
-    const hostReconcilerSource = await readFile(
-      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
-      "utf8",
-    );
-
-    expect(hostReconcilerSource).toContain("function childCommitPath(");
-    expect(hostReconcilerSource).toContain(
-      'return path === SKIP_COMMIT_PATH || path === "" ? "" : joinPath(path, segment);',
-    );
-    expect(hostReconcilerSource).toContain('childCommitPath(path, "memo")');
-    expect(hostReconcilerSource).toContain('childCommitPath(path, "c")');
-  });
-
   test("reconciles matching keyed host child order without used-child set bookkeeping", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

@@ -1851,13 +1851,7 @@ function commitHostDirtyFiber(
       fiber.childListChanged ||
       fiber.subtreeChildListChanged
     ) {
-      const childNodes = commitHostChildren(
-        fiber.child,
-        element,
-        eventRoot,
-        childCommitPath(path, "c"),
-        options,
-      );
+      const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
         !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
         !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
@@ -1865,13 +1859,7 @@ function commitHostDirtyFiber(
         syncChildNodes(element as ParentNode, childNodes);
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
-      commitHostDirtyChildren(
-        fiber.child,
-        element,
-        eventRoot,
-        childCommitPath(path, "c"),
-        options,
-      );
+      commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
     if (isDomHostElement(element)) {
@@ -1907,7 +1895,7 @@ function commitHostDirtyFiber(
           fiber.child,
           container as ParentNode,
           portalEventRoot,
-          childCommitPath(path, "portal"),
+          `${path}.portal`,
           portalOptions,
         );
         const previousNodes = committedHostNodesFromState(fiber.alternate?.memoizedState);
@@ -1918,7 +1906,7 @@ function commitHostDirtyFiber(
           fiber.child,
           container as ParentNode,
           portalEventRoot,
-          childCommitPath(path, "portal"),
+          `${path}.portal`,
           portalOptions,
         );
       }
@@ -2028,15 +2016,7 @@ function commitHostKeyedChildListMutationFiber(
         return false;
       }
 
-      if (
-        !commitHostKeyedChildListMutation(
-          fiber.child,
-          element,
-          eventRoot,
-          childCommitPath(path, "c"),
-          options,
-        )
-      ) {
+      if (!commitHostKeyedChildListMutation(fiber.child, element, eventRoot, `${path}.c`, options)) {
         return false;
       }
       finishHostPassthroughFiber(fiber);
@@ -2343,13 +2323,7 @@ function commitHostFiber(
       fiber.hydrateExisting === true ||
       (fiber.subtreeFlags & Placement) !== NoFlags
     ) {
-      const childNodes = commitHostChildren(
-        fiber.child,
-        element,
-        eventRoot,
-        childCommitPath(path, "c"),
-        options,
-      );
+      const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
         !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
         !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
@@ -2357,7 +2331,7 @@ function commitHostFiber(
         syncChildNodes(element as ParentNode, childNodes);
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
-      commitHostChildren(fiber.child, element, eventRoot, childCommitPath(path, "c"), options);
+      commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
     if (isDomHostElement(element)) {
@@ -2371,114 +2345,84 @@ function commitHostFiber(
 
   if (fiber.tag === "fragment") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "f"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.f`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "profiler") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(
-      fiber.child,
-      parent,
-      eventRoot,
-      childCommitPath(path, "profiler"),
-      options,
-    );
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.profiler`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "strict-mode") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(
-      fiber.child,
-      parent,
-      eventRoot,
-      childCommitPath(path, "strict"),
-      options,
-    );
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.strict`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "suspense") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "s"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.s`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "suspense-list") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "sl"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.sl`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "context-provider" || fiber.tag === "context-consumer") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "ctx"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.ctx`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "function-component") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "fc"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.fc`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "forward-ref") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "fr"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.fr`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "memo") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(
-      fiber.child,
-      parent,
-      eventRoot,
-      childCommitPath(path, "memo"),
-      options,
-    );
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.memo`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "lazy") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(
-      fiber.child,
-      parent,
-      eventRoot,
-      childCommitPath(path, "lazy"),
-      options,
-    );
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.lazy`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "error-boundary") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(fiber.child, parent, eventRoot, childCommitPath(path, "eb"), options);
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.eb`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
 
   if (fiber.tag === "class-component") {
     fiber.memoizedProps = fiber.pendingProps;
-    const nodes = commitHostChildren(
-      fiber.child,
-      parent,
-      eventRoot,
-      childCommitPath(path, "class"),
-      options,
-    );
+    const nodes = commitHostChildren(fiber.child, parent, eventRoot, `${path}.class`, options);
     finishCommittedFiber(fiber);
     return nodes;
   }
@@ -2505,7 +2449,7 @@ function commitHostFiber(
       fiber.child,
       container as ParentNode,
       portalEventRoot,
-      childCommitPath(path, "portal"),
+      `${path}.portal`,
       portalOptions,
     );
     const previousNodes = committedHostNodesFromState(fiber.alternate?.memoizedState);
@@ -3509,10 +3453,6 @@ function getRootCommitPath(options: RenderOptions): string {
 
 function joinCommitPath(path: string, segment: string): string {
   return path === SKIP_COMMIT_PATH ? "" : joinPath(path, segment);
-}
-
-function childCommitPath(path: string, segment: string): string {
-  return path === SKIP_COMMIT_PATH || path === "" ? "" : joinPath(path, segment);
 }
 
 function getHydrationChildOptions(
