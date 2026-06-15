@@ -103,8 +103,18 @@ describe("host reconciler module", () => {
       "utf8",
     );
 
-    expect(hooksSource).toContain("function instanceKeyPrefixes(");
+    expect(hooksSource).toContain("function forEachInstanceKeyPrefix(");
     expect(hooksSource).not.toContain("parts.slice(0, index).join");
+  });
+
+  test("indexes runtime instance key prefixes without allocating prefix arrays", async () => {
+    const hooksSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/hooks.ts"),
+      "utf8",
+    );
+
+    expect(hooksSource).toContain("function forEachInstanceKeyPrefix(");
+    expect(hooksSource).not.toContain("for (const prefix of instanceKeyPrefixes(key))");
   });
 
   test("checks same-type memo bailout before generic element reconciliation", async () => {

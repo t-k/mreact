@@ -2224,7 +2224,7 @@ function cleanupInactiveInstances(runtime: RootRuntime): void {
 }
 
 function indexInstanceKey(runtime: RootRuntime, key: string): void {
-  for (const prefix of instanceKeyPrefixes(key)) {
+  forEachInstanceKeyPrefix(key, (prefix) => {
     let keys = runtime.instanceKeysByPrefix.get(prefix);
 
     if (keys === undefined) {
@@ -2233,15 +2233,15 @@ function indexInstanceKey(runtime: RootRuntime, key: string): void {
     }
 
     keys.add(key);
-  }
+  });
 }
 
 function removeInstanceKeyFromIndex(runtime: RootRuntime, key: string): void {
-  for (const prefix of instanceKeyPrefixes(key)) {
+  forEachInstanceKeyPrefix(key, (prefix) => {
     const keys = runtime.instanceKeysByPrefix.get(prefix);
 
     if (keys === undefined) {
-      continue;
+      return;
     }
 
     keys.delete(key);
@@ -2249,11 +2249,13 @@ function removeInstanceKeyFromIndex(runtime: RootRuntime, key: string): void {
     if (keys.size === 0) {
       runtime.instanceKeysByPrefix.delete(prefix);
     }
-  }
+  });
 }
 
-function instanceKeyPrefixes(key: string): string[] {
-  const prefixes: string[] = [];
+function forEachInstanceKeyPrefix(
+  key: string,
+  callback: (prefix: string) => void,
+): void {
   let start = 0;
 
   while (start < key.length) {
@@ -2263,12 +2265,11 @@ function instanceKeyPrefixes(key: string): string[] {
       break;
     }
 
-    prefixes.push(key.slice(0, next));
+    callback(key.slice(0, next));
     start = next + 1;
   }
 
-  prefixes.push(key);
-  return prefixes;
+  callback(key);
 }
 
 function cleanupInstance(instance: ComponentInstance): void {
