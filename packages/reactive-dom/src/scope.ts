@@ -1,7 +1,7 @@
 import type { Dispose } from "./types.js";
 
 export interface DomScope {
-  disposers?: Set<Dispose> | undefined;
+  disposers?: Dispose[] | undefined;
   disposed: boolean;
 }
 
@@ -25,7 +25,7 @@ export function createScope(): DomScope {
 }
 
 export function hasScopeDisposers(scope: DomScope): boolean {
-  return scope.disposers !== undefined && scope.disposers.size > 0;
+  return scope.disposers !== undefined && scope.disposers.length > 0;
 }
 
 export function registerDispose(dispose: Dispose): Dispose {
@@ -42,11 +42,10 @@ export function registerDispose(dispose: Dispose): Dispose {
     }
 
     active = false;
-    scope.disposers?.delete(wrapped);
     dispose();
   };
 
-  (scope.disposers ??= new Set()).add(wrapped);
+  (scope.disposers ??= []).push(wrapped);
   return wrapped;
 }
 
@@ -57,20 +56,19 @@ export function disposeScope(scope: DomScope): void {
 
   scope.disposed = true;
 
-  const disposersSet = scope.disposers;
+  const disposers = scope.disposers;
 
-  if (disposersSet === undefined || disposersSet.size === 0) {
+  if (disposers === undefined || disposers.length === 0) {
     return;
   }
 
-  const disposers = Array.from(disposersSet).reverse();
-  disposersSet.clear();
+  scope.disposers = undefined;
 
   let firstError: unknown;
 
-  for (const dispose of disposers) {
+  for (let index = disposers.length - 1; index >= 0; index -= 1) {
     try {
-      dispose();
+      disposers[index]!();
     } catch (error) {
       firstError ??= error;
     }
