@@ -1294,10 +1294,7 @@ function createHostFiberImpl(
       forwardRefType,
     );
     fiber.memoizedState = getDevToolsHookState(runtime, path);
-    const childOptions = withHydrationComponentStack(
-      options,
-      getComponentName(forwardRefType.render),
-    );
+    const childOptions = getHydrationChildOptions(options, forwardRefType.render);
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "forward-ref" ? current.child : undefined,
@@ -1494,10 +1491,7 @@ function createHostFiberImpl(
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
-    const childOptions = withHydrationComponentStack(
-      options,
-      getComponentName(classType),
-    );
+    const childOptions = getHydrationChildOptions(options, classType);
 
     try {
       const childResult = reconcileHostChild(
@@ -1579,10 +1573,7 @@ function createHostFiberImpl(
       node.type,
     );
     fiber.memoizedState = getDevToolsHookState(runtime, path);
-    const childOptions = withHydrationComponentStack(
-      options,
-      getComponentName(node.type as Function),
-    );
+    const childOptions = getHydrationChildOptions(options, node.type as Function);
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "function-component" ? current.child : undefined,
@@ -3397,6 +3388,15 @@ function getRootCommitPath(options: RenderOptions): string {
 
 function joinCommitPath(path: string, segment: string): string {
   return path === SKIP_COMMIT_PATH ? "" : joinPath(path, segment);
+}
+
+function getHydrationChildOptions(
+  options: FiberHydrationOptions,
+  component: Function,
+): FiberHydrationOptions {
+  return options.hydration === undefined
+    ? options
+    : withHydrationComponentStack(options, getComponentName(component));
 }
 
 function getComponentName(component: Function): string {

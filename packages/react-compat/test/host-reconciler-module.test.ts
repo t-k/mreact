@@ -211,6 +211,18 @@ describe("host reconciler module", () => {
     }
   });
 
+  test("does not eagerly compute hydration component names without hydration options", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain(
+      "withHydrationComponentStack(\n      options,\n      getComponentName(",
+    );
+    expect(hostReconcilerSource).toContain("getHydrationChildOptions(");
+  });
+
   test("keeps vi.stubEnv control over host fast paths in node test environments", () => {
     vi.stubEnv("NODE_ENV", "development");
     const container = document.createElement("div");
