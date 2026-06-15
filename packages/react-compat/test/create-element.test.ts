@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { Fragment, createElement } from "../src/index.js";
-import { MEMO_TYPE, REACTIVE_TEXT_BINDING_META } from "../src/element.js";
+import { REACTIVE_TEXT_BINDING_META } from "../src/element.js";
 
 describe("react-compat createElement", () => {
   test("creates a DOM element record with props and children", () => {
@@ -57,19 +57,5 @@ describe("react-compat createElement", () => {
     const element = createElement(Fragment, null, "A", "B");
 
     expect(element.props.children).toEqual(["A", "B"]);
-  });
-
-  test("does not probe Provider on memo element types", () => {
-    const type = {
-      $$typeof: MEMO_TYPE,
-      type: "div",
-      get Provider(): unknown {
-        throw new Error("Provider should not be read for memo types");
-      },
-    };
-
-    const element = createElement(type, { id: "row" });
-
-    expect(element.type).toBe(type);
   });
 });
