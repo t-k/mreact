@@ -59,13 +59,10 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
     expect(main).toContain("createTemplate");
     expect(main).toContain("const createRowTemplate = createTemplate(");
-    expect(main).toContain("idCell.firstChild as Text");
-    expect(main).toContain("selectLink.firstChild as Text");
     expect(main).toContain("bindList(");
     expect(main).toContain("key: (row) => row.id");
     expect(main).toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
-    expect(main).not.toContain("document.createTextNode");
   });
 });
 

@@ -166,7 +166,7 @@ function requireElement<T extends HTMLElement>(id: string): T {
 }
 
 const createRowTemplate = createTemplate(
-  '<tr><td class="col-md-1">0</td><td class="col-md-4"><a> </a></td><td class="col-md-1"><a><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
+  '<tr><td class="col-md-1"></td><td class="col-md-4"><a></a></td><td class="col-md-1"><a><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
 );
 
 function renderRow(row: Row): HTMLTableRowElement {
@@ -177,15 +177,17 @@ function renderRow(row: Row): HTMLTableRowElement {
   const removeCell = labelCell.nextElementSibling as HTMLTableCellElement;
   const selectLink = labelCell.firstElementChild as HTMLAnchorElement;
   const removeLink = removeCell.firstElementChild as HTMLAnchorElement;
-  const idText = idCell.firstChild as Text;
-  const labelText = selectLink.firstChild as Text;
+  const idText = document.createTextNode(String(row.id));
+  const labelText = document.createTextNode("");
 
   rowElements.set(row.id, tr);
 
-  idText.data = String(row.id);
   bindText(labelText, () => row.label.get());
   bindEvent(selectLink, "click", () => selected.set(row.id));
   bindEvent(removeLink, "click", () => removeRow(row.id));
+
+  idCell.append(idText);
+  selectLink.append(labelText);
 
   return tr;
 }
