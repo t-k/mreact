@@ -76,6 +76,27 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("function hasDirtyInstanceDependencies(");
   });
 
+  test("checks same-type memo bailout before generic element reconciliation", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function tryReuseMemoBailout(");
+    expect(hostReconcilerSource).toContain("const memoBailout = tryReuseMemoBailout(");
+    expect(hostReconcilerSource).toContain("if (memoBailout !== undefined) {");
+  });
+
+  test("rejects non-host keyed row fast path before walking key order", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("!isKeyedRowHostElementCandidate(children[0])");
+    expect(hostReconcilerSource).toContain("function isKeyedRowHostElementCandidate(");
+  });
+
   test("uses production host fast paths when no process global exists", async () => {
     // Browsers without bundler define rewriting have no process global at all.
     // The fast-path gate must treat that as production instead of silently

@@ -467,6 +467,7 @@ function reconcileKeyedRowHostChildren(
     children.length === 0 ||
     currentFirstChild === undefined ||
     options.previousNodes !== undefined ||
+    !isKeyedRowHostElementCandidate(children[0]) ||
     !shouldUseDirectHostTextChild()
   ) {
     return undefined;
@@ -681,6 +682,15 @@ function createKeyedRowHostElementScratch(): KeyedRowHostElement {
     type: "",
     text: "",
   };
+}
+
+function isKeyedRowHostElementCandidate(node: ReactCompatNode): boolean {
+  return (
+    isReactCompatElement(node) &&
+    typeof node.type === "string" &&
+    node.key !== null &&
+    node.ref === null
+  );
 }
 
 function readKeyedRowHostElement(
@@ -1052,6 +1062,11 @@ function createHostFiberImpl(
     );
     fiber.child = childResult.fiber;
     return { fiber, consumed: childResult.consumed };
+  }
+
+  const memoBailout = tryReuseMemoBailout(current, node, runtime, path, options);
+  if (memoBailout !== undefined) {
+    return memoBailout;
   }
 
   if (!isReactCompatElement(node)) {
@@ -3017,6 +3032,52 @@ function hasPendingAsyncChild(fiber: Fiber | undefined): boolean {
   }
 
   return false;
+}
+
+function tryReuseMemoBailout(
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions,
+): FiberReconcileResult | undefined {
+  if (
+    current?.tag !== "memo" ||
+    runtime === undefined ||
+    !isReactCompatElement(node) ||
+    node.type !== current.type ||
+    !isMemoType(node.type)
+  ) {
+    return undefined;
+  }
+
+  const previousMemoState = current.memoizedState as MemoFiberState | undefined;
+  const memoPath = `${path}.memo`;
+
+  if (
+    previousMemoState === undefined ||
+    (
+      memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
+      hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath)
+    ) ||
+    (
+      memoStateNeedsEffectCheck(previousMemoState) &&
+      hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys)
+    ) ||
+    !areMemoPropsEqual(node.type, previousMemoState.props, node.props)
+  ) {
+    return undefined;
+  }
+
+  const fiber = createWorkInProgress(current, node.props);
+  fiber.type = node.type;
+  markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+  fiber.child = getSkippedChild(current);
+  fiber.memoizedState = previousMemoState;
+  return {
+    fiber,
+    consumed: options.previousNodes?.length ?? 0,
+  };
 }
 
 function isPendingLazyFiber(fiber: Fiber): boolean {
