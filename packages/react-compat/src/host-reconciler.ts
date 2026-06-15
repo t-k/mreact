@@ -110,7 +110,6 @@ const hasOwnProperty = Object.prototype.hasOwnProperty;
 interface FiberReconcileResult {
   fiber: Fiber | undefined;
   consumed: number;
-  finalized?: boolean;
 }
 
 interface AppendSuffixCommitHint {
@@ -964,7 +963,7 @@ function createHostFiber(
 ): FiberReconcileResult {
   const result = createHostFiberImpl(parent, current, node, key, runtime, path, options);
 
-  if (result.fiber !== undefined && result.finalized !== true) {
+  if (result.fiber !== undefined) {
     if (canFinalizeNewHostFiber(result.fiber, current, node, options)) {
       result.fiber.flags |= Placement;
       result.fiber.hostChildListChanged = true;
@@ -1300,7 +1299,6 @@ function createHostFiberImpl(
       return {
         fiber,
         consumed: options.previousNodes?.length ?? 0,
-        finalized: node.ref === null,
       };
     }
 
