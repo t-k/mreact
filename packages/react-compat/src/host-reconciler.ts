@@ -349,6 +349,10 @@ function reconcileHostChild(
 
   const childCount = children === undefined ? 1 : children.length;
   const hasKeyedChildren = children !== undefined && hasKeyedChild(children);
+  const canReuseCurrentFibersInList =
+    !hasKeyedChildren ||
+    currentFirstChild === undefined ||
+    hasSameKeyOrder(currentFirstChild, children);
   let existingByKey: Map<string, Fiber> | undefined;
   let currentKeyed: Fiber | undefined = currentFirstChild;
   let currentUnkeyed = currentFirstChild;
@@ -377,6 +381,7 @@ function reconcileHostChild(
     const child = children === undefined ? node : children[index];
     const key = getNodeKey(child);
     let matchedCurrent: Fiber | undefined;
+    let canReuseMatchedCurrentFiber = canReuseCurrentFibersInList;
 
     if (key === undefined) {
       if (hasKeyedChildren && currentUnkeyed !== undefined) {
@@ -387,6 +392,7 @@ function reconcileHostChild(
       matchedCurrent = undefined;
     } else if (existingByKey !== undefined) {
       matchedCurrent = existingByKey.get(key);
+      canReuseMatchedCurrentFiber = matchedCurrent === undefined;
     } else if (currentKeyed?.key === key) {
       matchedCurrent = currentKeyed;
       currentKeyed = currentKeyed.sibling;
@@ -398,6 +404,7 @@ function reconcileHostChild(
     ) {
       ensureUsedCurrentChildren();
       matchedCurrent = currentKeyed.sibling;
+      canReuseMatchedCurrentFiber = false;
       currentKeyed = currentKeyed.sibling.sibling;
     } else {
       if (
@@ -411,6 +418,7 @@ function reconcileHostChild(
         ensureUsedCurrentChildren();
         existingByKey = collectExistingKeyedFibers(currentKeyed);
         matchedCurrent = existingByKey.get(key);
+        canReuseMatchedCurrentFiber = matchedCurrent === undefined;
       }
     }
 
@@ -419,6 +427,7 @@ function reconcileHostChild(
       child,
       runtime,
       options,
+      canReuseMatchedCurrentFiber,
     );
     const previousNodes =
       memoBailout !== undefined || options.previousNodes === undefined
@@ -432,6 +441,7 @@ function reconcileHostChild(
       runtime,
       getReconcileChildPath(path, child, index, options),
       previousNodes === undefined ? options : { ...options, previousNodes },
+      canReuseMatchedCurrentFiber,
     );
     const fiber = result.fiber;
 
@@ -651,6 +661,23 @@ function hasSameKeyOrderPrefix(
     }
 
     if (current.key !== getNodeKey(children[index])) {
+      return false;
+    }
+
+    current = current.sibling;
+  }
+
+  return current === undefined;
+}
+
+function hasSameKeyOrder(
+  currentFirstChild: Fiber,
+  children: readonly ReactCompatNode[],
+): boolean {
+  let current: Fiber | undefined = currentFirstChild;
+
+  for (let index = 0; index < children.length; index += 1) {
+    if (current === undefined || current.key !== getNodeKey(children[index])) {
       return false;
     }
 
@@ -1001,8 +1028,18 @@ function createHostFiber(
   runtime: RootRuntime | undefined,
   path: string,
   options: FiberHydrationOptions = {},
+  canReuseCurrentFiber = true,
 ): FiberReconcileResult {
-  const result = createHostFiberImpl(parent, current, node, key, runtime, path, options);
+  const result = createHostFiberImpl(
+    parent,
+    current,
+    node,
+    key,
+    runtime,
+    path,
+    options,
+    canReuseCurrentFiber,
+  );
 
   if (result.fiber !== undefined) {
     if (canFinalizeNewHostFiber(result.fiber, current, node, options)) {
@@ -1043,6 +1080,7 @@ function createHostFiberImpl(
   runtime: RootRuntime | undefined,
   path: string,
   options: FiberHydrationOptions = {},
+  canReuseCurrentFiber = true,
 ): FiberReconcileResult {
   if (node === null || node === undefined || typeof node === "boolean") {
     return { fiber: undefined, consumed: 0 };
@@ -1095,7 +1133,14 @@ function createHostFiberImpl(
     return { fiber, consumed: childResult.consumed };
   }
 
-  const memoBailout = tryReuseMemoBailout(current, node, runtime, path, options);
+  const memoBailout = tryReuseMemoBailout(
+    current,
+    node,
+    runtime,
+    path,
+    options,
+    canReuseCurrentFiber,
+  );
   if (memoBailout !== undefined) {
     return memoBailout;
   }
@@ -1334,7 +1379,13 @@ function createHostFiberImpl(
       ) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
-      const fiber = getMemoBailoutFiber(runtime, previousMemoFiber, node.props, previousMemoState);
+      const fiber = getMemoBailoutFiber(
+        runtime,
+        previousMemoFiber,
+        node.props,
+        previousMemoState,
+        canReuseCurrentFiber,
+      );
       fiber.child = getSkippedChild(previousMemoFiber);
       fiber.memoizedState = previousMemoState;
       return {
@@ -3069,6 +3120,7 @@ function tryReuseMemoBailout(
   runtime: RootRuntime | undefined,
   path: string,
   options: FiberHydrationOptions,
+  canReuseCurrentFiber = true,
 ): FiberReconcileResult | undefined {
   if (
     current?.tag !== "memo" ||
@@ -3098,7 +3150,13 @@ function tryReuseMemoBailout(
     return undefined;
   }
 
-  const fiber = getMemoBailoutFiber(runtime, current, node.props, previousMemoState);
+  const fiber = getMemoBailoutFiber(
+    runtime,
+    current,
+    node.props,
+    previousMemoState,
+    canReuseCurrentFiber,
+  );
   fiber.type = node.type;
   fiber.child = getSkippedChild(current);
   fiber.memoizedState = previousMemoState;
@@ -3113,6 +3171,7 @@ function tryReuseDependencyFreeMemoBailout(
   node: ReactCompatNode,
   runtime: RootRuntime | undefined,
   options: FiberHydrationOptions,
+  canReuseCurrentFiber: boolean,
 ): FiberReconcileResult | undefined {
   if (
     options.previousNodes !== undefined ||
@@ -3137,7 +3196,13 @@ function tryReuseDependencyFreeMemoBailout(
     return undefined;
   }
 
-  const fiber = getMemoBailoutFiber(runtime, current, node.props, previousMemoState);
+  const fiber = getMemoBailoutFiber(
+    runtime,
+    current,
+    node.props,
+    previousMemoState,
+    canReuseCurrentFiber,
+  );
   fiber.type = node.type;
   fiber.child = getSkippedChild(current);
   fiber.memoizedState = previousMemoState;
@@ -3495,8 +3560,9 @@ function getMemoBailoutFiber(
   current: Fiber,
   pendingProps: unknown,
   state: MemoFiberState,
+  canReuseCurrentFiber: boolean,
 ): Fiber {
-  if (canReuseMemoBailoutFiber(current, state)) {
+  if (canReuseCurrentFiber && canReuseMemoBailoutFiber(current, state)) {
     current.pendingProps = pendingProps;
     current.flags = NoFlags;
     current.subtreeFlags = NoFlags;

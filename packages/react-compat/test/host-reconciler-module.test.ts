@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { Fragment, createElement } from "../src/index.js";
+import { Fragment, createElement, memo } from "../src/index.js";
 import { createRoot, flushSync } from "../src/root.js";
 import {
   canRenderHostFiber,
@@ -569,6 +569,36 @@ describe("host reconciler module", () => {
     expect(container.innerHTML).toBe(
       '<span data-key="a">A</span><span data-key="c">C</span>',
     );
+  });
+
+  test("commits keyed swaps for dependency-free memo rows", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const Row = memo(
+      function Row(props: { readonly id: number }) {
+        return createElement("span", { "data-key": props.id, key: props.id }, props.id);
+      },
+      (previous, next) => previous.id === next.id,
+    );
+    const renderRows = (ids: readonly number[]) => {
+      flushSync(() => {
+        root.render(ids.map((id) => createElement(Row, { id, key: id })));
+      });
+    };
+
+    renderRows([1, 2, 3]);
+    const first = container.children[0];
+    const second = container.children[1];
+    const third = container.children[2];
+
+    renderRows([1, 3, 2]);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="1">1</span><span data-key="3">3</span><span data-key="2">2</span>',
+    );
+    expect(container.children[0]).toBe(first);
+    expect(container.children[1]).toBe(third);
+    expect(container.children[2]).toBe(second);
   });
 
   test("appends keyed fragment children without resyncing unchanged siblings", () => {
