@@ -104,7 +104,9 @@ export function createElement<P extends object>(
   if (typeof type === "string") {
     const key = config?.key === undefined ? null : String(config.key);
     const ref = config?.ref ?? null;
-    const props = copyElementProps(config) as P & { children?: ReactCompatNode };
+    const props = copyElementProps(config, undefined, false, "internal") as P & {
+      children?: ReactCompatNode;
+    };
 
     if (children.length === 1) {
       props.children = children[0];
@@ -127,7 +129,10 @@ export function createElement<P extends object>(
     typeof type === "object" && type !== null ? normalizeElementType(type) : type;
   const key = config?.key === undefined ? null : String(config.key);
   const ref = config?.ref ?? null;
-  const props = applyDefaultProps(normalizedType, copyElementProps(config)) as P & {
+  const props = applyDefaultProps(
+    normalizedType,
+    copyElementProps(config, undefined, false, "internal"),
+  ) as P & {
     children?: ReactCompatNode;
   };
 
@@ -312,6 +317,7 @@ function copyElementProps(
   source: object | null | undefined,
   base?: object,
   omitChildren = false,
+  copySymbols: boolean | "internal" = true,
 ): Record<string, unknown> {
   const props: Record<PropertyKey, unknown> = {};
 
@@ -324,7 +330,11 @@ function copyElementProps(
   }
 
   copyOwnStringElementProps(source, props, omitChildren);
-  copyOwnSymbolElementProps(source, props);
+  if (copySymbols === "internal") {
+    copyInternalElementSymbolProps(source, props);
+  } else if (copySymbols) {
+    copyOwnSymbolElementProps(source, props);
+  }
   return props as Record<string, unknown>;
 }
 
@@ -358,6 +368,16 @@ function copyOwnSymbolElementProps(
   const symbolSource = source as Record<PropertyKey, unknown>;
   for (const symbol of Object.getOwnPropertySymbols(source)) {
     target[symbol] = symbolSource[symbol];
+  }
+}
+
+function copyInternalElementSymbolProps(
+  source: object,
+  target: Record<PropertyKey, unknown>,
+): void {
+  const symbolSource = source as Record<PropertyKey, unknown>;
+  if (hasOwnProperty.call(source, REACTIVE_TEXT_BINDING_META)) {
+    target[REACTIVE_TEXT_BINDING_META] = symbolSource[REACTIVE_TEXT_BINDING_META];
   }
 }
 
