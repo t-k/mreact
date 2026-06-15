@@ -414,11 +414,17 @@ function reconcileHostChild(
       }
     }
 
+    const memoBailout = tryReuseDependencyFreeMemoBailout(
+      matchedCurrent,
+      child,
+      runtime,
+      options,
+    );
     const previousNodes =
-      options.previousNodes === undefined
+      memoBailout !== undefined || options.previousNodes === undefined
         ? undefined
         : options.previousNodes.slice(consumed);
-    const result = createHostFiber(
+    const result = memoBailout ?? createHostFiber(
       parent,
       matchedCurrent,
       child,
@@ -3108,6 +3114,45 @@ function tryReuseMemoBailout(
   return {
     fiber,
     consumed: options.previousNodes?.length ?? 0,
+  };
+}
+
+function tryReuseDependencyFreeMemoBailout(
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+  runtime: RootRuntime | undefined,
+  options: FiberHydrationOptions,
+): FiberReconcileResult | undefined {
+  if (
+    options.previousNodes !== undefined ||
+    current?.tag !== "memo" ||
+    runtime === undefined ||
+    !isReactCompatElement(node) ||
+    node.type !== current.type ||
+    !isMemoType(node.type)
+  ) {
+    return undefined;
+  }
+
+  const previousMemoState = current.memoizedState as MemoFiberState | undefined;
+
+  if (
+    previousMemoState === undefined ||
+    previousMemoState.hasDirtyInstanceDependencies !== false ||
+    previousMemoState.hasUnflushedEffectDependencies !== false ||
+    previousMemoState.hasRetainedInstanceDependencies !== false ||
+    !areMemoPropsEqual(node.type, previousMemoState.props, node.props)
+  ) {
+    return undefined;
+  }
+
+  const fiber = getMemoBailoutFiber(runtime, current, node.props, previousMemoState);
+  fiber.type = node.type;
+  fiber.child = getSkippedChild(current);
+  fiber.memoizedState = previousMemoState;
+  return {
+    fiber,
+    consumed: 0,
   };
 }
 

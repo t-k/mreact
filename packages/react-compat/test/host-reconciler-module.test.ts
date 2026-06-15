@@ -118,6 +118,23 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("if (memoBailout !== undefined) {");
   });
 
+  test("checks dependency-free memo bailout before child path generation", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const bailoutIndex = hostReconcilerSource.indexOf(
+      "const memoBailout = tryReuseDependencyFreeMemoBailout(",
+    );
+    const pathIndex = hostReconcilerSource.indexOf(
+      "getReconcileChildPath(path, child, index, options)",
+    );
+
+    expect(bailoutIndex).toBeGreaterThanOrEqual(0);
+    expect(pathIndex).toBeGreaterThanOrEqual(0);
+    expect(bailoutIndex).toBeLessThan(pathIndex);
+  });
+
   test("reconciles matching keyed host child order without used-child set bookkeeping", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
