@@ -141,6 +141,50 @@ describe("bindEvent", () => {
     dispose();
   });
 
+  test("batches disconnected delegated event promotion microtasks", async () => {
+    const originalQueueMicrotask = globalThis.queueMicrotask;
+    const templateDocument = document.implementation.createHTMLDocument("template");
+    const first = templateDocument.createElement("button");
+    const second = templateDocument.createElement("button");
+    let queuedMicrotasks = 0;
+    let firstCalls = 0;
+    let secondCalls = 0;
+
+    try {
+      globalThis.queueMicrotask = ((callback: VoidFunction) => {
+        queuedMicrotasks += 1;
+        originalQueueMicrotask(callback);
+      }) as typeof queueMicrotask;
+
+      const disposeFirst = bindEvent(first, "click", () => {
+        firstCalls += 1;
+      });
+      const disposeSecond = bindEvent(second, "click", () => {
+        secondCalls += 1;
+      });
+
+      expect(queuedMicrotasks).toBe(1);
+
+      first.click();
+      second.click();
+      expect(firstCalls).toBe(1);
+      expect(secondCalls).toBe(1);
+
+      document.body.append(first, second);
+      await Promise.resolve();
+
+      first.click();
+      second.click();
+      expect(firstCalls).toBe(2);
+      expect(secondCalls).toBe(2);
+
+      disposeFirst();
+      disposeSecond();
+    } finally {
+      globalThis.queueMicrotask = originalQueueMicrotask;
+    }
+  });
+
   test("promotes delayed delegated events without queueMicrotask", async () => {
     const originalQueueMicrotask = globalThis.queueMicrotask;
     const templateDocument = document.implementation.createHTMLDocument("template");

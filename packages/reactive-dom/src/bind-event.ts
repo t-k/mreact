@@ -27,6 +27,8 @@ type EventElement = HTMLElement & {
 const delegatedEventTypes = " change click input keydown keyup pointerdown pointermove pointerup submit ";
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
+const pendingDisconnectedPromotions = new Set<() => void>();
+let disconnectedPromotionFlushQueued = false;
 
 /** Binds an event handler to an element and returns a disposer. */
 export function bindEvent<K extends keyof HTMLElementEventMap>(
@@ -189,7 +191,7 @@ function addDisconnectedFallback(
     }
 
     promotionQueued = true;
-    enqueueMicrotask(() => {
+    enqueueDisconnectedPromotion(() => {
       promotionQueued = false;
       promote();
     });
@@ -230,6 +232,27 @@ function enqueueMicrotask(callback: () => void): void {
   }
 
   void Promise.resolve().then(callback);
+}
+
+function enqueueDisconnectedPromotion(callback: () => void): void {
+  pendingDisconnectedPromotions.add(callback);
+
+  if (disconnectedPromotionFlushQueued) {
+    return;
+  }
+
+  disconnectedPromotionFlushQueued = true;
+  enqueueMicrotask(flushDisconnectedPromotions);
+}
+
+function flushDisconnectedPromotions(): void {
+  disconnectedPromotionFlushQueued = false;
+  const promotions = Array.from(pendingDisconnectedPromotions);
+  pendingDisconnectedPromotions.clear();
+
+  for (const promote of promotions) {
+    promote();
+  }
 }
 
 function retainDelegatedRoot(root: EventTarget, type: string): void {
