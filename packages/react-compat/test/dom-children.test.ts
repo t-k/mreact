@@ -66,6 +66,28 @@ describe("react-compat DOM child sync", () => {
     expect([...parent.childNodes]).toEqual(nextNodes);
   });
 
+  test("moves only the swapped pair for a distant two-node swap", () => {
+    const parent = document.createElement("div");
+    const nodes = Array.from({ length: 1_000 }, () => document.createElement("span"));
+    parent.append(...nodes);
+    const nextNodes = nodes.slice();
+    const second = nextNodes[1]!;
+    const nineHundredNinetyNinth = nextNodes[998]!;
+    nextNodes[1] = nineHundredNinetyNinth;
+    nextNodes[998] = second;
+    let insertions = 0;
+    const originalInsertBefore = parent.insertBefore.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      insertions += 1;
+      return originalInsertBefore(node, child);
+    }) as typeof parent.insertBefore;
+
+    syncChildNodes(parent, nextNodes);
+
+    expect(insertions).toBe(2);
+    expect([...parent.childNodes]).toEqual(nextNodes);
+  });
+
   test("ignores a stale removal when an external DOM owner has already removed the child", () => {
     const parent = document.createElement("div");
     const stale = document.createElement("span");
