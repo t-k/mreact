@@ -2253,13 +2253,21 @@ function removeInstanceKeyFromIndex(runtime: RootRuntime, key: string): void {
 }
 
 function instanceKeyPrefixes(key: string): string[] {
-  const parts = key.split(".");
   const prefixes: string[] = [];
+  let start = 0;
 
-  for (let index = 1; index <= parts.length; index += 1) {
-    prefixes.push(parts.slice(0, index).join("."));
+  while (start < key.length) {
+    const next = key.indexOf(".", start);
+
+    if (next === -1) {
+      break;
+    }
+
+    prefixes.push(key.slice(0, next));
+    start = next + 1;
   }
 
+  prefixes.push(key);
   return prefixes;
 }
 

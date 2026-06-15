@@ -80,6 +80,7 @@ interface MemoFiberState {
   instanceKeys: string[];
   hasDirtyInstanceDependencies: boolean;
   hasUnflushedEffectDependencies: boolean;
+  hasRetainedInstanceDependencies: boolean;
 }
 
 interface FunctionFiberState {
@@ -355,8 +356,22 @@ function reconcileHostChild(
   let previous: Fiber | undefined;
   let consumed = 0;
   let skipRemainingKeyedLookup = false;
-  const usedCurrentChildren =
-    currentFirstChild === undefined ? undefined : new Set<Fiber>();
+  let sequentialCurrentCursor = currentFirstChild;
+  let usedCurrentChildren =
+    currentFirstChild === undefined || hasKeyedChildren ? undefined : new Set<Fiber>();
+  const ensureUsedCurrentChildren = (): Set<Fiber> => {
+    if (usedCurrentChildren === undefined) {
+      usedCurrentChildren = new Set<Fiber>();
+      let cursor = currentFirstChild;
+
+      while (cursor !== undefined && cursor !== sequentialCurrentCursor) {
+        usedCurrentChildren.add(cursor);
+        cursor = cursor.sibling;
+      }
+    }
+
+    return usedCurrentChildren;
+  };
 
   for (let index = 0; index < childCount; index += 1) {
     const child = children === undefined ? node : children[index];
@@ -364,6 +379,9 @@ function reconcileHostChild(
     let matchedCurrent: Fiber | undefined;
 
     if (key === undefined) {
+      if (hasKeyedChildren && currentUnkeyed !== undefined) {
+        ensureUsedCurrentChildren();
+      }
       matchedCurrent = currentUnkeyed;
     } else if (skipRemainingKeyedLookup) {
       matchedCurrent = undefined;
@@ -372,11 +390,13 @@ function reconcileHostChild(
     } else if (currentKeyed?.key === key) {
       matchedCurrent = currentKeyed;
       currentKeyed = currentKeyed.sibling;
+      sequentialCurrentCursor = currentKeyed;
     } else if (
       children !== undefined &&
       currentKeyed?.sibling?.key === key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
+      ensureUsedCurrentChildren();
       matchedCurrent = currentKeyed.sibling;
       currentKeyed = currentKeyed.sibling.sibling;
     } else {
@@ -388,6 +408,7 @@ function reconcileHostChild(
         skipRemainingKeyedLookup = true;
         currentKeyed = undefined;
       } else if (hasKeyedChildren) {
+        ensureUsedCurrentChildren();
         existingByKey = collectExistingKeyedFibers(currentKeyed);
         matchedCurrent = existingByKey.get(key);
       }
@@ -451,7 +472,11 @@ function reconcileHostChild(
     previous = fiber;
   }
 
-  markUnusedCurrentChildrenForDeletion(parent, currentFirstChild, usedCurrentChildren);
+  if (usedCurrentChildren === undefined && hasKeyedChildren && currentKeyed !== undefined) {
+    markOptimizedChildrenForDeletion(parent, currentKeyed);
+  } else {
+    markUnusedCurrentChildrenForDeletion(parent, currentFirstChild, usedCurrentChildren);
+  }
   parent.childListChanged = childFiberListShapeChanged(currentFirstChild, first);
 
   return { fiber: first, consumed };
@@ -1308,7 +1333,9 @@ function createHostFiberImpl(
       ) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
-      markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+      if (memoStateNeedsActiveInstanceMark(previousMemoState)) {
+        markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+      }
       fiber.child = getSkippedChild(current);
       fiber.memoizedState = previousMemoState;
       return {
@@ -1347,6 +1374,9 @@ function createHostFiberImpl(
         runtime,
         instanceKeys,
       ),
+      hasRetainedInstanceDependencies:
+        hasRetainedInstanceDependencies(runtime, instanceKeys) ||
+        hasClassComponentDescendant(fiber.child),
     };
     return { fiber, consumed: childResult.consumed };
   }
@@ -3071,7 +3101,9 @@ function tryReuseMemoBailout(
 
   const fiber = createWorkInProgress(current, node.props);
   fiber.type = node.type;
-  markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+  if (memoStateNeedsActiveInstanceMark(previousMemoState)) {
+    markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+  }
   fiber.child = getSkippedChild(current);
   fiber.memoizedState = previousMemoState;
   return {
@@ -3410,6 +3442,10 @@ function memoStateNeedsEffectCheck(state: MemoFiberState): boolean {
   return state.hasUnflushedEffectDependencies !== false;
 }
 
+function memoStateNeedsActiveInstanceMark(state: MemoFiberState): boolean {
+  return state.hasRetainedInstanceDependencies !== false;
+}
+
 function hasDirtyInstanceDependencies(
   runtime: RootRuntime,
   keys: readonly string[],
@@ -3422,6 +3458,25 @@ function hasDirtyInstanceDependencies(
     }
 
     if (instance.hooks?.some(isDirtyCapableHookSlot) === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasRetainedInstanceDependencies(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const instance = runtime.instances.get(key) as RuntimeInstanceLike | undefined;
+
+    if (instance === undefined || instance.contextDependencies !== undefined) {
+      return true;
+    }
+
+    if (instance.hooks !== undefined && instance.hooks.length > 0) {
       return true;
     }
   }

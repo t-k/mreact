@@ -76,6 +76,27 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("function hasDirtyInstanceDependencies(");
   });
 
+  test("skips active instance marks for dependency-free memo subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("hasRetainedInstanceDependencies:");
+    expect(hostReconcilerSource).toContain("memoStateNeedsActiveInstanceMark(previousMemoState)");
+    expect(hostReconcilerSource).toContain("function hasRetainedInstanceDependencies(");
+  });
+
+  test("builds runtime instance key prefixes without repeated slice joins", async () => {
+    const hooksSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/hooks.ts"),
+      "utf8",
+    );
+
+    expect(hooksSource).toContain("function instanceKeyPrefixes(");
+    expect(hooksSource).not.toContain("parts.slice(0, index).join");
+  });
+
   test("checks same-type memo bailout before generic element reconciliation", async () => {
     const hostReconcilerSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
@@ -85,6 +106,42 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("function tryReuseMemoBailout(");
     expect(hostReconcilerSource).toContain("const memoBailout = tryReuseMemoBailout(");
     expect(hostReconcilerSource).toContain("if (memoBailout !== undefined) {");
+  });
+
+  test("reconciles matching keyed host child order without used-child set bookkeeping", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("div", { key: "a" }),
+      createElement("div", { key: "b" }),
+      createElement("div", { key: "c" }),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const OriginalSet = globalThis.Set;
+    let setConstructions = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          setConstructions += 1;
+          super(values ?? undefined);
+        }
+      } as SetConstructor;
+
+      renderHostFiberRoot(root, [
+        createElement("div", { key: "a" }),
+        createElement("div", { key: "b" }),
+        createElement("div", { key: "c" }),
+      ]);
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    expect(setConstructions).toBe(0);
   });
 
   test("rejects non-host keyed row fast path before walking key order", async () => {
