@@ -180,8 +180,8 @@ function renderRow(row: Row): HTMLTableRowElement {
 
   bindText(labelText, () => row.label.get());
   bindProp(tr, "className", () => (selected.get() === row.id ? "danger" : ""));
-  bindEvent(selectLink, "click", () => selected.set(row.id), { direct: true });
-  bindEvent(removeLink, "click", () => removeRow(row.id), { direct: true });
+  bindEvent(selectLink, "click", () => selected.set(row.id));
+  bindEvent(removeLink, "click", () => removeRow(row.id));
 
   idCell.append(idText);
   selectLink.append(labelText);

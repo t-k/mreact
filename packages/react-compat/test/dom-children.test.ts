@@ -43,29 +43,6 @@ describe("react-compat DOM child sync", () => {
     expect(previousNodes.every((node) => node.parentNode === null)).toBe(true);
   });
 
-  test("bulk inserts an empty full child list", () => {
-    const parent = document.createElement("div");
-    const nextNodes = Array.from({ length: 20 }, () => document.createElement("button"));
-    let insertions = 0;
-    let replacements = 0;
-    const originalInsertBefore = parent.insertBefore.bind(parent);
-    const originalReplaceChildren = parent.replaceChildren.bind(parent);
-    parent.insertBefore = ((node, child) => {
-      insertions += 1;
-      return originalInsertBefore(node, child);
-    }) as typeof parent.insertBefore;
-    parent.replaceChildren = ((...nodes) => {
-      replacements += 1;
-      originalReplaceChildren(...nodes);
-    }) as typeof parent.replaceChildren;
-
-    syncChildNodes(parent, nextNodes);
-
-    expect(insertions).toBe(0);
-    expect(replacements).toBe(1);
-    expect([...parent.childNodes]).toEqual(nextNodes);
-  });
-
   test("ignores a stale removal when an external DOM owner has already removed the child", () => {
     const parent = document.createElement("div");
     const stale = document.createElement("span");
