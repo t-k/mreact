@@ -76,6 +76,17 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("function hasDirtyInstanceDependencies(");
   });
 
+  test("skips host post-processing for ref-free memo bailouts", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("finalized?: boolean;");
+    expect(hostReconcilerSource).toContain("result.finalized !== true");
+    expect(hostReconcilerSource).toContain("finalized: node.ref === null");
+  });
+
   test("uses production host fast paths when no process global exists", async () => {
     // Browsers without bundler define rewriting have no process global at all.
     // The fast-path gate must treat that as production instead of silently

@@ -97,9 +97,17 @@ function buildData(count: number): RowData[] {
 }
 
 function updateEveryTenth(rows: readonly RowData[]): RowData[] {
-  return rows.map((row, index) =>
-    index % 10 === 0 ? { ...row, label: `${row.label} !!!` } : row,
-  );
+  const next = rows.slice(0);
+
+  for (let index = 0; index < next.length; index += 10) {
+    const row = next[index];
+
+    if (row !== undefined) {
+      next[index] = { id: row.id, label: `${row.label} !!!` };
+    }
+  }
+
+  return next;
 }
 
 function swapRows(rows: readonly RowData[]): readonly RowData[] {

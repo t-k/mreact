@@ -114,6 +114,15 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).not.toContain("function node");
     expect(main).not.toContain("@reckona/mreact-reactive-dom");
   });
+
+  test("uses the same tenth-row update shape as the official React fixture", async () => {
+    const main = await readFile(join(reactCompatFixtureRoot, "src", "main.ts"), "utf8");
+
+    expect(main).toContain("const next = rows.slice(0);");
+    expect(main).toContain("for (let index = 0; index < next.length; index += 10)");
+    expect(main).toContain('next[index] = { id: row.id, label: `${row.label} !!!` };');
+    expect(main).not.toContain("return rows.map((row, index)");
+  });
 });
 
 describe("js-framework-benchmark official runner", () => {
