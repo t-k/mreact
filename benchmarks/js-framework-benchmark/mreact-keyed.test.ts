@@ -105,14 +105,28 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("createRoot");
     expect(main).toContain("flushSync");
     expect(main).toContain("memo");
-    expect(main).toContain("useState");
+    expect(main).toContain("useReducer");
     expect(main).toContain('from "@reckona/mreact-compat"');
-    expect(main).toContain("setRows?.(updateEveryTenth");
+    expect(main).toContain("type AppAction");
+    expect(main).toContain("function reduceAppState");
+    expect(main).toContain('case "update":');
+    expect(main).toContain("dispatchBenchAction");
     expect(main).toContain("key: row.id");
     expect(main).toContain("createElement(Row");
     expect(main).toContain("previous.selected === next.selected && previous.row === next.row");
+    expect(main).not.toContain("useState");
+    expect(main).not.toContain("setRows?.(");
     expect(main).not.toContain("function node");
     expect(main).not.toContain("@reckona/mreact-reactive-dom");
+  });
+
+  test("builds with production defines used by the benchmark hot paths", async () => {
+    const config = await readFile(join(reactCompatFixtureRoot, "vite.config.ts"), "utf8");
+
+    expect(config).toContain("__MREACT_CLIENT_DEVTOOLS__");
+    expect(config).toContain('"false"');
+    expect(config).toContain('"process.env.NODE_ENV"');
+    expect(config).toContain('"production"');
   });
 
   test("uses the same tenth-row update shape as the official React fixture", async () => {
@@ -122,6 +136,15 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("for (let index = 0; index < next.length; index += 10)");
     expect(main).toContain('next[index] = { id: row.id, label: `${row.label} !!!` };');
     expect(main).not.toContain("return rows.map((row, index)");
+  });
+});
+
+describe("js-framework-benchmark mreact keyed production build", () => {
+  test("builds with production defines used by reactive-core hot paths", async () => {
+    const config = await readFile(join(fixtureRoot, "vite.config.ts"), "utf8");
+
+    expect(config).toContain("__MREACT_CLIENT_DEVTOOLS__");
+    expect(config).toContain('"false"');
   });
 });
 
