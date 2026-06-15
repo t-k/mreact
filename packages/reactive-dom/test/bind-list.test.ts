@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
@@ -108,6 +110,16 @@ describe("bindList", () => {
     expect(parent.childNodes[1]).toBe(firstA);
 
     dispose();
+  });
+
+  test("builds keyed item key arrays without Array.from allocation", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages/reactive-dom/src/bind-list.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("new Array<unknown>(length)");
+    expect(source).not.toContain("Array.from({ length })");
   });
 
   test("updates keyed row index-dependent bindings after reorder", async () => {

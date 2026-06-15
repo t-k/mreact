@@ -408,7 +408,7 @@ function uniqueKeyedItems<T>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
 ): KeyedItems<T> {
   const length = items.length;
-  const keys: unknown[] = Array.from({ length });
+  const keys = new Array<unknown>(length);
   const seenKeys = new Set<unknown>();
 
   for (let index = 0; index < length; index += 1) {
