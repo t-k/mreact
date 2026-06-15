@@ -100,7 +100,13 @@ export function createElement<P extends object>(
   type: ElementType<P>,
   config: (P & ReactReservedProps) | null,
   ...children: ReactCompatNode[]
+): ReactCompatElement<P>;
+export function createElement<P extends object>(
+  type: ElementType<P>,
+  config: (P & ReactReservedProps) | null,
 ): ReactCompatElement<P> {
+  const childCount = arguments.length - 2;
+
   if (typeof type === "string") {
     const key = config?.key === undefined ? null : String(config.key);
     const ref = config?.ref ?? null;
@@ -108,11 +114,7 @@ export function createElement<P extends object>(
       children?: ReactCompatNode;
     };
 
-    if (children.length === 1) {
-      props.children = children[0];
-    } else if (children.length > 1) {
-      props.children = children;
-    }
+    assignCreateElementChildren(props, childCount, arguments);
 
     setHostOwnPropsMeta(props);
 
@@ -136,11 +138,7 @@ export function createElement<P extends object>(
     children?: ReactCompatNode;
   };
 
-  if (children.length === 1) {
-    props.children = children[0];
-  } else if (children.length > 1) {
-    props.children = children;
-  }
+  assignCreateElementChildren(props, childCount, arguments);
 
   if (typeof normalizedType === "string") {
     setHostOwnPropsMeta(props);
@@ -153,6 +151,30 @@ export function createElement<P extends object>(
     ref,
     props: props as P & { children?: ReactCompatNode },
   };
+}
+
+function assignCreateElementChildren(
+  props: { children?: ReactCompatNode },
+  childCount: number,
+  args: IArguments,
+): void {
+  if (childCount === 1) {
+    props.children = args[2] as ReactCompatNode;
+    return;
+  }
+
+  if (childCount <= 1) {
+    return;
+  }
+
+  const children: ReactCompatNode[] = [];
+  children.length = childCount;
+
+  for (let index = 0; index < childCount; index += 1) {
+    children[index] = args[index + 2] as ReactCompatNode;
+  }
+
+  props.children = children;
 }
 
 /** Creates a React-compatible element from JSX runtime arguments. */
