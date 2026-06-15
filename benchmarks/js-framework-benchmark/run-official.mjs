@@ -16,6 +16,7 @@ const resultDir = resultsRoot === undefined
   ? join(repoRoot, "benchmarks", "results", "local-js-framework")
   : resultsRoot;
 const officialResultDir = join(resultDir, "js-framework-benchmark-results");
+const officialTraceDir = join(resultDir, "js-framework-benchmark-traces");
 const useLocalPackages = parseBooleanEnv(
   process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES,
   true,
@@ -167,6 +168,7 @@ async function main() {
   }
   await mkdir(resultDir, { recursive: true });
   await rm(officialResultDir, { force: true, recursive: true });
+  await rm(officialTraceDir, { force: true, recursive: true });
 
   let server;
   try {
@@ -183,6 +185,7 @@ async function main() {
   }
 
   await copyResults();
+  await copyTraces();
   await writeSummary();
 }
 
@@ -429,6 +432,15 @@ async function copyResults() {
   await cp(source, officialResultDir, { force: true, recursive: true });
 }
 
+async function copyTraces() {
+  const source = join(checkoutRoot, "webdriver-ts", "traces");
+  if (!existsSync(source)) {
+    throw new Error(`Missing js-framework-benchmark traces directory: ${source}`);
+  }
+
+  await cp(source, officialTraceDir, { force: true, recursive: true });
+}
+
 async function writeSummary() {
   const frameworkRows = await collectResultRows();
   const resultRows = toResultRows(frameworkRows);
@@ -451,6 +463,7 @@ async function writeSummary() {
     ...unsupportedPrimitiveAdapters.map((entry) => `- ${entry}`),
     "",
     `Raw JSON files are stored in \`${relativePath(officialResultDir)}\`.`,
+    `Chrome trace files are stored in \`${relativePath(officialTraceDir)}\`.`,
     "",
     "## Rankings",
     "",

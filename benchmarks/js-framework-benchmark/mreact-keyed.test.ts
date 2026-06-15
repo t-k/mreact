@@ -255,4 +255,20 @@ describe("js-framework-benchmark official runner", () => {
       "| suite | framework | case | status | metric | unit | value | diff vs 1st |",
     );
   });
+
+  test("copies official Chrome traces next to the js-framework results", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain("const officialTraceDir = join(resultDir, \"js-framework-benchmark-traces\");");
+    expect(runner).toContain("await copyTraces();");
+    expect(runner).toContain("Chrome trace files are stored");
+  });
 });

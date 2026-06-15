@@ -149,6 +149,12 @@ jobs:
             done
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ steps.results.outputs.date }}-${{ steps.results.outputs.run }}
+          path: ${{ steps.results.outputs.dir }}
+
       - name: Commit benchmark results
         if: ${{ github.ref_type == 'branch' && github.ref_name == 'main' }}
         shell: bash

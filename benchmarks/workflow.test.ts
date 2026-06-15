@@ -28,6 +28,10 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/js-framework-benchmark.md")');
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/router.md")');
     expect(workflow).toContain("Commit benchmark results");
+    expect(workflow).toContain("Upload benchmark results");
+    expect(workflow).toContain("uses: actions/upload-artifact@v4");
+    expect(workflow).toContain("benchmark-results-${{ steps.results.outputs.date }}-${{ steps.results.outputs.run }}");
+    expect(workflow).toContain("path: ${{ steps.results.outputs.dir }}");
     expect(workflow).toContain("if: ${{ github.ref_type == 'branch' && github.ref_name == 'main' }}");
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
     expect(workflow).toContain("git add -f benchmarks/results");
@@ -35,6 +39,5 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain('git push origin "HEAD:$GITHUB_REF_NAME"');
     expect(workflow).toContain('gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"');
     expect(workflow).not.toContain("request-fastpaths");
-    expect(workflow).not.toContain("actions/upload-artifact");
   });
 });
