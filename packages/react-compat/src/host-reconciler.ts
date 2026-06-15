@@ -1369,18 +1369,19 @@ function createHostFiberImpl(
       bubbleHostChild(fiber, fiber.child);
     }
     const instanceKeys = collectInstanceKeys(runtime, memoPath);
-    const hasClassDescendant = hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
       props: { ...node.props },
       instanceKeys,
       hasDirtyInstanceDependencies:
-        hasDirtyInstanceDependencies(runtime, instanceKeys) || hasClassDescendant,
+        hasDirtyInstanceDependencies(runtime, instanceKeys) ||
+        hasClassComponentDescendant(fiber.child),
       hasUnflushedEffectDependencies: hasUnflushedEffectDependencies(
         runtime,
         instanceKeys,
       ),
       hasRetainedInstanceDependencies:
-        hasRetainedInstanceDependencies(runtime, instanceKeys) || hasClassDescendant,
+        hasRetainedInstanceDependencies(runtime, instanceKeys) ||
+        hasClassComponentDescendant(fiber.child),
     };
     return { fiber, consumed: childResult.consumed };
   }

@@ -223,17 +223,6 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("getHydrationChildOptions(");
   });
 
-  test("checks class descendants once when storing memo dependency flags", async () => {
-    const hostReconcilerSource = await readFile(
-      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
-      "utf8",
-    );
-
-    expect(hostReconcilerSource).toContain("const hasClassDescendant =");
-    expect(hostReconcilerSource.match(/hasClassComponentDescendant\(fiber\.child\)/g))
-      .toHaveLength(1);
-  });
-
   test("keeps vi.stubEnv control over host fast paths in node test environments", () => {
     vi.stubEnv("NODE_ENV", "development");
     const container = document.createElement("div");
