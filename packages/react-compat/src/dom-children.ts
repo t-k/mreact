@@ -45,6 +45,10 @@ export function syncScopedChildNodes(
   after: ChildNode | null,
   nextNodes: readonly Node[],
 ): void {
+  if (replaceEmptyFullChildList(parent, before, after, nextNodes)) {
+    return;
+  }
+
   if (replaceDisjointFullChildList(parent, before, after, nextNodes)) {
     return;
   }
@@ -89,6 +93,25 @@ export function syncScopedChildNodes(
       removeChildIfPresent(parent, child);
     }
   }
+}
+
+function replaceEmptyFullChildList(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextNodes: readonly Node[],
+): boolean {
+  if (
+    before !== null ||
+    after !== null ||
+    nextNodes.length <= 16 ||
+    parent.childNodes.length !== 0
+  ) {
+    return false;
+  }
+
+  parent.replaceChildren(...nextNodes);
+  return true;
 }
 
 function replaceDisjointFullChildList(
