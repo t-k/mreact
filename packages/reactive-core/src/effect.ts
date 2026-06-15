@@ -43,7 +43,7 @@ export function effect(fn: () => void | (() => void)): () => void {
       const previousDepsSize = computation.deps.size;
       const nextTrackingVersion = nextTrackingVersionFor(computation);
 
-      computation.trackingAddedDeps = [];
+      computation.trackingAddedDeps = undefined;
       computation.trackingCount = 0;
       computation.trackingTouchedDeps = [];
       computation.trackingVersion = nextTrackingVersion;

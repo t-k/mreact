@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { cell, effect } from "../src/index.js";
 import { setScheduler } from "../src/internal.js";
+import { runtimeState, type ReactiveComputation } from "../src/state.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("effect", () => {
@@ -46,6 +47,21 @@ describe("effect", () => {
     await flushEffects();
 
     expect(calls).toEqual([0]);
+  });
+
+  test("does not allocate added dependency tracking before a dependency is added", () => {
+    const count = cell(0);
+    let addedDepsAllocated = false;
+
+    const dispose = effect(() => {
+      const computation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      addedDepsAllocated = computation?.trackingAddedDeps !== undefined;
+      count.get();
+    });
+
+    dispose();
+
+    expect(addedDepsAllocated).toBe(false);
   });
 
   test("cleans up before rerun and once on dispose", async () => {
