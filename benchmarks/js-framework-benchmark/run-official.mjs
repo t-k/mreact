@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 
@@ -16,6 +16,47 @@ const resultDir = resultsRoot === undefined
   ? join(repoRoot, "benchmarks", "results", "local-js-framework")
   : resultsRoot;
 const officialResultDir = join(resultDir, "js-framework-benchmark-results");
+const useLocalPackages = parseBooleanEnv(
+  process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES,
+  true,
+);
+const localPackageModeHelp =
+  "Set MREACT_JS_FRAMEWORK_LOCAL_PACKAGES=0 to benchmark published npm packages.";
+
+const localPackageSpecs = [
+  {
+    name: "@reckona/mreact-shared",
+    source: join(repoRoot, "packages", "shared"),
+    target: "mreact-shared",
+  },
+  {
+    name: "@reckona/mreact-reactive-core",
+    source: join(repoRoot, "packages", "reactive-core"),
+    target: "mreact-reactive-core",
+  },
+  {
+    name: "@reckona/mreact-reactive-dom",
+    source: join(repoRoot, "packages", "reactive-dom"),
+    target: "mreact-reactive-dom",
+  },
+  {
+    name: "@reckona/mreact-compat",
+    source: join(repoRoot, "packages", "react-compat"),
+    target: "mreact-compat",
+  },
+];
+
+const localPackageByName = new Map(localPackageSpecs.map((spec) => [spec.name, spec]));
+
+const localFixtureDependencies = {
+  "mreact": [
+    "@reckona/mreact-reactive-core",
+    "@reckona/mreact-reactive-dom",
+  ],
+  "mreact-react-compat": [
+    "@reckona/mreact-compat",
+  ],
+};
 
 const frameworkMappings = [
   {
@@ -70,6 +111,9 @@ await main();
 async function main() {
   await prepareCheckout();
   await copyMreactFixtures();
+  if (useLocalPackages) {
+    await prepareLocalPackages();
+  }
   await mkdir(resultDir, { recursive: true });
   await rm(officialResultDir, { force: true, recursive: true });
 
@@ -116,6 +160,22 @@ function parseFrameworks(value, fallback) {
     .filter((entry) => entry.length > 0);
 }
 
+function parseBooleanEnv(value, defaultValue) {
+  if (value === undefined || value.trim() === "") {
+    return defaultValue;
+  }
+
+  if (/^(1|true|yes|on)$/iu.test(value)) {
+    return true;
+  }
+
+  if (/^(0|false|no|off)$/iu.test(value)) {
+    return false;
+  }
+
+  throw new Error(`Expected a boolean environment value, received ${value}`);
+}
+
 function benchmarkArgs() {
   if (selectedBenchmarks.length === 0) {
     return [];
@@ -135,6 +195,111 @@ async function prepareCheckout() {
       checkoutRoot,
     ], repoRoot);
   }
+}
+
+async function prepareLocalPackages() {
+  await run("pnpm", ["build"], repoRoot);
+
+  for (const fixture of Object.keys(localFixtureDependencies)) {
+    const fixtureDir = join(checkoutRoot, "frameworks", "keyed", fixture);
+    const packageRoot = localPackageRoot(fixtureDir);
+    await rm(packageRoot, { force: true, recursive: true });
+    await mkdir(packageRoot, { recursive: true });
+
+    for (const spec of localPackageSpecs) {
+      await copyLocalPackage(packageRoot, spec);
+    }
+
+    for (const spec of localPackageSpecs) {
+      await rewriteLocalPackageDependencies(packageRoot, spec);
+    }
+
+    await applyLocalFixtureDependencies(fixtureDir, packageRoot, localFixtureDependencies[fixture]);
+  }
+}
+
+async function copyLocalPackage(packageRoot, spec) {
+  const target = localPackageDir(packageRoot, spec);
+  await mkdir(target, { recursive: true });
+  await cp(join(spec.source, "package.json"), join(target, "package.json"));
+
+  for (const entry of ["dist", "src"]) {
+    const source = join(spec.source, entry);
+    if (existsSync(source)) {
+      await cp(source, join(target, entry), { force: true, recursive: true });
+    }
+  }
+}
+
+async function rewriteLocalPackageDependencies(packageRoot, spec) {
+  const packageDir = localPackageDir(packageRoot, spec);
+  const packageJsonPath = join(packageDir, "package.json");
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+
+  rewriteLocalDependencies(packageJson, packageRoot, packageDir);
+  await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+}
+
+function rewriteLocalDependencies(packageJson, packageRoot, packageDir) {
+  const dependencies = packageJson.dependencies;
+  if (dependencies === undefined) {
+    return;
+  }
+
+  for (const [name, value] of Object.entries(dependencies)) {
+    const localPackage = localPackageByName.get(name);
+    if (localPackage !== undefined && typeof value === "string" && value.startsWith("workspace:")) {
+      dependencies[name] = fileDependency(packageDir, localPackageDir(packageRoot, localPackage));
+    }
+  }
+}
+
+async function applyLocalFixtureDependencies(fixtureDir, packageRoot, dependencies) {
+  const packageJsonPath = join(fixtureDir, "package.json");
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
+  packageJson.dependencies ??= {};
+
+  for (const dependency of dependencies) {
+    const localPackage = localPackageByName.get(dependency);
+    if (localPackage === undefined) {
+      throw new Error(`Missing local package staging config for ${dependency}`);
+    }
+    packageJson.dependencies[dependency] = fileDependency(fixtureDir, localPackageDir(packageRoot, localPackage));
+  }
+
+  await applyLocalFixtureVersion(packageJson, packageRoot, dependencies[dependencies.length - 1]);
+  await writeFile(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+}
+
+async function applyLocalFixtureVersion(packageJson, packageRoot, versionPackageName) {
+  const localPackage = localPackageByName.get(versionPackageName);
+  if (localPackage === undefined) {
+    throw new Error(`Missing local package staging config for ${versionPackageName}`);
+  }
+
+  const versionPackageJson = JSON.parse(
+    await readFile(join(localPackageDir(packageRoot, localPackage), "package.json"), "utf8"),
+  );
+  const benchmarkData = packageJson["js-framework-benchmark"];
+  if (benchmarkData === undefined) {
+    throw new Error(`Missing js-framework-benchmark metadata in ${packageJson.name}`);
+  }
+
+  benchmarkData.frameworkVersion = `${versionPackageJson.version}-local`;
+  delete benchmarkData.frameworkVersionFromPackage;
+}
+
+function localPackageRoot(fixtureDir) {
+  return join(fixtureDir, "mreact-local-packages");
+}
+
+function localPackageDir(packageRoot, spec) {
+  return join(packageRoot, spec.target);
+}
+
+function fileDependency(fromDir, toDir) {
+  const relativePath = relative(fromDir, toDir).replaceAll("\\", "/");
+  return `file:${relativePath.startsWith(".") ? relativePath : `./${relativePath}`}`;
 }
 
 async function copyMreactFixtures() {
@@ -201,6 +366,9 @@ async function writeSummary() {
     "# js-framework-benchmark Results",
     "",
     "Official krausest/js-framework-benchmark keyed DOM cases run for the primitive benchmark peers that have matching upstream fixtures.",
+    useLocalPackages
+      ? "The mreact fixtures use local package builds staged from this checkout, so unreleased runtime changes are included."
+      : `The mreact fixtures use the published npm package versions from their package.json files. ${localPackageModeHelp}`,
     "",
     "## Framework Mapping",
     "",

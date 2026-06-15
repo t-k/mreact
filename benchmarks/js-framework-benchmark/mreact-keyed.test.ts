@@ -170,4 +170,39 @@ describe("js-framework-benchmark official runner", () => {
       'await run("npm", ["run", "compile"], join(checkoutRoot, "webdriver-ts"));',
     );
   });
+
+  test("uses local mreact package builds by default for unreleased benchmark changes", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain("MREACT_JS_FRAMEWORK_LOCAL_PACKAGES");
+    expect(runner).toContain("const useLocalPackages = parseBooleanEnv");
+    expect(runner).toContain("await prepareLocalPackages();");
+    expect(runner).toContain("await applyLocalFixtureDependencies(fixtureDir");
+    expect(runner).toContain('return join(fixtureDir, "mreact-local-packages");');
+    expect(runner).toContain('benchmarkData.frameworkVersion = `${versionPackageJson.version}-local`;');
+    expect(runner).toContain("delete benchmarkData.frameworkVersionFromPackage;");
+  });
+
+  test("can opt out of local package builds for published npm comparisons", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain("MREACT_JS_FRAMEWORK_LOCAL_PACKAGES=0");
+    expect(runner).toContain("return defaultValue;");
+  });
 });
