@@ -24,13 +24,16 @@ type EventElement = HTMLElement & {
   __mreactHasEvents?: true;
 };
 type DeferredDelegatedEventPromotion = () => void;
+interface DeferredDelegatedEventPromotionContext {
+  promotions?: DeferredDelegatedEventPromotion[] | undefined;
+}
 
 const delegatedEventTypes = " change click input keydown keyup pointerdown pointermove pointerup submit ";
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
 const pendingDisconnectedPromotions = new Set<() => void>();
 let currentDeferredDelegatedEventPromotions:
-  | DeferredDelegatedEventPromotion[]
+  | DeferredDelegatedEventPromotionContext
   | undefined;
 let currentDelegatedRootReleaseBatch:
   | Map<EventTarget, Record<string, number>>
@@ -49,17 +52,23 @@ export function withEventBindingMetadata<T>(fn: () => T): T {
 }
 
 export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
-  promote(): void;
+  promote?: () => void;
   value: T;
 } {
   const previousPromotions = currentDeferredDelegatedEventPromotions;
-  const promotions: DeferredDelegatedEventPromotion[] = [];
-  currentDeferredDelegatedEventPromotions = promotions;
+  const context: DeferredDelegatedEventPromotionContext = {};
+  currentDeferredDelegatedEventPromotions = context;
 
   try {
     const value = fn();
+    const promotions = context.promotions;
+
+    if (promotions === undefined) {
+      return { value };
+    }
+
     return {
-      promote() {
+      promote: () => {
         for (const promote of promotions) {
           promote();
         }
@@ -212,11 +221,13 @@ function addDeferredDelegatedEventPromotion(
   element: HTMLElement,
   type: string,
 ): Dispose | undefined {
-  const promotions = currentDeferredDelegatedEventPromotions;
+  const context = currentDeferredDelegatedEventPromotions;
 
-  if (promotions === undefined) {
+  if (context === undefined) {
     return undefined;
   }
+
+  const promotions = (context.promotions ??= []);
 
   let active = true;
   let delegatedRoot: EventTarget | undefined;

@@ -34,6 +34,10 @@ export function withPropBindingMetadata<T>(fn: () => T): T {
   }
 }
 
+export function hasActivePropBindingMetadata(): boolean {
+  return propBindingMetadataDepth > 0;
+}
+
 export function registerReactivePropBinding(element: Element, binding: PropBinding): Dispose {
   if (propBindingMetadataDepth === 0) {
     return registerDispose(binding.dispose);

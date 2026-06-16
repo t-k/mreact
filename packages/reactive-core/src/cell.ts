@@ -70,9 +70,8 @@ function emitCellSetEvent<T>(source: Source, previous: T, value: T): void {
   });
 }
 
-interface CellState<T> {
+interface CellSource<T> extends Source {
   value: T;
-  readonly source: Source;
 }
 
 type SourceBackedCell<T> = Cell<T> & {
@@ -91,8 +90,8 @@ export function getCellSource(value: unknown): Source | undefined {
 
 // One shared write function keeps the hot store/notify sequence in a single
 // optimizable function instead of a fresh fat closure per cell.
-function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): void {
-  const previous = state.value;
+function writeCellValue<T>(source: CellSource<T>, next: T | ((prev: T) => T)): void {
+  const previous = source.value;
   const resolved =
     typeof next === "function" ? (next as (prev: T) => T)(previous) : next;
 
@@ -100,16 +99,16 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
     return;
   }
 
-  state.value = resolved;
+  source.value = resolved;
 
   // clientDevtoolsDisabled folds to true under the client build define, which
   // makes this branch statically dead so bundlers drop the emit path (and its
   // globalThis.__mreactDevtools references) from production client bundles.
   if (!clientDevtoolsDisabled && cachedDevtoolsHook !== null) {
-    emitCellSetEvent(state.source, previous, resolved);
+    emitCellSetEvent(source, previous, resolved);
   }
 
-  const subscribers = state.source.subscribers;
+  const subscribers = source.subscribers;
   if (subscribers !== null) {
     if (runtimeState.batchDepth > 0 && !(subscribers instanceof Set)) {
       if (!subscribers.disposed && !subscribers.queued) {
@@ -118,26 +117,24 @@ function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): voi
       return;
     }
 
-    notifySubscribers(state.source);
+    notifySubscribers(source);
   }
 }
 
 export function cell<T>(initial: T): Cell<T> {
-  const state: CellState<T> = {
-    source: {
-      subscribers: null,
-    },
+  const source: CellSource<T> = {
+    subscribers: null,
     value: initial,
   };
 
   const value: SourceBackedCell<T> = {
-    [cellSourceSymbol]: state.source,
+    [cellSourceSymbol]: source,
     get(): T {
-      trackSource(state.source);
-      return state.value;
+      trackSource(source);
+      return source.value;
     },
     set(next: T | ((prev: T) => T)): void {
-      writeCellValue(state, next);
+      writeCellValue(source, next);
     },
   };
 

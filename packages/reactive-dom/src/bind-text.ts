@@ -1,7 +1,7 @@
 import { effect, untrack } from "@reckona/mreact-reactive-core";
 import type { ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { subscribeCell } from "@reckona/mreact-reactive-core/internal";
-import { registerDispose } from "./scope.js";
+import { registerDispose, registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
 export interface BindTextBatchOptions {
@@ -36,7 +36,6 @@ export function bindText(
 
   reactiveText.__mreactReactiveText = true;
   let shouldWrite = options?.preserveInitial !== true;
-  const readValue = typeof value === "function" ? value : () => value.get();
 
   if (typeof value !== "function") {
     const directDispose = subscribeCell(value, (nextValue) => {
@@ -57,10 +56,11 @@ export function bindText(
         shouldWrite = true;
       }
 
-      return registerDispose(directDispose);
+      return registerIdempotentDispose(directDispose);
     }
   }
 
+  const readValue = typeof value === "function" ? value : () => value.get();
   const dispose = effect(() => {
     const text = normalizeText(readValue());
 
@@ -72,7 +72,7 @@ export function bindText(
     node.data = text;
   });
 
-  return registerDispose(dispose);
+  return registerIdempotentDispose(dispose);
 }
 
 /** Binds multiple text nodes to the same reactive value. */

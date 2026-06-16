@@ -6,9 +6,31 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindList, bindText } from "../src/index.js";
-import { registerDispose } from "../src/scope.js";
+import {
+  createScope,
+  disposeScope,
+  registerDispose,
+  registerIdempotentDispose,
+  withScope,
+} from "../src/scope.js";
 
 describe("bindList", () => {
+  test("can register known-idempotent disposers without wrapper allocation", () => {
+    const scope = createScope();
+    let calls = 0;
+    const dispose = () => {
+      calls += 1;
+    };
+
+    const registered = withScope(scope, () => registerIdempotentDispose(dispose));
+
+    expect(registered).toBe(dispose);
+
+    disposeScope(scope);
+
+    expect(calls).toBe(1);
+  });
+
   test("promotes delegated row events after mount without detached fallback listeners", () => {
     const items = cell([1, 2]);
     const parent = document.createElement("div");

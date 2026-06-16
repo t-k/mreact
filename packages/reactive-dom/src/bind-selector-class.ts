@@ -1,5 +1,5 @@
 import type { Selector } from "@reckona/mreact-reactive-core";
-import { registerDispose } from "./scope.js";
+import { registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
 export interface BindSelectorClassOptions {
@@ -33,5 +33,5 @@ export function bindSelectorClass<TValue, TKey>(
     apply(selector(key));
   }
 
-  return registerDispose(selector.subscribe(key, apply));
+  return registerIdempotentDispose(selector.subscribe(key, apply));
 }

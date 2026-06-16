@@ -49,6 +49,17 @@ export function registerDispose(dispose: Dispose): Dispose {
   return wrapped;
 }
 
+export function registerIdempotentDispose(dispose: Dispose): Dispose {
+  const scope = activeScope;
+
+  if (scope === null || scope.disposed) {
+    return dispose;
+  }
+
+  (scope.disposers ??= []).push(dispose);
+  return dispose;
+}
+
 export function disposeScope(scope: DomScope): void {
   if (scope.disposed) {
     return;

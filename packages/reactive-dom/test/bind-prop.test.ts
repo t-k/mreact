@@ -1,11 +1,23 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindProp, withPropBindingMetadata } from "../src/index.js";
 
 describe("bindProp", () => {
+  test("keeps the default path free of prop binding metadata allocation", async () => {
+    const source = await readFile("packages/reactive-dom/src/bind-prop.ts", "utf8");
+    const defaultPathStart = source.indexOf("export function bindProp(");
+    const metadataPathStart = source.indexOf("function bindPropWithMetadata(");
+    const defaultPath = source.slice(defaultPathStart, metadataPathStart);
+
+    expect(defaultPath).toContain("hasActivePropBindingMetadata()");
+    expect(defaultPath).not.toContain("const binding");
+    expect(defaultPath).not.toContain("retarget(");
+  });
+
   test("does not attach hydration metadata by default", () => {
     const label = cell("Save");
     const button = document.createElement("button") as HTMLButtonElement & {

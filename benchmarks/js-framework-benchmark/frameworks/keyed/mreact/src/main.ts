@@ -1,15 +1,13 @@
 import {
   batch,
   cell,
-  selector,
   type Cell,
 } from "@reckona/mreact-reactive-core";
 import {
   bindEvent,
-  bindList,
-  bindSelectorClass,
+  bindStaticKeyedSingleNodeList,
   bindText,
-  createTemplate,
+  createTemplateElement,
   createRoot,
 } from "@reckona/mreact-reactive-dom";
 
@@ -78,7 +76,6 @@ let nextId = 1;
 
 const data = cell<readonly Row[]>([]);
 const selected = cell<number | null>(null);
-const selectedRow = selector<number | null, number>(selected);
 
 function random(max: number): number {
   return Math.round(Math.random() * 1000) % max;
@@ -166,26 +163,25 @@ function requireElement<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
-const createRowTemplate = createTemplate(
+const createRowTemplate = createTemplateElement<HTMLTableRowElement>(
   '<tr><td class="col-md-1"> </td><td class="col-md-4"><a data-action="select"> </a></td><td class="col-md-1"><a data-action="remove"><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
 );
-const rowIds = new WeakMap<HTMLTableRowElement, number>();
+const rowIdProperty: unique symbol = Symbol("mreact row id");
+type RowElement = HTMLTableRowElement & { [rowIdProperty]?: number };
 
 function renderRow(row: Row): HTMLTableRowElement {
-  const fragment = createRowTemplate();
-  const tr = fragment.firstElementChild as HTMLTableRowElement;
+  const tr = createRowTemplate();
   const idCell = tr.firstElementChild as HTMLTableCellElement;
   const labelCell = idCell.nextElementSibling as HTMLTableCellElement;
   const selectLink = labelCell.firstElementChild as HTMLAnchorElement;
   const idText = idCell.firstChild as Text;
   const labelText = selectLink.firstChild as Text;
 
-  rowIds.set(tr, row.id);
+  (tr as RowElement)[rowIdProperty] = row.id;
   idText.data = String(row.id);
   labelText.data = row.label.get();
 
   bindText(labelText, row.label, { preserveInitial: true });
-  bindSelectorClass(tr, "danger", selectedRow, row.id, { preserveInitial: true });
 
   return tr;
 }
@@ -207,7 +203,7 @@ function handleRowClick(event: MouseEvent): void {
   }
 
   const rowElement = actionLink.closest<HTMLTableRowElement>("tr");
-  const id = rowElement === null ? undefined : rowIds.get(rowElement);
+  const id = rowElement === null ? undefined : (rowElement as RowElement)[rowIdProperty];
 
   if (id === undefined) {
     return;
@@ -223,9 +219,13 @@ function handleRowClick(event: MouseEvent): void {
 tbody.append(marker);
 createRoot(tbody, () => {
   tbody.append(marker);
-  bindList(tbody, marker, () => data.get(), renderRow, {
-    itemMode: "static",
+  bindStaticKeyedSingleNodeList(tbody, marker, () => data.get(), renderRow, {
     key: (row) => row.id,
+    selectedClass: {
+      className: "danger",
+      preserveInitial: true,
+      source: selected,
+    },
   });
   return marker;
 });

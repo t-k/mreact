@@ -114,7 +114,7 @@ function bindUnkeyedList<T>(
     for (const node of current) {
       insertionParent.insertBefore(node, marker);
     }
-    deferred?.promote();
+    deferred?.promote?.();
   });
 
   return registerDispose(() => {

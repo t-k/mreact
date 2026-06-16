@@ -4,9 +4,7 @@ import { runtimeState, type ReactiveComputation, type Source } from "./state.js"
 import type { ReadonlyCell } from "./types.js";
 import { addSourceSubscriber, removeSourceSubscriber } from "./tracking.js";
 
-const emptyDeps = new Set<Source>();
-
-interface CellSubscription<T> extends ReactiveComputation {
+interface CellSubscription<T> extends Omit<ReactiveComputation, "deps"> {
   cell: ReadonlyCell<T>;
   listener: (value: T) => void;
   source: Source;
@@ -29,18 +27,19 @@ export function subscribeCell<T>(
   }
 
   const computation: CellSubscription<T> = {
-    ...CELL_SUBSCRIPTION_COMPUTATION_METHODS,
     cell,
-    id: runtimeState.nextComputationId,
-    deps: emptyDeps,
+    dispose: CELL_SUBSCRIPTION_COMPUTATION_METHODS.dispose,
     disposed: false,
+    id: runtimeState.nextComputationId,
     listener,
+    markDirty: CELL_SUBSCRIPTION_COMPUTATION_METHODS.markDirty,
     queued: false,
+    run: CELL_SUBSCRIPTION_COMPUTATION_METHODS.run,
     source,
   };
 
   runtimeState.nextComputationId += 1;
-  addSourceSubscriber(source, computation);
+  addSourceSubscriber(source, computation as unknown as ReactiveComputation);
 
   return () => computation.dispose();
 }
@@ -50,7 +49,7 @@ function cellSubscriptionMarkDirty(this: ReactiveComputation): void {
 }
 
 function cellSubscriptionRun(this: ReactiveComputation): void {
-  const subscription = this as CellSubscription<unknown>;
+  const subscription = this as unknown as CellSubscription<unknown>;
 
   if (subscription.disposed) {
     return;
@@ -60,7 +59,7 @@ function cellSubscriptionRun(this: ReactiveComputation): void {
 }
 
 function cellSubscriptionDispose(this: ReactiveComputation): void {
-  const subscription = this as CellSubscription<unknown>;
+  const subscription = this as unknown as CellSubscription<unknown>;
 
   if (subscription.disposed) {
     return;
@@ -68,6 +67,9 @@ function cellSubscriptionDispose(this: ReactiveComputation): void {
 
   subscription.disposed = true;
   subscription.queued = false;
-  runtimeState.pendingComputed.delete(subscription);
-  removeSourceSubscriber(subscription.source, subscription);
+  runtimeState.pendingComputed.delete(subscription as unknown as ReactiveComputation);
+  removeSourceSubscriber(
+    subscription.source,
+    subscription as unknown as ReactiveComputation,
+  );
 }

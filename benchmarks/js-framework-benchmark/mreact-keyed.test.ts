@@ -56,34 +56,36 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
 
     expect(main).toContain("batch(() =>");
-    expect(main).toContain("selector");
-    expect(main).toContain("const selectedRow = selector<number | null, number>(selected);");
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
-    expect(main).toContain("createTemplate");
-    expect(main).toContain("const createRowTemplate = createTemplate(");
+    expect(main).toContain("createTemplateElement");
+    expect(main).toContain("const createRowTemplate = createTemplateElement<HTMLTableRowElement>(");
     expect(main).toContain('class="col-md-1"> </td>');
     expect(main).toContain('data-action="select"');
     expect(main).toContain('data-action="remove"');
     expect(main).toContain("const idText = idCell.firstChild as Text;");
     expect(main).toContain("const labelText = selectLink.firstChild as Text;");
-    expect(main).toContain("const rowIds = new WeakMap<HTMLTableRowElement, number>();");
-    expect(main).toContain("rowIds.set(tr, row.id);");
-    expect(main).toContain("bindList(");
-    expect(main).toContain(
-      'bindSelectorClass(tr, "danger", selectedRow, row.id, { preserveInitial: true });',
-    );
+    expect(main).toContain('const rowIdProperty: unique symbol = Symbol("mreact row id");');
+    expect(main).toContain("(tr as RowElement)[rowIdProperty] = row.id;");
+    expect(main).toContain("bindStaticKeyedSingleNodeList(");
+    expect(main).toContain("selectedClass: {");
+    expect(main).toContain('className: "danger"');
+    expect(main).toContain("preserveInitial: true");
+    expect(main).toContain("source: selected");
     expect(main).toContain('bindEvent(tbody, "click", handleRowClick);');
     expect(main).toContain('target.closest<HTMLAnchorElement>("a[data-action]")');
     expect(main).toContain("key: (row) => row.id");
-    expect(main).toContain('itemMode: "static"');
+    expect(main).not.toContain("bindList(");
+    expect(main).not.toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
     expect(main).not.toContain("selected.get() === row.id");
     expect(main).not.toContain("bindProp(tr, \"className\"");
+    expect(main).not.toContain("bindSelectorClass(");
     expect(main).not.toContain("bindEvent(selectLink");
     expect(main).not.toContain("bindEvent(removeLink");
     expect(main).not.toContain("rowElements");
     expect(main).not.toContain("previousSelectedRow");
     expect(main).not.toContain(".className =");
+    expect(main).not.toContain("new WeakMap<HTMLTableRowElement, number>()");
     expect(main).not.toContain("document.createTextNode(String(row.id))");
   });
 });

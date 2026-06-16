@@ -109,9 +109,24 @@ describe("bindText", () => {
     );
 
     expect(source).toContain("const CELL_SUBSCRIPTION_COMPUTATION_METHODS");
+    expect(source).not.toContain("emptyDeps");
+    expect(source).not.toContain("...CELL_SUBSCRIPTION_COMPUTATION_METHODS");
     expect(source).not.toContain("markDirty() {");
     expect(source).not.toContain("run() {");
     expect(source).not.toContain("dispose() {");
+  });
+
+  test("direct readonly cell binding does not allocate the effect fallback reader first", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages", "reactive-dom", "src", "bind-text.ts"),
+      "utf8",
+    );
+    const directBranchStart = source.indexOf('if (typeof value !== "function")');
+    const subscribeCellStart = source.indexOf("const directDispose = subscribeCell");
+    const readValueStart = source.indexOf("const readValue");
+
+    expect(readValueStart).toBeGreaterThan(subscribeCellStart);
+    expect(readValueStart).toBeGreaterThan(directBranchStart);
   });
 
   test("bindTextBatch updates many text nodes through one scheduled effect", async () => {
