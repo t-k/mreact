@@ -26,10 +26,13 @@ export function registerReactivePropBinding(element: Element, binding: PropBindi
   const propElement = element as PropElement;
 
   propElement.__mreactHasReactiveProps = true;
-  propElement.__mreactPropBindings = [
-    ...(propElement.__mreactPropBindings ?? []),
-    binding,
-  ];
+  const bindings = propElement.__mreactPropBindings;
+
+  if (bindings === undefined) {
+    propElement.__mreactPropBindings = [binding];
+  } else {
+    bindings.push(binding);
+  }
 
   return registerDispose(() => {
     binding.dispose();
