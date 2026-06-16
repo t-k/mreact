@@ -11,6 +11,7 @@ export interface Source {
   // empties back to null). Most sources never allocate a Set at all, and hot
   // write sites can gate on a null check instead of a Set.size accessor.
   subscribers: ReactiveComputation | Set<ReactiveComputation> | null;
+  onNoSubscribers?: (() => void) | undefined;
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
 }

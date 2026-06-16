@@ -1,4 +1,4 @@
-import { batch, cell, type Cell } from "@reckona/mreact-reactive-core";
+import { batch, cell, selector, type Cell } from "@reckona/mreact-reactive-core";
 import {
   bindEvent,
   bindList,
@@ -73,6 +73,7 @@ let nextId = 1;
 
 const data = cell<readonly Row[]>([]);
 const selected = cell<number | null>(null);
+const selectedRow = selector<number | null, number>(selected);
 
 function random(max: number): number {
   return Math.round(Math.random() * 1000) % max;
@@ -176,7 +177,7 @@ function renderRow(row: Row): HTMLTableRowElement {
   const labelText = document.createTextNode("");
 
   bindText(labelText, () => row.label.get());
-  bindProp(tr, "className", () => (selected.get() === row.id ? "danger" : ""));
+  bindProp(tr, "className", () => (selectedRow(row.id) ? "danger" : ""));
   bindEvent(selectLink, "click", () => selected.set(row.id));
   bindEvent(removeLink, "click", () => removeRow(row.id));
 

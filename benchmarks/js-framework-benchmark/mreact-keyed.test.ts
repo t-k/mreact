@@ -56,14 +56,18 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
 
     expect(main).toContain("batch(() =>");
+    expect(main).toContain("selector");
+    expect(main).toContain("const selectedRow = selector<number | null, number>(selected);");
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
     expect(main).toContain("createTemplate");
     expect(main).toContain("const createRowTemplate = createTemplate(");
     expect(main).toContain("bindList(");
     expect(main).toContain("bindProp(tr, \"className\"");
+    expect(main).toContain("selectedRow(row.id) ? \"danger\" : \"\"");
     expect(main).toContain("key: (row) => row.id");
     expect(main).toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
+    expect(main).not.toContain("selected.get() === row.id");
     expect(main).not.toContain("rowElements");
     expect(main).not.toContain("previousSelectedRow");
     expect(main).not.toContain(".className =");

@@ -35,12 +35,14 @@ function removeSourceSubscriber(source: Source, computation: ReactiveComputation
 
   if (subscribers === computation) {
     source.subscribers = null;
+    source.onNoSubscribers?.();
     return true;
   }
 
   if (subscribers instanceof Set && subscribers.delete(computation)) {
     if (subscribers.size === 0) {
       source.subscribers = null;
+      source.onNoSubscribers?.();
     }
     return true;
   }
