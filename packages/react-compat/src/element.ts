@@ -110,7 +110,7 @@ export function createElement<P extends object>(
   if (typeof type === "string") {
     const key = config?.key === undefined ? null : String(config.key);
     const ref = config?.ref ?? null;
-    const props = copyElementProps(config, undefined, false, "internal") as P & {
+    const props = copyCreateElementProps(config) as P & {
       children?: ReactCompatNode;
     };
 
@@ -133,7 +133,7 @@ export function createElement<P extends object>(
   const ref = config?.ref ?? null;
   const props = applyDefaultProps(
     normalizedType,
-    copyElementProps(config, undefined, false, "internal"),
+    copyCreateElementProps(config),
   ) as P & {
     children?: ReactCompatNode;
   };
@@ -357,6 +357,35 @@ function copyElementProps(
   } else if (copySymbols) {
     copyOwnSymbolElementProps(source, props);
   }
+  return props as Record<string, unknown>;
+}
+
+function copyCreateElementProps(
+  source: object | null | undefined,
+): Record<string, unknown> {
+  const props: Record<PropertyKey, unknown> = {};
+
+  if (source === null || source === undefined) {
+    return props as Record<string, unknown>;
+  }
+
+  const stringSource = source as Record<string, unknown>;
+  for (const name in source) {
+    if (!hasOwnProperty.call(source, name)) {
+      continue;
+    }
+
+    if (
+      name !== "key" &&
+      name !== "ref" &&
+      name !== "__self" &&
+      name !== "__source"
+    ) {
+      props[name] = stringSource[name];
+    }
+  }
+
+  copyInternalElementSymbolProps(source, props);
   return props as Record<string, unknown>;
 }
 

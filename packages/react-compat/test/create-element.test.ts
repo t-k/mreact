@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { Fragment, createElement } from "../src/index.js";
 import { REACTIVE_TEXT_BINDING_META } from "../src/element.js";
@@ -53,9 +54,30 @@ describe("react-compat createElement", () => {
       .toBe(binding);
   });
 
+  test("keeps config children when no variadic children are passed", () => {
+    const element = createElement("button", {
+      children: "Save",
+      type: "button",
+    });
+
+    expect(element.props).toEqual({
+      children: "Save",
+      type: "button",
+    });
+  });
+
   test("keeps multiple children as an array", () => {
     const element = createElement(Fragment, null, "A", "B");
 
     expect(element.props.children).toEqual(["A", "B"]);
+  });
+
+  test("uses a createElement-specific props copy path", async () => {
+    const source = await readFile(
+      new URL("../src/element.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("copyCreateElementProps(config)");
   });
 });
