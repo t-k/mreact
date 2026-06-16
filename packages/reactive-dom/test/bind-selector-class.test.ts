@@ -62,7 +62,7 @@ describe("bindSelectorClass", () => {
     selectedFor.dispose();
   });
 
-  test("reads the initial selector value once", () => {
+  test("does not read the initial selector value when preserving the current class", () => {
     const row = document.createElement("tr");
     let reads = 0;
     const selectedFor = ((key: number) => {
@@ -77,8 +77,27 @@ describe("bindSelectorClass", () => {
       preserveInitial: true,
     });
 
-    expect(reads).toBe(1);
+    expect(reads).toBe(0);
     expect(row.className).toBe("");
+
+    dispose();
+  });
+
+  test("reads the initial selector value when not preserving the current class", () => {
+    const row = document.createElement("tr");
+    let reads = 0;
+    const selectedFor = ((key: number) => {
+      reads += 1;
+      return key === 1;
+    }) as Selector<number, number>;
+
+    selectedFor.subscribe = () => () => {};
+    selectedFor.dispose = () => {};
+
+    const dispose = bindSelectorClass(row, "danger", selectedFor, 1);
+
+    expect(reads).toBe(1);
+    expect(row.className).toBe("danger");
 
     dispose();
   });

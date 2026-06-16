@@ -13,8 +13,7 @@ export function bindSelectorClass<TValue, TKey>(
   key: TKey,
   options?: BindSelectorClassOptions,
 ): Dispose {
-  const initial = selector(key);
-  let previous = options?.preserveInitial === true ? initial : undefined;
+  let previous: boolean | undefined;
 
   const apply = (selected: boolean): void => {
     if (previous === selected) {
@@ -30,7 +29,9 @@ export function bindSelectorClass<TValue, TKey>(
     }
   };
 
-  apply(initial);
+  if (options?.preserveInitial !== true) {
+    apply(selector(key));
+  }
 
   return registerDispose(selector.subscribe(key, apply));
 }
