@@ -2,6 +2,7 @@ export { bindEvent, withEventBindingMetadata } from "./bind-event.js";
 export type { BindEventOptions } from "./bind-event.js";
 export { bindList } from "./bind-list.js";
 export { bindProp } from "./bind-prop.js";
+export { withPropBindingMetadata } from "./dom-prop-application.js";
 export { bindSpreadProps } from "./bind-spread-props.js";
 export { bindText, bindTextBatch } from "./bind-text.js";
 export { createList } from "./create-list.js";

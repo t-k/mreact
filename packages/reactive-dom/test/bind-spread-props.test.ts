@@ -3,7 +3,7 @@
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { describe, expect, test } from "vitest";
-import { bindSpreadProps } from "../src/index.js";
+import { bindSpreadProps, withPropBindingMetadata } from "../src/index.js";
 
 interface RetargetableElement extends HTMLElement {
   __mreactPropBindings?: Array<{ retarget(element: Element): void }>;
@@ -149,8 +149,10 @@ describe("bindSpreadProps", () => {
     const target = document.createElement("div");
     let retargeted = false;
 
-    const dispose = bindSpreadProps(source, () =>
-      retargeted ? { title: hydratedTitle.get() } : { title: initialTitle.get() },
+    const dispose = withPropBindingMetadata(() =>
+      bindSpreadProps(source, () =>
+        retargeted ? { title: hydratedTitle.get() } : { title: initialTitle.get() },
+      ),
     );
     await flushEffects();
 

@@ -5,6 +5,7 @@ import {
   applyDomProp,
   registerReactivePropBinding,
   removeDomProp,
+  withPropBindingMetadata,
 } from "../src/dom-prop-application.js";
 
 describe("DOM prop application policy", () => {
@@ -21,10 +22,14 @@ describe("DOM prop application policy", () => {
       retarget() {},
     };
 
-    const disposeFirst = registerReactivePropBinding(div, firstBinding);
+    const disposeFirst = withPropBindingMetadata(() =>
+      registerReactivePropBinding(div, firstBinding),
+    );
     const bindings = div.__mreactPropBindings;
 
-    const disposeSecond = registerReactivePropBinding(div, secondBinding);
+    const disposeSecond = withPropBindingMetadata(() =>
+      registerReactivePropBinding(div, secondBinding),
+    );
 
     expect(div.__mreactPropBindings).toBe(bindings);
     expect(div.__mreactPropBindings).toEqual([firstBinding, secondBinding]);

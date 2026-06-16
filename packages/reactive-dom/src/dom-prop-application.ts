@@ -22,7 +22,23 @@ type PropElement = Element & {
   __mreactPropBindings?: PropBinding[];
 };
 
+let propBindingMetadataDepth = 0;
+
+export function withPropBindingMetadata<T>(fn: () => T): T {
+  propBindingMetadataDepth += 1;
+
+  try {
+    return fn();
+  } finally {
+    propBindingMetadataDepth -= 1;
+  }
+}
+
 export function registerReactivePropBinding(element: Element, binding: PropBinding): Dispose {
+  if (propBindingMetadataDepth === 0) {
+    return registerDispose(binding.dispose);
+  }
+
   const propElement = element as PropElement;
 
   propElement.__mreactHasReactiveProps = true;

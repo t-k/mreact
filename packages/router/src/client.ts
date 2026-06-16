@@ -2256,8 +2256,8 @@ export async function buildClientRouteEntrySource(
   const routeCleanupScopeImport = routeUsesCleanupScope
     ? `import { withCleanupScope as __mreactWithCleanupScope } from "@reckona/mreact-reactive-core/internal";\n`
     : "";
-  const routeEventMetadataImport = !routeUsesOnlyClientReferenceBoundaries
-    ? `import { withEventBindingMetadata as __mreactWithEventBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
+  const routeReactiveDomMetadataImport = !routeUsesOnlyClientReferenceBoundaries
+    ? `import { withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
     : "";
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -2427,7 +2427,7 @@ function __mreactResolveRouteNode(value) {
     ? `__mreactResolveRouteNode(${routeComponentCallExpression})`
     : routeComponentCallExpression;
   const routeHydrationNodeExpression = !routeUsesOnlyClientReferenceBoundaries
-    ? `__mreactWithEventBindingMetadata(() => __mreactEvaluateHydrationNode(() => ${routeNodeExpression}))`
+    ? `__mreactWithPropBindingMetadata(() => __mreactWithEventBindingMetadata(() => __mreactEvaluateHydrationNode(() => ${routeNodeExpression})))`
     : `__mreactEvaluateHydrationNode(() => ${routeNodeExpression})`;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
@@ -2441,7 +2441,7 @@ ${routeCellHydrationIndent}}
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
-  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${routeEventMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
+  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${routeReactiveDomMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
   const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};
