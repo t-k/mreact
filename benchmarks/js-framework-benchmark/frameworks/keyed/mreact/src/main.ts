@@ -1,7 +1,8 @@
-import { batch, cell, effect, type Cell } from "@reckona/mreact-reactive-core";
+import { batch, cell, type Cell } from "@reckona/mreact-reactive-core";
 import {
   bindEvent,
   bindList,
+  bindProp,
   bindText,
   createTemplate,
   createRoot,
@@ -72,9 +73,6 @@ let nextId = 1;
 
 const data = cell<readonly Row[]>([]);
 const selected = cell<number | null>(null);
-const rowElements = new Map<number, HTMLTableRowElement>();
-
-let previousSelectedRow: HTMLTableRowElement | undefined;
 
 function random(max: number): number {
   return Math.round(Math.random() * 1000) % max;
@@ -101,7 +99,6 @@ function buildData(count: number): Row[] {
 }
 
 function setRows(count: number): void {
-  rowElements.clear();
   data.set(buildData(count));
   selected.set(null);
 }
@@ -125,7 +122,6 @@ function updateEveryTenthRow(): void {
 }
 
 function clearRows(): void {
-  rowElements.clear();
   data.set([]);
   selected.set(null);
 }
@@ -151,7 +147,6 @@ function swapRows(): void {
 }
 
 function removeRow(id: number): void {
-  rowElements.delete(id);
   data.set((rows) => rows.filter((row) => row.id !== id));
 }
 
@@ -180,9 +175,8 @@ function renderRow(row: Row): HTMLTableRowElement {
   const idText = document.createTextNode(String(row.id));
   const labelText = document.createTextNode("");
 
-  rowElements.set(row.id, tr);
-
   bindText(labelText, () => row.label.get());
+  bindProp(tr, "className", () => (selected.get() === row.id ? "danger" : ""));
   bindEvent(selectLink, "click", () => selected.set(row.id));
   bindEvent(removeLink, "click", () => removeRow(row.id));
 
@@ -203,26 +197,6 @@ createRoot(tbody, () => {
     key: (row) => row.id,
   });
   return marker;
-});
-
-effect(() => {
-  const selectedId = selected.get();
-  const nextSelectedRow =
-    selectedId === null ? undefined : rowElements.get(selectedId);
-
-  if (previousSelectedRow === nextSelectedRow) {
-    return;
-  }
-
-  if (previousSelectedRow !== undefined) {
-    previousSelectedRow.className = "";
-  }
-
-  if (nextSelectedRow !== undefined) {
-    nextSelectedRow.className = "danger";
-  }
-
-  previousSelectedRow = nextSelectedRow;
 });
 
 bindEvent(requireElement("run"), "click", () => setRows(1_000));

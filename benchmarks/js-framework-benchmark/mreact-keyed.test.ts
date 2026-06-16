@@ -60,9 +60,13 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("createTemplate");
     expect(main).toContain("const createRowTemplate = createTemplate(");
     expect(main).toContain("bindList(");
+    expect(main).toContain("bindProp(tr, \"className\"");
     expect(main).toContain("key: (row) => row.id");
     expect(main).toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
+    expect(main).not.toContain("rowElements");
+    expect(main).not.toContain("previousSelectedRow");
+    expect(main).not.toContain(".className =");
   });
 });
 
