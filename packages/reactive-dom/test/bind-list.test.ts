@@ -1269,6 +1269,47 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("swaps keyed list items without building a duplicate-key tracking set", async () => {
+    const items = cell([0, 1, 2, 3, 4]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    const OriginalSet = globalThis.Set;
+    let setCreations = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          super(values ?? undefined);
+          setCreations += 1;
+        }
+      } as SetConstructor;
+
+      items.set([0, 3, 2, 1, 4]);
+      await flushEffects();
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    expect(setCreations).toBe(0);
+    expect(parent.innerHTML).toBe("<li>0</li><li>3</li><li>2</li><li>1</li><li>4</li><!--list-->");
+
+    dispose();
+  });
+
   test("reorders swapped keyed records without allocating a full LIS array", async () => {
     const values = [0, 1, 2, 3, 4, 5];
     const items = cell(values);
@@ -1563,11 +1604,13 @@ describe("bindList", () => {
     );
 
     let parentReplacements = 0;
+    let largestReplacementArgCount = 0;
     let explicitRecordRemovals = 0;
     const replaceChildren = parent.replaceChildren.bind(parent);
     const removeChild = parent.removeChild.bind(parent);
     parent.replaceChildren = ((...nodes) => {
       parentReplacements += 1;
+      largestReplacementArgCount = Math.max(largestReplacementArgCount, nodes.length);
       return replaceChildren(...nodes);
     }) as typeof parent.replaceChildren;
     parent.removeChild = ((node) => {
@@ -1581,6 +1624,7 @@ describe("bindList", () => {
     await flushEffects();
 
     expect(parentReplacements).toBe(1);
+    expect(largestReplacementArgCount).toBe(2);
     expect(explicitRecordRemovals).toBe(0);
     expect(disposedRows).toBe(3);
     expect(parent.innerHTML).toBe("<li>10</li><li>11</li><li>12</li><!--list-->");
