@@ -84,6 +84,35 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       return;
     }
 
+    if (records.size === 0) {
+      if (currentItems.length === 0) {
+        insertionParent.replaceChildren(marker);
+        ownsParent = true;
+        return;
+      }
+
+      const nextRecords = createInitialSingleNodeRecords(
+        insertionParent,
+        currentItems,
+        options.key,
+        renderItem,
+        renderArity,
+        deferEventPromotion,
+        selectedClassState,
+      );
+      const fragment = document.createDocumentFragment();
+
+      for (const record of nextRecords.values()) {
+        fragment.appendChild(record.node);
+      }
+
+      insertionParent.replaceChildren(fragment, marker);
+      promoteRecordEvents(nextRecords.values());
+      records = nextRecords;
+      ownsParent = true;
+      return;
+    }
+
     const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key);
     const keys = keyedItems.keys;
 
@@ -237,6 +266,44 @@ function uniqueSingleNodeKeyedItems<T>(
   }
 
   return { indexes: null, items, keys };
+}
+
+function createInitialSingleNodeRecords<T, TNode extends ChildNode>(
+  parent: ParentNode,
+  items: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
+  selectedClassState: SelectedClassState | undefined,
+): Map<unknown, SingleNodeRecord> {
+  const records = new Map<unknown, SingleNodeRecord>();
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index] as T;
+    const itemKey = key(item, index, items);
+
+    if (records.has(itemKey)) {
+      continue;
+    }
+
+    records.set(
+      itemKey,
+      createSingleNodeRecord(
+        parent,
+        itemKey,
+        item,
+        index,
+        items,
+        renderItem,
+        renderArity,
+        deferEventPromotion,
+        selectedClassState,
+      ),
+    );
+  }
+
+  return records;
 }
 
 function dedupedSingleNodeKeyedItems<T>(

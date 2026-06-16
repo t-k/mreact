@@ -255,6 +255,19 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(createRecordSource).toContain("deferEventPromotion");
   });
 
+  test("creates initial single-node records without the generic unique-key pass", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    const emptyCreateStart = source.indexOf("if (records.size === 0)");
+    const uniquePassStart = source.indexOf("const keyedItems = uniqueSingleNodeKeyedItems");
+
+    expect(emptyCreateStart).toBeGreaterThan(-1);
+    expect(emptyCreateStart).toBeLessThan(uniquePassStart);
+    expect(source).toContain("function createInitialSingleNodeRecords");
+  });
+
   test("creates scoped render node results without per-row object spread", async () => {
     const source = await readFile("packages/reactive-dom/src/render-scope.ts", "utf8");
     const helperStart = source.indexOf("export function createScopedRenderNodeScope");
