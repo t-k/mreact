@@ -9,7 +9,7 @@ export { bindSpreadProps } from "./bind-spread-props.js";
 export { bindText, bindTextBatch } from "./bind-text.js";
 export { createList } from "./create-list.js";
 export { createRoot } from "./root.js";
-export { createElementTemplate, createTemplate } from "./template.js";
+export { createTemplate } from "./template.js";
 export { insertDynamic } from "./insert-dynamic.js";
 export { LIST_RENDER_VALUE, type ListRenderValue } from "./types.js";
 export type { Dispose, RenderValue } from "./types.js";
