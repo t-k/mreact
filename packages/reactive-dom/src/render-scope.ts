@@ -56,11 +56,13 @@ export function createScopedRenderNodeScope<TNode extends ChildNode>(
 
   try {
     const node = withScope(scope, render);
+    const result: { node: TNode; scope?: DomScope | undefined } = { node };
 
-    return {
-      node,
-      ...(hasScopeDisposers(scope) ? { scope } : {}),
-    };
+    if (hasScopeDisposers(scope)) {
+      result.scope = scope;
+    }
+
+    return result;
   } catch (error) {
     disposeScope(scope);
     throw error;

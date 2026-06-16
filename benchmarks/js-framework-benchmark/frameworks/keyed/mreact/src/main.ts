@@ -166,8 +166,6 @@ function requireElement<T extends HTMLElement>(id: string): T {
 const createRowTemplate = createTemplateElement<HTMLTableRowElement>(
   '<tr><td class="col-md-1"> </td><td class="col-md-4"><a data-action="select"> </a></td><td class="col-md-1"><a data-action="remove"><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
 );
-const rowIdProperty: unique symbol = Symbol("mreact row id");
-type RowElement = HTMLTableRowElement & { [rowIdProperty]?: number };
 
 function renderRow(row: Row): HTMLTableRowElement {
   const tr = createRowTemplate();
@@ -177,7 +175,6 @@ function renderRow(row: Row): HTMLTableRowElement {
   const idText = idCell.firstChild as Text;
   const labelText = selectLink.firstChild as Text;
 
-  (tr as RowElement)[rowIdProperty] = row.id;
   idText.data = String(row.id);
   labelText.data = row.label.get();
 
@@ -188,6 +185,13 @@ function renderRow(row: Row): HTMLTableRowElement {
 
 const tbody = requireElement<HTMLTableSectionElement>("tbody");
 const marker = document.createComment("mreact rows");
+
+function getRowId(rowElement: HTMLTableRowElement): number | undefined {
+  const idCell = rowElement.firstElementChild;
+  const id = Number.parseInt(idCell?.textContent ?? "", 10);
+
+  return Number.isNaN(id) ? undefined : id;
+}
 
 function handleRowClick(event: MouseEvent): void {
   const target = event.target;
@@ -203,7 +207,7 @@ function handleRowClick(event: MouseEvent): void {
   }
 
   const rowElement = actionLink.closest<HTMLTableRowElement>("tr");
-  const id = rowElement === null ? undefined : (rowElement as RowElement)[rowIdProperty];
+  const id = rowElement === null ? undefined : getRowId(rowElement);
 
   if (id === undefined) {
     return;
@@ -220,6 +224,7 @@ tbody.append(marker);
 createRoot(tbody, () => {
   tbody.append(marker);
   bindStaticKeyedSingleNodeList(tbody, marker, () => data.get(), renderRow, {
+    deferEventPromotion: false,
     key: (row) => row.id,
     selectedClass: {
       className: "danger",

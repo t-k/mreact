@@ -64,9 +64,10 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain('data-action="remove"');
     expect(main).toContain("const idText = idCell.firstChild as Text;");
     expect(main).toContain("const labelText = selectLink.firstChild as Text;");
-    expect(main).toContain('const rowIdProperty: unique symbol = Symbol("mreact row id");');
-    expect(main).toContain("(tr as RowElement)[rowIdProperty] = row.id;");
+    expect(main).toContain("function getRowId(rowElement: HTMLTableRowElement): number | undefined");
+    expect(main).toContain("Number.parseInt(idCell?.textContent ?? \"\", 10)");
     expect(main).toContain("bindStaticKeyedSingleNodeList(");
+    expect(main).toContain("deferEventPromotion: false");
     expect(main).toContain("selectedClass: {");
     expect(main).toContain('className: "danger"');
     expect(main).toContain("preserveInitial: true");
@@ -86,6 +87,7 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).not.toContain("previousSelectedRow");
     expect(main).not.toContain(".className =");
     expect(main).not.toContain("new WeakMap<HTMLTableRowElement, number>()");
+    expect(main).not.toContain("rowIdProperty");
     expect(main).not.toContain("document.createTextNode(String(row.id))");
   });
 });

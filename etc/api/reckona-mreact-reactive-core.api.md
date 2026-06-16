@@ -46,6 +46,8 @@ export interface Selector<TValue, TKey = TValue> {
     (key: TKey): boolean;
     // (undocumented)
     dispose(): void;
+    // (undocumented)
+    subscribe(key: TKey, listener: (selected: boolean) => void): () => void;
 }
 
 // @public

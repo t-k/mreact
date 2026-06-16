@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
+import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
   test("creates, replaces, swaps, removes, and clears keyed single-node rows", async () => {
@@ -122,6 +123,46 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("promotes delegated row events by default without detached fallback listeners", () => {
+    const items = cell([1, 2]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    const calls: number[] = [];
+    let rowClickFallbacks = 0;
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const tr = document.createElement("tr");
+        const addEventListener = tr.addEventListener.bind(tr);
+        tr.addEventListener = ((type, listener, options) => {
+          if (type === "click") {
+            rowClickFallbacks += 1;
+          }
+          addEventListener(type, listener, options);
+        }) as typeof tr.addEventListener;
+        bindEvent(tr, "click", () => {
+          calls.push(item);
+        });
+        tr.textContent = String(item);
+        return tr;
+      },
+      { key: (item) => item },
+    );
+
+    expect(rowClickFallbacks).toBe(0);
+
+    (parent.firstElementChild as HTMLTableRowElement).click();
+    expect(calls).toEqual([1]);
+
+    dispose();
+    parent.remove();
+  });
+
   test("can preserve initial selected class state without classList writes", () => {
     const selected = cell<number | null>(null);
     const items = cell([{ id: 1, label: "A" }]);
@@ -162,5 +203,63 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(writes).toBe(0);
 
     dispose();
+  });
+
+  test("recreates records when a renderer depends on the item index", async () => {
+    const items = cell([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item, index) => {
+        const tr = document.createElement("tr");
+        tr.textContent = `${index}:${item.label}`;
+        return tr;
+      },
+      { key: (item) => item.id },
+    );
+
+    const firstRow = parent.children[0];
+
+    items.set([
+      { id: 2, label: "B" },
+      { id: 1, label: "A" },
+    ]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<tr>0:B</tr><tr>1:A</tr><!--rows-->");
+    expect(parent.children[1]).not.toBe(firstRow);
+
+    dispose();
+  });
+
+  test("creates single-node records without per-record object spread", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    const createRecordStart = source.indexOf("function createSingleNodeRecord");
+    const updateRecordStart = source.indexOf("function updateSameOrderRecords");
+    const createRecordSource = source.slice(createRecordStart, updateRecordStart);
+
+    expect(createRecordSource).not.toContain("...");
+    expect(createRecordSource).not.toContain("currentIndex: index");
+    expect(createRecordSource).not.toContain("currentItems: items");
+    expect(createRecordSource).toContain("deferEventPromotion");
+  });
+
+  test("creates scoped render node results without per-row object spread", async () => {
+    const source = await readFile("packages/reactive-dom/src/render-scope.ts", "utf8");
+    const helperStart = source.indexOf("export function createScopedRenderNodeScope");
+    const helperSource = source.slice(helperStart);
+
+    expect(helperSource).not.toContain("...");
   });
 });

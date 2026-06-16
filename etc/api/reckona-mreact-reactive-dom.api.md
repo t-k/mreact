@@ -4,6 +4,9 @@
 
 ```ts
 
+import { ReadonlyCell } from '@reckona/mreact-reactive-core';
+import type { Selector } from '@reckona/mreact-reactive-core';
+
 // @public
 export function bindEvent<K extends keyof HTMLElementEventMap>(element: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: BindEventOptions): Dispose;
 
@@ -21,11 +24,38 @@ export function bindList<T>(parent: ParentNode, marker: ChildNode, items: () => 
 // @public
 export function bindProp(element: Element, name: string, value: () => unknown): Dispose;
 
+// @public (undocumented)
+export function bindSelectorClass<TValue, TKey>(element: Element, className: string, selector: Selector<TValue, TKey>, key: TKey, options?: BindSelectorClassOptions): Dispose;
+
+// @public (undocumented)
+export interface BindSelectorClassOptions {
+    // (undocumented)
+    preserveInitial?: boolean;
+}
+
 // @public
 export function bindSpreadProps(element: HTMLElement, props: () => Record<string, unknown> | null | undefined): Dispose;
 
+// Warning: (ae-forgotten-export) The symbol "SingleNodeRenderer" needs to be exported by the entry point index.d.ts
+//
 // @public
-export function bindText(node: Text, value: () => unknown): Dispose;
+export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(parent: ParentNode, marker: ChildNode, items: () => readonly T[], renderItem: SingleNodeRenderer<T, TNode>, options: BindStaticKeyedSingleNodeListOptions<T, TNode>): Dispose;
+
+// @public (undocumented)
+export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode = ChildNode> {
+    deferEventPromotion?: boolean;
+    // (undocumented)
+    key: (item: T, index: number, items: readonly T[]) => unknown;
+    // Warning: (ae-forgotten-export) The symbol "BindStaticKeyedSingleNodeListSelectedClassOptions" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    selectedClass?: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>;
+}
+
+// Warning: (ae-forgotten-export) The symbol "BindTextOptions" needs to be exported by the entry point index.d.ts
+//
+// @public
+export function bindText(node: Text, value: ReadonlyCell<unknown> | (() => unknown), options?: BindTextOptions): Dispose;
 
 // Warning: (ae-forgotten-export) The symbol "BindTextBatchOptions" needs to be exported by the entry point index.d.ts
 //
@@ -40,6 +70,9 @@ export function createRoot(container: ParentNode, render: () => RenderValue): Di
 
 // @public
 export function createTemplate(html: string): () => DocumentFragment;
+
+// @public
+export function createTemplateElement<TElement extends Element = Element>(html: string): () => TElement;
 
 // @public
 export type Dispose = () => void;
@@ -67,6 +100,12 @@ export interface ListRenderValue<T = unknown> {
 
 // @public
 export type RenderValue = Node | string | number | boolean | null | undefined | ListRenderValue | readonly RenderValue[];
+
+// @public (undocumented)
+export function withEventBindingMetadata<T>(fn: () => T): T;
+
+// @public (undocumented)
+export function withPropBindingMetadata<T>(fn: () => T): T;
 
 // (No @packageDocumentation comment for this package)
 

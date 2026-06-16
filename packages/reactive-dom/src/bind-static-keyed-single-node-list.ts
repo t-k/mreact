@@ -10,6 +10,8 @@ import { disposeScope, type DomScope } from "./scope.js";
 import type { Dispose } from "./types.js";
 
 export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode = ChildNode> {
+  /** Set to false when the item renderer never binds delegated events on row nodes. */
+  deferEventPromotion?: boolean;
   key: (item: T, index: number, items: readonly T[]) => unknown;
   selectedClass?: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>;
 }
@@ -37,9 +39,9 @@ type SingleNodeRenderer<T, TNode extends ChildNode> = (
 ) => TNode;
 
 interface SingleNodeRecord {
-  currentIndex: number;
+  currentIndex?: number | undefined;
   currentItem: unknown;
-  currentItems: readonly unknown[];
+  currentItems?: readonly unknown[] | undefined;
   key: unknown;
   node: ChildNode;
   selectedClassElement?: Element | undefined;
@@ -62,6 +64,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
 ): Dispose {
   let records = new Map<unknown, SingleNodeRecord>();
   let ownsParent = false;
+  const deferEventPromotion = options.deferEventPromotion !== false;
   const renderArity = renderItem.length;
   const selectedClass = options.selectedClass as
     | BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>
@@ -140,6 +143,8 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
         keyedItems,
         currentItems,
         renderItem,
+        renderArity,
+        deferEventPromotion,
         selectedClassState,
       );
       const fragment = document.createDocumentFragment();
@@ -185,6 +190,8 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
           sourceIndex,
           currentItems,
           renderItem,
+          renderArity,
+          deferEventPromotion,
           selectedClassState,
         );
       }
@@ -268,6 +275,8 @@ function createSingleNodeRecords<T, TNode extends ChildNode>(
   keyedItems: SingleNodeKeyedItems<T>,
   currentItems: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): Map<unknown, SingleNodeRecord> {
   const records = new Map<unknown, SingleNodeRecord>();
@@ -285,6 +294,8 @@ function createSingleNodeRecords<T, TNode extends ChildNode>(
         indexes === null ? slot : (indexes[slot] as number),
         currentItems,
         renderItem,
+        renderArity,
+        deferEventPromotion,
         selectedClassState,
       ),
     );
@@ -300,10 +311,12 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
   index: number,
   items: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): SingleNodeRecord {
   const deferred =
-    parent.isConnected === true
+    deferEventPromotion && parent.isConnected === true
       ? untrack(() =>
           withDeferredDelegatedEventPromotions(() =>
             createScopedRenderNodeScope(() => renderItem(item, index, items)),
@@ -315,14 +328,26 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
     untrack(() => createScopedRenderNodeScope(() => renderItem(item, index, items)));
 
   const record: SingleNodeRecord & { promoteEvents?: () => void } = {
-    currentIndex: index,
     currentItem: item,
-    currentItems: items,
     key,
     node: scoped.node,
-    ...(scoped.scope === undefined ? {} : { scope: scoped.scope }),
-    ...(deferred?.promote === undefined ? {} : { promoteEvents: deferred.promote }),
   };
+
+  if (renderArity >= 2) {
+    record.currentIndex = index;
+  }
+
+  if (renderArity >= 3) {
+    record.currentItems = items;
+  }
+
+  if (scoped.scope !== undefined) {
+    record.scope = scoped.scope;
+  }
+
+  if (deferred?.promote !== undefined) {
+    record.promoteEvents = deferred.promote;
+  }
 
   registerSelectedClassRecord(selectedClassState, record, item, index, items);
   return record;
@@ -387,8 +412,13 @@ function updateSingleNodeRecord(
     return false;
   }
 
-  record.currentIndex = nextIndex;
-  record.currentItems = nextItems;
+  if (renderArity >= 2) {
+    record.currentIndex = nextIndex;
+  }
+
+  if (renderArity >= 3) {
+    record.currentItems = nextItems;
+  }
   return true;
 }
 
