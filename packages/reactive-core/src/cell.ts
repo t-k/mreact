@@ -75,6 +75,20 @@ interface CellState<T> {
   readonly source: Source;
 }
 
+type SourceBackedCell<T> = Cell<T> & {
+  readonly [cellSourceSymbol]: Source;
+};
+
+export const cellSourceSymbol: unique symbol = Symbol.for(
+  "@reckona/mreact-reactive-core.cellSource",
+);
+
+export function getCellSource(value: unknown): Source | undefined {
+  return typeof value === "object" && value !== null
+    ? (value as { [cellSourceSymbol]?: Source })[cellSourceSymbol]
+    : undefined;
+}
+
 // One shared write function keeps the hot store/notify sequence in a single
 // optimizable function instead of a fresh fat closure per cell.
 function writeCellValue<T>(state: CellState<T>, next: T | ((prev: T) => T)): void {
@@ -116,7 +130,8 @@ export function cell<T>(initial: T): Cell<T> {
     value: initial,
   };
 
-  return {
+  const value: SourceBackedCell<T> = {
+    [cellSourceSymbol]: state.source,
     get(): T {
       trackSource(state.source);
       return state.value;
@@ -125,4 +140,6 @@ export function cell<T>(initial: T): Cell<T> {
       writeCellValue(state, next);
     },
   };
+
+  return value;
 }

@@ -176,7 +176,7 @@ function renderRow(row: Row): HTMLTableRowElement {
   const idText = document.createTextNode(String(row.id));
   const labelText = document.createTextNode(row.label.get());
 
-  bindText(labelText, () => row.label.get(), { preserveInitial: true });
+  bindText(labelText, row.label, { preserveInitial: true });
   bindProp(tr, "className", () => (selectedRow(row.id) ? "danger" : ""));
   bindEvent(selectLink, "click", () => selected.set(row.id));
   bindEvent(removeLink, "click", () => removeRow(row.id));

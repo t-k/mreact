@@ -40,6 +40,39 @@ describe("bindText", () => {
     dispose();
   });
 
+  test("binds text directly to a readonly cell", async () => {
+    const count = cell(0);
+    const text = document.createTextNode("");
+    const dispose = bindText(text, count);
+
+    expect(text.data).toBe("0");
+
+    count.set(1);
+    await flushEffects();
+    expect(text.data).toBe("1");
+
+    dispose();
+    count.set(2);
+    await flushEffects();
+    expect(text.data).toBe("1");
+  });
+
+  test("direct readonly cell binding can preserve an already-initialized text node", async () => {
+    const count = cell(0);
+    const text = document.createTextNode("server");
+    const dispose = bindText(text, count, {
+      preserveInitial: true,
+    });
+
+    expect(text.data).toBe("server");
+
+    count.set(1);
+    await flushEffects();
+    expect(text.data).toBe("1");
+
+    dispose();
+  });
+
   test("bindTextBatch updates many text nodes through one scheduled effect", async () => {
     const scheduled: Array<() => void> = [];
     const restoreScheduler = setScheduler({

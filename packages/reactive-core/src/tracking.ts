@@ -18,7 +18,10 @@ export function trackSource(source: Source): void {
   tracker.deps.add(source);
 }
 
-function addSourceSubscriber(source: Source, computation: ReactiveComputation): void {
+export function addSourceSubscriber(
+  source: Source,
+  computation: ReactiveComputation,
+): void {
   const subscribers = source.subscribers;
 
   if (subscribers === null) {
@@ -30,7 +33,10 @@ function addSourceSubscriber(source: Source, computation: ReactiveComputation): 
   }
 }
 
-function removeSourceSubscriber(source: Source, computation: ReactiveComputation): boolean {
+export function removeSourceSubscriber(
+  source: Source,
+  computation: ReactiveComputation,
+): boolean {
   const subscribers = source.subscribers;
 
   if (subscribers === computation) {

@@ -8,6 +8,8 @@ export { flushQueuedComputations, schedulePendingFlush, setScheduler } from "./s
 export { flushPendingComputed } from "./tracking.js";
 /** Low-level source helpers used by reactive DOM keyed item proxies. */
 export { notifySubscribers, trackSource } from "./tracking.js";
+/** Low-level cell subscription used by reactive DOM single-cell bindings. */
+export { subscribeCell } from "./cell-subscription.js";
 /** Shared global runtime state helper for singleton package state. */
 export { getGlobalRuntimeState } from "./runtime-state.js";
 export { runtimeState } from "./state.js";

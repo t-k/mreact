@@ -1,4 +1,6 @@
-import { effect } from "@reckona/mreact-reactive-core";
+import { effect, untrack } from "@reckona/mreact-reactive-core";
+import type { ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { subscribeCell } from "@reckona/mreact-reactive-core/internal";
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
@@ -27,16 +29,40 @@ function normalizeText(value: unknown): string {
 /** Binds a text node to a reactive value. */
 export function bindText(
   node: Text,
-  value: () => unknown,
+  value: ReadonlyCell<unknown> | (() => unknown),
   options?: BindTextOptions,
 ): Dispose {
   const reactiveText = node as Text & { __mreactReactiveText?: true };
 
   reactiveText.__mreactReactiveText = true;
   let shouldWrite = options?.preserveInitial !== true;
+  const readValue = typeof value === "function" ? value : () => value.get();
+
+  if (typeof value !== "function") {
+    const directDispose = subscribeCell(value, (nextValue) => {
+      const text = normalizeText(nextValue);
+
+      if (!shouldWrite) {
+        shouldWrite = true;
+        return;
+      }
+
+      node.data = text;
+    });
+
+    if (directDispose !== undefined) {
+      if (shouldWrite) {
+        node.data = normalizeText(untrack(() => value.get()));
+      } else {
+        shouldWrite = true;
+      }
+
+      return registerDispose(directDispose);
+    }
+  }
 
   const dispose = effect(() => {
-    const text = normalizeText(value());
+    const text = normalizeText(readValue());
 
     if (!shouldWrite) {
       shouldWrite = true;
