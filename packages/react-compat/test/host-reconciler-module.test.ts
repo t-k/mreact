@@ -170,6 +170,17 @@ describe("host reconciler module", () => {
     expect(bailoutIndex).toBeLessThan(pathIndex);
   });
 
+  test("does not pre-walk the full keyed child list before generic reconciliation", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain("hasSameKeyOrder(currentFirstChild, children)");
+    expect(hostReconcilerSource).not.toContain("function hasSameKeyOrder(");
+    expect(hostReconcilerSource).toContain("canReuseMatchedCurrentFiber = true;");
+  });
+
   test("reconciles matching keyed host child order without used-child set bookkeeping", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);

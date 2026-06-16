@@ -349,10 +349,7 @@ function reconcileHostChild(
 
   const childCount = children === undefined ? 1 : children.length;
   const hasKeyedChildren = children !== undefined && hasKeyedChild(children);
-  const canReuseCurrentFibersInList =
-    !hasKeyedChildren ||
-    currentFirstChild === undefined ||
-    hasSameKeyOrder(currentFirstChild, children);
+  const canReuseCurrentFibersInList = !hasKeyedChildren || currentFirstChild === undefined;
   let existingByKey: Map<string, Fiber> | undefined;
   let currentKeyed: Fiber | undefined = currentFirstChild;
   let currentUnkeyed = currentFirstChild;
@@ -361,6 +358,7 @@ function reconcileHostChild(
   let consumed = 0;
   let skipRemainingKeyedLookup = false;
   let sequentialCurrentCursor = currentFirstChild;
+  let childListOrderChanged = false;
   let usedCurrentChildren =
     currentFirstChild === undefined || hasKeyedChildren ? undefined : new Set<Fiber>();
   const ensureUsedCurrentChildren = (): Set<Fiber> => {
@@ -385,16 +383,20 @@ function reconcileHostChild(
 
     if (key === undefined) {
       if (hasKeyedChildren && currentUnkeyed !== undefined) {
+        childListOrderChanged = true;
         ensureUsedCurrentChildren();
       }
       matchedCurrent = currentUnkeyed;
     } else if (skipRemainingKeyedLookup) {
+      childListOrderChanged = true;
       matchedCurrent = undefined;
     } else if (existingByKey !== undefined) {
+      childListOrderChanged = true;
       matchedCurrent = existingByKey.get(key);
       canReuseMatchedCurrentFiber = matchedCurrent === undefined;
     } else if (currentKeyed?.key === key) {
       matchedCurrent = currentKeyed;
+      canReuseMatchedCurrentFiber = true;
       currentKeyed = currentKeyed.sibling;
       sequentialCurrentCursor = currentKeyed;
     } else if (
@@ -402,6 +404,7 @@ function reconcileHostChild(
       currentKeyed?.sibling?.key === key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
+      childListOrderChanged = true;
       ensureUsedCurrentChildren();
       matchedCurrent = currentKeyed.sibling;
       canReuseMatchedCurrentFiber = false;
@@ -412,9 +415,11 @@ function reconcileHostChild(
         hasKeyedChildren &&
         canSkipRemainingKeyedLookup(currentKeyed, children, index)
       ) {
+        childListOrderChanged = true;
         skipRemainingKeyedLookup = true;
         currentKeyed = undefined;
       } else if (hasKeyedChildren) {
+        childListOrderChanged = true;
         ensureUsedCurrentChildren();
         existingByKey = collectExistingKeyedFibers(currentKeyed);
         matchedCurrent = existingByKey.get(key);
@@ -493,7 +498,8 @@ function reconcileHostChild(
   } else {
     markUnusedCurrentChildrenForDeletion(parent, currentFirstChild, usedCurrentChildren);
   }
-  parent.childListChanged = childFiberListShapeChanged(currentFirstChild, first);
+  parent.childListChanged =
+    childListOrderChanged || childFiberListShapeChanged(currentFirstChild, first);
 
   return { fiber: first, consumed };
 }
@@ -661,23 +667,6 @@ function hasSameKeyOrderPrefix(
     }
 
     if (current.key !== getNodeKey(children[index])) {
-      return false;
-    }
-
-    current = current.sibling;
-  }
-
-  return current === undefined;
-}
-
-function hasSameKeyOrder(
-  currentFirstChild: Fiber,
-  children: readonly ReactCompatNode[],
-): boolean {
-  let current: Fiber | undefined = currentFirstChild;
-
-  for (let index = 0; index < children.length; index += 1) {
-    if (current === undefined || current.key !== getNodeKey(children[index])) {
       return false;
     }
 
