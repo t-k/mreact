@@ -1290,7 +1290,10 @@ describe("bindList", () => {
 
     const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
     const arrayFrom = Array.from;
+    const arrayPush = Array.prototype.push;
     let lisArrayAllocations = 0;
+    let orderedNodePushes = 0;
+    let orderedRecordPushes = 0;
 
     Array.from = function countedArrayFrom<T>(
       source: ArrayLike<T> | Iterable<T>,
@@ -1309,20 +1312,93 @@ describe("bindList", () => {
 
       return arrayFrom.call(Array, source, mapFn as never, thisArg) as T[];
     } as typeof Array.from;
+    Array.prototype.push = function countedArrayPush<T>(
+      this: T[],
+      ...valuesToPush: T[]
+    ): number {
+      if (valuesToPush.every((value) => value instanceof Node)) {
+        orderedNodePushes += valuesToPush.length;
+      } else if (
+        valuesToPush.every(
+          (value) =>
+            typeof value === "object" &&
+            value !== null &&
+            "nodes" in value &&
+            "currentItem" in value,
+        )
+      ) {
+        orderedRecordPushes += valuesToPush.length;
+      }
+
+      return arrayPush.apply(this, valuesToPush);
+    };
 
     try {
       items.set([0, 4, 2, 3, 1, 5]);
       await flushEffects();
     } finally {
       Array.from = arrayFrom;
+      Array.prototype.push = arrayPush;
     }
 
     expect(lisArrayAllocations).toBe(0);
+    expect(orderedNodePushes).toBe(0);
+    expect(orderedRecordPushes).toBe(0);
     expect(parent.innerHTML).toBe(
       "<li>0</li><li>4</li><li>2</li><li>3</li><li>1</li><li>5</li><!--list-->",
     );
     expect(parent.childNodes[1]).toBe(originalNodes[4]);
     expect(parent.childNodes[4]).toBe(originalNodes[1]);
+
+    dispose();
+  });
+
+  test("updates reactive keyed records while using the swapped-record fast path", async () => {
+    const items = cell([
+      { id: 0, label: "0" },
+      { id: 1, label: "1" },
+      { id: 2, label: "2" },
+      { id: 3, label: "3" },
+      { id: 4, label: "4" },
+      { id: 5, label: "5" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        bindText(li.appendChild(document.createTextNode("")), () => item.label);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    let parentInsertions = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+
+    items.set([
+      { id: 0, label: "zero" },
+      { id: 4, label: "four" },
+      { id: 2, label: "two" },
+      { id: 3, label: "three" },
+      { id: 1, label: "one" },
+      { id: 5, label: "five" },
+    ]);
+    await flushEffects();
+
+    expect(parentInsertions).toBe(2);
+    expect(parent.innerHTML).toBe(
+      "<li>zero</li><li>four</li><li>two</li><li>three</li><li>one</li><li>five</li><!--list-->",
+    );
 
     dispose();
   });

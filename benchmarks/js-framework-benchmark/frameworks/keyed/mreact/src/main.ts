@@ -174,9 +174,9 @@ function renderRow(row: Row): HTMLTableRowElement {
   const selectLink = labelCell.firstElementChild as HTMLAnchorElement;
   const removeLink = removeCell.firstElementChild as HTMLAnchorElement;
   const idText = document.createTextNode(String(row.id));
-  const labelText = document.createTextNode("");
+  const labelText = document.createTextNode(row.label.get());
 
-  bindText(labelText, () => row.label.get());
+  bindText(labelText, () => row.label.get(), { preserveInitial: true });
   bindProp(tr, "className", () => (selectedRow(row.id) ? "danger" : ""));
   bindEvent(selectLink, "click", () => selected.set(row.id));
   bindEvent(removeLink, "click", () => removeRow(row.id));

@@ -252,6 +252,23 @@ function bindKeyedList<T>(
         return;
       }
 
+      const swappedRecords = tryReorderSwappedKeyedRecords(
+        insertionParent,
+        marker,
+        records,
+        currentKeyedItems,
+        currentItems,
+        renderArity,
+        MAX_TARGETED_OWNED_PARENT_MOVES,
+      );
+
+      if (swappedRecords !== undefined) {
+        records = swappedRecords.records;
+        recordNodeCount = swappedRecords.nodeCount;
+        ownsParent = true;
+        return;
+      }
+
       const appendedRecords = tryAppendKeyedRecords(
         insertionParent,
         marker,
@@ -289,7 +306,7 @@ function bindKeyedList<T>(
 
     const nextRecords = new Map<unknown, KeyedRecord>();
     const orderedRecords: KeyedRecord[] = [];
-    const orderedNodes: Node[] = [];
+    let orderedNodeCount = 0;
     let reusedAllRecords = true;
     let previousIndex = 0;
 
@@ -338,10 +355,7 @@ function bindKeyedList<T>(
 
       nextRecords.set(itemKey, record);
       orderedRecords.push(record);
-
-      for (const node of record.nodes) {
-        orderedNodes.push(node);
-      }
+      orderedNodeCount += record.nodes.length;
     }
 
     const canClaimEmptyParent =
@@ -351,7 +365,7 @@ function bindKeyedList<T>(
 
     if (canClaimEmptyParent) {
       const disposeError = disposeStaleRecords(records, nextRecords);
-      replaceWithOrderedNodes(insertionParent, marker, orderedNodes);
+      replaceWithOrderedRecords(insertionParent, marker, orderedRecords);
       promoteRecordEvents(nextRecords.values());
       if (disposeError !== undefined) {
         throw disposeError;
@@ -369,13 +383,13 @@ function bindKeyedList<T>(
         )
       ) {
         records = nextRecords;
-        recordNodeCount = orderedNodes.length;
+        recordNodeCount = orderedNodeCount;
         ownsParent = true;
         return;
       }
 
       const disposeError = disposeStaleRecords(records, nextRecords);
-      replaceWithOrderedNodes(insertionParent, marker, orderedNodes);
+      replaceWithOrderedRecords(insertionParent, marker, orderedRecords);
       promoteRecordEvents(nextRecords.values());
       if (disposeError !== undefined) {
         throw disposeError;
@@ -389,10 +403,10 @@ function bindKeyedList<T>(
       reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords);
       promoteRecordEvents(nextRecords.values());
       ownsParent =
-        insertionParent.childNodes.length === orderedNodes.length + 1 &&
+        insertionParent.childNodes.length === orderedNodeCount + 1 &&
         marker.nextSibling === null;
     }
-    recordNodeCount = orderedNodes.length;
+    recordNodeCount = orderedNodeCount;
 
     records = nextRecords;
   });
@@ -415,6 +429,22 @@ function replaceWithOrderedNodes(
 
   for (const node of orderedNodes) {
     fragment.appendChild(node);
+  }
+
+  parent.replaceChildren(fragment, marker);
+}
+
+function replaceWithOrderedRecords(
+  parent: ListParentNode,
+  marker: ChildNode,
+  orderedRecords: readonly KeyedRecord[],
+): void {
+  const fragment = document.createDocumentFragment();
+
+  for (const record of orderedRecords) {
+    for (const node of record.nodes) {
+      fragment.appendChild(node);
+    }
   }
 
   parent.replaceChildren(fragment, marker);
@@ -559,6 +589,120 @@ function tryAppendKeyedRecords<T>(
   }
 
   return { appendedNodeCount, records };
+}
+
+function tryReorderSwappedKeyedRecords<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, KeyedRecord>,
+  currentKeyedItems: KeyedItems<T>,
+  currentItems: readonly T[],
+  renderArity: number,
+  maxMovedNodes: number,
+): { records: Map<unknown, KeyedRecord>; nodeCount: number } | undefined {
+  const keys = currentKeyedItems.keys;
+
+  if (
+    !Number.isFinite(maxMovedNodes) ||
+    renderArity >= 2 ||
+    currentKeyedItems.indexes !== null ||
+    keys.length !== records.size ||
+    keys.length < 2
+  ) {
+    return undefined;
+  }
+
+  const previousKeys = records.keys();
+  let firstIndex = -1;
+  let secondIndex = -1;
+  let firstPreviousKey: unknown;
+  let secondPreviousKey: unknown;
+
+  for (let slot = 0; slot < keys.length; slot += 1) {
+    const previousKey = previousKeys.next();
+
+    if (previousKey.done) {
+      return undefined;
+    }
+
+    const nextKey = keys[slot];
+
+    if (Object.is(previousKey.value, nextKey)) {
+      continue;
+    }
+
+    if (firstIndex === -1) {
+      firstIndex = slot;
+      firstPreviousKey = previousKey.value;
+    } else if (secondIndex === -1) {
+      secondIndex = slot;
+      secondPreviousKey = previousKey.value;
+    } else {
+      return undefined;
+    }
+  }
+
+  if (
+    firstIndex === -1 ||
+    secondIndex === -1 ||
+    !Object.is(firstPreviousKey, keys[secondIndex]) ||
+    !Object.is(secondPreviousKey, keys[firstIndex])
+  ) {
+    return undefined;
+  }
+
+  const nextRecords = new Map<unknown, KeyedRecord>();
+  const items = currentKeyedItems.items;
+  let nodeCount = 0;
+
+  for (let slot = 0; slot < keys.length; slot += 1) {
+    const record = records.get(keys[slot]);
+
+    if (record === undefined) {
+      return undefined;
+    }
+
+    if (
+      !canSkipKeyedRecordUpdate(record, renderArity, items[slot], slot, currentItems) &&
+      !updateKeyedRecord(record, renderArity, items[slot], slot, currentItems)
+    ) {
+      return undefined;
+    }
+
+    nextRecords.set(keys[slot], record);
+    nodeCount += record.nodes.length;
+  }
+
+  const firstRecord = nextRecords.get(keys[firstIndex]);
+  const secondRecord = nextRecords.get(keys[secondIndex]);
+
+  if (firstRecord === undefined || secondRecord === undefined) {
+    return undefined;
+  }
+
+  const movedNodes = firstRecord.nodes.length + secondRecord.nodes.length;
+
+  if (movedNodes > maxMovedNodes) {
+    return undefined;
+  }
+
+  const firstAnchor = secondRecord.nodes[0] as ChildNode | undefined;
+  const secondAnchor =
+    (nextRecords.get(keys[secondIndex + 1])?.nodes[0] as ChildNode | undefined) ?? marker;
+
+  if (firstAnchor === undefined) {
+    return undefined;
+  }
+
+  for (const node of firstRecord.nodes) {
+    parent.insertBefore(node, firstAnchor);
+  }
+
+  for (const node of secondRecord.nodes) {
+    parent.insertBefore(node, secondAnchor);
+  }
+
+  return { records: nextRecords, nodeCount };
 }
 
 function canSkipKeyedRecordUpdate(

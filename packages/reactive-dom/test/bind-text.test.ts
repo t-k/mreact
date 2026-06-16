@@ -24,6 +24,22 @@ describe("bindText", () => {
     expect(text.data).toBe("1");
   });
 
+  test("can preserve an already-initialized text node until the first update", async () => {
+    const count = cell(0);
+    const text = document.createTextNode("server");
+    const dispose = bindText(text, () => count.get(), {
+      preserveInitial: true,
+    });
+
+    expect(text.data).toBe("server");
+
+    count.set(1);
+    await flushEffects();
+    expect(text.data).toBe("1");
+
+    dispose();
+  });
+
   test("bindTextBatch updates many text nodes through one scheduled effect", async () => {
     const scheduled: Array<() => void> = [];
     const restoreScheduler = setScheduler({
