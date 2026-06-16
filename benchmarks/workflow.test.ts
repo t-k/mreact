@@ -24,7 +24,17 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("js_benchmarks:");
     expect(workflow).toContain("MREACT_JS_FRAMEWORKS: ${{ inputs.js_frameworks }}");
     expect(workflow).toContain("MREACT_JS_FRAMEWORK_BENCHMARKS: ${{ inputs.js_benchmarks }}");
+    expect(workflow).toContain("BENCH_CASES:");
+    expect(workflow).toContain(
+      "source write with subscriber 1k,text binding update 1k,computed fan-out 1k,computed fan-in 1k,source write 1k,keyed reverse 1k rows,create 1k event targets,repeated create update clear memory",
+    );
+    expect(workflow).toContain(
+      "Run primitive browser benchmarks\n        if: ${{ inputs.suite == 'primitive-browser' }}",
+    );
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/primitive.md")');
+    expect(workflow).toContain(
+      'if [ "${{ inputs.suite }}" = "primitive-browser" ]; then\n            files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")',
+    );
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/js-framework-benchmark.md")');
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/router.md")');
     expect(workflow).toContain("Commit benchmark results");

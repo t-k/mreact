@@ -89,10 +89,11 @@ jobs:
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive' }}
         env:
           MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
+          BENCH_CASES: ${{ inputs.suite == 'all' && 'source write with subscriber 1k,text binding update 1k,computed fan-out 1k,computed fan-in 1k,source write 1k,keyed reverse 1k rows,create 1k event targets,repeated create update clear memory' || '' }}
         run: NODE_ENV=production pnpm bench:primitive
 
       - name: Run primitive browser benchmarks
-        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}
+        if: ${{ inputs.suite == 'primitive-browser' }}
         env:
           MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
         run: NODE_ENV=production pnpm bench:primitive-browser
@@ -124,7 +125,7 @@ jobs:
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive.md")
           fi
-          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive-browser" ]; then
+          if [ "${{ inputs.suite }}" = "primitive-browser" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "js-framework" ]; then
