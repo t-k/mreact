@@ -62,4 +62,47 @@ describe("selector", () => {
     expect(source).toContain("function cleanupSelectorSource");
     expect(source).not.toContain("onNoSubscribers() {");
   });
+
+  test("notifies key subscriptions only for previous and next selected keys", async () => {
+    const selected = cell<number | null>(null);
+    const selectedFor = selector<number | null, number>(selected);
+    const calls = new Map<number, boolean[]>();
+    const disposers = [1, 2, 3].map((id) =>
+      selectedFor.subscribe(id, (isSelected) => {
+        const values = calls.get(id) ?? [];
+        values.push(isSelected);
+        calls.set(id, values);
+      }),
+    );
+
+    selected.set(2);
+    await flushEffects();
+
+    expect(calls).toEqual(new Map([[2, [true]]]));
+
+    selected.set(3);
+    await flushEffects();
+
+    expect(calls).toEqual(
+      new Map([
+        [2, [true, false]],
+        [3, [true]],
+      ]),
+    );
+
+    disposers[1]?.();
+    selected.set(2);
+    await flushEffects();
+
+    expect(calls).toEqual(
+      new Map([
+        [2, [true, false]],
+        [3, [true, false]],
+      ]),
+    );
+
+    disposers[0]?.();
+    disposers[2]?.();
+    selectedFor.dispose();
+  });
 });

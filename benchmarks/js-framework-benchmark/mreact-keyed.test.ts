@@ -62,15 +62,25 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("createTemplate");
     expect(main).toContain("const createRowTemplate = createTemplate(");
     expect(main).toContain('class="col-md-1"> </td>');
+    expect(main).toContain('data-action="select"');
+    expect(main).toContain('data-action="remove"');
     expect(main).toContain("const idText = idCell.firstChild as Text;");
     expect(main).toContain("const labelText = selectLink.firstChild as Text;");
+    expect(main).toContain("const rowIds = new WeakMap<HTMLTableRowElement, number>();");
+    expect(main).toContain("rowIds.set(tr, row.id);");
     expect(main).toContain("bindList(");
-    expect(main).toContain("bindProp(tr, \"className\"");
-    expect(main).toContain("selectedRow(row.id) ? \"danger\" : \"\"");
+    expect(main).toContain(
+      'bindSelectorClass(tr, "danger", selectedRow, row.id, { preserveInitial: true });',
+    );
+    expect(main).toContain('bindEvent(tbody, "click", handleRowClick);');
+    expect(main).toContain('target.closest<HTMLAnchorElement>("a[data-action]")');
     expect(main).toContain("key: (row) => row.id");
     expect(main).toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
     expect(main).not.toContain("selected.get() === row.id");
+    expect(main).not.toContain("bindProp(tr, \"className\"");
+    expect(main).not.toContain("bindEvent(selectLink");
+    expect(main).not.toContain("bindEvent(removeLink");
     expect(main).not.toContain("rowElements");
     expect(main).not.toContain("previousSelectedRow");
     expect(main).not.toContain(".className =");

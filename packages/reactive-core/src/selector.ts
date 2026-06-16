@@ -10,10 +10,12 @@ export type SelectorEquality<TValue, TKey> = (value: TValue, key: TKey) => boole
 /** A keyed boolean selector with an explicit disposer for the source subscription. */
 export interface Selector<TValue, TKey = TValue> {
   (key: TKey): boolean;
+  subscribe(key: TKey, listener: (selected: boolean) => void): () => void;
   dispose(): void;
 }
 
 interface SelectorSource<TKey> extends Source {
+  callbacks?: Set<(selected: boolean) => void> | undefined;
   key: TKey;
   owner: Map<TKey, SelectorSource<TKey>>;
   selected: boolean;
@@ -53,7 +55,7 @@ export function selector<TValue, TKey = TValue>(
     }
   });
 
-  const select = ((key: TKey): boolean => {
+  function getOrCreateSelectorSource(key: TKey): SelectorSource<TKey> {
     let selectorSource = sources.get(key);
 
     if (selectorSource === undefined) {
@@ -67,9 +69,31 @@ export function selector<TValue, TKey = TValue>(
       sources.set(key, selectorSource);
     }
 
+    return selectorSource;
+  }
+
+  const select = ((key: TKey): boolean => {
+    const selectorSource = getOrCreateSelectorSource(key);
+
     trackSource(selectorSource);
     return selectorSource.selected;
   }) as Selector<TValue, TKey>;
+
+  select.subscribe = (key, listener) => {
+    const selectorSource = getOrCreateSelectorSource(key);
+
+    (selectorSource.callbacks ??= new Set()).add(listener);
+
+    return () => {
+      selectorSource.callbacks?.delete(listener);
+
+      if (selectorSource.callbacks?.size === 0) {
+        selectorSource.callbacks = undefined;
+      }
+
+      cleanupSelectorSource.call(selectorSource);
+    };
+  };
 
   select.dispose = () => {
     disposeSourceEffect();
@@ -84,7 +108,7 @@ function defaultSelectorEquality<TValue, TKey>(value: TValue, key: TKey): boolea
 }
 
 function cleanupSelectorSource<TKey>(this: SelectorSource<TKey>): void {
-  if (this.subscribers === null) {
+  if (this.subscribers === null && this.callbacks === undefined) {
     this.owner.delete(this.key);
   }
 }
@@ -101,5 +125,13 @@ function updateSelectorSource<TKey>(
   }
 
   selectorSource.selected = selected;
+  const callbacks = selectorSource.callbacks;
+
+  if (callbacks !== undefined) {
+    for (const callback of callbacks) {
+      callback(selected);
+    }
+  }
+
   notifySubscribers(selectorSource);
 }

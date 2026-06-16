@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { setScheduler } from "@reckona/mreact-reactive-core/internal";
@@ -71,6 +73,45 @@ describe("bindText", () => {
     expect(text.data).toBe("1");
 
     dispose();
+  });
+
+  test("direct readonly cell binding uses the reactive scheduler", async () => {
+    const scheduled: Array<() => void> = [];
+    const restoreScheduler = setScheduler({
+      schedule(flush) {
+        scheduled.push(flush);
+      },
+    });
+
+    try {
+      const count = cell(0);
+      const text = document.createTextNode("");
+      const dispose = bindText(text, count);
+
+      count.set(1);
+
+      expect(text.data).toBe("0");
+      expect(scheduled).toHaveLength(1);
+
+      await flushEffects();
+      expect(text.data).toBe("1");
+
+      dispose();
+    } finally {
+      restoreScheduler();
+    }
+  });
+
+  test("direct readonly cell subscriptions share computation methods", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages", "reactive-core", "src", "cell-subscription.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("const CELL_SUBSCRIPTION_COMPUTATION_METHODS");
+    expect(source).not.toContain("markDirty() {");
+    expect(source).not.toContain("run() {");
+    expect(source).not.toContain("dispose() {");
   });
 
   test("bindTextBatch updates many text nodes through one scheduled effect", async () => {

@@ -1,8 +1,13 @@
-import { batch, cell, selector, type Cell } from "@reckona/mreact-reactive-core";
+import {
+  batch,
+  cell,
+  selector,
+  type Cell,
+} from "@reckona/mreact-reactive-core";
 import {
   bindEvent,
   bindList,
-  bindProp,
+  bindSelectorClass,
   bindText,
   createTemplate,
   createRoot,
@@ -162,33 +167,58 @@ function requireElement<T extends HTMLElement>(id: string): T {
 }
 
 const createRowTemplate = createTemplate(
-  '<tr><td class="col-md-1"> </td><td class="col-md-4"><a> </a></td><td class="col-md-1"><a><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
+  '<tr><td class="col-md-1"> </td><td class="col-md-4"><a data-action="select"> </a></td><td class="col-md-1"><a data-action="remove"><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
 );
+const rowIds = new WeakMap<HTMLTableRowElement, number>();
 
 function renderRow(row: Row): HTMLTableRowElement {
   const fragment = createRowTemplate();
   const tr = fragment.firstElementChild as HTMLTableRowElement;
   const idCell = tr.firstElementChild as HTMLTableCellElement;
   const labelCell = idCell.nextElementSibling as HTMLTableCellElement;
-  const removeCell = labelCell.nextElementSibling as HTMLTableCellElement;
   const selectLink = labelCell.firstElementChild as HTMLAnchorElement;
-  const removeLink = removeCell.firstElementChild as HTMLAnchorElement;
   const idText = idCell.firstChild as Text;
   const labelText = selectLink.firstChild as Text;
 
+  rowIds.set(tr, row.id);
   idText.data = String(row.id);
   labelText.data = row.label.get();
 
   bindText(labelText, row.label, { preserveInitial: true });
-  bindProp(tr, "className", () => (selectedRow(row.id) ? "danger" : ""));
-  bindEvent(selectLink, "click", () => selected.set(row.id));
-  bindEvent(removeLink, "click", () => removeRow(row.id));
+  bindSelectorClass(tr, "danger", selectedRow, row.id, { preserveInitial: true });
 
   return tr;
 }
 
 const tbody = requireElement<HTMLTableSectionElement>("tbody");
 const marker = document.createComment("mreact rows");
+
+function handleRowClick(event: MouseEvent): void {
+  const target = event.target;
+
+  if (!(target instanceof Element)) {
+    return;
+  }
+
+  const actionLink = target.closest<HTMLAnchorElement>("a[data-action]");
+
+  if (actionLink === null || !tbody.contains(actionLink)) {
+    return;
+  }
+
+  const rowElement = actionLink.closest<HTMLTableRowElement>("tr");
+  const id = rowElement === null ? undefined : rowIds.get(rowElement);
+
+  if (id === undefined) {
+    return;
+  }
+
+  if (actionLink.dataset.action === "select") {
+    selected.set(id);
+  } else if (actionLink.dataset.action === "remove") {
+    removeRow(id);
+  }
+}
 
 tbody.append(marker);
 createRoot(tbody, () => {
@@ -200,6 +230,7 @@ createRoot(tbody, () => {
   return marker;
 });
 
+bindEvent(tbody, "click", handleRowClick);
 bindEvent(requireElement("run"), "click", () => setRows(1_000));
 bindEvent(requireElement("runlots"), "click", () => setRows(10_000));
 bindEvent(requireElement("add"), "click", addRows);

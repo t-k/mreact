@@ -6,6 +6,18 @@ import { addSourceSubscriber, removeSourceSubscriber } from "./tracking.js";
 
 const emptyDeps = new Set<Source>();
 
+interface CellSubscription<T> extends ReactiveComputation {
+  cell: ReadonlyCell<T>;
+  listener: (value: T) => void;
+  source: Source;
+}
+
+const CELL_SUBSCRIPTION_COMPUTATION_METHODS = {
+  markDirty: cellSubscriptionMarkDirty,
+  run: cellSubscriptionRun,
+  dispose: cellSubscriptionDispose,
+} satisfies Pick<ReactiveComputation, "markDirty" | "run" | "dispose">;
+
 export function subscribeCell<T>(
   cell: ReadonlyCell<T>,
   listener: (value: T) => void,
@@ -16,35 +28,46 @@ export function subscribeCell<T>(
     return undefined;
   }
 
-  const computation: ReactiveComputation = {
+  const computation: CellSubscription<T> = {
+    ...CELL_SUBSCRIPTION_COMPUTATION_METHODS,
+    cell,
     id: runtimeState.nextComputationId,
     deps: emptyDeps,
     disposed: false,
+    listener,
     queued: false,
-    markDirty() {
-      queueComputation(computation);
-    },
-    run() {
-      if (computation.disposed) {
-        return;
-      }
-
-      listener(cell.get());
-    },
-    dispose() {
-      if (computation.disposed) {
-        return;
-      }
-
-      computation.disposed = true;
-      computation.queued = false;
-      runtimeState.pendingComputed.delete(computation);
-      removeSourceSubscriber(source, computation);
-    },
+    source,
   };
 
   runtimeState.nextComputationId += 1;
   addSourceSubscriber(source, computation);
 
-  return computation.dispose;
+  return () => computation.dispose();
+}
+
+function cellSubscriptionMarkDirty(this: ReactiveComputation): void {
+  queueComputation(this);
+}
+
+function cellSubscriptionRun(this: ReactiveComputation): void {
+  const subscription = this as CellSubscription<unknown>;
+
+  if (subscription.disposed) {
+    return;
+  }
+
+  subscription.listener(subscription.cell.get());
+}
+
+function cellSubscriptionDispose(this: ReactiveComputation): void {
+  const subscription = this as CellSubscription<unknown>;
+
+  if (subscription.disposed) {
+    return;
+  }
+
+  subscription.disposed = true;
+  subscription.queued = false;
+  runtimeState.pendingComputed.delete(subscription);
+  removeSourceSubscriber(subscription.source, subscription);
 }
