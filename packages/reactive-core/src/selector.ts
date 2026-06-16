@@ -15,6 +15,7 @@ export interface Selector<TValue, TKey = TValue> {
 
 interface SelectorSource<TKey> extends Source {
   key: TKey;
+  owner: Map<TKey, SelectorSource<TKey>>;
   selected: boolean;
 }
 
@@ -58,11 +59,8 @@ export function selector<TValue, TKey = TValue>(
     if (selectorSource === undefined) {
       selectorSource = {
         key,
-        onNoSubscribers() {
-          if (selectorSource?.subscribers === null) {
-            sources.delete(key);
-          }
-        },
+        onNoSubscribers: cleanupSelectorSource,
+        owner: sources,
         selected: equals(current, key) === true,
         subscribers: null,
       };
@@ -83,6 +81,12 @@ export function selector<TValue, TKey = TValue>(
 
 function defaultSelectorEquality<TValue, TKey>(value: TValue, key: TKey): boolean {
   return Object.is(value, key);
+}
+
+function cleanupSelectorSource<TKey>(this: SelectorSource<TKey>): void {
+  if (this.subscribers === null) {
+    this.owner.delete(this.key);
+  }
 }
 
 function updateSelectorSource<TKey>(

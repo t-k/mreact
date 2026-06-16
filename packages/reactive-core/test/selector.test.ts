@@ -1,4 +1,6 @@
 import { describe, expect, test } from "vitest";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { cell, effect, selector } from "../src/index.js";
 import { flushEffects } from "../src/testing.js";
 
@@ -49,5 +51,15 @@ describe("selector", () => {
       dispose();
     }
     selectedFor.dispose();
+  });
+
+  test("uses a shared selector source cleanup function", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages/reactive-core/src/selector.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("function cleanupSelectorSource");
+    expect(source).not.toContain("onNoSubscribers() {");
   });
 });
