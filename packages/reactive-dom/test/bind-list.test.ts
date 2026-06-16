@@ -1136,6 +1136,50 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("batches delegated root release lookups when clearing keyed rows", async () => {
+    const values = Array.from({ length: 10 }, (_, index) => index);
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    document.body.append(parent);
+    const mapGet = Map.prototype.get;
+    let clickRootLookups = 0;
+
+    Map.prototype.get = function countedGet<K, V>(this: Map<K, V>, key: K): V | undefined {
+      if (key === "click") {
+        clickRootLookups += 1;
+      }
+      return mapGet.call(this, key);
+    };
+
+    try {
+      const dispose = bindList(
+        parent,
+        marker,
+        () => items.get(),
+        (item) => {
+          const button = document.createElement("button");
+          button.textContent = String(item);
+          bindEvent(button, "click", () => {});
+          return button;
+        },
+        { itemMode: "static", key: (item) => item },
+      );
+
+      clickRootLookups = 0;
+      items.set([]);
+      await flushEffects();
+
+      expect(clickRootLookups).toBeLessThan(values.length);
+
+      dispose();
+    } finally {
+      Map.prototype.get = mapGet;
+      parent.remove();
+    }
+  });
+
   test("appends keyed list items without building an extra appended-key set", async () => {
     const items = cell([0, 1, 2]);
     const parent = document.createElement("ul");

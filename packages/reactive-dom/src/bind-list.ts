@@ -10,7 +10,10 @@ import {
   markDynamicNode,
   markDynamicNodes,
 } from "./dynamic-node.js";
-import { withDeferredDelegatedEventPromotions } from "./bind-event.js";
+import {
+  withBatchedDelegatedRootReleases,
+  withDeferredDelegatedEventPromotions,
+} from "./bind-event.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
@@ -1163,15 +1166,17 @@ function disposeStaleRecords(
 ): unknown {
   let firstError: unknown;
 
-  for (const [itemKey, record] of records) {
-    if (!nextRecords.has(itemKey)) {
-      try {
-        record.dispose();
-      } catch (error) {
-        firstError ??= error;
+  withBatchedDelegatedRootReleases(() => {
+    for (const [itemKey, record] of records) {
+      if (!nextRecords.has(itemKey)) {
+        try {
+          record.dispose();
+        } catch (error) {
+          firstError ??= error;
+        }
       }
     }
-  }
+  });
 
   return firstError;
 }
@@ -1179,13 +1184,15 @@ function disposeStaleRecords(
 function disposeRecordValues(records: Iterable<KeyedRecord>): unknown {
   let firstError: unknown;
 
-  for (const record of records) {
-    try {
-      record.dispose();
-    } catch (error) {
-      firstError ??= error;
+  withBatchedDelegatedRootReleases(() => {
+    for (const record of records) {
+      try {
+        record.dispose();
+      } catch (error) {
+        firstError ??= error;
+      }
     }
-  }
+  });
 
   return firstError;
 }
@@ -1193,17 +1200,19 @@ function disposeRecordValues(records: Iterable<KeyedRecord>): unknown {
 function removeRecordNodes(records: Iterable<KeyedRecord>): void {
   let firstError: unknown;
 
-  for (const record of records) {
-    try {
-      record.dispose();
-    } catch (error) {
-      firstError ??= error;
-    }
+  withBatchedDelegatedRootReleases(() => {
+    for (const record of records) {
+      try {
+        record.dispose();
+      } catch (error) {
+        firstError ??= error;
+      }
 
-    for (const node of record.nodes) {
-      node.parentNode?.removeChild(node);
+      for (const node of record.nodes) {
+        node.parentNode?.removeChild(node);
+      }
     }
-  }
+  });
 
   if (firstError !== undefined) {
     throw firstError;
@@ -1211,9 +1220,11 @@ function removeRecordNodes(records: Iterable<KeyedRecord>): void {
 }
 
 function disposeRecords(records: Iterable<KeyedRecord>): void {
-  for (const record of records) {
-    record.dispose();
-  }
+  withBatchedDelegatedRootReleases(() => {
+    for (const record of records) {
+      record.dispose();
+    }
+  });
 }
 
 function countRecordNodes(records: readonly KeyedRecord[]): number {

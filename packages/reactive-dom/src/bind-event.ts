@@ -32,6 +32,9 @@ const pendingDisconnectedPromotions = new Set<() => void>();
 let currentDeferredDelegatedEventPromotions:
   | DeferredDelegatedEventPromotion[]
   | undefined;
+let currentDelegatedRootReleaseBatch:
+  | Map<EventTarget, Record<string, number>>
+  | undefined;
 let disconnectedPromotionFlushQueued = false;
 
 export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
@@ -54,6 +57,23 @@ export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
     };
   } finally {
     currentDeferredDelegatedEventPromotions = previousPromotions;
+  }
+}
+
+export function withBatchedDelegatedRootReleases<T>(fn: () => T): T {
+  const previousBatch = currentDelegatedRootReleaseBatch;
+  const batch = previousBatch ?? new Map<EventTarget, Record<string, number>>();
+
+  currentDelegatedRootReleaseBatch = batch;
+
+  try {
+    return fn();
+  } finally {
+    currentDelegatedRootReleaseBatch = previousBatch;
+
+    if (previousBatch === undefined) {
+      flushDelegatedRootReleaseBatch(batch);
+    }
   }
 }
 
@@ -343,6 +363,38 @@ function retainDelegatedRoot(root: EventTarget, type: string): void {
 }
 
 function releaseDelegatedRoot(root: EventTarget, type: string): void {
+  const batch = currentDelegatedRootReleaseBatch;
+
+  if (batch !== undefined) {
+    let releasesByType = batch.get(root);
+
+    if (releasesByType === undefined) {
+      releasesByType = Object.create(null) as Record<string, number>;
+      batch.set(root, releasesByType);
+    }
+
+    releasesByType[type] = (releasesByType[type] ?? 0) + 1;
+    return;
+  }
+
+  releaseDelegatedRootCount(root, type, 1);
+}
+
+function flushDelegatedRootReleaseBatch(
+  batch: Map<EventTarget, Record<string, number>>,
+): void {
+  for (const [root, releasesByType] of batch) {
+    for (const [type, count] of Object.entries(releasesByType)) {
+      releaseDelegatedRootCount(root, type, count);
+    }
+  }
+}
+
+function releaseDelegatedRootCount(
+  root: EventTarget,
+  type: string,
+  count: number,
+): void {
   const rootsByType = delegatedRoots.get(root);
   const current = rootsByType?.get(type);
 
@@ -350,7 +402,7 @@ function releaseDelegatedRoot(root: EventTarget, type: string): void {
     return;
   }
 
-  current.count -= 1;
+  current.count -= count;
 
   if (current.count > 0) {
     return;
