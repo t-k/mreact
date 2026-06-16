@@ -61,6 +61,9 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
     expect(main).toContain("createTemplate");
     expect(main).toContain("const createRowTemplate = createTemplate(");
+    expect(main).toContain('class="col-md-1"> </td>');
+    expect(main).toContain("const idText = idCell.firstChild as Text;");
+    expect(main).toContain("const labelText = selectLink.firstChild as Text;");
     expect(main).toContain("bindList(");
     expect(main).toContain("bindProp(tr, \"className\"");
     expect(main).toContain("selectedRow(row.id) ? \"danger\" : \"\"");
@@ -71,6 +74,7 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).not.toContain("rowElements");
     expect(main).not.toContain("previousSelectedRow");
     expect(main).not.toContain(".className =");
+    expect(main).not.toContain("document.createTextNode(String(row.id))");
   });
 });
 
