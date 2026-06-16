@@ -59,8 +59,8 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("selector");
     expect(main).toContain("const selectedRow = selector<number | null, number>(selected);");
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
-    expect(main).toContain("createTemplate");
-    expect(main).toContain("const createRowTemplate = createTemplate(");
+    expect(main).toContain("createElementTemplate");
+    expect(main).toContain("const createRow = createElementTemplate<HTMLTableRowElement>(");
     expect(main).toContain('class="col-md-1"> </td>');
     expect(main).toContain('data-action="select"');
     expect(main).toContain('data-action="remove"');

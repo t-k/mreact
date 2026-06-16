@@ -9,7 +9,7 @@ import {
   bindList,
   bindSelectorClass,
   bindText,
-  createTemplate,
+  createElementTemplate,
   createRoot,
 } from "@reckona/mreact-reactive-dom";
 
@@ -166,14 +166,13 @@ function requireElement<T extends HTMLElement>(id: string): T {
   return element as T;
 }
 
-const createRowTemplate = createTemplate(
+const createRow = createElementTemplate<HTMLTableRowElement>(
   '<tr><td class="col-md-1"> </td><td class="col-md-4"><a data-action="select"> </a></td><td class="col-md-1"><a data-action="remove"><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
 );
 const rowIds = new WeakMap<HTMLTableRowElement, number>();
 
 function renderRow(row: Row): HTMLTableRowElement {
-  const fragment = createRowTemplate();
-  const tr = fragment.firstElementChild as HTMLTableRowElement;
+  const tr = createRow();
   const idCell = tr.firstElementChild as HTMLTableCellElement;
   const labelCell = idCell.nextElementSibling as HTMLTableCellElement;
   const selectLink = labelCell.firstElementChild as HTMLAnchorElement;
