@@ -6,6 +6,8 @@ import type { ReadonlyCell } from "./types.js";
 
 /** Equality function used by selector keys. */
 export type SelectorEquality<TValue, TKey> = (value: TValue, key: TKey) => boolean;
+type SelectorCallback = (selected: boolean) => void;
+type SelectorCallbacks = SelectorCallback | Set<SelectorCallback>;
 
 /** A keyed boolean selector with an explicit disposer for the source subscription. */
 export interface Selector<TValue, TKey = TValue> {
@@ -15,7 +17,7 @@ export interface Selector<TValue, TKey = TValue> {
 }
 
 interface SelectorSource<TKey> extends Source {
-  callbacks?: Set<(selected: boolean) => void> | undefined;
+  callbacks?: SelectorCallbacks | undefined;
   key: TKey;
   owner: Map<TKey, SelectorSource<TKey>>;
   selected: boolean;
@@ -81,14 +83,29 @@ export function selector<TValue, TKey = TValue>(
 
   select.subscribe = (key, listener) => {
     const selectorSource = getOrCreateSelectorSource(key);
+    const callbacks = selectorSource.callbacks;
 
-    (selectorSource.callbacks ??= new Set()).add(listener);
+    if (callbacks === undefined) {
+      selectorSource.callbacks = listener;
+    } else if (typeof callbacks === "function") {
+      if (callbacks !== listener) {
+        selectorSource.callbacks = new Set([callbacks, listener]);
+      }
+    } else {
+      callbacks.add(listener);
+    }
 
     return () => {
-      selectorSource.callbacks?.delete(listener);
+      const currentCallbacks = selectorSource.callbacks;
 
-      if (selectorSource.callbacks?.size === 0) {
+      if (currentCallbacks === listener) {
         selectorSource.callbacks = undefined;
+      } else if (currentCallbacks instanceof Set) {
+        currentCallbacks.delete(listener);
+
+        if (currentCallbacks.size === 0) {
+          selectorSource.callbacks = undefined;
+        }
       }
 
       cleanupSelectorSource.call(selectorSource);
@@ -127,7 +144,9 @@ function updateSelectorSource<TKey>(
   selectorSource.selected = selected;
   const callbacks = selectorSource.callbacks;
 
-  if (callbacks !== undefined) {
+  if (typeof callbacks === "function") {
+    callbacks(selected);
+  } else if (callbacks !== undefined) {
     for (const callback of callbacks) {
       callback(selected);
     }

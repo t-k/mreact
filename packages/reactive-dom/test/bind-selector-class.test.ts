@@ -73,7 +73,7 @@ describe("bindSelectorClass", () => {
     selectedFor.subscribe = () => () => {};
     selectedFor.dispose = () => {};
 
-    const dispose = bindSelectorClass(row, "danger", selectedFor, 1, {
+    const dispose = bindSelectorClass(row, "danger", selectedFor, 2, {
       preserveInitial: true,
     });
 

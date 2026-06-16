@@ -105,4 +105,34 @@ describe("selector", () => {
     disposers[2]?.();
     selectedFor.dispose();
   });
+
+  test("supports multiple key subscriptions without dropping remaining callbacks", async () => {
+    const selected = cell<number | null>(null);
+    const selectedFor = selector<number | null, number>(selected);
+    const firstCalls: boolean[] = [];
+    const secondCalls: boolean[] = [];
+    const disposeFirst = selectedFor.subscribe(1, (isSelected) => {
+      firstCalls.push(isSelected);
+    });
+    const disposeSecond = selectedFor.subscribe(1, (isSelected) => {
+      secondCalls.push(isSelected);
+    });
+
+    selected.set(1);
+    await flushEffects();
+
+    expect(firstCalls).toEqual([true]);
+    expect(secondCalls).toEqual([true]);
+
+    disposeFirst();
+    selected.set(null);
+    await flushEffects();
+
+    expect(firstCalls).toEqual([true]);
+    expect(secondCalls).toEqual([true, false]);
+
+    disposeSecond();
+    selectedFor.dispose();
+  });
+
 });
