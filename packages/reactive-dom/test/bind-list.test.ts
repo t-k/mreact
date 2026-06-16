@@ -1269,6 +1269,64 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("reorders swapped keyed records without allocating a full LIS array", async () => {
+    const values = [0, 1, 2, 3, 4, 5];
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
+    const arrayFrom = Array.from;
+    let lisArrayAllocations = 0;
+
+    Array.from = function countedArrayFrom<T>(
+      source: ArrayLike<T> | Iterable<T>,
+      mapFn?: (value: T, index: number) => T,
+      thisArg?: unknown,
+    ): T[] {
+      if (
+        typeof source === "object" &&
+        source !== null &&
+        "length" in source &&
+        source.length === values.length &&
+        mapFn !== undefined
+      ) {
+        lisArrayAllocations += 1;
+      }
+
+      return arrayFrom.call(Array, source, mapFn as never, thisArg) as T[];
+    } as typeof Array.from;
+
+    try {
+      items.set([0, 4, 2, 3, 1, 5]);
+      await flushEffects();
+    } finally {
+      Array.from = arrayFrom;
+    }
+
+    expect(lisArrayAllocations).toBe(0);
+    expect(parent.innerHTML).toBe(
+      "<li>0</li><li>4</li><li>2</li><li>3</li><li>1</li><li>5</li><!--list-->",
+    );
+    expect(parent.childNodes[1]).toBe(originalNodes[4]);
+    expect(parent.childNodes[4]).toBe(originalNodes[1]);
+
+    dispose();
+  });
+
   test("removes keyed list items without replacing or reinserting retained nodes", async () => {
     const items = cell([0, 1, 2, 3]);
     const parent = document.createElement("ul");

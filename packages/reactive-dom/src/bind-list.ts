@@ -589,6 +589,17 @@ function reconcileKeyedRecordOrderWithMoveLimit(
   orderedRecords: readonly KeyedRecord[],
   maxMovedNodes: number,
 ): boolean {
+  const swappedPairResult = reconcileSwappedKeyedRecordPair(
+    parent,
+    marker,
+    orderedRecords,
+    maxMovedNodes,
+  );
+
+  if (swappedPairResult !== undefined) {
+    return swappedPairResult;
+  }
+
   const previousOrder: number[] = [];
   for (let index = 0; index < orderedRecords.length; index += 1) {
     previousOrder.push(orderedRecords[index]?.prevIndex ?? -1);
@@ -629,6 +640,82 @@ function reconcileKeyedRecordOrderWithMoveLimit(
     }
 
     anchor = firstNode;
+  }
+
+  return true;
+}
+
+function reconcileSwappedKeyedRecordPair(
+  parent: ParentNode,
+  marker: ChildNode,
+  orderedRecords: readonly KeyedRecord[],
+  maxMovedNodes: number,
+): boolean | undefined {
+  if (!Number.isFinite(maxMovedNodes)) {
+    return undefined;
+  }
+
+  let firstMovedIndex = -1;
+  let secondMovedIndex = -1;
+  let movedNodes = 0;
+
+  for (let index = 0; index < orderedRecords.length; index += 1) {
+    const record = orderedRecords[index];
+    const previousIndex = record?.prevIndex ?? -1;
+
+    if (previousIndex === index) {
+      continue;
+    }
+
+    if (previousIndex < 0 || record === undefined) {
+      return undefined;
+    }
+
+    if (firstMovedIndex === -1) {
+      firstMovedIndex = index;
+    } else if (secondMovedIndex === -1) {
+      secondMovedIndex = index;
+    } else {
+      return undefined;
+    }
+
+    movedNodes += record.nodes.length;
+  }
+
+  if (firstMovedIndex === -1 || secondMovedIndex === -1) {
+    return undefined;
+  }
+
+  const firstRecord = orderedRecords[firstMovedIndex];
+  const secondRecord = orderedRecords[secondMovedIndex];
+
+  if (
+    firstRecord === undefined ||
+    secondRecord === undefined ||
+    firstRecord.prevIndex !== secondMovedIndex ||
+    secondRecord.prevIndex !== firstMovedIndex
+  ) {
+    return undefined;
+  }
+
+  if (movedNodes > maxMovedNodes) {
+    return false;
+  }
+
+  const firstAnchor = secondRecord.nodes[0] as ChildNode | undefined;
+  const secondAnchor =
+    (orderedRecords[secondMovedIndex + 1]?.nodes[0] as ChildNode | undefined) ?? marker;
+
+  if (firstAnchor === undefined) {
+    return undefined;
+  }
+
+  for (const node of firstRecord.nodes) {
+    parent.insertBefore(node, firstAnchor);
+  }
+
+  for (const node of secondRecord.nodes) {
+    parent.insertBefore(node, secondAnchor);
   }
 
   return true;
