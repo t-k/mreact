@@ -348,7 +348,7 @@ function bindKeyedList<T>(
 
     if (canClaimEmptyParent) {
       const disposeError = disposeStaleRecords(records, nextRecords);
-      insertionParent.replaceChildren(...orderedNodes, marker);
+      replaceWithOrderedNodes(insertionParent, marker, orderedNodes);
       promoteRecordEvents(nextRecords.values());
       if (disposeError !== undefined) {
         throw disposeError;
@@ -372,7 +372,7 @@ function bindKeyedList<T>(
       }
 
       const disposeError = disposeStaleRecords(records, nextRecords);
-      insertionParent.replaceChildren(...orderedNodes, marker);
+      replaceWithOrderedNodes(insertionParent, marker, orderedNodes);
       promoteRecordEvents(nextRecords.values());
       if (disposeError !== undefined) {
         throw disposeError;
@@ -401,6 +401,20 @@ function bindKeyedList<T>(
 
     records = new Map();
   });
+}
+
+function replaceWithOrderedNodes(
+  parent: ListParentNode,
+  marker: ChildNode,
+  orderedNodes: readonly Node[],
+): void {
+  const fragment = document.createDocumentFragment();
+
+  for (const node of orderedNodes) {
+    fragment.appendChild(node);
+  }
+
+  parent.replaceChildren(fragment, marker);
 }
 
 function uniqueKeyedItems<T>(
@@ -506,9 +520,10 @@ function tryAppendKeyedRecords<T>(
   }
 
   // When the marker is the parent's last child the new rows can use plain
-  // appendChild (then re-append the marker once) instead of paying the
-  // insert-before-marker position lookup for every node.
+  // appendChild with a fragment (then re-append the marker once) instead of
+  // paying the insert-before-marker position lookup for every node.
   const appendToParentTail = marker.nextSibling === null;
+  const appendFragment = appendToParentTail ? document.createDocumentFragment() : undefined;
 
   let appendedNodeCount = 0;
   for (let slot = records.size; slot < keys.length; slot += 1) {
@@ -526,8 +541,8 @@ function tryAppendKeyedRecords<T>(
     appendedNodeCount += record.nodes.length;
 
     for (const node of record.nodes) {
-      if (appendToParentTail) {
-        parent.appendChild(node);
+      if (appendFragment !== undefined) {
+        appendFragment.appendChild(node);
       } else {
         parent.insertBefore(node, marker);
       }
@@ -536,6 +551,7 @@ function tryAppendKeyedRecords<T>(
   }
 
   if (appendToParentTail && appendedNodeCount > 0) {
+    parent.appendChild(appendFragment as DocumentFragment);
     parent.appendChild(marker);
   }
 

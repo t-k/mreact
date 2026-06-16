@@ -350,7 +350,7 @@ describe("bindList", () => {
     dispose();
   });
 
-  test("renders initial keyed rows with one whole-parent replacement", () => {
+  test("renders initial keyed rows with one fragment-backed whole-parent replacement", () => {
     const values = Array.from({ length: 1000 }, (_, index) => index);
     const items = cell(values);
     const parent = document.createElement("ul");
@@ -364,8 +364,12 @@ describe("bindList", () => {
       parentInsertions += 1;
       return insertBefore(node, child);
     }) as typeof parent.insertBefore;
+    let replacementArgumentCount = 0;
+    let firstReplacementNode: Node | undefined;
     parent.replaceChildren = ((...nodes) => {
       parentReplacements += 1;
+      replacementArgumentCount = nodes.length;
+      firstReplacementNode = nodes[0];
       return replaceChildren(...nodes);
     }) as typeof parent.replaceChildren;
 
@@ -383,6 +387,8 @@ describe("bindList", () => {
 
     expect(parentInsertions).toBe(0);
     expect(parentReplacements).toBe(1);
+    expect(replacementArgumentCount).toBe(2);
+    expect(firstReplacementNode).toBeInstanceOf(DocumentFragment);
     expect(parent.childNodes[0]?.textContent).toBe("0");
     expect(parent.childNodes[1000]).toBe(marker);
 
@@ -1085,6 +1091,7 @@ describe("bindList", () => {
     const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
     let parentInsertions = 0;
     let parentAppends = 0;
+    const appendedNodes: Node[] = [];
     let parentReplacements = 0;
     let parentRemovals = 0;
     const insertBefore = parent.insertBefore.bind(parent);
@@ -1097,6 +1104,7 @@ describe("bindList", () => {
     }) as typeof parent.insertBefore;
     parent.appendChild = ((node) => {
       parentAppends += 1;
+      appendedNodes.push(node);
       return appendChild(node);
     }) as typeof parent.appendChild;
     parent.replaceChildren = ((...nodes) => {
@@ -1111,9 +1119,11 @@ describe("bindList", () => {
     items.set([0, 1, 2, 3, 4]);
     await flushEffects();
 
-    // Tail appends use appendChild per new row plus one marker re-append;
+    // Tail appends use one fragment append plus one marker re-append;
     // existing rows must never be rebuilt, replaced, or removed.
-    expect(parentInsertions + parentAppends).toBe(3);
+    expect(parentInsertions).toBe(0);
+    expect(parentAppends).toBeGreaterThan(0);
+    expect(appendedNodes.some((node) => node instanceof DocumentFragment)).toBe(true);
     expect(parentReplacements).toBe(0);
     expect(parentRemovals).toBe(0);
     expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(
