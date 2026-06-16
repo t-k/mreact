@@ -125,6 +125,27 @@ export default function Page() {
     expect(output.code).not.toContain("__mreactRouteStateSignature");
   });
 
+  test("captures event binding metadata while evaluating route hydration nodes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-event-metadata-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export const clientNavigation = false;
+
+export default function Page() {
+  return <button type="button" onClick={() => document.body.setAttribute("data-clicked", "yes")}>Click</button>;
+}`;
+    await writeFile(file, code);
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(output.code).toContain("function withEventBindingMetadata");
+    expect(output.code).toContain(
+      "withEventBindingMetadata(() => __mreactEvaluateHydrationNode",
+    );
+  });
+
   test("annotates runtime route script imports so Vite does not warn", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-ignore-"));
     const file = join(appDir, "page.mreact.tsx");

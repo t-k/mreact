@@ -36,6 +36,17 @@ let currentDelegatedRootReleaseBatch:
   | Map<EventTarget, Record<string, number>>
   | undefined;
 let disconnectedPromotionFlushQueued = false;
+let eventBindingMetadataDepth = 0;
+
+export function withEventBindingMetadata<T>(fn: () => T): T {
+  eventBindingMetadataDepth += 1;
+
+  try {
+    return fn();
+  } finally {
+    eventBindingMetadataDepth -= 1;
+  }
+}
 
 export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
   promote(): void;
@@ -86,17 +97,20 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
 ): Dispose {
   const listener = handler as EventListener;
   const useDelegation = options?.direct !== true && delegatedEventTypes.includes(` ${type} `);
-  const eventElement = element as EventElement;
-  const binding = { delegated: useDelegation, listener, type };
+  const eventElement = eventBindingMetadataDepth > 0 ? (element as EventElement) : undefined;
+  const binding =
+    eventElement === undefined ? undefined : { delegated: useDelegation, listener, type };
 
-  eventElement.__mreactHasEvents = true;
-  const bindings = eventElement.__mreactEventBindings;
-  if (bindings === undefined) {
-    eventElement.__mreactEventBindings = binding;
-  } else if (Array.isArray(bindings)) {
-    bindings.push(binding);
-  } else {
-    eventElement.__mreactEventBindings = [bindings, binding];
+  if (eventElement !== undefined && binding !== undefined) {
+    eventElement.__mreactHasEvents = true;
+    const bindings = eventElement.__mreactEventBindings;
+    if (bindings === undefined) {
+      eventElement.__mreactEventBindings = binding;
+    } else if (Array.isArray(bindings)) {
+      bindings.push(binding);
+    } else {
+      eventElement.__mreactEventBindings = [bindings, binding];
+    }
   }
 
   let disposeListener: Dispose;
@@ -109,6 +123,11 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
 
   return registerDispose(() => {
     disposeListener();
+
+    if (eventElement === undefined || binding === undefined) {
+      return;
+    }
+
     const currentBindings = eventElement.__mreactEventBindings;
 
     if (Array.isArray(currentBindings)) {

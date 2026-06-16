@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { bindEvent } from "../src/index.js";
+import { bindEvent, withEventBindingMetadata } from "../src/index.js";
 
 describe("bindEvent", () => {
   test("uses native events and removes listener on dispose", () => {
@@ -239,24 +239,35 @@ describe("bindEvent", () => {
     document.addEventListener = documentAddEventListener;
   });
 
-  test("stores a single event binding without array metadata", () => {
+  test("skips event binding metadata unless metadata capture is enabled", () => {
     const button = document.createElement("button");
 
     const dispose = bindEvent(button, "click", () => {});
+
+    expect((button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings).toBeUndefined();
+    expect((button as unknown as { __mreactHasEvents?: true }).__mreactHasEvents).toBeUndefined();
+
+    dispose();
+  });
+
+  test("captures a single event binding without array metadata when requested", () => {
+    const button = document.createElement("button");
+
+    const dispose = withEventBindingMetadata(() => bindEvent(button, "click", () => {}));
 
     expect(Array.isArray((button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings)).toBe(false);
 
     dispose();
   });
 
-  test("promotes event binding metadata to an array for multiple bindings", () => {
+  test("promotes event binding metadata to an array for multiple captured bindings", () => {
     const button = document.createElement("button");
 
-    const disposeFirst = bindEvent(button, "click", () => {});
+    const disposeFirst = withEventBindingMetadata(() => bindEvent(button, "click", () => {}));
     const firstBinding = (button as unknown as { __mreactEventBindings?: unknown })
       .__mreactEventBindings;
 
-    const disposeSecond = bindEvent(button, "input", () => {});
+    const disposeSecond = withEventBindingMetadata(() => bindEvent(button, "input", () => {}));
     const bindings = (button as unknown as { __mreactEventBindings?: unknown[] })
       .__mreactEventBindings;
 
@@ -267,11 +278,11 @@ describe("bindEvent", () => {
     disposeSecond();
   });
 
-  test("prunes event binding metadata on dispose", () => {
+  test("prunes captured event binding metadata on dispose", () => {
     const button = document.createElement("button");
 
-    const disposeFirst = bindEvent(button, "click", () => {});
-    const disposeSecond = bindEvent(button, "input", () => {});
+    const disposeFirst = withEventBindingMetadata(() => bindEvent(button, "click", () => {}));
+    const disposeSecond = withEventBindingMetadata(() => bindEvent(button, "input", () => {}));
 
     const eventElement = button as unknown as {
       __mreactEventBindings?: unknown[];

@@ -1,4 +1,4 @@
-export { bindEvent } from "./bind-event.js";
+export { bindEvent, withEventBindingMetadata } from "./bind-event.js";
 export type { BindEventOptions } from "./bind-event.js";
 export { bindList } from "./bind-list.js";
 export { bindProp } from "./bind-prop.js";
