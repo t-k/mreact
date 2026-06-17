@@ -1,8 +1,14 @@
-import { effect } from "@reckona/mreact-reactive-core";
-import { registerDispose } from "./scope.js";
+import { effect, untrack } from "@reckona/mreact-reactive-core";
+import type { ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { subscribeCell } from "@reckona/mreact-reactive-core/internal";
+import { registerDispose, registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
 export interface BindTextBatchOptions {
+  preserveInitial?: boolean;
+}
+
+export interface BindTextOptions {
   preserveInitial?: boolean;
 }
 
@@ -21,15 +27,52 @@ function normalizeText(value: unknown): string {
 }
 
 /** Binds a text node to a reactive value. */
-export function bindText(node: Text, value: () => unknown): Dispose {
+export function bindText(
+  node: Text,
+  value: ReadonlyCell<unknown> | (() => unknown),
+  options?: BindTextOptions,
+): Dispose {
   const reactiveText = node as Text & { __mreactReactiveText?: true };
 
   reactiveText.__mreactReactiveText = true;
+  let shouldWrite = options?.preserveInitial !== true;
+
+  if (typeof value !== "function") {
+    const directDispose = subscribeCell(value, (nextValue) => {
+      const text = normalizeText(nextValue);
+
+      if (!shouldWrite) {
+        shouldWrite = true;
+        return;
+      }
+
+      node.data = text;
+    });
+
+    if (directDispose !== undefined) {
+      if (shouldWrite) {
+        node.data = normalizeText(untrack(() => value.get()));
+      } else {
+        shouldWrite = true;
+      }
+
+      return registerIdempotentDispose(directDispose);
+    }
+  }
+
+  const readValue = typeof value === "function" ? value : () => value.get();
   const dispose = effect(() => {
-    node.data = normalizeText(value());
+    const text = normalizeText(readValue());
+
+    if (!shouldWrite) {
+      shouldWrite = true;
+      return;
+    }
+
+    node.data = text;
   });
 
-  return registerDispose(dispose);
+  return registerIdempotentDispose(dispose);
 }
 
 /** Binds multiple text nodes to the same reactive value. */

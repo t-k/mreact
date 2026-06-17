@@ -1,12 +1,76 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindList, bindText } from "../src/index.js";
-import { registerDispose } from "../src/scope.js";
+import { bindEvent, bindList, bindText } from "../src/index.js";
+import {
+  createScope,
+  disposeScope,
+  registerDispose,
+  registerIdempotentDispose,
+  withScope,
+} from "../src/scope.js";
 
 describe("bindList", () => {
+  test("can register known-idempotent disposers without wrapper allocation", () => {
+    const scope = createScope();
+    let calls = 0;
+    const dispose = () => {
+      calls += 1;
+    };
+
+    const registered = withScope(scope, () => registerIdempotentDispose(dispose));
+
+    expect(registered).toBe(dispose);
+
+    disposeScope(scope);
+
+    expect(calls).toBe(1);
+  });
+
+  test("promotes delegated row events after mount without detached fallback listeners", () => {
+    const items = cell([1, 2]);
+    const parent = document.createElement("div");
+    const marker = document.createComment("list");
+    const calls: number[] = [];
+    let buttonClickFallbacks = 0;
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const button = document.createElement("button");
+        const addEventListener = button.addEventListener.bind(button);
+        button.addEventListener = ((type, listener, options) => {
+          if (type === "click") {
+            buttonClickFallbacks += 1;
+          }
+          addEventListener(type, listener, options);
+        }) as typeof button.addEventListener;
+        bindEvent(button, "click", () => {
+          calls.push(item);
+        });
+        button.textContent = String(item);
+        return button;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    expect(buttonClickFallbacks).toBe(0);
+
+    (parent.firstElementChild as HTMLButtonElement).click();
+    expect(calls).toEqual([1]);
+
+    dispose();
+    parent.remove();
+  });
+
   test("renders a simple unkeyed list and redraws on update", async () => {
     const items = cell(["A", "B"]);
     const parent = document.createElement("ul");
@@ -68,6 +132,16 @@ describe("bindList", () => {
     expect(parent.childNodes[1]).toBe(firstA);
 
     dispose();
+  });
+
+  test("builds keyed item key arrays without Array.from allocation", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages/reactive-dom/src/bind-list.ts"),
+      "utf8",
+    );
+
+    expect(source).toContain("new Array<unknown>(length)");
+    expect(source).not.toContain("Array.from({ length })");
   });
 
   test("updates keyed row index-dependent bindings after reorder", async () => {
@@ -298,7 +372,7 @@ describe("bindList", () => {
     dispose();
   });
 
-  test("renders initial keyed rows with one whole-parent replacement", () => {
+  test("renders initial keyed rows with one fragment-backed whole-parent replacement", () => {
     const values = Array.from({ length: 1000 }, (_, index) => index);
     const items = cell(values);
     const parent = document.createElement("ul");
@@ -312,8 +386,12 @@ describe("bindList", () => {
       parentInsertions += 1;
       return insertBefore(node, child);
     }) as typeof parent.insertBefore;
+    let replacementArgumentCount = 0;
+    let firstReplacementNode: Node | undefined;
     parent.replaceChildren = ((...nodes) => {
       parentReplacements += 1;
+      replacementArgumentCount = nodes.length;
+      firstReplacementNode = nodes[0];
       return replaceChildren(...nodes);
     }) as typeof parent.replaceChildren;
 
@@ -331,6 +409,8 @@ describe("bindList", () => {
 
     expect(parentInsertions).toBe(0);
     expect(parentReplacements).toBe(1);
+    expect(replacementArgumentCount).toBe(2);
+    expect(firstReplacementNode).toBeInstanceOf(DocumentFragment);
     expect(parent.childNodes[0]?.textContent).toBe("0");
     expect(parent.childNodes[1000]).toBe(marker);
 
@@ -1033,6 +1113,7 @@ describe("bindList", () => {
     const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
     let parentInsertions = 0;
     let parentAppends = 0;
+    const appendedNodes: Node[] = [];
     let parentReplacements = 0;
     let parentRemovals = 0;
     const insertBefore = parent.insertBefore.bind(parent);
@@ -1045,6 +1126,7 @@ describe("bindList", () => {
     }) as typeof parent.insertBefore;
     parent.appendChild = ((node) => {
       parentAppends += 1;
+      appendedNodes.push(node);
       return appendChild(node);
     }) as typeof parent.appendChild;
     parent.replaceChildren = ((...nodes) => {
@@ -1059,9 +1141,11 @@ describe("bindList", () => {
     items.set([0, 1, 2, 3, 4]);
     await flushEffects();
 
-    // Tail appends use appendChild per new row plus one marker re-append;
+    // Tail appends use one fragment append plus one marker re-append;
     // existing rows must never be rebuilt, replaced, or removed.
-    expect(parentInsertions + parentAppends).toBe(3);
+    expect(parentInsertions).toBe(0);
+    expect(parentAppends).toBeGreaterThan(0);
+    expect(appendedNodes.some((node) => node instanceof DocumentFragment)).toBe(true);
     expect(parentReplacements).toBe(0);
     expect(parentRemovals).toBe(0);
     expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(
@@ -1072,6 +1156,50 @@ describe("bindList", () => {
     );
 
     dispose();
+  });
+
+  test("batches delegated root release lookups when clearing keyed rows", async () => {
+    const values = Array.from({ length: 10 }, (_, index) => index);
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    document.body.append(parent);
+    const mapGet = Map.prototype.get;
+    let clickRootLookups = 0;
+
+    Map.prototype.get = function countedGet<K, V>(this: Map<K, V>, key: K): V | undefined {
+      if (key === "click") {
+        clickRootLookups += 1;
+      }
+      return mapGet.call(this, key);
+    };
+
+    try {
+      const dispose = bindList(
+        parent,
+        marker,
+        () => items.get(),
+        (item) => {
+          const button = document.createElement("button");
+          button.textContent = String(item);
+          bindEvent(button, "click", () => {});
+          return button;
+        },
+        { itemMode: "static", key: (item) => item },
+      );
+
+      clickRootLookups = 0;
+      items.set([]);
+      await flushEffects();
+
+      expect(clickRootLookups).toBeLessThan(values.length);
+
+      dispose();
+    } finally {
+      Map.prototype.get = mapGet;
+      parent.remove();
+    }
   });
 
   test("appends keyed list items without building an extra appended-key set", async () => {
@@ -1111,6 +1239,230 @@ describe("bindList", () => {
 
     expect(setCreations).toBe(3);
     expect(parent.innerHTML).toBe("<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->");
+    dispose();
+  });
+
+  test("swaps keyed list items with targeted moves instead of replacing the owned parent", async () => {
+    const items = cell([0, 1, 2, 3, 4]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes).slice(0, 5);
+    let parentInsertions = 0;
+    let parentReplacements = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+
+    items.set([0, 3, 2, 1, 4]);
+    await flushEffects();
+
+    expect(parentReplacements).toBe(0);
+    expect(parentInsertions).toBe(2);
+    expect(Array.from(parent.childNodes).slice(0, 5)).toEqual([
+      originalNodes[0],
+      originalNodes[3],
+      originalNodes[2],
+      originalNodes[1],
+      originalNodes[4],
+    ]);
+    expect(parent.innerHTML).toBe("<li>0</li><li>3</li><li>2</li><li>1</li><li>4</li><!--list-->");
+
+    dispose();
+  });
+
+  test("swaps keyed list items without building a duplicate-key tracking set", async () => {
+    const items = cell([0, 1, 2, 3, 4]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    const OriginalSet = globalThis.Set;
+    let setCreations = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          super(values ?? undefined);
+          setCreations += 1;
+        }
+      } as SetConstructor;
+
+      items.set([0, 3, 2, 1, 4]);
+      await flushEffects();
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    expect(setCreations).toBe(0);
+    expect(parent.innerHTML).toBe("<li>0</li><li>3</li><li>2</li><li>1</li><li>4</li><!--list-->");
+
+    dispose();
+  });
+
+  test("reorders swapped keyed records without allocating a full LIS array", async () => {
+    const values = [0, 1, 2, 3, 4, 5];
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
+    const arrayFrom = Array.from;
+    const arrayPush = Array.prototype.push;
+    let lisArrayAllocations = 0;
+    let orderedNodePushes = 0;
+    let orderedRecordPushes = 0;
+
+    Array.from = function countedArrayFrom<T>(
+      source: ArrayLike<T> | Iterable<T>,
+      mapFn?: (value: T, index: number) => T,
+      thisArg?: unknown,
+    ): T[] {
+      if (
+        typeof source === "object" &&
+        source !== null &&
+        "length" in source &&
+        source.length === values.length &&
+        mapFn !== undefined
+      ) {
+        lisArrayAllocations += 1;
+      }
+
+      return arrayFrom.call(Array, source, mapFn as never, thisArg) as T[];
+    } as typeof Array.from;
+    Array.prototype.push = function countedArrayPush<T>(
+      this: T[],
+      ...valuesToPush: T[]
+    ): number {
+      if (valuesToPush.every((value) => value instanceof Node)) {
+        orderedNodePushes += valuesToPush.length;
+      } else if (
+        valuesToPush.every(
+          (value) =>
+            typeof value === "object" &&
+            value !== null &&
+            "nodes" in value &&
+            "currentItem" in value,
+        )
+      ) {
+        orderedRecordPushes += valuesToPush.length;
+      }
+
+      return arrayPush.apply(this, valuesToPush);
+    };
+
+    try {
+      items.set([0, 4, 2, 3, 1, 5]);
+      await flushEffects();
+    } finally {
+      Array.from = arrayFrom;
+      Array.prototype.push = arrayPush;
+    }
+
+    expect(lisArrayAllocations).toBe(0);
+    expect(orderedNodePushes).toBe(0);
+    expect(orderedRecordPushes).toBe(0);
+    expect(parent.innerHTML).toBe(
+      "<li>0</li><li>4</li><li>2</li><li>3</li><li>1</li><li>5</li><!--list-->",
+    );
+    expect(parent.childNodes[1]).toBe(originalNodes[4]);
+    expect(parent.childNodes[4]).toBe(originalNodes[1]);
+
+    dispose();
+  });
+
+  test("updates reactive keyed records while using the swapped-record fast path", async () => {
+    const items = cell([
+      { id: 0, label: "0" },
+      { id: 1, label: "1" },
+      { id: 2, label: "2" },
+      { id: 3, label: "3" },
+      { id: 4, label: "4" },
+      { id: 5, label: "5" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        bindText(li.appendChild(document.createTextNode("")), () => item.label);
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    let parentInsertions = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    parent.insertBefore = ((node, child) => {
+      parentInsertions += 1;
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+
+    items.set([
+      { id: 0, label: "zero" },
+      { id: 4, label: "four" },
+      { id: 2, label: "two" },
+      { id: 3, label: "three" },
+      { id: 1, label: "one" },
+      { id: 5, label: "five" },
+    ]);
+    await flushEffects();
+
+    expect(parentInsertions).toBe(2);
+    expect(parent.innerHTML).toBe(
+      "<li>zero</li><li>four</li><li>two</li><li>three</li><li>one</li><li>five</li><!--list-->",
+    );
+
     dispose();
   });
 
@@ -1274,11 +1626,13 @@ describe("bindList", () => {
     );
 
     let parentReplacements = 0;
+    let largestReplacementArgCount = 0;
     let explicitRecordRemovals = 0;
     const replaceChildren = parent.replaceChildren.bind(parent);
     const removeChild = parent.removeChild.bind(parent);
     parent.replaceChildren = ((...nodes) => {
       parentReplacements += 1;
+      largestReplacementArgCount = Math.max(largestReplacementArgCount, nodes.length);
       return replaceChildren(...nodes);
     }) as typeof parent.replaceChildren;
     parent.removeChild = ((node) => {
@@ -1292,6 +1646,7 @@ describe("bindList", () => {
     await flushEffects();
 
     expect(parentReplacements).toBe(1);
+    expect(largestReplacementArgCount).toBe(2);
     expect(explicitRecordRemovals).toBe(0);
     expect(disposedRows).toBe(3);
     expect(parent.innerHTML).toBe("<li>10</li><li>11</li><li>12</li><!--list-->");

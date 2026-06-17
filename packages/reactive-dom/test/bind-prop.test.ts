@@ -1,11 +1,55 @@
 // @vitest-environment happy-dom
 
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindProp } from "../src/index.js";
+import { bindProp, withPropBindingMetadata } from "../src/index.js";
 
 describe("bindProp", () => {
+  test("keeps the default path free of prop binding metadata allocation", async () => {
+    const source = await readFile("packages/reactive-dom/src/bind-prop.ts", "utf8");
+    const defaultPathStart = source.indexOf("export function bindProp(");
+    const metadataPathStart = source.indexOf("function bindPropWithMetadata(");
+    const defaultPath = source.slice(defaultPathStart, metadataPathStart);
+
+    expect(defaultPath).toContain("hasActivePropBindingMetadata()");
+    expect(defaultPath).not.toContain("const binding");
+    expect(defaultPath).not.toContain("retarget(");
+  });
+
+  test("does not attach hydration metadata by default", () => {
+    const label = cell("Save");
+    const button = document.createElement("button") as HTMLButtonElement & {
+      __mreactHasReactiveProps?: boolean;
+      __mreactPropBindings?: unknown[];
+    };
+    const dispose = bindProp(button, "aria-label", () => label.get());
+
+    expect(button.getAttribute("aria-label")).toBe("Save");
+    expect(button.__mreactHasReactiveProps).toBeUndefined();
+    expect(button.__mreactPropBindings).toBeUndefined();
+
+    dispose();
+  });
+
+  test("captures hydration metadata inside an explicit metadata scope", () => {
+    const label = cell("Save");
+    const button = document.createElement("button") as HTMLButtonElement & {
+      __mreactHasReactiveProps?: boolean;
+      __mreactPropBindings?: unknown[];
+    };
+
+    const dispose = withPropBindingMetadata(() =>
+      bindProp(button, "aria-label", () => label.get()),
+    );
+
+    expect(button.__mreactHasReactiveProps).toBe(true);
+    expect(button.__mreactPropBindings).toHaveLength(1);
+
+    dispose();
+  });
+
   test("updates DOM properties", async () => {
     const disabled = cell(false);
     const button = document.createElement("button");

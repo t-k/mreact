@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { Fragment, createElement } from "../src/index.js";
+import { Fragment, createElement, memo } from "../src/index.js";
 import { createRoot, flushSync } from "../src/root.js";
 import {
   canRenderHostFiber,
@@ -35,7 +35,196 @@ describe("host reconciler module", () => {
     );
 
     expect(hostReconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
+    expect(hostReconcilerSource).not.toContain("for (const [key, instance] of runtime.instances)");
+    expect(hostReconcilerSource).toContain("runtime.instanceKeysByPrefix.get(prefix)");
     expect(reconcilerSource).not.toContain("Array.from(runtime.instances.keys())");
+  });
+
+  test("does not scan runtime instances for hookless memo subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("if (keys.length === 0) {");
+    expect(hostReconcilerSource).toContain("return false;");
+  });
+
+  test("uses a boolean committed host node probe for skipped children", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function hasCommittedHostNode(");
+    expect(hostReconcilerSource).toContain("!hasCommittedHostNode(child)");
+    expect(hostReconcilerSource).toContain("hasCommittedHostNode(alternateChild)");
+    expect(hostReconcilerSource).not.toContain("collectCommittedHostNodes(child).length");
+    expect(hostReconcilerSource).not.toContain("collectCommittedHostNodes(alternateChild).length");
+  });
+
+  test("skips dirty instance scans for hookless memo subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("hasDirtyInstanceDependencies:");
+    expect(hostReconcilerSource).toContain("hasUnflushedEffectDependencies:");
+    expect(hostReconcilerSource).toContain("memoStateNeedsDirtyInstanceCheck(previousMemoState)");
+    expect(hostReconcilerSource).toContain("memoStateNeedsEffectCheck(previousMemoState)");
+    expect(hostReconcilerSource).toContain("function hasDirtyInstanceDependencies(");
+  });
+
+  test("skips active instance marks for dependency-free memo subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("hasRetainedInstanceDependencies:");
+    expect(hostReconcilerSource).toContain("memoStateNeedsActiveInstanceMark(state)");
+    expect(hostReconcilerSource).toContain("function hasRetainedInstanceDependencies(");
+  });
+
+  test("reuses dependency-free memo bailout fibers without creating work in progress", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function getMemoBailoutFiber(");
+    expect(hostReconcilerSource).toContain("canReuseMemoBailoutFiber(current, state)");
+  });
+
+  test("keeps memo state props without snapshot spread copies", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("fiber.memoizedState = {");
+    expect(hostReconcilerSource).not.toContain(
+      "fiber.memoizedState = {\n      props: { ...node.props }",
+    );
+  });
+
+  test("checks class descendants once when recording memo state", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const memoStateStart = hostReconcilerSource.indexOf("const hasClassDescendant =");
+    const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
+    const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
+
+    expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
+    expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
+  });
+
+  test("builds runtime instance key prefixes without repeated slice joins", async () => {
+    const hooksSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/hooks.ts"),
+      "utf8",
+    );
+
+    expect(hooksSource).toContain("function forEachInstanceKeyPrefix(");
+    expect(hooksSource).not.toContain("parts.slice(0, index).join");
+  });
+
+  test("indexes runtime instance key prefixes without allocating prefix arrays", async () => {
+    const hooksSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/hooks.ts"),
+      "utf8",
+    );
+
+    expect(hooksSource).toContain("function forEachInstanceKeyPrefix(");
+    expect(hooksSource).not.toContain("for (const prefix of instanceKeyPrefixes(key))");
+  });
+
+  test("checks same-type memo bailout before generic element reconciliation", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function tryReuseMemoBailout(");
+    expect(hostReconcilerSource).toContain("const memoBailout = tryReuseMemoBailout(");
+    expect(hostReconcilerSource).toContain("if (memoBailout !== undefined) {");
+  });
+
+  test("checks dependency-free memo bailout before child path generation", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const bailoutIndex = hostReconcilerSource.indexOf(
+      "const memoBailout = tryReuseDependencyFreeMemoBailout(",
+    );
+    const pathIndex = hostReconcilerSource.indexOf(
+      "getReconcileChildPath(path, child, index, options)",
+    );
+
+    expect(bailoutIndex).toBeGreaterThanOrEqual(0);
+    expect(pathIndex).toBeGreaterThanOrEqual(0);
+    expect(bailoutIndex).toBeLessThan(pathIndex);
+  });
+
+  test("does not pre-walk the full keyed child list before generic reconciliation", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain("hasSameKeyOrder(currentFirstChild, children)");
+    expect(hostReconcilerSource).not.toContain("function hasSameKeyOrder(");
+    expect(hostReconcilerSource).toContain("canReuseMatchedCurrentFiber = true;");
+  });
+
+  test("reconciles matching keyed host child order without used-child set bookkeeping", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("div", { key: "a" }),
+      createElement("div", { key: "b" }),
+      createElement("div", { key: "c" }),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const OriginalSet = globalThis.Set;
+    let setConstructions = 0;
+
+    try {
+      globalThis.Set = class CountingSet<T> extends OriginalSet<T> {
+        constructor(values?: Iterable<T> | null) {
+          setConstructions += 1;
+          super(values ?? undefined);
+        }
+      } as SetConstructor;
+
+      renderHostFiberRoot(root, [
+        createElement("div", { key: "a" }),
+        createElement("div", { key: "b" }),
+        createElement("div", { key: "c" }),
+      ]);
+    } finally {
+      globalThis.Set = OriginalSet;
+    }
+
+    expect(setConstructions).toBe(0);
+  });
+
+  test("rejects non-host keyed row fast path before walking key order", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("!isKeyedRowHostElementCandidate(children[0])");
+    expect(hostReconcilerSource).toContain("function isKeyedRowHostElementCandidate(");
   });
 
   test("uses production host fast paths when no process global exists", async () => {
@@ -66,6 +255,18 @@ describe("host reconciler module", () => {
       globalWithProcess.process = originalProcess;
       vi.resetModules();
     }
+  });
+
+  test("does not eagerly compute hydration component names without hydration options", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain(
+      "withHydrationComponentStack(\n      options,\n      getComponentName(",
+    );
+    expect(hostReconcilerSource).toContain("getHydrationChildOptions(");
   });
 
   test("keeps vi.stubEnv control over host fast paths in node test environments", () => {
@@ -414,6 +615,36 @@ describe("host reconciler module", () => {
     expect(container.innerHTML).toBe(
       '<span data-key="a">A</span><span data-key="c">C</span>',
     );
+  });
+
+  test("commits keyed swaps for dependency-free memo rows", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const Row = memo(
+      function Row(props: { readonly id: number }) {
+        return createElement("span", { "data-key": props.id, key: props.id }, props.id);
+      },
+      (previous, next) => previous.id === next.id,
+    );
+    const renderRows = (ids: readonly number[]) => {
+      flushSync(() => {
+        root.render(ids.map((id) => createElement(Row, { id, key: id })));
+      });
+    };
+
+    renderRows([1, 2, 3]);
+    const first = container.children[0];
+    const second = container.children[1];
+    const third = container.children[2];
+
+    renderRows([1, 3, 2]);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="1">1</span><span data-key="3">3</span><span data-key="2">2</span>',
+    );
+    expect(container.children[0]).toBe(first);
+    expect(container.children[1]).toBe(third);
+    expect(container.children[2]).toBe(second);
   });
 
   test("appends keyed fragment children without resyncing unchanged siblings", () => {

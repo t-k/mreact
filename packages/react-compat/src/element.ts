@@ -100,17 +100,21 @@ export function createElement<P extends object>(
   type: ElementType<P>,
   config: (P & ReactReservedProps) | null,
   ...children: ReactCompatNode[]
+): ReactCompatElement<P>;
+export function createElement<P extends object>(
+  type: ElementType<P>,
+  config: (P & ReactReservedProps) | null,
 ): ReactCompatElement<P> {
+  const childCount = arguments.length - 2;
+
   if (typeof type === "string") {
     const key = config?.key === undefined ? null : String(config.key);
     const ref = config?.ref ?? null;
-    const props = copyElementProps(config) as P & { children?: ReactCompatNode };
+    const props = copyCreateElementProps(config) as P & {
+      children?: ReactCompatNode;
+    };
 
-    if (children.length === 1) {
-      props.children = children[0];
-    } else if (children.length > 1) {
-      props.children = children;
-    }
+    assignCreateElementChildren(props, childCount, arguments);
 
     setHostOwnPropsMeta(props);
 
@@ -127,15 +131,14 @@ export function createElement<P extends object>(
     typeof type === "object" && type !== null ? normalizeElementType(type) : type;
   const key = config?.key === undefined ? null : String(config.key);
   const ref = config?.ref ?? null;
-  const props = applyDefaultProps(normalizedType, copyElementProps(config)) as P & {
+  const props = applyDefaultProps(
+    normalizedType,
+    copyCreateElementProps(config),
+  ) as P & {
     children?: ReactCompatNode;
   };
 
-  if (children.length === 1) {
-    props.children = children[0];
-  } else if (children.length > 1) {
-    props.children = children;
-  }
+  assignCreateElementChildren(props, childCount, arguments);
 
   if (typeof normalizedType === "string") {
     setHostOwnPropsMeta(props);
@@ -148,6 +151,30 @@ export function createElement<P extends object>(
     ref,
     props: props as P & { children?: ReactCompatNode },
   };
+}
+
+function assignCreateElementChildren(
+  props: { children?: ReactCompatNode },
+  childCount: number,
+  args: IArguments,
+): void {
+  if (childCount === 1) {
+    props.children = args[2] as ReactCompatNode;
+    return;
+  }
+
+  if (childCount <= 1) {
+    return;
+  }
+
+  const children: ReactCompatNode[] = [];
+  children.length = childCount;
+
+  for (let index = 0; index < childCount; index += 1) {
+    children[index] = args[index + 2] as ReactCompatNode;
+  }
+
+  props.children = children;
 }
 
 /** Creates a React-compatible element from JSX runtime arguments. */
@@ -312,6 +339,7 @@ function copyElementProps(
   source: object | null | undefined,
   base?: object,
   omitChildren = false,
+  copySymbols: boolean | "internal" = true,
 ): Record<string, unknown> {
   const props: Record<PropertyKey, unknown> = {};
 
@@ -324,7 +352,40 @@ function copyElementProps(
   }
 
   copyOwnStringElementProps(source, props, omitChildren);
-  copyOwnSymbolElementProps(source, props);
+  if (copySymbols === "internal") {
+    copyInternalElementSymbolProps(source, props);
+  } else if (copySymbols) {
+    copyOwnSymbolElementProps(source, props);
+  }
+  return props as Record<string, unknown>;
+}
+
+function copyCreateElementProps(
+  source: object | null | undefined,
+): Record<string, unknown> {
+  const props: Record<PropertyKey, unknown> = {};
+
+  if (source === null || source === undefined) {
+    return props as Record<string, unknown>;
+  }
+
+  const stringSource = source as Record<string, unknown>;
+  for (const name in source) {
+    if (!hasOwnProperty.call(source, name)) {
+      continue;
+    }
+
+    if (
+      name !== "key" &&
+      name !== "ref" &&
+      name !== "__self" &&
+      name !== "__source"
+    ) {
+      props[name] = stringSource[name];
+    }
+  }
+
+  copyInternalElementSymbolProps(source, props);
   return props as Record<string, unknown>;
 }
 
@@ -358,6 +419,16 @@ function copyOwnSymbolElementProps(
   const symbolSource = source as Record<PropertyKey, unknown>;
   for (const symbol of Object.getOwnPropertySymbols(source)) {
     target[symbol] = symbolSource[symbol];
+  }
+}
+
+function copyInternalElementSymbolProps(
+  source: object,
+  target: Record<PropertyKey, unknown>,
+): void {
+  const symbolSource = source as Record<PropertyKey, unknown>;
+  if (hasOwnProperty.call(source, REACTIVE_TEXT_BINDING_META)) {
+    target[REACTIVE_TEXT_BINDING_META] = symbolSource[REACTIVE_TEXT_BINDING_META];
   }
 }
 

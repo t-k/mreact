@@ -2256,6 +2256,9 @@ export async function buildClientRouteEntrySource(
   const routeCleanupScopeImport = routeUsesCleanupScope
     ? `import { withCleanupScope as __mreactWithCleanupScope } from "@reckona/mreact-reactive-core/internal";\n`
     : "";
+  const routeReactiveDomMetadataImport = !routeUsesOnlyClientReferenceBoundaries
+    ? `import { withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
+    : "";
   const navigationStateDeclaration = clientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
@@ -2423,7 +2426,9 @@ function __mreactResolveRouteNode(value) {
   const routeNodeExpression = routeUsesCells
     ? `__mreactResolveRouteNode(${routeComponentCallExpression})`
     : routeComponentCallExpression;
-  const routeHydrationNodeExpression = `__mreactEvaluateHydrationNode(() => ${routeNodeExpression})`;
+  const routeHydrationNodeExpression = !routeUsesOnlyClientReferenceBoundaries
+    ? `__mreactWithPropBindingMetadata(() => __mreactWithEventBindingMetadata(() => __mreactEvaluateHydrationNode(() => ${routeNodeExpression})))`
+    : `__mreactEvaluateHydrationNode(() => ${routeNodeExpression})`;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
@@ -2436,7 +2441,7 @@ ${routeCellHydrationIndent}}
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
-  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
+  const entry = `${routeCellEffectImport}${routeCleanupScopeImport}${routeReactiveDomMetadataImport}${emitCompatClientReferenceImportBlock(compatClientReferenceNames)}${clientReferenceImportBlock}${routeHydrationCode}
 
 const __mreactRouteId = ${JSON.stringify(routeId)};
   const __mreactRouteStateSignature = ${JSON.stringify(routeStateSignature)};

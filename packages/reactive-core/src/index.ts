@@ -4,4 +4,6 @@ export { batch, batchAsync } from "./batch.js";
 export { cell } from "./cell.js";
 export { computed } from "./computed.js";
 export { effect } from "./effect.js";
+export { selector } from "./selector.js";
+export type { Selector, SelectorEquality } from "./selector.js";
 export { untrack } from "./untrack.js";

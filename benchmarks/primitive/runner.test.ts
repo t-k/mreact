@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { primitiveAdapters } from "./adapters/index.js";
 import { mreactAdapter } from "./adapters/mreact.js";
@@ -277,6 +278,16 @@ describe("primitive adapters", () => {
         expect(result.samples.every((sample) => sample >= 0)).toBe(true);
       }
     }
+  });
+
+  it("keeps Solid v1 fine-grained source writes batched", async () => {
+    const source = await readFile(
+      new URL("./adapters/solid.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("const { batch, createComputed");
+    expect([...source.matchAll(/batch\(\(\) =>/g)]).toHaveLength(3);
   });
 
   it("uses the provided benchmark document for React initial row creation", async () => {

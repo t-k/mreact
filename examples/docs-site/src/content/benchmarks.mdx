@@ -7,8 +7,9 @@ Benchmarks are part of Mreact's development loop. They are used to watch primiti
 
 ## What we measure
 
-- **Primitive DOM and reactivity work** - How keyed list operations, source writes, text bindings, computed fan-out, computed fan-in, and memory-sensitive primitive cases behave across frameworks.
-- **Primitive framework adapters** - Marko, Vue, Svelte, Angular, Qwik, React, Solid, and Mreact run comparable primitive cases where each framework exposes a production-ready adapter shape.
+- **Primitive DOM work** - Keyed list operations, row selection, event target creation, and memory-sensitive DOM cases are separated from lower-level reactivity microbenchmarks. Public DOM claims should prefer the krausest/js-framework-benchmark harness once the Mreact keyed implementation lands there, because that harness owns the peer framework adapters and keyed validation rules.
+- **Primitive reactivity microbenchmarks** - Source writes, text bindings, computed fan-out, and computed fan-in stay in the repository as local regression signals. They are useful for Mreact runtime development, but they are not a replacement for official DOM benchmark results from the krausest harness.
+- **Primitive framework adapters** - Marko, Vue, Svelte, Angular, Qwik, React, Solid, and Mreact still run local primitive cases where useful, but peer-adapter anomalies should be treated as investigation leads rather than public performance claims.
 - **Browser runtime behavior** - How the same DOM-heavy primitive cases behave in real Chromium rather than only in the server-side benchmark harness.
 - **App router and deployment paths** - How server rendering, streaming, static cache hits, middleware, route matching, cold starts, build time, and adapter targets behave under app-router workloads.
 - **Router framework adapters** - Marko Run, Nuxt, SvelteKit, Analog, Qwik City, SolidStart, TanStack Start, Next.js App Router, and Mreact app router run production router fixtures where practical.
@@ -21,6 +22,8 @@ Benchmarks are part of Mreact's development loop. They are used to watch primiti
 Treat benchmark numbers as trend signals, not universal promises. Compare runs with the same Node version, adapter target, route set, and build mode before drawing conclusions.
 
 Resumability-oriented frameworks such as Qwik and Marko are designed around delaying or avoiding client-side activation, not only around already-active update paths. Primitive DOM-update cases mostly measure already-active update paths, and the browser interaction cases use small synthetic routes, so read interaction timing together with shipped JavaScript size, startup work, and whether unused UI needs to activate at all.
+
+For keyed table operations such as create rows, replace rows, partial update, select row, append rows, remove row, swap/reorder rows, and clear rows, the long-term source of truth is the official krausest/js-framework-benchmark harness. The local primitive runner remains useful for quick regression checks and experiments, but it should not require Mreact maintainers to prove that every competitor adapter is idiomatic.
 
 ## Latest results
 

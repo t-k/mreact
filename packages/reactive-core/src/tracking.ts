@@ -18,7 +18,10 @@ export function trackSource(source: Source): void {
   tracker.deps.add(source);
 }
 
-function addSourceSubscriber(source: Source, computation: ReactiveComputation): void {
+export function addSourceSubscriber(
+  source: Source,
+  computation: ReactiveComputation,
+): void {
   const subscribers = source.subscribers;
 
   if (subscribers === null) {
@@ -30,17 +33,22 @@ function addSourceSubscriber(source: Source, computation: ReactiveComputation): 
   }
 }
 
-function removeSourceSubscriber(source: Source, computation: ReactiveComputation): boolean {
+export function removeSourceSubscriber(
+  source: Source,
+  computation: ReactiveComputation,
+): boolean {
   const subscribers = source.subscribers;
 
   if (subscribers === computation) {
     source.subscribers = null;
+    source.onNoSubscribers?.();
     return true;
   }
 
   if (subscribers instanceof Set && subscribers.delete(computation)) {
     if (subscribers.size === 0) {
       source.subscribers = null;
+      source.onNoSubscribers?.();
     }
     return true;
   }
@@ -129,7 +137,10 @@ export function trackIncrementalSource(
   computation.trackingCount = (computation.trackingCount ?? 0) + 1;
   computation.trackingTouchedDeps?.push(source);
 
-  if (alreadyTrackedByComputation || computation.deps.has(source)) {
+  if (
+    alreadyTrackedByComputation ||
+    (computation.deps.size > 0 && computation.deps.has(source))
+  ) {
     return;
   }
 

@@ -1,7 +1,17 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { cell } from "../src/index.js";
 
 describe("cell", () => {
+  test("stores cell value on the source object without a separate state wrapper", async () => {
+    const source = await readFile("packages/reactive-core/src/cell.ts", "utf8");
+    const cellStart = source.indexOf("export function cell<T>");
+    const cellImplementation = source.slice(cellStart);
+
+    expect(cellImplementation).toContain("subscribers: null");
+    expect(cellImplementation).not.toContain("source: {");
+  });
+
   test("returns the initial value", () => {
     const count = cell(1);
 

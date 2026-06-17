@@ -288,7 +288,7 @@ describe("reactive-dom scope: edge branches", () => {
     expect(arrayFromCalls).toBe(0);
   });
 
-  test("createScope does not allocate a disposer set until cleanup is registered", () => {
+  test("createScope cleanup registration does not allocate a disposer set", () => {
     const OriginalSet = globalThis.Set;
     let setCreations = 0;
 
@@ -307,7 +307,7 @@ describe("reactive-dom scope: edge branches", () => {
       withScope(scope, () => {
         registerDispose(() => {});
       });
-      expect(setCreations).toBe(1);
+      expect(setCreations).toBe(0);
     } finally {
       globalThis.Set = OriginalSet;
     }
@@ -332,6 +332,21 @@ describe("reactive-dom scope: edge branches", () => {
     );
     dispose();
     dispose(); // exercises the !active early-return branch
+    expect(calls).toBe(1);
+  });
+
+  test("manually disposed scoped cleanup is skipped during scope disposal", () => {
+    const scope = createScope();
+    let calls = 0;
+    const dispose = withScope(scope, () =>
+      registerDispose(() => {
+        calls += 1;
+      }),
+    );
+
+    dispose();
+    disposeScope(scope);
+
     expect(calls).toBe(1);
   });
 });

@@ -9,8 +9,43 @@ import {
   useRef,
   useState,
 } from "../src/index.js";
+import { createRootRuntime, type RootRuntime } from "../src/hooks.js";
+
+type RuntimeInstance = RootRuntime["instances"] extends Map<string, infer Instance>
+  ? Instance
+  : never;
 
 describe("react-compat identity hooks", () => {
+  test("skips inactive instance cleanup scans when every instance is active", () => {
+    class CountingMap<K, V> extends Map<K, V> {
+      iterations = 0;
+
+      override [Symbol.iterator](): MapIterator<[K, V]> {
+        this.iterations += 1;
+        return super[Symbol.iterator]();
+      }
+    }
+
+    const runtime = createRootRuntime(() => undefined);
+    const instances = new CountingMap<string, RuntimeInstance>();
+    const instance = {
+      owner: undefined,
+      path: "0",
+      hooks: [],
+      hookIndex: 0,
+      dirty: false,
+      devToolsHookSuppressionDepth: 0,
+    } as RuntimeInstance;
+
+    instances.set("0", instance);
+    runtime.instances = instances as RootRuntime["instances"];
+    runtime.activeInstanceKeys = new Set(["0"]);
+
+    runtime.endRender(true);
+
+    expect(instances.iterations).toBe(0);
+  });
+
   test("shares render state across duplicated hook module evaluations", async () => {
     const rendererHooks = await import("../src/hooks.ts?renderer") as {
       createRootRuntime: (rerender: () => void) => unknown;

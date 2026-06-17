@@ -92,8 +92,10 @@ const benchmarkFrameworkGroups: readonly BenchmarkFrameworkGroup[] = [
   { id: "nuxt", label: "Nuxt" },
 ];
 const benchmarkSuiteDisplayOrder: readonly string[] = [
+  "js-framework",
   "router",
-  "primitive",
+  "primitive-dom",
+  "primitive-reactivity",
   "primitive-browser",
 ];
 const benchmarkResultsGitRef = "main";
@@ -322,6 +324,7 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
                 <span>
                   {row.value} {row.unit}
                 </span>
+                <BenchmarkTimingBreakdown row={row} />
                 <span class="benchmark-diff">{row.diff}</span>
               </span>
             </div>
@@ -329,6 +332,27 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
         })}
       </div>
     </section>
+  );
+}
+
+function BenchmarkTimingBreakdown({ row }: { readonly row: BenchmarkRankingRow }) {
+  if (row.script === undefined && row.paint === undefined) {
+    return null;
+  }
+
+  return (
+    <span class="benchmark-breakdown" aria-label="Timing breakdown">
+      {row.script === undefined ? null : (
+        <span>
+          Script {row.script} {row.unit}
+        </span>
+      )}
+      {row.paint === undefined ? null : (
+        <span>
+          Paint {row.paint} {row.unit}
+        </span>
+      )}
+    </span>
   );
 }
 

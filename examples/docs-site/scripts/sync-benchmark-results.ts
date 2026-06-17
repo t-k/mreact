@@ -18,7 +18,9 @@ interface BenchmarkRankingRow {
   readonly diff: string;
   readonly framework: string;
   readonly isMreact: boolean;
+  readonly paint?: string;
   readonly rank: number;
+  readonly script?: string;
   readonly unit: string;
   readonly value: string;
 }
@@ -51,23 +53,47 @@ interface BenchmarkEnvironment {
 
 interface BenchmarkSource {
   readonly id: string;
+  readonly cardFilter?: (card: BenchmarkRankingCard) => boolean;
+  readonly optional?: boolean;
   readonly source: string;
   readonly title: string;
 }
 
+const primitiveReactivityCaseNames = new Set([
+  "source write with subscriber 1k",
+  "text binding update 1k",
+  "computed fan-out 1k",
+  "computed fan-in 1k",
+  "source write 1k",
+]);
+
 const benchmarkSources: readonly BenchmarkSource[] = [
+  {
+    id: "js-framework",
+    optional: true,
+    source: "js-framework-benchmark.md",
+    title: "js-framework-benchmark keyed DOM benchmarks",
+  },
   {
     id: "router",
     source: "router.md",
     title: "Router benchmarks",
   },
   {
-    id: "primitive",
+    id: "primitive-dom",
+    cardFilter: (card) => !primitiveReactivityCaseNames.has(card.title),
     source: "primitive.md",
-    title: "Primitive benchmarks",
+    title: "Primitive DOM benchmarks",
+  },
+  {
+    id: "primitive-reactivity",
+    cardFilter: (card) => primitiveReactivityCaseNames.has(card.title),
+    source: "primitive.md",
+    title: "Primitive reactivity microbenchmarks",
   },
   {
     id: "primitive-browser",
+    optional: true,
     source: "primitive-browser.md",
     title: "Primitive browser benchmarks",
   },
@@ -81,20 +107,30 @@ const outputPath = join(docsSiteRoot, "src", "benchmark-results.ts");
 
 const latestRun = await findLatestCompleteBenchmarkRun();
 const env = await readJson<BenchmarkEnvironment>(join(latestRun.absolutePath, "env.json"));
-const suites = await Promise.all(
-  benchmarkSources.map(async (source) => {
-    const markdown = await readFile(join(latestRun.absolutePath, source.source), "utf8");
-    const cards = parseRankingCards(source.id, markdown);
+const suites = (
+  await Promise.all(
+    benchmarkSources.map(async (source) => {
+      const markdown = await readOptionalBenchmarkReport(latestRun.absolutePath, source);
+      if (markdown === undefined) {
+        return undefined;
+      }
 
-    return {
-      id: source.id,
-      title: source.title,
-      source: source.source,
-      cardCount: cards.length,
-      cards,
-    } satisfies BenchmarkRankingSuite;
-  }),
-);
+      const cards = parseRankingCards(source.id, markdown).filter(source.cardFilter ?? (() => true));
+
+      if (cards.length === 0) {
+        throw new Error(`No benchmark ranking cards remain for ${source.id}.`);
+      }
+
+      return {
+        id: source.id,
+        title: source.title,
+        source: source.source,
+        cardCount: cards.length,
+        cards,
+      } satisfies BenchmarkRankingSuite;
+    }),
+  )
+).filter((suite): suite is BenchmarkRankingSuite => suite !== undefined);
 
 const meta: BenchmarkRunMeta = {
   arch: `${env.platform} ${env.arch}`,
@@ -144,7 +180,10 @@ async function findLatestCompleteBenchmarkRun(): Promise<{
 }
 
 async function hasCompleteBenchmarkReports(runPath: string): Promise<boolean> {
-  const requiredFiles = ["env.json", ...benchmarkSources.map((source) => source.source)];
+  const requiredFiles = [
+    "env.json",
+    ...benchmarkSources.filter((source) => source.optional !== true).map((source) => source.source),
+  ];
 
   for (const file of requiredFiles) {
     try {
@@ -155,6 +194,30 @@ async function hasCompleteBenchmarkReports(runPath: string): Promise<boolean> {
   }
 
   return true;
+}
+
+async function readOptionalBenchmarkReport(
+  runPath: string,
+  source: BenchmarkSource,
+): Promise<string | undefined> {
+  try {
+    return await readFile(join(runPath, source.source), "utf8");
+  } catch (error) {
+    if (source.optional === true && isFileMissingError(error)) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function isFileMissingError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { readonly code?: unknown }).code === "ENOENT"
+  );
 }
 
 async function readJson<T>(path: string): Promise<T> {
@@ -247,13 +310,19 @@ function parseRankingRows(body: string): readonly BenchmarkRankingRow[] {
 
     const framework = cells[1].replaceAll("**", "");
 
+    const hasTimingBreakdown = cells.length >= 8;
+    const script = hasTimingBreakdown ? cells[4] : "";
+    const paint = hasTimingBreakdown ? cells[5] : "";
+
     rows.push({
       rank,
       framework,
       caseName: cells[2],
       value: cells[3],
-      diff: cells[4],
-      unit: cells[5],
+      ...(paint === "" ? {} : { paint }),
+      diff: hasTimingBreakdown ? cells[6] : cells[4],
+      ...(script === "" ? {} : { script }),
+      unit: hasTimingBreakdown ? cells[7] : cells[5],
       isMreact: framework.toLowerCase().includes("mreact"),
     });
   }
@@ -290,7 +359,9 @@ export interface BenchmarkRankingRow {
   readonly diff: string;
   readonly framework: string;
   readonly isMreact: boolean;
+  readonly paint?: string;
   readonly rank: number;
+  readonly script?: string;
   readonly unit: string;
   readonly value: string;
 }

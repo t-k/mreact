@@ -12,8 +12,17 @@ on:
           - all
           - primitive
           - primitive-browser
+          - js-framework
           - non-router
           - router
+      js_frameworks:
+        description: Optional js-framework-benchmark framework ids, for example "keyed/mreact keyed/mreact-react-compat keyed/react-hooks"
+        required: false
+        type: string
+      js_benchmarks:
+        description: Optional js-framework-benchmark ids, for example "01_run1k 03_update10th1k_x16 04_select1k 05_swap1k 07_create10k"
+        required: false
+        type: string
 
 permissions:
   actions: write
@@ -69,7 +78,7 @@ jobs:
           fi
 
       - name: Install Playwright Chromium
-        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' || inputs.suite == 'router' }}
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' || inputs.suite == 'js-framework' || inputs.suite == 'router' }}
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Build Linux native addon
@@ -80,13 +89,22 @@ jobs:
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive' }}
         env:
           MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
+          BENCH_CASES: ${{ inputs.suite == 'all' && 'source write with subscriber 1k,text binding update 1k,computed fan-out 1k,computed fan-in 1k,source write 1k,keyed reverse 1k rows,create 1k event targets,repeated create update clear memory' || '' }}
         run: NODE_ENV=production pnpm bench:primitive
 
       - name: Run primitive browser benchmarks
-        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}
+        if: ${{ inputs.suite == 'primitive-browser' }}
         env:
           MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
         run: NODE_ENV=production pnpm bench:primitive-browser
+
+      - name: Run js-framework-benchmark keyed DOM benchmarks
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'js-framework' }}
+        env:
+          MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
+          MREACT_JS_FRAMEWORKS: ${{ inputs.js_frameworks }}
+          MREACT_JS_FRAMEWORK_BENCHMARKS: ${{ inputs.js_benchmarks }}
+        run: NODE_ENV=production pnpm bench:js-framework
 
       - name: Run non-router benchmarks
         if: ${{ inputs.suite == 'all' || inputs.suite == 'non-router' }}
@@ -107,8 +125,11 @@ jobs:
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive.md")
           fi
-          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive-browser" ]; then
+          if [ "${{ inputs.suite }}" = "primitive-browser" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")
+          fi
+          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "js-framework" ]; then
+            files+=("${{ steps.results.outputs.dir }}/js-framework-benchmark.md")
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "non-router" ]; then
             files+=("${{ steps.results.outputs.dir }}/non-router.md")
@@ -128,6 +149,12 @@ jobs:
               fi
             done
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ steps.results.outputs.date }}-${{ steps.results.outputs.run }}
+          path: ${{ steps.results.outputs.dir }}
 
       - name: Commit benchmark results
         if: ${{ github.ref_type == 'branch' && github.ref_name == 'main' }}

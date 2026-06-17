@@ -9,13 +9,17 @@ const root = process.cwd();
 const docsSiteRoot = join(root, "examples", "docs-site");
 
 describe("benchmark filters", () => {
-  test("renders router benchmark suite before primitive suites", () => {
+  test("renders router benchmark suite before separated primitive suites", () => {
     const html = renderToString(BenchmarkResults);
 
     expect(html.indexOf("Router benchmarks")).toBeGreaterThanOrEqual(0);
-    expect(html.indexOf("Primitive benchmarks")).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf("Primitive DOM benchmarks")).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf("Primitive reactivity microbenchmarks")).toBeGreaterThanOrEqual(0);
     expect(html.indexOf("Router benchmarks")).toBeLessThan(
-      html.indexOf("Primitive benchmarks"),
+      html.indexOf("Primitive DOM benchmarks"),
+    );
+    expect(html.indexOf("Primitive DOM benchmarks")).toBeLessThan(
+      html.indexOf("Primitive reactivity microbenchmarks"),
     );
   });
 

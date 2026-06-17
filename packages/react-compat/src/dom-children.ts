@@ -45,6 +45,10 @@ export function syncScopedChildNodes(
   after: ChildNode | null,
   nextNodes: readonly Node[],
 ): void {
+  if (replaceEmptyFullChildList(parent, before, after, nextNodes)) {
+    return;
+  }
+
   if (replaceDisjointFullChildList(parent, before, after, nextNodes)) {
     return;
   }
@@ -54,6 +58,10 @@ export function syncScopedChildNodes(
     hasSingleExtraScopedChild(parent, before, after, nextNodes.length) &&
     removeSingleMissingChild(parent, before, after, nextNodes)
   ) {
+    return;
+  }
+
+  if (nextNodes.length > 16 && moveSingleSwappedPair(parent, before, after, nextNodes)) {
     return;
   }
 
@@ -89,6 +97,25 @@ export function syncScopedChildNodes(
       removeChildIfPresent(parent, child);
     }
   }
+}
+
+function replaceEmptyFullChildList(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextNodes: readonly Node[],
+): boolean {
+  if (
+    before !== null ||
+    after !== null ||
+    nextNodes.length <= 16 ||
+    parent.childNodes.length !== 0
+  ) {
+    return false;
+  }
+
+  parent.replaceChildren(...nextNodes);
+  return true;
 }
 
 function replaceDisjointFullChildList(
@@ -174,6 +201,57 @@ function removeSingleMissingChild(
   }
 
   removeChildIfPresent(parent, cursor);
+  return true;
+}
+
+function moveSingleSwappedPair(
+  parent: ParentNode,
+  before: ChildNode | null,
+  after: ChildNode | null,
+  nextNodes: readonly Node[],
+): boolean {
+  let cursor = before === null ? parent.firstChild : before.nextSibling;
+  let index = 0;
+  let firstMismatchIndex = -1;
+  let secondMismatchIndex = -1;
+  let firstCurrent: ChildNode | null = null;
+  let secondCurrent: ChildNode | null = null;
+
+  while (cursor !== null && cursor !== after && index < nextNodes.length) {
+    const current = cursor;
+
+    if (current !== nextNodes[index]) {
+      if (firstMismatchIndex === -1) {
+        firstMismatchIndex = index;
+        firstCurrent = current;
+      } else if (secondMismatchIndex === -1) {
+        secondMismatchIndex = index;
+        secondCurrent = current;
+      } else {
+        return false;
+      }
+    }
+
+    cursor = current.nextSibling;
+    index += 1;
+  }
+
+  if (
+    index !== nextNodes.length ||
+    cursor !== after ||
+    firstCurrent === null ||
+    secondCurrent === null ||
+    firstCurrent !== nextNodes[secondMismatchIndex] ||
+    secondCurrent !== nextNodes[firstMismatchIndex]
+  ) {
+    return false;
+  }
+
+  parent.insertBefore(secondCurrent, firstCurrent);
+  parent.insertBefore(
+    firstCurrent,
+    (nextNodes[secondMismatchIndex + 1] as ChildNode | undefined) ?? after,
+  );
   return true;
 }
 

@@ -43,9 +43,9 @@ export function effect(fn: () => void | (() => void)): () => void {
       const previousDepsSize = computation.deps.size;
       const nextTrackingVersion = nextTrackingVersionFor(computation);
 
-      computation.trackingAddedDeps = [];
+      computation.trackingAddedDeps = undefined;
       computation.trackingCount = 0;
-      computation.trackingTouchedDeps = [];
+      computation.trackingTouchedDeps = undefined;
       computation.trackingVersion = nextTrackingVersion;
       runtimeState.activeTracker = computation;
 
@@ -133,7 +133,10 @@ function finishIncrementalTracking(
   const addedDeps = computation.trackingAddedDeps;
   const trackedCount = computation.trackingCount ?? 0;
 
-  if (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0) {
+  if (
+    previousDepsSize > 0 &&
+    (trackedCount !== previousDepsSize || (addedDeps?.length ?? 0) > 0)
+  ) {
     cleanupUntrackedDeps(computation, trackingVersion);
   }
 

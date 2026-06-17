@@ -131,7 +131,7 @@ export function computed<T>(
       const addedDepsCount = addedDeps?.length ?? 0;
       const orderedMismatch = computation.trackingOrderedMismatch as boolean | undefined;
 
-      if (trackedCount !== previousDepsSize || addedDepsCount > 0) {
+      if (previousDepsSize > 0 && (trackedCount !== previousDepsSize || addedDepsCount > 0)) {
         const orderedIndex = computation.trackingOrderedIndex;
 
         if (

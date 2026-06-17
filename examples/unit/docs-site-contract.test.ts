@@ -2008,13 +2008,20 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain("primitive.md");
     expect(benchmarkData).toContain("router.md");
     expect(benchmarkData).toContain("primitive-browser.md");
-    expect(benchmarkData).toContain('"cardCount": 15');
+    expect(benchmarkData).toContain("readonly script?: string");
+    expect(benchmarkData).toContain("readonly paint?: string");
+    expect(benchmarkData).toContain('"title": "Primitive DOM benchmarks"');
+    expect(benchmarkData).toContain('"title": "Primitive reactivity microbenchmarks"');
+    expect(benchmarkData).toContain('"cardCount": 10');
+    expect(benchmarkData).toContain('"cardCount": 5');
     expect(benchmarkData).toContain('"cardCount": 37');
     expect(benchmarkData).toContain('"cardCount": 4');
     expect(benchmarkData).toContain("benchmarkRankingSuites");
     expect(benchmarkData).toContain("browser create 1k rows");
     expect(benchmarkData).toContain("mreact-app-router");
-    expect(benchmarks).toContain("Primitive DOM and reactivity work");
+    expect(benchmarks).toContain("Primitive DOM work");
+    expect(benchmarks).toContain("krausest/js-framework-benchmark");
+    expect(benchmarks).toContain("Primitive reactivity microbenchmarks");
     expect(benchmarks).toContain("Marko, Vue, Svelte, Angular, Qwik, React, Solid, and Mreact");
     expect(benchmarks).toContain("Browser runtime behavior");
     expect(benchmarks).toContain("App router and deployment paths");
@@ -2024,6 +2031,7 @@ describe("docs-site example contract", () => {
     expect(benchmarks).toContain("Package-level microbenchmarks");
     expect(benchmarks).toContain("Resumability-oriented frameworks");
     expect(benchmarks).toContain("Primitive DOM-update cases mostly measure already-active update paths");
+    expect(benchmarks).toContain("the long-term source of truth is the official krausest/js-framework-benchmark harness");
     expect(rootReadme.split("\n").length).toBeLessThan(260);
     expect(rootReadme).toContain("## Documentation");
     expect(rootReadme).toContain(
@@ -2057,6 +2065,10 @@ describe("docs-site example contract", () => {
     expect(benchmarkResults).toContain("View run on GitHub");
     expect(benchmarkResults).toContain("View source on GitHub");
     expect(benchmarkResults).toContain("BenchmarkRankingPanel");
+    expect(benchmarkResults).toContain("BenchmarkTimingBreakdown");
+    expect(benchmarkResults).toContain("row.script");
+    expect(benchmarkResults).toContain("row.paint");
+    expect(css).toContain(".benchmark-breakdown");
     expect(benchmarkResults).toContain("benchmark-chart");
     expect(benchmarkResults).toContain("benchmark-bar-row");
     expect(benchmarkResults).toContain("benchmark-diff");
@@ -2102,6 +2114,8 @@ describe("docs-site example contract", () => {
     expect(benchmarkSync).toContain("primitive.md");
     expect(benchmarkSync).toContain("router.md");
     expect(benchmarkSync).toContain("primitive-browser.md");
+    expect(benchmarkSync).toContain("js-framework-benchmark.md");
+    expect(benchmarkSync).toContain('"js-framework-benchmark keyed DOM benchmarks"');
     expect(benchmarkSync).toContain("env.json");
   });
 

@@ -23,10 +23,79 @@ type EventElement = HTMLElement & {
   __mreactEventBindings?: EventBinding | EventBinding[];
   __mreactHasEvents?: true;
 };
+type DeferredDelegatedEventPromotion = () => void;
+interface DeferredDelegatedEventPromotionContext {
+  promotions?: DeferredDelegatedEventPromotion[] | undefined;
+}
 
 const delegatedEventTypes = " change click input keydown keyup pointerdown pointermove pointerup submit ";
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
+const pendingDisconnectedPromotions = new Set<() => void>();
+let currentDeferredDelegatedEventPromotions:
+  | DeferredDelegatedEventPromotionContext
+  | undefined;
+let currentDelegatedRootReleaseBatch:
+  | Map<EventTarget, Record<string, number>>
+  | undefined;
+let disconnectedPromotionFlushQueued = false;
+let eventBindingMetadataDepth = 0;
+
+export function withEventBindingMetadata<T>(fn: () => T): T {
+  eventBindingMetadataDepth += 1;
+
+  try {
+    return fn();
+  } finally {
+    eventBindingMetadataDepth -= 1;
+  }
+}
+
+export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
+  promote?: () => void;
+  value: T;
+} {
+  const previousPromotions = currentDeferredDelegatedEventPromotions;
+  const context: DeferredDelegatedEventPromotionContext = {};
+  currentDeferredDelegatedEventPromotions = context;
+
+  try {
+    const value = fn();
+    const promotions = context.promotions;
+
+    if (promotions === undefined) {
+      return { value };
+    }
+
+    return {
+      promote: () => {
+        for (const promote of promotions) {
+          promote();
+        }
+      },
+      value,
+    };
+  } finally {
+    currentDeferredDelegatedEventPromotions = previousPromotions;
+  }
+}
+
+export function withBatchedDelegatedRootReleases<T>(fn: () => T): T {
+  const previousBatch = currentDelegatedRootReleaseBatch;
+  const batch = previousBatch ?? new Map<EventTarget, Record<string, number>>();
+
+  currentDelegatedRootReleaseBatch = batch;
+
+  try {
+    return fn();
+  } finally {
+    currentDelegatedRootReleaseBatch = previousBatch;
+
+    if (previousBatch === undefined) {
+      flushDelegatedRootReleaseBatch(batch);
+    }
+  }
+}
 
 /** Binds an event handler to an element and returns a disposer. */
 export function bindEvent<K extends keyof HTMLElementEventMap>(
@@ -37,17 +106,20 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
 ): Dispose {
   const listener = handler as EventListener;
   const useDelegation = options?.direct !== true && delegatedEventTypes.includes(` ${type} `);
-  const eventElement = element as EventElement;
-  const binding = { delegated: useDelegation, listener, type };
+  const eventElement = eventBindingMetadataDepth > 0 ? (element as EventElement) : undefined;
+  const binding =
+    eventElement === undefined ? undefined : { delegated: useDelegation, listener, type };
 
-  eventElement.__mreactHasEvents = true;
-  const bindings = eventElement.__mreactEventBindings;
-  if (bindings === undefined) {
-    eventElement.__mreactEventBindings = binding;
-  } else if (Array.isArray(bindings)) {
-    bindings.push(binding);
-  } else {
-    eventElement.__mreactEventBindings = [bindings, binding];
+  if (eventElement !== undefined && binding !== undefined) {
+    eventElement.__mreactHasEvents = true;
+    const bindings = eventElement.__mreactEventBindings;
+    if (bindings === undefined) {
+      eventElement.__mreactEventBindings = binding;
+    } else if (Array.isArray(bindings)) {
+      bindings.push(binding);
+    } else {
+      eventElement.__mreactEventBindings = [bindings, binding];
+    }
   }
 
   let disposeListener: Dispose;
@@ -60,6 +132,11 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
 
   return registerDispose(() => {
     disposeListener();
+
+    if (eventElement === undefined || binding === undefined) {
+      return;
+    }
+
     const currentBindings = eventElement.__mreactEventBindings;
 
     if (Array.isArray(currentBindings)) {
@@ -113,6 +190,15 @@ function addDelegatedEventListener(
     delegatedRoot = element.ownerDocument;
     retainDelegatedRoot(delegatedRoot, type);
   };
+  const disposeDeferredPromotion = addDeferredDelegatedEventPromotion(element, type);
+
+  if (disposeDeferredPromotion !== undefined) {
+    return () => {
+      removeDelegatedElementListener(element, type, listener);
+      disposeDeferredPromotion();
+    };
+  }
+
   const disposeDisconnectedFallback = addDisconnectedFallback(
     element,
     type,
@@ -128,6 +214,39 @@ function addDelegatedEventListener(
     }
 
     disposeDisconnectedFallback();
+  };
+}
+
+function addDeferredDelegatedEventPromotion(
+  element: HTMLElement,
+  type: string,
+): Dispose | undefined {
+  const context = currentDeferredDelegatedEventPromotions;
+
+  if (context === undefined) {
+    return undefined;
+  }
+
+  const promotions = (context.promotions ??= []);
+
+  let active = true;
+  let delegatedRoot: EventTarget | undefined;
+  const promote = () => {
+    if (!active || delegatedRoot !== undefined || !element.isConnected) {
+      return;
+    }
+
+    delegatedRoot = element.ownerDocument;
+    retainDelegatedRoot(delegatedRoot, type);
+  };
+  promotions.push(promote);
+
+  return () => {
+    active = false;
+
+    if (delegatedRoot !== undefined) {
+      releaseDelegatedRoot(delegatedRoot, type);
+    }
   };
 }
 
@@ -189,7 +308,7 @@ function addDisconnectedFallback(
     }
 
     promotionQueued = true;
-    enqueueMicrotask(() => {
+    enqueueDisconnectedPromotion(() => {
       promotionQueued = false;
       promote();
     });
@@ -232,6 +351,27 @@ function enqueueMicrotask(callback: () => void): void {
   void Promise.resolve().then(callback);
 }
 
+function enqueueDisconnectedPromotion(callback: () => void): void {
+  pendingDisconnectedPromotions.add(callback);
+
+  if (disconnectedPromotionFlushQueued) {
+    return;
+  }
+
+  disconnectedPromotionFlushQueued = true;
+  enqueueMicrotask(flushDisconnectedPromotions);
+}
+
+function flushDisconnectedPromotions(): void {
+  disconnectedPromotionFlushQueued = false;
+  const promotions = Array.from(pendingDisconnectedPromotions);
+  pendingDisconnectedPromotions.clear();
+
+  for (const promote of promotions) {
+    promote();
+  }
+}
+
 function retainDelegatedRoot(root: EventTarget, type: string): void {
   let rootsByType = delegatedRoots.get(root);
 
@@ -253,6 +393,38 @@ function retainDelegatedRoot(root: EventTarget, type: string): void {
 }
 
 function releaseDelegatedRoot(root: EventTarget, type: string): void {
+  const batch = currentDelegatedRootReleaseBatch;
+
+  if (batch !== undefined) {
+    let releasesByType = batch.get(root);
+
+    if (releasesByType === undefined) {
+      releasesByType = Object.create(null) as Record<string, number>;
+      batch.set(root, releasesByType);
+    }
+
+    releasesByType[type] = (releasesByType[type] ?? 0) + 1;
+    return;
+  }
+
+  releaseDelegatedRootCount(root, type, 1);
+}
+
+function flushDelegatedRootReleaseBatch(
+  batch: Map<EventTarget, Record<string, number>>,
+): void {
+  for (const [root, releasesByType] of batch) {
+    for (const [type, count] of Object.entries(releasesByType)) {
+      releaseDelegatedRootCount(root, type, count);
+    }
+  }
+}
+
+function releaseDelegatedRootCount(
+  root: EventTarget,
+  type: string,
+  count: number,
+): void {
   const rootsByType = delegatedRoots.get(root);
   const current = rootsByType?.get(type);
 
@@ -260,7 +432,7 @@ function releaseDelegatedRoot(root: EventTarget, type: string): void {
     return;
   }
 
-  current.count -= 1;
+  current.count -= count;
 
   if (current.count > 0) {
     return;

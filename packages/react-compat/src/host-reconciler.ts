@@ -78,6 +78,9 @@ import {
 interface MemoFiberState {
   props: Record<string, unknown>;
   instanceKeys: string[];
+  hasDirtyInstanceDependencies: boolean;
+  hasUnflushedEffectDependencies: boolean;
+  hasRetainedInstanceDependencies: boolean;
 }
 
 interface FunctionFiberState {
@@ -346,6 +349,7 @@ function reconcileHostChild(
 
   const childCount = children === undefined ? 1 : children.length;
   const hasKeyedChildren = children !== undefined && hasKeyedChild(children);
+  const canReuseCurrentFibersInList = !hasKeyedChildren || currentFirstChild === undefined;
   let existingByKey: Map<string, Fiber> | undefined;
   let currentKeyed: Fiber | undefined = currentFirstChild;
   let currentUnkeyed = currentFirstChild;
@@ -353,29 +357,57 @@ function reconcileHostChild(
   let previous: Fiber | undefined;
   let consumed = 0;
   let skipRemainingKeyedLookup = false;
-  const usedCurrentChildren =
-    currentFirstChild === undefined ? undefined : new Set<Fiber>();
+  let sequentialCurrentCursor = currentFirstChild;
+  let childListOrderChanged = false;
+  let usedCurrentChildren =
+    currentFirstChild === undefined || hasKeyedChildren ? undefined : new Set<Fiber>();
+  const ensureUsedCurrentChildren = (): Set<Fiber> => {
+    if (usedCurrentChildren === undefined) {
+      usedCurrentChildren = new Set<Fiber>();
+      let cursor = currentFirstChild;
+
+      while (cursor !== undefined && cursor !== sequentialCurrentCursor) {
+        usedCurrentChildren.add(cursor);
+        cursor = cursor.sibling;
+      }
+    }
+
+    return usedCurrentChildren;
+  };
 
   for (let index = 0; index < childCount; index += 1) {
     const child = children === undefined ? node : children[index];
     const key = getNodeKey(child);
     let matchedCurrent: Fiber | undefined;
+    let canReuseMatchedCurrentFiber = canReuseCurrentFibersInList;
 
     if (key === undefined) {
+      if (hasKeyedChildren && currentUnkeyed !== undefined) {
+        childListOrderChanged = true;
+        ensureUsedCurrentChildren();
+      }
       matchedCurrent = currentUnkeyed;
     } else if (skipRemainingKeyedLookup) {
+      childListOrderChanged = true;
       matchedCurrent = undefined;
     } else if (existingByKey !== undefined) {
+      childListOrderChanged = true;
       matchedCurrent = existingByKey.get(key);
+      canReuseMatchedCurrentFiber = matchedCurrent === undefined;
     } else if (currentKeyed?.key === key) {
       matchedCurrent = currentKeyed;
+      canReuseMatchedCurrentFiber = true;
       currentKeyed = currentKeyed.sibling;
+      sequentialCurrentCursor = currentKeyed;
     } else if (
       children !== undefined &&
       currentKeyed?.sibling?.key === key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
+      childListOrderChanged = true;
+      ensureUsedCurrentChildren();
       matchedCurrent = currentKeyed.sibling;
+      canReuseMatchedCurrentFiber = false;
       currentKeyed = currentKeyed.sibling.sibling;
     } else {
       if (
@@ -383,19 +415,30 @@ function reconcileHostChild(
         hasKeyedChildren &&
         canSkipRemainingKeyedLookup(currentKeyed, children, index)
       ) {
+        childListOrderChanged = true;
         skipRemainingKeyedLookup = true;
         currentKeyed = undefined;
       } else if (hasKeyedChildren) {
+        childListOrderChanged = true;
+        ensureUsedCurrentChildren();
         existingByKey = collectExistingKeyedFibers(currentKeyed);
         matchedCurrent = existingByKey.get(key);
+        canReuseMatchedCurrentFiber = matchedCurrent === undefined;
       }
     }
 
+    const memoBailout = tryReuseDependencyFreeMemoBailout(
+      matchedCurrent,
+      child,
+      runtime,
+      options,
+      canReuseMatchedCurrentFiber,
+    );
     const previousNodes =
-      options.previousNodes === undefined
+      memoBailout !== undefined || options.previousNodes === undefined
         ? undefined
         : options.previousNodes.slice(consumed);
-    const result = createHostFiber(
+    const result = memoBailout ?? createHostFiber(
       parent,
       matchedCurrent,
       child,
@@ -403,6 +446,7 @@ function reconcileHostChild(
       runtime,
       getReconcileChildPath(path, child, index, options),
       previousNodes === undefined ? options : { ...options, previousNodes },
+      canReuseMatchedCurrentFiber,
     );
     const fiber = result.fiber;
 
@@ -449,8 +493,13 @@ function reconcileHostChild(
     previous = fiber;
   }
 
-  markUnusedCurrentChildrenForDeletion(parent, currentFirstChild, usedCurrentChildren);
-  parent.childListChanged = childFiberListShapeChanged(currentFirstChild, first);
+  if (usedCurrentChildren === undefined && hasKeyedChildren && currentKeyed !== undefined) {
+    markOptimizedChildrenForDeletion(parent, currentKeyed);
+  } else {
+    markUnusedCurrentChildrenForDeletion(parent, currentFirstChild, usedCurrentChildren);
+  }
+  parent.childListChanged =
+    childListOrderChanged || childFiberListShapeChanged(currentFirstChild, first);
 
   return { fiber: first, consumed };
 }
@@ -465,6 +514,7 @@ function reconcileKeyedRowHostChildren(
     children.length === 0 ||
     currentFirstChild === undefined ||
     options.previousNodes !== undefined ||
+    !isKeyedRowHostElementCandidate(children[0]) ||
     !shouldUseDirectHostTextChild()
   ) {
     return undefined;
@@ -679,6 +729,15 @@ function createKeyedRowHostElementScratch(): KeyedRowHostElement {
     type: "",
     text: "",
   };
+}
+
+function isKeyedRowHostElementCandidate(node: ReactCompatNode): boolean {
+  return (
+    isReactCompatElement(node) &&
+    typeof node.type === "string" &&
+    node.key !== null &&
+    node.ref === null
+  );
 }
 
 function readKeyedRowHostElement(
@@ -958,8 +1017,18 @@ function createHostFiber(
   runtime: RootRuntime | undefined,
   path: string,
   options: FiberHydrationOptions = {},
+  canReuseCurrentFiber = true,
 ): FiberReconcileResult {
-  const result = createHostFiberImpl(parent, current, node, key, runtime, path, options);
+  const result = createHostFiberImpl(
+    parent,
+    current,
+    node,
+    key,
+    runtime,
+    path,
+    options,
+    canReuseCurrentFiber,
+  );
 
   if (result.fiber !== undefined) {
     if (canFinalizeNewHostFiber(result.fiber, current, node, options)) {
@@ -1000,6 +1069,7 @@ function createHostFiberImpl(
   runtime: RootRuntime | undefined,
   path: string,
   options: FiberHydrationOptions = {},
+  canReuseCurrentFiber = true,
 ): FiberReconcileResult {
   if (node === null || node === undefined || typeof node === "boolean") {
     return { fiber: undefined, consumed: 0 };
@@ -1050,6 +1120,18 @@ function createHostFiberImpl(
     );
     fiber.child = childResult.fiber;
     return { fiber, consumed: childResult.consumed };
+  }
+
+  const memoBailout = tryReuseMemoBailout(
+    current,
+    node,
+    runtime,
+    path,
+    options,
+    canReuseCurrentFiber,
+  );
+  if (memoBailout !== undefined) {
+    return memoBailout;
   }
 
   if (!isReactCompatElement(node)) {
@@ -1246,10 +1328,7 @@ function createHostFiberImpl(
       forwardRefType,
     );
     fiber.memoizedState = getDevToolsHookState(runtime, path);
-    const childOptions = withHydrationComponentStack(
-      options,
-      getComponentName(forwardRefType.render),
-    );
+    const childOptions = getHydrationChildOptions(options, forwardRefType.render);
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "forward-ref" ? current.child : undefined,
@@ -1269,27 +1348,46 @@ function createHostFiberImpl(
 
     const memoType = node.type;
     const memoPath = `${path}.memo`;
+    const previousMemoFiber =
+      current?.tag === "memo" && current.type === memoType ? current : undefined;
     const previousMemoState =
-      current?.tag === "memo"
-        ? (current.memoizedState as MemoFiberState | undefined)
+      previousMemoFiber !== undefined
+        ? (previousMemoFiber.memoizedState as MemoFiberState | undefined)
         : undefined;
-    const fiber =
-      current?.tag === "memo" && current.type === memoType
-        ? createWorkInProgress(current, node.props)
-        : createFiber("memo", node.props, key);
-    fiber.type = memoType;
 
     if (
+      previousMemoFiber !== undefined &&
       previousMemoState !== undefined &&
-      !hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath) &&
-      !hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys) &&
+      !(
+        memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
+        hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath)
+      ) &&
+      !(
+        memoStateNeedsEffectCheck(previousMemoState) &&
+        hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys)
+      ) &&
       areMemoPropsEqual(memoType, previousMemoState.props, node.props)
     ) {
-      markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
-      fiber.child = getSkippedChild(current);
+      const fiber = getMemoBailoutFiber(
+        runtime,
+        previousMemoFiber,
+        node.props,
+        previousMemoState,
+        canReuseCurrentFiber,
+      );
+      fiber.child = getSkippedChild(previousMemoFiber);
       fiber.memoizedState = previousMemoState;
-      return { fiber, consumed: options.previousNodes?.length ?? 0 };
+      return {
+        fiber,
+        consumed: options.previousNodes?.length ?? 0,
+      };
     }
+
+    const fiber =
+      previousMemoFiber !== undefined
+        ? createWorkInProgress(previousMemoFiber, node.props)
+        : createFiber("memo", node.props, key);
+    fiber.type = memoType;
 
     const renderedElement: ReactCompatElement = {
       ...node,
@@ -1310,9 +1408,19 @@ function createHostFiberImpl(
       fiber.child.sibling = undefined;
       bubbleHostChild(fiber, fiber.child);
     }
+    const instanceKeys = collectInstanceKeys(runtime, memoPath);
+    const hasClassDescendant = hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
-      props: { ...node.props },
-      instanceKeys: collectInstanceKeys(runtime, memoPath),
+      props: node.props as Record<string, unknown>,
+      instanceKeys,
+      hasDirtyInstanceDependencies:
+        hasDirtyInstanceDependencies(runtime, instanceKeys) || hasClassDescendant,
+      hasUnflushedEffectDependencies: hasUnflushedEffectDependencies(
+        runtime,
+        instanceKeys,
+      ),
+      hasRetainedInstanceDependencies:
+        hasRetainedInstanceDependencies(runtime, instanceKeys) || hasClassDescendant,
     };
     return { fiber, consumed: childResult.consumed };
   }
@@ -1422,10 +1530,7 @@ function createHostFiberImpl(
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
-    const childOptions = withHydrationComponentStack(
-      options,
-      getComponentName(classType),
-    );
+    const childOptions = getHydrationChildOptions(options, classType);
 
     try {
       const childResult = reconcileHostChild(
@@ -1507,10 +1612,7 @@ function createHostFiberImpl(
       node.type,
     );
     fiber.memoizedState = getDevToolsHookState(runtime, path);
-    const childOptions = withHydrationComponentStack(
-      options,
-      getComponentName(node.type as Function),
-    );
+    const childOptions = getHydrationChildOptions(options, node.type as Function);
     const childResult = reconcileHostChild(
       fiber,
       current?.tag === "function-component" ? current.child : undefined,
@@ -2082,6 +2184,26 @@ function collectCommittedHostNodes(fiber: Fiber): Node[] {
   return nodes;
 }
 
+function hasCommittedHostNode(fiber: Fiber): boolean {
+  if (
+    (fiber.tag === "host-component" || fiber.tag === "host-text") &&
+    fiber.stateNode instanceof Node
+  ) {
+    return true;
+  }
+
+  let child = fiber.child;
+
+  while (child !== undefined) {
+    if (hasCommittedHostNode(child)) {
+      return true;
+    }
+    child = child.sibling;
+  }
+
+  return false;
+}
+
 function getSkippedChild(current: Fiber | undefined): Fiber | undefined {
   const child = current?.child;
   const alternateChild = current?.alternate?.child;
@@ -2089,8 +2211,8 @@ function getSkippedChild(current: Fiber | undefined): Fiber | undefined {
   if (
     child !== undefined &&
     alternateChild !== undefined &&
-    collectCommittedHostNodes(child).length === 0 &&
-    collectCommittedHostNodes(alternateChild).length > 0
+    !hasCommittedHostNode(child) &&
+    hasCommittedHostNode(alternateChild)
   ) {
     return alternateChild;
   }
@@ -2980,6 +3102,104 @@ function hasPendingAsyncChild(fiber: Fiber | undefined): boolean {
   return false;
 }
 
+function tryReuseMemoBailout(
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions,
+  canReuseCurrentFiber = true,
+): FiberReconcileResult | undefined {
+  if (
+    current?.tag !== "memo" ||
+    runtime === undefined ||
+    !isReactCompatElement(node) ||
+    node.type !== current.type ||
+    !isMemoType(node.type)
+  ) {
+    return undefined;
+  }
+
+  const previousMemoState = current.memoizedState as MemoFiberState | undefined;
+  const memoPath = `${path}.memo`;
+
+  if (
+    previousMemoState === undefined ||
+    (
+      memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
+      hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath)
+    ) ||
+    (
+      memoStateNeedsEffectCheck(previousMemoState) &&
+      hasUnflushedMountEffectInstance(runtime, previousMemoState.instanceKeys)
+    ) ||
+    !areMemoPropsEqual(node.type, previousMemoState.props, node.props)
+  ) {
+    return undefined;
+  }
+
+  const fiber = getMemoBailoutFiber(
+    runtime,
+    current,
+    node.props,
+    previousMemoState,
+    canReuseCurrentFiber,
+  );
+  fiber.type = node.type;
+  fiber.child = getSkippedChild(current);
+  fiber.memoizedState = previousMemoState;
+  return {
+    fiber,
+    consumed: options.previousNodes?.length ?? 0,
+  };
+}
+
+function tryReuseDependencyFreeMemoBailout(
+  current: Fiber | undefined,
+  node: ReactCompatNode,
+  runtime: RootRuntime | undefined,
+  options: FiberHydrationOptions,
+  canReuseCurrentFiber: boolean,
+): FiberReconcileResult | undefined {
+  if (
+    options.previousNodes !== undefined ||
+    current?.tag !== "memo" ||
+    runtime === undefined ||
+    !isReactCompatElement(node) ||
+    node.type !== current.type ||
+    !isMemoType(node.type)
+  ) {
+    return undefined;
+  }
+
+  const previousMemoState = current.memoizedState as MemoFiberState | undefined;
+
+  if (
+    previousMemoState === undefined ||
+    previousMemoState.hasDirtyInstanceDependencies !== false ||
+    previousMemoState.hasUnflushedEffectDependencies !== false ||
+    previousMemoState.hasRetainedInstanceDependencies !== false ||
+    !areMemoPropsEqual(node.type, previousMemoState.props, node.props)
+  ) {
+    return undefined;
+  }
+
+  const fiber = getMemoBailoutFiber(
+    runtime,
+    current,
+    node.props,
+    previousMemoState,
+    canReuseCurrentFiber,
+  );
+  fiber.type = node.type;
+  fiber.child = getSkippedChild(current);
+  fiber.memoizedState = previousMemoState;
+  return {
+    fiber,
+    consumed: 0,
+  };
+}
+
 function isPendingLazyFiber(fiber: Fiber): boolean {
   if (fiber.tag !== "lazy" || !isLazyType(fiber.type)) {
     return false;
@@ -3223,6 +3443,15 @@ function joinCommitPath(path: string, segment: string): string {
   return path === SKIP_COMMIT_PATH ? "" : joinPath(path, segment);
 }
 
+function getHydrationChildOptions(
+  options: FiberHydrationOptions,
+  component: Function,
+): FiberHydrationOptions {
+  return options.hydration === undefined
+    ? options
+    : withHydrationComponentStack(options, getComponentName(component));
+}
+
 function getComponentName(component: Function): string {
   return component.name === "" ? "Anonymous" : component.name;
 }
@@ -3288,6 +3517,152 @@ function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): 
   }
 }
 
+type RuntimeHookSlotLike = {
+  kind?: string;
+};
+
+type RuntimeEffectHookSlotLike = RuntimeHookSlotLike & {
+  mounted?: boolean;
+  disposed?: boolean;
+};
+
+interface RuntimeInstanceLike {
+  hooks?: readonly (RuntimeHookSlotLike | undefined)[];
+  contextDependencies?: unknown;
+}
+
+function memoStateNeedsDirtyInstanceCheck(state: MemoFiberState): boolean {
+  return state.hasDirtyInstanceDependencies !== false;
+}
+
+function memoStateNeedsEffectCheck(state: MemoFiberState): boolean {
+  return state.hasUnflushedEffectDependencies !== false;
+}
+
+function memoStateNeedsActiveInstanceMark(state: MemoFiberState): boolean {
+  return state.hasRetainedInstanceDependencies !== false;
+}
+
+function getMemoBailoutFiber(
+  runtime: RootRuntime,
+  current: Fiber,
+  pendingProps: unknown,
+  state: MemoFiberState,
+  canReuseCurrentFiber: boolean,
+): Fiber {
+  if (canReuseCurrentFiber && canReuseMemoBailoutFiber(current, state)) {
+    current.pendingProps = pendingProps;
+    current.flags = NoFlags;
+    current.subtreeFlags = NoFlags;
+    current.childListChanged = false;
+    current.subtreeChildListChanged = false;
+    current.hostChildListChanged = false;
+    return current;
+  }
+
+  const fiber = createWorkInProgress(current, pendingProps);
+  if (memoStateNeedsActiveInstanceMark(state)) {
+    markActiveInstanceKeys(runtime, state.instanceKeys);
+  }
+  return fiber;
+}
+
+function canReuseMemoBailoutFiber(current: Fiber, state: MemoFiberState): boolean {
+  return (
+    state.hasRetainedInstanceDependencies === false &&
+    current.hasRefSubtree !== true &&
+    current.hydrateExisting !== true
+  );
+}
+
+function hasDirtyInstanceDependencies(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const instance = runtime.instances.get(key) as RuntimeInstanceLike | undefined;
+
+    if (instance === undefined || instance.contextDependencies !== undefined) {
+      return true;
+    }
+
+    if (instance.hooks?.some(isDirtyCapableHookSlot) === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasRetainedInstanceDependencies(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const instance = runtime.instances.get(key) as RuntimeInstanceLike | undefined;
+
+    if (instance === undefined || instance.contextDependencies !== undefined) {
+      return true;
+    }
+
+    if (instance.hooks !== undefined && instance.hooks.length > 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isDirtyCapableHookSlot(slot: RuntimeHookSlotLike | undefined): boolean {
+  if (slot === undefined) {
+    return false;
+  }
+
+  return (
+    slot.kind !== "ref" &&
+    slot.kind !== "memo" &&
+    slot.kind !== "debug" &&
+    slot.kind !== "effect"
+  );
+}
+
+function hasUnflushedEffectDependencies(
+  runtime: RootRuntime,
+  keys: readonly string[],
+): boolean {
+  for (const key of keys) {
+    const instance = runtime.instances.get(key) as RuntimeInstanceLike | undefined;
+
+    if (instance === undefined) {
+      return true;
+    }
+
+    if (instance.hooks?.some((slot) => slot?.kind === "effect") === true) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasClassComponentDescendant(fiber: Fiber | undefined): boolean {
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    if (cursor.tag === "class-component") {
+      return true;
+    }
+
+    if (hasClassComponentDescendant(cursor.child)) {
+      return true;
+    }
+
+    cursor = cursor.sibling;
+  }
+
+  return false;
+}
+
 function hasDirtyInstance(
   runtime: RootRuntime | undefined,
   keys: readonly string[],
@@ -3301,6 +3676,10 @@ function hasDirtyInstance(
     return true;
   }
 
+  if (keys.length === 0) {
+    return false;
+  }
+
   if (keys.some(
     (key) =>
       (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
@@ -3312,12 +3691,21 @@ function hasDirtyInstance(
     return false;
   }
 
-  for (const [key, instance] of runtime.instances) {
-    if (
-      (key === prefix || key.startsWith(`${prefix}.`)) &&
-      (instance as { dirty?: boolean }).dirty === true
-    ) {
-      return true;
+  // Resolve dirty descendants through the prefix index instead of scanning
+  // every runtime instance. The previous full-map scan made memo/function
+  // bailout O(total instances) per node, i.e. O(n^2) for large keyed lists
+  // (js-framework-benchmark update-every-10th / select). The index is the same
+  // source of truth used by collectRuntimeInstanceKeys.
+  const keysUnderPrefix = runtime.instanceKeysByPrefix.get(prefix);
+
+  if (keysUnderPrefix !== undefined) {
+    for (const key of keysUnderPrefix) {
+      if (
+        (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty ===
+        true
+      ) {
+        return true;
+      }
     }
   }
 
@@ -3327,7 +3715,7 @@ function hasDirtyInstance(
 function hasUnflushedMountEffectInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
   return keys.some((key) => {
     const instance = runtime.instances.get(key) as
-      | { hooks?: readonly ({ kind?: string; mounted?: boolean; disposed?: boolean } | undefined)[] }
+      | { hooks?: readonly (RuntimeEffectHookSlotLike | undefined)[] }
       | undefined;
 
     return instance?.hooks?.some(

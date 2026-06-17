@@ -41,6 +41,24 @@ export interface ReadonlyCell<T> {
 }
 
 // @public
+export interface Selector<TValue, TKey = TValue> {
+    // (undocumented)
+    (key: TKey): boolean;
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    subscribe(key: TKey, listener: (selected: boolean) => void): () => void;
+}
+
+// @public
+export function selector<TValue, TKey = TValue>(source: ReadonlyCell<TValue>, options?: {
+    equals?: SelectorEquality<TValue, TKey> | undefined;
+}): Selector<TValue, TKey>;
+
+// @public
+export type SelectorEquality<TValue, TKey> = (value: TValue, key: TKey) => boolean;
+
+// @public
 export function untrack<T>(fn: () => T): T;
 
 // (No @packageDocumentation comment for this package)

@@ -1,9 +1,43 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { applyDomProp, removeDomProp } from "../src/dom-prop-application.js";
+import {
+  applyDomProp,
+  registerReactivePropBinding,
+  removeDomProp,
+  withPropBindingMetadata,
+} from "../src/dom-prop-application.js";
 
 describe("DOM prop application policy", () => {
+  test("appends reactive prop bindings without replacing the binding array", () => {
+    const div = document.createElement("div") as HTMLDivElement & {
+      __mreactPropBindings?: unknown[];
+    };
+    const firstBinding = {
+      dispose() {},
+      retarget() {},
+    };
+    const secondBinding = {
+      dispose() {},
+      retarget() {},
+    };
+
+    const disposeFirst = withPropBindingMetadata(() =>
+      registerReactivePropBinding(div, firstBinding),
+    );
+    const bindings = div.__mreactPropBindings;
+
+    const disposeSecond = withPropBindingMetadata(() =>
+      registerReactivePropBinding(div, secondBinding),
+    );
+
+    expect(div.__mreactPropBindings).toBe(bindings);
+    expect(div.__mreactPropBindings).toEqual([firstBinding, secondBinding]);
+
+    disposeSecond();
+    disposeFirst();
+  });
+
   test("normalizes JSX aliases for property-preferred and attribute-preferred entrypoints", () => {
     const label = document.createElement("label");
     const meta = document.createElement("meta");

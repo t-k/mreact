@@ -52,6 +52,17 @@ describe("react-compat automatic JSX runtime", () => {
     });
   });
 
+  test("jsx preserves symbol metadata props used by compiler output", () => {
+    const binding = { value: "Save" };
+    const element = jsx("button", {
+      [REACTIVE_TEXT_BINDING_META]: binding,
+      children: "Save",
+    });
+
+    expect((element.props as Record<PropertyKey, unknown>)[REACTIVE_TEXT_BINDING_META])
+      .toBe(binding);
+  });
+
   test("jsx runtime does not spread props before createElement", async () => {
     const source = await readFile(
       new URL("../src/jsx-runtime.ts", import.meta.url),

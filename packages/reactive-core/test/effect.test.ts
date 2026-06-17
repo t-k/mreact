@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { cell, effect } from "../src/index.js";
 import { setScheduler } from "../src/internal.js";
+import { runtimeState, type ReactiveComputation } from "../src/state.js";
 import { flushEffects } from "../src/testing.js";
 
 describe("effect", () => {
@@ -46,6 +47,67 @@ describe("effect", () => {
     await flushEffects();
 
     expect(calls).toEqual([0]);
+  });
+
+  test("does not allocate added dependency tracking before a dependency is added", () => {
+    const count = cell(0);
+    let addedDepsAllocated = false;
+
+    const dispose = effect(() => {
+      const computation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      addedDepsAllocated = computation?.trackingAddedDeps !== undefined;
+      count.get();
+    });
+
+    dispose();
+
+    expect(addedDepsAllocated).toBe(false);
+  });
+
+  test("does not allocate touched dependency tracking for stable effect dependencies", async () => {
+    const count = cell(0);
+    let touchedDepsAllocated = false;
+
+    const dispose = effect(() => {
+      const computation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      touchedDepsAllocated ||= computation?.trackingTouchedDeps !== undefined;
+      count.get();
+    });
+
+    count.set(1);
+    await flushEffects();
+    dispose();
+
+    expect(touchedDepsAllocated).toBe(false);
+  });
+
+  test("initial run does not probe cleanup touched dependency set", () => {
+    const count = cell(0);
+    const originalHas = Set.prototype.has;
+    let sourceHasCalls = 0;
+
+    try {
+      Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          "subscribers" in value
+        ) {
+          sourceHasCalls += 1;
+        }
+
+        return originalHas.call(this, value);
+      };
+
+      const dispose = effect(() => {
+        count.get();
+      });
+      dispose();
+    } finally {
+      Set.prototype.has = originalHas;
+    }
+
+    expect(sourceHasCalls).toBe(0);
   });
 
   test("cleans up before rerun and once on dispose", async () => {

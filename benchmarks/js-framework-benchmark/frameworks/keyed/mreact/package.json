@@ -1,0 +1,29 @@
+{
+  "name": "js-framework-benchmark-mreact",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/assets/index.js",
+  "js-framework-benchmark": {
+    "frameworkVersionFromPackage": "@reckona/mreact-reactive-dom",
+    "frameworkHomeURL": "https://github.com/t-k/mreact",
+    "language": "TypeScript"
+  },
+  "scripts": {
+    "build-prod": "vite build --mode production"
+  },
+  "author": "Takuto Wada",
+  "license": "MIT",
+  "homepage": "https://github.com/t-k/mreact",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t-k/mreact.git"
+  },
+  "dependencies": {
+    "@reckona/mreact-reactive-core": "0.0.169",
+    "@reckona/mreact-reactive-dom": "0.0.169"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}
