@@ -1887,9 +1887,11 @@ function createHostFiberImpl(
 
   const elementNamespace = namespaceForHostElement(options.namespace ?? "html", node.type);
   const childNamespace = namespaceForHostChildren(elementNamespace, node.type);
+  const reusableCurrent =
+    current?.tag === "host-component" && current.type === node.type ? current : undefined;
   const fiber =
-    current?.tag === "host-component" && current.type === node.type
-      ? createWorkInProgress(current, node.props)
+    reusableCurrent !== undefined
+      ? createWorkInProgress(reusableCurrent, node.props)
       : createFiber("host-component", node.props, key);
   const existing = options.previousNodes?.[0];
   const existingElement = isHostElement(existing) ? existing : undefined;
@@ -1916,14 +1918,14 @@ function createHostFiberImpl(
   }
 
   fiber.type = node.type;
+  // When reusing a same-type current fiber, its stateNode was created for this
+  // exact tag and namespace (same tree position), so the hostElementMatches
+  // re-check (localName + namespaceURI reads) is redundant.
   fiber.stateNode =
     tagMatches
       ? existingElement
-      : current?.tag === "host-component" &&
-          current.type === node.type &&
-          isHostElement(current.stateNode) &&
-          hostElementMatches(current.stateNode, node.type, elementNamespace)
-        ? current.stateNode
+      : reusableCurrent !== undefined && isHostElement(reusableCurrent.stateNode)
+        ? reusableCurrent.stateNode
         : createHostElement(getDocumentRef(options), node.type, options.namespace ?? "html");
   fiber.hydrateExisting = tagMatches && options.previousNodes !== undefined;
   const previousChildNodes =
