@@ -828,6 +828,39 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("removes one keyed root child without resyncing unchanged siblings", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "b", key: "b" }, "B"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+    const firstRow = updated.child;
+    const lastRow = firstRow?.sibling;
+
+    if (firstRow === undefined || lastRow === undefined) {
+      expect.fail("expected remaining root children");
+    }
+
+    firstRow.stateNode = undefined;
+    lastRow.stateNode = undefined;
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
+
   test("removes SVG grandchildren when a component child collapses to null", () => {
     const container = document.createElement("div");
     const root = createRoot(container);

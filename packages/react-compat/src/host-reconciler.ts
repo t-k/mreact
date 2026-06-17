@@ -264,6 +264,20 @@ export function commitHostFiberRoot(
       }
 
       if (
+        finishedWork.childListChanged &&
+        commitHostKeyedChildListMutationFiber(
+          finishedWork,
+          root.container,
+          root.container,
+          commitPath,
+          options,
+        )
+      ) {
+        committed = true;
+        return;
+      }
+
+      if (
         !finishedWork.childListChanged &&
         finishedWork.subtreeChildListChanged &&
         commitHostKeyedChildListMutation(finishedWork.child, root.container, root.container, commitPath, options)
