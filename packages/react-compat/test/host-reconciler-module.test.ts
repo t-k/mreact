@@ -128,8 +128,21 @@ describe("host reconciler module", () => {
     const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
     const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
 
-    expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
+    expect(memoStateSource).toContain("const hasClassDescendant = instanceKeys.length === 0");
     expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
+  });
+
+  test("skips memo class-descendant scans for runtime-free host subtrees", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const memoStateStart = hostReconcilerSource.indexOf("const instanceKeys = collectInstanceKeys(runtime, memoPath);");
+    const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
+    const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
+
+    expect(memoStateSource).toContain("instanceKeys.length === 0");
+    expect(memoStateSource).toContain(": hasClassComponentDescendant(fiber.child);");
   });
 
   test("builds runtime instance key prefixes without repeated slice joins", async () => {

@@ -1445,7 +1445,9 @@ function createHostFiberImpl(
       bubbleHostChild(fiber, fiber.child);
     }
     const instanceKeys = collectInstanceKeys(runtime, memoPath);
-    const hasClassDescendant = hasClassComponentDescendant(fiber.child);
+    const hasClassDescendant = instanceKeys.length === 0
+      ? false
+      : hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
       props: node.props as Record<string, unknown>,
       instanceKeys,
