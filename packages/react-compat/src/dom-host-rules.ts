@@ -113,7 +113,10 @@ export function hostElementMatches(
     return false;
   }
 
-  return element.tagName.toLowerCase() === tagName && element.namespaceURI === namespaceUri(namespace);
+  // localName is already lowercase for HTML (and preserves case for SVG), so it
+  // matches the lowercase tag from the element type without allocating the
+  // lowercased string that element.tagName.toLowerCase() would.
+  return element.localName === tagName && element.namespaceURI === namespaceUri(namespace);
 }
 
 export function serializeClientStyleValue(name: string, value: unknown): string {

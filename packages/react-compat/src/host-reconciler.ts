@@ -2265,6 +2265,7 @@ function commitHostDirtyFiber(
       return;
     }
 
+    const isDomElement = isDomHostElement(element);
     const props = fiber.pendingProps as Record<string, unknown>;
     const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
     const directTextChild =
@@ -2290,7 +2291,7 @@ function commitHostDirtyFiber(
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (isDomHostElement(element) && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
+    if (isDomElement && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
@@ -2308,8 +2309,8 @@ function commitHostDirtyFiber(
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
-        !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
-        !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
+        !(isDomElement && childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !(isDomElement && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
         syncChildNodes(element as ParentNode, childNodes);
       }
@@ -2317,7 +2318,7 @@ function commitHostDirtyFiber(
       commitHostDirtyChildrenOf(fiber, fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (isFormHostType(fiber.type) && isDomHostElement(element)) {
+    if (isDomElement && isFormHostType(fiber.type)) {
       applyPostChildFormProps(element, props, previousProps);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
@@ -2766,6 +2767,7 @@ function commitHostFiber(
       return [element];
     }
 
+    const isDomElement = isDomHostElement(element);
     const props = fiber.pendingProps as Record<string, unknown>;
     const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
     const directTextChild =
@@ -2791,7 +2793,7 @@ function commitHostFiber(
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (isDomHostElement(element) && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
+    if (isDomElement && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
@@ -2810,8 +2812,8 @@ function commitHostFiber(
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
-        !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
-        !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
+        !(isDomElement && childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !(isDomElement && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
         syncChildNodes(element as ParentNode, childNodes);
       }
@@ -2819,7 +2821,7 @@ function commitHostFiber(
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (isFormHostType(fiber.type) && isDomHostElement(element)) {
+    if (isDomElement && isFormHostType(fiber.type)) {
       applyPostChildFormProps(element, props, previousProps);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
