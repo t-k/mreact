@@ -1651,6 +1651,16 @@ function createHostFiberImpl(
     return { fiber: undefined, consumed: 0 };
   }
 
+  const initialHostOnlyFiber = tryCreateInitialHostOnlyFiber(
+    current,
+    node,
+    key,
+    options,
+  );
+  if (initialHostOnlyFiber !== undefined) {
+    return { fiber: initialHostOnlyFiber, consumed: 0 };
+  }
+
   const elementNamespace = namespaceForHostElement(options.namespace ?? "html", node.type);
   const childNamespace = namespaceForHostChildren(elementNamespace, node.type);
   const fiber =
@@ -1745,6 +1755,165 @@ function isFunctionComponentType(value: unknown): value is (
     typeof value === "function" &&
     typeof (value as { prototype?: { render?: unknown } }).prototype?.render !==
       "function"
+  );
+}
+
+function tryCreateInitialHostOnlyFiber(
+  current: Fiber | undefined,
+  node: ReactCompatElement,
+  key: string | undefined,
+  options: FiberHydrationOptions,
+): Fiber | undefined {
+  if (
+    current !== undefined ||
+    options.previousNodes !== undefined ||
+    !shouldUseDirectHostTextChild() ||
+    typeof node.type !== "string" ||
+    !canCreateInitialHostOnlyNode(node)
+  ) {
+    return undefined;
+  }
+
+  return createInitialHostOnlyElementFiber(
+    node,
+    key,
+    options.namespace ?? "html",
+    getDocumentRef(options),
+  );
+}
+
+function createInitialHostOnlyElementFiber(
+  node: ReactCompatElement,
+  key: string | undefined,
+  namespace: HostNamespace,
+  documentRef: Document | CustomHostDocument,
+): Fiber {
+  const elementType = node.type as string;
+  const elementNamespace = namespaceForHostElement(namespace, elementType);
+  const childNamespace = namespaceForHostChildren(elementNamespace, elementType);
+  const fiber = createFiber("host-component", node.props, key);
+  fiber.type = elementType;
+  fiber.stateNode = createHostElement(documentRef, elementType, namespace);
+  fiber.flags |= Placement;
+  fiber.hostChildListChanged = true;
+
+  if (getDirectHostTextChild(node.props.children) === undefined) {
+    fiber.child = createInitialHostOnlyChildList(
+      fiber,
+      node.props.children as ReactCompatNode,
+      childNamespace,
+      documentRef,
+    );
+  }
+
+  return fiber;
+}
+
+function createInitialHostOnlyChildList(
+  parent: Fiber,
+  children: ReactCompatNode,
+  namespace: HostNamespace,
+  documentRef: Document | CustomHostDocument,
+): Fiber | undefined {
+  const normalized = normalizeChildren(children);
+  let first: Fiber | undefined;
+  let previous: Fiber | undefined;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const child = normalized[index];
+    const fiber = createInitialHostOnlyChildFiber(child, namespace, documentRef);
+
+    if (fiber === undefined) {
+      continue;
+    }
+
+    fiber.return = parent;
+    fiber.memoizedState = index;
+
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    bubbleHostChild(parent, fiber);
+    previous = fiber;
+  }
+
+  return first;
+}
+
+function createInitialHostOnlyChildFiber(
+  node: ReactCompatNode,
+  namespace: HostNamespace,
+  documentRef: Document | CustomHostDocument,
+): Fiber | undefined {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return undefined;
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    const fiber = createFiber("host-text", String(node));
+    fiber.stateNode = createHostTextNode(documentRef);
+    fiber.flags |= Placement;
+    return fiber;
+  }
+
+  if (Array.isArray(node)) {
+    const fiber = createFiber("fragment", node);
+    fiber.child = createInitialHostOnlyChildList(fiber, node, namespace, documentRef);
+    return fiber.child === undefined ? undefined : fiber;
+  }
+
+  if (!isReactCompatElement(node) || typeof node.type !== "string") {
+    return undefined;
+  }
+
+  return createInitialHostOnlyElementFiber(
+    node,
+    node.key === null ? undefined : node.key,
+    namespace,
+    documentRef,
+  );
+}
+
+function canCreateInitialHostOnlyNode(node: ReactCompatNode): boolean {
+  if (
+    node === null ||
+    node === undefined ||
+    typeof node === "boolean" ||
+    typeof node === "string" ||
+    typeof node === "number"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(node)) {
+    return node.every(canCreateInitialHostOnlyNode);
+  }
+
+  if (
+    !isReactCompatElement(node) ||
+    typeof node.type !== "string" ||
+    node.ref !== null ||
+    hasInitialHostOnlyExcludedProps(node.props)
+  ) {
+    return false;
+  }
+
+  return canCreateInitialHostOnlyNode(node.props.children as ReactCompatNode);
+}
+
+function hasInitialHostOnlyExcludedProps(props: Record<string, unknown>): boolean {
+  return (
+    hasOwnProperty.call(props, REACTIVE_TEXT_BINDING_META) ||
+    props.dangerouslySetInnerHTML !== undefined ||
+    props.contentEditable === true ||
+    props.suppressContentEditableWarning === true ||
+    props.value !== undefined ||
+    props.defaultValue !== undefined ||
+    props.checked !== undefined ||
+    props.defaultChecked !== undefined
   );
 }
 
