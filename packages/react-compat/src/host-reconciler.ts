@@ -38,6 +38,7 @@ import {
   namespaceForHostChildren,
   namespaceForHostElement,
   type CustomHostDocument,
+  type HostElement,
   type HostNamespace,
 } from "./dom-host-rules.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
@@ -1893,28 +1894,35 @@ function createHostFiberImpl(
     reusableCurrent !== undefined
       ? createWorkInProgress(reusableCurrent, node.props)
       : createFiber("host-component", node.props, key);
+  // The hydration node bookkeeping only matters when hydrating. Skipping it for
+  // the common (non-hydration) render avoids an isHostElement(undefined) probe
+  // and the mismatch checks on every reconciled element.
   const existing = options.previousNodes?.[0];
-  const existingElement = isHostElement(existing) ? existing : undefined;
-  const tagMatches =
-    existingElement !== undefined &&
-    hostElementMatches(existingElement, node.type, elementNamespace);
+  let existingElement: HostElement | undefined;
+  let tagMatches = false;
+  if (options.previousNodes !== undefined) {
+    existingElement = isHostElement(existing) ? existing : undefined;
+    tagMatches =
+      existingElement !== undefined &&
+      hostElementMatches(existingElement, node.type, elementNamespace);
 
-  if (existing === undefined && options.previousNodes !== undefined) {
-    reportMissingHydrationNode(options, path);
-  } else if (existing !== undefined && !isHostElement(existing)) {
-    reportHydrationNodeTypeMismatch(options, path, `<${node.type}>`, existing);
-  }
+    if (existing === undefined) {
+      reportMissingHydrationNode(options, path);
+    } else if (!isHostElement(existing)) {
+      reportHydrationNodeTypeMismatch(options, path, `<${node.type}>`, existing);
+    }
 
-  if (existingElement !== undefined && !tagMatches) {
-    reportRecoverable(
-      options,
-      "tag",
-      path,
-      new Error(
-        `Hydration tag mismatch: expected <${node.type}> but found <${existingElement.tagName.toLowerCase()}>.`,
-      ),
-    );
-    reportElementTextMismatch(options, `${path}.c`, existingElement, node.props.children);
+    if (existingElement !== undefined && !tagMatches) {
+      reportRecoverable(
+        options,
+        "tag",
+        path,
+        new Error(
+          `Hydration tag mismatch: expected <${node.type}> but found <${existingElement.tagName.toLowerCase()}>.`,
+        ),
+      );
+      reportElementTextMismatch(options, `${path}.c`, existingElement, node.props.children);
+    }
   }
 
   fiber.type = node.type;
@@ -1927,10 +1935,10 @@ function createHostFiberImpl(
       : reusableCurrent !== undefined && isHostElement(reusableCurrent.stateNode)
         ? reusableCurrent.stateNode
         : createHostElement(getDocumentRef(options), node.type, options.namespace ?? "html");
-  fiber.hydrateExisting = tagMatches && options.previousNodes !== undefined;
+  fiber.hydrateExisting = tagMatches;
   const previousChildNodes =
     tagMatches && existingElement !== undefined
-      ? Array.from(existingElement.childNodes)
+      ? Array.from((existingElement as Element).childNodes)
       : undefined;
   const directTextChild =
     shouldUseDirectHostTextChild() && previousChildNodes === undefined
