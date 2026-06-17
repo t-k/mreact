@@ -88,6 +88,7 @@ if (benchmarkRoot instanceof HTMLElement) {
 
     for (const countNode of panel.querySelectorAll("[data-benchmark-visible-count]")) {
       countNode.textContent = `${visibleRows} ${visibleRows === 1 ? "entry" : "entries"}`;
+      countNode.setAttribute("aria-live", "polite");
     }
 
     return visibleRows;

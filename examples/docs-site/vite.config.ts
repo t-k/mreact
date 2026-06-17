@@ -1,3 +1,5 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import mdx from "@mdx-js/rollup";
 import rehypeShiki from "@shikijs/rehype";
 import tailwindcss from "@tailwindcss/vite";
@@ -8,6 +10,7 @@ import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { defineConfig } from "vite";
 
 const base = normalizeBasePath(process.env.MREACT_DOCS_BASE_PATH ?? "/");
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   base,
@@ -20,7 +23,7 @@ export default defineConfig({
     }),
     tailwindcss(),
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "src/app",
       publicDir: "public",
       allowedSourceDirs: ["src"],

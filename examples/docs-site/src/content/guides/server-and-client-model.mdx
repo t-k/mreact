@@ -1,7 +1,7 @@
 export const title = "Server and Client Model";
 export const description = "How Mreact decides what runs on the server and what hydrates in the browser.";
 
-# Server and client model
+# Server and Client Model
 
 Mreact renders routes on the server by default and only ships browser runtime when a rendered code path needs it. Use this page to decide whether a feature should stay server-only, become client-interactive through inference, use an explicit client boundary, or turn the whole route into a client route.
 
@@ -53,7 +53,7 @@ export default function LikeButton() {
 
 ```tsx
 // src/app/widgets/page.tsx
-import { LikeButton } from "./LikeButton";
+import { LikeButton } from "./LikeButton.client.js";
 
 export default function WidgetsPage() {
   return (

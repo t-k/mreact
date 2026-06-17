@@ -97,7 +97,7 @@ function enhanceCodeBlocks(html: string): string {
     const fileTreeBlockClass = "code-block is-file-tree";
     const blockClass = highlightedPreBody === preBody ? "code-block" : fileTreeBlockClass;
 
-    return `<div class="${blockClass}"><button class="code-copy" type="button">Copy</button><pre${preAttributes}>${highlightedPreBody}</pre></div>`;
+    return `<div class="${blockClass}"><button class="code-copy" type="button" aria-label="Copy code">Copy</button><pre${preAttributes}>${highlightedPreBody}</pre></div>`;
   });
 }
 

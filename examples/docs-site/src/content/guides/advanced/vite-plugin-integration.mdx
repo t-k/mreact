@@ -1,7 +1,7 @@
 export const title = "Vite Plugin Integration";
 export const description = "Use Vite plugins for MDX, CSS tooling, custom content transforms, define values, and app-router builds.";
 
-# Vite plugin integration
+# Vite Plugin Integration
 
 Mreact reads your `vite.config.ts` and forwards app-safe Vite plugin behavior into dev, SSR, client, adapter, and prerender builds. This is what lets MDX, Tailwind, syntax highlighting, and small content transforms participate in the app router without a separate build system.
 
@@ -19,10 +19,14 @@ Put content and CSS plugins in the same `plugins` array as `mreactRouter()`. Kee
 
 ```ts
 // vite.config.ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import mdx from "@mdx-js/rollup";
 import tailwindcss from "@tailwindcss/vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
 import { defineConfig } from "vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
@@ -32,7 +36,7 @@ export default defineConfig({
     }),
     tailwindcss(),
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "src/app",
       publicDir: "public",
       allowedSourceDirs: ["src"],
@@ -49,8 +53,12 @@ Custom plugins work when they return JavaScript that the server and client bundl
 
 ```ts
 // vite.config.ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { mreactRouter } from "@reckona/mreact-router/vite";
 import { defineConfig } from "vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 function contentFixturePlugin() {
   return {
@@ -74,7 +82,7 @@ export default defineConfig({
   plugins: [
     contentFixturePlugin(),
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "src/app",
       allowedSourceDirs: ["src"],
     }),
@@ -131,6 +139,13 @@ Vite `define` values are forwarded into app-router builds. They work for route c
 
 ```ts
 // vite.config.ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+import { defineConfig } from "vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(process.env.npm_package_version),
@@ -140,7 +155,7 @@ export default defineConfig({
   },
   plugins: [
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "src/app",
     }),
   ],

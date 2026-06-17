@@ -203,7 +203,7 @@ const items = feed.result.get().pages.flatMap((page) => page.items);
 Use `createMutation()` when a client action changes server state. Keep query keys stable so successful mutations can invalidate or refetch the affected data.
 
 ```ts
-const saveProfile = createMutation<{ name: string }, Profile>({
+const saveProfile = createMutation<{ name: string }, Profile>(getQueryClient(), {
   mutationFn: (values) =>
     fetch("/api/profile", {
       method: "POST",

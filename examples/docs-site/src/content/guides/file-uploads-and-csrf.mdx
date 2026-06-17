@@ -1,7 +1,7 @@
 export const title = "File Uploads and CSRF";
 export const description = "Handle multipart upload forms, server action CSRF, HTTP API CSRF, validation, safe filenames, and direct storage uploads.";
 
-# File uploads and CSRF
+# File Uploads and CSRF
 
 File uploads are mutating requests. Treat them like account changes or payments: authenticate the user, authorize the target object, limit the request body, validate the file before storage, and apply CSRF protection for cookie-authenticated browser submissions.
 

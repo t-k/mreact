@@ -12,7 +12,7 @@ export default function HomePage() {
   const page = pageForSlug("");
 
   if (page === undefined) {
-    return <main>Missing overview.</main>;
+    return <p>Missing overview.</p>;
   }
 
   return <DocPage page={page} />;

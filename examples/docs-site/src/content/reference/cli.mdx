@@ -21,7 +21,7 @@ Use this page when you need to choose the right CLI command, map an npm script t
 - `mreact-router package cloudflare-pages` creates a Cloudflare Pages advanced-mode artifact with `_worker.js`.
 
 ```bash
-mreact-router dev --host 0.0.0.0 --port 5173 --log requests
+mreact-router dev --host 0.0.0.0 --port 3001 --log requests
 mreact-router build --target=node --client-source-maps=hidden
 mreact-router build --target=aws-lambda
 mreact-router package aws-lambda --from .mreact --out .lambda
@@ -31,7 +31,8 @@ mreact-router package aws-lambda --from .mreact --out .lambda
 
 - `--target=node|cloudflare|aws-lambda|all` controls which production artifact is built.
 - `--client-source-maps=none|hidden` controls production browser source maps. Use `hidden` when you upload maps to Sentry or another error pipeline without publishing source map comments to browsers.
-- `--host`, `--port`, `--host-policy`, and `--allowed-hosts` affect development and start server binding and request host checks.
+- `mreact-router dev` reads `--host` and `--port`.
+- `mreact-router start` reads `--host`, `--host-policy`, and `--allowed-hosts`. Set `PORT` when you need a non-default start-server port.
 - `--log requests` enables compact request logs. `MREACT_ROUTER_LOG=requests` enables the same mode from the environment.
 - `--from`, `--out`, `--handler`, and `--skip-runtime-dependency-check` are packaging options used after a build.
 
