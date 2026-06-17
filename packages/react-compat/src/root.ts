@@ -35,7 +35,6 @@ import { commitFiberRoot, detachFiberRefs } from "./fiber-commit.js";
 import {
   canRenderHostFiber,
   commitHydratingHostFiberRoot,
-  disposeHostFiberResources,
   renderHydratingHostFiberRoot,
   renderHostFiberRoot,
 } from "./fiber-host.js";
@@ -132,7 +131,6 @@ export function createRoot(
     unmount() {
       runtime.currentElement = undefined;
       runtime.dispose();
-      disposeHostFiberResources(fiberRoot.current);
       detachFiberRefs(fiberRoot.current);
       runtime.instances.clear();
       unmountDevToolsRoot(container);
@@ -331,7 +329,6 @@ export function hydrateRoot(
     unmount() {
       runtime.currentElement = undefined;
       runtime.dispose();
-      disposeHostFiberResources(fiberRoot.current);
       detachFiberRefs(fiberRoot.current);
       runtime.instances.clear();
       unmountDevToolsRoot(container);

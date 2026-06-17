@@ -5,7 +5,6 @@ export const MEMO_TYPE = Symbol.for("react.memo");
 export const LAZY_TYPE = Symbol.for("react.lazy");
 export const STRICT_MODE_TYPE = Symbol.for("react.strict_mode");
 export const PORTAL_TYPE = Symbol.for("react.portal");
-export const REACTIVE_DOM_BLOCK_TYPE = Symbol.for("modular.react.reactive_dom_block");
 const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
 /** Symbol used to group JSX children without adding a host element. */
 export const Fragment = Symbol.for("react.fragment");
@@ -49,7 +48,6 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof Activity
   | typeof Profiler
   | typeof ERROR_BOUNDARY_TYPE
-  | typeof REACTIVE_DOM_BLOCK_TYPE
   | typeof STRICT_MODE_TYPE
   | ReactCompatContextProviderShorthand
   | ReactCompatProviderType
@@ -99,17 +97,6 @@ export interface ReactCompatPortal {
   container: Element;
   children: ReactCompatNode;
   key: string | null;
-}
-
-export interface ReactiveDomBlockResult {
-  node: ChildNode;
-  dispose?: (() => void) | undefined;
-}
-
-export type ReactiveDomBlockRender = () => ChildNode | ReactiveDomBlockResult;
-
-export interface ReactiveDomBlockProps {
-  render: ReactiveDomBlockRender;
 }
 
 /** Creates a React-compatible element from a type, config object, and children. */
@@ -479,9 +466,6 @@ function copyInternalElementSymbolProps(
   const symbolSource = source as Record<PropertyKey, unknown>;
   if (hasOwnProperty.call(source, REACTIVE_TEXT_BINDING_META)) {
     target[REACTIVE_TEXT_BINDING_META] = symbolSource[REACTIVE_TEXT_BINDING_META];
-  }
-  if (hasOwnProperty.call(source, REACTIVE_STATE_BINDING_META)) {
-    target[REACTIVE_STATE_BINDING_META] = symbolSource[REACTIVE_STATE_BINDING_META];
   }
 }
 

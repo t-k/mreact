@@ -23,10 +23,6 @@ import {
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import type { Fiber } from "../src/fiber.js";
 import {
-  createReactiveDomBlock,
-  REACTIVE_STATE_BINDING_META,
-} from "../src/jsx-runtime.js";
-import {
   forceFrameRate,
   setSchedulerHostForTesting,
   type SchedulerHost,
@@ -213,74 +209,6 @@ describe("react-compat useState", () => {
       dispose?.();
       process.env.NODE_ENV = previousNodeEnv;
     }
-  });
-
-  test("mounts compiler reactive DOM blocks without re-rendering the component", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-    const container = document.createElement("div");
-    let renders = 0;
-    let update: (value: number) => void = () => {};
-
-    function Counter() {
-      renders += 1;
-      const state = useState(0) as unknown as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
-      const [, setCount] = state;
-      const stateBinding = state[REACTIVE_STATE_BINDING_META] as { get(): number };
-      update = setCount;
-
-      return createReactiveDomBlock(() => {
-        const node = document.createTextNode("");
-        const dispose = effect(() => {
-          node.data = String(stateBinding.get());
-        });
-
-        return { node, dispose };
-      });
-    }
-
-    try {
-      createRoot(container).render(createElement(Counter, null));
-
-      expect(container.innerHTML).toBe("0");
-      expect(renders).toBe(1);
-
-      update(1);
-      await flushEffects();
-
-      expect(container.innerHTML).toBe("1");
-      expect(renders).toBe(1);
-    } finally {
-      process.env.NODE_ENV = previousNodeEnv;
-    }
-  });
-
-  test("disposes compiler reactive DOM blocks on unmount", () => {
-    const container = document.createElement("div");
-    let disposeCalls = 0;
-
-    function Block() {
-      return createReactiveDomBlock(() => ({
-        node: document.createTextNode("mounted"),
-        dispose() {
-          disposeCalls += 1;
-        },
-      }));
-    }
-
-    const root = createRoot(container);
-    root.render(createElement(Block, null));
-
-    expect(container.innerHTML).toBe("mounted");
-    expect(disposeCalls).toBe(0);
-
-    root.unmount();
-
-    expect(container.innerHTML).toBe("");
-    expect(disposeCalls).toBe(1);
   });
 
   test("clears compiler-proven direct text binding subscribers on unmount", () => {

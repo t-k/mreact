@@ -7,13 +7,10 @@ import {
   LAZY_TYPE,
   MEMO_TYPE,
   Profiler,
-  REACTIVE_DOM_BLOCK_TYPE,
   REACTIVE_TEXT_BINDING_META,
   STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
-  type ReactiveDomBlockProps,
-  type ReactiveDomBlockResult,
   type ReactCompatElement,
   type ReactCompatPortal,
   isReactCompatElement,
@@ -86,12 +83,6 @@ interface MemoFiberState {
   hasRetainedInstanceDependencies: boolean;
 }
 
-interface ReactiveDomBlockState {
-  dispose?: (() => void) | undefined;
-  disposed?: boolean | undefined;
-  node: ChildNode;
-}
-
 interface FunctionFiberState {
   element: ReactCompatElement;
   props: Record<string, unknown>;
@@ -138,14 +129,6 @@ interface ReactSuspenseBoundary {
 }
 
 let suspensePrimaryRenderDepth = 0;
-
-export function disposeHostFiberResources(fiber: Fiber | undefined): void {
-  if (fiber === undefined) {
-    return;
-  }
-
-  collectCommittedHostNodes(fiber);
-}
 
 export function canRenderHostFiber(node: ReactCompatNode): boolean {
   if (
@@ -312,10 +295,6 @@ export function commitHostFiberRoot(
       }
 
       const nodes = commitHostChildren(finishedWork.child, root.container, root.container, commitPath, options);
-      disposeHostDeletedFibers(finishedWork.deletions);
-      if (finishedWork.deletions === undefined && nodes.length === 0) {
-        disposeHostFiberSubtree(finishedWork.alternate?.child);
-      }
       syncChildNodes(root.container, nodes);
       committed = true;
     } finally {
@@ -1474,15 +1453,6 @@ function createHostFiberImpl(
     return { fiber, consumed: options.previousNodes?.length ?? 0 };
   }
 
-  if (node.type === REACTIVE_DOM_BLOCK_TYPE) {
-    const fiber =
-      current?.tag === "reactive-dom-block"
-        ? createWorkInProgress(current, node.props)
-        : createFiber("reactive-dom-block", node.props, key);
-    fiber.type = node.type;
-    return { fiber, consumed: 0 };
-  }
-
   if (isReactCompatProvider(node.type)) {
     const fiber =
       current?.tag === "context-provider" && current.type === node.type
@@ -2233,21 +2203,6 @@ function commitHostDirtyFiber(
   path: string,
   options: RenderOptions = {},
 ): void {
-  if (fiber.tag === "reactive-dom-block") {
-    const previousNode = (fiber.stateNode as ReactiveDomBlockState | undefined)?.node;
-    const nextNode = commitReactiveDomBlockFiber(fiber);
-
-    if (
-      previousNode !== undefined &&
-      nextNode !== undefined &&
-      previousNode !== nextNode &&
-      previousNode.parentNode === parent
-    ) {
-      parent.replaceChild(nextNode, previousNode);
-    }
-    return;
-  }
-
   if (fiber.tag === "host-text") {
     commitHostFiber(fiber, parent, eventRoot, path, options);
     return;
@@ -2303,10 +2258,6 @@ function commitHostDirtyFiber(
       fiber.subtreeChildListChanged
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
-      disposeHostDeletedFibers(fiber.deletions);
-      if (fiber.deletions === undefined && childNodes.length === 0) {
-        disposeHostFiberSubtree(fiber.alternate?.child);
-      }
       if (
         !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
         !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
@@ -2641,13 +2592,6 @@ function isSameFiberSlot(current: Fiber, next: Fiber): boolean {
 }
 
 function collectCommittedHostNodes(fiber: Fiber): Node[] {
-  if (fiber.tag === "reactive-dom-block") {
-    const state = fiber.stateNode as ReactiveDomBlockState | undefined;
-
-    disposeReactiveDomBlockState(state);
-    return state?.node === undefined ? [] : [state.node];
-  }
-
   if (
     (fiber.tag === "host-component" || fiber.tag === "host-text") &&
     fiber.stateNode instanceof Node
@@ -2666,33 +2610,7 @@ function collectCommittedHostNodes(fiber: Fiber): Node[] {
   return nodes;
 }
 
-function disposeHostDeletedFibers(deletions: readonly Fiber[] | undefined): void {
-  if (deletions === undefined) {
-    return;
-  }
-
-  for (const deletion of deletions) {
-    collectCommittedHostNodes(deletion);
-  }
-}
-
-function disposeHostFiberSubtree(fiber: Fiber | undefined): void {
-  let cursor = fiber;
-
-  while (cursor !== undefined) {
-    collectCommittedHostNodes(cursor);
-    cursor = cursor.sibling;
-  }
-}
-
 function hasCommittedHostNode(fiber: Fiber): boolean {
-  if (
-    fiber.tag === "reactive-dom-block" &&
-    (fiber.stateNode as ReactiveDomBlockState | undefined)?.node instanceof Node
-  ) {
-    return true;
-  }
-
   if (
     (fiber.tag === "host-component" || fiber.tag === "host-text") &&
     fiber.stateNode instanceof Node
@@ -2733,50 +2651,6 @@ function finishHostPassthroughFiber(fiber: Fiber): void {
   finishCommittedFiber(fiber);
 }
 
-function commitReactiveDomBlockFiber(fiber: Fiber): ChildNode | undefined {
-  const props = fiber.pendingProps as ReactiveDomBlockProps;
-  const previousProps = fiber.memoizedProps as ReactiveDomBlockProps | undefined;
-  let state = fiber.stateNode as ReactiveDomBlockState | undefined;
-
-  if (state === undefined || state.disposed === true || previousProps?.render !== props.render) {
-    const nextState = normalizeReactiveDomBlockResult(props.render());
-
-    disposeReactiveDomBlockState(state);
-    state = nextState;
-    fiber.stateNode = state;
-  }
-
-  fiber.memoizedProps = props;
-  finishCommittedFiber(fiber);
-  return state.node;
-}
-
-function normalizeReactiveDomBlockResult(
-  result: ChildNode | ReactiveDomBlockResult,
-): ReactiveDomBlockState {
-  if (result instanceof Node) {
-    return { node: result as ChildNode };
-  }
-
-  if (typeof result === "object" && result !== null && result.node instanceof Node) {
-    return {
-      ...(typeof result.dispose === "function" ? { dispose: result.dispose } : {}),
-      node: result.node,
-    };
-  }
-
-  throw new Error("createReactiveDomBlock render must return a DOM child node.");
-}
-
-function disposeReactiveDomBlockState(state: ReactiveDomBlockState | undefined): void {
-  if (state === undefined || state.disposed === true) {
-    return;
-  }
-
-  state.disposed = true;
-  state.dispose?.();
-}
-
 function commitHostFiber(
   fiber: Fiber,
   parent: ParentNode,
@@ -2784,12 +2658,6 @@ function commitHostFiber(
   path: string,
   options: RenderOptions = {},
 ): Node[] {
-  if (fiber.tag === "reactive-dom-block") {
-    const node = commitReactiveDomBlockFiber(fiber);
-
-    return node === undefined ? [] : [node];
-  }
-
   if (fiber.tag === "host-text") {
     const text = fiber.stateNode;
 

@@ -1155,8 +1155,6 @@ function getReactFiberTag(tag: FiberTag): number {
       return 4;
     case "host-component":
       return 5;
-    case "reactive-dom-block":
-      return 5;
     case "host-text":
       return 6;
     case "fragment":
