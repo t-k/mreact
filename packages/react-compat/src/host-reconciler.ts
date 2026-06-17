@@ -346,8 +346,12 @@ export function commitHydratingHostFiberRoot(
 }
 
 export function disposeHostFiberResources(fiber: Fiber | undefined): void {
+  if (fiber === undefined || fiber.hasDisposableResources !== true) {
+    return;
+  }
+
   const seen = new Set<unknown>();
-  let cursor = fiber;
+  let cursor: Fiber | undefined = fiber;
 
   while (cursor !== undefined) {
     if (cursor.tag === "reactive-dom-block") {
@@ -597,6 +601,7 @@ function reconcileKeyedRowHostChildren(
   let subtreeFlags = NoFlags;
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
+  let hasDisposableResources = false;
   let appendSuffix: AppendSuffixCommitHint | undefined;
   const canReuseUnchangedRows = hasSameKeyOrderPrefix(currentFirstChild, children);
   const row = createKeyedRowHostElementScratch();
@@ -662,6 +667,9 @@ function reconcileKeyedRowHostChildren(
     if (fiber.hasRefSubtree) {
       hasRefSubtree = true;
     }
+    if (fiber.hasDisposableResources) {
+      hasDisposableResources = true;
+    }
     subtreeFlags |= fiber.flags | fiber.subtreeFlags;
     subtreeChildListChanged =
       subtreeChildListChanged ||
@@ -679,6 +687,7 @@ function reconcileKeyedRowHostChildren(
   }
 
   parent.hasRefSubtree = hasRefSubtree;
+  parent.hasDisposableResources = hasDisposableResources;
   parent.subtreeFlags = subtreeFlags;
   parent.subtreeChildListChanged = subtreeChildListChanged;
   parent.childListChanged = listShapeChanged;
@@ -699,6 +708,7 @@ function canReuseDependencyFreeMemoAtKey(
     current.tag === "memo" &&
     current.type === node.type &&
     current.hasRefSubtree !== true &&
+    current.hasDisposableResources !== true &&
     current.hydrateExisting !== true &&
     isMemoType(node.type)
   );
@@ -904,6 +914,7 @@ function getReusableKeyedRowHostFiber(
   current.subtreeChildListChanged = false;
   current.hostChildListChanged = false;
   current.hasRefSubtree = false;
+  current.hasDisposableResources = false;
   return current;
 }
 
@@ -985,6 +996,7 @@ function createKeyedRowHostFiber(
   fiber.pendingProps = node.props;
   fiber.hostChildListChanged = false;
   fiber.hasRefSubtree = false;
+  fiber.hasDisposableResources = false;
 
   if (current === undefined || fiber.alternate !== current) {
     fiber.flags |= Placement;
@@ -1148,6 +1160,9 @@ function bubbleHostChild(parent: Fiber, child: Fiber): void {
   if (child.hasRefSubtree) {
     parent.hasRefSubtree = true;
   }
+  if (child.hasDisposableResources) {
+    parent.hasDisposableResources = true;
+  }
   parent.subtreeFlags |= child.flags | child.subtreeFlags;
   parent.subtreeChildListChanged =
     parent.subtreeChildListChanged ||
@@ -1169,6 +1184,7 @@ function recordDirtyChildCommitHints(
 
 function resetFiberRefSubtree(fiber: Fiber): void {
   fiber.hasRefSubtree = false;
+  fiber.hasDisposableResources = false;
 }
 
 function includeNodeRef(fiber: Fiber, node: ReactCompatNode): void {
@@ -1479,6 +1495,7 @@ function createHostFiberImpl(
         ? createWorkInProgress(current, node.props)
         : createFiber("reactive-dom-block", node.props, key);
     fiber.type = node.type;
+    fiber.hasDisposableResources = true;
     fiber.stateNode = current?.tag === "reactive-dom-block"
       ? current.stateNode
       : (node.props as { render: () => ReactiveDomBlockResult }).render();
@@ -3651,6 +3668,7 @@ function tryReuseMemoBailout(
   const fiber =
     canReuseCurrentFiber &&
     current.hasRefSubtree !== true &&
+    current.hasDisposableResources !== true &&
     current.hydrateExisting !== true
       ? current
       : createWorkInProgress(current, node.props);
@@ -4118,6 +4136,7 @@ function canReuseMemoBailoutFiber(current: Fiber, state: MemoFiberState): boolea
   return (
     state.hasRetainedInstanceDependencies === false &&
     current.hasRefSubtree !== true &&
+    current.hasDisposableResources !== true &&
     current.hydrateExisting !== true
   );
 }

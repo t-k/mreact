@@ -42,6 +42,7 @@ export interface Fiber {
   childLanes: Lanes;
   hydrateExisting: boolean;
   hasRefSubtree: boolean;
+  hasDisposableResources: boolean;
   hostChildListChanged: boolean;
 }
 
@@ -97,6 +98,7 @@ export function createFiber(
     childLanes: NoLanes,
     hydrateExisting: false,
     hasRefSubtree: false,
+    hasDisposableResources: false,
     hostChildListChanged: false,
   };
 }
@@ -158,6 +160,7 @@ export function createWorkInProgress(
   workInProgress.childLanes = current.childLanes;
   workInProgress.hydrateExisting = false;
   workInProgress.hasRefSubtree = current.hasRefSubtree;
+  workInProgress.hasDisposableResources = current.hasDisposableResources;
   workInProgress.hostChildListChanged = current.hostChildListChanged;
   return workInProgress;
 }
