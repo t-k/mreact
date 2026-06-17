@@ -1363,6 +1363,13 @@ function createHostFiberImpl(
     return { fiber: undefined, consumed: 0 };
   }
 
+  // Host elements (string type) are by far the most common node. Dispatch them
+  // before the component-type checks below, none of which a string can match,
+  // so each reconciled host element skips ~12 type comparisons / probes.
+  if (typeof node.type === "string") {
+    return createHostComponentFiber(parent, current, node, key, runtime, path, options);
+  }
+
   if (node.type === Fragment) {
     const fiber =
       current?.tag === "fragment"
@@ -1872,6 +1879,21 @@ function createHostFiberImpl(
     return { fiber, consumed: childResult.consumed };
   }
 
+  return { fiber: undefined, consumed: 0 };
+}
+
+// The host-component reconcile, split out of createHostFiberImpl so host
+// elements can be dispatched before the component-type checks. Only called with
+// a string element type.
+function createHostComponentFiber(
+  parent: Fiber,
+  current: Fiber | undefined,
+  node: ReactCompatElement,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions,
+): FiberReconcileResult {
   if (typeof node.type !== "string") {
     return { fiber: undefined, consumed: 0 };
   }
