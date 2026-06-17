@@ -1728,11 +1728,7 @@ function createHostFiberImpl(
     node.props.children as ReactCompatNode,
     runtime,
     `${path}.c`,
-    {
-      ...options,
-      namespace: childNamespace,
-      ...(previousChildNodes === undefined ? {} : { previousNodes: previousChildNodes }),
-    },
+    getHostChildFiberOptions(options, childNamespace, previousChildNodes),
   );
   fiber.child = childResult.fiber;
   if (previousChildNodes !== undefined) {
@@ -1750,6 +1746,26 @@ function isFunctionComponentType(value: unknown): value is (
     typeof (value as { prototype?: { render?: unknown } }).prototype?.render !==
       "function"
   );
+}
+
+function getHostChildFiberOptions(
+  options: FiberHydrationOptions,
+  namespace: HostNamespace,
+  previousNodes: readonly Node[] | undefined,
+): FiberHydrationOptions {
+  const namespaceUnchanged =
+    options.namespace === namespace ||
+    (options.namespace === undefined && namespace === "html");
+
+  if (previousNodes === undefined && namespaceUnchanged) {
+    return options;
+  }
+
+  return {
+    ...options,
+    namespace,
+    ...(previousNodes === undefined ? {} : { previousNodes }),
+  };
 }
 
 function commitHostChildren(

@@ -143,6 +143,16 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("readDependencyFreeMemoInstanceKey(runtime, prefix)");
   });
 
+  test("reuses host child options when namespace and hydration state are unchanged", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("getHostChildFiberOptions(");
+    expect(hostReconcilerSource).not.toContain("namespace: childNamespace,\n      ...(previousChildNodes");
+  });
+
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
     const hooksSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/hooks.ts"),
