@@ -527,18 +527,23 @@ export function renderWithRootRuntime<T>(
     instance = undefined;
   }
 
-  instance ??= {
-    owner,
-    path,
-    hooks: [],
-    hookIndex: 0,
-    dirty: false,
-    devToolsHookSuppressionDepth: 0,
-  };
-  instance.owner = owner;
-  instance.path = path;
-  runtime.instances.set(path, instance);
-  indexInstanceKey(runtime, path);
+  if (instance === undefined) {
+    instance = {
+      owner,
+      path,
+      hooks: [],
+      hookIndex: 0,
+      dirty: false,
+      devToolsHookSuppressionDepth: 0,
+    };
+    runtime.instances.set(path, instance);
+    // The prefix index only needs the key the first time the instance appears;
+    // an already-registered instance keeps its index entries until removal, so
+    // re-render (the hot path) skips the per-segment prefix walk entirely.
+    indexInstanceKey(runtime, path);
+  } else {
+    instance.owner = owner;
+  }
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
