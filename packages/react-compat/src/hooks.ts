@@ -170,9 +170,21 @@ type HookSlot =
       strictReplay?: boolean;
     };
 
+interface PendingInstanceContext {
+  runtime: RootRuntime;
+  path: string;
+  owner: unknown;
+  existing: ComponentInstance | undefined;
+}
+
 interface HookRenderState {
   currentRuntime: RootRuntime | undefined;
   currentInstance: ComponentInstance | undefined;
+  // Deferred instance for the component currently rendering. The instance is
+  // only materialized (created, registered, prefix-indexed) when a hook or a
+  // context read first needs it, so components with no hooks/context (e.g. a
+  // pure host-rendering memo row) pay none of that per-render cost.
+  pendingInstance: PendingInstanceContext | undefined;
   currentCacheScope: CacheScope | undefined;
   hostCommitDepth: number;
   queuedHostCommitRerenders: Set<RootRuntime>;
@@ -186,6 +198,7 @@ const hookRenderState =
   ] ??= {
     currentRuntime: undefined,
     currentInstance: undefined,
+    pendingInstance: undefined,
     currentCacheScope: undefined,
     hostCommitDepth: 0,
     queuedHostCommitRerenders: new Set<RootRuntime>(),
@@ -520,13 +533,42 @@ export function renderWithRootRuntime<T>(
 ): T {
   const previousRuntime = hookRenderState.currentRuntime;
   const previousInstance = hookRenderState.currentInstance;
-  let instance = runtime.instances.get(path);
+  const previousPending = hookRenderState.pendingInstance;
 
-  if (instance !== undefined && owner !== undefined && instance.owner !== owner) {
-    cleanupInstance(instance);
-    instance = undefined;
+  let existing = runtime.instances.get(path);
+  if (existing !== undefined && owner !== undefined && existing.owner !== owner) {
+    cleanupInstance(existing);
+    runtime.instances.delete(path);
+    removeInstanceKeyFromIndex(runtime, path);
+    existing = undefined;
   }
 
+  // Defer instance materialization: hooks / context reads call
+  // materializeInstance() lazily. A component that touches neither never
+  // allocates or registers an instance.
+  hookRenderState.currentRuntime = runtime;
+  hookRenderState.currentInstance = undefined;
+  hookRenderState.pendingInstance = { runtime, path, owner, existing };
+
+  try {
+    return withContextReadObserver(recordContextDependency, render);
+  } finally {
+    hookRenderState.currentRuntime = previousRuntime;
+    hookRenderState.currentInstance = previousInstance;
+    hookRenderState.pendingInstance = previousPending;
+  }
+}
+
+// Materialize the deferred instance for the rendering component the first time
+// a hook or context read needs it.
+function materializeInstance(): ComponentInstance {
+  const pending = hookRenderState.pendingInstance;
+  if (pending === undefined) {
+    throw new Error("Hooks can only be called while rendering.");
+  }
+
+  const { runtime, path, owner } = pending;
+  let instance = pending.existing;
   if (instance === undefined) {
     instance = {
       owner,
@@ -537,9 +579,6 @@ export function renderWithRootRuntime<T>(
       devToolsHookSuppressionDepth: 0,
     };
     runtime.instances.set(path, instance);
-    // The prefix index only needs the key the first time the instance appears;
-    // an already-registered instance keeps its index entries until removal, so
-    // re-render (the hot path) skips the per-segment prefix walk entirely.
     indexInstanceKey(runtime, path);
   } else {
     instance.owner = owner;
@@ -557,17 +596,17 @@ export function renderWithRootRuntime<T>(
     delete instance.devToolsHookTypes;
   }
   instance.devToolsHookSuppressionDepth = 0;
-  hookRenderState.currentRuntime = runtime;
   hookRenderState.currentInstance = instance;
+  hookRenderState.pendingInstance = undefined;
+  return instance;
+}
 
-  try {
-    return withContextReadObserver((context, value) => {
-      (instance.contextDependencies ??= new Map()).set(context, value);
-    }, render);
-  } finally {
-    hookRenderState.currentRuntime = previousRuntime;
-    hookRenderState.currentInstance = previousInstance;
-  }
+function recordContextDependency(
+  context: ReactCompatContextLike<unknown>,
+  value: unknown,
+): void {
+  const instance = hookRenderState.currentInstance ?? materializeInstance();
+  (instance.contextDependencies ??= new Map()).set(context, value);
 }
 
 export function hasChangedContextDependency(
@@ -2372,11 +2411,7 @@ function requireRuntime(): RootRuntime {
 }
 
 function requireInstance(): ComponentInstance {
-  if (hookRenderState.currentInstance === undefined) {
-    throw new Error("Hooks can only be called while rendering.");
-  }
-
-  return hookRenderState.currentInstance;
+  return hookRenderState.currentInstance ?? materializeInstance();
 }
 
 function areHookInputsEqual(
