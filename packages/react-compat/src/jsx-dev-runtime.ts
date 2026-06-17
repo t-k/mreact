@@ -2,6 +2,7 @@ import {
   Fragment,
   REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META,
+  createReactiveDomBlock,
   jsx,
 } from "./jsx-runtime.js";
 import type {
@@ -20,6 +21,8 @@ export { Fragment };
 export { REACTIVE_TEXT_BINDING_META };
 /** Metadata key used by compiled JSX for reactive state bindings. */
 export { REACTIVE_STATE_BINDING_META };
+/** Internal DOM block helper used by compiler-proven compat DOM output. */
+export { createReactiveDomBlock };
 /** JSX event and attribute types re-exported by the development JSX runtime. */
 export type {
   FormEvent,

@@ -2,12 +2,14 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createElement, Fragment } from "../src/index.js";
 import {
+  createReactiveDomBlock,
   jsx,
   jsxs,
   REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META,
 } from "../src/jsx-runtime.js";
 import {
+  createReactiveDomBlock as devCreateReactiveDomBlock,
   Fragment as DevFragment,
   REACTIVE_STATE_BINDING_META as DEV_REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META as DEV_REACTIVE_TEXT_BINDING_META,
@@ -164,5 +166,8 @@ describe("react-compat automatic JSX runtime", () => {
     expect(production.REACTIVE_STATE_BINDING_META).toBe(REACTIVE_STATE_BINDING_META);
     expect(DEV_REACTIVE_STATE_BINDING_META).toBe(REACTIVE_STATE_BINDING_META);
     expect(dev.REACTIVE_STATE_BINDING_META).toBe(REACTIVE_STATE_BINDING_META);
+    expect(production.createReactiveDomBlock).toBe(createReactiveDomBlock);
+    expect(devCreateReactiveDomBlock).toBe(createReactiveDomBlock);
+    expect(dev.createReactiveDomBlock).toBe(createReactiveDomBlock);
   });
 });

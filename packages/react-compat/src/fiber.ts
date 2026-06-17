@@ -5,6 +5,7 @@ export type FiberTag =
   | "host-root"
   | "host-component"
   | "host-text"
+  | "reactive-dom-block"
   | "fragment"
   | "function-component"
   | "forward-ref"
