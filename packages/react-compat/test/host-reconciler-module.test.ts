@@ -204,6 +204,18 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("if (memoBailout !== undefined) {");
   });
 
+  test("does not spread memo and lazy elements while retargeting inner types", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain("...node,\n      type: memoType.type");
+    expect(hostReconcilerSource).not.toContain("...node,\n        type: lazyType.resolved");
+    expect(hostReconcilerSource).toContain("type: memoType.type");
+    expect(hostReconcilerSource).toContain("type: lazyType.resolved");
+  });
+
   test("checks dependency-free memo bailout before child path generation", async () => {
     const hostReconcilerSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),

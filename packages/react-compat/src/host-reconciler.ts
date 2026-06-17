@@ -1545,8 +1545,11 @@ function createHostFiberImpl(
     fiber.type = memoType;
 
     const renderedElement: ReactCompatElement = {
-      ...node,
+      $$typeof: node.$$typeof,
       type: memoType.type,
+      key: node.key,
+      ref: node.ref,
+      props: node.props,
     };
     const childResult = createHostFiber(
       fiber,
@@ -1594,8 +1597,11 @@ function createHostFiberImpl(
 
     if (lazyType.status === "resolved" && lazyType.resolved !== undefined) {
       const renderedElement: ReactCompatElement = {
-        ...node,
+        $$typeof: node.$$typeof,
         type: lazyType.resolved,
+        key: node.key,
+        ref: node.ref,
+        props: node.props,
       };
       const childResult = createHostFiber(
         fiber,
