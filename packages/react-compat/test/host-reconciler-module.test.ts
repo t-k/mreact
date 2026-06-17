@@ -861,6 +861,50 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("commits one keyed root removal without rescanning remaining siblings", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "b", key: "b" }, "B"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+    const currentFirst = root.current.child;
+    const updatedFirst = updated.child;
+
+    if (currentFirst === undefined || updatedFirst === undefined) {
+      expect.fail("expected keyed root children");
+    }
+
+    Object.defineProperty(currentFirst, "sibling", {
+      configurable: true,
+      get() {
+        throw new Error("commit should not rescan the unchanged current prefix");
+      },
+    });
+    Object.defineProperty(updatedFirst, "sibling", {
+      configurable: true,
+      get() {
+        throw new Error("commit should not rescan the unchanged next prefix");
+      },
+    });
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
+
   test("removes SVG grandchildren when a component child collapses to null", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
