@@ -620,9 +620,6 @@ importers:
 
   packages/query:
     dependencies:
-      '@reckona/mreact-devtools':
-        specifier: workspace:*
-        version: link:../devtools
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../reactive-core
