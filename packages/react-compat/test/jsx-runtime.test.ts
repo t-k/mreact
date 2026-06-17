@@ -1,8 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createElement, Fragment } from "../src/index.js";
-import { jsx, jsxs, REACTIVE_TEXT_BINDING_META } from "../src/jsx-runtime.js";
 import {
+  createReactiveDomBlock,
+  jsx,
+  jsxs,
+  REACTIVE_TEXT_BINDING_META,
+} from "../src/jsx-runtime.js";
+import {
+  createReactiveDomBlock as createDevReactiveDomBlock,
   Fragment as DevFragment,
   REACTIVE_TEXT_BINDING_META as DEV_REACTIVE_TEXT_BINDING_META,
   jsxDEV,
@@ -61,6 +67,18 @@ describe("react-compat automatic JSX runtime", () => {
 
     expect((element.props as Record<PropertyKey, unknown>)[REACTIVE_TEXT_BINDING_META])
       .toBe(binding);
+  });
+
+  test("creates compiler reactive DOM block elements", () => {
+    const render = () => ({ node: document.createTextNode("compiled") });
+    const element = createReactiveDomBlock(render);
+
+    expect(element.type).toBe(Symbol.for("modular.react.reactive_dom_block"));
+    expect(element.props.render).toBe(render);
+  });
+
+  test("dev runtime re-exports compiler reactive DOM block helper", () => {
+    expect(createDevReactiveDomBlock).toBe(createReactiveDomBlock);
   });
 
   test("jsx runtime does not spread props before createElement", async () => {

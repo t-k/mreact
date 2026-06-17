@@ -26,6 +26,7 @@ import {
   type SchedulerHost,
 } from "../src/fiber-scheduler.js";
 import { __getStrictMemoOwnerKeyForTesting } from "../src/hooks.js";
+import { createReactiveDomBlock } from "../src/jsx-runtime.js";
 
 interface TestSchedulerHost extends SchedulerHost {
   flushOneHostCallback(): void;
@@ -142,6 +143,53 @@ describe("react-compat useState", () => {
     } finally {
       process.env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  test("mounts compiler-owned reactive DOM blocks and disposes them on unmount", () => {
+    const container = document.createElement("div");
+    const dispose = vi.fn();
+
+    function Block() {
+      return createReactiveDomBlock(() => {
+        const node = document.createElement("span");
+        node.textContent = "compiled";
+        return { node, dispose };
+      });
+    }
+
+    const root = createRoot(container);
+    root.render(createElement(Block, null));
+
+    expect(container.innerHTML).toBe("<span>compiled</span>");
+
+    root.unmount();
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(container.innerHTML).toBe("");
+  });
+
+  test("disposes compiler-owned reactive DOM blocks when they are removed", () => {
+    const container = document.createElement("div");
+    const dispose = vi.fn();
+
+    function Block() {
+      return createReactiveDomBlock(() => {
+        const node = document.createElement("span");
+        node.textContent = "compiled";
+        return { node, dispose };
+      });
+    }
+
+    function App({ show }: { show: boolean }) {
+      return show ? createElement(Block, null) : null;
+    }
+
+    const root = createRoot(container);
+    root.render(createElement(App, { show: true }));
+    root.render(createElement(App, { show: false }));
+
+    expect(container.innerHTML).toBe("");
+    expect(dispose).toHaveBeenCalledTimes(1);
   });
 
   test("batches discrete event updates and flushes once after the handler", () => {

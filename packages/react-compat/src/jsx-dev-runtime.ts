@@ -1,4 +1,5 @@
 import {
+  createReactiveDomBlock,
   Fragment,
   REACTIVE_TEXT_BINDING_META,
   jsx,
@@ -17,6 +18,7 @@ import type {
 export { Fragment };
 /** Metadata key used by compiled JSX for reactive text bindings. */
 export { REACTIVE_TEXT_BINDING_META };
+export { createReactiveDomBlock };
 /** JSX event and attribute types re-exported by the development JSX runtime. */
 export type {
   FormEvent,

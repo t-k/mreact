@@ -15,6 +15,7 @@ export type FiberTag =
   | "memo"
   | "lazy"
   | "profiler"
+  | "reactive-dom-block"
   | "strict-mode"
   | "suspense"
   | "suspense-list"

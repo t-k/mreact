@@ -1,10 +1,13 @@
 import {
   createElementFromJsxConfig,
   Fragment,
+  REACTIVE_DOM_BLOCK_TYPE,
   REACTIVE_TEXT_BINDING_META,
 } from "./element.js";
 import type {
   ElementType,
+  ReactiveDomBlockProps,
+  ReactiveDomBlockRender,
   ReactCompatElement,
   ReactCompatNode,
 } from "./element.js";
@@ -13,6 +16,12 @@ import type {
 export { Fragment };
 /** Metadata key used by compiled JSX for reactive text bindings. */
 export { REACTIVE_TEXT_BINDING_META };
+
+export function createReactiveDomBlock(
+  render: ReactiveDomBlockRender,
+): ReactCompatElement<ReactiveDomBlockProps> {
+  return createElementFromJsxConfig(REACTIVE_DOM_BLOCK_TYPE, { render });
+}
 
 /** DOM event type with a narrowed currentTarget. */
 export type JSXEvent<

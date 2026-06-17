@@ -7,12 +7,14 @@ import {
   LAZY_TYPE,
   MEMO_TYPE,
   Profiler,
+  REACTIVE_DOM_BLOCK_TYPE,
   REACTIVE_TEXT_BINDING_META,
   STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
   type ReactCompatElement,
   type ReactCompatPortal,
+  type ReactiveDomBlockResult,
   isReactCompatElement,
   isReactCompatPortal,
   type ReactCompatNode,
@@ -172,6 +174,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
   }
 
   if (node.type === ERROR_BOUNDARY_TYPE) {
+    return true;
+  }
+
+  if (node.type === REACTIVE_DOM_BLOCK_TYPE) {
     return true;
   }
 
@@ -336,6 +342,20 @@ export function commitHydratingHostFiberRoot(
   if (options.consumeResumeMarkers === true) {
     scope.before?.parentNode?.removeChild(scope.before);
     scope.after?.parentNode?.removeChild(scope.after);
+  }
+}
+
+export function disposeHostFiberResources(fiber: Fiber | undefined): void {
+  const seen = new Set<unknown>();
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    if (cursor.tag === "reactive-dom-block") {
+      disposeReactiveDomBlockState(cursor.stateNode, seen);
+    }
+
+    disposeHostFiberResources(cursor.child);
+    cursor = cursor.sibling;
   }
 }
 
@@ -1453,6 +1473,18 @@ function createHostFiberImpl(
     return { fiber, consumed: options.previousNodes?.length ?? 0 };
   }
 
+  if (node.type === REACTIVE_DOM_BLOCK_TYPE) {
+    const fiber =
+      current?.tag === "reactive-dom-block"
+        ? createWorkInProgress(current, node.props)
+        : createFiber("reactive-dom-block", node.props, key);
+    fiber.type = node.type;
+    fiber.stateNode = current?.tag === "reactive-dom-block"
+      ? current.stateNode
+      : (node.props as { render: () => ReactiveDomBlockResult }).render();
+    return { fiber, consumed: options.previousNodes?.length ?? 0 };
+  }
+
   if (isReactCompatProvider(node.type)) {
     const fiber =
       current?.tag === "context-provider" && current.type === node.type
@@ -2323,6 +2355,12 @@ function commitHostDirtyFiber(
     return;
   }
 
+  if (fiber.tag === "reactive-dom-block") {
+    fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
+    return;
+  }
+
   if (fiber.subtreeFlags !== NoFlags) {
     commitHostDirtyChildrenOf(fiber, fiber.child, parent, eventRoot, path, options);
   }
@@ -2592,6 +2630,11 @@ function isSameFiberSlot(current: Fiber, next: Fiber): boolean {
 }
 
 function collectCommittedHostNodes(fiber: Fiber): Node[] {
+  if (fiber.tag === "reactive-dom-block") {
+    const node = getReactiveDomBlockNode(fiber.stateNode);
+    return node === undefined ? [] : [node];
+  }
+
   if (
     (fiber.tag === "host-component" || fiber.tag === "host-text") &&
     fiber.stateNode instanceof Node
@@ -2611,6 +2654,10 @@ function collectCommittedHostNodes(fiber: Fiber): Node[] {
 }
 
 function hasCommittedHostNode(fiber: Fiber): boolean {
+  if (fiber.tag === "reactive-dom-block") {
+    return getReactiveDomBlockNode(fiber.stateNode) !== undefined;
+  }
+
   if (
     (fiber.tag === "host-component" || fiber.tag === "host-text") &&
     fiber.stateNode instanceof Node
@@ -2673,6 +2720,13 @@ function commitHostFiber(
     fiber.memoizedProps = fiber.pendingProps;
     finishCommittedFiber(fiber);
     return [text];
+  }
+
+  if (fiber.tag === "reactive-dom-block") {
+    const node = getReactiveDomBlockNode(fiber.stateNode);
+    fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
+    return node === undefined ? [] : [node];
   }
 
   if (fiber.tag === "host-component") {
@@ -2884,6 +2938,36 @@ function finishCommittedFiber(fiber: Fiber): void {
   fiber.childListChanged = false;
   fiber.subtreeChildListChanged = false;
   fiber.hostChildListChanged = false;
+}
+
+function getReactiveDomBlockNode(state: unknown): ChildNode | undefined {
+  if (
+    typeof state === "object" &&
+    state !== null &&
+    "node" in state &&
+    (state as { node?: unknown }).node instanceof Node
+  ) {
+    return (state as { node: ChildNode }).node;
+  }
+
+  return undefined;
+}
+
+function disposeReactiveDomBlockState(
+  state: unknown,
+  seen: Set<unknown>,
+): void {
+  if (typeof state !== "object" || state === null || seen.has(state)) {
+    return;
+  }
+
+  seen.add(state);
+  const dispose = (state as { dispose?: unknown }).dispose;
+
+  if (typeof dispose === "function") {
+    dispose();
+    (state as { dispose?: unknown }).dispose = undefined;
+  }
 }
 
 function hasChildListMutation(fiber: Fiber): boolean {
