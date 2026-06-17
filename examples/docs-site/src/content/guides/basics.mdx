@@ -70,6 +70,30 @@ export default function ParityBadge() {
 }
 ```
 
+Use `selector()` when one source value selects exactly one key from a larger keyed set. It returns a keyed boolean reader, so only the previously selected key and the newly selected key notify their subscribers when the source changes.
+
+```tsx
+import { cell, selector } from "@reckona/mreact-reactive-core";
+
+export default function RowSelection() {
+  const selectedId = cell<string | null>(null);
+  const isSelected = selector<string | null, string>(selectedId);
+  const rows = ["alpha", "beta", "gamma"];
+
+  return (
+    <ul>
+      {rows.map((id) => (
+        <li className={isSelected(id) ? "selected" : ""}>
+          <button type="button" onClick={() => selectedId.set(id)}>
+            {id}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
 ## Effects
 
 Use `effect()` for side effects that should re-run after the values they read change. Effects return a dispose function.
@@ -162,6 +186,7 @@ Use `.client.tsx` when you want an explicit client boundary instead of relying o
 
 - Use `cell()` for local mutable state.
 - Use `computed()` for derived readonly state.
+- Use `selector()` when one source value selects one key from a larger keyed set.
 - Use `effect()` for imperative side effects.
 - Use JSX for normal UI binding.
 - Use `@reckona/mreact-reactive-dom` only for low-level DOM integration or compiler-style output.

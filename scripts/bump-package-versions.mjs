@@ -12,7 +12,9 @@ const createAppDependencyRangePackages = [
   "@reckona/mreact",
   "@reckona/mreact-query",
   "@reckona/mreact-reactive-core",
+  "@reckona/mreact-reactive-dom",
   "@reckona/mreact-router",
+  "@reckona/mreact-test-utils",
 ];
 
 if (isCliEntryPoint(import.meta.url, process.argv[1])) {

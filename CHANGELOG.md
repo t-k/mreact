@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.170 - 2026-06-17
+
+### Added
+
+- Added `selector()` to `@reckona/mreact-reactive-core` for keyed boolean selection where only the previous and next selected keys notify subscribers when a source value changes.
+- Added low-level `@reckona/mreact-reactive-dom` helpers for selector-backed class binding, static keyed single-node lists, template element creation, and opt-in event/prop binding metadata used by compiler-style DOM integrations.
+
+### Changed
+
+- Improved reactive DOM keyed list, text, prop, event, and selector-class hot paths by reducing per-row bookkeeping, batching delegated event release, deferring delegated event promotion, and binding direct cell reads where possible.
+- Improved React-compatible keyed list and memo bailout hot paths by reducing child reconciliation scans, instance prefix allocation, memo dependency checks, `createElement()` prop copying, and child-node synchronization work.
+
+### Fixed
+
+- Fixed `bindStaticKeyedSingleNodeList()` so lists mounted before an embedded marker preserve unrelated sibling nodes during initial render and empty-list transitions.
+- Fixed React-compatible dependency-free memo row swaps so keyed rows keep the correct DOM order without forcing unnecessary subtree work.
+
 ## 0.0.169 - 2026-06-15
 
 ### Added

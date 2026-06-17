@@ -64,11 +64,22 @@ describe("package version bump script", () => {
       },
       {
         actual: "^0.0.1",
+        path: `${join(
+          rootDir,
+          "packages/create-mreact-app/src/index.ts",
+        )} @reckona/mreact-reactive-dom`,
+      },
+      {
+        actual: "^0.0.1",
         path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact-router`,
+      },
+      {
+        actual: "^0.0.1",
+        path: `${join(rootDir, "packages/create-mreact-app/src/index.ts")} @reckona/mreact-test-utils`,
       },
     ]);
 
-    await expect(updateCreateAppDependencyRanges(rootDir, "0.0.2")).resolves.toBe(7);
+    await expect(updateCreateAppDependencyRanges(rootDir, "0.0.2")).resolves.toBe(9);
 
     const source = await readFile(join(rootDir, "packages/create-mreact-app/src/index.ts"), "utf8");
     expect(source).toContain('"@reckona/mreact-auth": "^0.0.2"');
@@ -77,7 +88,9 @@ describe("package version bump script", () => {
     expect(source).toContain('"@reckona/mreact": "^0.0.2"');
     expect(source).toContain('"@reckona/mreact-query": "^0.0.2"');
     expect(source).toContain('"@reckona/mreact-reactive-core": "^0.0.2"');
+    expect(source).toContain('"@reckona/mreact-reactive-dom": "^0.0.2"');
     expect(source).toContain('"@reckona/mreact-router": "^0.0.2"');
+    expect(source).toContain('"@reckona/mreact-test-utils": "^0.0.2"');
   });
 
   test("reports mismatches in check mode", async () => {
@@ -147,7 +160,9 @@ async function createFixtureWorkspace() {
       '  "@reckona/mreact": "^0.0.1",',
       '  "@reckona/mreact-query": "^0.0.1",',
       '  "@reckona/mreact-reactive-core": "^0.0.1",',
+      '  "@reckona/mreact-reactive-dom": "^0.0.1",',
       '  "@reckona/mreact-router": "^0.0.1",',
+      '  "@reckona/mreact-test-utils": "^0.0.1",',
       "} as const;",
       "",
     ].join("\n"),
