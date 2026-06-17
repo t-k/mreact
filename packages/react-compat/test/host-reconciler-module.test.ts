@@ -12,6 +12,7 @@ import {
 } from "../src/host-reconciler.js";
 import { createFiberRoot } from "../src/fiber.js";
 import { NoFlags, Update } from "../src/fiber-flags.js";
+import { createRootRuntime } from "../src/hooks.js";
 
 describe("host reconciler module", () => {
   afterEach(() => {
@@ -908,6 +909,61 @@ describe("host reconciler module", () => {
 
     expect(container.innerHTML).toBe(
       '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
+
+  test("records one removed dependency-free memo child during keyed reconcile", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const runtime = createRootRuntime(() => {});
+    const Row = memo(
+      ({ label }: { readonly label: string }) =>
+        createElement("span", { "data-row": label }, label),
+      (previous, next) => previous.label === next.label,
+    );
+    const initial = renderHostFiberRoot(
+      root,
+      [
+        createElement(Row, { key: "a", label: "A" }),
+        createElement(Row, { key: "b", label: "B" }),
+        createElement(Row, { key: "c", label: "C" }),
+      ],
+      runtime,
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const currentFirst = root.current.child;
+    const currentSecond = currentFirst?.sibling;
+    const currentThird = currentSecond?.sibling;
+
+    if (
+      currentFirst === undefined ||
+      currentSecond === undefined ||
+      currentThird === undefined
+    ) {
+      expect.fail("expected initial memo children");
+    }
+
+    const updated = renderHostFiberRoot(
+      root,
+      [
+        createElement(Row, { key: "a", label: "A" }),
+        createElement(Row, { key: "c", label: "C" }),
+      ],
+      runtime,
+    );
+
+    expect(updated.child).toBe(currentFirst);
+    expect(updated.child?.sibling).toBe(currentThird);
+    expect(updated.deletions).toEqual([currentSecond]);
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-row="A">A</span><span data-row="C">C</span>',
     );
   });
 

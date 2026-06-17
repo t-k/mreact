@@ -419,11 +419,28 @@ function reconcileHostChild(
       currentKeyed?.sibling?.key === key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
+      const deleted = currentKeyed;
+      const matched = currentKeyed.sibling;
+      const suffixResult = tryReuseDependencyFreeMemoRemovalSuffix(
+        parent,
+        children,
+        index,
+        deleted,
+        matched,
+        runtime,
+        options,
+        first,
+        previous,
+        consumed,
+      );
+      if (suffixResult !== undefined) {
+        return suffixResult;
+      }
       childListOrderChanged = true;
       ensureUsedCurrentChildren();
-      matchedCurrent = currentKeyed.sibling;
+      matchedCurrent = matched;
       canReuseMatchedCurrentFiber = false;
-      currentKeyed = currentKeyed.sibling.sibling;
+      currentKeyed = matched.sibling;
     } else {
       if (
         children !== undefined &&
@@ -632,6 +649,129 @@ function reconcileKeyedRowHostChildren(
     parent.memoizedState = appendSuffix;
   }
   return { fiber: first, consumed: 0 };
+}
+
+function canReuseDependencyFreeMemoAtKey(
+  current: Fiber | undefined,
+  node: ReactCompatElement,
+  key: string,
+): boolean {
+  return (
+    current !== undefined &&
+    current.key === key &&
+    current.tag === "memo" &&
+    current.type === node.type &&
+    current.hasRefSubtree !== true &&
+    current.hydrateExisting !== true &&
+    isMemoType(node.type)
+  );
+}
+
+function tryReuseDependencyFreeMemoRemovalSuffix(
+  parent: Fiber,
+  children: readonly ReactCompatNode[],
+  startIndex: number,
+  removed: Fiber,
+  matchedCurrent: Fiber,
+  runtime: RootRuntime | undefined,
+  options: FiberHydrationOptions,
+  prefixFirst: Fiber | undefined,
+  prefixPrevious: Fiber | undefined,
+  consumed: number,
+): FiberReconcileResult | undefined {
+  if (
+    runtime === undefined ||
+    options.previousNodes !== undefined ||
+    removed.hasRefSubtree
+  ) {
+    return undefined;
+  }
+
+  const suffix: Fiber[] = [];
+  let current: Fiber | undefined = matchedCurrent;
+
+  for (let index = startIndex; index < children.length; index += 1) {
+    const child = children[index];
+    const key = getNodeKey(child);
+
+    if (key === undefined || !isReactCompatElement(child) || !isMemoType(child.type)) {
+      return undefined;
+    }
+
+    if (!canReuseDependencyFreeMemoAtKey(current, child, key)) {
+      return undefined;
+    }
+
+    if (current === undefined) {
+      return undefined;
+    }
+
+    const matched: Fiber = current;
+    const fiber = reuseDependencyFreeMemoFiber(matched, child);
+
+    if (fiber === undefined) {
+      return undefined;
+    }
+
+    suffix.push(fiber);
+    current = matched.sibling;
+  }
+
+  if (current !== undefined) {
+    return undefined;
+  }
+
+  let first = prefixFirst;
+  let previous = prefixPrevious;
+
+  for (const fiber of suffix) {
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    fiber.return = parent;
+    fiber.sibling = undefined;
+    previous = fiber;
+  }
+
+  parent.childListChanged = true;
+  parent.deletions = [removed];
+  markOptimizedChildForDeletion(parent, removed);
+  return { fiber: first, consumed };
+}
+
+function reuseDependencyFreeMemoFiber(
+  current: Fiber,
+  node: ReactCompatElement,
+): Fiber | undefined {
+  if (!isMemoType(node.type)) {
+    return undefined;
+  }
+
+  const previousMemoState = current.memoizedState as MemoFiberState | undefined;
+
+  if (
+    previousMemoState === undefined ||
+    previousMemoState.hasDirtyInstanceDependencies !== false ||
+    previousMemoState.hasUnflushedEffectDependencies !== false ||
+    previousMemoState.hasRetainedInstanceDependencies !== false ||
+    !areMemoPropsEqual(node.type, previousMemoState.props, node.props)
+  ) {
+    return undefined;
+  }
+
+  current.pendingProps = node.props;
+  current.flags = NoFlags;
+  current.subtreeFlags = NoFlags;
+  current.childListChanged = false;
+  current.subtreeChildListChanged = false;
+  current.hostChildListChanged = false;
+  current.type = node.type;
+  current.child = getSkippedChild(current);
+  current.memoizedState = previousMemoState;
+  return current;
 }
 
 function canStoreAppendSuffixCommitHint(parent: Fiber): boolean {
@@ -2272,7 +2412,10 @@ function readAppendSuffixCommitHint(value: unknown): AppendSuffixCommitHint | un
 }
 
 function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
-  const removed = getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
+  const removed =
+    fiber.deletions?.length === 1
+      ? fiber.deletions[0]
+      : getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
 
   if (removed === undefined) {
     return false;
@@ -2287,6 +2430,10 @@ function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
 
     parent.removeChild(node);
     removedAny = true;
+  }
+
+  if (removedAny) {
+    fiber.deletions = undefined;
   }
 
   return removedAny;
