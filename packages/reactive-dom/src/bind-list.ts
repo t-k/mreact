@@ -439,20 +439,6 @@ function bindKeyedList<T>(
   });
 }
 
-function replaceWithOrderedNodes(
-  parent: ListParentNode,
-  marker: ChildNode,
-  orderedNodes: readonly Node[],
-): void {
-  const fragment = document.createDocumentFragment();
-
-  for (const node of orderedNodes) {
-    fragment.appendChild(node);
-  }
-
-  parent.replaceChildren(fragment, marker);
-}
-
 function replaceWithOrderedRecords(
   parent: ListParentNode,
   marker: ChildNode,
@@ -474,6 +460,7 @@ function uniqueKeyedItems<T>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
 ): KeyedItems<T> {
   const length = items.length;
+  // oxlint-disable-next-line unicorn/no-new-array -- a sparse preallocated keys array avoids per-slot callbacks on the hot list path.
   const keys = new Array<unknown>(length);
   const seenKeys = new Set<unknown>();
 

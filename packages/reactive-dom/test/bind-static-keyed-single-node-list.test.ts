@@ -65,6 +65,43 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("preserves sibling nodes around an embedded marker", async () => {
+    const items = cell([1, 2]);
+    const parent = document.createElement("section");
+    const before = document.createElement("header");
+    const after = document.createElement("footer");
+    const marker = document.createComment("rows");
+    before.textContent = "before";
+    after.textContent = "after";
+    parent.append(before, marker, after);
+
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const row = document.createElement("p");
+        row.textContent = String(item);
+        return row;
+      },
+      { key: (item) => item },
+    );
+
+    expect(parent.childNodes[0]).toBe(before);
+    expect(parent.childNodes[3]).toBe(marker);
+    expect(parent.childNodes[4]).toBe(after);
+
+    items.set([]);
+    await flushEffects();
+
+    expect(parent.childNodes.length).toBe(3);
+    expect(parent.childNodes[0]).toBe(before);
+    expect(parent.childNodes[1]).toBe(marker);
+    expect(parent.childNodes[2]).toBe(after);
+
+    dispose();
+  });
+
   test("can bind selected class for keyed row elements with one list-level subscription", async () => {
     const selected = cell<number | null>(null);
     const items = cell([

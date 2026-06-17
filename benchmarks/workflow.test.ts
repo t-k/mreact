@@ -50,4 +50,20 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain('gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"');
     expect(workflow).not.toContain("request-fastpaths");
   });
+
+  test("keeps docs-site required benchmark reports aligned with the all suite", async () => {
+    const workflow = await readFile(
+      join(process.cwd(), ".github", "workflows", "benchmarks.yml"),
+      "utf8",
+    );
+    const benchmarkSync = await readFile(
+      join(process.cwd(), "examples", "docs-site", "scripts", "sync-benchmark-results.ts"),
+      "utf8",
+    );
+
+    expect(workflow).toContain(
+      "Run primitive browser benchmarks\n        if: ${{ inputs.suite == 'primitive-browser' }}",
+    );
+    expect(benchmarkSync).toContain('id: "primitive-browser",\n    optional: true,');
+  });
 });

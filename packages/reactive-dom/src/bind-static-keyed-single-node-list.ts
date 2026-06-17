@@ -86,13 +86,21 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
 
     const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key);
     const keys = keyedItems.keys;
+    const ownsCurrentParent =
+      ownsParent &&
+      insertionParent.childNodes.length === records.size + 1 &&
+      marker.nextSibling === null;
 
     if (keys.length === 0) {
       unregisterSelectedClassRecords(selectedClassState, records.values());
-      disposeRecords(records.values());
-      insertionParent.replaceChildren(marker);
+      if (ownsCurrentParent) {
+        disposeRecords(records.values());
+        insertionParent.replaceChildren(marker);
+      } else {
+        removeRecordNodes(records.values());
+      }
       records = new Map();
-      ownsParent = true;
+      ownsParent = marker.nextSibling === null && insertionParent.childNodes.length === 1;
       return;
     }
 
@@ -109,11 +117,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
         return;
       }
     }
-
-    const ownsCurrentParent =
-      ownsParent &&
-      insertionParent.childNodes.length === records.size + 1 &&
-      marker.nextSibling === null;
 
     const swappedRecords = ownsCurrentParent
       ? trySwapSingleNodeRecords(
@@ -134,7 +137,9 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     }
 
     const canBulkReplace =
-      records.size === 0 ||
+      (records.size === 0 &&
+        insertionParent.childNodes.length === 1 &&
+        marker.nextSibling === null) ||
       (ownsCurrentParent && keys.length === records.size && areKeysDisjoint(records, keys));
 
     if (canBulkReplace) {
@@ -222,6 +227,7 @@ function uniqueSingleNodeKeyedItems<T>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
 ): SingleNodeKeyedItems<T> {
   const length = items.length;
+  // oxlint-disable-next-line unicorn/no-new-array -- a sparse preallocated keys array avoids per-slot callbacks on the hot list path.
   const keys = new Array<unknown>(length);
   const seenKeys = new Set<unknown>();
 
