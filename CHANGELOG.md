@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.171 - 2026-06-18
+
+### Changed
+
+- Removed the `@reckona/mreact-devtools` runtime dependency from `@reckona/mreact-query` while preserving optional query devtools event emission through an installed global devtools hook.
+
 ## 0.0.170 - 2026-06-17
 
 ### Added
