@@ -576,11 +576,11 @@ async function writeSummary() {
     ...formatJsFrameworkRankingSections(resultRows),
     "## Results",
     "",
-    "| suite | framework | case | status | metric | unit | value | diff vs 1st |",
-    "| --- | --- | --- | --- | --- | --- | ---: | ---: |",
+    "| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st |",
+    "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
     ...resultRows.map((row) => {
       const bestRow = rankJsFrameworkRows(resultRows, row.caseName)[0];
-      return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${formatDiffVsBest(row, bestRow)} |`;
+      return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} |`;
     }),
     "",
   ];
@@ -611,7 +611,7 @@ async function collectResultRows() {
     ...Object.fromEntries(
       resultMetricDescriptors.map((descriptor) => [
         descriptor.key,
-        readMetric(files, framework, descriptor.caseId, descriptor.sourceMetric),
+        readMetricParts(files, framework, descriptor.caseId, descriptor.sourceMetric),
       ]),
     ),
   }));
@@ -622,7 +622,7 @@ function toResultRows(frameworkRows) {
     resultMetricDescriptors.flatMap((descriptor) => {
       const value = frameworkRow[descriptor.key];
 
-      if (typeof value !== "number") {
+      if (typeof value?.value !== "number") {
         return [];
       }
 
@@ -633,7 +633,9 @@ function toResultRows(frameworkRows) {
           status: "completed",
           metric: descriptor.metric,
           unit: descriptor.unit,
-          value,
+          value: value.value,
+          script: value.script,
+          paint: value.paint,
         },
       ];
     }),
@@ -651,22 +653,22 @@ function formatJsFrameworkRankingSections(resultRows) {
     }
 
     lines.push(`### ${descriptor.caseName}`, "");
-    lines.push("| rank | framework | case | value | diff vs 1st | unit |");
-    lines.push("| ---: | --- | --- | ---: | ---: | --- |");
+    lines.push("| rank | framework | case | value | script | paint | diff vs 1st | unit |");
+    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |");
 
     const bestRow = rankedRows[0];
     rankedRows.forEach((row, index) => {
       lines.push(
-        `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
+        `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
       );
     });
     lines.push("");
   }
 
   if (lines.length === 0) {
-    lines.push("| rank | framework | case | value | diff vs 1st | unit |");
-    lines.push("| ---: | --- | --- | ---: | ---: | --- |");
-    lines.push("|  | no completed results |  |  |  |  |");
+    lines.push("| rank | framework | case | value | script | paint | diff vs 1st | unit |");
+    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |");
+    lines.push("|  | no completed results |  |  |  |  |  |  |");
     lines.push("");
   }
 
@@ -721,18 +723,22 @@ function formatFrameworkCell(value) {
   return value.includes("mreact") ? `**${escaped}**` : escaped;
 }
 
-function readMetric(files, framework, caseId, metric) {
+function readMetricParts(files, framework, caseId, metric) {
   const filename = `${framework}_${caseId}.json`;
   if (!files.includes(filename)) {
     return undefined;
   }
 
-  return readJsonMetric(join(officialResultDir, filename), metric);
+  return readJsonMetricParts(join(officialResultDir, filename), metric);
 }
 
-function readJsonMetric(filename, metric) {
+function readJsonMetricParts(filename, metric) {
   const json = JSON.parse(readFileSync(filename, "utf8"));
-  return json.values?.[metric]?.median ?? json.values?.DEFAULT?.median;
+  return {
+    paint: json.values?.paint?.median,
+    script: json.values?.script?.median,
+    value: json.values?.[metric]?.median ?? json.values?.DEFAULT?.median,
+  };
 }
 
 function format(value) {

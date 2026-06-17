@@ -16,7 +16,9 @@ export interface BenchmarkRankingRow {
   readonly diff: string;
   readonly framework: string;
   readonly isMreact: boolean;
+  readonly paint?: string;
   readonly rank: number;
+  readonly script?: string;
   readonly unit: string;
   readonly value: string;
 }

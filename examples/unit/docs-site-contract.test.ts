@@ -2008,6 +2008,8 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain("primitive.md");
     expect(benchmarkData).toContain("router.md");
     expect(benchmarkData).toContain("primitive-browser.md");
+    expect(benchmarkData).toContain("readonly script?: string");
+    expect(benchmarkData).toContain("readonly paint?: string");
     expect(benchmarkData).toContain('"title": "Primitive DOM benchmarks"');
     expect(benchmarkData).toContain('"title": "Primitive reactivity microbenchmarks"');
     expect(benchmarkData).toContain('"cardCount": 10');
@@ -2063,6 +2065,10 @@ describe("docs-site example contract", () => {
     expect(benchmarkResults).toContain("View run on GitHub");
     expect(benchmarkResults).toContain("View source on GitHub");
     expect(benchmarkResults).toContain("BenchmarkRankingPanel");
+    expect(benchmarkResults).toContain("BenchmarkTimingBreakdown");
+    expect(benchmarkResults).toContain("row.script");
+    expect(benchmarkResults).toContain("row.paint");
+    expect(css).toContain(".benchmark-breakdown");
     expect(benchmarkResults).toContain("benchmark-chart");
     expect(benchmarkResults).toContain("benchmark-bar-row");
     expect(benchmarkResults).toContain("benchmark-diff");
@@ -2108,6 +2114,8 @@ describe("docs-site example contract", () => {
     expect(benchmarkSync).toContain("primitive.md");
     expect(benchmarkSync).toContain("router.md");
     expect(benchmarkSync).toContain("primitive-browser.md");
+    expect(benchmarkSync).toContain("js-framework-benchmark.md");
+    expect(benchmarkSync).toContain('"js-framework-benchmark keyed DOM benchmarks"');
     expect(benchmarkSync).toContain("env.json");
   });
 

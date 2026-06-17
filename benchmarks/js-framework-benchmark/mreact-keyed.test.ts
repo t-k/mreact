@@ -298,12 +298,15 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain(
       "Lower values are better for all js-framework-benchmark metrics reported here.",
     );
-    expect(runner).toContain("| rank | framework | case | value | diff vs 1st | unit |");
+    expect(runner).toContain(
+      "| rank | framework | case | value | script | paint | diff vs 1st | unit |",
+    );
     expect(runner).toContain("formatJsFrameworkRankingSections(resultRows)");
     expect(runner).toContain("formatDiffVsBest(row, bestRow)");
+    expect(runner).toContain("readMetricParts(files, framework, descriptor.caseId");
     expect(runner).toContain("## Results");
     expect(runner).toContain(
-      "| suite | framework | case | status | metric | unit | value | diff vs 1st |",
+      "| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st |",
     );
   });
 
