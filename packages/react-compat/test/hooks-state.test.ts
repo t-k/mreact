@@ -1,8 +1,6 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { effect } from "@reckona/mreact-reactive-core";
-import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   Children,
   cloneElement,
@@ -111,102 +109,6 @@ describe("react-compat useState", () => {
       expect(container.innerHTML).toBe("<p>1</p>");
       expect(renders).toBe(1);
     } finally {
-      process.env.NODE_ENV = previousNodeEnv;
-    }
-  });
-
-  test("updates compiler-proven reactive state bindings without re-rendering the component", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-    const container = document.createElement("div");
-    const reactiveStateBindingMeta = Symbol.for("modular.react.reactive_state_binding_meta");
-    const observed: number[] = [];
-    let renders = 0;
-    let update: (value: number) => void = () => {};
-    let dispose: (() => void) | undefined;
-
-    function Counter() {
-      renders += 1;
-      const state = useState(0) as unknown as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
-      const [count, setCount] = state;
-      const stateBinding = state[reactiveStateBindingMeta] as { get(): number };
-      update = setCount;
-
-      if (dispose === undefined) {
-        dispose = effect(() => {
-          observed.push(stateBinding.get());
-        });
-      }
-
-      return createElement("p", null, count);
-    }
-
-    try {
-      createRoot(container).render(createElement(Counter, null));
-
-      expect(container.innerHTML).toBe("<p>0</p>");
-      expect(observed).toEqual([0]);
-      expect(renders).toBe(1);
-
-      update(1);
-      await flushEffects();
-
-      expect(container.innerHTML).toBe("<p>0</p>");
-      expect(observed).toEqual([0, 1]);
-      expect(renders).toBe(1);
-    } finally {
-      dispose?.();
-      process.env.NODE_ENV = previousNodeEnv;
-    }
-  });
-
-  test("exposes compiler reactive state bindings from useReducer tuples", async () => {
-    const previousNodeEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = "production";
-    const container = document.createElement("div");
-    const reactiveStateBindingMeta = Symbol.for("modular.react.reactive_state_binding_meta");
-    const observed: number[] = [];
-    let renders = 0;
-    let dispatch: (value: number) => void = () => {};
-    let dispose: (() => void) | undefined;
-
-    function Counter() {
-      renders += 1;
-      const reducerState = useReducer((state: number, value: number) => state + value, 0) as [
-        number,
-        (value: number) => void,
-      ] & Record<PropertyKey, unknown>;
-      const [count, innerDispatch] = reducerState;
-      const stateBinding = reducerState[reactiveStateBindingMeta] as { get(): number };
-      dispatch = innerDispatch;
-
-      if (dispose === undefined) {
-        dispose = effect(() => {
-          observed.push(stateBinding.get());
-        });
-      }
-
-      return createElement("p", null, count);
-    }
-
-    try {
-      createRoot(container).render(createElement(Counter, null));
-
-      expect(container.innerHTML).toBe("<p>0</p>");
-      expect(observed).toEqual([0]);
-      expect(renders).toBe(1);
-
-      dispatch(2);
-      await flushEffects();
-
-      expect(container.innerHTML).toBe("<p>0</p>");
-      expect(observed).toEqual([0, 2]);
-      expect(renders).toBe(1);
-    } finally {
-      dispose?.();
       process.env.NODE_ENV = previousNodeEnv;
     }
   });

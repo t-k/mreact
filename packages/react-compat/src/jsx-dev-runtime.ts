@@ -1,6 +1,5 @@
 import {
   Fragment,
-  REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META,
   jsx,
 } from "./jsx-runtime.js";
@@ -18,8 +17,6 @@ import type {
 export { Fragment };
 /** Metadata key used by compiled JSX for reactive text bindings. */
 export { REACTIVE_TEXT_BINDING_META };
-/** Metadata key used by compiled JSX for reactive state bindings. */
-export { REACTIVE_STATE_BINDING_META };
 /** JSX event and attribute types re-exported by the development JSX runtime. */
 export type {
   FormEvent,

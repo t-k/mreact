@@ -1,9 +1,6 @@
 import {
   flushPendingComputed,
   flushQueuedComputations,
-  notifySubscribers,
-  trackSource,
-  type Source,
 } from "@reckona/mreact-reactive-core/internal";
 import { scheduleCallback } from "./fiber-scheduler.js";
 import { removeChildIfPresent } from "./dom-children.js";
@@ -14,10 +11,7 @@ import {
   useContext,
   withContextReadObserver,
 } from "./context.js";
-import {
-  REACTIVE_STATE_BINDING_META,
-  REACTIVE_TEXT_BINDING_META,
-} from "./element.js";
+import { REACTIVE_TEXT_BINDING_META } from "./element.js";
 import { isThenable } from "./thenable.js";
 
 export interface RootRuntime {
@@ -133,13 +127,7 @@ export type DevToolsHookValue =
   | { kind: "effect"; effectKind: "insertion" | "layout" | "normal"; deps?: readonly unknown[] };
 
 type HookSlot =
-  | {
-      kind: "state";
-      value: unknown;
-      hostCommitValue?: unknown;
-      stateBinding?: ReactiveStateBindingInternal;
-      textBinding?: ReactiveTextBinding;
-    }
+  | { kind: "state"; value: unknown; hostCommitValue?: unknown; textBinding?: ReactiveTextBinding }
   | {
       kind: "action-state";
       state: unknown;
@@ -214,15 +202,6 @@ export const version = "19.2.6";
 export interface ReactiveTextBinding {
   value: unknown;
   subscribers: Set<Text>;
-}
-
-export interface ReactiveStateBinding<T = unknown> {
-  get(): T;
-}
-
-interface ReactiveStateBindingInternal extends ReactiveStateBinding {
-  source: Source;
-  slot: Extract<HookSlot, { kind: "state" }>;
 }
 
 const reactiveTextBindingsByNode = new WeakMap<Text, ReactiveTextBinding>();
@@ -824,20 +803,17 @@ export function useState<T>(
     }
 
     slot.value = nextValue;
-    const canUseDirectBinding =
+    const canUseDirectTextBinding =
       hookRenderState.hostCommitDepth === 0 &&
       hookRenderState.currentRuntime !== runtime &&
       hookRenderState.currentInstance !== instance &&
       runtime.effectFlushPhase === undefined &&
       eventBatchDepth === 0 &&
       transitionDepth === 0 &&
-      optionsAllowDirectTextBinding(value);
-    const didUseDirectTextBinding =
-      canUseDirectBinding && updateDirectTextBinding(slot.textBinding, nextValue);
-    const didUseDirectStateBinding =
-      canUseDirectBinding && updateDirectStateBinding(slot.stateBinding);
+      optionsAllowDirectTextBinding(value) &&
+      updateDirectTextBinding(slot.textBinding, nextValue);
 
-    if (didUseDirectTextBinding || didUseDirectStateBinding) {
+    if (canUseDirectTextBinding) {
       return;
     }
 
@@ -860,7 +836,6 @@ export function useState<T>(
     (value: T | ((previous: T) => T)) => void,
   ] & Record<PropertyKey, unknown>;
   result[REACTIVE_TEXT_BINDING_META] = getStateTextBinding(slot);
-  result[REACTIVE_STATE_BINDING_META] = getReactiveStateBinding(slot);
   return result;
 }
 
@@ -909,26 +884,6 @@ function getStateTextBinding(slot: Extract<HookSlot, { kind: "state" }>): Reacti
   return slot.textBinding;
 }
 
-function getReactiveStateBinding(
-  slot: Extract<HookSlot, { kind: "state" }>,
-): ReactiveStateBindingInternal {
-  if (slot.stateBinding === undefined) {
-    const source: Source = {
-      subscribers: null,
-    };
-
-    slot.stateBinding = {
-      source,
-      slot,
-      get() {
-        trackSource(source);
-        return slot.value;
-      },
-    };
-  }
-  return slot.stateBinding;
-}
-
 function optionsAllowDirectTextBinding(value: unknown): boolean {
   return typeof value !== "function";
 }
@@ -958,15 +913,6 @@ function updateDirectTextBinding(binding: ReactiveTextBinding | undefined, value
   return updated;
 }
 
-function updateDirectStateBinding(binding: ReactiveStateBindingInternal | undefined): boolean {
-  if (binding === undefined || binding.source.subscribers === null) {
-    return false;
-  }
-
-  notifySubscribers(binding.source);
-  return true;
-}
-
 function isReactiveTextBinding(value: unknown): value is ReactiveTextBinding {
   return (
     typeof value === "object" &&
@@ -982,15 +928,11 @@ export function useReducer<TState, TAction, TInitial = TState>(
   initialArg: TInitial,
   init?: (initialArg: TInitial) => TState,
 ): [TState, (action: TAction) => void] {
-  const stateTuple = runWithoutDevToolsHookTracking(() =>
+  const [state, setState] = runWithoutDevToolsHookTracking(() =>
     useState<TState>(() =>
       init === undefined ? (initialArg as unknown as TState) : init(initialArg),
     ),
-  ) as [TState, (value: TState | ((previous: TState) => TState)) => void] & Record<
-    PropertyKey,
-    unknown
-  >;
-  const [state, setState] = stateTuple;
+  );
   const reducerRef = runWithoutDevToolsHookTracking(() => useRef(reducer));
   const stateRef = runWithoutDevToolsHookTracking(() => useRef(state));
   const dispatchRef = runWithoutDevToolsHookTracking(() =>
@@ -1014,12 +956,7 @@ export function useReducer<TState, TAction, TInitial = TState>(
     value: state,
   });
 
-  const result = [state, dispatchRef.current] as [TState, (action: TAction) => void] & Record<
-    PropertyKey,
-    unknown
-  >;
-  result[REACTIVE_STATE_BINDING_META] = stateTuple[REACTIVE_STATE_BINDING_META];
-  return result;
+  return [state, dispatchRef.current];
 }
 
 /** Returns a stable mutable ref object for the component instance. */
