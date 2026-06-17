@@ -3485,13 +3485,21 @@ function tryReuseMemoBailout(
     return undefined;
   }
 
-  const fiber = getMemoBailoutFiber(
-    runtime,
-    current,
-    node.props,
-    previousMemoState,
-    canReuseCurrentFiber,
-  );
+  const fiber =
+    canReuseCurrentFiber &&
+    current.hasRefSubtree !== true &&
+    current.hydrateExisting !== true
+      ? current
+      : createWorkInProgress(current, node.props);
+
+  if (fiber === current) {
+    current.pendingProps = node.props;
+    current.flags = NoFlags;
+    current.subtreeFlags = NoFlags;
+    current.childListChanged = false;
+    current.subtreeChildListChanged = false;
+    current.hostChildListChanged = false;
+  }
   fiber.type = node.type;
   fiber.child = getSkippedChild(current);
   fiber.memoizedState = previousMemoState;
