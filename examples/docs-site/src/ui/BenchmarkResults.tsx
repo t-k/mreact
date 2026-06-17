@@ -358,13 +358,18 @@ function BenchmarkTimingBreakdown({ row }: { readonly row: BenchmarkRankingRow }
   const measuredTotal = (script ?? 0) + (paint ?? 0);
   const scriptShare =
     script === undefined || measuredTotal <= 0 ? 0 : (script / measuredTotal) * 100;
+  const paintShare = paint === undefined || measuredTotal <= 0 ? 0 : (paint / measuredTotal) * 100;
 
   return (
     <span class="benchmark-breakdown" aria-label="Timing breakdown">
       <span class="benchmark-breakdown-scale" aria-hidden="true">
         <span
-          class="benchmark-breakdown-scale-script"
+          class="benchmark-breakdown-segment is-script"
           style={`--script-share: ${formatPercent(scriptShare)}%;`}
+        />
+        <span
+          class="benchmark-breakdown-segment is-paint"
+          style={`--paint-share: ${formatPercent(paintShare)}%;`}
         />
       </span>
       {row.script === undefined ? null : (

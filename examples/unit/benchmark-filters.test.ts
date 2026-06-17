@@ -49,6 +49,8 @@ describe("benchmark filters", () => {
     expect(html).toContain('class="benchmark-breakdown-term"');
     expect(html).toContain('data-benchmark-metric="script"');
     expect(html).toContain('data-benchmark-metric="paint"');
+    expect(html).toContain('class="benchmark-breakdown-segment is-script"');
+    expect(html).toContain('class="benchmark-breakdown-segment is-paint"');
   });
 
   test("filters benchmark rows by selected framework groups while preserving category filters", async () => {
