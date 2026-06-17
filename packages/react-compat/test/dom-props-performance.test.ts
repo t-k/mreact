@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { applyPostChildFormProps, applyProps } from "../src/dom-props.js";
 
 type FormConstructors = Pick<
@@ -208,6 +208,36 @@ describe("react-compat DOM prop performance", () => {
     applyPostChildFormProps(div, props);
 
     expect(propDescriptorReads).toBe(0);
+  });
+
+  test("host createElement does not recheck ordinary props for children-only metadata", async () => {
+    vi.resetModules();
+    const originalHasOwnProperty = Object.prototype.hasOwnProperty;
+    let propOwnershipChecks = 0;
+
+    Object.prototype.hasOwnProperty = function hasOwnPropertySpy(property) {
+      if (
+        (property === "className" || property === "children") &&
+        ((this as Record<PropertyKey, unknown>).className === "row" ||
+          (this as Record<PropertyKey, unknown>).children === "row")
+      ) {
+        propOwnershipChecks += 1;
+      }
+
+      return originalHasOwnProperty.call(this, property);
+    };
+
+    try {
+      const { createElement } = await import("../src/element.js");
+      const element = createElement("tr", { className: "row" }, "row");
+
+      expect(element.props.className).toBe("row");
+      expect(element.props.children).toBe("row");
+      expect(propOwnershipChecks).toBe(1);
+    } finally {
+      Object.prototype.hasOwnProperty = originalHasOwnProperty;
+      vi.resetModules();
+    }
   });
 
 });

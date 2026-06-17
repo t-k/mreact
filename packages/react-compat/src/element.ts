@@ -110,13 +110,11 @@ export function createElement<P extends object>(
   if (typeof type === "string") {
     const key = config?.key === undefined ? null : String(config.key);
     const ref = config?.ref ?? null;
-    const props = copyCreateElementProps(config) as P & {
+    const props = copyHostCreateElementProps(config) as P & {
       children?: ReactCompatNode;
     };
 
     assignCreateElementChildren(props, childCount, arguments);
-
-    setHostOwnPropsMeta(props);
 
     return {
       $$typeof: REACT_COMPAT_ELEMENT_TYPE,
@@ -386,6 +384,41 @@ function copyCreateElementProps(
   }
 
   copyInternalElementSymbolProps(source, props);
+  return props as Record<string, unknown>;
+}
+
+function copyHostCreateElementProps(
+  source: object | null | undefined,
+): Record<string, unknown> {
+  const props: Record<PropertyKey, unknown> = {};
+
+  if (source === null || source === undefined) {
+    props[HOST_CHILDREN_ONLY_PROPS_META] = true;
+    return props as Record<string, unknown>;
+  }
+
+  let hasNonChildrenProp = false;
+  const stringSource = source as Record<string, unknown>;
+  for (const name in source) {
+    if (!hasOwnProperty.call(source, name)) {
+      continue;
+    }
+
+    if (
+      name !== "key" &&
+      name !== "ref" &&
+      name !== "__self" &&
+      name !== "__source"
+    ) {
+      props[name] = stringSource[name];
+      hasNonChildrenProp ||= name !== "children";
+    }
+  }
+
+  copyInternalElementSymbolProps(source, props);
+  if (!hasNonChildrenProp) {
+    props[HOST_CHILDREN_ONLY_PROPS_META] = true;
+  }
   return props as Record<string, unknown>;
 }
 
