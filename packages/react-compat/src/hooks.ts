@@ -637,22 +637,27 @@ export function hasContextDependency(
   return keys.some((key) => runtime.instances.get(key)?.contextDependencies !== undefined);
 }
 
+// Shared read-only empty result so components with no registered instances
+// (e.g. hookless rows under lazy instance materialization) don't each allocate
+// a fresh array. Callers treat instance-key lists as read-only.
+const EMPTY_INSTANCE_KEYS: string[] = [];
+
 export function collectRuntimeInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
   const keys = runtime.instanceKeysByPrefix.get(prefix);
 
   if (keys === undefined) {
-    return [];
+    return EMPTY_INSTANCE_KEYS;
   }
 
-  const activeKeys: string[] = [];
+  let activeKeys: string[] | undefined;
 
   for (const key of keys) {
     if (runtime.instances.has(key)) {
-      activeKeys.push(key);
+      (activeKeys ??= []).push(key);
     }
   }
 
-  return activeKeys;
+  return activeKeys ?? EMPTY_INSTANCE_KEYS;
 }
 
 export function getDevToolsHookState(
