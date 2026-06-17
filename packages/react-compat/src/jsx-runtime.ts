@@ -1,6 +1,7 @@
 import {
   createElementFromJsxConfig,
   Fragment,
+  REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META,
 } from "./element.js";
 import type {
@@ -13,6 +14,8 @@ import type {
 export { Fragment };
 /** Metadata key used by compiled JSX for reactive text bindings. */
 export { REACTIVE_TEXT_BINDING_META };
+/** Metadata key used by compiled JSX for reactive state bindings. */
+export { REACTIVE_STATE_BINDING_META };
 
 /** DOM event type with a narrowed currentTarget. */
 export type JSXEvent<

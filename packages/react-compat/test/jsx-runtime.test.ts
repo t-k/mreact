@@ -1,9 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createElement, Fragment } from "../src/index.js";
-import { jsx, jsxs, REACTIVE_TEXT_BINDING_META } from "../src/jsx-runtime.js";
+import {
+  jsx,
+  jsxs,
+  REACTIVE_STATE_BINDING_META,
+  REACTIVE_TEXT_BINDING_META,
+} from "../src/jsx-runtime.js";
 import {
   Fragment as DevFragment,
+  REACTIVE_STATE_BINDING_META as DEV_REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META as DEV_REACTIVE_TEXT_BINDING_META,
   jsxDEV,
 } from "../src/jsx-dev-runtime.js";
@@ -148,12 +154,15 @@ describe("react-compat automatic JSX runtime", () => {
     expect(dev.Fragment).toBe(Fragment);
   });
 
-  test("runtime entrypoints export reactive text binding metadata", async () => {
+  test("runtime entrypoints export reactive binding metadata", async () => {
     const production = await importProductionRuntime();
     const dev = await importDevRuntime();
 
     expect(production.REACTIVE_TEXT_BINDING_META).toBe(REACTIVE_TEXT_BINDING_META);
     expect(DEV_REACTIVE_TEXT_BINDING_META).toBe(REACTIVE_TEXT_BINDING_META);
     expect(dev.REACTIVE_TEXT_BINDING_META).toBe(REACTIVE_TEXT_BINDING_META);
+    expect(production.REACTIVE_STATE_BINDING_META).toBe(REACTIVE_STATE_BINDING_META);
+    expect(DEV_REACTIVE_STATE_BINDING_META).toBe(REACTIVE_STATE_BINDING_META);
+    expect(dev.REACTIVE_STATE_BINDING_META).toBe(REACTIVE_STATE_BINDING_META);
   });
 });
