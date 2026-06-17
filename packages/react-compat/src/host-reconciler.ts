@@ -1428,10 +1428,7 @@ function createHostFiberImpl(
         : createFiber("memo", node.props, key);
     fiber.type = memoType;
 
-    const renderedElement: ReactCompatElement = {
-      ...node,
-      type: memoType.type,
-    };
+    const renderedElement = retargetElementType(node, memoType.type);
     const childResult = createHostFiber(
       fiber,
       current?.tag === "memo" ? current.child : undefined,
@@ -1477,10 +1474,7 @@ function createHostFiberImpl(
     fiber.type = lazyType;
 
     if (lazyType.status === "resolved" && lazyType.resolved !== undefined) {
-      const renderedElement: ReactCompatElement = {
-        ...node,
-        type: lazyType.resolved,
-      };
+      const renderedElement = retargetElementType(node, lazyType.resolved);
       const childResult = createHostFiber(
         fiber,
         current?.tag === "lazy" ? current.child : undefined,
@@ -3415,6 +3409,19 @@ function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
   }
 
   return Array.isArray(node) ? node : [node];
+}
+
+function retargetElementType(
+  element: ReactCompatElement,
+  type: ReactCompatElement["type"],
+): ReactCompatElement {
+  return {
+    $$typeof: element.$$typeof,
+    type,
+    key: element.key,
+    ref: element.ref,
+    props: element.props,
+  };
 }
 
 function getDocumentRef(options: FiberHydrationOptions): Document | CustomHostDocument {

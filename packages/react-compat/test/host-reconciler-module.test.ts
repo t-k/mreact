@@ -109,6 +109,16 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("retargets wrapper elements without spread copies", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("function retargetElementType(");
+    expect(hostReconcilerSource).not.toContain("const renderedElement: ReactCompatElement = {\n      ...node,");
+  });
+
   test("checks class descendants once when recording memo state", async () => {
     const hostReconcilerSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
