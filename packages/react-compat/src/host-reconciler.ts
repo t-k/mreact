@@ -2317,7 +2317,7 @@ function commitHostDirtyFiber(
       commitHostDirtyChildrenOf(fiber, fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (isDomHostElement(element)) {
+    if (isFormHostType(fiber.type) && isDomHostElement(element)) {
       applyPostChildFormProps(element, props, previousProps);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
@@ -2819,7 +2819,7 @@ function commitHostFiber(
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (isDomHostElement(element)) {
+    if (isFormHostType(fiber.type) && isDomHostElement(element)) {
       applyPostChildFormProps(element, props, previousProps);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
@@ -3184,6 +3184,13 @@ function getDirectHostTextChild(children: unknown): string | undefined {
   return typeof children === "string" || typeof children === "number"
     ? String(children)
     : undefined;
+}
+
+// Only these host tags carry post-child form value/checked semantics. Gating on
+// the (cheap, already-known) type string lets the commit skip applyPostChildFormProps
+// and its instanceof probes for every other element.
+function isFormHostType(type: unknown): boolean {
+  return type === "input" || type === "textarea" || type === "select";
 }
 
 // This package has no Node type dependency; declare the minimal process
