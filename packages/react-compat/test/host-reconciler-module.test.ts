@@ -109,6 +109,17 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("keeps function state props without snapshot spread copies", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain(
+      "fiber.stateNode = {\n      element: node,\n      props: { ...node.props }",
+    );
+  });
+
   test("checks class descendants once when recording memo state", async () => {
     const hostReconcilerSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
@@ -120,6 +131,16 @@ describe("host reconciler module", () => {
 
     expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
     expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
+  });
+
+  test("short-circuits dependency-free memo instance key snapshots", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("collectMemoInstanceKeys(runtime, memoPath)");
+    expect(hostReconcilerSource).toContain("readDependencyFreeMemoInstanceKey(runtime, prefix)");
   });
 
   test("builds runtime instance key prefixes without repeated slice joins", async () => {

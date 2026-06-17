@@ -96,6 +96,7 @@ interface SuspenseFiberState {
 
 const committedPortalContainers = new Set<Element>();
 const pendingHostRefUpdates: { ref: unknown; node: unknown }[] = [];
+const emptyInstanceKeys: string[] = [];
 
 interface FiberHydrationOptions extends RenderOptions {
   previousNodes?: readonly Node[];
@@ -1422,7 +1423,7 @@ function createHostFiberImpl(
       fiber.child.sibling = undefined;
       bubbleHostChild(fiber, fiber.child);
     }
-    const instanceKeys = collectInstanceKeys(runtime, memoPath);
+    const instanceKeys = collectMemoInstanceKeys(runtime, memoPath);
     const hasClassDescendant = hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
       props: node.props as Record<string, unknown>,
@@ -1639,7 +1640,7 @@ function createHostFiberImpl(
     const instanceKeys = collectInstanceKeys(runtime, path);
     fiber.stateNode = {
       element: node,
-      props: { ...node.props },
+      props: node.props as Record<string, unknown>,
       instanceKeys,
       hasContextDependencies: hasContextDependency(runtime, instanceKeys),
     } satisfies FunctionFiberState;
@@ -3523,6 +3524,35 @@ function isLazyType(
 
 function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
   return collectRuntimeInstanceKeys(runtime, prefix);
+}
+
+function collectMemoInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
+  return readDependencyFreeMemoInstanceKey(runtime, prefix) === undefined
+    ? collectInstanceKeys(runtime, prefix)
+    : emptyInstanceKeys;
+}
+
+function readDependencyFreeMemoInstanceKey(
+  runtime: RootRuntime,
+  prefix: string,
+): string | undefined {
+  const keys = runtime.instanceKeysByPrefix.get(prefix);
+
+  if (keys === undefined || keys.size !== 1 || !keys.has(prefix)) {
+    return undefined;
+  }
+
+  const instance = runtime.instances.get(prefix) as RuntimeInstanceLike | undefined;
+
+  if (
+    instance === undefined ||
+    instance.contextDependencies !== undefined ||
+    (instance.hooks !== undefined && instance.hooks.length > 0)
+  ) {
+    return undefined;
+  }
+
+  return prefix;
 }
 
 function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {
