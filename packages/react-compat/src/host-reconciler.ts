@@ -259,7 +259,14 @@ export function commitHostFiberRoot(
       pendingHostRefUpdates.length = 0;
       const commitPath = getRootCommitPath(options);
       if (!hasChildListMutation(finishedWork)) {
-        commitHostDirtyChildren(finishedWork.child, root.container, root.container, commitPath, options);
+        commitHostDirtyChildrenOf(
+          finishedWork,
+          finishedWork.child,
+          root.container,
+          root.container,
+          commitPath,
+          options,
+        );
         committed = true;
         return;
       }
@@ -374,6 +381,7 @@ function reconcileHostChild(
   let skipRemainingKeyedLookup = false;
   let sequentialCurrentCursor = currentFirstChild;
   let childListOrderChanged = false;
+  let dirtyChildren: Fiber[] | undefined;
   let usedCurrentChildren =
     currentFirstChild === undefined || hasKeyedChildren ? undefined : new Set<Fiber>();
   const ensureUsedCurrentChildren = (): Set<Fiber> => {
@@ -521,6 +529,14 @@ function reconcileHostChild(
       && fiber.memoizedState === undefined
     ) {
       fiber.memoizedState = index;
+    } else if (
+      fiber.tag === "memo" &&
+      (fiber.stateNode === undefined || typeof fiber.stateNode === "number")
+    ) {
+      fiber.stateNode = index;
+    }
+    if (hasHostCommitWork(fiber)) {
+      (dirtyChildren ??= []).push(fiber);
     }
     previous = fiber;
   }
@@ -532,6 +548,7 @@ function reconcileHostChild(
   }
   parent.childListChanged =
     childListOrderChanged || childFiberListShapeChanged(currentFirstChild, first);
+  recordDirtyChildCommitHints(parent, dirtyChildren);
 
   return { fiber: first, consumed };
 }
@@ -1116,6 +1133,18 @@ function bubbleHostChild(parent: Fiber, child: Fiber): void {
     parent.subtreeChildListChanged ||
     child.childListChanged ||
     child.subtreeChildListChanged;
+}
+
+function recordDirtyChildCommitHints(
+  parent: Fiber,
+  dirtyChildren: Fiber[] | undefined,
+): void {
+  if (parent.childListChanged || dirtyChildren === undefined || dirtyChildren.length === 0) {
+    return;
+  }
+
+  // Reuse the effect-list slot only when there are no child-list deletions.
+  parent.deletions = dirtyChildren;
 }
 
 function resetFiberRefSubtree(fiber: Fiber): void {
@@ -2124,6 +2153,49 @@ function commitHostDirtyChildren(
   }
 }
 
+function commitHostDirtyChildrenOf(
+  owner: Fiber,
+  fiber: Fiber | undefined,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions = {},
+): void {
+  const dirtyChildren = readDirtyChildCommitHints(owner);
+
+  if (dirtyChildren === undefined) {
+    commitHostDirtyChildren(fiber, parent, eventRoot, path, options);
+    return;
+  }
+
+  for (let index = 0; index < dirtyChildren.length; index += 1) {
+    const dirtyChild = dirtyChildren[index];
+
+    if (dirtyChild !== undefined && hasHostCommitWork(dirtyChild)) {
+      commitHostDirtyFiber(
+        dirtyChild,
+        parent,
+        eventRoot,
+        joinCommitPath(path, String(getDirtyChildCommitIndex(dirtyChild, index))),
+        options,
+      );
+    }
+  }
+  owner.deletions = undefined;
+}
+
+function readDirtyChildCommitHints(fiber: Fiber): Fiber[] | undefined {
+  return fiber.childListChanged ? undefined : fiber.deletions;
+}
+
+function getDirtyChildCommitIndex(fiber: Fiber, fallback: number): number {
+  if (typeof fiber.memoizedState === "number") {
+    return fiber.memoizedState;
+  }
+
+  return typeof fiber.stateNode === "number" ? fiber.stateNode : fallback;
+}
+
 function commitHostDirtyFiber(
   fiber: Fiber,
   parent: ParentNode,
@@ -2193,7 +2265,7 @@ function commitHostDirtyFiber(
         syncChildNodes(element as ParentNode, childNodes);
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
-      commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
+      commitHostDirtyChildrenOf(fiber, fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
     if (isDomHostElement(element)) {
@@ -2236,7 +2308,8 @@ function commitHostDirtyFiber(
         syncOwnedChildNodes(container as ParentNode, previousNodes, childNodes);
         fiber.memoizedState = childNodes;
       } else {
-        commitHostDirtyChildren(
+        commitHostDirtyChildrenOf(
+          fiber,
           fiber.child,
           container as ParentNode,
           portalEventRoot,
@@ -2251,7 +2324,7 @@ function commitHostDirtyFiber(
   }
 
   if (fiber.subtreeFlags !== NoFlags) {
-    commitHostDirtyChildren(fiber.child, parent, eventRoot, path, options);
+    commitHostDirtyChildrenOf(fiber, fiber.child, parent, eventRoot, path, options);
   }
   fiber.memoizedProps = fiber.pendingProps;
   finishCommittedFiber(fiber);

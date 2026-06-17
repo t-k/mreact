@@ -979,6 +979,55 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("records dirty memo children during keyed reconcile without child list changes", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const runtime = createRootRuntime(() => {});
+    const Row = memo(
+      ({ label }: { readonly label: string }) =>
+        createElement("span", { "data-row": label }, label),
+      (previous, next) => previous.label === next.label,
+    );
+
+    function App({ labels }: { readonly labels: readonly string[] }) {
+      return labels.map((label) => createElement(Row, { key: label[0], label }));
+    }
+
+    const initial = renderHostFiberRoot(
+      root,
+      createElement(App, { labels: ["A", "B", "C"] }),
+      runtime,
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement(App, { labels: ["A", "B2", "C"] }),
+      runtime,
+    );
+    const appFiber = updated.child;
+    const firstRow = appFiber?.child;
+    const secondRow = firstRow?.sibling;
+
+    if (appFiber === undefined || secondRow === undefined) {
+      expect.fail("expected updated app and dirty memo child");
+    }
+
+    expect(updated.childListChanged).toBe(false);
+    expect(appFiber.childListChanged).toBe(false);
+    expect(updated.deletions).toEqual([appFiber]);
+    expect(appFiber.deletions).toEqual([secondRow]);
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-row="A">A</span><span data-row="B2">B2</span><span data-row="C">C</span>',
+    );
+  });
+
   test("removes SVG grandchildren when a component child collapses to null", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
