@@ -430,7 +430,7 @@ describe("docs-site example contract", () => {
   test("keeps Getting Started actionable for a first app", async () => {
     const gettingStarted = await readDocsSite("src/content/getting-started.mdx");
 
-    expect(gettingStarted).toContain("Node.js 20 or newer");
+    expect(gettingStarted).toContain("Node.js 20.19 or newer");
     expect(gettingStarted).toContain("A package manager: pnpm or npm");
     expect(gettingStarted).toContain("The examples below use pnpm");
     expect(gettingStarted).toContain(
@@ -835,7 +835,7 @@ describe("docs-site example contract", () => {
     expect(serverClientModel).toContain("onClick");
     expect(serverClientModel).toContain('## Client boundaries');
     expect(serverClientModel).toContain("LikeButton.tsx");
-    expect(serverClientModel).toContain('import { LikeButton } from "./LikeButton";');
+    expect(serverClientModel).toContain('import { LikeButton } from "./LikeButton.client.js";');
     expect(serverClientModel).toContain("Prefer inference for ordinary counters, menus, and small controls.");
     expect(serverClientModel).toContain("## Route-level \"use client\"");
     expect(serverClientModel).toContain('"use client";');

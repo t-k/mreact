@@ -2,7 +2,6 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
 
-import { docsPages } from "./content-registry.js";
 import { flatNav, sidebar } from "./nav.config.js";
 
 const utilityLabels = [
@@ -61,12 +60,13 @@ describe("docs-site utility package labels", () => {
 
 describe("docs-site content integrity", () => {
   test("Navigation slugs and labels match the content registry", () => {
-    expect(new Set(flatNav.map((item) => item.slug))).toEqual(new Set(docsPages.map((page) => page.slug)));
+    expect(new Set(flatNav.map((item) => item.slug))).toEqual(new Set(readContentRegistrySlugs()));
 
     for (const navItem of flatNav) {
-      const page = docsPages.find((candidate) => candidate.slug === navItem.slug);
+      const source = readContentForSlug(navItem.slug);
+      const title = source.match(/export const title = "([^"]+)";/)?.[1];
 
-      expect(page?.title).toBe(navItem.text);
+      expect(title).toBe(navItem.text);
     }
   });
 
@@ -188,6 +188,16 @@ function mdxContentPaths(): string[] {
 
 function readContent(path: string): string {
   return readFileSync(join(import.meta.dirname, "content", path), "utf8");
+}
+
+function readContentForSlug(slug: string): string {
+  return readContent(slug === "" ? "overview.mdx" : `${slug}.mdx`);
+}
+
+function readContentRegistrySlugs(): string[] {
+  const source = readFileSync(join(import.meta.dirname, "content-registry.ts"), "utf8");
+
+  return [...source.matchAll(/\bpage\(\s*"([^"]*)"/g)].map((match) => match[1] ?? "");
 }
 
 function readPublicScript(filename: string): string {
