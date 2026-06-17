@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { flushQueuedComputations } from "@reckona/mreact-reactive-core/internal";
+import { bindText } from "@reckona/mreact-reactive-dom";
 import {
   Children,
   cloneElement,
@@ -190,6 +192,68 @@ describe("react-compat useState", () => {
 
     expect(container.innerHTML).toBe("");
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  test("updates compiler-owned reactive DOM blocks without re-rendering the component", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const container = document.createElement("div");
+    const reactiveStateBindingMeta = Symbol.for("modular.react.reactive_state_binding_meta");
+    let renders = 0;
+    let update: (value: number) => void = () => {};
+
+    function Counter() {
+      renders += 1;
+      const state = useState(0) as unknown as [
+        number,
+        (value: number) => void,
+      ] & Record<PropertyKey, unknown>;
+      const [, setCount] = state;
+      const stateBinding = state[reactiveStateBindingMeta] as { get(): unknown };
+      update = setCount;
+
+      return createReactiveDomBlock(() => {
+        const node = document.createTextNode(String(stateBinding.get()));
+        const dispose = bindText(node, () => stateBinding.get(), {
+          preserveInitial: true,
+        });
+        return { node, dispose };
+      });
+    }
+
+    try {
+      createRoot(container).render(createElement(Counter, null));
+
+      expect(container.textContent).toBe("0");
+      expect(renders).toBe(1);
+
+      update(1);
+      flushQueuedComputations();
+
+      expect(container.textContent).toBe("1");
+      expect(renders).toBe(1);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  test("exposes compiler reactive state bindings from useReducer tuples", () => {
+    const container = document.createElement("div");
+    const reactiveStateBindingMeta = Symbol.for("modular.react.reactive_state_binding_meta");
+    let binding: { get(): unknown } | undefined;
+
+    function Counter() {
+      const state = useReducer((count: number, delta: number) => count + delta, 0) as [
+        number,
+        (delta: number) => void,
+      ] & Record<PropertyKey, unknown>;
+      binding = state[reactiveStateBindingMeta] as { get(): unknown };
+      return createElement("p", null, state[0]);
+    }
+
+    createRoot(container).render(createElement(Counter, null));
+
+    expect(binding?.get()).toBe(0);
   });
 
   test("batches discrete event updates and flushes once after the handler", () => {

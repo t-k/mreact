@@ -24,6 +24,10 @@ export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
 export const REACTIVE_TEXT_BINDING_META = Symbol.for(
   "modular.react.reactive_text_binding_meta",
 );
+/** Metadata key that links compiler-owned DOM blocks to component state. */
+export const REACTIVE_STATE_BINDING_META = Symbol.for(
+  "modular.react.reactive_state_binding_meta",
+);
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
