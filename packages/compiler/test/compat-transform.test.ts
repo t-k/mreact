@@ -644,7 +644,7 @@ describe("compiler compat mode", () => {
     );
   });
 
-  test("emits direct text binding metadata for compiler-proven useState text children", () => {
+  test("emits compiler reactive DOM blocks for compiler-proven useState text children", () => {
     const output = transform({
       code: `import { useState } from "@reckona/mreact-compat";
 
@@ -662,17 +662,31 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.metadata.imports).toContainEqual({
+    expect(output.metadata.imports).toEqual([
+      {
+        source: "@reckona/mreact-reactive-dom",
+        specifiers: ["bindText", "createTemplate"],
+      },
+      {
       source: "@reckona/mreact-compat/jsx-runtime",
-      specifiers: ["REACTIVE_TEXT_BINDING_META", "jsx"],
-    });
+        specifiers: ["REACTIVE_STATE_BINDING_META", "createReactiveDomBlock"],
+      },
+    ]);
+    expect(output.code).toContain(
+      'import { bindText as _bindText, createTemplate as _createTemplate } from "@reckona/mreact-reactive-dom";',
+    );
+    expect(output.code).toContain(
+      'import { REACTIVE_STATE_BINDING_META as _REACTIVE_STATE_BINDING_META, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";',
+    );
+    expect(output.code).toContain('const _tmpl_App = _createTemplate("<p><!----></p>");');
     expect(output.code).toContain("const _countStateTuple = useState(0);");
     expect(output.code).toContain("const [count, setCount] = _countStateTuple;");
     expect(output.code).toContain(
-      "const _countTextBinding = _countStateTuple[_REACTIVE_TEXT_BINDING_META];",
+      "const _countStateBinding = _countStateTuple[_REACTIVE_STATE_BINDING_META];",
     );
+    expect(output.code).toContain("return _createReactiveDomBlock(() => {");
     expect(output.code).toContain(
-      "[_REACTIVE_TEXT_BINDING_META]: _countTextBinding",
+      "const _countTextDispose = _bindText(_countTextNode, () => _countStateBinding.get(), { preserveInitial: true });",
     );
   });
 
@@ -790,14 +804,17 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
   });
 
-  test("allocates direct text binding helper names without colliding with user locals", () => {
+  test("allocates compiler reactive DOM block helper names without colliding with user locals", () => {
     const output = transform({
       code: `import { useState } from "@reckona/mreact-compat";
 
       export function App() {
         const _countStateTuple = "user tuple";
-        const _countTextBinding = "user binding";
-        const _REACTIVE_TEXT_BINDING_META = "user meta";
+        const _countStateBinding = "user binding";
+        const _REACTIVE_STATE_BINDING_META = "user meta";
+        const _createReactiveDomBlock = "user block";
+        const _bindText = "user bind";
+        const _createTemplate = "user template";
         const [count, setCount] = useState(0);
         return <p>{count}</p>;
       }`,
@@ -809,14 +826,20 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain('const _countStateTuple = "user tuple";');
-    expect(output.code).toContain('const _countTextBinding = "user binding";');
-    expect(output.code).toContain('const _REACTIVE_TEXT_BINDING_META = "user meta";');
+    expect(output.code).toContain('const _countStateBinding = "user binding";');
+    expect(output.code).toContain('const _REACTIVE_STATE_BINDING_META = "user meta";');
+    expect(output.code).toContain('const _createReactiveDomBlock = "user block";');
+    expect(output.code).toContain('const _bindText = "user bind";');
+    expect(output.code).toContain('const _createTemplate = "user template";');
+    expect(output.code).toContain("createReactiveDomBlock as _createReactiveDomBlock$1");
+    expect(output.code).toContain("bindText as _bindText$1");
+    expect(output.code).toContain("createTemplate as _createTemplate$1");
     expect(output.code).toContain("const _countStateTuple$1 = useState(0);");
     expect(output.code).toContain("const [count, setCount] = _countStateTuple$1;");
     expect(output.code).toContain(
-      "const _countTextBinding$1 = _countStateTuple$1[_REACTIVE_TEXT_BINDING_META$1];",
+      "const _countStateBinding$1 = _countStateTuple$1[_REACTIVE_STATE_BINDING_META$1];",
     );
-    expect(output.code).toContain("[_REACTIVE_TEXT_BINDING_META$1]: _countTextBinding$1");
+    expect(output.code).toContain("return _createReactiveDomBlock$1(() => {");
   });
 
   test("runs compiler-proven direct text bindings without a compat component rerender", async () => {

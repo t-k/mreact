@@ -965,6 +965,7 @@ function updateDirectStateBinding(
 
   binding.value = value;
   notifySubscribers(binding.source);
+  flushQueuedComputations();
   return true;
 }
 

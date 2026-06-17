@@ -8,6 +8,7 @@ import type {
   ModuleIr,
 } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
+import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitCompatResult {
   code: string;
@@ -20,6 +21,7 @@ export interface EmitCompatOptions {
 
 const JSX_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-runtime";
 const JSX_DEV_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-dev-runtime";
+const REACTIVE_DOM_SOURCE = "@reckona/mreact-reactive-dom";
 
 export function emitCompat(
   ir: ModuleIr,
@@ -36,9 +38,11 @@ export function emitCompat(
   const dev = options.dev === true;
   const componentImportSource = dev ? JSX_DEV_RUNTIME_SOURCE : JSX_RUNTIME_SOURCE;
   const componentSpecifiers = collectComponentImportSpecifiers(ir, dev);
-  const helperNames = allocateHelperNames(ir, componentSpecifiers);
+  const reactiveDomSpecifiers = collectReactiveDomImportSpecifiers(ir, dev);
+  const helperNames = allocateHelperNames(ir, componentSpecifiers, reactiveDomSpecifiers);
   const importGroups = createImportGroups(
     componentSpecifiers,
+    reactiveDomSpecifiers,
     helperNames,
     normalizedModuleStatements.importSpecifiers,
     componentImportSource,
@@ -69,7 +73,16 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
   const specifiers = new Set<string>();
 
   for (const component of ir.components) {
-    if (collectDirectTextBindings(component).length > 0) {
+    const directTextBindings = collectDirectTextBindings(component);
+    const reactiveDomBlock = dev ? undefined : getReactiveDomBlock(component.root, directTextBindings);
+
+    if (reactiveDomBlock !== undefined) {
+      specifiers.add("REACTIVE_STATE_BINDING_META");
+      specifiers.add("createReactiveDomBlock");
+      continue;
+    }
+
+    if (directTextBindings.length > 0) {
       specifiers.add("REACTIVE_TEXT_BINDING_META");
     }
 
@@ -91,9 +104,32 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
   return Array.from(specifiers).sort();
 }
 
+function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[] {
+  const specifiers = new Set<string>();
+
+  if (dev) {
+    return [];
+  }
+
+  for (const component of ir.components) {
+    const reactiveDomBlock = getReactiveDomBlock(component.root, collectDirectTextBindings(component));
+
+    if (reactiveDomBlock !== undefined) {
+      specifiers.add("bindText");
+      specifiers.add("createTemplate");
+    }
+  }
+
+  return Array.from(specifiers).sort();
+}
+
 interface CompatHelperNames {
   Fragment?: string;
+  REACTIVE_STATE_BINDING_META?: string;
   REACTIVE_TEXT_BINDING_META?: string;
+  bindText?: string;
+  createReactiveDomBlock?: string;
+  createTemplate?: string;
   jsx?: string;
   jsxDEV?: string;
   jsxs?: string;
@@ -102,24 +138,51 @@ interface CompatHelperNames {
 interface DirectTextBinding {
   stateName: string;
   tupleName: string;
-  bindingName: string;
+  textBindingName: string;
+  stateBindingName: string;
+}
+
+interface ReactiveDomBlock {
+  element: JsxElementIr;
+  binding: DirectTextBinding;
 }
 
 function allocateHelperNames(
   ir: ModuleIr,
   specifiers: readonly string[],
+  reactiveDomSpecifiers: readonly string[] = [],
 ): CompatHelperNames {
   const allocator = createNameAllocator(collectReservedHelperNames(ir));
   const helperNames: CompatHelperNames = {};
 
-  for (const specifier of specifiers) {
+  for (const specifier of [...specifiers, ...reactiveDomSpecifiers]) {
+    if (specifier === "bindText") {
+      helperNames.bindText = allocator("_bindText");
+      continue;
+    }
+
+    if (specifier === "createTemplate") {
+      helperNames.createTemplate = allocator("_createTemplate");
+      continue;
+    }
+
     if (specifier === "Fragment") {
       helperNames.Fragment = allocator("_Fragment");
       continue;
     }
 
+    if (specifier === "REACTIVE_STATE_BINDING_META") {
+      helperNames.REACTIVE_STATE_BINDING_META = allocator("_REACTIVE_STATE_BINDING_META");
+      continue;
+    }
+
     if (specifier === "REACTIVE_TEXT_BINDING_META") {
       helperNames.REACTIVE_TEXT_BINDING_META = allocator("_REACTIVE_TEXT_BINDING_META");
+      continue;
+    }
+
+    if (specifier === "createReactiveDomBlock") {
+      helperNames.createReactiveDomBlock = allocator("_createReactiveDomBlock");
       continue;
     }
 
@@ -222,7 +285,7 @@ function parseCompatRuntimeImportLine(
   return specifierText.split(",").flatMap((rawSpecifier): CompatRuntimeImportSpecifier[] => {
     const specifier = rawSpecifier.trim();
     const aliasMatch = specifier.match(
-      /^(?<importedName>Fragment|REACTIVE_TEXT_BINDING_META|jsx|jsxDEV|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>Fragment|REACTIVE_STATE_BINDING_META|REACTIVE_TEXT_BINDING_META|createReactiveDomBlock|jsx|jsxDEV|jsxs)\s+as\s+(?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (aliasMatch?.groups !== undefined) {
@@ -239,7 +302,7 @@ function parseCompatRuntimeImportLine(
       }];
     }
 
-    return /^(Fragment|REACTIVE_TEXT_BINDING_META|jsx|jsxDEV|jsxs)$/.test(specifier)
+    return /^(Fragment|REACTIVE_STATE_BINDING_META|REACTIVE_TEXT_BINDING_META|createReactiveDomBlock|jsx|jsxDEV|jsxs)$/.test(specifier)
       ? [{ importedName: specifier, localName: specifier, source }]
       : [];
   });
@@ -247,6 +310,7 @@ function parseCompatRuntimeImportLine(
 
 function createImportGroups(
   componentSpecifiers: readonly string[],
+  reactiveDomSpecifiers: readonly string[],
   helperNames: CompatHelperNames,
   moduleImportSpecifiers: readonly CompatRuntimeImportSpecifier[],
   componentImportSource: string,
@@ -262,6 +326,11 @@ function createImportGroups(
     );
   }
 
+  for (const specifier of reactiveDomSpecifiers) {
+    const localName = helperNames[specifier as "bindText" | "createTemplate"] ?? `_${specifier}`;
+    addImportSpecifier(groups, REACTIVE_DOM_SOURCE, specifier, localName);
+  }
+
   for (const specifier of componentSpecifiers) {
     if (specifier === "Fragment") {
       const localName = helperNames.Fragment ?? "_Fragment";
@@ -269,9 +338,21 @@ function createImportGroups(
       continue;
     }
 
+    if (specifier === "REACTIVE_STATE_BINDING_META") {
+      const localName = helperNames.REACTIVE_STATE_BINDING_META ?? "_REACTIVE_STATE_BINDING_META";
+      addImportSpecifier(groups, componentImportSource, "REACTIVE_STATE_BINDING_META", localName);
+      continue;
+    }
+
     if (specifier === "REACTIVE_TEXT_BINDING_META") {
       const localName = helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META";
       addImportSpecifier(groups, componentImportSource, "REACTIVE_TEXT_BINDING_META", localName);
+      continue;
+    }
+
+    if (specifier === "createReactiveDomBlock") {
+      const localName = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
+      addImportSpecifier(groups, componentImportSource, "createReactiveDomBlock", localName);
       continue;
     }
 
@@ -323,13 +404,28 @@ function emitComponent(
   dev: boolean,
 ): string {
   const directTextBindings = collectDirectTextBindings(component, helperNames);
+  const reactiveDomBlock = dev ? undefined : getReactiveDomBlock(component.root, directTextBindings);
   const body = component.bodyStatements.map((statement) =>
-    `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames)}`
+    `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames, reactiveDomBlock !== undefined)}`
   );
   const parameters = component.parameters.join(", ");
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
     component.async === true ? "async " : ""
   }function`;
+
+  if (reactiveDomBlock !== undefined) {
+    const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
+    const templateName = allocator(`_tmpl_${component.name}`);
+    const templateHtml = JSON.stringify(renderStaticReactiveDomBlockHtml(reactiveDomBlock.element));
+
+    return [
+      `const ${templateName} = ${helperNames.createTemplate ?? "_createTemplate"}(${templateHtml});`,
+      `${functionKeyword} ${component.name}(${parameters}) {`,
+      ...body,
+      emitReactiveDomBlockReturn(reactiveDomBlock, helperNames, templateName, allocator),
+      `}`,
+    ].join("\n");
+  }
 
   return [
     `${functionKeyword} ${component.name}(${parameters}) {`,
@@ -488,7 +584,7 @@ function emitProps(
 
   if (directTextBinding !== undefined) {
     entries.push(
-      `[${helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META"}]: ${directTextBinding.bindingName}`,
+      `[${helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META"}]: ${directTextBinding.textBindingName}`,
     );
   }
 
@@ -580,7 +676,8 @@ function collectDirectTextBindings(
     candidates.push({
       stateName,
       tupleName: allocator(`_${stateName}StateTuple`),
-      bindingName: allocator(`_${stateName}TextBinding`),
+      textBindingName: allocator(`_${stateName}TextBinding`),
+      stateBindingName: allocator(`_${stateName}StateBinding`),
     });
   }
 
@@ -722,6 +819,7 @@ function rewriteDirectTextBindingStatement(
   statement: string,
   directTextBindings: readonly DirectTextBinding[],
   helperNames: CompatHelperNames,
+  useStateBinding: boolean,
 ): string {
   for (const binding of directTextBindings) {
     const match = statement.match(
@@ -732,15 +830,80 @@ function rewriteDirectTextBindingStatement(
       continue;
     }
 
-    const metadataName = helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META";
+    const metadataName = useStateBinding
+      ? helperNames.REACTIVE_STATE_BINDING_META ?? "_REACTIVE_STATE_BINDING_META"
+      : helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META";
+    const bindingName = useStateBinding ? binding.stateBindingName : binding.textBindingName;
     return [
       `const ${binding.tupleName} = ${match.groups.initializer};`,
       `  const [${binding.stateName}, ${match.groups.setterName}] = ${binding.tupleName};`,
-      `  const ${binding.bindingName} = ${binding.tupleName}[${metadataName}];`,
+      `  const ${bindingName} = ${binding.tupleName}[${metadataName}];`,
     ].join("\n");
   }
 
   return statement;
+}
+
+function getReactiveDomBlock(
+  root: JsxNodeIr,
+  directTextBindings: readonly DirectTextBinding[],
+): ReactiveDomBlock | undefined {
+  if (root.kind !== "element") {
+    return undefined;
+  }
+
+  if (root.keyCode !== undefined || root.attributes.some((attr) => attr.kind !== "static-attr")) {
+    return undefined;
+  }
+
+  const binding = findDirectTextBindingForChildren(root.children, directTextBindings);
+
+  if (binding === undefined) {
+    return undefined;
+  }
+
+  return {
+    element: root,
+    binding,
+  };
+}
+
+function emitReactiveDomBlockReturn(
+  block: ReactiveDomBlock,
+  helperNames: CompatHelperNames,
+  templateName: string,
+  allocateName: (baseName: string) => string,
+): string {
+  const binding = block.binding;
+  const createBlock = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
+  const bindText = helperNames.bindText ?? "_bindText";
+  const fragmentName = allocateName("_fragment");
+  const rootName = allocateName("_root");
+  const textNodeName = allocateName(`_${binding.stateName}TextNode`);
+  const textValueName = allocateName(`_${binding.stateName}TextValue`);
+  const textDisposeName = allocateName(`_${binding.stateName}TextDispose`);
+
+  return [
+    `  return ${createBlock}(() => {`,
+    `    const ${fragmentName} = ${templateName}();`,
+    `    const ${rootName} = ${fragmentName}.firstChild;`,
+    `    const ${textNodeName} = document.createTextNode("");`,
+    `    ${rootName}.childNodes[0].replaceWith(${textNodeName});`,
+    `    const ${textValueName} = ${binding.stateBindingName}.get();`,
+    `    ${textNodeName}.data = ${textValueName} == null ? "" : String(${textValueName});`,
+    `    const ${textDisposeName} = ${bindText}(${textNodeName}, () => ${binding.stateBindingName}.get(), { preserveInitial: true });`,
+    `    return { node: ${rootName}, dispose: ${textDisposeName} };`,
+    "  });",
+  ].join("\n");
+}
+
+function renderStaticReactiveDomBlockHtml(element: JsxElementIr): string {
+  const attrs = element.attributes
+    .filter((attr): attr is Extract<AttributeIr, { kind: "static-attr" }> => attr.kind === "static-attr")
+    .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
+    .join("");
+
+  return `<${element.tagName}${attrs}><!----></${element.tagName}>`;
 }
 
 function findDirectTextBindingForChildren(
