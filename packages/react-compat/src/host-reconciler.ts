@@ -114,14 +114,8 @@ interface FiberReconcileResult {
 }
 
 interface AppendSuffixCommitHint {
-  kind?: "append-suffix";
   fiber: Fiber;
   index: number;
-}
-
-interface SingleRemovalCommitHint {
-  kind: "single-removal";
-  fiber: Fiber;
 }
 
 interface ReactSuspenseBoundary {
@@ -349,7 +343,6 @@ function reconcileHostChild(
   parent.subtreeFlags = NoFlags;
   parent.childListChanged = false;
   parent.subtreeChildListChanged = false;
-  clearChildListCommitHint(parent);
 
   if (node === null || node === undefined || typeof node === "boolean") {
     parent.childListChanged = currentFirstChild !== undefined;
@@ -425,13 +418,11 @@ function reconcileHostChild(
       currentKeyed?.sibling?.key === key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
-      const deleted = currentKeyed;
       childListOrderChanged = true;
       ensureUsedCurrentChildren();
       matchedCurrent = currentKeyed.sibling;
       canReuseMatchedCurrentFiber = false;
       currentKeyed = currentKeyed.sibling.sibling;
-      storeSingleRemovalCommitHint(parent, deleted);
     } else {
       if (
         children !== undefined &&
@@ -583,7 +574,6 @@ function reconcileKeyedRowHostChildren(
       const matched = currentKeyed.sibling;
       listShapeChanged = true;
       markOptimizedChildForDeletion(parent, deleted);
-      storeSingleRemovalCommitHint(parent, deleted);
       matchedCurrent = matched;
       currentKeyed = matched.sibling;
     } else if (canSkipRemainingKeyedLookup(currentKeyed, children, index)) {
@@ -638,24 +628,9 @@ function reconcileKeyedRowHostChildren(
   parent.subtreeChildListChanged = subtreeChildListChanged;
   parent.childListChanged = listShapeChanged;
   if (appendSuffix !== undefined && canStoreAppendSuffixCommitHint(parent)) {
-    parent.memoizedState = { ...appendSuffix, kind: "append-suffix" };
+    parent.memoizedState = appendSuffix;
   }
   return { fiber: first, consumed: 0 };
-}
-
-function clearChildListCommitHint(fiber: Fiber): void {
-  if (
-    readAppendSuffixCommitHint(fiber.memoizedState) !== undefined ||
-    readSingleRemovalCommitHint(fiber.memoizedState) !== undefined
-  ) {
-    fiber.memoizedState = undefined;
-  }
-}
-
-function storeSingleRemovalCommitHint(parent: Fiber, fiber: Fiber): void {
-  if (canStoreAppendSuffixCommitHint(parent)) {
-    parent.memoizedState = { kind: "single-removal", fiber };
-  }
 }
 
 function canStoreAppendSuffixCommitHint(parent: Fiber): boolean {
@@ -1428,7 +1403,10 @@ function createHostFiberImpl(
         : createFiber("memo", node.props, key);
     fiber.type = memoType;
 
-    const renderedElement = retargetElementType(node, memoType.type);
+    const renderedElement: ReactCompatElement = {
+      ...node,
+      type: memoType.type,
+    };
     const childResult = createHostFiber(
       fiber,
       current?.tag === "memo" ? current.child : undefined,
@@ -1445,9 +1423,7 @@ function createHostFiberImpl(
       bubbleHostChild(fiber, fiber.child);
     }
     const instanceKeys = collectInstanceKeys(runtime, memoPath);
-    const hasClassDescendant = instanceKeys.length === 0
-      ? false
-      : hasClassComponentDescendant(fiber.child);
+    const hasClassDescendant = hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
       props: node.props as Record<string, unknown>,
       instanceKeys,
@@ -1476,7 +1452,10 @@ function createHostFiberImpl(
     fiber.type = lazyType;
 
     if (lazyType.status === "resolved" && lazyType.resolved !== undefined) {
-      const renderedElement = retargetElementType(node, lazyType.resolved);
+      const renderedElement: ReactCompatElement = {
+        ...node,
+        type: lazyType.resolved,
+      };
       const childResult = createHostFiber(
         fiber,
         current?.tag === "lazy" ? current.child : undefined,
@@ -2018,20 +1997,12 @@ function commitHostKeyedChildListMutationFiber(
       return false;
     }
 
-    const hasSingleRemovalHint =
-      readSingleRemovalCommitHint(fiber.memoizedState) !== undefined;
-
-    if (hasSingleRemovalHint && commitHostSingleRemoval(fiber, mutationParent)) {
-      finishHostPassthroughFiber(fiber);
-      return true;
-    }
-
     if (commitHostAppendSuffix(fiber, mutationParent, eventRoot, path, options)) {
       finishHostPassthroughFiber(fiber);
       return true;
     }
 
-    if (!hasSingleRemovalHint && commitHostSingleRemoval(fiber, mutationParent)) {
+    if (commitHostSingleRemoval(fiber, mutationParent)) {
       finishHostPassthroughFiber(fiber);
       return true;
     }
@@ -2109,24 +2080,16 @@ function readAppendSuffixCommitHint(value: unknown): AppendSuffixCommitHint | un
   }
 
   const candidate = value as Partial<AppendSuffixCommitHint>;
-  return (candidate.kind === undefined || candidate.kind === "append-suffix") &&
-    candidate.fiber !== undefined &&
-    typeof candidate.index === "number"
+  return candidate.fiber !== undefined && typeof candidate.index === "number"
     ? { fiber: candidate.fiber, index: candidate.index }
     : undefined;
 }
 
 function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
-  const removalHint = readSingleRemovalCommitHint(fiber.memoizedState);
-  const removed =
-    removalHint?.fiber ?? getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
+  const removed = getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
 
   if (removed === undefined) {
     return false;
-  }
-
-  if (removalHint !== undefined) {
-    fiber.memoizedState = undefined;
   }
 
   let removedAny = false;
@@ -2141,17 +2104,6 @@ function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
   }
 
   return removedAny;
-}
-
-function readSingleRemovalCommitHint(value: unknown): SingleRemovalCommitHint | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-
-  const candidate = value as Partial<SingleRemovalCommitHint>;
-  return candidate.kind === "single-removal" && candidate.fiber !== undefined
-    ? { kind: "single-removal", fiber: candidate.fiber }
-    : undefined;
 }
 
 function getAppendSuffix(
@@ -3411,19 +3363,6 @@ function normalizeChildren(node: ReactCompatNode): ReactCompatNode[] {
   }
 
   return Array.isArray(node) ? node : [node];
-}
-
-function retargetElementType(
-  element: ReactCompatElement,
-  type: ReactCompatElement["type"],
-): ReactCompatElement {
-  return {
-    $$typeof: element.$$typeof,
-    type,
-    key: element.key,
-    ref: element.ref,
-    props: element.props,
-  };
 }
 
 function getDocumentRef(options: FiberHydrationOptions): Document | CustomHostDocument {

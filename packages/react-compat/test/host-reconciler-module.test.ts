@@ -109,16 +109,6 @@ describe("host reconciler module", () => {
     );
   });
 
-  test("retargets wrapper elements without spread copies", async () => {
-    const hostReconcilerSource = await readFile(
-      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
-      "utf8",
-    );
-
-    expect(hostReconcilerSource).toContain("function retargetElementType(");
-    expect(hostReconcilerSource).not.toContain("const renderedElement: ReactCompatElement = {\n      ...node,");
-  });
-
   test("checks class descendants once when recording memo state", async () => {
     const hostReconcilerSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
@@ -128,21 +118,8 @@ describe("host reconciler module", () => {
     const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
     const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
 
-    expect(memoStateSource).toContain("const hasClassDescendant = instanceKeys.length === 0");
+    expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
     expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
-  });
-
-  test("skips memo class-descendant scans for runtime-free host subtrees", async () => {
-    const hostReconcilerSource = await readFile(
-      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
-      "utf8",
-    );
-    const memoStateStart = hostReconcilerSource.indexOf("const instanceKeys = collectInstanceKeys(runtime, memoPath);");
-    const memoStateEnd = hostReconcilerSource.indexOf("return { fiber, consumed: childResult.consumed };", memoStateStart);
-    const memoStateSource = hostReconcilerSource.slice(memoStateStart, memoStateEnd);
-
-    expect(memoStateSource).toContain("instanceKeys.length === 0");
-    expect(memoStateSource).toContain(": hasClassComponentDescendant(fiber.child);");
   });
 
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
@@ -877,50 +854,6 @@ describe("host reconciler module", () => {
 
     firstRow.stateNode = undefined;
     lastRow.stateNode = undefined;
-    commitHostFiberRoot(root, updated);
-
-    expect(container.innerHTML).toBe(
-      '<span data-key="a">A</span><span data-key="c">C</span>',
-    );
-  });
-
-  test("commits one keyed root removal without rescanning remaining siblings", () => {
-    const container = document.createElement("div");
-    const root = createFiberRoot(container);
-    const initial = renderHostFiberRoot(root, [
-      createElement("span", { "data-key": "a", key: "a" }, "A"),
-      createElement("span", { "data-key": "b", key: "b" }, "B"),
-      createElement("span", { "data-key": "c", key: "c" }, "C"),
-    ]);
-
-    root.finishedWork = initial;
-    commitHostFiberRoot(root, initial);
-    root.current = initial;
-
-    const updated = renderHostFiberRoot(root, [
-      createElement("span", { "data-key": "a", key: "a" }, "A"),
-      createElement("span", { "data-key": "c", key: "c" }, "C"),
-    ]);
-    const currentFirst = root.current.child;
-    const updatedFirst = updated.child;
-
-    if (currentFirst === undefined || updatedFirst === undefined) {
-      expect.fail("expected keyed root children");
-    }
-
-    Object.defineProperty(currentFirst, "sibling", {
-      configurable: true,
-      get() {
-        throw new Error("commit should not rescan the unchanged current prefix");
-      },
-    });
-    Object.defineProperty(updatedFirst, "sibling", {
-      configurable: true,
-      get() {
-        throw new Error("commit should not rescan the unchanged next prefix");
-      },
-    });
-
     commitHostFiberRoot(root, updated);
 
     expect(container.innerHTML).toBe(
