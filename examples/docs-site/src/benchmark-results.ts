@@ -920,72 +920,72 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "solid-v1.9.13-keyed",
             "caseName": "ready memory",
-            "value": "1",
+            "value": "1050",
             "diff": "best",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 2,
             "framework": "mreact-v0.0.170-local-keyed",
             "caseName": "ready memory",
-            "value": "1.1",
+            "value": "1129",
             "diff": "+7.61%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": true
           },
           {
             "rank": 3,
             "framework": "marko-v6.1.8-keyed",
             "caseName": "ready memory",
-            "value": "1.1",
+            "value": "1135",
             "diff": "+8.16%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 4,
             "framework": "svelte-v5.56.3-keyed",
             "caseName": "ready memory",
-            "value": "1.2",
+            "value": "1261",
             "diff": "+20.13%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 5,
             "framework": "vue-v3.6.0-beta.15-keyed",
             "caseName": "ready memory",
-            "value": "1.3",
+            "value": "1371",
             "diff": "+30.66%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 6,
             "framework": "mreact-react-compat-v0.0.170-local-keyed",
             "caseName": "ready memory",
-            "value": "1.4",
+            "value": "1410",
             "diff": "+34.37%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": true
           },
           {
             "rank": 7,
             "framework": "react-hooks-v19.2.7-keyed",
             "caseName": "ready memory",
-            "value": "1.6",
+            "value": "1686",
             "diff": "+60.59%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 8,
             "framework": "angular-cf-v22.0.0-keyed",
             "caseName": "ready memory",
-            "value": "2",
+            "value": "2027",
             "diff": "+93.16%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           }
         ]
@@ -999,72 +999,72 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "marko-v6.1.8-keyed",
             "caseName": "run memory",
-            "value": "2.8",
+            "value": "2917",
             "diff": "best",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 2,
             "framework": "mreact-v0.0.170-local-keyed",
             "caseName": "run memory",
-            "value": "2.9",
+            "value": "2987",
             "diff": "+2.39%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": true
           },
           {
             "rank": 3,
             "framework": "solid-v1.9.13-keyed",
             "caseName": "run memory",
-            "value": "3.1",
+            "value": "3188",
             "diff": "+9.28%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 4,
             "framework": "svelte-v5.56.3-keyed",
             "caseName": "run memory",
-            "value": "3.5",
+            "value": "3538",
             "diff": "+21.31%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 5,
             "framework": "vue-v3.6.0-beta.15-keyed",
             "caseName": "run memory",
-            "value": "4.4",
+            "value": "4538",
             "diff": "+55.58%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 6,
             "framework": "react-hooks-v19.2.7-keyed",
             "caseName": "run memory",
-            "value": "4.9",
+            "value": "5016",
             "diff": "+71.97%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 7,
             "framework": "angular-cf-v22.0.0-keyed",
             "caseName": "run memory",
-            "value": "5",
+            "value": "5109",
             "diff": "+75.16%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 8,
             "framework": "mreact-react-compat-v0.0.170-local-keyed",
             "caseName": "run memory",
-            "value": "5.4",
+            "value": "5493",
             "diff": "+88.31%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": true
           }
         ]
@@ -1078,72 +1078,72 @@ export const benchmarkRankingSuites: readonly BenchmarkRankingSuite[] = [
             "rank": 1,
             "framework": "solid-v1.9.13-keyed",
             "caseName": "repeated clear memory",
-            "value": "1.2",
+            "value": "1272",
             "diff": "best",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 2,
             "framework": "mreact-v0.0.170-local-keyed",
             "caseName": "repeated clear memory",
-            "value": "1.3",
+            "value": "1337",
             "diff": "+5.14%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": true
           },
           {
             "rank": 3,
             "framework": "marko-v6.1.8-keyed",
             "caseName": "repeated clear memory",
-            "value": "1.3",
+            "value": "1363",
             "diff": "+7.12%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 4,
             "framework": "svelte-v5.56.3-keyed",
             "caseName": "repeated clear memory",
-            "value": "1.6",
+            "value": "1625",
             "diff": "+27.71%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 5,
             "framework": "vue-v3.6.0-beta.15-keyed",
             "caseName": "repeated clear memory",
-            "value": "1.6",
+            "value": "1683",
             "diff": "+32.28%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 6,
             "framework": "react-hooks-v19.2.7-keyed",
             "caseName": "repeated clear memory",
-            "value": "2.5",
+            "value": "2520",
             "diff": "+98.12%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           },
           {
             "rank": 7,
             "framework": "mreact-react-compat-v0.0.170-local-keyed",
             "caseName": "repeated clear memory",
-            "value": "2.5",
+            "value": "2526",
             "diff": "+98.57%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": true
           },
           {
             "rank": 8,
             "framework": "angular-cf-v22.0.0-keyed",
             "caseName": "repeated clear memory",
-            "value": "2.6",
+            "value": "2653",
             "diff": "+108.53%",
-            "unit": "MB",
+            "unit": "KB",
             "isMreact": false
           }
         ]

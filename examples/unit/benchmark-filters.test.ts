@@ -44,9 +44,9 @@ describe("benchmark filters", () => {
   test("renders benchmark timing rows with distinct total, script, and paint cells", () => {
     const html = renderToString(BenchmarkResults);
 
-    expect(html).toContain('class="benchmark-total-value"');
-    expect(html).toContain('class="benchmark-total-label"');
-    expect(html).toContain('class="benchmark-breakdown-term"');
+    expect(html).toContain('class="benchmark-stat is-total"');
+    expect(html).toContain('class="benchmark-stat-label"');
+    expect(html).toContain('class="benchmark-stat-value"');
     expect(html).toContain('data-benchmark-metric="script"');
     expect(html).toContain('data-benchmark-metric="paint"');
   });

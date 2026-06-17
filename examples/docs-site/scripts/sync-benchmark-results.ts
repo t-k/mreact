@@ -59,6 +59,12 @@ interface BenchmarkSource {
   readonly title: string;
 }
 
+// Some markdown card titles do not match the raw benchmark id slug
+// (e.g. "repeated clear memory" is the "run-clear-memory" measurement).
+const memoryCaseSlugAliases: Readonly<Record<string, string>> = {
+  "repeated-clear-memory": "run-clear-memory",
+};
+
 const primitiveReactivityCaseNames = new Set([
   "source write with subscriber 1k",
   "text binding update 1k",
@@ -107,6 +113,7 @@ const outputPath = join(docsSiteRoot, "src", "benchmark-results.ts");
 
 const latestRun = await findLatestCompleteBenchmarkRun();
 const env = await readJson<BenchmarkEnvironment>(join(latestRun.absolutePath, "env.json"));
+const memoryMediansMb = await readMemoryMediansMb(latestRun.absolutePath);
 const suites = (
   await Promise.all(
     benchmarkSources.map(async (source) => {
@@ -115,7 +122,9 @@ const suites = (
         return undefined;
       }
 
-      const cards = parseRankingCards(source.id, markdown).filter(source.cardFilter ?? (() => true));
+      const cards = parseRankingCards(source.id, markdown)
+        .filter(source.cardFilter ?? (() => true))
+        .map((card) => withPreciseMemoryInKb(card, memoryMediansMb));
 
       if (cards.length === 0) {
         throw new Error(`No benchmark ranking cards remain for ${source.id}.`);
@@ -335,6 +344,72 @@ function slugify(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+interface BenchmarkMemoryResult {
+  readonly benchmark: string;
+  readonly framework: string;
+  readonly type: string;
+  readonly values: { readonly DEFAULT?: { readonly median?: number } };
+}
+
+// The js-framework-benchmark markdown rounds memory to one decimal in MB, so
+// distinct results (e.g. 1.10 vs 1.13 MB) collapse to the same "1.1". Read the
+// precise per-framework median from the raw result JSON and express it in KB so
+// the ranking stays legible.
+async function readMemoryMediansMb(runPath: string): Promise<ReadonlyMap<string, number>> {
+  const medians = new Map<string, number>();
+  const resultsDir = join(runPath, "js-framework-benchmark-results");
+
+  let entries: readonly string[];
+  try {
+    entries = await readdir(resultsDir);
+  } catch {
+    return medians;
+  }
+
+  for (const file of entries) {
+    if (!file.endsWith(".json")) {
+      continue;
+    }
+
+    try {
+      const result = await readJson<BenchmarkMemoryResult>(join(resultsDir, file));
+      const median = result.values.DEFAULT?.median;
+      if (result.type !== "memory" || typeof median !== "number") {
+        continue;
+      }
+
+      const caseSlug = slugify(result.benchmark.replace(/^\d+[_-]/, ""));
+      medians.set(`${result.framework}|${caseSlug}`, median);
+    } catch {
+      // Ignore malformed or partial result files; fall back to the markdown value.
+    }
+  }
+
+  return medians;
+}
+
+function withPreciseMemoryInKb(
+  card: BenchmarkRankingCard,
+  mediansMb: ReadonlyMap<string, number>,
+): BenchmarkRankingCard {
+  const titleSlug = slugify(card.title);
+  const caseSlug = memoryCaseSlugAliases[titleSlug] ?? titleSlug;
+  const rows = card.rows.map((row) => {
+    if (row.unit !== "MB") {
+      return row;
+    }
+
+    const medianMb = mediansMb.get(`${row.framework}|${caseSlug}`);
+    if (medianMb === undefined) {
+      return row;
+    }
+
+    return { ...row, value: String(Math.round(medianMb * 1024)), unit: "KB" };
+  });
+
+  return { ...card, rows };
 }
 
 function renderBenchmarkResultsModule(

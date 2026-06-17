@@ -281,6 +281,7 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
   const maxValue = Math.max(...card.rows.map((row) => valueAsNumber(row)), 1);
   const badges = classifyBenchmarkCard(card);
   const badgeSlugs = badges.map((badge) => badgeSlug(badge.label)).join(" ");
+  const cardUnit = sharedBenchmarkUnit(card.rows);
 
   return (
     <section
@@ -289,7 +290,12 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
       data-benchmark-badges={badgeSlugs}
     >
       <div class="benchmark-panel-heading">
-        <h4 id={`${card.id}-title`}>{card.title}</h4>
+        <h4 id={`${card.id}-title`}>
+          {card.title}
+          {cardUnit === undefined ? null : (
+            <span class="benchmark-panel-unit">{cardUnit}</span>
+          )}
+        </h4>
         <p data-benchmark-visible-count>{formatEntryCount(card.rows.length)}</p>
       </div>
       <div class="benchmark-badge-list" aria-label="Benchmark categories">
@@ -318,8 +324,8 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
               data-benchmark-framework-groups={frameworkGroups}
               key={`${card.id}-${row.rank}-${row.framework}`}
             >
-              <span class="benchmark-label">
-                #{row.displayRank} {row.framework}
+              <span class="benchmark-label" title={row.framework}>
+                #{row.displayRank} {displayFrameworkName(row.framework)}
               </span>
               <span class="benchmark-bar-track" aria-hidden="true">
                 <span
@@ -328,17 +334,16 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
                 />
               </span>
               <span class="benchmark-value">
-                <span class="benchmark-total">
-                  <span class="benchmark-total-label">
-                    {row.script === undefined && row.paint === undefined ? "Value" : "Total"}
-                  </span>
-                  <span>
-                    <span class="benchmark-total-value">{row.value}</span>{" "}
-                    <span class="benchmark-total-unit">{row.unit}</span>
+                <span class="benchmark-stat is-total">
+                  <span class="benchmark-stat-amount">
+                    <span class="benchmark-stat-value">{row.value}</span>
+                    {cardUnit === undefined ? (
+                      <span class="benchmark-stat-unit">{row.unit}</span>
+                    ) : null}
                   </span>
                 </span>
-                <BenchmarkTimingBreakdown row={row} />
                 <span class="benchmark-diff">{row.diff}</span>
+                <BenchmarkTimingBreakdown row={row} showUnit={cardUnit === undefined} />
               </span>
             </div>
           );
@@ -348,43 +353,48 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
   );
 }
 
-function BenchmarkTimingBreakdown({ row }: { readonly row: BenchmarkRankingRow }) {
+function BenchmarkTimingBreakdown({
+  row,
+  showUnit,
+}: {
+  readonly row: BenchmarkRankingRow;
+  readonly showUnit: boolean;
+}) {
   if (row.script === undefined && row.paint === undefined) {
     return null;
   }
 
-  const script = row.script === undefined ? undefined : globalThis.parseFloat(row.script);
-  const paint = row.paint === undefined ? undefined : globalThis.parseFloat(row.paint);
-  const measuredTotal = (script ?? 0) + (paint ?? 0);
-  const scriptShare =
-    script === undefined || measuredTotal <= 0 ? 0 : (script / measuredTotal) * 100;
-
   return (
-    <span class="benchmark-breakdown" aria-label="Timing breakdown">
-      <span class="benchmark-breakdown-scale" aria-hidden="true">
-        <span
-          class="benchmark-breakdown-scale-script"
-          style={`--script-share: ${formatPercent(scriptShare)}%;`}
-        />
-      </span>
+    <span class="benchmark-breakdown">
       {row.script === undefined ? null : (
-        <span class="benchmark-breakdown-term" data-benchmark-metric="script">
-          <span class="benchmark-breakdown-label">Script</span>
-          <span class="benchmark-breakdown-value">
-            {row.script} {row.unit}
+        <span class="benchmark-stat is-sub" data-benchmark-metric="script">
+          <span class="benchmark-stat-label">Script</span>
+          <span class="benchmark-stat-amount">
+            <span class="benchmark-stat-value">{row.script}</span>
+            {showUnit ? <span class="benchmark-stat-unit">{row.unit}</span> : null}
           </span>
         </span>
       )}
       {row.paint === undefined ? null : (
-        <span class="benchmark-breakdown-term" data-benchmark-metric="paint">
-          <span class="benchmark-breakdown-label">Paint</span>
-          <span class="benchmark-breakdown-value">
-            {row.paint} {row.unit}
+        <span class="benchmark-stat is-sub" data-benchmark-metric="paint">
+          <span class="benchmark-stat-label">Paint</span>
+          <span class="benchmark-stat-amount">
+            <span class="benchmark-stat-value">{row.paint}</span>
+            {showUnit ? <span class="benchmark-stat-unit">{row.unit}</span> : null}
           </span>
         </span>
       )}
     </span>
   );
+}
+
+function sharedBenchmarkUnit(rows: readonly BenchmarkRankingRow[]): string | undefined {
+  const first = rows[0]?.unit;
+  if (first === undefined || first === "") {
+    return undefined;
+  }
+
+  return rows.every((row) => row.unit === first) ? first : undefined;
 }
 
 function badgeSlug(label: BenchmarkBadgeLabel): string {
@@ -532,6 +542,14 @@ function rankingRowsWithDisplayRank(rows: readonly BenchmarkRankingRow[]) {
 
 function isMreactFramework(row: BenchmarkRankingRow): boolean {
   return row.isMreact;
+}
+
+// Shorten js-framework-benchmark entries like "mreact-v0.0.170-local-keyed" to
+// "mreact" for display, while keeping variant prefixes (e.g. "mreact-react-compat")
+// distinct. Only the versioned "-keyed" suite names are trimmed, so router/primitive
+// names such as "solid-v2" or "qwik-router-v2" are left untouched.
+function displayFrameworkName(framework: string): string {
+  return framework.replace(/-v[\d.]+(?:-[a-z0-9.]+)*-keyed$/, "");
 }
 
 function frameworkGroupsForRow(row: BenchmarkRankingRow): readonly BenchmarkFrameworkGroupId[] {
