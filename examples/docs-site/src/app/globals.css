@@ -871,7 +871,7 @@ a:hover {
 .benchmark-ranking-grid {
   display: grid;
   gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 29rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr));
 }
 
 .benchmark-panel {
@@ -1108,25 +1108,17 @@ a:hover {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 999rem;
-  display: flex;
   grid-column: 1 / -1;
   height: 0.35rem;
   overflow: hidden;
 }
 
-.benchmark-breakdown-segment {
+.benchmark-breakdown-scale-script {
+  background: linear-gradient(90deg, var(--brand), var(--accent));
+  border-radius: inherit;
   display: block;
   height: 100%;
-}
-
-.benchmark-breakdown-segment.is-script {
-  background: var(--accent);
   width: var(--script-share);
-}
-
-.benchmark-breakdown-segment.is-paint {
-  background: oklch(0.79 0.145 73);
-  width: var(--paint-share);
 }
 
 .benchmark-breakdown-term {
@@ -1143,14 +1135,6 @@ a:hover {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.benchmark-breakdown-term[data-benchmark-metric="script"] .benchmark-breakdown-label {
-  color: var(--accent);
-}
-
-.benchmark-breakdown-term[data-benchmark-metric="paint"] .benchmark-breakdown-label {
-  color: oklch(0.79 0.145 73);
 }
 
 .benchmark-breakdown-value {
