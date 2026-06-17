@@ -99,6 +99,7 @@ const benchmarkSuiteDisplayOrder: readonly string[] = [
   "primitive-browser",
 ];
 const benchmarkResultsGitRef = "main";
+const jsFrameworkBenchmarkUrl = "https://github.com/krausest/js-framework-benchmark";
 
 export function BenchmarkResults() {
   return (
@@ -155,6 +156,12 @@ export function BenchmarkResults() {
                 <a href={githubUrlForFilePath(`${latestBenchmarkRun.path}/${suite.source}`)}>
                   View source on GitHub
                 </a>
+                {suite.id === "js-framework" ? (
+                  <>
+                    {" "}
+                    / <a href={jsFrameworkBenchmarkUrl}>Official js-framework-benchmark harness</a>
+                  </>
+                ) : null}
               </p>
             </div>
           </div>
@@ -321,8 +328,14 @@ function BenchmarkRankingPanel({ card }: { readonly card: BenchmarkRankingCard }
                 />
               </span>
               <span class="benchmark-value">
-                <span>
-                  {row.value} {row.unit}
+                <span class="benchmark-total">
+                  <span class="benchmark-total-label">
+                    {row.script === undefined && row.paint === undefined ? "Value" : "Total"}
+                  </span>
+                  <span>
+                    <span class="benchmark-total-value">{row.value}</span>{" "}
+                    <span class="benchmark-total-unit">{row.unit}</span>
+                  </span>
                 </span>
                 <BenchmarkTimingBreakdown row={row} />
                 <span class="benchmark-diff">{row.diff}</span>
@@ -340,16 +353,34 @@ function BenchmarkTimingBreakdown({ row }: { readonly row: BenchmarkRankingRow }
     return null;
   }
 
+  const script = row.script === undefined ? undefined : globalThis.parseFloat(row.script);
+  const paint = row.paint === undefined ? undefined : globalThis.parseFloat(row.paint);
+  const measuredTotal = (script ?? 0) + (paint ?? 0);
+  const scriptShare =
+    script === undefined || measuredTotal <= 0 ? 0 : (script / measuredTotal) * 100;
+
   return (
     <span class="benchmark-breakdown" aria-label="Timing breakdown">
+      <span class="benchmark-breakdown-scale" aria-hidden="true">
+        <span
+          class="benchmark-breakdown-scale-script"
+          style={`--script-share: ${formatPercent(scriptShare)}%;`}
+        />
+      </span>
       {row.script === undefined ? null : (
-        <span>
-          Script {row.script} {row.unit}
+        <span class="benchmark-breakdown-term" data-benchmark-metric="script">
+          <span class="benchmark-breakdown-label">Script</span>
+          <span class="benchmark-breakdown-value">
+            {row.script} {row.unit}
+          </span>
         </span>
       )}
       {row.paint === undefined ? null : (
-        <span>
-          Paint {row.paint} {row.unit}
+        <span class="benchmark-breakdown-term" data-benchmark-metric="paint">
+          <span class="benchmark-breakdown-label">Paint</span>
+          <span class="benchmark-breakdown-value">
+            {row.paint} {row.unit}
+          </span>
         </span>
       )}
     </span>

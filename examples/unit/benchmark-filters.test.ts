@@ -34,6 +34,23 @@ describe("benchmark filters", () => {
     expect(html).toContain('mreact-app-router');
   });
 
+  test("links js-framework benchmark cards to the official upstream harness", () => {
+    const html = renderToString(BenchmarkResults);
+
+    expect(html).toContain("Official js-framework-benchmark harness");
+    expect(html).toContain('href="https://github.com/krausest/js-framework-benchmark"');
+  });
+
+  test("renders benchmark timing rows with distinct total, script, and paint cells", () => {
+    const html = renderToString(BenchmarkResults);
+
+    expect(html).toContain('class="benchmark-total-value"');
+    expect(html).toContain('class="benchmark-total-label"');
+    expect(html).toContain('class="benchmark-breakdown-term"');
+    expect(html).toContain('data-benchmark-metric="script"');
+    expect(html).toContain('data-benchmark-metric="paint"');
+  });
+
   test("filters benchmark rows by selected framework groups while preserving category filters", async () => {
     const script = await readDocsSite("public/docs-benchmarks.js");
     const window = new Window({ url: "https://docs.example.com/benchmarks/" });
