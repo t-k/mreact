@@ -40,7 +40,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*"
   }
 }
