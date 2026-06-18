@@ -136,6 +136,7 @@ type HookSlot =
   | {
       kind: "state";
       value: unknown;
+      dispatch?: (value: unknown) => void;
       hostCommitValue?: unknown;
       textBinding?: ReactiveTextBinding;
       stateBinding?: ReactiveStateBinding;
@@ -155,7 +156,13 @@ type HookSlot =
       update: (state: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
     }
-  | { kind: "store"; value: unknown; hasMounted?: boolean; hostCommitValue?: unknown }
+  | {
+      kind: "store";
+      value: unknown;
+      getSnapshot?: () => unknown;
+      hasMounted?: boolean;
+      hostCommitValue?: unknown;
+    }
   | { kind: "ref"; value: { current: unknown } }
   | { kind: "memo"; value: unknown; deps?: readonly unknown[] }
   | { kind: "debug"; value: unknown }
@@ -857,11 +864,11 @@ export function useState<T>(
     throw new Error("Hook order changed between renders.");
   }
 
-  const setState = (value: T | ((previous: T) => T)): void => {
+  slot.dispatch ??= (value: unknown): void => {
     const previousValue = slot.value;
     const nextValue =
       typeof value === "function"
-        ? (value as (previous: T) => T)(slot.value as T)
+        ? (value as (previous: unknown) => unknown)(slot.value)
         : value;
 
     if (Object.is(slot.value, nextValue)) {
@@ -905,6 +912,7 @@ export function useState<T>(
 
     scheduleInstanceUpdate(runtime, instance, { deferSync: typeof value === "function" });
   };
+  const setState = slot.dispatch as (value: T | ((previous: T) => T)) => void;
 
   recordDevToolsHook("useState", {
     kind: "state",
@@ -1420,6 +1428,7 @@ export function useSyncExternalStore<T>(
   if (slot.kind !== "store") {
     throw new Error("Hook order changed between renders.");
   }
+  slot.getSnapshot = getSnapshot as () => unknown;
 
   const isHydrationMount =
     runtime.idMode === "server" && slot.hasMounted !== true && getServerSnapshot !== undefined;
@@ -1439,7 +1448,7 @@ export function useSyncExternalStore<T>(
         return;
       }
 
-      const nextSnapshot = getSnapshot();
+      const nextSnapshot = (slot.getSnapshot ?? getSnapshot)();
 
       if (!Object.is(slot.value, nextSnapshot)) {
         if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
@@ -1473,7 +1482,7 @@ export function useSyncExternalStore<T>(
     return () => {
       unsubscribe();
     };
-  }, [subscribe, getSnapshot]));
+  }, [subscribe]));
 
   recordDevToolsHook("useSyncExternalStore", {
     kind: "store",

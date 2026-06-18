@@ -9,23 +9,39 @@ export function useSyncExternalStoreWithSelector<Snapshot, Selection>(
   selector: (snapshot: Snapshot) => Selection,
   isEqual?: (left: Selection, right: Selection) => boolean,
 ): Selection {
-  const selectedRef = useRef<Selection | undefined>(undefined);
-  const snapshot = useSyncExternalStore(
-    subscribe,
-    () => getSnapshot(),
+  const selectedRef = useRef<{
+    snapshot: Snapshot;
+    selection: Selection;
+  } | undefined>(undefined);
+  const getSelection = () => {
+    const snapshot = getSnapshot();
+    const previous = selectedRef.current;
+    const selection = selector(snapshot);
+
+    if (previous !== undefined) {
+      if (Object.is(previous.snapshot, snapshot)) {
+        return previous.selection;
+      }
+
+      if (isEqual?.(previous.selection, selection) === true) {
+        selectedRef.current = { snapshot, selection: previous.selection };
+        return previous.selection;
+      }
+    }
+
+    selectedRef.current = { snapshot, selection };
+    return selection;
+  };
+  const getServerSelection =
     getServerSnapshot === undefined || getServerSnapshot === null
       ? undefined
-      : () => getServerSnapshot(),
+      : () => selector(getServerSnapshot());
+
+  return useSyncExternalStore(
+    subscribe,
+    getSelection,
+    getServerSelection,
   );
-  const selected = selector(snapshot);
-  const previous = selectedRef.current;
-
-  if (previous === undefined || isEqual?.(previous, selected) !== true) {
-    selectedRef.current = selected;
-    return selected;
-  }
-
-  return previous;
 }
 
 export default {

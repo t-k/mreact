@@ -78,7 +78,7 @@ export const reactFlowCoverageLedger: ReactFlowCoverageRow[] = [
     vrt: true,
     domSummary: true,
     interaction: true,
-    status: "debt",
+    status: "covered",
   },
   {
     obligationId: "RF-CONNECT-001",
@@ -88,7 +88,7 @@ export const reactFlowCoverageLedger: ReactFlowCoverageRow[] = [
     vrt: true,
     domSummary: true,
     interaction: true,
-    status: "debt",
+    status: "covered",
   },
   {
     obligationId: "RF-RECONNECT-001",
@@ -108,6 +108,6 @@ export const reactFlowCoverageLedger: ReactFlowCoverageRow[] = [
     vrt: true,
     domSummary: true,
     interaction: true,
-    status: "debt",
+    status: "covered",
   },
 ];

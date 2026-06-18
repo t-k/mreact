@@ -929,6 +929,51 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("<p>B</p>");
   });
 
+  test("useState keeps setter identity stable across rerenders", () => {
+    const container = document.createElement("div");
+    let effectRuns = 0;
+
+    function App() {
+      const [count, setCount] = useState(0);
+      useEffect(() => {
+        effectRuns += 1;
+      }, [setCount]);
+
+      return createElement("button", { onClick: () => setCount(count + 1) }, count);
+    }
+
+    createRoot(container).render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(container.innerHTML).toBe("<button>1</button>");
+    expect(effectRuns).toBe(1);
+  });
+
+  test("useSyncExternalStore keeps the subscription stable when getSnapshot identity changes", () => {
+    const container = document.createElement("div");
+    let value = "A";
+    let subscribeCalls = 0;
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      subscribeCalls += 1;
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    function App() {
+      const [count, setCount] = useState(0);
+      const snapshot = useSyncExternalStore(subscribe, () => value);
+      return createElement("button", { onClick: () => setCount(count + 1) }, `${snapshot}:${count}`);
+    }
+
+    createRoot(container).render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(container.innerHTML).toBe("<button>A:1</button>");
+    expect(subscribeCalls).toBe(1);
+  });
+
   test("useSyncExternalStore defers listener updates fired during host ref commit", () => {
     const container = document.createElement("div");
     let value = 0;
@@ -1452,6 +1497,51 @@ describe("react-compat common API subset", () => {
     expect(container.textContent).toContain("1199:1;");
     expect(subscriberRenders).toBe(2400);
     expect(Math.min(...listenerCountsDuringUpdatedRender)).toBe(1200);
+  });
+
+  test("passive mount effects that update external stores do not rerun after subscriber updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let snapshot = 0;
+    let mountEffects = 0;
+    let subscriberRenders = 0;
+    const listeners = new Set<() => void>();
+    const store = {
+      getSnapshot: () => snapshot,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      set(value: number) {
+        snapshot = value;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function Subscriber() {
+      subscriberRenders += 1;
+      const value = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return createElement("span", null, value);
+    }
+
+    function Initializer() {
+      useEffect(() => {
+        mountEffects += 1;
+        store.set(1);
+      }, []);
+
+      return createElement("div", null, createElement(Subscriber, null));
+    }
+
+    root.render(createElement(Initializer, null));
+
+    expect(container.innerHTML).toBe("<div><span>1</span></div>");
+    expect(mountEffects).toBe(1);
+    expect(subscriberRenders).toBe(2);
   });
 
   test("useSyncExternalStore restarts render instead of committing torn snapshots", () => {

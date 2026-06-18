@@ -50,14 +50,14 @@ describe("React Flow coverage ledger", () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test("tracks deep interaction compatibility debt separately from covered fixtures", () => {
+  test("marks deep interaction compatibility fixtures as covered", () => {
     const statusByObligation = new Map(
       reactFlowCoverageLedger.map((row) => [row.obligationId, row.status]),
     );
 
     expect(statusByObligation.get("RF-RECONNECT-001")).toBe("covered");
-    expect(statusByObligation.get("RF-DRAG-001")).toBe("debt");
-    expect(statusByObligation.get("RF-CONNECT-001")).toBe("debt");
-    expect(statusByObligation.get("RF-RESIZE-001")).toBe("debt");
+    expect(statusByObligation.get("RF-DRAG-001")).toBe("covered");
+    expect(statusByObligation.get("RF-CONNECT-001")).toBe("covered");
+    expect(statusByObligation.get("RF-RESIZE-001")).toBe("covered");
   });
 });

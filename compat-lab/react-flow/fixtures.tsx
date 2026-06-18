@@ -383,6 +383,7 @@ function ConnectOnClickFixture() {
           onEdgesChange={onEdgesChange}
           connectOnClick
           fitView
+          elementsSelectable={false}
           nodesDraggable={false}
           panOnDrag={false}
           zoomOnScroll={false}
