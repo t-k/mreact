@@ -4,6 +4,7 @@
 
 ```ts
 
+import { effect } from '@reckona/mreact-reactive-core';
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 import type { Selector } from '@reckona/mreact-reactive-core';
 
@@ -76,6 +77,8 @@ export function createTemplateElement<TElement extends Element = Element>(html: 
 
 // @public
 export type Dispose = () => void;
+
+export { effect }
 
 // @public
 export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () => RenderValue): Dispose;

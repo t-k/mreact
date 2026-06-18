@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.172 - 2026-06-18
+
+### Added
+
+- Added React-compatible JSX runtime exports for compiler reactive DOM blocks and reactive state binding metadata, plus the `effect` export from `@reckona/mreact-reactive-dom`, for compiler-generated reactive DOM integrations.
+
+### Changed
+
+- Improved React-compatible keyed memo row reconciliation for same-order list updates, including compiler-lowered static reactive DOM block rows that can update through prop cells without re-invoking the row component.
+- Improved React-compatible compiler lowering for safe state text, prop, and event bindings so generated compat DOM blocks update through the reactive DOM runtime while effect-sensitive shapes keep the normal compatibility reconciler path.
+
+### Fixed
+
+- Fixed React-compatible prop-driven reactive DOM blocks so event handlers update when props change instead of keeping the initial listener.
+- Fixed React-compatible portal and ref-driven focus timing so layout-effect-triggered host rerenders flush before passive effects, matching React-facing focus behavior for Radix-style portal content.
+- Fixed dependency-free memo bailout cleanup so retained memo subtree hook instances remain active when a parent layout effect schedules a deferred selector update.
+
 ## 0.0.171 - 2026-06-18
 
 ### Changed

@@ -4,6 +4,13 @@
 
 ```ts
 
+// Warning: (ae-forgotten-export) The symbol "ReactiveDomBlockRender" needs to be exported by the entry point jsx-dev-runtime.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReactCompatElement" needs to be exported by the entry point jsx-dev-runtime.d.ts
+// Warning: (ae-forgotten-export) The symbol "ReactiveDomBlockProps" needs to be exported by the entry point jsx-dev-runtime.d.ts
+//
+// @public (undocumented)
+export function createReactiveDomBlock<P extends object = Record<string, unknown>>(render: ReactiveDomBlockRender<P>, blockProps?: P): ReactCompatElement<ReactiveDomBlockProps>;
+
 // @public
 export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
 
@@ -15,8 +22,6 @@ export const Fragment: unique symbol;
 
 // @public
 namespace JSX_2 {
-    // Warning: (ae-forgotten-export) The symbol "ReactCompatElement" needs to be exported by the entry point jsx-dev-runtime.d.ts
-    //
     // (undocumented)
     interface Element extends ReactCompatElement {
     }
@@ -93,11 +98,14 @@ export interface JSXIntrinsicElements {
 }
 
 // @public
+export const REACTIVE_STATE_BINDING_META: unique symbol;
+
+// @public
 export const REACTIVE_TEXT_BINDING_META: unique symbol;
 
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/jsx-dev-runtime.ts:43:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-dev-runtime.d.ts
+// packages/react-compat/src/jsx-dev-runtime.ts:47:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-dev-runtime.d.ts
 
 // (No @packageDocumentation comment for this package)
 
