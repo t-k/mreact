@@ -1096,6 +1096,10 @@ function emitPropReactiveDomBlockComponent(
     `    return { node: ${rootVar}, dispose: ${disposeName} };`,
     `  }, ${block.propsParam});`,
     `}`,
+    // The component is pure and returns its props verbatim as a static reactive
+    // block: mark it so a memo wrapping it can re-render by cell-updating the
+    // committed block instead of re-invoking the component (see host-reconciler).
+    `${component.name}.__mreactStaticBlock = true;`,
   ].join("\n");
 }
 

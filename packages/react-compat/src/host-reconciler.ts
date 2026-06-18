@@ -740,6 +740,20 @@ function isKeyedMemoRowCandidate(node: ReactCompatNode): boolean {
   );
 }
 
+// Marker the compiler stamps on a lowered host-only component that returns its
+// props verbatim as a reactive block (`createReactiveDomBlock(render, props)`).
+// Such a component is pure and structurally static, so on a props change the
+// reconciler can drive its committed block straight through the prop cell instead
+// of re-invoking the component (the block's bound DOM updates via subscriptions).
+const STATIC_REACTIVE_BLOCK_MARKER = "__mreactStaticBlock";
+
+function isStaticReactiveBlockComponent(type: unknown): boolean {
+  return (
+    typeof type === "function" &&
+    (type as unknown as Record<string, unknown>)[STATIC_REACTIVE_BLOCK_MARKER] === true
+  );
+}
+
 // In-place bailout for a keyed memo row whose props are unchanged and which has
 // no hook/context/effect dependencies. The caller has proven the key order is
 // unchanged (hasSameKeyOrderPrefix), so the fiber keeps its position and can be
@@ -778,6 +792,74 @@ function tryReuseDependencyFreeKeyedMemoRow(
     return undefined;
   }
 
+  matched.pendingProps = child.props;
+  matched.flags = NoFlags;
+  matched.subtreeFlags = NoFlags;
+  matched.childListChanged = false;
+  matched.subtreeChildListChanged = false;
+  matched.hostChildListChanged = false;
+  matched.child = getSkippedChild(matched);
+  return matched;
+}
+
+// In-place CHANGED-row update for a keyed memo row whose inner component is a
+// compiler-marked static reactive block (returns its props verbatim as the block
+// props). Instead of re-invoking the component to rebuild a throwaway block
+// element, push the new props straight into the committed block's prop cell — the
+// bound DOM updates via subscriptions, exactly as the normal block re-render path
+// would, but without the memo/component render machinery. Same-order is proven by
+// the caller, so the fiber is reused in place. Returns undefined when this is not
+// a marked, dependency-free, single-block memo row (the general path handles it).
+function tryCellUpdateStaticBlockMemoRow(
+  matched: Fiber,
+  child: ReactCompatElement,
+): Fiber | undefined {
+  if (
+    matched.tag !== "memo" ||
+    matched.type !== child.type ||
+    matched.hasRefSubtree === true ||
+    matched.hydrateExisting === true ||
+    !isStaticReactiveBlockComponent((matched.type as { type?: unknown }).type)
+  ) {
+    return undefined;
+  }
+
+  const state = matched.memoizedState as MemoFiberState | undefined;
+
+  if (
+    state === undefined ||
+    state.hasDirtyInstanceDependencies !== false ||
+    state.hasUnflushedEffectDependencies !== false ||
+    state.hasRetainedInstanceDependencies !== false
+  ) {
+    return undefined;
+  }
+
+  // Navigate memo -> component fiber -> reactive-dom-block fiber. The marked
+  // component renders exactly one static block, so anything else is unexpected.
+  const componentFiber = matched.child;
+  if (componentFiber === undefined || componentFiber.sibling !== undefined) {
+    return undefined;
+  }
+
+  const blockFiber = componentFiber.child;
+  if (
+    blockFiber === undefined ||
+    blockFiber.tag !== "reactive-dom-block" ||
+    blockFiber.sibling !== undefined
+  ) {
+    return undefined;
+  }
+
+  const blockState = blockFiber.stateNode as ReactiveDomBlockState | undefined;
+  if (blockState?.propCell === undefined) {
+    return undefined;
+  }
+
+  // Drive the bound DOM through the prop cell (the marker guarantees the block's
+  // props are the component's props verbatim), then reuse the memo fiber in place.
+  setReactivePropCell(blockState.propCell, child.props as Record<string, unknown>);
+  matched.memoizedState = { ...state, props: child.props as Record<string, unknown> };
   matched.pendingProps = child.props;
   matched.flags = NoFlags;
   matched.subtreeFlags = NoFlags;
@@ -834,7 +916,9 @@ function reconcileKeyedMemoRowHostChildren(
     currentKeyed = currentKeyed.sibling;
     const childElement = child as ReactCompatElement;
 
-    let fiber = tryReuseDependencyFreeKeyedMemoRow(matched, childElement);
+    let fiber =
+      tryReuseDependencyFreeKeyedMemoRow(matched, childElement) ??
+      tryCellUpdateStaticBlockMemoRow(matched, childElement);
     if (fiber === undefined) {
       const result = createHostFiber(
         parent,

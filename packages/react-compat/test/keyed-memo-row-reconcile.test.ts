@@ -187,6 +187,73 @@ describe("keyed memo-row reconcile (same-order fast path contract)", () => {
     });
   });
 
+  test("marked static-block rows: a changed row cell-updates without re-invoking the component or rebuilding the block", () => {
+    withProdEnv(() => {
+      const container = document.createElement("div");
+      let componentCalls = 0;
+      let blockBuilds = 0;
+      let setRows: (rows: RowData[]) => void = () => {};
+
+      const RowComponent = (props: { row: RowData }) => {
+        componentCalls += 1;
+        return createReactiveDomBlock((p: { row: RowData }) => {
+          blockBuilds += 1;
+          const node = document.createElement("div");
+          node.setAttribute("data-id", String(p.row.id));
+          const text = document.createTextNode("");
+          node.appendChild(text);
+          const dispose = bindText(text, () => p.row.label, { preserveInitial: false });
+          return { node, dispose };
+        }, props);
+      };
+      // The compiler stamps this on a lowered, props-transparent block component.
+      (RowComponent as unknown as Record<string, unknown>).__mreactStaticBlock = true;
+      const Row = memo(RowComponent, (a, b) => a.row === b.row);
+
+      const initial: RowData[] = [
+        { id: 1, label: "a" },
+        { id: 2, label: "b" },
+        { id: 3, label: "c" },
+      ];
+
+      function App() {
+        const [rows, setRowsState] = useState<RowData[]>(initial);
+        setRows = setRowsState;
+        return rows.map((row) => createElement(Row, { key: row.id, row }));
+      }
+
+      flushSync(() => {
+        createRoot(container).render(createElement(App, null));
+      });
+      flushQueuedComputations();
+      expect(labels(container)).toEqual(["a", "b", "c"]);
+      const callsAfterMount = componentCalls;
+      const buildsAfterMount = blockBuilds;
+
+      // Same-order update, change ONLY row 2 (reuse identities of 1 and 3).
+      const updated = initial.slice();
+      updated[1] = { id: 2, label: "B!" };
+      flushSync(() => setRows(updated));
+      flushQueuedComputations();
+
+      expect(labels(container)).toEqual(["a", "B!", "c"]);
+      expect(ids(container)).toEqual(["1", "2", "3"]);
+      // The changed row updated through the prop cell: the component was NOT
+      // re-invoked and NO block render closure re-ran, for any row.
+      expect(componentCalls).toBe(callsAfterMount);
+      expect(blockBuilds).toBe(buildsAfterMount);
+
+      // A second, different change keeps driving correctly through the cell.
+      const updated2 = updated.slice();
+      updated2[0] = { id: 1, label: "A!" };
+      flushSync(() => setRows(updated2));
+      flushQueuedComputations();
+      expect(labels(container)).toEqual(["A!", "B!", "c"]);
+      expect(componentCalls).toBe(callsAfterMount);
+      expect(blockBuilds).toBe(buildsAfterMount);
+    });
+  });
+
   test("reorder (swap two rows) produces correct DOM and preserves identity", () => {
     withProdEnv(() => {
       const container = document.createElement("div");
