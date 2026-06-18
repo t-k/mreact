@@ -89,7 +89,7 @@ pnpm --filter @reckona/example-react-libraries test:e2e
 
 If a package works in the compatibility example but fails in an App Router route, check whether inference can see the browser behavior, whether an explicit client boundary is needed, whether the package imports browser-only modules during server render, and whether it expects React DOM behavior that is not part of the tested compatibility surface yet.
 
-The repository also includes focused compatibility labs for ecosystem packages that need screenshot and DOM-summary comparison against React. Run `pnpm compat-lab:radix` when changing Radix-facing event or portal behavior, `pnpm compat-lab:recharts` when changing chart, SVG, animation, or tooltip behavior, and `pnpm compat-lab:ui-primitives` when changing primitive-library behavior for Ark UI, Base UI, Headless UI, React Aria, React Spectrum, or Zag JS.
+The repository also includes focused compatibility labs for ecosystem packages that need screenshot and DOM-summary comparison against React. Run `pnpm compat-lab:radix` when changing Radix-facing event or portal behavior, `pnpm compat-lab:recharts` when changing chart, SVG, animation, or tooltip behavior, `pnpm compat-lab:react-flow` when changing React Flow or xyflow-facing layout, store, handle, or pointer behavior, and `pnpm compat-lab:ui-primitives` when changing primitive-library behavior for Ark UI, Base UI, Headless UI, React Aria, React Spectrum, or Zag JS.
 
 ## Focused conformance checks
 
