@@ -28,7 +28,9 @@ import {
 } from "@reckona/mreact-compat";
 import {
   Fragment,
+  REACTIVE_STATE_BINDING_META,
   REACTIVE_TEXT_BINDING_META,
+  createReactiveDomBlock,
   jsx,
   jsxs,
 } from "@reckona/mreact-compat/jsx-runtime";
@@ -200,6 +202,7 @@ export function compileCompatModule(code: string): CompatComponentExports {
   const runnableCode = stripFunctionExports(stripImports(code));
   const runtimeEntries = [
     ...extractCompatRuntimeEntries(code),
+    ...extractClientRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
   const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
@@ -311,7 +314,7 @@ function extractCompatRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>Fragment|REACTIVE_TEXT_BINDING_META|jsx|jsxDEV|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
+      /^(?<importedName>Fragment|REACTIVE_STATE_BINDING_META|REACTIVE_TEXT_BINDING_META|createReactiveDomBlock|jsx|jsxDEV|jsxs) as (?<localName>[A-Za-z_$][\w$]*)$/,
     );
 
     if (match?.groups === undefined) {
@@ -337,7 +340,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -426,6 +429,10 @@ function getClientRuntimeValue(importedName: string): unknown {
     return insertDynamic;
   }
 
+  if (importedName === "effect") {
+    return effect;
+  }
+
   throw new Error(`Unsupported client runtime import: ${importedName}`);
 }
 
@@ -448,6 +455,14 @@ function getCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "REACTIVE_TEXT_BINDING_META") {
     return REACTIVE_TEXT_BINDING_META;
+  }
+
+  if (importedName === "REACTIVE_STATE_BINDING_META") {
+    return REACTIVE_STATE_BINDING_META;
+  }
+
+  if (importedName === "createReactiveDomBlock") {
+    return createReactiveDomBlock;
   }
 
   throw new Error(`Unsupported compat runtime import: ${importedName}`);

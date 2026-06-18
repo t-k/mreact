@@ -55,6 +55,10 @@ const localFixtureDependencies = {
     "@reckona/mreact-reactive-dom",
   ],
   "mreact-react-compat": [
+    "@reckona/mreact-reactive-dom",
+    "@reckona/mreact-compat",
+  ],
+  "mreact-react-compat-vdom": [
     "@reckona/mreact-compat",
   ],
 };
@@ -83,6 +87,10 @@ const frameworkMappings = [
   {
     primitive: "mreact react-compat",
     official: "keyed/mreact-react-compat",
+  },
+  {
+    primitive: "mreact react-compat (vdom)",
+    official: "keyed/mreact-react-compat-vdom",
   },
   {
     primitive: "solid",
@@ -479,7 +487,7 @@ function fileDependency(fromDir, toDir) {
 }
 
 async function copyMreactFixtures() {
-  for (const name of ["mreact", "mreact-react-compat"]) {
+  for (const name of ["mreact", "mreact-react-compat", "mreact-react-compat-vdom"]) {
     await cp(join(fixtureRoot, name), join(checkoutRoot, "frameworks", "keyed", name), {
       force: true,
       recursive: true,

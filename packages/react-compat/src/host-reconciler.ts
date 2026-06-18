@@ -7,16 +7,25 @@ import {
   LAZY_TYPE,
   MEMO_TYPE,
   Profiler,
+  REACTIVE_DOM_BLOCK_TYPE,
   REACTIVE_TEXT_BINDING_META,
   STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
   type ReactCompatElement,
   type ReactCompatPortal,
+  type ReactiveDomBlockProps,
+  type ReactiveDomBlockResult,
   isReactCompatElement,
   isReactCompatPortal,
   type ReactCompatNode,
 } from "./element.js";
+import {
+  createReactivePropCell,
+  createReactivePropProxy,
+  setReactivePropCell,
+  type ReactiveDomBlockState,
+} from "./reactive-prop-cell.js";
 import {
   consumerContext,
   isReactCompatConsumer,
@@ -36,6 +45,7 @@ import {
   namespaceForHostChildren,
   namespaceForHostElement,
   type CustomHostDocument,
+  type HostElement,
   type HostNamespace,
 } from "./dom-host-rules.js";
 import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from "./fiber.js";
@@ -96,6 +106,7 @@ interface SuspenseFiberState {
 
 const committedPortalContainers = new Set<Element>();
 const pendingHostRefUpdates: { ref: unknown; node: unknown }[] = [];
+const emptyInstanceKeys: string[] = [];
 
 interface FiberHydrationOptions extends RenderOptions {
   previousNodes?: readonly Node[];
@@ -171,6 +182,10 @@ export function canRenderHostFiber(node: ReactCompatNode): boolean {
   }
 
   if (node.type === ERROR_BOUNDARY_TYPE) {
+    return true;
+  }
+
+  if (node.type === REACTIVE_DOM_BLOCK_TYPE) {
     return true;
   }
 
@@ -258,7 +273,28 @@ export function commitHostFiberRoot(
       pendingHostRefUpdates.length = 0;
       const commitPath = getRootCommitPath(options);
       if (!hasChildListMutation(finishedWork)) {
-        commitHostDirtyChildren(finishedWork.child, root.container, root.container, commitPath, options);
+        commitHostDirtyChildrenOf(
+          finishedWork,
+          finishedWork.child,
+          root.container,
+          root.container,
+          commitPath,
+          options,
+        );
+        committed = true;
+        return;
+      }
+
+      if (
+        finishedWork.childListChanged &&
+        commitHostKeyedChildListMutationFiber(
+          finishedWork,
+          root.container,
+          root.container,
+          commitPath,
+          options,
+        )
+      ) {
         committed = true;
         return;
       }
@@ -317,6 +353,42 @@ export function commitHydratingHostFiberRoot(
   }
 }
 
+export function disposeHostFiberResources(fiber: Fiber | undefined): void {
+  if (fiber === undefined || fiber.hasDisposableResources !== true) {
+    return;
+  }
+
+  // Dispose this fiber and its SUBTREE only — not its siblings. This is called
+  // once per deleted fiber, and deleted siblings are disposed by their own
+  // calls; walking siblings here re-walked the whole deleted list per deletion
+  // (O(n^2) on a cleared 1k-row reactive list). The dedupe set is allocated
+  // once for the subtree walk.
+  const seen = new Set<unknown>();
+  if (fiber.tag === "reactive-dom-block") {
+    disposeReactiveDomBlockState(fiber.stateNode, seen);
+  }
+  disposeHostFiberChildResources(fiber.child, seen);
+}
+
+function disposeHostFiberChildResources(
+  fiber: Fiber | undefined,
+  seen: Set<unknown>,
+): void {
+  let cursor = fiber;
+
+  while (cursor !== undefined) {
+    if (cursor.hasDisposableResources === true) {
+      if (cursor.tag === "reactive-dom-block") {
+        disposeReactiveDomBlockState(cursor.stateNode, seen);
+      }
+
+      disposeHostFiberChildResources(cursor.child, seen);
+    }
+
+    cursor = cursor.sibling;
+  }
+}
+
 function reconcileHostChild(
   parent: Fiber,
   currentFirstChild: Fiber | undefined,
@@ -359,6 +431,7 @@ function reconcileHostChild(
   let skipRemainingKeyedLookup = false;
   let sequentialCurrentCursor = currentFirstChild;
   let childListOrderChanged = false;
+  let dirtyChildren: Fiber[] | undefined;
   let usedCurrentChildren =
     currentFirstChild === undefined || hasKeyedChildren ? undefined : new Set<Fiber>();
   const ensureUsedCurrentChildren = (): Set<Fiber> => {
@@ -404,11 +477,28 @@ function reconcileHostChild(
       currentKeyed?.sibling?.key === key &&
       canSkipSingleDeletedKeyedFiber(children, index, currentKeyed.sibling)
     ) {
+      const deleted = currentKeyed;
+      const matched = currentKeyed.sibling;
+      const suffixResult = tryReuseDependencyFreeMemoRemovalSuffix(
+        parent,
+        children,
+        index,
+        deleted,
+        matched,
+        runtime,
+        options,
+        first,
+        previous,
+        consumed,
+      );
+      if (suffixResult !== undefined) {
+        return suffixResult;
+      }
       childListOrderChanged = true;
       ensureUsedCurrentChildren();
-      matchedCurrent = currentKeyed.sibling;
+      matchedCurrent = matched;
       canReuseMatchedCurrentFiber = false;
-      currentKeyed = currentKeyed.sibling.sibling;
+      currentKeyed = matched.sibling;
     } else {
       if (
         children !== undefined &&
@@ -489,6 +579,14 @@ function reconcileHostChild(
       && fiber.memoizedState === undefined
     ) {
       fiber.memoizedState = index;
+    } else if (
+      fiber.tag === "memo" &&
+      (fiber.stateNode === undefined || typeof fiber.stateNode === "number")
+    ) {
+      fiber.stateNode = index;
+    }
+    if (hasHostCommitWork(fiber)) {
+      (dirtyChildren ??= []).push(fiber);
     }
     previous = fiber;
   }
@@ -500,6 +598,7 @@ function reconcileHostChild(
   }
   parent.childListChanged =
     childListOrderChanged || childFiberListShapeChanged(currentFirstChild, first);
+  recordDirtyChildCommitHints(parent, dirtyChildren);
 
   return { fiber: first, consumed };
 }
@@ -528,6 +627,7 @@ function reconcileKeyedRowHostChildren(
   let subtreeFlags = NoFlags;
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
+  let hasDisposableResources = false;
   let appendSuffix: AppendSuffixCommitHint | undefined;
   const canReuseUnchangedRows = hasSameKeyOrderPrefix(currentFirstChild, children);
   const row = createKeyedRowHostElementScratch();
@@ -593,6 +693,9 @@ function reconcileKeyedRowHostChildren(
     if (fiber.hasRefSubtree) {
       hasRefSubtree = true;
     }
+    if (fiber.hasDisposableResources) {
+      hasDisposableResources = true;
+    }
     subtreeFlags |= fiber.flags | fiber.subtreeFlags;
     subtreeChildListChanged =
       subtreeChildListChanged ||
@@ -610,6 +713,7 @@ function reconcileKeyedRowHostChildren(
   }
 
   parent.hasRefSubtree = hasRefSubtree;
+  parent.hasDisposableResources = hasDisposableResources;
   parent.subtreeFlags = subtreeFlags;
   parent.subtreeChildListChanged = subtreeChildListChanged;
   parent.childListChanged = listShapeChanged;
@@ -617,6 +721,130 @@ function reconcileKeyedRowHostChildren(
     parent.memoizedState = appendSuffix;
   }
   return { fiber: first, consumed: 0 };
+}
+
+function canReuseDependencyFreeMemoAtKey(
+  current: Fiber | undefined,
+  node: ReactCompatElement,
+  key: string,
+): boolean {
+  return (
+    current !== undefined &&
+    current.key === key &&
+    current.tag === "memo" &&
+    current.type === node.type &&
+    current.hasRefSubtree !== true &&
+    current.hasDisposableResources !== true &&
+    current.hydrateExisting !== true &&
+    isMemoType(node.type)
+  );
+}
+
+function tryReuseDependencyFreeMemoRemovalSuffix(
+  parent: Fiber,
+  children: readonly ReactCompatNode[],
+  startIndex: number,
+  removed: Fiber,
+  matchedCurrent: Fiber,
+  runtime: RootRuntime | undefined,
+  options: FiberHydrationOptions,
+  prefixFirst: Fiber | undefined,
+  prefixPrevious: Fiber | undefined,
+  consumed: number,
+): FiberReconcileResult | undefined {
+  if (
+    runtime === undefined ||
+    options.previousNodes !== undefined ||
+    removed.hasRefSubtree
+  ) {
+    return undefined;
+  }
+
+  const suffix: Fiber[] = [];
+  let current: Fiber | undefined = matchedCurrent;
+
+  for (let index = startIndex; index < children.length; index += 1) {
+    const child = children[index];
+    const key = getNodeKey(child);
+
+    if (key === undefined || !isReactCompatElement(child) || !isMemoType(child.type)) {
+      return undefined;
+    }
+
+    if (!canReuseDependencyFreeMemoAtKey(current, child, key)) {
+      return undefined;
+    }
+
+    if (current === undefined) {
+      return undefined;
+    }
+
+    const matched: Fiber = current;
+    const fiber = reuseDependencyFreeMemoFiber(matched, child);
+
+    if (fiber === undefined) {
+      return undefined;
+    }
+
+    suffix.push(fiber);
+    current = matched.sibling;
+  }
+
+  if (current !== undefined) {
+    return undefined;
+  }
+
+  let first = prefixFirst;
+  let previous = prefixPrevious;
+
+  for (const fiber of suffix) {
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    fiber.return = parent;
+    fiber.sibling = undefined;
+    previous = fiber;
+  }
+
+  parent.childListChanged = true;
+  parent.deletions = [removed];
+  markOptimizedChildForDeletion(parent, removed);
+  return { fiber: first, consumed };
+}
+
+function reuseDependencyFreeMemoFiber(
+  current: Fiber,
+  node: ReactCompatElement,
+): Fiber | undefined {
+  if (!isMemoType(node.type)) {
+    return undefined;
+  }
+
+  const previousMemoState = current.memoizedState as MemoFiberState | undefined;
+
+  if (
+    previousMemoState === undefined ||
+    previousMemoState.hasDirtyInstanceDependencies !== false ||
+    previousMemoState.hasUnflushedEffectDependencies !== false ||
+    previousMemoState.hasRetainedInstanceDependencies !== false ||
+    !areMemoPropsEqual(node.type, previousMemoState.props, node.props)
+  ) {
+    return undefined;
+  }
+
+  current.pendingProps = node.props;
+  current.flags = NoFlags;
+  current.subtreeFlags = NoFlags;
+  current.childListChanged = false;
+  current.subtreeChildListChanged = false;
+  current.hostChildListChanged = false;
+  current.type = node.type;
+  current.child = getSkippedChild(current);
+  current.memoizedState = previousMemoState;
+  return current;
 }
 
 function canStoreAppendSuffixCommitHint(parent: Fiber): boolean {
@@ -712,6 +940,7 @@ function getReusableKeyedRowHostFiber(
   current.subtreeChildListChanged = false;
   current.hostChildListChanged = false;
   current.hasRefSubtree = false;
+  current.hasDisposableResources = false;
   return current;
 }
 
@@ -793,6 +1022,7 @@ function createKeyedRowHostFiber(
   fiber.pendingProps = node.props;
   fiber.hostChildListChanged = false;
   fiber.hasRefSubtree = false;
+  fiber.hasDisposableResources = false;
 
   if (current === undefined || fiber.alternate !== current) {
     fiber.flags |= Placement;
@@ -956,6 +1186,9 @@ function bubbleHostChild(parent: Fiber, child: Fiber): void {
   if (child.hasRefSubtree) {
     parent.hasRefSubtree = true;
   }
+  if (child.hasDisposableResources) {
+    parent.hasDisposableResources = true;
+  }
   parent.subtreeFlags |= child.flags | child.subtreeFlags;
   parent.subtreeChildListChanged =
     parent.subtreeChildListChanged ||
@@ -963,8 +1196,21 @@ function bubbleHostChild(parent: Fiber, child: Fiber): void {
     child.subtreeChildListChanged;
 }
 
+function recordDirtyChildCommitHints(
+  parent: Fiber,
+  dirtyChildren: Fiber[] | undefined,
+): void {
+  if (parent.childListChanged || dirtyChildren === undefined || dirtyChildren.length === 0) {
+    return;
+  }
+
+  // Reuse the effect-list slot only when there are no child-list deletions.
+  parent.deletions = dirtyChildren;
+}
+
 function resetFiberRefSubtree(fiber: Fiber): void {
   fiber.hasRefSubtree = false;
+  fiber.hasDisposableResources = false;
 }
 
 function includeNodeRef(fiber: Fiber, node: ReactCompatNode): void {
@@ -1142,6 +1388,13 @@ function createHostFiberImpl(
     return { fiber: undefined, consumed: 0 };
   }
 
+  // Host elements (string type) are by far the most common node. Dispatch them
+  // before the component-type checks below, none of which a string can match,
+  // so each reconciled host element skips ~12 type comparisons / probes.
+  if (typeof node.type === "string") {
+    return createHostComponentFiber(parent, current, node, key, runtime, path, options);
+  }
+
   if (node.type === Fragment) {
     const fiber =
       current?.tag === "fragment"
@@ -1269,6 +1522,37 @@ function createHostFiberImpl(
     return { fiber, consumed: options.previousNodes?.length ?? 0 };
   }
 
+  if (node.type === REACTIVE_DOM_BLOCK_TYPE) {
+    const blockProps = (node.props as unknown as ReactiveDomBlockProps).blockProps;
+    if (current?.tag === "reactive-dom-block") {
+      // Re-render: reuse the committed DOM/subscriptions and push the new props
+      // into the prop cell instead of re-running render(). Bound text/attributes
+      // update via their reactive subscriptions; the subtree is never reconciled.
+      const fiber = createWorkInProgress(current, node.props);
+      fiber.type = node.type;
+      fiber.hasDisposableResources = true;
+      const previousState = current.stateNode as ReactiveDomBlockState | undefined;
+      if (previousState?.propCell !== undefined && blockProps !== undefined) {
+        setReactivePropCell(previousState.propCell, blockProps);
+      }
+      fiber.stateNode = previousState;
+      return { fiber, consumed: options.previousNodes?.length ?? 0 };
+    }
+
+    const fiber = createFiber("reactive-dom-block", node.props, key);
+    fiber.type = node.type;
+    fiber.hasDisposableResources = true;
+    const render = (node.props as unknown as ReactiveDomBlockProps).render;
+    if (blockProps !== undefined) {
+      const propCell = createReactivePropCell(blockProps);
+      const result = render(createReactivePropProxy(propCell));
+      fiber.stateNode = { node: result.node, dispose: result.dispose, propCell };
+    } else {
+      fiber.stateNode = (render as () => ReactiveDomBlockResult)();
+    }
+    return { fiber, consumed: options.previousNodes?.length ?? 0 };
+  }
+
   if (isReactCompatProvider(node.type)) {
     const fiber =
       current?.tag === "context-provider" && current.type === node.type
@@ -1390,8 +1674,11 @@ function createHostFiberImpl(
     fiber.type = memoType;
 
     const renderedElement: ReactCompatElement = {
-      ...node,
+      $$typeof: node.$$typeof,
       type: memoType.type,
+      key: node.key,
+      ref: node.ref,
+      props: node.props,
     };
     const childResult = createHostFiber(
       fiber,
@@ -1408,7 +1695,7 @@ function createHostFiberImpl(
       fiber.child.sibling = undefined;
       bubbleHostChild(fiber, fiber.child);
     }
-    const instanceKeys = collectInstanceKeys(runtime, memoPath);
+    const instanceKeys = collectMemoInstanceKeys(runtime, memoPath);
     const hasClassDescendant = hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
       props: node.props as Record<string, unknown>,
@@ -1439,8 +1726,11 @@ function createHostFiberImpl(
 
     if (lazyType.status === "resolved" && lazyType.resolved !== undefined) {
       const renderedElement: ReactCompatElement = {
-        ...node,
+        $$typeof: node.$$typeof,
         type: lazyType.resolved,
+        key: node.key,
+        ref: node.ref,
+        props: node.props,
       };
       const childResult = createHostFiber(
         fiber,
@@ -1625,61 +1915,95 @@ function createHostFiberImpl(
     const instanceKeys = collectInstanceKeys(runtime, path);
     fiber.stateNode = {
       element: node,
-      props: { ...node.props },
+      props: node.props as Record<string, unknown>,
       instanceKeys,
       hasContextDependencies: hasContextDependency(runtime, instanceKeys),
     } satisfies FunctionFiberState;
     return { fiber, consumed: childResult.consumed };
   }
 
+  return { fiber: undefined, consumed: 0 };
+}
+
+// The host-component reconcile, split out of createHostFiberImpl so host
+// elements can be dispatched before the component-type checks. Only called with
+// a string element type.
+function createHostComponentFiber(
+  parent: Fiber,
+  current: Fiber | undefined,
+  node: ReactCompatElement,
+  key: string | undefined,
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions,
+): FiberReconcileResult {
   if (typeof node.type !== "string") {
     return { fiber: undefined, consumed: 0 };
   }
 
-  const elementNamespace = namespaceForHostElement(options.namespace ?? "html", node.type);
-  const childNamespace = namespaceForHostChildren(elementNamespace, node.type);
-  const fiber =
-    current?.tag === "host-component" && current.type === node.type
-      ? createWorkInProgress(current, node.props)
-      : createFiber("host-component", node.props, key);
-  const existing = options.previousNodes?.[0];
-  const existingElement = isHostElement(existing) ? existing : undefined;
-  const tagMatches =
-    existingElement !== undefined &&
-    hostElementMatches(existingElement, node.type, elementNamespace);
-
-  if (existing === undefined && options.previousNodes !== undefined) {
-    reportMissingHydrationNode(options, path);
-  } else if (existing !== undefined && !isHostElement(existing)) {
-    reportHydrationNodeTypeMismatch(options, path, `<${node.type}>`, existing);
+  const initialHostOnlyFiber = tryCreateInitialHostOnlyFiber(
+    current,
+    node,
+    key,
+    options,
+  );
+  if (initialHostOnlyFiber !== undefined) {
+    return { fiber: initialHostOnlyFiber, consumed: 0 };
   }
 
-  if (existingElement !== undefined && !tagMatches) {
-    reportRecoverable(
-      options,
-      "tag",
-      path,
-      new Error(
-        `Hydration tag mismatch: expected <${node.type}> but found <${existingElement.tagName.toLowerCase()}>.`,
-      ),
-    );
-    reportElementTextMismatch(options, `${path}.c`, existingElement, node.props.children);
+  const elementNamespace = namespaceForHostElement(options.namespace ?? "html", node.type);
+  const childNamespace = namespaceForHostChildren(elementNamespace, node.type);
+  const reusableCurrent =
+    current?.tag === "host-component" && current.type === node.type ? current : undefined;
+  const fiber =
+    reusableCurrent !== undefined
+      ? createWorkInProgress(reusableCurrent, node.props)
+      : createFiber("host-component", node.props, key);
+  // The hydration node bookkeeping only matters when hydrating. Skipping it for
+  // the common (non-hydration) render avoids an isHostElement(undefined) probe
+  // and the mismatch checks on every reconciled element.
+  const existing = options.previousNodes?.[0];
+  let existingElement: HostElement | undefined;
+  let tagMatches = false;
+  if (options.previousNodes !== undefined) {
+    existingElement = isHostElement(existing) ? existing : undefined;
+    tagMatches =
+      existingElement !== undefined &&
+      hostElementMatches(existingElement, node.type, elementNamespace);
+
+    if (existing === undefined) {
+      reportMissingHydrationNode(options, path);
+    } else if (!isHostElement(existing)) {
+      reportHydrationNodeTypeMismatch(options, path, `<${node.type}>`, existing);
+    }
+
+    if (existingElement !== undefined && !tagMatches) {
+      reportRecoverable(
+        options,
+        "tag",
+        path,
+        new Error(
+          `Hydration tag mismatch: expected <${node.type}> but found <${existingElement.tagName.toLowerCase()}>.`,
+        ),
+      );
+      reportElementTextMismatch(options, `${path}.c`, existingElement, node.props.children);
+    }
   }
 
   fiber.type = node.type;
+  // When reusing a same-type current fiber, its stateNode was created for this
+  // exact tag and namespace (same tree position), so the hostElementMatches
+  // re-check (localName + namespaceURI reads) is redundant.
   fiber.stateNode =
     tagMatches
       ? existingElement
-      : current?.tag === "host-component" &&
-          current.type === node.type &&
-          isHostElement(current.stateNode) &&
-          hostElementMatches(current.stateNode, node.type, elementNamespace)
-        ? current.stateNode
+      : reusableCurrent !== undefined && isHostElement(reusableCurrent.stateNode)
+        ? reusableCurrent.stateNode
         : createHostElement(getDocumentRef(options), node.type, options.namespace ?? "html");
-  fiber.hydrateExisting = tagMatches && options.previousNodes !== undefined;
+  fiber.hydrateExisting = tagMatches;
   const previousChildNodes =
     tagMatches && existingElement !== undefined
-      ? Array.from(existingElement.childNodes)
+      ? Array.from((existingElement as Element).childNodes)
       : undefined;
   const directTextChild =
     shouldUseDirectHostTextChild() && previousChildNodes === undefined
@@ -1713,11 +2037,7 @@ function createHostFiberImpl(
     node.props.children as ReactCompatNode,
     runtime,
     `${path}.c`,
-    {
-      ...options,
-      namespace: childNamespace,
-      ...(previousChildNodes === undefined ? {} : { previousNodes: previousChildNodes }),
-    },
+    getHostChildFiberOptions(options, childNamespace, previousChildNodes),
   );
   fiber.child = childResult.fiber;
   if (previousChildNodes !== undefined) {
@@ -1735,6 +2055,185 @@ function isFunctionComponentType(value: unknown): value is (
     typeof (value as { prototype?: { render?: unknown } }).prototype?.render !==
       "function"
   );
+}
+
+function tryCreateInitialHostOnlyFiber(
+  current: Fiber | undefined,
+  node: ReactCompatElement,
+  key: string | undefined,
+  options: FiberHydrationOptions,
+): Fiber | undefined {
+  if (
+    current !== undefined ||
+    options.previousNodes !== undefined ||
+    !shouldUseDirectHostTextChild() ||
+    typeof node.type !== "string" ||
+    !canCreateInitialHostOnlyNode(node)
+  ) {
+    return undefined;
+  }
+
+  return createInitialHostOnlyElementFiber(
+    node,
+    key,
+    options.namespace ?? "html",
+    getDocumentRef(options),
+  );
+}
+
+function createInitialHostOnlyElementFiber(
+  node: ReactCompatElement,
+  key: string | undefined,
+  namespace: HostNamespace,
+  documentRef: Document | CustomHostDocument,
+): Fiber {
+  const elementType = node.type as string;
+  const elementNamespace = namespaceForHostElement(namespace, elementType);
+  const childNamespace = namespaceForHostChildren(elementNamespace, elementType);
+  const fiber = createFiber("host-component", node.props, key);
+  fiber.type = elementType;
+  fiber.stateNode = createHostElement(documentRef, elementType, namespace);
+  fiber.flags |= Placement;
+  fiber.hostChildListChanged = true;
+
+  if (getDirectHostTextChild(node.props.children) === undefined) {
+    fiber.child = createInitialHostOnlyChildList(
+      fiber,
+      node.props.children as ReactCompatNode,
+      childNamespace,
+      documentRef,
+    );
+  }
+
+  return fiber;
+}
+
+function createInitialHostOnlyChildList(
+  parent: Fiber,
+  children: ReactCompatNode,
+  namespace: HostNamespace,
+  documentRef: Document | CustomHostDocument,
+): Fiber | undefined {
+  const normalized = normalizeChildren(children);
+  let first: Fiber | undefined;
+  let previous: Fiber | undefined;
+
+  for (let index = 0; index < normalized.length; index += 1) {
+    const child = normalized[index];
+    const fiber = createInitialHostOnlyChildFiber(child, namespace, documentRef);
+
+    if (fiber === undefined) {
+      continue;
+    }
+
+    fiber.return = parent;
+    fiber.memoizedState = index;
+
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    bubbleHostChild(parent, fiber);
+    previous = fiber;
+  }
+
+  return first;
+}
+
+function createInitialHostOnlyChildFiber(
+  node: ReactCompatNode,
+  namespace: HostNamespace,
+  documentRef: Document | CustomHostDocument,
+): Fiber | undefined {
+  if (node === null || node === undefined || typeof node === "boolean") {
+    return undefined;
+  }
+
+  if (typeof node === "string" || typeof node === "number") {
+    const fiber = createFiber("host-text", String(node));
+    fiber.stateNode = createHostTextNode(documentRef);
+    fiber.flags |= Placement;
+    return fiber;
+  }
+
+  if (Array.isArray(node)) {
+    const fiber = createFiber("fragment", node);
+    fiber.child = createInitialHostOnlyChildList(fiber, node, namespace, documentRef);
+    return fiber.child === undefined ? undefined : fiber;
+  }
+
+  if (!isReactCompatElement(node) || typeof node.type !== "string") {
+    return undefined;
+  }
+
+  return createInitialHostOnlyElementFiber(
+    node,
+    node.key === null ? undefined : node.key,
+    namespace,
+    documentRef,
+  );
+}
+
+function canCreateInitialHostOnlyNode(node: ReactCompatNode): boolean {
+  if (
+    node === null ||
+    node === undefined ||
+    typeof node === "boolean" ||
+    typeof node === "string" ||
+    typeof node === "number"
+  ) {
+    return true;
+  }
+
+  if (Array.isArray(node)) {
+    return node.every(canCreateInitialHostOnlyNode);
+  }
+
+  if (
+    !isReactCompatElement(node) ||
+    typeof node.type !== "string" ||
+    node.ref !== null ||
+    hasInitialHostOnlyExcludedProps(node.props)
+  ) {
+    return false;
+  }
+
+  return canCreateInitialHostOnlyNode(node.props.children as ReactCompatNode);
+}
+
+function hasInitialHostOnlyExcludedProps(props: Record<string, unknown>): boolean {
+  return (
+    hasOwnProperty.call(props, REACTIVE_TEXT_BINDING_META) ||
+    props.dangerouslySetInnerHTML !== undefined ||
+    props.contentEditable === true ||
+    props.suppressContentEditableWarning === true ||
+    props.value !== undefined ||
+    props.defaultValue !== undefined ||
+    props.checked !== undefined ||
+    props.defaultChecked !== undefined
+  );
+}
+
+function getHostChildFiberOptions(
+  options: FiberHydrationOptions,
+  namespace: HostNamespace,
+  previousNodes: readonly Node[] | undefined,
+): FiberHydrationOptions {
+  const namespaceUnchanged =
+    options.namespace === namespace ||
+    (options.namespace === undefined && namespace === "html");
+
+  if (previousNodes === undefined && namespaceUnchanged) {
+    return options;
+  }
+
+  return {
+    ...options,
+    namespace,
+    ...(previousNodes === undefined ? {} : { previousNodes }),
+  };
 }
 
 function commitHostChildren(
@@ -1778,6 +2277,49 @@ function commitHostDirtyChildren(
   }
 }
 
+function commitHostDirtyChildrenOf(
+  owner: Fiber,
+  fiber: Fiber | undefined,
+  parent: ParentNode,
+  eventRoot: Element,
+  path: string,
+  options: RenderOptions = {},
+): void {
+  const dirtyChildren = readDirtyChildCommitHints(owner);
+
+  if (dirtyChildren === undefined) {
+    commitHostDirtyChildren(fiber, parent, eventRoot, path, options);
+    return;
+  }
+
+  for (let index = 0; index < dirtyChildren.length; index += 1) {
+    const dirtyChild = dirtyChildren[index];
+
+    if (dirtyChild !== undefined && hasHostCommitWork(dirtyChild)) {
+      commitHostDirtyFiber(
+        dirtyChild,
+        parent,
+        eventRoot,
+        joinCommitPath(path, String(getDirtyChildCommitIndex(dirtyChild, index))),
+        options,
+      );
+    }
+  }
+  owner.deletions = undefined;
+}
+
+function readDirtyChildCommitHints(fiber: Fiber): Fiber[] | undefined {
+  return fiber.childListChanged ? undefined : fiber.deletions;
+}
+
+function getDirtyChildCommitIndex(fiber: Fiber, fallback: number): number {
+  if (typeof fiber.memoizedState === "number") {
+    return fiber.memoizedState;
+  }
+
+  return typeof fiber.stateNode === "number" ? fiber.stateNode : fallback;
+}
+
 function commitHostDirtyFiber(
   fiber: Fiber,
   parent: ParentNode,
@@ -1798,6 +2340,7 @@ function commitHostDirtyFiber(
       return;
     }
 
+    const isDomElement = isDomHostElement(element);
     const props = fiber.pendingProps as Record<string, unknown>;
     const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
     const directTextChild =
@@ -1823,7 +2366,7 @@ function commitHostDirtyFiber(
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (isDomHostElement(element) && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
+    if (isDomElement && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
@@ -1841,16 +2384,16 @@ function commitHostDirtyFiber(
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
-        !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
-        !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
+        !(isDomElement && childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !(isDomElement && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
         syncChildNodes(element as ParentNode, childNodes);
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
-      commitHostDirtyChildren(fiber.child, element, eventRoot, `${path}.c`, options);
+      commitHostDirtyChildrenOf(fiber, fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (isDomHostElement(element)) {
+    if (isDomElement && isFormHostType(fiber.type)) {
       applyPostChildFormProps(element, props, previousProps);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
@@ -1890,7 +2433,8 @@ function commitHostDirtyFiber(
         syncOwnedChildNodes(container as ParentNode, previousNodes, childNodes);
         fiber.memoizedState = childNodes;
       } else {
-        commitHostDirtyChildren(
+        commitHostDirtyChildrenOf(
+          fiber,
           fiber.child,
           container as ParentNode,
           portalEventRoot,
@@ -1904,8 +2448,14 @@ function commitHostDirtyFiber(
     return;
   }
 
+  if (fiber.tag === "reactive-dom-block") {
+    fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
+    return;
+  }
+
   if (fiber.subtreeFlags !== NoFlags) {
-    commitHostDirtyChildren(fiber.child, parent, eventRoot, path, options);
+    commitHostDirtyChildrenOf(fiber, fiber.child, parent, eventRoot, path, options);
   }
   fiber.memoizedProps = fiber.pendingProps;
   finishCommittedFiber(fiber);
@@ -2072,7 +2622,10 @@ function readAppendSuffixCommitHint(value: unknown): AppendSuffixCommitHint | un
 }
 
 function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
-  const removed = getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
+  const removed =
+    fiber.deletions?.length === 1
+      ? fiber.deletions[0]
+      : getSingleRemovedFiber(fiber.alternate?.child, fiber.child);
 
   if (removed === undefined) {
     return false;
@@ -2087,6 +2640,10 @@ function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
 
     parent.removeChild(node);
     removedAny = true;
+  }
+
+  if (removedAny) {
+    fiber.deletions = undefined;
   }
 
   return removedAny;
@@ -2166,6 +2723,11 @@ function isSameFiberSlot(current: Fiber, next: Fiber): boolean {
 }
 
 function collectCommittedHostNodes(fiber: Fiber): Node[] {
+  if (fiber.tag === "reactive-dom-block") {
+    const node = getReactiveDomBlockNode(fiber.stateNode);
+    return node === undefined ? [] : [node];
+  }
+
   if (
     (fiber.tag === "host-component" || fiber.tag === "host-text") &&
     fiber.stateNode instanceof Node
@@ -2185,6 +2747,10 @@ function collectCommittedHostNodes(fiber: Fiber): Node[] {
 }
 
 function hasCommittedHostNode(fiber: Fiber): boolean {
+  if (fiber.tag === "reactive-dom-block") {
+    return getReactiveDomBlockNode(fiber.stateNode) !== undefined;
+  }
+
   if (
     (fiber.tag === "host-component" || fiber.tag === "host-text") &&
     fiber.stateNode instanceof Node
@@ -2249,6 +2815,13 @@ function commitHostFiber(
     return [text];
   }
 
+  if (fiber.tag === "reactive-dom-block") {
+    const node = getReactiveDomBlockNode(fiber.stateNode);
+    fiber.memoizedProps = fiber.pendingProps;
+    finishCommittedFiber(fiber);
+    return node === undefined ? [] : [node];
+  }
+
   if (fiber.tag === "host-component") {
     const element = fiber.stateNode;
 
@@ -2269,6 +2842,7 @@ function commitHostFiber(
       return [element];
     }
 
+    const isDomElement = isDomHostElement(element);
     const props = fiber.pendingProps as Record<string, unknown>;
     const previousProps = fiber.memoizedProps as Record<string, unknown> | undefined;
     const directTextChild =
@@ -2294,7 +2868,7 @@ function commitHostFiber(
       fiber.hydrateExisting !== true &&
       isRowTextOnlyUpdate(fiber.memoizedProps, props);
 
-    if (isDomHostElement(element) && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
+    if (isDomElement && !propsAreUnchanged && !propsAreChildrenOnly && !textOnlyRowUpdate) {
       applyProps(element, props, path, {
         ...options,
         eventRoot,
@@ -2313,8 +2887,8 @@ function commitHostFiber(
     ) {
       const childNodes = commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
       if (
-        !(isDomHostElement(element) && childNodes.length === 0 && committedPortalContainers.has(element)) &&
-        !(isDomHostElement(element) && shouldPreserveContentEditableChildren(element, props, childNodes))
+        !(isDomElement && childNodes.length === 0 && committedPortalContainers.has(element)) &&
+        !(isDomElement && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
         syncChildNodes(element as ParentNode, childNodes);
       }
@@ -2322,7 +2896,7 @@ function commitHostFiber(
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
     }
 
-    if (isDomHostElement(element)) {
+    if (isDomElement && isFormHostType(fiber.type)) {
       applyPostChildFormProps(element, props, previousProps);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
@@ -2458,6 +3032,36 @@ function finishCommittedFiber(fiber: Fiber): void {
   fiber.childListChanged = false;
   fiber.subtreeChildListChanged = false;
   fiber.hostChildListChanged = false;
+}
+
+function getReactiveDomBlockNode(state: unknown): ChildNode | undefined {
+  if (
+    typeof state === "object" &&
+    state !== null &&
+    "node" in state &&
+    (state as { node?: unknown }).node instanceof Node
+  ) {
+    return (state as { node: ChildNode }).node;
+  }
+
+  return undefined;
+}
+
+function disposeReactiveDomBlockState(
+  state: unknown,
+  seen: Set<unknown>,
+): void {
+  if (typeof state !== "object" || state === null || seen.has(state)) {
+    return;
+  }
+
+  seen.add(state);
+  const dispose = (state as { dispose?: unknown }).dispose;
+
+  if (typeof dispose === "function") {
+    dispose();
+    (state as { dispose?: unknown }).dispose = undefined;
+  }
 }
 
 function hasChildListMutation(fiber: Fiber): boolean {
@@ -2657,6 +3261,13 @@ function getDirectHostTextChild(children: unknown): string | undefined {
   return typeof children === "string" || typeof children === "number"
     ? String(children)
     : undefined;
+}
+
+// Only these host tags carry post-child form value/checked semantics. Gating on
+// the (cheap, already-known) type string lets the commit skip applyPostChildFormProps
+// and its instanceof probes for every other element.
+function isFormHostType(type: unknown): boolean {
+  return type === "input" || type === "textarea" || type === "select";
 }
 
 // This package has no Node type dependency; declare the minimal process
@@ -3138,13 +3749,26 @@ function tryReuseMemoBailout(
     return undefined;
   }
 
-  const fiber = getMemoBailoutFiber(
-    runtime,
-    current,
-    node.props,
-    previousMemoState,
-    canReuseCurrentFiber,
-  );
+  if (memoStateNeedsActiveInstanceMark(previousMemoState)) {
+    markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+  }
+
+  const fiber =
+    canReuseCurrentFiber &&
+    current.hasRefSubtree !== true &&
+    current.hasDisposableResources !== true &&
+    current.hydrateExisting !== true
+      ? current
+      : createWorkInProgress(current, node.props);
+
+  if (fiber === current) {
+    current.pendingProps = node.props;
+    current.flags = NoFlags;
+    current.subtreeFlags = NoFlags;
+    current.childListChanged = false;
+    current.subtreeChildListChanged = false;
+    current.hostChildListChanged = false;
+  }
   fiber.type = node.type;
   fiber.child = getSkippedChild(current);
   fiber.memoizedState = previousMemoState;
@@ -3511,6 +4135,35 @@ function collectInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
   return collectRuntimeInstanceKeys(runtime, prefix);
 }
 
+function collectMemoInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
+  return readDependencyFreeMemoInstanceKey(runtime, prefix) === undefined
+    ? collectInstanceKeys(runtime, prefix)
+    : emptyInstanceKeys;
+}
+
+function readDependencyFreeMemoInstanceKey(
+  runtime: RootRuntime,
+  prefix: string,
+): string | undefined {
+  const keys = runtime.instanceKeysByPrefix.get(prefix);
+
+  if (keys === undefined || keys.size !== 1 || !keys.has(prefix)) {
+    return undefined;
+  }
+
+  const instance = runtime.instances.get(prefix) as RuntimeInstanceLike | undefined;
+
+  if (
+    instance === undefined ||
+    instance.contextDependencies !== undefined ||
+    (instance.hooks !== undefined && instance.hooks.length > 0)
+  ) {
+    return undefined;
+  }
+
+  return prefix;
+}
+
 function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): void {
   for (const key of keys) {
     runtime.activeInstanceKeys?.add(key);
@@ -3550,6 +4203,10 @@ function getMemoBailoutFiber(
   state: MemoFiberState,
   canReuseCurrentFiber: boolean,
 ): Fiber {
+  if (memoStateNeedsActiveInstanceMark(state)) {
+    markActiveInstanceKeys(runtime, state.instanceKeys);
+  }
+
   if (canReuseCurrentFiber && canReuseMemoBailoutFiber(current, state)) {
     current.pendingProps = pendingProps;
     current.flags = NoFlags;
@@ -3561,9 +4218,6 @@ function getMemoBailoutFiber(
   }
 
   const fiber = createWorkInProgress(current, pendingProps);
-  if (memoStateNeedsActiveInstanceMark(state)) {
-    markActiveInstanceKeys(runtime, state.instanceKeys);
-  }
   return fiber;
 }
 
@@ -3571,6 +4225,7 @@ function canReuseMemoBailoutFiber(current: Fiber, state: MemoFiberState): boolea
   return (
     state.hasRetainedInstanceDependencies === false &&
     current.hasRefSubtree !== true &&
+    current.hasDisposableResources !== true &&
     current.hydrateExisting !== true
   );
 }

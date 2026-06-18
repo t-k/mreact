@@ -1,6 +1,6 @@
 import type { Fiber, FiberRoot } from "./fiber.js";
 import { ChildDeletion } from "./fiber-flags.js";
-import { commitHostFiberRoot } from "./fiber-host.js";
+import { commitHostFiberRoot, disposeHostFiberResources } from "./fiber-host.js";
 import { markRootFinished } from "./fiber-lanes.js";
 import { runWithHostCommit } from "./hooks.js";
 import type { RenderOptions } from "./hydration.js";
@@ -122,6 +122,8 @@ function detachDeletedFiberSubtrees(
 }
 
 function detachFiberSubtree(fiber: Fiber, retained: ReadonlySet<Fiber>): void {
+  disposeHostFiberResources(fiber);
+
   const stack = [fiber];
   const seen = new Set<Fiber>();
 

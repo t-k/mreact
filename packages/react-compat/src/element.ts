@@ -5,6 +5,7 @@ export const MEMO_TYPE = Symbol.for("react.memo");
 export const LAZY_TYPE = Symbol.for("react.lazy");
 export const STRICT_MODE_TYPE = Symbol.for("react.strict_mode");
 export const PORTAL_TYPE = Symbol.for("react.portal");
+export const REACTIVE_DOM_BLOCK_TYPE = Symbol.for("modular.react.reactive_dom_block");
 const REACT_COMPAT_PROVIDER_TYPE = Symbol.for("react.context");
 /** Symbol used to group JSX children without adding a host element. */
 export const Fragment = Symbol.for("react.fragment");
@@ -22,6 +23,10 @@ export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
 /** Metadata key that links a state value to a reactive text binding. */
 export const REACTIVE_TEXT_BINDING_META = Symbol.for(
   "modular.react.reactive_text_binding_meta",
+);
+/** Metadata key that links compiler-owned DOM blocks to component state. */
+export const REACTIVE_STATE_BINDING_META = Symbol.for(
+  "modular.react.reactive_state_binding_meta",
 );
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
@@ -44,6 +49,7 @@ export type ElementType<P = Record<string, unknown>> =
   | typeof Activity
   | typeof Profiler
   | typeof ERROR_BOUNDARY_TYPE
+  | typeof REACTIVE_DOM_BLOCK_TYPE
   | typeof STRICT_MODE_TYPE
   | ReactCompatContextProviderShorthand
   | ReactCompatProviderType
@@ -95,6 +101,24 @@ export interface ReactCompatPortal {
   key: string | null;
 }
 
+export interface ReactiveDomBlockResult {
+  node: ChildNode;
+  dispose?: (() => void) | undefined;
+}
+
+// The render receives a stable reactive props proxy when the block is created
+// with props (createReactiveDomBlock(render, props)); state-only blocks ignore
+// the argument.
+export type ReactiveDomBlockRender<P = unknown> = (props: P) => ReactiveDomBlockResult;
+
+export interface ReactiveDomBlockProps {
+  render: ReactiveDomBlockRender;
+  // Present when the block bridges its component's props into the reactive
+  // runtime; carries the latest props on every re-render so the reconciler can
+  // push them into the block's prop cell.
+  blockProps?: Record<string, unknown> | undefined;
+}
+
 /** Creates a React-compatible element from a type, config object, and children. */
 export function createElement<P extends object>(
   type: ElementType<P>,
@@ -110,13 +134,11 @@ export function createElement<P extends object>(
   if (typeof type === "string") {
     const key = config?.key === undefined ? null : String(config.key);
     const ref = config?.ref ?? null;
-    const props = copyCreateElementProps(config) as P & {
+    const props = copyHostCreateElementProps(config) as P & {
       children?: ReactCompatNode;
     };
 
     assignCreateElementChildren(props, childCount, arguments);
-
-    setHostOwnPropsMeta(props);
 
     return {
       $$typeof: REACT_COMPAT_ELEMENT_TYPE,
@@ -386,6 +408,41 @@ function copyCreateElementProps(
   }
 
   copyInternalElementSymbolProps(source, props);
+  return props as Record<string, unknown>;
+}
+
+function copyHostCreateElementProps(
+  source: object | null | undefined,
+): Record<string, unknown> {
+  const props: Record<PropertyKey, unknown> = {};
+
+  if (source === null || source === undefined) {
+    props[HOST_CHILDREN_ONLY_PROPS_META] = true;
+    return props as Record<string, unknown>;
+  }
+
+  let hasNonChildrenProp = false;
+  const stringSource = source as Record<string, unknown>;
+  for (const name in source) {
+    if (!hasOwnProperty.call(source, name)) {
+      continue;
+    }
+
+    if (
+      name !== "key" &&
+      name !== "ref" &&
+      name !== "__self" &&
+      name !== "__source"
+    ) {
+      props[name] = stringSource[name];
+      hasNonChildrenProp ||= name !== "children";
+    }
+  }
+
+  copyInternalElementSymbolProps(source, props);
+  if (!hasNonChildrenProp) {
+    props[HOST_CHILDREN_ONLY_PROPS_META] = true;
+  }
   return props as Record<string, unknown>;
 }
 

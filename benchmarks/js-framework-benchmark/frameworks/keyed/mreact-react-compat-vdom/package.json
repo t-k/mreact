@@ -1,5 +1,5 @@
 {
-  "name": "js-framework-benchmark-mreact-react-compat",
+  "name": "js-framework-benchmark-mreact-react-compat-vdom",
   "version": "1.0.0",
   "type": "module",
   "main": "dist/main.js",
@@ -19,8 +19,7 @@
     "url": "https://github.com/t-k/mreact.git"
   },
   "dependencies": {
-    "@reckona/mreact-compat": "0.0.169",
-    "@reckona/mreact-reactive-dom": "0.0.169"
+    "@reckona/mreact-compat": "0.0.169"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

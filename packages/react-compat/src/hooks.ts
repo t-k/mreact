@@ -1,6 +1,9 @@
 import {
   flushPendingComputed,
   flushQueuedComputations,
+  notifySubscribers,
+  trackSource,
+  type Source,
 } from "@reckona/mreact-reactive-core/internal";
 import { scheduleCallback } from "./fiber-scheduler.js";
 import { removeChildIfPresent } from "./dom-children.js";
@@ -11,7 +14,10 @@ import {
   useContext,
   withContextReadObserver,
 } from "./context.js";
-import { REACTIVE_TEXT_BINDING_META } from "./element.js";
+import {
+  REACTIVE_STATE_BINDING_META,
+  REACTIVE_TEXT_BINDING_META,
+} from "./element.js";
 import { isThenable } from "./thenable.js";
 
 export interface RootRuntime {
@@ -127,7 +133,13 @@ export type DevToolsHookValue =
   | { kind: "effect"; effectKind: "insertion" | "layout" | "normal"; deps?: readonly unknown[] };
 
 type HookSlot =
-  | { kind: "state"; value: unknown; hostCommitValue?: unknown; textBinding?: ReactiveTextBinding }
+  | {
+      kind: "state";
+      value: unknown;
+      hostCommitValue?: unknown;
+      textBinding?: ReactiveTextBinding;
+      stateBinding?: ReactiveStateBinding;
+    }
   | {
       kind: "action-state";
       state: unknown;
@@ -158,9 +170,21 @@ type HookSlot =
       strictReplay?: boolean;
     };
 
+interface PendingInstanceContext {
+  runtime: RootRuntime;
+  path: string;
+  owner: unknown;
+  existing: ComponentInstance | undefined;
+}
+
 interface HookRenderState {
   currentRuntime: RootRuntime | undefined;
   currentInstance: ComponentInstance | undefined;
+  // Deferred instance for the component currently rendering. The instance is
+  // only materialized (created, registered, prefix-indexed) when a hook or a
+  // context read first needs it, so components with no hooks/context (e.g. a
+  // pure host-rendering memo row) pay none of that per-render cost.
+  pendingInstance: PendingInstanceContext | undefined;
   currentCacheScope: CacheScope | undefined;
   hostCommitDepth: number;
   queuedHostCommitRerenders: Set<RootRuntime>;
@@ -174,6 +198,7 @@ const hookRenderState =
   ] ??= {
     currentRuntime: undefined,
     currentInstance: undefined,
+    pendingInstance: undefined,
     currentCacheScope: undefined,
     hostCommitDepth: 0,
     queuedHostCommitRerenders: new Set<RootRuntime>(),
@@ -202,6 +227,12 @@ export const version = "19.2.6";
 export interface ReactiveTextBinding {
   value: unknown;
   subscribers: Set<Text>;
+}
+
+export interface ReactiveStateBinding {
+  get(): unknown;
+  source: Source;
+  value: unknown;
 }
 
 const reactiveTextBindingsByNode = new WeakMap<Text, ReactiveTextBinding>();
@@ -378,6 +409,9 @@ export function createRootRuntime(
         flushPendingEffects(this.pendingImperativeHandleEffects);
         this.effectFlushPhase = "layout";
         const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+        if (flushHostCommitRerenders()) {
+          dedupePendingEffects(this.pendingEffects);
+        }
         this.effectFlushPhase = "normal";
         const strictEffects = flushPendingEffects(this.pendingEffects);
         this.effectFlushPhase = undefined;
@@ -502,25 +536,56 @@ export function renderWithRootRuntime<T>(
 ): T {
   const previousRuntime = hookRenderState.currentRuntime;
   const previousInstance = hookRenderState.currentInstance;
-  let instance = runtime.instances.get(path);
+  const previousPending = hookRenderState.pendingInstance;
 
-  if (instance !== undefined && owner !== undefined && instance.owner !== owner) {
-    cleanupInstance(instance);
-    instance = undefined;
+  let existing = runtime.instances.get(path);
+  if (existing !== undefined && owner !== undefined && existing.owner !== owner) {
+    cleanupInstance(existing);
+    runtime.instances.delete(path);
+    removeInstanceKeyFromIndex(runtime, path);
+    existing = undefined;
   }
 
-  instance ??= {
-    owner,
-    path,
-    hooks: [],
-    hookIndex: 0,
-    dirty: false,
-    devToolsHookSuppressionDepth: 0,
-  };
-  instance.owner = owner;
-  instance.path = path;
-  runtime.instances.set(path, instance);
-  indexInstanceKey(runtime, path);
+  // Defer instance materialization: hooks / context reads call
+  // materializeInstance() lazily. A component that touches neither never
+  // allocates or registers an instance.
+  hookRenderState.currentRuntime = runtime;
+  hookRenderState.currentInstance = undefined;
+  hookRenderState.pendingInstance = { runtime, path, owner, existing };
+
+  try {
+    return withContextReadObserver(recordContextDependency, render);
+  } finally {
+    hookRenderState.currentRuntime = previousRuntime;
+    hookRenderState.currentInstance = previousInstance;
+    hookRenderState.pendingInstance = previousPending;
+  }
+}
+
+// Materialize the deferred instance for the rendering component the first time
+// a hook or context read needs it.
+function materializeInstance(): ComponentInstance {
+  const pending = hookRenderState.pendingInstance;
+  if (pending === undefined) {
+    throw new Error("Hooks can only be called while rendering.");
+  }
+
+  const { runtime, path, owner } = pending;
+  let instance = pending.existing;
+  if (instance === undefined) {
+    instance = {
+      owner,
+      path,
+      hooks: [],
+      hookIndex: 0,
+      dirty: false,
+      devToolsHookSuppressionDepth: 0,
+    };
+    runtime.instances.set(path, instance);
+    indexInstanceKey(runtime, path);
+  } else {
+    instance.owner = owner;
+  }
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
@@ -534,17 +599,17 @@ export function renderWithRootRuntime<T>(
     delete instance.devToolsHookTypes;
   }
   instance.devToolsHookSuppressionDepth = 0;
-  hookRenderState.currentRuntime = runtime;
   hookRenderState.currentInstance = instance;
+  hookRenderState.pendingInstance = undefined;
+  return instance;
+}
 
-  try {
-    return withContextReadObserver((context, value) => {
-      (instance.contextDependencies ??= new Map()).set(context, value);
-    }, render);
-  } finally {
-    hookRenderState.currentRuntime = previousRuntime;
-    hookRenderState.currentInstance = previousInstance;
-  }
+function recordContextDependency(
+  context: ReactCompatContextLike<unknown>,
+  value: unknown,
+): void {
+  const instance = hookRenderState.currentInstance ?? materializeInstance();
+  (instance.contextDependencies ??= new Map()).set(context, value);
 }
 
 export function hasChangedContextDependency(
@@ -575,22 +640,27 @@ export function hasContextDependency(
   return keys.some((key) => runtime.instances.get(key)?.contextDependencies !== undefined);
 }
 
+// Shared read-only empty result so components with no registered instances
+// (e.g. hookless rows under lazy instance materialization) don't each allocate
+// a fresh array. Callers treat instance-key lists as read-only.
+const EMPTY_INSTANCE_KEYS: string[] = [];
+
 export function collectRuntimeInstanceKeys(runtime: RootRuntime, prefix: string): string[] {
   const keys = runtime.instanceKeysByPrefix.get(prefix);
 
   if (keys === undefined) {
-    return [];
+    return EMPTY_INSTANCE_KEYS;
   }
 
-  const activeKeys: string[] = [];
+  let activeKeys: string[] | undefined;
 
   for (const key of keys) {
     if (runtime.instances.has(key)) {
-      activeKeys.push(key);
+      (activeKeys ??= []).push(key);
     }
   }
 
-  return activeKeys;
+  return activeKeys ?? EMPTY_INSTANCE_KEYS;
 }
 
 export function getDevToolsHookState(
@@ -813,7 +883,17 @@ export function useState<T>(
       optionsAllowDirectTextBinding(value) &&
       updateDirectTextBinding(slot.textBinding, nextValue);
 
-    if (canUseDirectTextBinding) {
+    const canUseDirectStateBinding =
+      hookRenderState.hostCommitDepth === 0 &&
+      hookRenderState.currentRuntime !== runtime &&
+      hookRenderState.currentInstance !== instance &&
+      runtime.effectFlushPhase === undefined &&
+      eventBatchDepth === 0 &&
+      transitionDepth === 0 &&
+      optionsAllowDirectTextBinding(value) &&
+      updateDirectStateBinding(slot.stateBinding, nextValue);
+
+    if (canUseDirectTextBinding || canUseDirectStateBinding) {
       return;
     }
 
@@ -836,6 +916,7 @@ export function useState<T>(
     (value: T | ((previous: T) => T)) => void,
   ] & Record<PropertyKey, unknown>;
   result[REACTIVE_TEXT_BINDING_META] = getStateTextBinding(slot);
+  result[REACTIVE_STATE_BINDING_META] = getStateBinding(slot);
   return result;
 }
 
@@ -884,6 +965,19 @@ function getStateTextBinding(slot: Extract<HookSlot, { kind: "state" }>): Reacti
   return slot.textBinding;
 }
 
+function getStateBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveStateBinding {
+  slot.stateBinding ??= {
+    value: slot.value,
+    source: { subscribers: null },
+    get() {
+      trackSource(this.source);
+      return this.value;
+    },
+  };
+  slot.stateBinding.value = slot.value;
+  return slot.stateBinding;
+}
+
 function optionsAllowDirectTextBinding(value: unknown): boolean {
   return typeof value !== "function";
 }
@@ -913,6 +1007,20 @@ function updateDirectTextBinding(binding: ReactiveTextBinding | undefined, value
   return updated;
 }
 
+function updateDirectStateBinding(
+  binding: ReactiveStateBinding | undefined,
+  value: unknown,
+): boolean {
+  if (binding === undefined || binding.source.subscribers === null) {
+    return false;
+  }
+
+  binding.value = value;
+  notifySubscribers(binding.source);
+  flushQueuedComputations();
+  return true;
+}
+
 function isReactiveTextBinding(value: unknown): value is ReactiveTextBinding {
   return (
     typeof value === "object" &&
@@ -928,11 +1036,12 @@ export function useReducer<TState, TAction, TInitial = TState>(
   initialArg: TInitial,
   init?: (initialArg: TInitial) => TState,
 ): [TState, (action: TAction) => void] {
-  const [state, setState] = runWithoutDevToolsHookTracking(() =>
+  const stateTuple = runWithoutDevToolsHookTracking(() =>
     useState<TState>(() =>
       init === undefined ? (initialArg as unknown as TState) : init(initialArg),
     ),
   );
+  const [state, setState] = stateTuple;
   const reducerRef = runWithoutDevToolsHookTracking(() => useRef(reducer));
   const stateRef = runWithoutDevToolsHookTracking(() => useRef(state));
   const dispatchRef = runWithoutDevToolsHookTracking(() =>
@@ -956,7 +1065,18 @@ export function useReducer<TState, TAction, TInitial = TState>(
     value: state,
   });
 
-  return [state, dispatchRef.current];
+  const result = [state, dispatchRef.current] as [
+    TState,
+    (action: TAction) => void,
+  ] & Record<PropertyKey, unknown>;
+  const stateBinding = (stateTuple as unknown as Record<PropertyKey, unknown>)[
+    REACTIVE_STATE_BINDING_META
+  ];
+
+  if (stateBinding !== undefined) {
+    result[REACTIVE_STATE_BINDING_META] = stateBinding;
+  }
+  return result;
 }
 
 /** Returns a stable mutable ref object for the component instance. */
@@ -2044,15 +2164,16 @@ function scheduleInstanceUpdate(
   scheduleRuntimeRerender(runtime, options);
 }
 
-function flushHostCommitRerenders(): void {
+function flushHostCommitRerenders(): boolean {
   if (
     hostCommitRerenderDepth > 0 ||
     hookRenderState.hostCommitDepth > 0 ||
     hookRenderState.queuedHostCommitRerenders.size === 0
   ) {
-    return;
+    return false;
   }
 
+  let didRerender = false;
   hostCommitRerenderDepth += 1;
   try {
     for (
@@ -2069,6 +2190,7 @@ function flushHostCommitRerenders(): void {
         clearHostCommitStateBaselines(runtime);
 
         if (hasDirtyInstance) {
+          didRerender = true;
           runtime.rerender("sync");
         }
       }
@@ -2077,6 +2199,20 @@ function flushHostCommitRerenders(): void {
   } finally {
     hostCommitRerenderDepth -= 1;
   }
+  return didRerender;
+}
+
+function dedupePendingEffects(queue: PendingEffect[]): void {
+  if (queue.length < 2) {
+    return;
+  }
+
+  const latestBySlot = new Map<Extract<HookSlot, { kind: "effect" }>, PendingEffect>();
+  for (const effect of queue) {
+    latestBySlot.set(effect.slot, effect);
+  }
+  queue.length = 0;
+  queue.push(...latestBySlot.values());
 }
 
 function flushEffectFlushRerenders(): void {
@@ -2299,11 +2435,7 @@ function requireRuntime(): RootRuntime {
 }
 
 function requireInstance(): ComponentInstance {
-  if (hookRenderState.currentInstance === undefined) {
-    throw new Error("Hooks can only be called while rendering.");
-  }
-
-  return hookRenderState.currentInstance;
+  return hookRenderState.currentInstance ?? materializeInstance();
 }
 
 function areHookInputsEqual(

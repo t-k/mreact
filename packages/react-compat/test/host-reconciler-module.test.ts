@@ -12,6 +12,7 @@ import {
 } from "../src/host-reconciler.js";
 import { createFiberRoot } from "../src/fiber.js";
 import { NoFlags, Update } from "../src/fiber-flags.js";
+import { createRootRuntime } from "../src/hooks.js";
 
 describe("host reconciler module", () => {
   afterEach(() => {
@@ -109,6 +110,17 @@ describe("host reconciler module", () => {
     );
   });
 
+  test("keeps function state props without snapshot spread copies", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain(
+      "fiber.stateNode = {\n      element: node,\n      props: { ...node.props }",
+    );
+  });
+
   test("checks class descendants once when recording memo state", async () => {
     const hostReconcilerSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
@@ -120,6 +132,45 @@ describe("host reconciler module", () => {
 
     expect(memoStateSource).toContain("const hasClassDescendant = hasClassComponentDescendant(fiber.child);");
     expect(memoStateSource.match(/hasClassComponentDescendant\(fiber\.child\)/g)).toHaveLength(1);
+  });
+
+  test("short-circuits dependency-free memo instance key snapshots", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("collectMemoInstanceKeys(runtime, memoPath)");
+    expect(hostReconcilerSource).toContain("readDependencyFreeMemoInstanceKey(runtime, prefix)");
+  });
+
+  test("reuses host child options when namespace and hydration state are unchanged", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).toContain("getHostChildFiberOptions(");
+    expect(hostReconcilerSource).not.toContain("namespace: childNamespace,\n      ...(previousChildNodes");
+  });
+
+  test("tries the initial host-only subtree builder before the generic host branch", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const fastPathIndex = hostReconcilerSource.indexOf(
+      "const initialHostOnlyFiber = tryCreateInitialHostOnlyFiber(",
+    );
+    const genericHostIndex = hostReconcilerSource.indexOf(
+      "const elementNamespace = namespaceForHostElement(",
+      fastPathIndex,
+    );
+
+    expect(fastPathIndex).toBeGreaterThanOrEqual(0);
+    expect(genericHostIndex).toBeGreaterThanOrEqual(0);
+    expect(fastPathIndex).toBeLessThan(genericHostIndex);
+    expect(hostReconcilerSource).toContain("function tryCreateInitialHostOnlyFiber(");
   });
 
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
@@ -151,6 +202,18 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("function tryReuseMemoBailout(");
     expect(hostReconcilerSource).toContain("const memoBailout = tryReuseMemoBailout(");
     expect(hostReconcilerSource).toContain("if (memoBailout !== undefined) {");
+  });
+
+  test("does not spread memo and lazy elements while retargeting inner types", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+
+    expect(hostReconcilerSource).not.toContain("...node,\n      type: memoType.type");
+    expect(hostReconcilerSource).not.toContain("...node,\n        type: lazyType.resolved");
+    expect(hostReconcilerSource).toContain("type: memoType.type");
+    expect(hostReconcilerSource).toContain("type: lazyType.resolved");
   });
 
   test("checks dependency-free memo bailout before child path generation", async () => {
@@ -825,6 +888,143 @@ describe("host reconciler module", () => {
 
     expect(container.innerHTML).toBe(
       '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
+
+  test("removes one keyed root child without resyncing unchanged siblings", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const initial = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "b", key: "b" }, "B"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(root, [
+      createElement("span", { "data-key": "a", key: "a" }, "A"),
+      createElement("span", { "data-key": "c", key: "c" }, "C"),
+    ]);
+    const firstRow = updated.child;
+    const lastRow = firstRow?.sibling;
+
+    if (firstRow === undefined || lastRow === undefined) {
+      expect.fail("expected remaining root children");
+    }
+
+    firstRow.stateNode = undefined;
+    lastRow.stateNode = undefined;
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-key="a">A</span><span data-key="c">C</span>',
+    );
+  });
+
+  test("records one removed dependency-free memo child during keyed reconcile", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const runtime = createRootRuntime(() => {});
+    const Row = memo(
+      ({ label }: { readonly label: string }) =>
+        createElement("span", { "data-row": label }, label),
+      (previous, next) => previous.label === next.label,
+    );
+    const initial = renderHostFiberRoot(
+      root,
+      [
+        createElement(Row, { key: "a", label: "A" }),
+        createElement(Row, { key: "b", label: "B" }),
+        createElement(Row, { key: "c", label: "C" }),
+      ],
+      runtime,
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const currentFirst = root.current.child;
+    const currentSecond = currentFirst?.sibling;
+    const currentThird = currentSecond?.sibling;
+
+    if (
+      currentFirst === undefined ||
+      currentSecond === undefined ||
+      currentThird === undefined
+    ) {
+      expect.fail("expected initial memo children");
+    }
+
+    const updated = renderHostFiberRoot(
+      root,
+      [
+        createElement(Row, { key: "a", label: "A" }),
+        createElement(Row, { key: "c", label: "C" }),
+      ],
+      runtime,
+    );
+
+    expect(updated.child).toBe(currentFirst);
+    expect(updated.child?.sibling).toBe(currentThird);
+    expect(updated.deletions).toEqual([currentSecond]);
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-row="A">A</span><span data-row="C">C</span>',
+    );
+  });
+
+  test("records dirty memo children during keyed reconcile without child list changes", () => {
+    const container = document.createElement("div");
+    const root = createFiberRoot(container);
+    const runtime = createRootRuntime(() => {});
+    const Row = memo(
+      ({ label }: { readonly label: string }) =>
+        createElement("span", { "data-row": label }, label),
+      (previous, next) => previous.label === next.label,
+    );
+
+    function App({ labels }: { readonly labels: readonly string[] }) {
+      return labels.map((label) => createElement(Row, { key: label[0], label }));
+    }
+
+    const initial = renderHostFiberRoot(
+      root,
+      createElement(App, { labels: ["A", "B", "C"] }),
+      runtime,
+    );
+
+    root.finishedWork = initial;
+    commitHostFiberRoot(root, initial);
+    root.current = initial;
+
+    const updated = renderHostFiberRoot(
+      root,
+      createElement(App, { labels: ["A", "B2", "C"] }),
+      runtime,
+    );
+    const appFiber = updated.child;
+    const firstRow = appFiber?.child;
+    const secondRow = firstRow?.sibling;
+
+    if (appFiber === undefined || secondRow === undefined) {
+      expect.fail("expected updated app and dirty memo child");
+    }
+
+    expect(updated.childListChanged).toBe(false);
+    expect(appFiber.childListChanged).toBe(false);
+    expect(updated.deletions).toEqual([appFiber]);
+    expect(appFiber.deletions).toEqual([secondRow]);
+
+    commitHostFiberRoot(root, updated);
+
+    expect(container.innerHTML).toBe(
+      '<span data-row="A">A</span><span data-row="B2">B2</span><span data-row="C">C</span>',
     );
   });
 

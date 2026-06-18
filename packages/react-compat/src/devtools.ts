@@ -1169,6 +1169,8 @@ function getReactFiberTag(tag: FiberTag): number {
       return 11;
     case "profiler":
       return 12;
+    case "reactive-dom-block":
+      return 5;
     case "suspense":
       return 13;
     case "memo":

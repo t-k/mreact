@@ -61,6 +61,10 @@ Treat `optimizeDeps.include` as a dev-experience tool, not a compatibility switc
 
 The compatibility gate tracks React 19.2.6 public export coverage for React, React DOM, React DOM client, and React DOM server. It is a compatibility runtime, not a byte-for-byte React reconciler, so use tests for the specific library behavior you depend on.
 
+## Compiler optimization
+
+The compatibility runtime is not the only execution path for React-shaped code. When React-compatible JSX is compiled by Mreact, the compiler can lower proven-safe state text, prop bindings, and event bindings into reactive DOM blocks. Effect-sensitive, ref-sensitive, or otherwise unsupported shapes keep the normal compatibility reconciler path, so the optimization preserves observable behavior instead of acting as a benchmark-only shortcut.
+
 ## App Router output
 
 Static React-compatible `createElement()` trees can still flow through the App Router server string pipeline, so a server-renderable compat subtree does not need to pay the same runtime cost as a fully dynamic client integration. When a route uses compat client references, the router shares compat vendor chunks only across route artifacts that actually need them, keeping server-only and non-compat routes out of that client payload.

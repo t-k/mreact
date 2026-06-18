@@ -1,266 +1,250 @@
-import {
-  createElement,
-  createRoot,
-  flushSync,
-  memo,
-  useReducer,
-  type ReactCompatNode,
-} from "@reckona/mreact-compat";
-
+// GENERATED from main.tsx by the mreact compiler (compat mode, Option C).
+// Source of truth is main.tsx; regenerate, do not hand-edit. Phase 3 experiment.
+import { jsx as _jsx, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
+import { bindEvent as _bindEvent, effect as _effect } from "@reckona/mreact-reactive-dom";
+import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
 const adjectives = [
-  "pretty",
-  "large",
-  "big",
-  "small",
-  "tall",
-  "short",
-  "long",
-  "handsome",
-  "plain",
-  "quaint",
-  "clean",
-  "elegant",
-  "easy",
-  "angry",
-  "crazy",
-  "helpful",
-  "mushy",
-  "odd",
-  "unsightly",
-  "adorable",
-  "important",
-  "inexpensive",
-  "cheap",
-  "expensive",
-  "fancy",
+	"pretty",
+	"large",
+	"big",
+	"small",
+	"tall",
+	"short",
+	"long",
+	"handsome",
+	"plain",
+	"quaint",
+	"clean",
+	"elegant",
+	"easy",
+	"angry",
+	"crazy",
+	"helpful",
+	"mushy",
+	"odd",
+	"unsightly",
+	"adorable",
+	"important",
+	"inexpensive",
+	"cheap",
+	"expensive",
+	"fancy"
 ];
 const colors = [
-  "red",
-  "yellow",
-  "blue",
-  "green",
-  "pink",
-  "brown",
-  "purple",
-  "brown",
-  "white",
-  "black",
-  "orange",
+	"red",
+	"yellow",
+	"blue",
+	"green",
+	"pink",
+	"brown",
+	"purple",
+	"brown",
+	"white",
+	"black",
+	"orange"
 ];
 const nouns = [
-  "table",
-  "chair",
-  "house",
-  "bbq",
-  "desk",
-  "car",
-  "pony",
-  "cookie",
-  "sandwich",
-  "burger",
-  "pizza",
-  "mouse",
-  "keyboard",
+	"table",
+	"chair",
+	"house",
+	"bbq",
+	"desk",
+	"car",
+	"pony",
+	"cookie",
+	"sandwich",
+	"burger",
+	"pizza",
+	"mouse",
+	"keyboard"
 ];
-
-interface RowData {
-  readonly id: number;
-  readonly label: string;
-}
-
-interface AppState {
-  readonly rows: readonly RowData[];
-  readonly selected: number | null;
-}
-
-type AppAction =
-  | { readonly type: "run"; readonly count: number }
-  | { readonly type: "add" }
-  | { readonly type: "update" }
-  | { readonly type: "clear" }
-  | { readonly type: "swap" }
-  | { readonly type: "remove"; readonly id: number }
-  | { readonly type: "select"; readonly id: number };
-
 let nextId = 1;
-let dispatchApp: ((action: AppAction) => void) | undefined;
-
-function random(max: number): number {
-  return Math.round(Math.random() * 1000) % max;
+let dispatchApp;
+function random(max) {
+	return Math.round(Math.random() * 1e3) % max;
 }
-
-function buildData(count: number): RowData[] {
-  const rows: RowData[] = [];
-
-  rows.length = count;
-
-  for (let index = 0; index < count; index += 1) {
-    rows[index] = {
-      id: nextId,
-      label: `${adjectives[random(adjectives.length)]} ${colors[random(colors.length)]} ${
-        nouns[random(nouns.length)]
-      }`,
-    };
-    nextId += 1;
-  }
-
-  return rows;
+function buildData(count) {
+	const rows = [];
+	rows.length = count;
+	for (let index = 0; index < count; index += 1) {
+		rows[index] = {
+			id: nextId,
+			label: `${adjectives[random(adjectives.length)]} ${colors[random(colors.length)]} ${nouns[random(nouns.length)]}`
+		};
+		nextId += 1;
+	}
+	return rows;
 }
-
-function updateEveryTenth(rows: readonly RowData[]): RowData[] {
-  const next = rows.slice(0);
-
-  for (let index = 0; index < next.length; index += 10) {
-    const row = next[index];
-
-    if (row !== undefined) {
-      next[index] = { id: row.id, label: `${row.label} !!!` };
-    }
-  }
-
-  return next;
+function updateEveryTenth(rows) {
+	const next = rows.slice(0);
+	for (let index = 0; index < next.length; index += 10) {
+		const row = next[index];
+		if (row !== undefined) {
+			next[index] = {
+				id: row.id,
+				label: `${row.label} !!!`
+			};
+		}
+	}
+	return next;
 }
-
-function swapRows(rows: readonly RowData[]): readonly RowData[] {
-  if (rows.length <= 998) {
-    return rows;
-  }
-
-  const next = [...rows];
-  const second = next[1];
-  const nineHundredNinetyNinth = next[998];
-
-  if (second === undefined || nineHundredNinetyNinth === undefined) {
-    return rows;
-  }
-
-  next[1] = nineHundredNinetyNinth;
-  next[998] = second;
-  return next;
+function swapRows(rows) {
+	if (rows.length <= 998) {
+		return rows;
+	}
+	const next = [...rows];
+	const second = next[1];
+	const nineHundredNinetyNinth = next[998];
+	if (second === undefined || nineHundredNinetyNinth === undefined) {
+		return rows;
+	}
+	next[1] = nineHundredNinetyNinth;
+	next[998] = second;
+	return next;
 }
-
-function reduceAppState(state: AppState, action: AppAction): AppState {
-  switch (action.type) {
-    case "run":
-      return { rows: buildData(action.count), selected: null };
-    case "add":
-      return { rows: [...state.rows, ...buildData(1_000)], selected: state.selected };
-    case "update":
-      return { rows: updateEveryTenth(state.rows), selected: state.selected };
-    case "clear":
-      return { rows: [], selected: null };
-    case "swap":
-      return { rows: swapRows(state.rows), selected: state.selected };
-    case "remove":
-      return {
-        rows: state.rows.filter((row) => row.id !== action.id),
-        selected: state.selected,
-      };
-    case "select":
-      return { rows: state.rows, selected: action.id };
-  }
+function reduceAppState(state, action) {
+	switch (action.type) {
+		case "run": return {
+			rows: buildData(action.count),
+			selected: null
+		};
+		case "add": return {
+			rows: [...state.rows, ...buildData(1e3)],
+			selected: state.selected
+		};
+		case "update": return {
+			rows: updateEveryTenth(state.rows),
+			selected: state.selected
+		};
+		case "clear": return {
+			rows: [],
+			selected: null
+		};
+		case "swap": return {
+			rows: swapRows(state.rows),
+			selected: state.selected
+		};
+		case "remove": return {
+			rows: state.rows.filter((row) => row.id !== action.id),
+			selected: state.selected
+		};
+		case "select": return {
+			rows: state.rows,
+			selected: action.id
+		};
+	}
 }
-
-function dispatchBenchAction(action: AppAction): void {
-  flushSync(() => {
-    dispatchApp?.(action);
-  });
+function dispatchBenchAction(action) {
+	flushSync(() => {
+		dispatchApp?.(action);
+	});
 }
-
-function setData(count: number): void {
-  dispatchBenchAction({ type: "run", count });
+function setData(count) {
+	dispatchBenchAction({
+		type: "run",
+		count
+	});
 }
-
-function addRows(): void {
-  dispatchBenchAction({ type: "add" });
+function addRows() {
+	dispatchBenchAction({ type: "add" });
 }
-
-function updateRows(): void {
-  dispatchBenchAction({ type: "update" });
+function updateRows() {
+	dispatchBenchAction({ type: "update" });
 }
-
-function clearRows(): void {
-  dispatchBenchAction({ type: "clear" });
+function clearRows() {
+	dispatchBenchAction({ type: "clear" });
 }
-
-function swapRowsAtBenchPositions(): void {
-  dispatchBenchAction({ type: "swap" });
+function swapRowsAtBenchPositions() {
+	dispatchBenchAction({ type: "swap" });
 }
-
-function removeRow(id: number): void {
-  dispatchBenchAction({ type: "remove", id });
+function removeRow(id) {
+	dispatchBenchAction({
+		type: "remove",
+		id
+	});
 }
-
-function selectRow(id: number): void {
-  dispatchBenchAction({ type: "select", id });
+function selectRow(id) {
+	dispatchBenchAction({
+		type: "select",
+		id
+	});
 }
-
-function requireElement<T extends HTMLElement>(id: string): T {
-  const element = document.getElementById(id);
-
-  if (element === null) {
-    throw new Error(`Missing #${id}`);
-  }
-
-  return element as T;
+function requireElement(id) {
+	const element = document.getElementById(id);
+	if (element === null) {
+		throw new Error(`Missing #${id}`);
+	}
+	return element;
 }
-
-type RowProps = Record<string, unknown> & {
-  readonly row: RowData;
-  readonly selected: boolean;
-};
-
-const Row = memo(
-  function Row({ row, selected }: RowProps): ReactCompatNode {
-    return createElement(
-      "tr",
-      {
-        className: selected ? "danger" : "",
-        key: row.id,
-      },
-      createElement("td", { className: "col-md-1" }, row.id),
-      createElement(
-        "td",
-        { className: "col-md-4" },
-        createElement("a", { onClick: () => selectRow(row.id) }, row.label),
-      ),
-      createElement(
-        "td",
-        { className: "col-md-1" },
-        createElement(
-          "a",
-          { onClick: () => removeRow(row.id) },
-          createElement("span", {
-            "aria-hidden": "true",
-            className: "glyphicon glyphicon-remove",
-          }),
-        ),
-      ),
-      createElement("td", { className: "col-md-6" }),
-    );
-  },
-  (previous, next) => previous.selected === next.selected && previous.row === next.row,
-);
-
-function App(): ReactCompatNode {
-  const [state, dispatch] = useReducer(reduceAppState, { rows: [], selected: null });
-
-  dispatchApp = dispatch;
-
-  return state.rows.map((row) =>
-    createElement(Row, { key: row.id, row, selected: state.selected === row.id }),
-  );
+const RowMemo = memo(Row, (previous, next) => previous.selected === next.selected && previous.row === next.row);
+function App() {
+	const [state, dispatch] = useReducer(reduceAppState, {
+		rows: [],
+		selected: null
+	});
+	dispatchApp = dispatch;
+	return state.rows.map((row) => /* @__PURE__ */ _jsx(RowMemo, {
+		row,
+		selected: state.selected === row.id
+	}, row.id));
 }
-
 const root = createRoot(requireElement("tbody"));
-
 flushSync(() => {
-  root.render(createElement(App, null));
+	root.render(/* @__PURE__ */ _jsx(App, {}));
 });
-
-requireElement("run").addEventListener("click", () => setData(1_000));
-requireElement("runlots").addEventListener("click", () => setData(10_000));
+requireElement("run").addEventListener("click", () => setData(1e3));
+requireElement("runlots").addEventListener("click", () => setData(1e4));
 requireElement("add").addEventListener("click", addRows);
 requireElement("update").addEventListener("click", updateRows);
 requireElement("clear").addEventListener("click", clearRows);
 requireElement("swaprows").addEventListener("click", swapRowsAtBenchPositions);
+
+function Row(props) {
+  return _createReactiveDomBlock((props) => {
+    const _tr = document.createElement("tr");
+    const _td = document.createElement("td");
+    _td.className = "col-md-1";
+    const _text = document.createTextNode("");
+    _td.appendChild(_text);
+    _tr.appendChild(_td);
+    const _td$1 = document.createElement("td");
+    _td$1.className = "col-md-4";
+    const _a = document.createElement("a");
+    const _text$1 = document.createTextNode("");
+    _a.appendChild(_text$1);
+    _td$1.appendChild(_a);
+    _tr.appendChild(_td$1);
+    const _td$2 = document.createElement("td");
+    _td$2.className = "col-md-1";
+    const _a$1 = document.createElement("a");
+    const _span = document.createElement("span");
+    _span.setAttribute("aria-hidden", "true");
+    _span.className = "glyphicon glyphicon-remove";
+    _a$1.appendChild(_span);
+    _td$2.appendChild(_a$1);
+    _tr.appendChild(_td$2);
+    const _td$3 = document.createElement("td");
+    _td$3.className = "col-md-6";
+    _tr.appendChild(_td$3);
+    const _dispose = _effect(() => {
+      const _r = (props.selected ? "danger" : "");
+      const _v = _r == null ? "" : String(_r);
+      if (_tr.className !== _v) _tr.className = _v;
+      const _r$1 = (props.row.id);
+      const _v$1 = _r$1 == null ? "" : String(_r$1);
+      if (_text.data !== _v$1) _text.data = _v$1;
+      const _h = (() => selectRow(props.row.id));
+      const _disposeEvent = typeof _h === "function" ? _bindEvent(_a, "click", _h) : undefined;
+      const _r$3 = (props.row.label);
+      const _v$2 = _r$3 == null ? "" : String(_r$3);
+      if (_text$1.data !== _v$2) _text$1.data = _v$2;
+      const _h$1 = (() => removeRow(props.row.id));
+      const _disposeEvent$1 = typeof _h$1 === "function" ? _bindEvent(_a$1, "click", _h$1) : undefined;
+      return () => {
+        _disposeEvent?.();
+        _disposeEvent$1?.();
+      };
+    });
+    return { node: _tr, dispose: _dispose };
+  }, props);
+}

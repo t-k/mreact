@@ -25,6 +25,8 @@ Resumability-oriented frameworks such as Qwik and Marko are designed around dela
 
 For keyed table operations such as create rows, replace rows, partial update, select row, append rows, remove row, swap/reorder rows, and clear rows, the source of truth is the official krausest/js-framework-benchmark harness. The local primitive runner remains useful for quick regression checks and experiments, but it is not an authoritative cross-framework comparison.
 
+The keyed table results include two React-compatibility Mreact fixtures. `mreact-react-compat` is the compiler-lowered path: the source stays React-compatible JSX, and the Mreact compiler lowers proven-safe state text, prop, and event bindings into reactive DOM operations. `mreact-react-compat-vdom` is the virtual-DOM compatibility path: the same app shape runs through the React-compatible runtime without those DOM-binding lowerings. Compare the two to separate compatibility runtime cost from the compiler's normal DOM-binding optimizations.
+
 ## Latest results
 
 BENCHMARK_RESULTS_PLACEHOLDER
