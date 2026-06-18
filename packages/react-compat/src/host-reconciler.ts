@@ -414,7 +414,15 @@ function reconcileHostChild(
   const rowResult =
     children === undefined
       ? undefined
-      : reconcileKeyedRowHostChildren(parent, currentFirstChild, children, options);
+      : reconcileKeyedRowHostChildren(parent, currentFirstChild, children, options) ??
+        reconcileKeyedMemoRowHostChildren(
+          parent,
+          currentFirstChild,
+          children,
+          runtime,
+          path,
+          options,
+        );
   if (rowResult !== undefined) {
     return rowResult;
   }
@@ -720,6 +728,174 @@ function reconcileKeyedRowHostChildren(
   if (appendSuffix !== undefined && canStoreAppendSuffixCommitHint(parent)) {
     parent.memoizedState = appendSuffix;
   }
+  return { fiber: first, consumed: 0 };
+}
+
+function isKeyedMemoRowCandidate(node: ReactCompatNode): boolean {
+  return (
+    isReactCompatElement(node) &&
+    node.key !== null &&
+    node.ref === null &&
+    isMemoType(node.type)
+  );
+}
+
+// In-place bailout for a keyed memo row whose props are unchanged and which has
+// no hook/context/effect dependencies. The caller has proven the key order is
+// unchanged (hasSameKeyOrderPrefix), so the fiber keeps its position and can be
+// reused WITHOUT createWorkInProgress — no allocation, and the retained subtree
+// (including any reactive-dom-block subscriptions) is left untouched. Returns
+// undefined when the row must re-render or has dependencies (handled by the
+// general per-child path instead). Mirrors tryReuseDependencyFreeMemoBailout +
+// getMemoBailoutFiber's in-place branch, but is safe to reuse a fiber with
+// disposable resources because a stable position means nothing is disposed.
+function tryReuseDependencyFreeKeyedMemoRow(
+  matched: Fiber,
+  child: ReactCompatElement,
+): Fiber | undefined {
+  if (
+    matched.tag !== "memo" ||
+    matched.type !== child.type ||
+    matched.hasRefSubtree === true ||
+    matched.hydrateExisting === true
+  ) {
+    return undefined;
+  }
+
+  const state = matched.memoizedState as MemoFiberState | undefined;
+
+  if (
+    state === undefined ||
+    state.hasDirtyInstanceDependencies !== false ||
+    state.hasUnflushedEffectDependencies !== false ||
+    state.hasRetainedInstanceDependencies !== false ||
+    !areMemoPropsEqual(
+      child.type as { compare?: (a: Record<string, unknown>, b: Record<string, unknown>) => boolean },
+      state.props,
+      child.props as Record<string, unknown>,
+    )
+  ) {
+    return undefined;
+  }
+
+  matched.pendingProps = child.props;
+  matched.flags = NoFlags;
+  matched.subtreeFlags = NoFlags;
+  matched.childListChanged = false;
+  matched.subtreeChildListChanged = false;
+  matched.hostChildListChanged = false;
+  matched.child = getSkippedChild(matched);
+  return matched;
+}
+
+// Fast path for a keyed list of memo-wrapped rows (e.g. `<RowMemo key={id} />`)
+// whose key order is UNCHANGED between renders — the js-framework-benchmark
+// "select row" and "partial update" shapes. Walks current fibers and new
+// children in lockstep: unchanged rows bail in place (no allocation, no general
+// keyed-reconcile machinery), changed rows re-render through the proven
+// per-child path. Any reorder / insert / delete / non-memo child / length change
+// makes it return undefined so the general reconcile takes over.
+function reconcileKeyedMemoRowHostChildren(
+  parent: Fiber,
+  currentFirstChild: Fiber | undefined,
+  children: readonly ReactCompatNode[],
+  runtime: RootRuntime | undefined,
+  path: string,
+  options: FiberHydrationOptions,
+): FiberReconcileResult | undefined {
+  if (
+    children.length === 0 ||
+    currentFirstChild === undefined ||
+    runtime === undefined ||
+    options.previousNodes !== undefined ||
+    !isKeyedMemoRowCandidate(children[0]) ||
+    !hasSameKeyOrderPrefix(currentFirstChild, children)
+  ) {
+    return undefined;
+  }
+
+  let currentKeyed: Fiber | undefined = currentFirstChild;
+  let first: Fiber | undefined;
+  let previous: Fiber | undefined;
+  let subtreeFlags = NoFlags;
+  let subtreeChildListChanged = false;
+  let hasRefSubtree = false;
+  let hasDisposableResources = false;
+  let dirtyChildren: Fiber[] | undefined;
+
+  for (let index = 0; index < children.length; index += 1) {
+    const child = children[index];
+
+    if (currentKeyed === undefined || !isKeyedMemoRowCandidate(child)) {
+      return undefined;
+    }
+
+    const matched = currentKeyed;
+    currentKeyed = currentKeyed.sibling;
+    const childElement = child as ReactCompatElement;
+
+    let fiber = tryReuseDependencyFreeKeyedMemoRow(matched, childElement);
+    if (fiber === undefined) {
+      const result = createHostFiber(
+        parent,
+        matched,
+        child,
+        childElement.key ?? undefined,
+        runtime,
+        getReconcileChildPath(path, child, index, options),
+        options,
+        false,
+      );
+      fiber = result.fiber;
+
+      if (fiber === undefined) {
+        return undefined;
+      }
+
+      if (fiber !== matched && fiber.alternate !== matched) {
+        markOptimizedChildForDeletion(parent, matched);
+      }
+    }
+
+    if (first === undefined) {
+      first = fiber;
+    } else if (previous !== undefined) {
+      previous.sibling = fiber;
+    }
+
+    fiber.return = parent;
+    fiber.sibling = undefined;
+    if (fiber.hasRefSubtree) {
+      hasRefSubtree = true;
+    }
+    if (fiber.hasDisposableResources) {
+      hasDisposableResources = true;
+    }
+    subtreeFlags |= fiber.flags | fiber.subtreeFlags;
+    subtreeChildListChanged =
+      subtreeChildListChanged || fiber.childListChanged || fiber.subtreeChildListChanged;
+    if (
+      fiber.tag === "memo" &&
+      (fiber.stateNode === undefined || typeof fiber.stateNode === "number")
+    ) {
+      fiber.stateNode = index;
+    }
+    if (hasHostCommitWork(fiber)) {
+      (dirtyChildren ??= []).push(fiber);
+    }
+    previous = fiber;
+  }
+
+  if (currentKeyed !== undefined) {
+    return undefined;
+  }
+
+  parent.hasRefSubtree = hasRefSubtree;
+  parent.hasDisposableResources = hasDisposableResources;
+  parent.subtreeFlags = subtreeFlags;
+  parent.subtreeChildListChanged = subtreeChildListChanged;
+  parent.childListChanged = false;
+  recordDirtyChildCommitHints(parent, dirtyChildren);
   return { fiber: first, consumed: 0 };
 }
 
