@@ -41,10 +41,17 @@ const reckonaSrcPlugin = {
   },
 };
 
+const ENTRY_BY_FRAMEWORK = {
+  react: "entry-react.ts",
+  mreact: "entry-mreact.ts",
+  "mreact-reactive": "entry-mreact-reactive.ts",
+};
+
 export async function build(framework, { sourcemap = false } = {}) {
   const distDir = join(here, "dist");
   mkdirSync(distDir, { recursive: true });
-  const entry = join(here, framework === "react" ? "entry-react.ts" : "entry-mreact.ts");
+  const entry = join(here, ENTRY_BY_FRAMEWORK[framework] ?? "entry-mreact.ts");
+  const usesLocalSrc = framework.startsWith("mreact");
   const outfile = join(distDir, `${framework}.js`);
   await esbuild.build({
     entryPoints: [entry],
@@ -57,7 +64,7 @@ export async function build(framework, { sourcemap = false } = {}) {
     sourcemap: sourcemap ? "linked" : false,
     define: { "process.env.NODE_ENV": '"production"', __DEV__: "false" },
     external: framework === "react" ? ["react", "react-dom", "react-dom/client"] : [],
-    plugins: framework === "mreact" ? [reckonaSrcPlugin] : [],
+    plugins: usesLocalSrc ? [reckonaSrcPlugin] : [],
     legalComments: "none",
     logLevel: "warning",
   });

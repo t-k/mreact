@@ -74,12 +74,17 @@ function printTable(rows) {
     lines.push(cells.join("\t"));
   }
   console.log(lines.join("\n"));
-  if (rows.length === 2) {
-    console.log("\nratio (col2/col1, <1 means col2 faster):");
+  if (rows.length >= 2) {
+    const base = rows[0];
+    console.log(`\nratio vs ${base.label} (<1 means faster than ${base.label}):`);
     for (const op of OPS) {
-      const a = rows[0].result?.[op]?.median;
-      const b = rows[1].result?.[op]?.median;
-      if (a && b) console.log(`  ${op}\t${(b / a).toFixed(3)}\t(${rows[0].label} ${a} vs ${rows[1].label} ${b})`);
+      const a = base.result?.[op]?.median;
+      if (!a) continue;
+      const cells = rows.slice(1).map((r) => {
+        const b = r.result?.[op]?.median;
+        return b ? `${r.label} ${(b / a).toFixed(2)}` : `${r.label} -`;
+      });
+      console.log(`  ${op.padEnd(14)}\t${base.label} ${a}\t${cells.join("\t")}`);
     }
   }
 }
@@ -97,7 +102,11 @@ function printVs(current, baseline, label) {
 }
 
 const opts = parseArgs(process.argv.slice(2));
-const targets = opts.target === "both" ? ["react", "mreact"] : [opts.target];
+const targets = opts.target === "both"
+  ? ["react", "mreact"]
+  : opts.target === "all"
+    ? ["react", "mreact", "mreact-reactive"]
+    : [opts.target];
 const rows = [];
 for (const t of targets) {
   const trialResults = [];

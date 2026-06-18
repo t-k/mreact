@@ -9,6 +9,14 @@ export interface Adapter {
   readonly memo: (component: unknown, areEqual?: (a: any, b: any) => boolean) => unknown;
   readonly useReducer: (reducer: any, initial: any) => [any, (action: any) => void];
   readonly flushSync: (cb: () => void) => void;
+  // When present, Row is built as a prop-bridged reactive-dom-block (the
+  // compiler-lowered form), updating bound text/class via cells instead of
+  // re-reconciling the row subtree.
+  readonly reactive?: {
+    createReactiveDomBlock: (render: (props: any) => { node: ChildNode; dispose?: () => void }, props: any) => unknown;
+    bindText: (node: Text, value: () => unknown, options?: { preserveInitial?: boolean }) => () => void;
+    effect: (fn: () => void) => () => void;
+  };
 }
 
 interface RowData {
@@ -106,22 +114,64 @@ export function createHarness(adapter: Adapter, container: Element) {
   function selectRow(id: number) { dispatch({ type: "select", id }); }
   function removeRow(id: number) { dispatch({ type: "remove", id }); }
 
-  const Row: any = memo(
-    function Row({ row, selected }: { row: RowData; selected: boolean }) {
-      return createElement(
-        "tr",
-        { className: selected ? "danger" : "", key: row.id },
-        createElement("td", { className: "col-md-1" }, row.id),
-        createElement("td", { className: "col-md-4" },
-          createElement("a", { onClick: () => selectRow(row.id) }, row.label)),
-        createElement("td", { className: "col-md-1" },
-          createElement("a", { onClick: () => removeRow(row.id) },
-            createElement("span", { "aria-hidden": "true", className: "glyphicon glyphicon-remove" }))),
-        createElement("td", { className: "col-md-6" }),
-      );
-    },
-    (p: any, n: any) => p.selected === n.selected && p.row === n.row,
-  );
+  const rowAreEqual = (p: any, n: any) => p.selected === n.selected && p.row === n.row;
+
+  const Row: any = adapter.reactive
+    ? memo(function Row(props: { row: RowData; selected: boolean }) {
+        const { createReactiveDomBlock, bindText, effect } = adapter.reactive!;
+        return createReactiveDomBlock((p: { row: RowData; selected: boolean }) => {
+          const tr = document.createElement("tr");
+          const td1 = document.createElement("td");
+          td1.className = "col-md-1";
+          const idText = document.createTextNode("");
+          td1.appendChild(idText);
+          const td2 = document.createElement("td");
+          td2.className = "col-md-4";
+          const a1 = document.createElement("a");
+          const labelText = document.createTextNode("");
+          a1.appendChild(labelText);
+          a1.addEventListener("click", () => selectRow(p.row.id));
+          td2.appendChild(a1);
+          const td3 = document.createElement("td");
+          td3.className = "col-md-1";
+          const a2 = document.createElement("a");
+          a2.addEventListener("click", () => removeRow(p.row.id));
+          const span = document.createElement("span");
+          span.setAttribute("aria-hidden", "true");
+          span.className = "glyphicon glyphicon-remove";
+          a2.appendChild(span);
+          td3.appendChild(a2);
+          const td4 = document.createElement("td");
+          td4.className = "col-md-6";
+          tr.append(td1, td2, td3, td4);
+          void bindText;
+          // One effect per block: all bindings read the same prop cell, so they
+          // would all re-run on any change anyway. Guard each write so an update
+          // only touches the DOM that actually changed, and dispose is 1 effect.
+          const dispose = effect(() => {
+            const row = p.row;
+            const id = String(row.id);
+            if (idText.data !== id) idText.data = id;
+            if (labelText.data !== row.label) labelText.data = row.label;
+            const cls = p.selected ? "danger" : "";
+            if (tr.className !== cls) tr.className = cls;
+          });
+          return { node: tr, dispose };
+        }, props);
+      }, rowAreEqual)
+    : memo(function Row({ row, selected }: { row: RowData; selected: boolean }) {
+        return createElement(
+          "tr",
+          { className: selected ? "danger" : "", key: row.id },
+          createElement("td", { className: "col-md-1" }, row.id),
+          createElement("td", { className: "col-md-4" },
+            createElement("a", { onClick: () => selectRow(row.id) }, row.label)),
+          createElement("td", { className: "col-md-1" },
+            createElement("a", { onClick: () => removeRow(row.id) },
+              createElement("span", { "aria-hidden": "true", className: "glyphicon glyphicon-remove" }))),
+          createElement("td", { className: "col-md-6" }),
+        );
+      }, rowAreEqual);
 
   function App(): unknown {
     const [state, dispatch] = useReducer(reduce, { rows: [], selected: null });
