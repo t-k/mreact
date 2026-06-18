@@ -304,6 +304,74 @@ async function runInteractions(page: Page, interactions: ReactFlowInteraction[])
       await page.waitForTimeout(150);
       await page.locator("[data-testid='react-flow-edge-toolbar-button']").first().click();
       await page.waitForTimeout(300);
+    } else if (interaction.run === "wheelZoomPanAndDoubleClick") {
+      const pane = await page.locator(".react-flow__pane").boundingBox();
+      if (pane !== null) {
+        await page.mouse.move(pane.x + pane.width * 0.5, pane.y + pane.height * 0.5);
+        await page.mouse.wheel(0, -320);
+        await page.waitForTimeout(150);
+        await page.mouse.down();
+        await page.mouse.move(pane.x + pane.width * 0.5 + 90, pane.y + pane.height * 0.5 + 45, {
+          steps: 8,
+        });
+        await page.mouse.up();
+        await page.waitForTimeout(150);
+        await page.mouse.dblclick(pane.x + pane.width * 0.4, pane.y + pane.height * 0.4);
+      }
+      await page.waitForTimeout(400);
+    } else if (interaction.run === "dragConstrainedNode") {
+      const box = await page.locator(".react-flow__node[data-id='constrained']").boundingBox();
+      if (box !== null) {
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.5 + 360, box.y + box.height * 0.5 + 260, {
+          steps: 10,
+        });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
+    } else if (interaction.run === "clickStoreApiButton") {
+      await page.locator("[data-testid='react-flow-store-api-button']").click();
+      await page.waitForTimeout(250);
+    } else if (interaction.run === "clickDynamicHandleButton") {
+      await page.locator("[data-testid='react-flow-dynamic-handle-button']").click();
+      await page.waitForTimeout(350);
+    } else if (interaction.run === "attemptInvalidThenValidConnection") {
+      await page
+        .locator(".react-flow__node[data-id='invalid-source'] .react-flow__handle.source[data-handleid='success']")
+        .click();
+      await page.waitForTimeout(150);
+      await page
+        .locator(".react-flow__node[data-id='validation-target'] .react-flow__handle.target[data-handleid='input']")
+        .click();
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(200);
+      await page
+        .locator(".react-flow__node[data-id='valid-source'] .react-flow__handle.source[data-handleid='success']")
+        .click();
+      await page.waitForTimeout(150);
+      await page
+        .locator(".react-flow__node[data-id='validation-target'] .react-flow__handle.target[data-handleid='input']")
+        .click();
+      await page.waitForTimeout(350);
+    } else if (interaction.run === "pressDeleteWithGuard") {
+      await page.keyboard.press("Delete");
+      await page.waitForTimeout(200);
+      await page.locator("[data-testid='react-flow-delete-guard-allow']").click();
+      await page.waitForTimeout(150);
+      await page.keyboard.press("Delete");
+      await page.waitForTimeout(350);
+    } else if (interaction.run === "dragSelectedNodes") {
+      const box = await page.locator(".react-flow__node[data-id='drag-selected-a']").boundingBox();
+      if (box !== null) {
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.5 + 95, box.y + box.height * 0.5 + 45, {
+          steps: 8,
+        });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
     }
   }
 }
@@ -365,6 +433,48 @@ async function readDomSummary(
       .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
       .filter((value) => value.length > 0)
       .sort();
+    const gestureText = Array.from(document.querySelectorAll("[data-gesture-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const constraintText = Array.from(document.querySelectorAll("[data-constraint-position]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const storeText = Array.from(document.querySelectorAll("[data-store-hook-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const dynamicHandleText = Array.from(
+      document.querySelectorAll("[data-dynamic-handle-count], [data-dynamic-handle-node-count]"),
+    )
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const validationText = Array.from(document.querySelectorAll("[data-validation-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const guardText = Array.from(document.querySelectorAll("[data-delete-guard-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const visibleText = Array.from(document.querySelectorAll("[data-visible-elements-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const selectionDragText = Array.from(document.querySelectorAll("[data-selection-drag-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const appearanceText = Array.from(document.querySelectorAll("[data-appearance-a11y-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const largeGraphText = Array.from(document.querySelectorAll("[data-large-graph-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
     const resizeNode = document.querySelector(".react-flow__node[data-id='resize']");
     if (resizeNode instanceof HTMLElement) {
       resizeText.push(
@@ -396,6 +506,16 @@ async function readDomSummary(
       selectionText,
       toolbarText,
       parentChildText,
+      gestureText,
+      constraintText,
+      storeText,
+      dynamicHandleText,
+      validationText,
+      guardText,
+      visibleText,
+      selectionDragText,
+      appearanceText,
+      largeGraphText,
       transform: viewport instanceof HTMLElement ? viewport.style.transform : "",
       classes: uniqueClasses,
       consoleMessages: capturedConsoleMessages,
@@ -423,6 +543,16 @@ export function emptyDomSummary(): ReactFlowDomSummary {
     selectionText: [],
     toolbarText: [],
     parentChildText: [],
+    gestureText: [],
+    constraintText: [],
+    storeText: [],
+    dynamicHandleText: [],
+    validationText: [],
+    guardText: [],
+    visibleText: [],
+    selectionDragText: [],
+    appearanceText: [],
+    largeGraphText: [],
     transform: "",
     classes: [],
     consoleMessages: [],
@@ -453,6 +583,16 @@ export function summariesMatch(
     sameStringArray(react.selectionText, compat.selectionText) &&
     sameStringArray(react.toolbarText, compat.toolbarText) &&
     sameStringArray(react.parentChildText, compat.parentChildText) &&
+    sameStringArray(react.gestureText, compat.gestureText) &&
+    sameStringArray(react.constraintText, compat.constraintText) &&
+    sameStringArray(react.storeText, compat.storeText) &&
+    sameStringArray(react.dynamicHandleText, compat.dynamicHandleText) &&
+    sameStringArray(react.validationText, compat.validationText) &&
+    sameStringArray(react.guardText, compat.guardText) &&
+    sameStringArray(react.visibleText, compat.visibleText) &&
+    sameStringArray(react.selectionDragText, compat.selectionDragText) &&
+    sameStringArray(react.appearanceText, compat.appearanceText) &&
+    sameStringArray(react.largeGraphText, compat.largeGraphText) &&
     sameStringArray(react.classes, compat.classes) &&
     react.consoleMessages.length === 0 &&
     compat.consoleMessages.length === 0

@@ -98,6 +98,19 @@ body {
   text-align: center;
 }
 
+.dynamic-node {
+  position: relative;
+  display: grid;
+  min-width: 170px;
+  gap: 6px;
+  border: 1px solid #2f4d67;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1b2433;
+  padding: 12px 14px;
+  text-align: center;
+}
+
 .edge-portal-label {
   position: absolute;
   border: 1px solid #2f4d67;

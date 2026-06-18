@@ -19,6 +19,16 @@ describe("React Flow compat fixtures", () => {
       "react-flow-edge-keyboard-delete",
       "react-flow-node-edge-toolbar",
       "react-flow-parent-child-extent",
+      "react-flow-viewport-user-gestures",
+      "react-flow-drag-constraints",
+      "react-flow-store-hooks",
+      "react-flow-dynamic-handles",
+      "react-flow-connection-validation",
+      "react-flow-delete-guard",
+      "react-flow-visible-elements",
+      "react-flow-selection-drag",
+      "react-flow-appearance-a11y",
+      "react-flow-large-graph",
     ]);
   });
 
@@ -80,6 +90,41 @@ describe("React Flow compat fixtures", () => {
         .find((fixture) => fixture.id === "react-flow-node-edge-toolbar")
         ?.interactions?.map((interaction) => interaction.run),
     ).toEqual(["clickToolbarButtons"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-viewport-user-gestures")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["wheelZoomPanAndDoubleClick"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-drag-constraints")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["dragConstrainedNode"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-store-hooks")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickStoreApiButton"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-dynamic-handles")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickDynamicHandleButton"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-connection-validation")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["attemptInvalidThenValidConnection"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-delete-guard")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["pressDeleteWithGuard"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-selection-drag")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["dragSelectedNodes"]);
   });
 
   test("cover basic canvas, custom handles, controlled state, deep interaction, and hook features", () => {
@@ -101,5 +146,15 @@ describe("React Flow compat fixtures", () => {
     expect(features.has("Edge keyboard deletion and onEdgesDelete")).toBe(true);
     expect(features.has("NodeToolbar and EdgeToolbar portal controls")).toBe(true);
     expect(features.has("Parent child nodes with constrained extent")).toBe(true);
+    expect(features.has("Viewport pan zoom wheel and double click gestures")).toBe(true);
+    expect(features.has("Snap grid node extent and auto pan drag options")).toBe(true);
+    expect(features.has("useStore and useStoreApi direct access")).toBe(true);
+    expect(features.has("useUpdateNodeInternals with dynamic handles")).toBe(true);
+    expect(features.has("Connection validation and loose connection mode")).toBe(true);
+    expect(features.has("onBeforeDelete cancel and modify flow")).toBe(true);
+    expect(features.has("onlyRenderVisibleElements culling")).toBe(true);
+    expect(features.has("Selection drag callback sequence")).toBe(true);
+    expect(features.has("Color mode proOptions and ariaLabelConfig")).toBe(true);
+    expect(features.has("Large graph render and summary stability")).toBe(true);
   });
 });

@@ -32,6 +32,16 @@ describe("React Flow coverage ledger", () => {
         "Keyboard deletion must remove selected edges and call edge delete callbacks",
         "NodeToolbar and EdgeToolbar portal controls must render and dispatch user actions",
         "Parent child nodes must mount with constrained extent and preserve relative positioning",
+        "User pan, wheel zoom, and double click zoom gestures must update viewport state",
+        "Snap grid, node extent, and auto pan drag options must commit bounded node positions",
+        "Direct useStore and useStoreApi subscriptions must update with React Flow store changes",
+        "useUpdateNodeInternals must refresh dynamic handle registration",
+        "Connection validation and loose connection mode must reject and accept expected handle pairs",
+        "onBeforeDelete must be able to cancel and modify deletion results",
+        "onlyRenderVisibleElements must cull offscreen nodes without breaking visible nodes",
+        "Selection drag callbacks must fire for selected node drag sequences",
+        "Color mode, proOptions, and aria label configuration must apply without runtime warnings",
+        "Large graph rendering must preserve node and edge counts without console issues",
       ]),
     );
   });
@@ -56,6 +66,16 @@ describe("React Flow coverage ledger", () => {
         "react-flow-edge-keyboard-delete",
         "react-flow-node-edge-toolbar",
         "react-flow-parent-child-extent",
+        "react-flow-viewport-user-gestures",
+        "react-flow-drag-constraints",
+        "react-flow-store-hooks",
+        "react-flow-dynamic-handles",
+        "react-flow-connection-validation",
+        "react-flow-delete-guard",
+        "react-flow-visible-elements",
+        "react-flow-selection-drag",
+        "react-flow-appearance-a11y",
+        "react-flow-large-graph",
       ]),
     );
   });
@@ -83,5 +103,15 @@ describe("React Flow coverage ledger", () => {
     expect(statusByObligation.get("RF-EDGE-DELETE-001")).toBe("covered");
     expect(statusByObligation.get("RF-TOOLBAR-001")).toBe("covered");
     expect(statusByObligation.get("RF-PARENT-CHILD-001")).toBe("covered");
+    expect(statusByObligation.get("RF-VIEWPORT-GESTURE-001")).toBe("covered");
+    expect(statusByObligation.get("RF-DRAG-CONSTRAINT-001")).toBe("covered");
+    expect(statusByObligation.get("RF-STORE-HOOK-001")).toBe("covered");
+    expect(statusByObligation.get("RF-DYNAMIC-HANDLE-001")).toBe("covered");
+    expect(statusByObligation.get("RF-CONNECTION-VALIDATION-001")).toBe("covered");
+    expect(statusByObligation.get("RF-DELETE-GUARD-001")).toBe("covered");
+    expect(statusByObligation.get("RF-VISIBLE-ELEMENTS-001")).toBe("covered");
+    expect(statusByObligation.get("RF-SELECTION-DRAG-001")).toBe("covered");
+    expect(statusByObligation.get("RF-APPEARANCE-A11Y-001")).toBe("covered");
+    expect(statusByObligation.get("RF-LARGE-GRAPH-001")).toBe("covered");
   });
 });

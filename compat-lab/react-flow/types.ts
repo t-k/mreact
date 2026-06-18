@@ -23,7 +23,17 @@ export type ReactFlowRiskTag =
   | "selection-interaction"
   | "edge-delete"
   | "toolbar-portal"
-  | "parent-child";
+  | "parent-child"
+  | "viewport-gesture"
+  | "drag-constraint"
+  | "store-hook"
+  | "dynamic-handle"
+  | "connection-validation"
+  | "delete-guard"
+  | "visible-elements"
+  | "selection-drag"
+  | "appearance-a11y"
+  | "large-graph";
 
 export interface ReactFlowInteraction {
   name: string;
@@ -39,7 +49,14 @@ export interface ReactFlowInteraction {
     | "clickViewportButton"
     | "dragSelectionBox"
     | "pressDeleteEdgeKey"
-    | "clickToolbarButtons";
+    | "clickToolbarButtons"
+    | "wheelZoomPanAndDoubleClick"
+    | "dragConstrainedNode"
+    | "clickStoreApiButton"
+    | "clickDynamicHandleButton"
+    | "attemptInvalidThenValidConnection"
+    | "pressDeleteWithGuard"
+    | "dragSelectedNodes";
 }
 
 export interface ReactFlowFixture {
@@ -73,6 +90,16 @@ export interface ReactFlowDomSummary {
   selectionText: string[];
   toolbarText: string[];
   parentChildText: string[];
+  gestureText: string[];
+  constraintText: string[];
+  storeText: string[];
+  dynamicHandleText: string[];
+  validationText: string[];
+  guardText: string[];
+  visibleText: string[];
+  selectionDragText: string[];
+  appearanceText: string[];
+  largeGraphText: string[];
   transform: string;
   classes: string[];
   consoleMessages: string[];

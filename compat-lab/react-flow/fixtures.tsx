@@ -2,6 +2,7 @@ import {
   addEdge,
   BaseEdge,
   Background,
+  ConnectionMode,
   Controls,
   EdgeToolbar,
   EdgeLabelRenderer,
@@ -21,6 +22,9 @@ import {
   useNodesInitialized,
   useNodesState,
   useReactFlow,
+  useStore,
+  useStoreApi,
+  useUpdateNodeInternals,
   useViewport,
   type Connection,
   type Edge,
@@ -40,6 +44,8 @@ type LabelEdgeData = Record<string, unknown> & { label: string };
 type LabelEdge = Edge<LabelEdgeData, "labeled">;
 type ToolbarNodeData = Record<string, unknown> & { label: string; onAction: () => void };
 type ToolbarNode = Node<ToolbarNodeData, "toolbar">;
+type DynamicNodeData = Record<string, unknown> & { label: string; handleCount: number; onAddHandle: () => void };
+type DynamicNode = Node<DynamicNodeData, "dynamic">;
 
 const basicNodes: Node<BasicNodeData>[] = [
   {
@@ -358,6 +364,151 @@ const parentChildNodes: Node<BasicNodeData>[] = [
   },
 ];
 
+const viewportGestureNodes: Node<BasicNodeData>[] = [
+  {
+    id: "gesture-a",
+    type: "input",
+    position: { x: 100, y: 120 },
+    data: { label: "Gesture A" },
+  },
+  {
+    id: "gesture-b",
+    type: "output",
+    position: { x: 520, y: 260 },
+    data: { label: "Gesture B" },
+  },
+];
+
+const constrainedNodes: Node<BasicNodeData>[] = [
+  {
+    id: "constrained",
+    position: { x: 40, y: 40 },
+    data: { label: "Constrained" },
+  },
+];
+
+const storeHookNodes: Node<BasicNodeData>[] = [
+  {
+    id: "store-a",
+    position: { x: 120, y: 130 },
+    data: { label: "Store A" },
+  },
+  {
+    id: "store-b",
+    position: { x: 420, y: 210 },
+    data: { label: "Store B" },
+  },
+];
+
+const dynamicHandleNodes: DynamicNode[] = [
+  {
+    id: "dynamic-node",
+    type: "dynamic",
+    position: { x: 280, y: 160 },
+    data: { label: "Dynamic handles", handleCount: 1, onAddHandle: () => undefined },
+  },
+];
+
+const validationNodes: DecisionNode[] = [
+  {
+    id: "invalid-source",
+    type: "decision",
+    position: { x: 80, y: 110 },
+    data: { label: "Invalid", status: "reject" },
+  },
+  {
+    id: "valid-source",
+    type: "decision",
+    position: { x: 80, y: 260 },
+    data: { label: "Valid", status: "accept" },
+  },
+  {
+    id: "validation-target",
+    type: "decision",
+    position: { x: 500, y: 190 },
+    data: { label: "Target", status: "target" },
+  },
+];
+
+const deleteGuardNodes: Node<BasicNodeData>[] = [
+  {
+    id: "guard-keep",
+    position: { x: 110, y: 150 },
+    data: { label: "Guard keep" },
+  },
+  {
+    id: "guard-remove",
+    position: { x: 420, y: 150 },
+    data: { label: "Guard remove" },
+  },
+];
+
+const visibleElementNodes: Node<BasicNodeData>[] = [
+  {
+    id: "visible-a",
+    position: { x: 80, y: 90 },
+    data: { label: "Visible A" },
+  },
+  {
+    id: "visible-b",
+    position: { x: 320, y: 180 },
+    data: { label: "Visible B" },
+  },
+  {
+    id: "offscreen-a",
+    position: { x: 2800, y: 2800 },
+    data: { label: "Offscreen A" },
+  },
+  {
+    id: "offscreen-b",
+    position: { x: -2400, y: -2200 },
+    data: { label: "Offscreen B" },
+  },
+];
+
+const selectionDragNodes: Node<BasicNodeData>[] = [
+  {
+    id: "drag-selected-a",
+    selected: true,
+    position: { x: 120, y: 140 },
+    data: { label: "Drag selected A" },
+  },
+  {
+    id: "drag-selected-b",
+    selected: true,
+    position: { x: 410, y: 180 },
+    data: { label: "Drag selected B" },
+  },
+];
+
+const appearanceNodes: Node<BasicNodeData>[] = [
+  {
+    id: "appearance-a",
+    type: "input",
+    position: { x: 150, y: 150 },
+    data: { label: "Appearance A" },
+  },
+  {
+    id: "appearance-b",
+    type: "output",
+    position: { x: 510, y: 150 },
+    data: { label: "Appearance B" },
+  },
+];
+
+const largeGraphNodes: Node<BasicNodeData>[] = Array.from({ length: 48 }, (_, index) => ({
+  id: `large-${index}`,
+  position: { x: (index % 12) * 135, y: Math.floor(index / 12) * 105 },
+  data: { label: `Node ${index}` },
+}));
+
+const largeGraphEdges: Edge[] = Array.from({ length: 47 }, (_, index) => ({
+  id: `large-edge-${index}`,
+  source: `large-${index}`,
+  target: `large-${index + 1}`,
+  type: "smoothstep",
+}));
+
 function FlowFrame(props: { children: ReactNode }) {
   return <section className="react-flow-frame">{props.children}</section>;
 }
@@ -378,6 +529,7 @@ const nodeTypes = {
   decision: DecisionNodeComponent,
   resizable: ResizableNodeComponent,
   toolbar: ToolbarNodeComponent,
+  dynamic: DynamicNodeComponent,
 };
 
 const edgeTypes = {
@@ -447,6 +599,33 @@ function ToolbarNodeComponent(props: NodeProps<ToolbarNode>) {
       <Handle type="target" position={Position.Left} />
       <strong>{props.data.label}</strong>
       <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
+function DynamicNodeComponent(props: NodeProps<DynamicNode>) {
+  return (
+    <div className="dynamic-node">
+      <Handle id="input" type="target" position={Position.Left} />
+      <strong>{props.data.label}</strong>
+      <span data-dynamic-handle-node-count>{props.data.handleCount}</span>
+      <button
+        className="react-flow-lab-button nodrag"
+        data-testid="react-flow-dynamic-handle-button"
+        type="button"
+        onClick={props.data.onAddHandle}
+      >
+        Add handle
+      </button>
+      {Array.from({ length: props.data.handleCount }, (_, index) => (
+        <Handle
+          id={`dynamic-output-${index}`}
+          key={index}
+          type="source"
+          position={Position.Right}
+          style={{ top: 28 + index * 20 }}
+        />
+      ))}
     </div>
   );
 }
@@ -976,6 +1155,382 @@ function ParentChildExtentFixture() {
   );
 }
 
+function ViewportUserGesturesFixture() {
+  const [gesture, setGesture] = useState("idle");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={viewportGestureNodes}
+          defaultEdges={[]}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          onMoveEnd={(_event, viewport) => {
+            setGesture(`${Math.round(viewport.x)},${Math.round(viewport.y)},${viewport.zoom.toFixed(2)}`);
+          }}
+          panOnDrag
+          zoomOnScroll
+          zoomOnDoubleClick
+          zoomOnPinch={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Gesture: <span data-gesture-state>{gesture}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function DragConstraintsFixture() {
+  const [position, setPosition] = useState("40,40");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={constrainedNodes}
+          defaultEdges={[]}
+          defaultViewport={{ x: 80, y: 70, zoom: 1 }}
+          snapToGrid
+          snapGrid={[25, 25]}
+          nodeExtent={[
+            [0, 0],
+            [150, 150],
+          ]}
+          autoPanOnNodeDrag
+          autoPanSpeed={6}
+          onNodeDragStop={(_event, node) => {
+            setPosition(`${Math.round(node.position.x)},${Math.round(node.position.y)}`);
+          }}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Constrained: <span data-constraint-position>{position}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function StoreHooksPanel() {
+  const nodeCount = useStore((state) => state.nodes.length);
+  const store = useStoreApi();
+  const [apiRead, setApiRead] = useState("unread");
+
+  return (
+    <Panel position="top-left">
+      Store: <span data-store-hook-state>{nodeCount}:{apiRead}</span>
+      <button
+        className="react-flow-lab-button nodrag"
+        data-testid="react-flow-store-api-button"
+        type="button"
+        onClick={() => {
+          setApiRead(String(store.getState().nodeLookup.size));
+        }}
+      >
+        Read store
+      </button>
+    </Panel>
+  );
+}
+
+function StoreHooksFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={storeHookNodes}
+          defaultEdges={[]}
+          fitView
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <StoreHooksPanel />
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function DynamicHandlesFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <DynamicHandlesFlow />
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function DynamicHandlesFlow() {
+  const updateNodeInternals = useUpdateNodeInternals();
+  const [handleCount, setHandleCount] = useState(1);
+  const nodes: DynamicNode[] = useMemo(
+    () => [
+      {
+        ...dynamicHandleNodes[0],
+        data: {
+          label: "Dynamic handles",
+          handleCount,
+          onAddHandle: () => {
+            setHandleCount(3);
+            window.requestAnimationFrame(() => updateNodeInternals("dynamic-node"));
+          },
+        },
+      },
+    ],
+    [handleCount, updateNodeInternals],
+  );
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={[]}
+      nodeTypes={nodeTypes}
+      fitView
+      nodesDraggable={false}
+      panOnDrag={false}
+      zoomOnScroll={false}
+      zoomOnPinch={false}
+      zoomOnDoubleClick={false}
+    >
+      <Background />
+      <Panel position="top-left">
+        Handles: <span data-dynamic-handle-count>{handleCount}</span>
+      </Panel>
+    </ReactFlow>
+  );
+}
+
+function ConnectionValidationFixture() {
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [accepted, setAccepted] = useState(0);
+  const [validChecks, setValidChecks] = useState(0);
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={validationNodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          onEdgesChange={onEdgesChange}
+          onConnect={(connection) => {
+            setAccepted((count) => count + 1);
+            setEdges((currentEdges) =>
+              addEdge({ ...connection, id: `validated-${currentEdges.length}`, type: "smoothstep" }, currentEdges),
+            );
+          }}
+          isValidConnection={(connection) => {
+            setValidChecks((count) => count + 1);
+            return connection.source === "valid-source";
+          }}
+          connectionMode={ConnectionMode.Loose}
+          connectOnClick
+          fitView
+          elementsSelectable={false}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Validation: <span data-validation-state>{accepted}:{edges.length}:{validChecks > 0 ? "checked" : "idle"}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function DeleteGuardFixture() {
+  const [nodes, _setNodes, onNodesChange] = useNodesState(
+    deleteGuardNodes.map((node) => ({ ...node, selected: true })),
+  );
+  const [allowDelete, setAllowDelete] = useState(false);
+  const [guard, setGuard] = useState("idle");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={nodes}
+          edges={[]}
+          onNodesChange={onNodesChange}
+          onBeforeDelete={({ nodes: deletedNodes }) => {
+            if (!allowDelete) {
+              setGuard("canceled");
+              return false;
+            }
+
+            const allowedNodes = deletedNodes.filter((node) => node.id === "guard-remove");
+            setGuard(`modified:${allowedNodes.map((node) => node.id).join(",")}`);
+            return { nodes: allowedNodes, edges: [] };
+          }}
+          fitView
+          deleteKeyCode={["Backspace", "Delete"]}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Guard: <span data-delete-guard-state>{guard}:{nodes.length}</span>
+            <button
+              className="react-flow-lab-button nodrag"
+              data-testid="react-flow-delete-guard-allow"
+              type="button"
+              onClick={() => setAllowDelete(true)}
+            >
+              Allow delete
+            </button>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function VisibleElementsFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={visibleElementNodes}
+          defaultEdges={[]}
+          defaultViewport={{ x: 120, y: 100, zoom: 1 }}
+          onlyRenderVisibleElements
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Visible: <span data-visible-elements-state>2-of-4</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function SelectionDragFixture() {
+  const [dragState, setDragState] = useState("idle");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={selectionDragNodes}
+          defaultEdges={[]}
+          fitView
+          onSelectionDragStart={(_event, nodes) => {
+            setDragState(`start:${nodes.length}`);
+          }}
+          onSelectionDrag={(_event, nodes) => {
+            if (nodes.length > 0) {
+              setDragState(`drag:${nodes.length}`);
+            }
+          }}
+          onSelectionDragStop={(_event, nodes) => {
+            setDragState(`stop:${nodes.length}`);
+          }}
+          nodesConnectable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Selection drag: <span data-selection-drag-state>{dragState}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function AppearanceA11yFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={appearanceNodes}
+          edges={[
+            {
+              id: "appearance-edge",
+              source: "appearance-a",
+              target: "appearance-b",
+              type: "smoothstep",
+            },
+          ]}
+          fitView
+          colorMode="dark"
+          proOptions={{ hideAttribution: true }}
+          ariaLabelConfig={{
+            controls: "Appearance controls",
+            "zoom-in": "Zoom in appearance fixture",
+            "zoom-out": "Zoom out appearance fixture",
+            "fit-view": "Fit appearance fixture",
+          }}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Controls />
+          <Panel position="top-left">
+            Appearance: <span data-appearance-a11y-state>dark:no-attribution</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function LargeGraphFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={largeGraphNodes}
+          defaultEdges={largeGraphEdges}
+          fitView
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Large: <span data-large-graph-state>{largeGraphNodes.length}:{largeGraphEdges.length}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
 export const reactFlowFixtures: ReactFlowFixture[] = [
   {
     id: "react-flow-basic-canvas",
@@ -1205,5 +1760,154 @@ export const reactFlowFixtures: ReactFlowFixture[] = [
     riskTags: ["parent-child", "layout-measurement", "context-store"],
     viewport: { width: 920, height: 620 },
     render: () => <ParentChildExtentFixture />,
+  },
+  {
+    id: "react-flow-viewport-user-gestures",
+    packageName: "@xyflow/react",
+    title: "React Flow viewport user gestures",
+    description: "Uses wheel zoom, pane drag panning, and double click zoom to update viewport state.",
+    features: ["Viewport pan zoom wheel and double click gestures", "ReactFlow nodes and edges"],
+    riskTags: ["viewport-gesture", "viewport-transform", "pointer-interaction", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <ViewportUserGesturesFixture />,
+    interactions: [
+      {
+        name: "wheel-zoom-pan-and-double-click",
+        description: "Wheel zoom, drag the pane, then double click to zoom.",
+        run: "wheelZoomPanAndDoubleClick",
+      },
+    ],
+  },
+  {
+    id: "react-flow-drag-constraints",
+    packageName: "@xyflow/react",
+    title: "React Flow drag constraints",
+    description: "Drags a node with snap grid, node extent, and auto pan options enabled.",
+    features: ["Snap grid node extent and auto pan drag options", "Node drag position updates"],
+    riskTags: ["drag-constraint", "node-drag", "pointer-interaction", "controlled-state"],
+    viewport: { width: 920, height: 620 },
+    render: () => <DragConstraintsFixture />,
+    interactions: [
+      {
+        name: "drag-constrained-node",
+        description: "Drag the constrained node beyond its allowed extent.",
+        run: "dragConstrainedNode",
+      },
+    ],
+  },
+  {
+    id: "react-flow-store-hooks",
+    packageName: "@xyflow/react",
+    title: "React Flow store hooks",
+    description: "Reads React Flow state with useStore and useStoreApi.",
+    features: ["useStore and useStoreApi direct access", "ReactFlow nodes and edges"],
+    riskTags: ["store-hook", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <StoreHooksFixture />,
+    interactions: [
+      {
+        name: "click-store-api-button",
+        description: "Read the store API from a panel button after mount.",
+        run: "clickStoreApiButton",
+      },
+    ],
+  },
+  {
+    id: "react-flow-dynamic-handles",
+    packageName: "@xyflow/react",
+    title: "React Flow dynamic handles",
+    description: "Adds handles at runtime and refreshes node internals.",
+    features: ["useUpdateNodeInternals with dynamic handles", "Custom node with Handle and Position"],
+    riskTags: ["dynamic-handle", "handle-registration", "custom-node", "layout-measurement"],
+    viewport: { width: 920, height: 620 },
+    render: () => <DynamicHandlesFixture />,
+    interactions: [
+      {
+        name: "click-dynamic-handle-button",
+        description: "Add runtime handles and update node internals.",
+        run: "clickDynamicHandleButton",
+      },
+    ],
+  },
+  {
+    id: "react-flow-connection-validation",
+    packageName: "@xyflow/react",
+    title: "React Flow connection validation",
+    description: "Attempts one rejected and one accepted click connection with loose connection mode.",
+    features: ["Connection validation and loose connection mode", "connectOnClick and addEdge controlled updates"],
+    riskTags: ["connection-validation", "connection", "handle-registration", "controlled-state"],
+    viewport: { width: 920, height: 620 },
+    render: () => <ConnectionValidationFixture />,
+    interactions: [
+      {
+        name: "attempt-invalid-then-valid-connection",
+        description: "Click handles for a rejected connection, then a valid connection.",
+        run: "attemptInvalidThenValidConnection",
+      },
+    ],
+  },
+  {
+    id: "react-flow-delete-guard",
+    packageName: "@xyflow/react",
+    title: "React Flow delete guard",
+    description: "Cancels one deletion and then modifies the allowed delete result with onBeforeDelete.",
+    features: ["onBeforeDelete cancel and modify flow", "Keyboard deletion and onNodesDelete"],
+    riskTags: ["delete-guard", "keyboard-interaction", "controlled-state"],
+    viewport: { width: 920, height: 620 },
+    render: () => <DeleteGuardFixture />,
+    interactions: [
+      {
+        name: "press-delete-with-guard",
+        description: "Press Delete once to cancel, enable deletion, then press Delete again.",
+        run: "pressDeleteWithGuard",
+      },
+    ],
+  },
+  {
+    id: "react-flow-visible-elements",
+    packageName: "@xyflow/react",
+    title: "React Flow visible elements",
+    description: "Uses onlyRenderVisibleElements with offscreen nodes.",
+    features: ["onlyRenderVisibleElements culling", "ReactFlow nodes and edges"],
+    riskTags: ["visible-elements", "layout-measurement", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <VisibleElementsFixture />,
+  },
+  {
+    id: "react-flow-selection-drag",
+    packageName: "@xyflow/react",
+    title: "React Flow selection drag",
+    description: "Drags selected nodes and records selection drag callback state.",
+    features: ["Selection drag callback sequence", "Selection box and onSelectionChange"],
+    riskTags: ["selection-drag", "selection-interaction", "pointer-interaction"],
+    viewport: { width: 920, height: 620 },
+    render: () => <SelectionDragFixture />,
+    interactions: [
+      {
+        name: "drag-selected-nodes",
+        description: "Drag a selected node group to fire selection drag callbacks.",
+        run: "dragSelectedNodes",
+      },
+    ],
+  },
+  {
+    id: "react-flow-appearance-a11y",
+    packageName: "@xyflow/react",
+    title: "React Flow appearance and accessibility",
+    description: "Applies dark color mode, hidden attribution, Controls, and aria label configuration.",
+    features: ["Color mode proOptions and ariaLabelConfig", "Background, Controls, MiniMap, and Panel"],
+    riskTags: ["appearance-a11y", "keyboard-interaction", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <AppearanceA11yFixture />,
+  },
+  {
+    id: "react-flow-large-graph",
+    packageName: "@xyflow/react",
+    title: "React Flow large graph",
+    description: "Renders a larger graph and verifies summary counts remain stable.",
+    features: ["Large graph render and summary stability", "ReactFlow nodes and edges"],
+    riskTags: ["large-graph", "svg-edge-rendering", "layout-measurement"],
+    viewport: { width: 920, height: 620 },
+    render: () => <LargeGraphFixture />,
   },
 ];
