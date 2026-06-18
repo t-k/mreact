@@ -1,7 +1,7 @@
 // GENERATED from main.tsx by the mreact compiler (compat mode, Option C).
 // Source of truth is main.tsx; regenerate, do not hand-edit. Phase 3 experiment.
 import { jsx as _jsx, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
-import { bindProp as _bindProp, bindText as _bindText } from "@reckona/mreact-reactive-dom";
+import { effect as _effect } from "@reckona/mreact-reactive-dom";
 import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
 const adjectives = [
 	"pretty",
@@ -202,11 +202,9 @@ requireElement("swaprows").addEventListener("click", swapRowsAtBenchPositions);
 function Row(props) {
   return _createReactiveDomBlock((props) => {
     const _tr = document.createElement("tr");
-    const _bind = _bindProp(_tr, "className", () => (props.selected ? "danger" : ""));
     const _td = document.createElement("td");
     _td.className = "col-md-1";
     const _text = document.createTextNode("");
-    const _bind$1 = _bindText(_text, () => (props.row.id), { preserveInitial: false });
     _td.appendChild(_text);
     _tr.appendChild(_td);
     const _td$1 = document.createElement("td");
@@ -214,7 +212,6 @@ function Row(props) {
     const _a = document.createElement("a");
     _a.addEventListener("click", () => selectRow(props.row.id));
     const _text$1 = document.createTextNode("");
-    const _bind$2 = _bindText(_text$1, () => (props.row.label), { preserveInitial: false });
     _a.appendChild(_text$1);
     _td$1.appendChild(_a);
     _tr.appendChild(_td$1);
@@ -231,8 +228,17 @@ function Row(props) {
     const _td$3 = document.createElement("td");
     _td$3.className = "col-md-6";
     _tr.appendChild(_td$3);
-    const _dispose = () => { _bind(); _bind$1(); _bind$2(); };
+    const _dispose = _effect(() => {
+      const _r = (props.selected ? "danger" : "");
+      const _v = _r == null ? "" : String(_r);
+      if (_tr.className !== _v) _tr.className = _v;
+      const _r$1 = (props.row.id);
+      const _v$1 = _r$1 == null ? "" : String(_r$1);
+      if (_text.data !== _v$1) _text.data = _v$1;
+      const _r$2 = (props.row.label);
+      const _v$2 = _r$2 == null ? "" : String(_r$2);
+      if (_text$1.data !== _v$2) _text$1.data = _v$2;
+    });
     return { node: _tr, dispose: _dispose };
   }, props);
 }
-
