@@ -340,7 +340,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -427,6 +427,10 @@ function getClientRuntimeValue(importedName: string): unknown {
 
   if (importedName === "insertDynamic") {
     return insertDynamic;
+  }
+
+  if (importedName === "effect") {
+    return effect;
   }
 
   throw new Error(`Unsupported client runtime import: ${importedName}`);

@@ -25,10 +25,9 @@ describe("react-compat prop reactive DOM block lowering", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    // Imports: createReactiveDomBlock (compat) + bindText/bindProp (reactive-dom).
+    // Imports: createReactiveDomBlock (compat) + a single effect (reactive-dom).
     expect(output.code).toContain("createReactiveDomBlock");
-    expect(output.code).toContain("bindProp");
-    expect(output.code).toContain("bindText");
+    expect(output.code).toContain("effect");
     // The block closure parameter shadows `props` (the reactive proxy)...
     expect(output.code).toMatch(/createReactiveDomBlock\(\(props\) => \{/);
     // ...and the incoming props object is passed as the block props.
@@ -37,11 +36,12 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain('document.createElement("tr")');
     expect(output.code).toContain('document.createElement("td")');
     expect(output.code).toContain('document.createElement("a")');
-    // Dynamic className bound via bindProp reading the proxy verbatim.
-    expect(output.code).toMatch(/bindProp\([\w$]+, "className", \(\) => \(props\.selected \? "danger" : ""\)\)/);
-    // Text expressions bound verbatim from props.
-    expect(output.code).toContain("() => (props.row.id)");
-    expect(output.code).toContain("() => (props.row.label)");
+    // One effect drives all bindings, reading the proxy verbatim.
+    expect(output.code).toMatch(/= _effect\(\(\) => \{/);
+    expect(output.code).toContain('(props.selected ? "danger" : "")');
+    expect(output.code).toContain("(props.row.id)");
+    expect(output.code).toContain("(props.row.label)");
+    expect(output.code).toMatch(/\.className !== /);
     // Event handler reads current props lazily (verbatim, references the proxy).
     expect(output.code).toContain('addEventListener("click", () => selectRow(props.row.id))');
   });

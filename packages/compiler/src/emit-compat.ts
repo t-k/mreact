@@ -126,8 +126,7 @@ function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[
     }
 
     if (getPropReactiveDomBlock(component) !== undefined) {
-      specifiers.add("bindText");
-      specifiers.add("bindProp");
+      specifiers.add("effect");
     }
   }
 
@@ -140,6 +139,7 @@ interface CompatHelperNames {
   REACTIVE_TEXT_BINDING_META?: string;
   bindText?: string;
   bindProp?: string;
+  effect?: string;
   createReactiveDomBlock?: string;
   createTemplate?: string;
   jsx?: string;
@@ -175,6 +175,11 @@ function allocateHelperNames(
 
     if (specifier === "bindProp") {
       helperNames.bindProp = allocator("_bindProp");
+      continue;
+    }
+
+    if (specifier === "effect") {
+      helperNames.effect = allocator("_effect");
       continue;
     }
 
@@ -344,7 +349,7 @@ function createImportGroups(
   }
 
   for (const specifier of reactiveDomSpecifiers) {
-    const localName = helperNames[specifier as "bindText" | "bindProp" | "createTemplate"] ?? `_${specifier}`;
+    const localName = helperNames[specifier as "bindText" | "bindProp" | "effect" | "createTemplate"] ?? `_${specifier}`;
     addImportSpecifier(groups, REACTIVE_DOM_SOURCE, specifier, localName);
   }
 
@@ -1005,8 +1010,15 @@ function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
     return false;
   }
 
-  if (node.attributes.some((attr) => attr.kind === "spread-attr")) {
-    return false;
+  for (const attr of node.attributes) {
+    if (attr.kind === "spread-attr") {
+      return false;
+    }
+    // Dynamic attributes are applied as properties in the block's single effect,
+    // which has no url-safety handling; restrict to the safe property attributes.
+    if (attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor") {
+      return false;
+    }
   }
 
   return node.children.every(isHostOnlyPropBlockNode);
@@ -1028,6 +1040,12 @@ function propBlockHasDynamicPart(node: JsxNodeIr): boolean {
   return node.children.some(propBlockHasDynamicPart);
 }
 
+interface PropBlockBinding {
+  kind: "text" | "className" | "htmlFor";
+  target: string;
+  code: string;
+}
+
 function emitPropReactiveDomBlockComponent(
   component: ComponentIr,
   block: PropReactiveDomBlock,
@@ -1036,17 +1054,37 @@ function emitPropReactiveDomBlockComponent(
 ): string {
   const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
   const createBlock = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
-  const bindTextName = helperNames.bindText ?? "_bindText";
-  const bindPropName = helperNames.bindProp ?? "_bindProp";
+  const effectName = helperNames.effect ?? "_effect";
 
   const build: string[] = [];
-  const disposers: string[] = [];
-  const rootVar = emitPropBlockNode(block.root, undefined, build, disposers, allocator, bindTextName, bindPropName);
+  const bindings: PropBlockBinding[] = [];
+  const rootVar = emitPropBlockNode(block.root, undefined, build, bindings, allocator);
   const disposeName = allocator("_dispose");
-  const disposeExpr =
-    disposers.length === 0
-      ? "undefined"
-      : `() => { ${disposers.map((name) => `${name}();`).join(" ")} }`;
+
+  // Drive every binding from a single effect: all read the same prop cell, so
+  // they re-run together on any change anyway, and one effect means one
+  // subscriber, one re-run, and one disposer per block.
+  const effectBody = bindings.map((binding) => {
+    const rawName = allocator("_r");
+    const valueName = allocator("_v");
+    const property = binding.kind === "text" ? "data" : binding.kind;
+    // Evaluate the prop expression once (it may have side effects / be a
+    // ternary), normalize null/undefined to "", and write only on change.
+    return [
+      `      const ${rawName} = (${binding.code});`,
+      `      const ${valueName} = ${rawName} == null ? "" : String(${rawName});`,
+      `      if (${binding.target}.${property} !== ${valueName}) ${binding.target}.${property} = ${valueName};`,
+    ].join("\n");
+  });
+
+  const disposeLines =
+    bindings.length === 0
+      ? [`    const ${disposeName} = undefined;`]
+      : [
+          `    const ${disposeName} = ${effectName}(() => {`,
+          ...effectBody,
+          `    });`,
+        ];
 
   return [
     `${functionKeyword} ${component.name}(${block.propsParam}) {`,
@@ -1054,7 +1092,7 @@ function emitPropReactiveDomBlockComponent(
     // reactive props proxy, so the verbatim prop expressions below stay reactive.
     `  return ${createBlock}((${block.propsParam}) => {`,
     ...build.map((line) => `    ${line}`),
-    `    const ${disposeName} = ${disposeExpr};`,
+    ...disposeLines,
     `    return { node: ${rootVar}, dispose: ${disposeName} };`,
     `  }, ${block.propsParam});`,
     `}`,
@@ -1065,10 +1103,8 @@ function emitPropBlockNode(
   node: JsxNodeIr,
   parentVar: string | undefined,
   build: string[],
-  disposers: string[],
+  bindings: PropBlockBinding[],
   allocator: (baseName: string) => string,
-  bindTextName: string,
-  bindPropName: string,
 ): string {
   if (node.kind === "text") {
     const name = allocator("_text");
@@ -1081,12 +1117,8 @@ function emitPropBlockNode(
 
   if (node.kind === "expr") {
     const name = allocator("_text");
-    const disposeName = allocator("_bind");
     build.push(`const ${name} = document.createTextNode("");`);
-    build.push(
-      `const ${disposeName} = ${bindTextName}(${name}, () => (${node.code}), { preserveInitial: false });`,
-    );
-    disposers.push(disposeName);
+    bindings.push({ kind: "text", target: name, code: node.code });
     if (parentVar !== undefined) {
       build.push(`${parentVar}.appendChild(${name});`);
     }
@@ -1101,22 +1133,24 @@ function emitPropBlockNode(
     if (attr.kind === "static-attr") {
       if (attr.name === "className") {
         build.push(`${name}.className = ${JSON.stringify(attr.value)};`);
+      } else if (attr.name === "htmlFor") {
+        build.push(`${name}.htmlFor = ${JSON.stringify(attr.value)};`);
       } else {
         build.push(`${name}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
       }
     } else if (attr.kind === "dynamic-attr") {
-      const disposeName = allocator("_bind");
-      build.push(
-        `const ${disposeName} = ${bindPropName}(${name}, ${JSON.stringify(attr.name)}, () => (${attr.code}));`,
-      );
-      disposers.push(disposeName);
+      bindings.push({
+        kind: attr.name === "className" ? "className" : "htmlFor",
+        target: name,
+        code: attr.code,
+      });
     } else if (attr.kind === "event") {
       build.push(`${name}.addEventListener(${JSON.stringify(attr.eventName)}, ${attr.code});`);
     }
   }
 
   for (const child of element.children) {
-    emitPropBlockNode(child, name, build, disposers, allocator, bindTextName, bindPropName);
+    emitPropBlockNode(child, name, build, bindings, allocator);
   }
 
   if (parentVar !== undefined) {
