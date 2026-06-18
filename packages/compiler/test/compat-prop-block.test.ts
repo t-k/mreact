@@ -25,9 +25,10 @@ describe("react-compat prop reactive DOM block lowering", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    // Imports: createReactiveDomBlock (compat) + a single effect (reactive-dom).
+    // Imports: createReactiveDomBlock (compat) + reactive DOM helpers.
     expect(output.code).toContain("createReactiveDomBlock");
     expect(output.code).toContain("effect");
+    expect(output.code).toContain("bindEvent");
     // The block closure parameter shadows `props` (the reactive proxy)...
     expect(output.code).toMatch(/createReactiveDomBlock\(\(props\) => \{/);
     // ...and the incoming props object is passed as the block props.
@@ -42,8 +43,10 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain("(props.row.id)");
     expect(output.code).toContain("(props.row.label)");
     expect(output.code).toMatch(/\.className !== /);
-    // Event handler reads current props lazily (verbatim, references the proxy).
-    expect(output.code).toContain('addEventListener("click", () => selectRow(props.row.id))');
+    // Event handlers are rebound from the reactive props proxy, not captured once.
+    expect(output.code).toContain('bindEvent');
+    expect(output.code).toContain('"click"');
+    expect(output.code).not.toContain("addEventListener");
   });
 
   test("does not lower components with hooks (non-empty body) or destructured props", () => {
@@ -100,5 +103,55 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(tr?.className).toBe("danger");
     expect(container.querySelector("td.col-md-1")?.textContent).toBe("7");
     expect(container.querySelector("td.col-md-4")?.textContent).toBe("hi");
+  });
+
+  test("compiled prop block event handlers use latest parent props after updates", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <button id="target" onClick={props.onClick}>{props.label}</button>;
+        }
+
+        function Controller() {
+          const [mode, setMode] = useState("a");
+          const handler = mode === "a"
+            ? () => globalThis.__calls.push("a")
+            : () => globalThis.__calls.push("b");
+          return (
+            <div>
+              <button id="switch" onClick={() => setMode("b")}>switch</button>
+              <Row label={mode} onClick={handler} />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(output.diagnostics).toEqual([]);
+
+    const calls: string[] = [];
+    const previousCalls = (globalThis as unknown as { __calls?: string[] }).__calls;
+    (globalThis as unknown as { __calls?: string[] }).__calls = calls;
+
+    try {
+      const container = await runCompatComponent(output.code);
+      container.querySelector<HTMLButtonElement>("#target")?.click();
+      container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+      expect(container.querySelector("#target")?.textContent).toBe("b");
+
+      container.querySelector<HTMLButtonElement>("#target")?.click();
+
+      expect(calls).toEqual(["a", "b"]);
+    } finally {
+      (globalThis as unknown as { __calls?: string[] }).__calls = previousCalls;
+    }
   });
 });
