@@ -24,6 +24,10 @@ describe("React Flow coverage ledger", () => {
         "Click-based handle connection must call onConnect and add a controlled edge",
         "Controlled edge reconnection must update the edge target and rerender the edge path",
         "NodeResizer must render resize handles and commit dimension changes",
+        "Keyboard deletion must remove selected nodes and call delete callbacks without stale selection state",
+        "React Flow viewport hooks must expose programmatic viewport updates through the compat store path",
+        "Custom edge components must render marker definitions and portal-backed edge labels",
+        "useNodesInitialized must report measured node state after the viewport stabilizes",
       ]),
     );
   });
@@ -40,6 +44,10 @@ describe("React Flow coverage ledger", () => {
         "react-flow-connect-on-click",
         "react-flow-controlled-reconnect",
         "react-flow-node-resizer",
+        "react-flow-keyboard-delete",
+        "react-flow-viewport-hooks",
+        "react-flow-custom-edge-labels",
+        "react-flow-nodes-initialized",
       ]),
     );
   });
@@ -59,5 +67,9 @@ describe("React Flow coverage ledger", () => {
     expect(statusByObligation.get("RF-DRAG-001")).toBe("covered");
     expect(statusByObligation.get("RF-CONNECT-001")).toBe("covered");
     expect(statusByObligation.get("RF-RESIZE-001")).toBe("covered");
+    expect(statusByObligation.get("RF-KEYBOARD-001")).toBe("covered");
+    expect(statusByObligation.get("RF-VIEWPORT-001")).toBe("covered");
+    expect(statusByObligation.get("RF-CUSTOM-EDGE-001")).toBe("covered");
+    expect(statusByObligation.get("RF-NODES-INIT-001")).toBe("covered");
   });
 });

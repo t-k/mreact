@@ -14,7 +14,12 @@ export type ReactFlowRiskTag =
   | "node-drag"
   | "connection"
   | "edge-reconnect"
-  | "node-resize";
+  | "node-resize"
+  | "keyboard-interaction"
+  | "viewport-hook"
+  | "custom-edge"
+  | "edge-label-renderer"
+  | "node-initialization";
 
 export interface ReactFlowInteraction {
   name: string;
@@ -25,7 +30,9 @@ export interface ReactFlowInteraction {
     | "dragFirstNode"
     | "connectSourceToTargetByClick"
     | "clickReconnectEdgeButton"
-    | "dragResizeHandle";
+    | "dragResizeHandle"
+    | "pressDeleteKey"
+    | "clickViewportButton";
 }
 
 export interface ReactFlowFixture {
@@ -52,6 +59,10 @@ export interface ReactFlowDomSummary {
   edgeLabelText: string[];
   positionText: string[];
   resizeText: string[];
+  deletedText: string[];
+  viewportText: string[];
+  edgePortalText: string[];
+  initializedText: string[];
   transform: string;
   classes: string[];
   consoleMessages: string[];

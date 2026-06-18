@@ -277,6 +277,14 @@ async function runInteractions(page: Page, interactions: ReactFlowInteraction[])
         await page.mouse.up();
       }
       await page.waitForTimeout(300);
+    } else if (interaction.run === "pressDeleteKey") {
+      await page.locator(".react-flow__node").first().click();
+      await page.waitForTimeout(150);
+      await page.keyboard.press("Delete");
+      await page.waitForTimeout(300);
+    } else if (interaction.run === "clickViewportButton") {
+      await page.locator("[data-testid='react-flow-viewport-button']").click();
+      await page.waitForTimeout(300);
     }
   }
 }
@@ -310,6 +318,22 @@ async function readDomSummary(
       .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
       .filter((value) => value.length > 0)
       .sort();
+    const deletedText = Array.from(document.querySelectorAll("[data-deleted-nodes], [data-node-count]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const viewportText = Array.from(document.querySelectorAll("[data-viewport-state]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const edgePortalText = Array.from(document.querySelectorAll("[data-edge-portal-label]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const initializedText = Array.from(document.querySelectorAll("[data-nodes-initialized]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
     const resizeNode = document.querySelector(".react-flow__node[data-id='resize']");
     if (resizeNode instanceof HTMLElement) {
       resizeText.push(
@@ -334,6 +358,10 @@ async function readDomSummary(
       edgeLabelText,
       positionText,
       resizeText,
+      deletedText,
+      viewportText,
+      edgePortalText,
+      initializedText,
       transform: viewport instanceof HTMLElement ? viewport.style.transform : "",
       classes: uniqueClasses,
       consoleMessages: capturedConsoleMessages,
@@ -354,6 +382,10 @@ export function emptyDomSummary(): ReactFlowDomSummary {
     edgeLabelText: [],
     positionText: [],
     resizeText: [],
+    deletedText: [],
+    viewportText: [],
+    edgePortalText: [],
+    initializedText: [],
     transform: "",
     classes: [],
     consoleMessages: [],
@@ -377,6 +409,10 @@ export function summariesMatch(
     sameStringArray(react.nodeText, compat.nodeText) &&
     sameStringArray(react.positionText, compat.positionText) &&
     sameStringArray(react.resizeText, compat.resizeText) &&
+    sameStringArray(react.deletedText, compat.deletedText) &&
+    sameStringArray(react.viewportText, compat.viewportText) &&
+    sameStringArray(react.edgePortalText, compat.edgePortalText) &&
+    sameStringArray(react.initializedText, compat.initializedText) &&
     sameStringArray(react.classes, compat.classes) &&
     react.consoleMessages.length === 0 &&
     compat.consoleMessages.length === 0

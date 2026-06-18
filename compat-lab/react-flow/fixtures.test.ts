@@ -11,6 +11,10 @@ describe("React Flow compat fixtures", () => {
       "react-flow-connect-on-click",
       "react-flow-controlled-reconnect",
       "react-flow-node-resizer",
+      "react-flow-keyboard-delete",
+      "react-flow-viewport-hooks",
+      "react-flow-custom-edge-labels",
+      "react-flow-nodes-initialized",
     ]);
   });
 
@@ -47,9 +51,19 @@ describe("React Flow compat fixtures", () => {
         .find((fixture) => fixture.id === "react-flow-node-resizer")
         ?.interactions?.map((interaction) => interaction.run),
     ).toEqual(["dragResizeHandle"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-keyboard-delete")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["pressDeleteKey"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-viewport-hooks")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickViewportButton"]);
   });
 
-  test("cover basic canvas, custom handles, controlled state, and deep interaction features", () => {
+  test("cover basic canvas, custom handles, controlled state, deep interaction, and hook features", () => {
     const features = new Set(reactFlowFixtures.flatMap((fixture) => fixture.features));
 
     expect(features.has("ReactFlow nodes and edges")).toBe(true);
@@ -60,5 +74,9 @@ describe("React Flow compat fixtures", () => {
     expect(features.has("connectOnClick and addEdge controlled updates")).toBe(true);
     expect(features.has("reconnectEdge controlled target updates")).toBe(true);
     expect(features.has("NodeResizer dimension updates")).toBe(true);
+    expect(features.has("Keyboard deletion and onNodesDelete")).toBe(true);
+    expect(features.has("useReactFlow and useViewport updates")).toBe(true);
+    expect(features.has("Custom edge with EdgeLabelRenderer and marker")).toBe(true);
+    expect(features.has("useNodesInitialized measurement state")).toBe(true);
   });
 });

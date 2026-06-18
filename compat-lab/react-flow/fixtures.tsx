@@ -1,19 +1,27 @@
 import {
   addEdge,
+  BaseEdge,
   Background,
   Controls,
+  EdgeLabelRenderer,
   Handle,
   MiniMap,
+  MarkerType,
   NodeResizer,
   Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
+  getSmoothStepPath,
   reconnectEdge,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
+  useReactFlow,
+  useViewport,
   type Connection,
   type Edge,
+  type EdgeProps,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
@@ -25,6 +33,8 @@ type DecisionNodeData = { label: string; status: string };
 type DecisionNode = Node<DecisionNodeData, "decision">;
 type ResizeNodeData = { label: string };
 type ResizeNode = Node<ResizeNodeData, "resizable">;
+type LabelEdgeData = Record<string, unknown> & { label: string };
+type LabelEdge = Edge<LabelEdgeData, "labeled">;
 
 const basicNodes: Node<BasicNodeData>[] = [
   {
@@ -196,6 +206,84 @@ const resizableNodes: ResizeNode[] = [
   },
 ];
 
+const keyboardNodes: Node<BasicNodeData>[] = [
+  {
+    id: "delete-me",
+    position: { x: 90, y: 140 },
+    data: { label: "Delete me" },
+  },
+  {
+    id: "keep-me",
+    type: "output",
+    position: { x: 410, y: 140 },
+    data: { label: "Keep me" },
+  },
+];
+
+const keyboardEdges: Edge[] = [
+  {
+    id: "delete-keep",
+    source: "delete-me",
+    target: "keep-me",
+    type: "smoothstep",
+    label: "removable",
+  },
+];
+
+const viewportNodes: Node<BasicNodeData>[] = [
+  {
+    id: "viewport-a",
+    type: "input",
+    position: { x: 40, y: 100 },
+    data: { label: "Viewport A" },
+  },
+  {
+    id: "viewport-b",
+    type: "output",
+    position: { x: 520, y: 260 },
+    data: { label: "Viewport B" },
+  },
+];
+
+const customEdgeNodes: Node<BasicNodeData>[] = [
+  {
+    id: "custom-source",
+    type: "input",
+    position: { x: 100, y: 160 },
+    data: { label: "Source" },
+  },
+  {
+    id: "custom-target",
+    type: "output",
+    position: { x: 520, y: 160 },
+    data: { label: "Target" },
+  },
+];
+
+const customEdgeEdges: LabelEdge[] = [
+  {
+    id: "custom-labeled-edge",
+    source: "custom-source",
+    target: "custom-target",
+    type: "labeled",
+    markerEnd: { type: MarkerType.ArrowClosed, color: "#2f4d67" },
+    data: { label: "portal label" },
+  },
+];
+
+const initializedNodes: Node<BasicNodeData>[] = [
+  {
+    id: "init-a",
+    position: { x: 120, y: 120 },
+    data: { label: "Init A" },
+  },
+  {
+    id: "init-b",
+    position: { x: 420, y: 220 },
+    data: { label: "Init B" },
+  },
+];
+
 function FlowFrame(props: { children: ReactNode }) {
   return <section className="react-flow-frame">{props.children}</section>;
 }
@@ -217,6 +305,10 @@ const nodeTypes = {
   resizable: ResizableNodeComponent,
 };
 
+const edgeTypes = {
+  labeled: LabeledEdgeComponent,
+};
+
 function ResizableNodeComponent(props: NodeProps<ResizeNode>) {
   return (
     <div className="resizable-node">
@@ -235,6 +327,32 @@ function ResizableNodeComponent(props: NodeProps<ResizeNode>) {
       <span>{Math.round(props.width ?? 0)} x {Math.round(props.height ?? 0)}</span>
       <Handle id="output" type="source" position={Position.Right} />
     </div>
+  );
+}
+
+function LabeledEdgeComponent(props: EdgeProps<LabelEdge>) {
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX: props.sourceX,
+    sourceY: props.sourceY,
+    sourcePosition: props.sourcePosition,
+    targetX: props.targetX,
+    targetY: props.targetY,
+    targetPosition: props.targetPosition,
+  });
+
+  return (
+    <>
+      <BaseEdge id={props.id} path={path} markerEnd={props.markerEnd} />
+      <EdgeLabelRenderer>
+        <div
+          className="edge-portal-label"
+          data-edge-portal-label
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)` }}
+        >
+          {props.data.label}
+        </div>
+      </EdgeLabelRenderer>
+    </>
   );
 }
 
@@ -472,6 +590,140 @@ function NodeResizerFixture() {
   );
 }
 
+function KeyboardDeleteFixture() {
+  const [nodes, _setNodes, onNodesChange] = useNodesState(keyboardNodes);
+  const [edges, _setEdges, onEdgesChange] = useEdgesState(keyboardEdges);
+  const [deleted, setDeleted] = useState("none");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={onNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodesDelete={(deletedNodes) => {
+            setDeleted(deletedNodes.map((node) => node.id).join(","));
+          }}
+          fitView
+          deleteKeyCode={["Backspace", "Delete"]}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Nodes: <span data-node-count>{nodes.length}</span>
+            Deleted: <span data-deleted-nodes>{deleted}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function ViewportHooksPanel() {
+  const flow = useReactFlow();
+  const viewport = useViewport();
+  const viewportText = `${Math.round(viewport.x)},${Math.round(viewport.y)},${viewport.zoom.toFixed(2)}`;
+
+  return (
+    <Panel position="top-left">
+      Viewport: <span data-viewport-state>{viewportText}</span>
+      <button
+        className="react-flow-lab-button nodrag"
+        data-testid="react-flow-viewport-button"
+        type="button"
+        onClick={() => {
+          void flow.setViewport({ x: 84, y: 42, zoom: 1.35 }, { duration: 0 });
+        }}
+      >
+        Set viewport
+      </button>
+    </Panel>
+  );
+}
+
+function ViewportHooksFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={viewportNodes}
+          defaultEdges={[]}
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <ViewportHooksPanel />
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function CustomEdgeLabelsFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={customEdgeNodes}
+          edges={customEdgeEdges}
+          edgeTypes={edgeTypes}
+          fitView
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">Custom edge ready</Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function NodesInitializedPanel() {
+  const initialized = useNodesInitialized();
+
+  return (
+    <Panel position="top-left">
+      Initialized: <span data-nodes-initialized>{initialized ? "yes" : "no"}</span>
+    </Panel>
+  );
+}
+
+function NodesInitializedFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={initializedNodes}
+          defaultEdges={[]}
+          fitView
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <NodesInitializedPanel />
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
 export const reactFlowFixtures: ReactFlowFixture[] = [
   {
     id: "react-flow-basic-canvas",
@@ -586,5 +838,59 @@ export const reactFlowFixtures: ReactFlowFixture[] = [
         run: "dragResizeHandle",
       },
     ],
+  },
+  {
+    id: "react-flow-keyboard-delete",
+    packageName: "@xyflow/react",
+    title: "React Flow keyboard delete",
+    description: "Selects a node and deletes it with the keyboard while controlled nodes and edges update.",
+    features: ["Keyboard deletion and onNodesDelete", "useNodesState and useEdgesState controlled updates"],
+    riskTags: ["keyboard-interaction", "controlled-state", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <KeyboardDeleteFixture />,
+    interactions: [
+      {
+        name: "press-delete-key",
+        description: "Select the first node and press Delete to remove it.",
+        run: "pressDeleteKey",
+      },
+    ],
+  },
+  {
+    id: "react-flow-viewport-hooks",
+    packageName: "@xyflow/react",
+    title: "React Flow viewport hooks",
+    description: "Uses useReactFlow and useViewport to update and observe viewport state.",
+    features: ["useReactFlow and useViewport updates", "ReactFlow nodes and edges"],
+    riskTags: ["viewport-hook", "viewport-transform", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <ViewportHooksFixture />,
+    interactions: [
+      {
+        name: "click-viewport-button",
+        description: "Set the viewport through the React Flow instance and read it through useViewport.",
+        run: "clickViewportButton",
+      },
+    ],
+  },
+  {
+    id: "react-flow-custom-edge-labels",
+    packageName: "@xyflow/react",
+    title: "React Flow custom edge labels",
+    description: "Renders a custom edge component with BaseEdge, marker definitions, and EdgeLabelRenderer.",
+    features: ["Custom edge with EdgeLabelRenderer and marker", "ReactFlow nodes and edges"],
+    riskTags: ["custom-edge", "edge-label-renderer", "svg-edge-rendering"],
+    viewport: { width: 920, height: 620 },
+    render: () => <CustomEdgeLabelsFixture />,
+  },
+  {
+    id: "react-flow-nodes-initialized",
+    packageName: "@xyflow/react",
+    title: "React Flow nodes initialized hook",
+    description: "Uses useNodesInitialized to verify measured node initialization state.",
+    features: ["useNodesInitialized measurement state", "ReactFlow nodes and edges"],
+    riskTags: ["node-initialization", "layout-measurement", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <NodesInitializedFixture />,
   },
 ];
