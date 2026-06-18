@@ -132,8 +132,8 @@ export const reactFlowCoverageLedger: ReactFlowCoverageRow[] = [
   },
   {
     obligationId: "RF-CUSTOM-EDGE-001",
-    feature: "Custom edge with EdgeLabelRenderer and marker",
-    risk: "Custom edge components must render marker definitions and portal-backed edge labels",
+    feature: "Custom edge with BaseEdge and marker",
+    risk: "Custom edge components must render marker definitions and edge paths",
     fixtureId: "react-flow-custom-edge-labels",
     vrt: true,
     domSummary: true,

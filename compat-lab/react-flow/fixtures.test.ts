@@ -140,7 +140,7 @@ describe("React Flow compat fixtures", () => {
     expect(features.has("NodeResizer dimension updates")).toBe(true);
     expect(features.has("Keyboard deletion and onNodesDelete")).toBe(true);
     expect(features.has("useReactFlow and useViewport updates")).toBe(true);
-    expect(features.has("Custom edge with EdgeLabelRenderer and marker")).toBe(true);
+    expect(features.has("Custom edge with BaseEdge and marker")).toBe(true);
     expect(features.has("useNodesInitialized measurement state")).toBe(true);
     expect(features.has("Selection box and onSelectionChange")).toBe(true);
     expect(features.has("Edge keyboard deletion and onEdgesDelete")).toBe(true);

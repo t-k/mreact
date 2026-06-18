@@ -16,7 +16,16 @@ export function useSyncExternalStoreWithSelector<Snapshot, Selection>(
   const getSelection = () => {
     const snapshot = getSnapshot();
     const previous = selectedRef.current;
-    const selection = selector(snapshot);
+    let selection: Selection;
+    try {
+      selection = selector(snapshot);
+    } catch (error) {
+      if (previous !== undefined) {
+        return previous.selection;
+      }
+
+      throw error;
+    }
 
     if (previous !== undefined) {
       if (Object.is(previous.snapshot, snapshot)) {

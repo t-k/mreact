@@ -20,6 +20,7 @@ import {
   useReducer,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import { getAppliedEventHandler, getAppliedProps } from "../src/host-event-binder.js";
@@ -1780,6 +1781,147 @@ describe("react-compat render", () => {
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  test("creates HTML portal children when an SVG owner portals into an HTML container", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function App() {
+      const [target, setTarget] = useState<HTMLDivElement | null>(null);
+
+      return createElement(
+        "div",
+        null,
+        createElement(
+          "svg",
+          null,
+          target === null
+            ? null
+            : createPortal(
+                createElement("div", { "data-svg-owner-html-portal": true }, "Portal"),
+                target,
+              ),
+        ),
+        createElement("div", { ref: setTarget, className: "html-portal-target" }),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    const portal = container.querySelector("[data-svg-owner-html-portal]");
+    expect(portal?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+    expect(container.querySelector(".html-portal-target")?.textContent).toBe("Portal");
+  });
+
+  test("updates an SVG-owned HTML portal from an external store subscription", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let open = false;
+    const listeners = new Set<() => void>();
+
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => open,
+      set(nextOpen: boolean) {
+        open = nextOpen;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function PortalSubscriber(props: { target: HTMLDivElement | null }) {
+      const isOpen = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return isOpen && props.target !== null
+        ? createPortal(
+            createElement("div", { "data-svg-owner-store-portal": true }, "Store portal"),
+            props.target,
+          )
+        : null;
+    }
+
+    function App() {
+      const [target, setTarget] = useState<HTMLDivElement | null>(null);
+
+      useEffect(() => {
+        store.set(true);
+      }, []);
+
+      return createElement(
+        "div",
+        null,
+        createElement("svg", null, createElement(PortalSubscriber, { target })),
+        createElement("div", { ref: setTarget, className: "html-store-portal-target" }),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    const portal = container.querySelector("[data-svg-owner-store-portal]");
+    expect(portal?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+    expect(container.querySelector(".html-store-portal-target")?.textContent).toBe("Store portal");
+  });
+
+  test("keeps sibling SVG host nodes when a fragment also returns an HTML portal", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let open = false;
+    const listeners = new Set<() => void>();
+
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => open,
+      set(nextOpen: boolean) {
+        open = nextOpen;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function MixedSvgPortal(props: { target: HTMLDivElement | null }) {
+      const isOpen = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return createElement(
+        Fragment,
+        null,
+        createElement("path", { className: "edge-path", d: "M0 0L10 10" }),
+        isOpen && props.target !== null
+          ? createPortal(
+              createElement("div", { "data-mixed-svg-html-portal": true }, "Mixed portal"),
+              props.target,
+            )
+          : null,
+      );
+    }
+
+    function App() {
+      const [target, setTarget] = useState<HTMLDivElement | null>(null);
+
+      useEffect(() => {
+        store.set(true);
+      }, []);
+
+      return createElement(
+        "div",
+        null,
+        createElement("svg", null, createElement("g", null, createElement(MixedSvgPortal, { target }))),
+        createElement("div", { ref: setTarget, className: "mixed-html-portal-target" }),
+      );
+    }
+
+    root.render(createElement(App, null));
+
+    const portal = container.querySelector("[data-mixed-svg-html-portal]");
+    expect(container.querySelector(".edge-path")).not.toBeNull();
+    expect(portal?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+    expect(container.querySelector(".mixed-html-portal-target")?.textContent).toBe("Mixed portal");
   });
 
   test("legacy unmountComponentAtNode clears DOM", () => {

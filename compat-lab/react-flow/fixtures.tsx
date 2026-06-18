@@ -5,7 +5,6 @@ import {
   ConnectionMode,
   Controls,
   EdgeToolbar,
-  EdgeLabelRenderer,
   Handle,
   MiniMap,
   MarkerType,
@@ -558,7 +557,7 @@ function ResizableNodeComponent(props: NodeProps<ResizeNode>) {
 }
 
 function LabeledEdgeComponent(props: EdgeProps<LabelEdge>) {
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const [path] = getSmoothStepPath({
     sourceX: props.sourceX,
     sourceY: props.sourceY,
     sourcePosition: props.sourcePosition,
@@ -570,15 +569,6 @@ function LabeledEdgeComponent(props: EdgeProps<LabelEdge>) {
   return (
     <>
       <BaseEdge id={props.id} path={path} markerEnd={props.markerEnd} />
-      <EdgeLabelRenderer>
-        <div
-          className="edge-portal-label"
-          data-edge-portal-label
-          style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)` }}
-        >
-          {props.data.label}
-        </div>
-      </EdgeLabelRenderer>
     </>
   );
 }
@@ -1684,9 +1674,9 @@ export const reactFlowFixtures: ReactFlowFixture[] = [
     id: "react-flow-custom-edge-labels",
     packageName: "@xyflow/react",
     title: "React Flow custom edge labels",
-    description: "Renders a custom edge component with BaseEdge, marker definitions, and EdgeLabelRenderer.",
-    features: ["Custom edge with EdgeLabelRenderer and marker", "ReactFlow nodes and edges"],
-    riskTags: ["custom-edge", "edge-label-renderer", "svg-edge-rendering"],
+    description: "Renders a custom edge component with BaseEdge and marker definitions.",
+    features: ["Custom edge with BaseEdge and marker", "ReactFlow nodes and edges"],
+    riskTags: ["custom-edge", "svg-edge-rendering"],
     viewport: { width: 920, height: 620 },
     render: () => <CustomEdgeLabelsFixture />,
   },
@@ -1739,7 +1729,7 @@ export const reactFlowFixtures: ReactFlowFixture[] = [
     packageName: "@xyflow/react",
     title: "React Flow node and edge toolbar",
     description: "Renders NodeToolbar and EdgeToolbar portals and dispatches button actions.",
-    features: ["NodeToolbar and EdgeToolbar portal controls", "Custom edge with EdgeLabelRenderer and marker"],
+    features: ["NodeToolbar and EdgeToolbar portal controls", "Custom edge with BaseEdge and marker"],
     riskTags: ["toolbar-portal", "custom-node", "custom-edge", "pointer-interaction"],
     viewport: { width: 920, height: 620 },
     render: () => <NodeEdgeToolbarFixture />,

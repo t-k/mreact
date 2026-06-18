@@ -1062,6 +1062,43 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("<section><span>ready</span><button>target</button></section>");
   });
 
+  test("useSyncExternalStore observes parent passive effect updates before child subscriptions mount", () => {
+    const container = document.createElement("div");
+    let value = "initial";
+    const listeners = new Set<() => void>();
+
+    const store = {
+      subscribe(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      getSnapshot: () => value,
+      set(nextValue: string) {
+        value = nextValue;
+        for (const listener of Array.from(listeners)) {
+          listener();
+        }
+      },
+    };
+
+    function Child() {
+      const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot);
+      return createElement("span", null, snapshot);
+    }
+
+    function Parent() {
+      useEffect(() => {
+        store.set("ready");
+      }, []);
+
+      return createElement("section", null, createElement(Child, null));
+    }
+
+    createRoot(container).render(createElement(Parent, null));
+
+    expect(container.innerHTML).toBe("<section><span>ready</span></section>");
+  });
+
   test("useSyncExternalStore host ref updates do not duplicate portal children", () => {
     const container = document.createElement("div");
     const portalContainer = document.createElement("div");
@@ -1258,6 +1295,35 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Subscriber, { label: "store" }));
 
     expect(container.innerHTML).toBe("<p>store:ready</p>");
+  });
+
+  test("memo does not skip external store updates from child hooks", () => {
+    const container = document.createElement("div");
+    let value = "empty";
+    const listeners = new Set<() => void>();
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    function Subscriber() {
+      const snapshot = useSyncExternalStore(subscribe, () => value);
+      return createElement("p", null, snapshot);
+    }
+
+    const Parent = memo((props: { label: string }) =>
+      createElement("section", null, props.label, createElement(Subscriber, null)),
+    );
+
+    const root = createRoot(container);
+    root.render(createElement(Parent, { label: "store:" }));
+    value = "ready";
+    for (const listener of listeners) {
+      listener();
+    }
+
+    expect(container.innerHTML).toBe("<section>store:<p>ready</p></section>");
   });
 
   test("memoized subscribers re-render from layout-effect deferred selector updates", () => {

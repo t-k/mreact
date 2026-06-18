@@ -2707,7 +2707,7 @@ function commitHostDirtyFiber(
           : container instanceof Element
           ? container
           : eventRoot;
-      const portalOptions = withPortalDocumentRef(options, container);
+      const portalOptions = withPortalHostOptions(options, container);
 
       if (
         fiber.childListChanged ||
@@ -3298,7 +3298,7 @@ function commitHostFiber(
         : container instanceof Element
         ? container
         : eventRoot;
-    const portalOptions = withPortalDocumentRef(options, container);
+    const portalOptions = withPortalHostOptions(options, container);
     const childNodes = commitHostChildren(
       fiber.child,
       container as ParentNode,
@@ -4252,7 +4252,11 @@ function createPortalFiber(
     portal.children,
     runtime,
     `${path}.portal`,
-    { ...options, documentRef: portal.container.ownerDocument },
+    {
+      ...options,
+      documentRef: portal.container.ownerDocument,
+      namespace: namespaceForPortalContainer(portal.container),
+    },
   );
   fiber.child = childResult.fiber;
   fiber.return = parent;
@@ -4729,10 +4733,11 @@ function isPortalHostContainer(value: unknown): value is ParentNode {
   );
 }
 
-function withPortalDocumentRef(
+function withPortalHostOptions(
   options: RenderOptions,
   container: ParentNode,
-): RenderOptions & { documentRef?: Document | CustomHostDocument } {
+): RenderOptions & { documentRef?: Document | CustomHostDocument; namespace: HostNamespace } {
+  const namespace = namespaceForPortalContainer(container);
   const ownerDocument = (container as { ownerDocument?: unknown }).ownerDocument;
   if (
     typeof ownerDocument === "object" &&
@@ -4742,10 +4747,19 @@ function withPortalDocumentRef(
     return {
       ...options,
       documentRef: ownerDocument as Document | CustomHostDocument,
+      namespace,
     };
   }
 
-  return options;
+  return { ...options, namespace };
+}
+
+function namespaceForPortalContainer(container: ParentNode): HostNamespace {
+  if (container instanceof SVGElement && container.localName !== "foreignObject") {
+    return "svg";
+  }
+
+  return "html";
 }
 
 function committedHostNodesFromState(state: unknown): Node[] {
