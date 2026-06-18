@@ -7,6 +7,10 @@ describe("React Flow compat fixtures", () => {
       "react-flow-basic-canvas",
       "react-flow-custom-node-handles",
       "react-flow-controlled-interaction",
+      "react-flow-node-drag-position",
+      "react-flow-connect-on-click",
+      "react-flow-controlled-reconnect",
+      "react-flow-node-resizer",
     ]);
   });
 
@@ -23,14 +27,38 @@ describe("React Flow compat fixtures", () => {
         .find((fixture) => fixture.id === "react-flow-controlled-interaction")
         ?.interactions?.map((interaction) => interaction.run),
     ).toEqual(["clickFirstNode", "clickFitView"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-node-drag-position")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["dragFirstNode"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-connect-on-click")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["connectSourceToTargetByClick"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-controlled-reconnect")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickReconnectEdgeButton"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-node-resizer")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["dragResizeHandle"]);
   });
 
-  test("cover basic canvas, custom handles, and controlled state features", () => {
+  test("cover basic canvas, custom handles, controlled state, and deep interaction features", () => {
     const features = new Set(reactFlowFixtures.flatMap((fixture) => fixture.features));
 
     expect(features.has("ReactFlow nodes and edges")).toBe(true);
     expect(features.has("Background, Controls, MiniMap, and Panel")).toBe(true);
     expect(features.has("Custom node with Handle and Position")).toBe(true);
     expect(features.has("useNodesState and useEdgesState controlled updates")).toBe(true);
+    expect(features.has("Node drag position updates")).toBe(true);
+    expect(features.has("connectOnClick and addEdge controlled updates")).toBe(true);
+    expect(features.has("reconnectEdge controlled target updates")).toBe(true);
+    expect(features.has("NodeResizer dimension updates")).toBe(true);
   });
 });

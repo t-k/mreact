@@ -10,12 +10,22 @@ export type ReactFlowRiskTag =
   | "custom-node"
   | "handle-registration"
   | "controlled-state"
-  | "pointer-interaction";
+  | "pointer-interaction"
+  | "node-drag"
+  | "connection"
+  | "edge-reconnect"
+  | "node-resize";
 
 export interface ReactFlowInteraction {
   name: string;
   description: string;
-  run: "clickFirstNode" | "clickFitView";
+  run:
+    | "clickFirstNode"
+    | "clickFitView"
+    | "dragFirstNode"
+    | "connectSourceToTargetByClick"
+    | "clickReconnectEdgeButton"
+    | "dragResizeHandle";
 }
 
 export interface ReactFlowFixture {
@@ -39,6 +49,9 @@ export interface ReactFlowDomSummary {
   panelText: string[];
   nodeText: string[];
   selectedNodeText: string;
+  edgeLabelText: string[];
+  positionText: string[];
+  resizeText: string[];
   transform: string;
   classes: string[];
   consoleMessages: string[];

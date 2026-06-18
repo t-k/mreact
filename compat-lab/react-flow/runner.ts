@@ -216,12 +216,11 @@ async function captureRuntime(input: {
 
   input.page.on("console", onConsole);
   try {
-    await input.page.goto(input.url);
+    await input.page.goto(input.url, { waitUntil: "domcontentloaded" });
     await input.page
       .locator(`[data-fixture-id="${input.fixtureId}"]`)
       .waitFor({ state: "visible", timeout: 15_000 });
     await input.page.locator(".react-flow__node").first().waitFor({ state: "visible", timeout: 15_000 });
-    await input.page.locator(".react-flow__edge-path").first().waitFor({ state: "attached", timeout: 15_000 });
     await input.page.waitForTimeout(150);
     await runInteractions(input.page, input.interactions);
 
@@ -243,6 +242,41 @@ async function runInteractions(page: Page, interactions: ReactFlowInteraction[])
     } else if (interaction.run === "clickFitView") {
       await page.locator(".react-flow__controls-fitview").click();
       await page.waitForTimeout(250);
+    } else if (interaction.run === "dragFirstNode") {
+      const box = await page.locator(".react-flow__node").first().boundingBox();
+      if (box !== null) {
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.5 + 90, box.y + box.height * 0.5 + 50, {
+          steps: 8,
+        });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
+    } else if (interaction.run === "connectSourceToTargetByClick") {
+      await page
+        .locator(".react-flow__node[data-id='draft'] .react-flow__handle.source[data-handleid='success']")
+        .click();
+      await page.waitForTimeout(150);
+      await page
+        .locator(".react-flow__node[data-id='publish'] .react-flow__handle.target[data-handleid='input']")
+        .click();
+      await page.waitForTimeout(300);
+    } else if (interaction.run === "clickReconnectEdgeButton") {
+      await page.locator("[data-testid='react-flow-reconnect-button']").click();
+      await page.waitForTimeout(250);
+    } else if (interaction.run === "dragResizeHandle") {
+      const handle = page.locator(".react-flow__resize-control.bottom.right.handle").first();
+      const box = await handle.boundingBox();
+      if (box !== null) {
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+        await page.mouse.down();
+        await page.mouse.move(box.x + box.width * 0.5 + 48, box.y + box.height * 0.5 + 28, {
+          steps: 8,
+        });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
     }
   }
 }
@@ -264,6 +298,25 @@ async function readDomSummary(
       .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
       .filter((value) => value.length > 0)
       .sort();
+    const edgeLabelText = Array.from(document.querySelectorAll(".react-flow__edge-text"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const positionText = Array.from(document.querySelectorAll("[data-node-position]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const resizeText = Array.from(document.querySelectorAll("[data-node-size]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const resizeNode = document.querySelector(".react-flow__node[data-id='resize']");
+    if (resizeNode instanceof HTMLElement) {
+      resizeText.push(
+        `node-style:${resizeNode.style.width || "auto"}x${resizeNode.style.height || "auto"}`,
+      );
+      resizeText.sort();
+    }
     const selectedNodeText =
       document.querySelector("[data-selected-node]")?.textContent?.replace(/\s+/g, " ").trim() ??
       "";
@@ -278,6 +331,9 @@ async function readDomSummary(
       panelText,
       nodeText,
       selectedNodeText,
+      edgeLabelText,
+      positionText,
+      resizeText,
       transform: viewport instanceof HTMLElement ? viewport.style.transform : "",
       classes: uniqueClasses,
       consoleMessages: capturedConsoleMessages,
@@ -295,6 +351,9 @@ export function emptyDomSummary(): ReactFlowDomSummary {
     panelText: [],
     nodeText: [],
     selectedNodeText: "",
+    edgeLabelText: [],
+    positionText: [],
+    resizeText: [],
     transform: "",
     classes: [],
     consoleMessages: [],
@@ -313,8 +372,11 @@ export function summariesMatch(
     react.miniMapCount === compat.miniMapCount &&
     react.selectedNodeText === compat.selectedNodeText &&
     react.transform === compat.transform &&
+    sameStringArray(react.edgeLabelText, compat.edgeLabelText) &&
     sameStringArray(react.panelText, compat.panelText) &&
     sameStringArray(react.nodeText, compat.nodeText) &&
+    sameStringArray(react.positionText, compat.positionText) &&
+    sameStringArray(react.resizeText, compat.resizeText) &&
     sameStringArray(react.classes, compat.classes) &&
     react.consoleMessages.length === 0 &&
     compat.consoleMessages.length === 0

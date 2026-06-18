@@ -20,6 +20,10 @@ describe("React Flow coverage ledger", () => {
         "Custom node components must receive data and render source and target handles",
         "Controlled node and edge state must update after pointer interaction",
         "fitView control interaction must update viewport state without unmounting nodes",
+        "Dragging a node must emit controlled node position changes and preserve edge rendering",
+        "Click-based handle connection must call onConnect and add a controlled edge",
+        "Controlled edge reconnection must update the edge target and rerender the edge path",
+        "NodeResizer must render resize handles and commit dimension changes",
       ]),
     );
   });
@@ -32,6 +36,10 @@ describe("React Flow coverage ledger", () => {
         "react-flow-basic-canvas",
         "react-flow-custom-node-handles",
         "react-flow-controlled-interaction",
+        "react-flow-node-drag-position",
+        "react-flow-connect-on-click",
+        "react-flow-controlled-reconnect",
+        "react-flow-node-resizer",
       ]),
     );
   });
@@ -40,5 +48,16 @@ describe("React Flow coverage ledger", () => {
     const ids = reactFlowCoverageLedger.map((row) => row.obligationId);
 
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test("tracks deep interaction compatibility debt separately from covered fixtures", () => {
+    const statusByObligation = new Map(
+      reactFlowCoverageLedger.map((row) => [row.obligationId, row.status]),
+    );
+
+    expect(statusByObligation.get("RF-RECONNECT-001")).toBe("covered");
+    expect(statusByObligation.get("RF-DRAG-001")).toBe("debt");
+    expect(statusByObligation.get("RF-CONNECT-001")).toBe("debt");
+    expect(statusByObligation.get("RF-RESIZE-001")).toBe("debt");
   });
 });

@@ -66,6 +66,37 @@ body {
   text-transform: uppercase;
 }
 
+.resizable-node {
+  position: relative;
+  display: grid;
+  min-width: 120px;
+  min-height: 70px;
+  place-items: center;
+  gap: 4px;
+  border: 1px solid #2f4d67;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1b2433;
+  padding: 12px;
+  text-align: center;
+}
+
+.resizable-node span {
+  color: #55708d;
+  font-size: 12px;
+}
+
+.react-flow-lab-button {
+  display: block;
+  margin-top: 6px;
+  border: 1px solid #2f4d67;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1b2433;
+  font: inherit;
+  padding: 4px 8px;
+}
+
 .react-flow__panel {
   border: 1px solid #9aa8bd;
   border-radius: 6px;
