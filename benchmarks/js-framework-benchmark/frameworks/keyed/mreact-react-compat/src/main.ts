@@ -6,6 +6,11 @@ import {
   useReducer,
   type ReactCompatNode,
 } from "@reckona/mreact-compat";
+// EXPERIMENT (branch only): Row is hand-lowered to a prop-bridged reactive DOM
+// block, the form the compiler (Option C) will emit automatically. Validates
+// the reactive-lowering benchmark win on the official CI.
+import { createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
+import { effect } from "@reckona/mreact-reactive-core";
 
 const adjectives = [
   "pretty",
@@ -211,33 +216,46 @@ type RowProps = Record<string, unknown> & {
 };
 
 const Row = memo(
-  function Row({ row, selected }: RowProps): ReactCompatNode {
-    return createElement(
-      "tr",
-      {
-        className: selected ? "danger" : "",
-        key: row.id,
-      },
-      createElement("td", { className: "col-md-1" }, row.id),
-      createElement(
-        "td",
-        { className: "col-md-4" },
-        createElement("a", { onClick: () => selectRow(row.id) }, row.label),
-      ),
-      createElement(
-        "td",
-        { className: "col-md-1" },
-        createElement(
-          "a",
-          { onClick: () => removeRow(row.id) },
-          createElement("span", {
-            "aria-hidden": "true",
-            className: "glyphicon glyphicon-remove",
-          }),
-        ),
-      ),
-      createElement("td", { className: "col-md-6" }),
-    );
+  function Row(props: RowProps): ReactCompatNode {
+    return createReactiveDomBlock((reactiveProps: RowProps) => {
+      const tr = document.createElement("tr");
+      const idCell = document.createElement("td");
+      idCell.className = "col-md-1";
+      const idText = document.createTextNode("");
+      idCell.appendChild(idText);
+      const labelCell = document.createElement("td");
+      labelCell.className = "col-md-4";
+      const labelLink = document.createElement("a");
+      const labelText = document.createTextNode("");
+      labelLink.appendChild(labelText);
+      labelLink.addEventListener("click", () => selectRow(reactiveProps.row.id));
+      labelCell.appendChild(labelLink);
+      const removeCell = document.createElement("td");
+      removeCell.className = "col-md-1";
+      const removeLink = document.createElement("a");
+      removeLink.addEventListener("click", () => removeRow(reactiveProps.row.id));
+      const removeIcon = document.createElement("span");
+      removeIcon.setAttribute("aria-hidden", "true");
+      removeIcon.className = "glyphicon glyphicon-remove";
+      removeLink.appendChild(removeIcon);
+      removeCell.appendChild(removeLink);
+      const spacerCell = document.createElement("td");
+      spacerCell.className = "col-md-6";
+      tr.append(idCell, labelCell, removeCell, spacerCell);
+
+      // One guarded effect re-reads the prop cell on every prop change and
+      // writes only the DOM that actually changed.
+      const dispose = effect(() => {
+        const row = reactiveProps.row;
+        const id = String(row.id);
+        if (idText.data !== id) idText.data = id;
+        if (labelText.data !== row.label) labelText.data = row.label;
+        const className = reactiveProps.selected ? "danger" : "";
+        if (tr.className !== className) tr.className = className;
+      });
+
+      return { node: tr, dispose };
+    }, props) as ReactCompatNode;
   },
   (previous, next) => previous.selected === next.selected && previous.row === next.row,
 );
