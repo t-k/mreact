@@ -26,7 +26,7 @@ describe("React Flow coverage ledger", () => {
         "NodeResizer must render resize handles and commit dimension changes",
         "Keyboard deletion must remove selected nodes and call delete callbacks without stale selection state",
         "React Flow viewport hooks must expose programmatic viewport updates through the compat store path",
-        "Custom edge components must render marker definitions and edge paths",
+        "Custom edge components must render marker definitions and portal-backed edge labels",
         "useNodesInitialized must report measured node state after the viewport stabilizes",
         "Selection box interaction must update selected nodes and emit onSelectionChange",
         "Keyboard deletion must remove selected edges and call edge delete callbacks",

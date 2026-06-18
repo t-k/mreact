@@ -166,7 +166,7 @@ function renderHostFiberIntoContainer(
 
       fiberRoot.finishedWork = finishedWork;
       commitFiberRoot(fiberRoot);
-      collectPortalNodes(fiberRoot.current, runtime);
+      collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
       removeStalePortalNodes(portalSnapshot, runtime);
       commitDevToolsRoot(container, fiberRoot);
       runtime.idMode = "client";
@@ -226,7 +226,7 @@ function renderHydratingHostFiberIntoContainer(
       fiberRoot.finishedWork = undefined;
       fiberRoot.workInProgress = undefined;
       fiberRoot.workInProgressRootRenderLanes = 0;
-      collectPortalNodes(fiberRoot.current, runtime);
+      collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
       removeStalePortalNodes(portalSnapshot, runtime);
       commitDevToolsRoot(container, fiberRoot);
       runtime.idMode = "client";
@@ -475,8 +475,15 @@ function clearElementChildren(element: Element): void {
   }
 }
 
-function collectPortalNodes(fiber: Fiber | undefined, runtime: RootRuntime): void {
-  if (fiber === undefined || runtime.portalContainers.size === 0) {
+function collectPortalNodes(
+  fiber: Fiber | undefined,
+  runtime: RootRuntime,
+  snapshot: PortalRenderSnapshot,
+): void {
+  if (
+    fiber === undefined ||
+    (runtime.portalContainers.size === 0 && snapshot.containers.size === 0)
+  ) {
     return;
   }
 

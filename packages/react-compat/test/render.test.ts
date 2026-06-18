@@ -12,6 +12,7 @@ import {
   forwardRef,
   hydrateRoot,
   isValidElement,
+  memo,
   render,
   unmountComponentAtNode,
   useCallback,
@@ -1922,6 +1923,40 @@ describe("react-compat render", () => {
     expect(container.querySelector(".edge-path")).not.toBeNull();
     expect(portal?.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
     expect(container.querySelector(".mixed-html-portal-target")?.textContent).toBe("Mixed portal");
+  });
+
+  test("custom-edge-portal keeps portal content after a memo owner bailout", () => {
+    const container = document.createElement("div");
+    const portalTarget = document.createElement("div");
+    const root = createRoot(container);
+
+    const MemoizedEdgeOwner = memo((props: { target: HTMLDivElement }) =>
+      createElement(
+        "svg",
+        null,
+        createElement(
+          "g",
+          null,
+          createElement("path", { className: "memo-bailout-edge-path", d: "M0 0L10 10" }),
+          createPortal(
+            createElement("div", { "data-memo-bailout-portal": true }, "Memo portal"),
+            props.target,
+          ),
+        ),
+      ),
+    );
+
+    function App() {
+      return createElement(MemoizedEdgeOwner, { target: portalTarget });
+    }
+
+    root.render(createElement(App, null));
+    expect(portalTarget.textContent).toBe("Memo portal");
+
+    root.render(createElement(App, null));
+
+    expect(container.querySelector(".memo-bailout-edge-path")).not.toBeNull();
+    expect(portalTarget.textContent).toBe("Memo portal");
   });
 
   test("legacy unmountComponentAtNode clears DOM", () => {
