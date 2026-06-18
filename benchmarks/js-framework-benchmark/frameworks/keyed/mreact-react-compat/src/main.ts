@@ -1,5 +1,6 @@
 // GENERATED from main.tsx by the mreact compiler (compat mode, Option C).
 // Source of truth is main.tsx; regenerate, do not hand-edit. Phase 3 experiment.
+
 import { jsx as _jsx, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
 import { effect as _effect } from "@reckona/mreact-reactive-dom";
 import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
@@ -242,3 +243,4 @@ function Row(props) {
     return { node: _tr, dispose: _dispose };
   }, props);
 }
+Row.__mreactStaticBlock = true;

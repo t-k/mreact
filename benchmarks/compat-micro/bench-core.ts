@@ -116,11 +116,13 @@ export function createHarness(adapter: Adapter, container: Element) {
 
   const rowAreEqual = (p: any, n: any) => p.selected === n.selected && p.row === n.row;
 
-  const Row: any = adapter.reactive
-    ? memo(function Row(props: { row: RowData; selected: boolean }) {
-        const { createReactiveDomBlock, bindText, effect } = adapter.reactive!;
-        return createReactiveDomBlock((p: { row: RowData; selected: boolean }) => {
-          const tr = document.createElement("tr");
+  // Marked exactly as the mreact compiler stamps a lowered props-transparent
+  // block component, so the micro-bench exercises the reconciler's changed-row
+  // cell-update fast path (update without re-invoking the component).
+  const reactiveRow = function Row(props: { row: RowData; selected: boolean }) {
+    const { createReactiveDomBlock, bindText, effect } = adapter.reactive!;
+    return createReactiveDomBlock((p: { row: RowData; selected: boolean }) => {
+      const tr = document.createElement("tr");
           const td1 = document.createElement("td");
           td1.className = "col-md-1";
           const idText = document.createTextNode("");
@@ -158,7 +160,11 @@ export function createHarness(adapter: Adapter, container: Element) {
           });
           return { node: tr, dispose };
         }, props);
-      }, rowAreEqual)
+  };
+  (reactiveRow as any).__mreactStaticBlock = true;
+
+  const Row: any = adapter.reactive
+    ? memo(reactiveRow, rowAreEqual)
     : memo(function Row({ row, selected }: { row: RowData; selected: boolean }) {
         return createElement(
           "tr",
