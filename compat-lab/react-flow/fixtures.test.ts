@@ -15,6 +15,10 @@ describe("React Flow compat fixtures", () => {
       "react-flow-viewport-hooks",
       "react-flow-custom-edge-labels",
       "react-flow-nodes-initialized",
+      "react-flow-selection-box",
+      "react-flow-edge-keyboard-delete",
+      "react-flow-node-edge-toolbar",
+      "react-flow-parent-child-extent",
     ]);
   });
 
@@ -61,6 +65,21 @@ describe("React Flow compat fixtures", () => {
         .find((fixture) => fixture.id === "react-flow-viewport-hooks")
         ?.interactions?.map((interaction) => interaction.run),
     ).toEqual(["clickViewportButton"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-selection-box")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["dragSelectionBox"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-edge-keyboard-delete")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["pressDeleteEdgeKey"]);
+    expect(
+      reactFlowFixtures
+        .find((fixture) => fixture.id === "react-flow-node-edge-toolbar")
+        ?.interactions?.map((interaction) => interaction.run),
+    ).toEqual(["clickToolbarButtons"]);
   });
 
   test("cover basic canvas, custom handles, controlled state, deep interaction, and hook features", () => {
@@ -78,5 +97,9 @@ describe("React Flow compat fixtures", () => {
     expect(features.has("useReactFlow and useViewport updates")).toBe(true);
     expect(features.has("Custom edge with EdgeLabelRenderer and marker")).toBe(true);
     expect(features.has("useNodesInitialized measurement state")).toBe(true);
+    expect(features.has("Selection box and onSelectionChange")).toBe(true);
+    expect(features.has("Edge keyboard deletion and onEdgesDelete")).toBe(true);
+    expect(features.has("NodeToolbar and EdgeToolbar portal controls")).toBe(true);
+    expect(features.has("Parent child nodes with constrained extent")).toBe(true);
   });
 });

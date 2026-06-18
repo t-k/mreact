@@ -3,15 +3,18 @@ import {
   BaseEdge,
   Background,
   Controls,
+  EdgeToolbar,
   EdgeLabelRenderer,
   Handle,
   MiniMap,
   MarkerType,
+  NodeToolbar,
   NodeResizer,
   Panel,
   Position,
   ReactFlow,
   ReactFlowProvider,
+  SelectionMode,
   getSmoothStepPath,
   reconnectEdge,
   useEdgesState,
@@ -25,7 +28,7 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import { useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import type { ReactFlowFixture } from "./types.js";
 
 type BasicNodeData = { label: string };
@@ -35,6 +38,8 @@ type ResizeNodeData = { label: string };
 type ResizeNode = Node<ResizeNodeData, "resizable">;
 type LabelEdgeData = Record<string, unknown> & { label: string };
 type LabelEdge = Edge<LabelEdgeData, "labeled">;
+type ToolbarNodeData = Record<string, unknown> & { label: string; onAction: () => void };
+type ToolbarNode = Node<ToolbarNodeData, "toolbar">;
 
 const basicNodes: Node<BasicNodeData>[] = [
   {
@@ -284,6 +289,75 @@ const initializedNodes: Node<BasicNodeData>[] = [
   },
 ];
 
+const selectionNodes: Node<BasicNodeData>[] = [
+  {
+    id: "select-a",
+    position: { x: 120, y: 130 },
+    data: { label: "Select A" },
+  },
+  {
+    id: "select-b",
+    position: { x: 380, y: 180 },
+    data: { label: "Select B" },
+  },
+  {
+    id: "select-c",
+    type: "output",
+    position: { x: 650, y: 300 },
+    data: { label: "Outside" },
+  },
+];
+
+const edgeDeleteNodes: Node<BasicNodeData>[] = [
+  {
+    id: "edge-source",
+    type: "input",
+    position: { x: 120, y: 170 },
+    data: { label: "Edge Source" },
+  },
+  {
+    id: "edge-target",
+    type: "output",
+    position: { x: 520, y: 170 },
+    data: { label: "Edge Target" },
+  },
+];
+
+const edgeDeleteEdges: Edge[] = [
+  {
+    id: "delete-edge",
+    source: "edge-source",
+    target: "edge-target",
+    type: "smoothstep",
+  },
+];
+
+const parentChildNodes: Node<BasicNodeData>[] = [
+  {
+    id: "group",
+    type: "group",
+    position: { x: 130, y: 100 },
+    width: 390,
+    height: 260,
+    data: { label: "Group" },
+    style: { width: 390, height: 260 },
+  },
+  {
+    id: "child-a",
+    parentId: "group",
+    extent: "parent",
+    position: { x: 42, y: 72 },
+    data: { label: "Child A" },
+  },
+  {
+    id: "child-b",
+    parentId: "group",
+    extent: "parent",
+    position: { x: 218, y: 138 },
+    data: { label: "Child B" },
+  },
+];
+
 function FlowFrame(props: { children: ReactNode }) {
   return <section className="react-flow-frame">{props.children}</section>;
 }
@@ -303,6 +377,7 @@ function DecisionNodeComponent(props: NodeProps<DecisionNode>) {
 const nodeTypes = {
   decision: DecisionNodeComponent,
   resizable: ResizableNodeComponent,
+  toolbar: ToolbarNodeComponent,
 };
 
 const edgeTypes = {
@@ -353,6 +428,26 @@ function LabeledEdgeComponent(props: EdgeProps<LabelEdge>) {
         </div>
       </EdgeLabelRenderer>
     </>
+  );
+}
+
+function ToolbarNodeComponent(props: NodeProps<ToolbarNode>) {
+  return (
+    <div className="toolbar-node">
+      <NodeToolbar isVisible nodeId={props.id} position={Position.Top}>
+        <button
+          className="react-flow-lab-button"
+          data-testid="react-flow-node-toolbar-button"
+          type="button"
+          onClick={props.data.onAction}
+        >
+          Node action
+        </button>
+      </NodeToolbar>
+      <Handle type="target" position={Position.Left} />
+      <strong>{props.data.label}</strong>
+      <Handle type="source" position={Position.Right} />
+    </div>
   );
 }
 
@@ -724,6 +819,163 @@ function NodesInitializedFixture() {
   );
 }
 
+function SelectionBoxFixture() {
+  const [selection, setSelection] = useState("none");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={selectionNodes}
+          defaultEdges={[]}
+          fitView
+          selectionOnDrag
+          selectionMode={SelectionMode.Partial}
+          onSelectionChange={({ nodes }) => {
+            setSelection(nodes.map((node) => node.id).sort().join(",") || "none");
+          }}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Selection: <span data-selection-summary>{selection}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function EdgeKeyboardDeleteFixture() {
+  const [edges, _setEdges, onEdgesChange] = useEdgesState(edgeDeleteEdges);
+  const [deleted, setDeleted] = useState("none");
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={edgeDeleteNodes}
+          edges={edges}
+          onEdgesChange={onEdgesChange}
+          onEdgesDelete={(deletedEdges) => {
+            setDeleted(deletedEdges.map((edge) => edge.id).join(","));
+          }}
+          fitView
+          deleteKeyCode={["Backspace", "Delete"]}
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Edges: <span data-edge-count>{edges.length}</span>
+            Deleted edge: <span data-deleted-edges>{deleted}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function NodeEdgeToolbarFixture() {
+  const [actions, setActions] = useState<string[]>([]);
+  const pushAction = useCallback((action: string) => {
+    setActions((currentActions) => [...currentActions, action]);
+  }, []);
+  const nodes: ToolbarNode[] = useMemo(
+    () => [
+      {
+        id: "toolbar-node-a",
+        type: "toolbar",
+        position: { x: 120, y: 165 },
+        data: { label: "Toolbar A", onAction: () => pushAction("node") },
+      },
+      {
+        id: "toolbar-node-b",
+        type: "toolbar",
+        position: { x: 520, y: 165 },
+        data: { label: "Toolbar B", onAction: () => pushAction("unused") },
+      },
+    ],
+    [pushAction],
+  );
+  const edges: Edge[] = useMemo(
+    () => [
+      {
+        id: "toolbar-edge",
+        source: "toolbar-node-a",
+        target: "toolbar-node-b",
+        type: "smoothstep",
+      },
+    ],
+    [],
+  );
+
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <EdgeToolbar edgeId="toolbar-edge" x={330} y={200} isVisible>
+            <button
+              className="react-flow-lab-button"
+              data-testid="react-flow-edge-toolbar-button"
+              type="button"
+              onClick={() => pushAction("edge")}
+            >
+              Edge action
+            </button>
+          </EdgeToolbar>
+          <Panel position="top-left">
+            Toolbar: <span data-toolbar-actions>{actions.join(",") || "none"}</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
+function ParentChildExtentFixture() {
+  return (
+    <ReactFlowProvider>
+      <FlowFrame>
+        <ReactFlow
+          defaultNodes={parentChildNodes}
+          defaultEdges={[]}
+          fitView
+          nodesDraggable={false}
+          panOnDrag={false}
+          zoomOnScroll={false}
+          zoomOnPinch={false}
+          zoomOnDoubleClick={false}
+        >
+          <Background />
+          <Panel position="top-left">
+            Parent: <span data-parent-child-summary>group:2</span>
+          </Panel>
+        </ReactFlow>
+      </FlowFrame>
+    </ReactFlowProvider>
+  );
+}
+
 export const reactFlowFixtures: ReactFlowFixture[] = [
   {
     id: "react-flow-basic-canvas",
@@ -892,5 +1144,66 @@ export const reactFlowFixtures: ReactFlowFixture[] = [
     riskTags: ["node-initialization", "layout-measurement", "context-store"],
     viewport: { width: 920, height: 620 },
     render: () => <NodesInitializedFixture />,
+  },
+  {
+    id: "react-flow-selection-box",
+    packageName: "@xyflow/react",
+    title: "React Flow selection box",
+    description: "Selects multiple nodes with the pane selection rectangle and reads onSelectionChange.",
+    features: ["Selection box and onSelectionChange", "ReactFlow nodes and edges"],
+    riskTags: ["selection-interaction", "pointer-interaction", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <SelectionBoxFixture />,
+    interactions: [
+      {
+        name: "drag-selection-box",
+        description: "Drag a selection rectangle over two nodes.",
+        run: "dragSelectionBox",
+      },
+    ],
+  },
+  {
+    id: "react-flow-edge-keyboard-delete",
+    packageName: "@xyflow/react",
+    title: "React Flow edge keyboard delete",
+    description: "Selects an edge and deletes it with the keyboard while controlled edges update.",
+    features: ["Edge keyboard deletion and onEdgesDelete", "useNodesState and useEdgesState controlled updates"],
+    riskTags: ["edge-delete", "keyboard-interaction", "controlled-state", "svg-edge-rendering"],
+    viewport: { width: 920, height: 620 },
+    render: () => <EdgeKeyboardDeleteFixture />,
+    interactions: [
+      {
+        name: "press-delete-edge-key",
+        description: "Select the rendered edge and press Delete to remove it.",
+        run: "pressDeleteEdgeKey",
+      },
+    ],
+  },
+  {
+    id: "react-flow-node-edge-toolbar",
+    packageName: "@xyflow/react",
+    title: "React Flow node and edge toolbar",
+    description: "Renders NodeToolbar and EdgeToolbar portals and dispatches button actions.",
+    features: ["NodeToolbar and EdgeToolbar portal controls", "Custom edge with EdgeLabelRenderer and marker"],
+    riskTags: ["toolbar-portal", "custom-node", "custom-edge", "pointer-interaction"],
+    viewport: { width: 920, height: 620 },
+    render: () => <NodeEdgeToolbarFixture />,
+    interactions: [
+      {
+        name: "click-toolbar-buttons",
+        description: "Click visible NodeToolbar and EdgeToolbar buttons.",
+        run: "clickToolbarButtons",
+      },
+    ],
+  },
+  {
+    id: "react-flow-parent-child-extent",
+    packageName: "@xyflow/react",
+    title: "React Flow parent child extent",
+    description: "Renders a group node with child nodes constrained to the parent extent.",
+    features: ["Parent child nodes with constrained extent", "ReactFlow nodes and edges"],
+    riskTags: ["parent-child", "layout-measurement", "context-store"],
+    viewport: { width: 920, height: 620 },
+    render: () => <ParentChildExtentFixture />,
   },
 ];

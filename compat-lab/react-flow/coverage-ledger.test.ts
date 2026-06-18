@@ -28,6 +28,10 @@ describe("React Flow coverage ledger", () => {
         "React Flow viewport hooks must expose programmatic viewport updates through the compat store path",
         "Custom edge components must render marker definitions and portal-backed edge labels",
         "useNodesInitialized must report measured node state after the viewport stabilizes",
+        "Selection box interaction must update selected nodes and emit onSelectionChange",
+        "Keyboard deletion must remove selected edges and call edge delete callbacks",
+        "NodeToolbar and EdgeToolbar portal controls must render and dispatch user actions",
+        "Parent child nodes must mount with constrained extent and preserve relative positioning",
       ]),
     );
   });
@@ -48,6 +52,10 @@ describe("React Flow coverage ledger", () => {
         "react-flow-viewport-hooks",
         "react-flow-custom-edge-labels",
         "react-flow-nodes-initialized",
+        "react-flow-selection-box",
+        "react-flow-edge-keyboard-delete",
+        "react-flow-node-edge-toolbar",
+        "react-flow-parent-child-extent",
       ]),
     );
   });
@@ -71,5 +79,9 @@ describe("React Flow coverage ledger", () => {
     expect(statusByObligation.get("RF-VIEWPORT-001")).toBe("covered");
     expect(statusByObligation.get("RF-CUSTOM-EDGE-001")).toBe("covered");
     expect(statusByObligation.get("RF-NODES-INIT-001")).toBe("covered");
+    expect(statusByObligation.get("RF-SELECTION-001")).toBe("covered");
+    expect(statusByObligation.get("RF-EDGE-DELETE-001")).toBe("covered");
+    expect(statusByObligation.get("RF-TOOLBAR-001")).toBe("covered");
+    expect(statusByObligation.get("RF-PARENT-CHILD-001")).toBe("covered");
   });
 });

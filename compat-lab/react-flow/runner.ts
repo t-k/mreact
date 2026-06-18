@@ -285,6 +285,25 @@ async function runInteractions(page: Page, interactions: ReactFlowInteraction[])
     } else if (interaction.run === "clickViewportButton") {
       await page.locator("[data-testid='react-flow-viewport-button']").click();
       await page.waitForTimeout(300);
+    } else if (interaction.run === "dragSelectionBox") {
+      const pane = await page.locator(".react-flow__pane").boundingBox();
+      if (pane !== null) {
+        await page.mouse.move(pane.x + 130, pane.y + 120);
+        await page.mouse.down();
+        await page.mouse.move(pane.x + 600, pane.y + 340, { steps: 10 });
+        await page.mouse.up();
+      }
+      await page.waitForTimeout(300);
+    } else if (interaction.run === "pressDeleteEdgeKey") {
+      await page.locator(".react-flow__edge-interaction").first().click();
+      await page.waitForTimeout(150);
+      await page.keyboard.press("Delete");
+      await page.waitForTimeout(300);
+    } else if (interaction.run === "clickToolbarButtons") {
+      await page.locator("[data-testid='react-flow-node-toolbar-button']").first().click();
+      await page.waitForTimeout(150);
+      await page.locator("[data-testid='react-flow-edge-toolbar-button']").first().click();
+      await page.waitForTimeout(300);
     }
   }
 }
@@ -334,6 +353,18 @@ async function readDomSummary(
       .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
       .filter((value) => value.length > 0)
       .sort();
+    const selectionText = Array.from(document.querySelectorAll("[data-selection-summary]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const toolbarText = Array.from(document.querySelectorAll("[data-toolbar-actions]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
+    const parentChildText = Array.from(document.querySelectorAll("[data-parent-child-summary]"))
+      .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter((value) => value.length > 0)
+      .sort();
     const resizeNode = document.querySelector(".react-flow__node[data-id='resize']");
     if (resizeNode instanceof HTMLElement) {
       resizeText.push(
@@ -362,6 +393,9 @@ async function readDomSummary(
       viewportText,
       edgePortalText,
       initializedText,
+      selectionText,
+      toolbarText,
+      parentChildText,
       transform: viewport instanceof HTMLElement ? viewport.style.transform : "",
       classes: uniqueClasses,
       consoleMessages: capturedConsoleMessages,
@@ -386,6 +420,9 @@ export function emptyDomSummary(): ReactFlowDomSummary {
     viewportText: [],
     edgePortalText: [],
     initializedText: [],
+    selectionText: [],
+    toolbarText: [],
+    parentChildText: [],
     transform: "",
     classes: [],
     consoleMessages: [],
@@ -413,6 +450,9 @@ export function summariesMatch(
     sameStringArray(react.viewportText, compat.viewportText) &&
     sameStringArray(react.edgePortalText, compat.edgePortalText) &&
     sameStringArray(react.initializedText, compat.initializedText) &&
+    sameStringArray(react.selectionText, compat.selectionText) &&
+    sameStringArray(react.toolbarText, compat.toolbarText) &&
+    sameStringArray(react.parentChildText, compat.parentChildText) &&
     sameStringArray(react.classes, compat.classes) &&
     react.consoleMessages.length === 0 &&
     compat.consoleMessages.length === 0

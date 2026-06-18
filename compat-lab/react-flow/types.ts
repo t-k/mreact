@@ -19,7 +19,11 @@ export type ReactFlowRiskTag =
   | "viewport-hook"
   | "custom-edge"
   | "edge-label-renderer"
-  | "node-initialization";
+  | "node-initialization"
+  | "selection-interaction"
+  | "edge-delete"
+  | "toolbar-portal"
+  | "parent-child";
 
 export interface ReactFlowInteraction {
   name: string;
@@ -32,7 +36,10 @@ export interface ReactFlowInteraction {
     | "clickReconnectEdgeButton"
     | "dragResizeHandle"
     | "pressDeleteKey"
-    | "clickViewportButton";
+    | "clickViewportButton"
+    | "dragSelectionBox"
+    | "pressDeleteEdgeKey"
+    | "clickToolbarButtons";
 }
 
 export interface ReactFlowFixture {
@@ -63,6 +70,9 @@ export interface ReactFlowDomSummary {
   viewportText: string[];
   edgePortalText: string[];
   initializedText: string[];
+  selectionText: string[];
+  toolbarText: string[];
+  parentChildText: string[];
   transform: string;
   classes: string[];
   consoleMessages: string[];
