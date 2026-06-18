@@ -1,0 +1,1 @@
+{"framework":"mreact-v0.0.172-local-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":1.3611841201782227,"max":1.3611841201782227,"median":1.3611841201782227,"mean":1.3611841201782227,"stddev":null,"values":[1.3611841201782227]}}}
