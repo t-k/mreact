@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.173 - 2026-06-19
+
+### Added
+
+- Added a React Flow compatibility lab for `@xyflow/react` that compares React and mreact DOM summaries, screenshots, interaction outcomes, and coverage-ledger obligations across canvas, handle, controlled state, drag, connect, reconnect, viewport, selection, deletion, toolbar, dynamic handle, visibility, appearance, custom edge portal, and large graph scenarios.
+
+### Fixed
+
+- Fixed React-compatible `useState()` dispatch and `useSyncExternalStore()` subscription identities so setter references and external-store subscriptions remain stable across renders while still reading the latest snapshot function.
+- Fixed retained reactive DOM row cleanup so deleted fiber subtrees dispose only unretained reactive block resources and preserve resources owned by retained keyed rows.
+- Fixed React-compatible portal namespace handling so portals from SVG-owned subtrees render HTML children into HTML target containers, while SVG containers keep SVG namespace behavior.
+- Fixed React-compatible portal retention for memoized custom edge subtrees so retained portal labels stay mounted across memo bailouts, covering React Flow `EdgeLabelRenderer` custom edge labels.
+
 ## 0.0.172 - 2026-06-18
 
 ### Added
