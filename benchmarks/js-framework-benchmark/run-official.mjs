@@ -55,7 +55,7 @@ const localFixtureDependencies = {
     "@reckona/mreact-reactive-dom",
   ],
   "mreact-react-compat": [
-    "@reckona/mreact-reactive-core",
+    "@reckona/mreact-reactive-dom",
     "@reckona/mreact-compat",
   ],
 };
