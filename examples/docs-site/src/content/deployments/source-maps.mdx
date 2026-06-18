@@ -1,7 +1,7 @@
 export const title = "Source Maps";
 export const description = "Disable production client source maps, emit hidden upload-only maps, and upload them to Sentry-style services.";
 
-# Source maps
+# Source Maps
 
 Production client source maps are disabled by default. Keep that default unless your error reporting workflow needs browser stack trace symbolication.
 
@@ -10,8 +10,13 @@ Production client source maps are disabled by default. Keep that default unless 
 Use hidden maps when a service such as Sentry should receive maps but visitors should not discover them through the client manifest or `sourceMappingURL` comments.
 
 ```ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 mreactRouter({
-  projectRoot: __dirname,
+  projectRoot,
   routesDir: "src/app",
   clientSourceMaps: "hidden",
 });

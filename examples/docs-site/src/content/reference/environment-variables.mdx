@@ -1,7 +1,7 @@
 export const title = "Environment Variables Reference";
 export const description = "Framework environment variables, application variables, and server/client exposure rules.";
 
-# Environment variables reference
+# Environment Variables Reference
 
 Mreact does not make every environment variable available to browser code. Treat environment variables as server-only by default, and explicitly serialize only the public values a client component needs.
 
@@ -56,7 +56,7 @@ Expose public values intentionally through loader data, metadata, inline JSON, o
 export function loader() {
   return {
     publicConfig: {
-      siteUrl: process.env.PUBLIC_SITE_URL ?? "http://localhost:5173",
+      siteUrl: process.env.PUBLIC_SITE_URL ?? "http://localhost:3001",
     },
   };
 }

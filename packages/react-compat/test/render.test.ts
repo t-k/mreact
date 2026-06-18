@@ -15,6 +15,7 @@ import {
   render,
   unmountComponentAtNode,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useReducer,
   useRef,
@@ -1487,6 +1488,89 @@ describe("react-compat render", () => {
       ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(document.body.querySelector("button")).toBeNull();
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
+  test("focuses interaction-mounted portal content from a layout effect", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    function PortalContent() {
+      const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+      useLayoutEffect(() => {
+        buttonRef.current?.focus();
+      }, []);
+
+      return createPortal(
+        createElement("button", { ref: buttonRef, type: "button" }, "Portal action"),
+        document.body,
+      );
+    }
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, "Open"),
+        open ? createElement(PortalContent, null) : null,
+      );
+    }
+
+    root.render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(document.activeElement?.textContent).toBe("Portal action");
+
+    root.unmount();
+    document.body.replaceChildren();
+  });
+
+  test("runs effects scheduled after host ref state updates during portal commit", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const effects: string[] = [];
+
+    function FocusScopeLike(props: { children?: unknown }) {
+      const [scope, setScope] = useState<HTMLDivElement | null>(null);
+
+      useEffect(() => {
+        effects.push(scope?.textContent ?? "none");
+        scope?.querySelector<HTMLButtonElement>("button")?.focus();
+      }, [scope]);
+
+      return createElement("div", { ref: setScope }, props.children);
+    }
+
+    function PortalContent() {
+      return createPortal(
+        createElement(
+          FocusScopeLike,
+          null,
+          createElement("button", { type: "button" }, "Portal action"),
+        ),
+        document.body,
+      );
+    }
+
+    function App() {
+      const [open, setOpen] = useState(false);
+      return createElement(
+        "section",
+        null,
+        createElement("button", { onClick: () => setOpen(true) }, "Open"),
+        open ? createElement(PortalContent, null) : null,
+      );
+    }
+
+    root.render(createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(document.activeElement?.textContent).toBe("Portal action");
+    expect(effects).toEqual(["Portal action"]);
 
     root.unmount();
     document.body.replaceChildren();

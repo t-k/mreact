@@ -4009,6 +4009,10 @@ function tryReuseMemoBailout(
     return undefined;
   }
 
+  if (memoStateNeedsActiveInstanceMark(previousMemoState)) {
+    markActiveInstanceKeys(runtime, previousMemoState.instanceKeys);
+  }
+
   const fiber =
     canReuseCurrentFiber &&
     current.hasRefSubtree !== true &&
@@ -4459,6 +4463,10 @@ function getMemoBailoutFiber(
   state: MemoFiberState,
   canReuseCurrentFiber: boolean,
 ): Fiber {
+  if (memoStateNeedsActiveInstanceMark(state)) {
+    markActiveInstanceKeys(runtime, state.instanceKeys);
+  }
+
   if (canReuseCurrentFiber && canReuseMemoBailoutFiber(current, state)) {
     current.pendingProps = pendingProps;
     current.flags = NoFlags;
@@ -4470,9 +4478,6 @@ function getMemoBailoutFiber(
   }
 
   const fiber = createWorkInProgress(current, pendingProps);
-  if (memoStateNeedsActiveInstanceMark(state)) {
-    markActiveInstanceKeys(runtime, state.instanceKeys);
-  }
   return fiber;
 }
 

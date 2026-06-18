@@ -66,8 +66,8 @@ async function rewriteHtmlBasePaths(directory: string, base: string): Promise<vo
 
     const html = await readFile(path, "utf8");
     const rewritten = html
-      .replaceAll('href="/', `href="${base}/`)
-      .replaceAll('src="/', `src="${base}/`);
+      .replaceAll(/href="\/(?!\/)/g, `href="${base}/`)
+      .replaceAll(/src="\/(?!\/)/g, `src="${base}/`);
     if (rewritten !== html) {
       await writeFile(path, rewritten);
     }

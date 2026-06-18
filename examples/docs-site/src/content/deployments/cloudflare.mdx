@@ -11,7 +11,7 @@ Use the Cloudflare target when route handlers, loaders, middleware, metadata, or
 mreact-router build --target=cloudflare
 ```
 
-The build emits `.mreact/cloudflare/worker.mjs`, route modules, server route modules, and `.mreact/client` assets. Generated server route modules dispatch `GET`, `POST`, and `ALL` exports with decoded params and `context.env`, so route handlers can use Worker bindings.
+The build emits `.mreact/cloudflare/worker.mjs`, route modules, server route modules, and `.mreact/client` assets. Generated server route modules dispatch `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, and `ALL` exports with decoded params and `context.env`, so route handlers can use Worker bindings.
 
 ## Cloudflare Pages advanced mode
 
@@ -27,7 +27,7 @@ Pages provides the `ASSETS` binding to `_worker.js`. Mreact serves only allowed 
 
 ## Workers deployment
 
-Use Workers when you want an ordinary Worker service with a `wrangler.jsonc` entrypoint and an explicit static assets binding. Point `main` at the generated Worker and bind `.mreact/client` as `ASSETS`.
+Use Workers when you want an ordinary Worker service with an explicit static assets binding. The generator writes `wrangler.toml`, and Wrangler also accepts a JSONC config when you prefer that format. Point `main` at the generated Worker and bind `.mreact/client` as `ASSETS`.
 
 ```jsonc
 {

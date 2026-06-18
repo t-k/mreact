@@ -18,6 +18,14 @@ const reactCompatFixtureRoot = join(
   "keyed",
   "mreact-react-compat",
 );
+const reactCompatVdomFixtureRoot = join(
+  process.cwd(),
+  "benchmarks",
+  "js-framework-benchmark",
+  "frameworks",
+  "keyed",
+  "mreact-react-compat-vdom",
+);
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
   test("declares the metadata and build command expected by js-framework-benchmark", async () => {
@@ -106,6 +114,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
       "@reckona/mreact-compat",
     );
     expect(packageJson.dependencies?.["@reckona/mreact-compat"]).toBe("0.0.169");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );
@@ -126,8 +135,23 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(html).not.toContain("/src/main.ts");
   });
 
-  test("uses react-compatible state and keyed row elements", async () => {
+  test("uses compiler-lowered reactive DOM blocks for the hot row fixture", async () => {
     const main = await readFile(join(reactCompatFixtureRoot, "src", "main.ts"), "utf8");
+
+    expect(main).toContain("createReactiveDomBlock");
+    expect(main).toContain("@reckona/mreact-reactive-dom");
+    expect(main).toContain("function reduceAppState");
+    expect(main).toContain('case "update":');
+    expect(main).toContain("dispatchBenchAction");
+    expect(main).toContain("previous.selected === next.selected && previous.row === next.row");
+    expect(main).toContain("return _createReactiveDomBlock((props) =>");
+    expect(main).toContain("document.createElement(\"tr\")");
+    expect(main).toContain("bindEvent");
+    expect(main.slice(main.indexOf("function Row"))).not.toContain("addEventListener");
+  });
+
+  test("keeps a plain VDOM react-compatible fixture beside the lowered fixture", async () => {
+    const main = await readFile(join(reactCompatVdomFixtureRoot, "src", "main.ts"), "utf8");
 
     expect(main).toContain("createElement");
     expect(main).toContain("createRoot");
@@ -158,7 +182,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
   });
 
   test("uses the same tenth-row update shape as the official React fixture", async () => {
-    const main = await readFile(join(reactCompatFixtureRoot, "src", "main.ts"), "utf8");
+    const main = await readFile(join(reactCompatVdomFixtureRoot, "src", "main.ts"), "utf8");
 
     expect(main).toContain("const next = rows.slice(0);");
     expect(main).toContain("for (let index = 0; index < next.length; index += 10)");
@@ -194,6 +218,7 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/angular-cf"');
     expect(runner).toContain('official: "keyed/react-hooks"');
     expect(runner).toContain('official: "keyed/mreact-react-compat"');
+    expect(runner).toContain('official: "keyed/mreact-react-compat-vdom"');
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");

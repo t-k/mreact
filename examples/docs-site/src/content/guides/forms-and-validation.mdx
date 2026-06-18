@@ -1,7 +1,7 @@
 export const title = "Forms and Validation";
 export const description = "Reactive form state, server errors, schema validation, and mutation choices.";
 
-# Forms and validation
+# Forms and Validation
 
 Use `@reckona/mreact-forms` to keep form values, field state, client validation, schema validation, server errors, and submit state in one reactive form object. Use this page for input handling; use [Server Actions](/guides/server-actions/) or [HTTP APIs](/guides/http-apis/) for the mutation transport.
 
@@ -174,7 +174,7 @@ export default function Page() {
 }
 ```
 
-The submit result is `status === "success"`, `status === "invalid"`, or `status === "error"`. Call `form.reset()` after a successful mutation when the next form should start from the initial values. `form.submit()` dedupes concurrent submissions: while an active submit is running, later calls share the same result and `submitting` stays true.
+The submit result is `status === "success"`, `status === "invalid"`, `status === "duplicate"`, or `status === "error"`. Call `form.reset()` after a successful mutation when the next form should start from the initial values. `form.submit()` dedupes concurrent submissions: while an active submit is running, later calls share the same result and `submitting` stays true.
 
 ## Map server errors
 

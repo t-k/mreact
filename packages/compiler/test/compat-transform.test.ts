@@ -648,11 +648,8 @@ describe("compiler compat mode", () => {
     const output = transform({
       code: `import { useState } from "@reckona/mreact-compat";
 
-      let update;
-
       export function App() {
         const [count, setCount] = useState(0);
-        update = setCount;
         return <p>{count}</p>;
       }`,
       filename: "App.tsx",
@@ -804,6 +801,30 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain("_REACTIVE_TEXT_BINDING_META");
   });
 
+  test("does not lower state text when other body statements can observe rerenders", () => {
+    const output = transform({
+      code: `import { useEffect, useState } from "@reckona/mreact-compat";
+
+      export function App() {
+        const [count, setCount] = useState(0);
+        useEffect(() => {
+          globalThis.__effects = (globalThis.__effects ?? 0) + 1;
+        });
+        return <p>{count}</p>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const [count, setCount] = useState(0);");
+    expect(output.code).toContain("useEffect(() =>");
+    expect(output.code).not.toContain("createReactiveDomBlock");
+    expect(output.code).not.toContain("_REACTIVE_STATE_BINDING_META");
+  });
+
   test("allocates compiler reactive DOM block helper names without colliding with user locals", () => {
     const output = transform({
       code: `import { useState } from "@reckona/mreact-compat";
@@ -849,10 +870,7 @@ describe("compiler compat mode", () => {
       code: `import { useState } from "@reckona/mreact-compat";
 
       export function App(props) {
-        let renders = props.renders();
-        props.setRenders(renders + 1);
         const [count, setCount] = useState(0);
-        props.capture(() => setCount(1));
         return <p>{count}</p>;
       }`,
       filename: "App.tsx",
@@ -860,11 +878,15 @@ describe("compiler compat mode", () => {
       dev: false,
       mode: "compat",
     });
+    const outputWithSetter = output.code.replace(
+      "const _countStateBinding = _countStateTuple[_REACTIVE_STATE_BINDING_META];",
+      "const _countStateBinding = _countStateTuple[_REACTIVE_STATE_BINDING_META]; props.capture(() => setCount(1)); props.setRenders(props.renders() + 1);",
+    );
     let update = () => {};
     let renders = 0;
 
     try {
-      const module = compileCompatModule(output.code);
+      const module = compileCompatModule(outputWithSetter);
       const App = module.App as (props: Record<string, unknown>) => unknown;
       const container = document.createElement("div");
       createRoot(container).render(createElement(App, {

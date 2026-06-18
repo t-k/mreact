@@ -86,7 +86,7 @@ export const sidebar: readonly NavGroup[] = [
     items: [
       { text: "CLI", slug: "reference/cli" },
       { text: "Config", slug: "reference/config" },
-      { text: "Environment Variables", slug: "reference/environment-variables" },
+      { text: "Environment Variables Reference", slug: "reference/environment-variables" },
       { text: "Route Module Exports", slug: "reference/route-module-exports" },
       { text: "Route Handler Context", slug: "reference/route-handler-context" },
       { text: "Response Helpers", slug: "reference/response-helpers" },

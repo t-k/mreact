@@ -1,7 +1,7 @@
 export const title = "External Scripts";
 export const description = "Integrate GTM, GA4, JSON-LD, noscript fallbacks, and SPA page view tracking safely.";
 
-# External scripts
+# External Scripts
 
 Use external scripts only when the route really needs a third-party runtime. Keep the integration explicit: route-owned head scripts go through `metadata.head`, body-only fallbacks stay in page JSX, and SPA page view tracking belongs in a small browser bridge.
 
@@ -206,5 +206,4 @@ Third-party scripts can dominate startup and interaction time. Treat each vendor
 - [Metadata and Head](/guides/metadata-and-head/)
 - [Environment Variables](/guides/environment-variables/)
 - [Link and Navigation](/guides/link-and-navigation/)
-- [CSP](/guides/csp/)
 - [Logging and Diagnostics](/deployments/logging-and-diagnostics/)

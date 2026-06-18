@@ -1,7 +1,7 @@
 export const title = "CDN Assets";
 export const description = "Host built route assets on a CDN while application HTML stays on the app origin.";
 
-# CDN assets
+# CDN Assets
 
 Use a CDN for generated client assets when the app server should keep rendering HTML but static scripts, stylesheets, and copied public files should come from a static origin.
 
@@ -10,8 +10,13 @@ Use a CDN for generated client assets when the app server should keep rendering 
 Upload `.mreact/client/` to the CDN origin. This directory contains hashed route scripts, shared chunks, route CSS, copied public files, and the client manifest.
 
 ```ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 mreactRouter({
-  projectRoot: __dirname,
+  projectRoot,
   routesDir: "src/app",
   assetBaseUrl: "https://cdn.example.com/_mreact/client/",
   publicAssetBaseUrl: "https://cdn.example.com/",

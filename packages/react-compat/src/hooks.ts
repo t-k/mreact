@@ -409,6 +409,9 @@ export function createRootRuntime(
         flushPendingEffects(this.pendingImperativeHandleEffects);
         this.effectFlushPhase = "layout";
         const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+        if (flushHostCommitRerenders()) {
+          dedupePendingEffects(this.pendingEffects);
+        }
         this.effectFlushPhase = "normal";
         const strictEffects = flushPendingEffects(this.pendingEffects);
         this.effectFlushPhase = undefined;
@@ -2161,15 +2164,16 @@ function scheduleInstanceUpdate(
   scheduleRuntimeRerender(runtime, options);
 }
 
-function flushHostCommitRerenders(): void {
+function flushHostCommitRerenders(): boolean {
   if (
     hostCommitRerenderDepth > 0 ||
     hookRenderState.hostCommitDepth > 0 ||
     hookRenderState.queuedHostCommitRerenders.size === 0
   ) {
-    return;
+    return false;
   }
 
+  let didRerender = false;
   hostCommitRerenderDepth += 1;
   try {
     for (
@@ -2186,6 +2190,7 @@ function flushHostCommitRerenders(): void {
         clearHostCommitStateBaselines(runtime);
 
         if (hasDirtyInstance) {
+          didRerender = true;
           runtime.rerender("sync");
         }
       }
@@ -2194,6 +2199,20 @@ function flushHostCommitRerenders(): void {
   } finally {
     hostCommitRerenderDepth -= 1;
   }
+  return didRerender;
+}
+
+function dedupePendingEffects(queue: PendingEffect[]): void {
+  if (queue.length < 2) {
+    return;
+  }
+
+  const latestBySlot = new Map<Extract<HookSlot, { kind: "effect" }>, PendingEffect>();
+  for (const effect of queue) {
+    latestBySlot.set(effect.slot, effect);
+  }
+  queue.length = 0;
+  queue.push(...latestBySlot.values());
 }
 
 function flushEffectFlushRerenders(): void {

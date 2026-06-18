@@ -2,7 +2,7 @@
 // Source of truth is main.tsx; regenerate, do not hand-edit. Phase 3 experiment.
 
 import { jsx as _jsx, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
-import { effect as _effect } from "@reckona/mreact-reactive-dom";
+import { bindEvent as _bindEvent, effect as _effect } from "@reckona/mreact-reactive-dom";
 import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
 const adjectives = [
 	"pretty",
@@ -211,7 +211,6 @@ function Row(props) {
     const _td$1 = document.createElement("td");
     _td$1.className = "col-md-4";
     const _a = document.createElement("a");
-    _a.addEventListener("click", () => selectRow(props.row.id));
     const _text$1 = document.createTextNode("");
     _a.appendChild(_text$1);
     _td$1.appendChild(_a);
@@ -219,7 +218,6 @@ function Row(props) {
     const _td$2 = document.createElement("td");
     _td$2.className = "col-md-1";
     const _a$1 = document.createElement("a");
-    _a$1.addEventListener("click", () => removeRow(props.row.id));
     const _span = document.createElement("span");
     _span.setAttribute("aria-hidden", "true");
     _span.className = "glyphicon glyphicon-remove";
@@ -236,9 +234,17 @@ function Row(props) {
       const _r$1 = (props.row.id);
       const _v$1 = _r$1 == null ? "" : String(_r$1);
       if (_text.data !== _v$1) _text.data = _v$1;
-      const _r$2 = (props.row.label);
-      const _v$2 = _r$2 == null ? "" : String(_r$2);
+      const _h = (() => selectRow(props.row.id));
+      const _disposeEvent = typeof _h === "function" ? _bindEvent(_a, "click", _h) : undefined;
+      const _r$3 = (props.row.label);
+      const _v$2 = _r$3 == null ? "" : String(_r$3);
       if (_text$1.data !== _v$2) _text$1.data = _v$2;
+      const _h$1 = (() => removeRow(props.row.id));
+      const _disposeEvent$1 = typeof _h$1 === "function" ? _bindEvent(_a$1, "click", _h$1) : undefined;
+      return () => {
+        _disposeEvent?.();
+        _disposeEvent$1?.();
+      };
     });
     return { node: _tr, dispose: _dispose };
   }, props);

@@ -46,10 +46,21 @@ export default function RootLayout() {
                 name="q"
                 type="search"
                 autocomplete="off"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="site-search-results"
+                aria-expanded="false"
+                aria-activedescendant=""
                 placeholder="Search docs"
               />
               <p class="site-search-status" id="site-search-status" aria-live="polite"></p>
-              <ol class="site-search-results" aria-label="Search results"></ol>
+              <ol
+                class="site-search-results"
+                id="site-search-results"
+                role="listbox"
+                aria-label="Search results"
+                hidden
+              ></ol>
             </search>
             <div class="site-header-actions">
               <a
@@ -114,7 +125,7 @@ export default function RootLayout() {
             </div>
           </header>
           <aside class="site-sidebar">
-            <div class="site-sidebar-body" id="site-sidebar-menu">
+            <div class="site-sidebar-body" id="site-sidebar-menu" tabindex="-1">
               <nav aria-label="Primary">
                 {sidebar.map((group) => (
                   <section class="nav-group" key={group.text}>

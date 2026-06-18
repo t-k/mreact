@@ -1,7 +1,7 @@
 export const title = "CSS and Assets";
 export const description = "Use route CSS imports, Tailwind, public assets, CSS-referenced assets, image priority, and CDN base URLs.";
 
-# CSS and assets
+# CSS and Assets
 
 Mreact uses Vite for CSS and asset transforms, then records the route assets that the app router needs to link from server-rendered HTML. Use this page when you need to decide where CSS should be imported, where images should live, and how production asset URLs should be hosted.
 
@@ -42,15 +42,19 @@ Use the Vite plugin path for Tailwind CSS. Keep Tailwind input CSS in the app tr
 
 ```ts
 // vite.config.ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
 import { defineConfig } from "vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
     tailwindcss(),
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "src/app",
       publicDir: "public",
       allowedSourceDirs: ["src"],
@@ -162,8 +166,14 @@ Use CDN configuration when the app server should still serve HTML routes, but st
 
 ```ts
 // vite.config.ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { mreactRouter } from "@reckona/mreact-router/vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
+
 mreactRouter({
-  projectRoot: __dirname,
+  projectRoot,
   routesDir: "src/app",
   publicDir: "public",
   allowedSourceDirs: ["src"],

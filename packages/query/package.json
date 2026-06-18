@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-query",
-  "version": "0.0.170",
+  "version": "0.0.171",
   "description": "Server state and async cache primitives for mreact.",
   "keywords": [
     "cache",
@@ -40,7 +40,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*"
   }
 }

@@ -8,6 +8,7 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
   const pagefindModuleUrl = new URL("pagefind/pagefind.js", currentScript.src);
   let pagefindPromise;
   let searchTimer;
+  let activeResultIndex = -1;
   let latestQuery = "";
 
   if (
@@ -24,9 +25,27 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
 
     input.addEventListener("keydown", (event) => {
       if (event.key === "ArrowDown") {
-        if (focusSearchResult(0)) {
+        if (setActiveSearchResult(activeResultIndex + 1)) {
           event.preventDefault();
         }
+      }
+
+      if (event.key === "ArrowUp") {
+        if (setActiveSearchResult(activeResultIndex - 1)) {
+          event.preventDefault();
+        }
+      }
+
+      if (event.key === "Enter") {
+        const link = activeSearchResultLink();
+        if (link !== undefined) {
+          event.preventDefault();
+          link.click();
+        }
+      }
+
+      if (event.key === "Escape") {
+        closeResults();
       }
     });
 
@@ -47,6 +66,11 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
           event.preventDefault();
         }
       }
+
+      if (event.key === "Escape") {
+        closeResults();
+        input.focus();
+      }
     });
   }
 
@@ -56,6 +80,7 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
 
     if (query.length < 2) {
       setStatus("");
+      closeResults();
       return;
     }
 
@@ -89,19 +114,26 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
 
     if (resultData.length === 0) {
       setStatus("No results.");
+      closeResults();
       return;
     }
 
     setStatus(`${resultData.length} result${resultData.length === 1 ? "" : "s"}.`);
+    results.hidden = false;
+    input.setAttribute("aria-expanded", "true");
 
-    for (const result of resultData) {
+    for (const [index, result] of resultData.entries()) {
       const item = document.createElement("li");
       const link = document.createElement("a");
       const title = document.createElement("span");
       const excerpt = document.createElement("span");
 
       item.className = "site-search-result";
+      item.setAttribute("role", "none");
       link.href = result.url;
+      link.id = `site-search-result-${index}`;
+      link.setAttribute("role", "option");
+      link.setAttribute("aria-selected", "false");
       link.dataset.searchResultLink = "";
       title.className = "site-search-result-title";
       title.textContent = result.meta?.title ?? result.url;
@@ -119,7 +151,21 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
   }
 
   function clearResults() {
+    activeResultIndex = -1;
+    input.setAttribute("aria-activedescendant", "");
+    input.setAttribute("aria-expanded", "false");
+    results.hidden = true;
     results.replaceChildren();
+  }
+
+  function closeResults() {
+    activeResultIndex = -1;
+    input.setAttribute("aria-activedescendant", "");
+    input.setAttribute("aria-expanded", "false");
+    results.hidden = true;
+    for (const link of searchResultLinks()) {
+      link.setAttribute("aria-selected", "false");
+    }
   }
 
   function focusAdjacentSearchResult(currentLink, direction) {
@@ -129,6 +175,7 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
 
     if (nextIndex < 0) {
       input.focus();
+      closeResults();
       return true;
     }
 
@@ -142,8 +189,36 @@ if (searchRoot instanceof HTMLElement && currentScript instanceof HTMLScriptElem
       return false;
     }
 
+    activeResultIndex = index;
+    updateActiveSearchResult();
     link.focus();
     return true;
+  }
+
+  function setActiveSearchResult(index) {
+    const links = searchResultLinks();
+    if (links.length === 0) {
+      return false;
+    }
+
+    activeResultIndex = Math.max(0, Math.min(index, links.length - 1));
+    updateActiveSearchResult();
+    return true;
+  }
+
+  function updateActiveSearchResult() {
+    const links = searchResultLinks();
+    for (const [index, link] of links.entries()) {
+      const selected = index === activeResultIndex;
+      link.setAttribute("aria-selected", String(selected));
+      if (selected) {
+        input.setAttribute("aria-activedescendant", link.id);
+      }
+    }
+  }
+
+  function activeSearchResultLink() {
+    return searchResultLinks()[activeResultIndex];
   }
 
   function searchResultLinks() {
