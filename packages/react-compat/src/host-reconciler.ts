@@ -370,6 +370,18 @@ export function disposeHostFiberResources(fiber: Fiber | undefined): void {
   disposeHostFiberChildResources(fiber.child, seen);
 }
 
+export function disposeUnretainedHostFiberResources(
+  fiber: Fiber | undefined,
+  retained: ReadonlySet<Fiber>,
+): void {
+  if (fiber === undefined || fiber.hasDisposableResources !== true || retained.has(fiber)) {
+    return;
+  }
+
+  const seen = new Set<unknown>();
+  disposeUnretainedHostFiberSubtreeResources(fiber, seen, retained);
+}
+
 function disposeHostFiberChildResources(
   fiber: Fiber | undefined,
   seen: Set<unknown>,
@@ -386,6 +398,26 @@ function disposeHostFiberChildResources(
     }
 
     cursor = cursor.sibling;
+  }
+}
+
+function disposeUnretainedHostFiberSubtreeResources(
+  fiber: Fiber | undefined,
+  seen: Set<unknown>,
+  retained: ReadonlySet<Fiber>,
+): void {
+  if (fiber === undefined || retained.has(fiber) || fiber.hasDisposableResources !== true) {
+    return;
+  }
+
+  if (fiber.tag === "reactive-dom-block") {
+    disposeReactiveDomBlockState(fiber.stateNode, seen);
+  }
+
+  let child = fiber.child;
+  while (child !== undefined) {
+    disposeUnretainedHostFiberSubtreeResources(child, seen, retained);
+    child = child.sibling;
   }
 }
 

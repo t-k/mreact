@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from "vitest";
 import { flushQueuedComputations } from "@reckona/mreact-reactive-core/internal";
-import { bindText } from "@reckona/mreact-reactive-dom";
+import { bindEvent, bindText, effect } from "@reckona/mreact-reactive-dom";
 import {
   createElement,
   createRoot,
@@ -28,6 +28,16 @@ function withProdEnv(run: () => void): void {
   process.env.NODE_ENV = "production";
   try {
     run();
+  } finally {
+    process.env.NODE_ENV = previous;
+  }
+}
+
+async function withProdEnvAsync(run: () => Promise<void>): Promise<void> {
+  const previous = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  try {
+    await run();
   } finally {
     process.env.NODE_ENV = previous;
   }
@@ -251,6 +261,98 @@ describe("keyed memo-row reconcile (same-order fast path contract)", () => {
       expect(labels(container)).toEqual(["A!", "B!", "c"]);
       expect(componentCalls).toBe(callsAfterMount);
       expect(blockBuilds).toBe(buildsAfterMount);
+    });
+  });
+
+  test("marked static-block rows keep remove handlers after a prior row deletion", async () => {
+    await withProdEnvAsync(async () => {
+      const container = document.createElement("tbody");
+      const disposedIds: number[] = [];
+      const removedIds: number[] = [];
+      let setRows: (rows: RowData[] | ((rows: RowData[]) => RowData[])) => void = () => {};
+
+      const RowComponent = (props: { row: RowData }) => {
+        return createReactiveDomBlock((p: { row: RowData }) => {
+          const tr = document.createElement("tr");
+          const idCell = document.createElement("td");
+          const idText = document.createTextNode("");
+          idCell.appendChild(idText);
+          tr.appendChild(idCell);
+
+          const labelCell = document.createElement("td");
+          labelCell.textContent = p.row.label;
+          tr.appendChild(labelCell);
+
+          const removeCell = document.createElement("td");
+          const removeButton = document.createElement("button");
+          removeButton.type = "button";
+          removeButton.textContent = "remove";
+          removeCell.appendChild(removeButton);
+          tr.appendChild(removeCell);
+
+          const disposeEffect = effect(() => {
+            const nextId = String(p.row.id);
+            if (tr.dataset.id !== nextId) {
+              tr.dataset.id = nextId;
+            }
+            if (idText.data !== nextId) {
+              idText.data = nextId;
+            }
+
+            return bindEvent(removeButton, "click", () => {
+              removedIds.push(p.row.id);
+              flushSync(() => {
+                setRows((rows) => rows.filter((row) => row.id !== p.row.id));
+              });
+            });
+          });
+
+          return {
+            node: tr,
+            dispose: () => {
+              disposedIds.push(Number(tr.dataset.id));
+              disposeEffect();
+            },
+          };
+        }, props);
+      };
+      (RowComponent as unknown as Record<string, unknown>).__mreactStaticBlock = true;
+      const Row = memo(RowComponent, (a, b) => a.row === b.row);
+
+      const initial = Array.from({ length: 10 }, (_, index) => ({
+        id: index + 1,
+        label: `row ${index + 1}`,
+      }));
+
+      function App() {
+        const [rows, setRowsState] = useState<RowData[]>(initial);
+        setRows = setRowsState;
+        return rows.map((row) => createElement(Row, { key: row.id, row }));
+      }
+
+      flushSync(() => {
+        createRoot(container).render(createElement(App, null));
+      });
+      await Promise.resolve();
+      flushQueuedComputations();
+      expect(ids(container)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+
+      container.querySelector("tr:nth-of-type(9)>td:nth-of-type(3)>button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      flushQueuedComputations();
+      expect(removedIds).toEqual([9]);
+      expect(disposedIds).toEqual([9]);
+      expect(ids(container)).toEqual(["1", "2", "3", "4", "5", "6", "7", "8", "10"]);
+
+      container.querySelector("tr:nth-of-type(8)>td:nth-of-type(3)>button")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      await Promise.resolve();
+      flushQueuedComputations();
+      expect(removedIds).toEqual([9, 8]);
+      expect(ids(container)).toEqual(["1", "2", "3", "4", "5", "6", "7", "10"]);
     });
   });
 
