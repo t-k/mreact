@@ -14,11 +14,18 @@ import {
   SuspenseList,
   type ReactCompatElement,
   type ReactCompatPortal,
+  type ReactiveDomBlockProps,
   type ReactiveDomBlockResult,
   isReactCompatElement,
   isReactCompatPortal,
   type ReactCompatNode,
 } from "./element.js";
+import {
+  createReactivePropCell,
+  createReactivePropProxy,
+  setReactivePropCell,
+  type ReactiveDomBlockState,
+} from "./reactive-prop-cell.js";
 import {
   consumerContext,
   isReactCompatConsumer,
@@ -351,15 +358,33 @@ export function disposeHostFiberResources(fiber: Fiber | undefined): void {
     return;
   }
 
+  // Dispose this fiber and its SUBTREE only — not its siblings. This is called
+  // once per deleted fiber, and deleted siblings are disposed by their own
+  // calls; walking siblings here re-walked the whole deleted list per deletion
+  // (O(n^2) on a cleared 1k-row reactive list). The dedupe set is allocated
+  // once for the subtree walk.
   const seen = new Set<unknown>();
-  let cursor: Fiber | undefined = fiber;
+  if (fiber.tag === "reactive-dom-block") {
+    disposeReactiveDomBlockState(fiber.stateNode, seen);
+  }
+  disposeHostFiberChildResources(fiber.child, seen);
+}
+
+function disposeHostFiberChildResources(
+  fiber: Fiber | undefined,
+  seen: Set<unknown>,
+): void {
+  let cursor = fiber;
 
   while (cursor !== undefined) {
-    if (cursor.tag === "reactive-dom-block") {
-      disposeReactiveDomBlockState(cursor.stateNode, seen);
+    if (cursor.hasDisposableResources === true) {
+      if (cursor.tag === "reactive-dom-block") {
+        disposeReactiveDomBlockState(cursor.stateNode, seen);
+      }
+
+      disposeHostFiberChildResources(cursor.child, seen);
     }
 
-    disposeHostFiberResources(cursor.child);
     cursor = cursor.sibling;
   }
 }
@@ -1498,15 +1523,33 @@ function createHostFiberImpl(
   }
 
   if (node.type === REACTIVE_DOM_BLOCK_TYPE) {
-    const fiber =
-      current?.tag === "reactive-dom-block"
-        ? createWorkInProgress(current, node.props)
-        : createFiber("reactive-dom-block", node.props, key);
+    const blockProps = (node.props as unknown as ReactiveDomBlockProps).blockProps;
+    if (current?.tag === "reactive-dom-block") {
+      // Re-render: reuse the committed DOM/subscriptions and push the new props
+      // into the prop cell instead of re-running render(). Bound text/attributes
+      // update via their reactive subscriptions; the subtree is never reconciled.
+      const fiber = createWorkInProgress(current, node.props);
+      fiber.type = node.type;
+      fiber.hasDisposableResources = true;
+      const previousState = current.stateNode as ReactiveDomBlockState | undefined;
+      if (previousState?.propCell !== undefined && blockProps !== undefined) {
+        setReactivePropCell(previousState.propCell, blockProps);
+      }
+      fiber.stateNode = previousState;
+      return { fiber, consumed: options.previousNodes?.length ?? 0 };
+    }
+
+    const fiber = createFiber("reactive-dom-block", node.props, key);
     fiber.type = node.type;
     fiber.hasDisposableResources = true;
-    fiber.stateNode = current?.tag === "reactive-dom-block"
-      ? current.stateNode
-      : (node.props as { render: () => ReactiveDomBlockResult }).render();
+    const render = (node.props as unknown as ReactiveDomBlockProps).render;
+    if (blockProps !== undefined) {
+      const propCell = createReactivePropCell(blockProps);
+      const result = render(createReactivePropProxy(propCell));
+      fiber.stateNode = { node: result.node, dispose: result.dispose, propCell };
+    } else {
+      fiber.stateNode = (render as () => ReactiveDomBlockResult)();
+    }
     return { fiber, consumed: options.previousNodes?.length ?? 0 };
   }
 

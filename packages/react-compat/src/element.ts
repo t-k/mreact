@@ -106,10 +106,17 @@ export interface ReactiveDomBlockResult {
   dispose?: (() => void) | undefined;
 }
 
-export type ReactiveDomBlockRender = () => ReactiveDomBlockResult;
+// The render receives a stable reactive props proxy when the block is created
+// with props (createReactiveDomBlock(render, props)); state-only blocks ignore
+// the argument.
+export type ReactiveDomBlockRender<P = unknown> = (props: P) => ReactiveDomBlockResult;
 
 export interface ReactiveDomBlockProps {
   render: ReactiveDomBlockRender;
+  // Present when the block bridges its component's props into the reactive
+  // runtime; carries the latest props on every re-render so the reconciler can
+  // push them into the block's prop cell.
+  blockProps?: Record<string, unknown> | undefined;
 }
 
 /** Creates a React-compatible element from a type, config object, and children. */

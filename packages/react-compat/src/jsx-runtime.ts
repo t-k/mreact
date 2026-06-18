@@ -19,10 +19,15 @@ export { Fragment };
 export { REACTIVE_TEXT_BINDING_META };
 export { REACTIVE_STATE_BINDING_META };
 
-export function createReactiveDomBlock(
-  render: ReactiveDomBlockRender,
+export function createReactiveDomBlock<P extends object = Record<string, unknown>>(
+  render: ReactiveDomBlockRender<P>,
+  blockProps?: P,
 ): ReactCompatElement<ReactiveDomBlockProps> {
-  return createElementFromJsxConfig(REACTIVE_DOM_BLOCK_TYPE, { render });
+  const props: ReactiveDomBlockProps = { render: render as ReactiveDomBlockRender };
+  if (blockProps !== undefined) {
+    props.blockProps = blockProps as Record<string, unknown>;
+  }
+  return createElementFromJsxConfig(REACTIVE_DOM_BLOCK_TYPE, props);
 }
 
 /** DOM event type with a narrowed currentTarget. */
