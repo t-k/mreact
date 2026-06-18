@@ -82,6 +82,11 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
       continue;
     }
 
+    if (!dev && getPropReactiveDomBlock(component) !== undefined) {
+      specifiers.add("createReactiveDomBlock");
+      continue;
+    }
+
     if (directTextBindings.length > 0) {
       specifiers.add("REACTIVE_TEXT_BINDING_META");
     }
@@ -117,6 +122,12 @@ function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[
     if (reactiveDomBlock !== undefined) {
       specifiers.add("bindText");
       specifiers.add("createTemplate");
+      continue;
+    }
+
+    if (getPropReactiveDomBlock(component) !== undefined) {
+      specifiers.add("bindText");
+      specifiers.add("bindProp");
     }
   }
 
@@ -128,6 +139,7 @@ interface CompatHelperNames {
   REACTIVE_STATE_BINDING_META?: string;
   REACTIVE_TEXT_BINDING_META?: string;
   bindText?: string;
+  bindProp?: string;
   createReactiveDomBlock?: string;
   createTemplate?: string;
   jsx?: string;
@@ -158,6 +170,11 @@ function allocateHelperNames(
   for (const specifier of [...specifiers, ...reactiveDomSpecifiers]) {
     if (specifier === "bindText") {
       helperNames.bindText = allocator("_bindText");
+      continue;
+    }
+
+    if (specifier === "bindProp") {
+      helperNames.bindProp = allocator("_bindProp");
       continue;
     }
 
@@ -327,7 +344,7 @@ function createImportGroups(
   }
 
   for (const specifier of reactiveDomSpecifiers) {
-    const localName = helperNames[specifier as "bindText" | "createTemplate"] ?? `_${specifier}`;
+    const localName = helperNames[specifier as "bindText" | "bindProp" | "createTemplate"] ?? `_${specifier}`;
     addImportSpecifier(groups, REACTIVE_DOM_SOURCE, specifier, localName);
   }
 
@@ -405,6 +422,8 @@ function emitComponent(
 ): string {
   const directTextBindings = collectDirectTextBindings(component, helperNames);
   const reactiveDomBlock = dev ? undefined : getReactiveDomBlock(component.root, directTextBindings);
+  const propReactiveDomBlock =
+    !dev && reactiveDomBlock === undefined ? getPropReactiveDomBlock(component) : undefined;
   const body = component.bodyStatements.map((statement) =>
     `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames, reactiveDomBlock !== undefined)}`
   );
@@ -412,6 +431,10 @@ function emitComponent(
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
     component.async === true ? "async " : ""
   }function`;
+
+  if (propReactiveDomBlock !== undefined) {
+    return emitPropReactiveDomBlockComponent(component, propReactiveDomBlock, helperNames, functionKeyword);
+  }
 
   if (reactiveDomBlock !== undefined) {
     const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
@@ -921,6 +944,186 @@ function findDirectTextBindingForChildren(
   }
 
   return directTextBindings.find((binding) => binding.stateName === child.code);
+}
+
+interface PropReactiveDomBlock {
+  root: JsxElementIr;
+  propsParam: string;
+}
+
+const PROP_BLOCK_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+
+// Detects a component lowerable to a PROP-bridged reactive DOM block: a single
+// (non-destructured) props parameter, no body statements (no hooks), and a
+// host-only element tree (elements + static/dynamic attrs + events + text
+// expressions) with at least one dynamic part. Prop expressions are emitted
+// verbatim because the block closure parameter shadows the props parameter, so
+// e.g. `props.row.id` reads the reactive proxy with no rewriting needed.
+function getPropReactiveDomBlock(component: ComponentIr): PropReactiveDomBlock | undefined {
+  if (component.parameters.length !== 1) {
+    return undefined;
+  }
+
+  const propsParam = component.parameters[0];
+
+  if (propsParam === undefined || !PROP_BLOCK_IDENTIFIER.test(propsParam)) {
+    return undefined;
+  }
+
+  if (component.bodyStatements.length > 0) {
+    return undefined;
+  }
+
+  const root = component.root;
+
+  if (root.kind !== "element" || root.keyCode !== undefined) {
+    return undefined;
+  }
+
+  if (!isHostOnlyPropBlockNode(root) || !propBlockHasDynamicPart(root)) {
+    return undefined;
+  }
+
+  return { root, propsParam };
+}
+
+// Conventional node-valued slot props (mirrors oxc-render-values.ts): a text
+// expression referencing one of these may hold React nodes, not primitive text,
+// so it is not safe to bind with bindText. Conservatively bail on any of them.
+const PROP_BLOCK_NODE_VALUED = /\b(children|fallback|header|sidebar|element)\b/;
+
+function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
+  if (node.kind === "text") {
+    return true;
+  }
+
+  if (node.kind === "expr") {
+    return !PROP_BLOCK_NODE_VALUED.test(node.code);
+  }
+
+  if (node.kind !== "element" || node.keyCode !== undefined) {
+    return false;
+  }
+
+  if (node.attributes.some((attr) => attr.kind === "spread-attr")) {
+    return false;
+  }
+
+  return node.children.every(isHostOnlyPropBlockNode);
+}
+
+function propBlockHasDynamicPart(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return true;
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  if (node.attributes.some((attr) => attr.kind === "dynamic-attr" || attr.kind === "event")) {
+    return true;
+  }
+
+  return node.children.some(propBlockHasDynamicPart);
+}
+
+function emitPropReactiveDomBlockComponent(
+  component: ComponentIr,
+  block: PropReactiveDomBlock,
+  helperNames: CompatHelperNames,
+  functionKeyword: string,
+): string {
+  const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
+  const createBlock = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
+  const bindTextName = helperNames.bindText ?? "_bindText";
+  const bindPropName = helperNames.bindProp ?? "_bindProp";
+
+  const build: string[] = [];
+  const disposers: string[] = [];
+  const rootVar = emitPropBlockNode(block.root, undefined, build, disposers, allocator, bindTextName, bindPropName);
+  const disposeName = allocator("_dispose");
+  const disposeExpr =
+    disposers.length === 0
+      ? "undefined"
+      : `() => { ${disposers.map((name) => `${name}();`).join(" ")} }`;
+
+  return [
+    `${functionKeyword} ${component.name}(${block.propsParam}) {`,
+    // The closure parameter intentionally shadows the props parameter: it is the
+    // reactive props proxy, so the verbatim prop expressions below stay reactive.
+    `  return ${createBlock}((${block.propsParam}) => {`,
+    ...build.map((line) => `    ${line}`),
+    `    const ${disposeName} = ${disposeExpr};`,
+    `    return { node: ${rootVar}, dispose: ${disposeName} };`,
+    `  }, ${block.propsParam});`,
+    `}`,
+  ].join("\n");
+}
+
+function emitPropBlockNode(
+  node: JsxNodeIr,
+  parentVar: string | undefined,
+  build: string[],
+  disposers: string[],
+  allocator: (baseName: string) => string,
+  bindTextName: string,
+  bindPropName: string,
+): string {
+  if (node.kind === "text") {
+    const name = allocator("_text");
+    build.push(`const ${name} = document.createTextNode(${JSON.stringify(node.value)});`);
+    if (parentVar !== undefined) {
+      build.push(`${parentVar}.appendChild(${name});`);
+    }
+    return name;
+  }
+
+  if (node.kind === "expr") {
+    const name = allocator("_text");
+    const disposeName = allocator("_bind");
+    build.push(`const ${name} = document.createTextNode("");`);
+    build.push(
+      `const ${disposeName} = ${bindTextName}(${name}, () => (${node.code}), { preserveInitial: false });`,
+    );
+    disposers.push(disposeName);
+    if (parentVar !== undefined) {
+      build.push(`${parentVar}.appendChild(${name});`);
+    }
+    return name;
+  }
+
+  const element = node as JsxElementIr;
+  const name = allocator(`_${element.tagName.replace(/[^A-Za-z0-9_$]/g, "_") || "el"}`);
+  build.push(`const ${name} = document.createElement(${JSON.stringify(element.tagName)});`);
+
+  for (const attr of element.attributes) {
+    if (attr.kind === "static-attr") {
+      if (attr.name === "className") {
+        build.push(`${name}.className = ${JSON.stringify(attr.value)};`);
+      } else {
+        build.push(`${name}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
+      }
+    } else if (attr.kind === "dynamic-attr") {
+      const disposeName = allocator("_bind");
+      build.push(
+        `const ${disposeName} = ${bindPropName}(${name}, ${JSON.stringify(attr.name)}, () => (${attr.code}));`,
+      );
+      disposers.push(disposeName);
+    } else if (attr.kind === "event") {
+      build.push(`${name}.addEventListener(${JSON.stringify(attr.eventName)}, ${attr.code});`);
+    }
+  }
+
+  for (const child of element.children) {
+    emitPropBlockNode(child, name, build, disposers, allocator, bindTextName, bindPropName);
+  }
+
+  if (parentVar !== undefined) {
+    build.push(`${parentVar}.appendChild(${name});`);
+  }
+
+  return name;
 }
 
 function containsIdentifier(code: string, name: string): boolean {
