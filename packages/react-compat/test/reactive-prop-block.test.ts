@@ -176,4 +176,108 @@ describe("reactive-dom-block prop bridging", () => {
       process.env.NODE_ENV = previousNodeEnv;
     }
   });
+
+  test("prop effects re-run when a tracked property presence changes", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const container = document.createElement("div");
+    let setPresent: (value: boolean) => void = () => {};
+    let presenceEffectRuns = 0;
+
+    const Row = memo(
+      (props: { flag?: string | undefined }) =>
+        createReactiveDomBlock((reactiveProps: { flag?: string | undefined }) => {
+          const node = document.createElement("span");
+          const dispose = effect(() => {
+            presenceEffectRuns += 1;
+            node.textContent = "flag" in reactiveProps ? "present" : "absent";
+          });
+          return { node, dispose };
+        }, props),
+      () => false,
+    );
+
+    function App() {
+      const [present, setPresentState] = useState(false);
+      setPresent = setPresentState;
+      return createElement(Row, present ? { flag: undefined } : {});
+    }
+
+    try {
+      flushSync(() => {
+        createRoot(container).render(createElement(App, null));
+      });
+      expect(container.textContent).toBe("absent");
+      expect(presenceEffectRuns).toBe(1);
+
+      flushSync(() => setPresent(true));
+      flushQueuedComputations();
+
+      expect(container.textContent).toBe("present");
+      expect(presenceEffectRuns).toBe(2);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  test("object prop effects re-run after same-reference shallow mutations", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const container = document.createElement("div");
+    const row = { label: "a" };
+    let bump: () => void = () => {};
+    let rowEffectRuns = 0;
+    let selectedEffectRuns = 0;
+
+    const Row = memo(
+      (props: { row: { label: string }; selected: boolean }) =>
+        createReactiveDomBlock(
+          (reactiveProps: { row: { label: string }; selected: boolean }) => {
+            const node = document.createElement("span");
+            const disposeRow = effect(() => {
+              rowEffectRuns += 1;
+              node.textContent = reactiveProps.row.label;
+            });
+            const disposeSelected = effect(() => {
+              selectedEffectRuns += 1;
+              node.className = reactiveProps.selected ? "selected" : "";
+            });
+            return {
+              node,
+              dispose: () => {
+                disposeRow();
+                disposeSelected();
+              },
+            };
+          },
+          props,
+        ),
+      () => false,
+    );
+
+    function App() {
+      const [tick, setTick] = useState(0);
+      bump = () => setTick(tick + 1);
+      return createElement(Row, { row, selected: false });
+    }
+
+    try {
+      flushSync(() => {
+        createRoot(container).render(createElement(App, null));
+      });
+      expect(container.textContent).toBe("a");
+      expect(rowEffectRuns).toBe(1);
+      expect(selectedEffectRuns).toBe(1);
+
+      row.label = "b";
+      flushSync(() => bump());
+      flushQueuedComputations();
+
+      expect(container.textContent).toBe("b");
+      expect(rowEffectRuns).toBe(2);
+      expect(selectedEffectRuns).toBe(1);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
 });

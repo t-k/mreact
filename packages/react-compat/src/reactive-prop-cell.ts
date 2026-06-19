@@ -17,6 +17,7 @@ export interface ReactivePropCell {
   value: Record<string, unknown>;
   source: Source;
   propertySources?: Map<PropertyKey, Source> | undefined;
+  propertySnapshots?: Map<PropertyKey, ShallowObjectSnapshot> | undefined;
 }
 
 // What a reactive-dom-block fiber stores in stateNode: the committed node and
@@ -48,7 +49,9 @@ export function batchReactivePropCellUpdates<T>(run: () => T): T {
 const PROP_PROXY_HANDLER: ProxyHandler<ReactivePropCell> = {
   get(cell, property) {
     trackSource(getReactivePropPropertySource(cell, property));
-    return cell.value[property as string];
+    const value = Reflect.get(cell.value, property);
+    rememberReactivePropObjectSnapshot(cell, property, value);
+    return value;
   },
   has(cell, property) {
     trackSource(getReactivePropPropertySource(cell, property));
@@ -86,6 +89,89 @@ function getReactivePropPropertySource(cell: ReactivePropCell, property: Propert
   return source;
 }
 
+interface ShallowObjectSnapshot {
+  value: object;
+  entries: Map<PropertyKey, unknown>;
+}
+
+function rememberReactivePropObjectSnapshot(
+  cell: ReactivePropCell,
+  property: PropertyKey,
+  value: unknown,
+): void {
+  if (!isObjectLike(value)) {
+    cell.propertySnapshots?.delete(property);
+    return;
+  }
+
+  let snapshots = cell.propertySnapshots;
+  if (snapshots === undefined) {
+    snapshots = new Map();
+    cell.propertySnapshots = snapshots;
+  }
+
+  snapshots.set(property, createShallowObjectSnapshot(value));
+}
+
+function createShallowObjectSnapshot(value: object): ShallowObjectSnapshot {
+  const entries = new Map<PropertyKey, unknown>();
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+    if (descriptor !== undefined && "value" in descriptor) {
+      entries.set(key, descriptor.value);
+    }
+  }
+
+  return { value, entries };
+}
+
+function isObjectLike(value: unknown): value is object {
+  return (typeof value === "object" && value !== null) || typeof value === "function";
+}
+
+function hasShallowObjectSnapshotChanged(
+  snapshot: ShallowObjectSnapshot | undefined,
+  nextValue: unknown,
+): boolean {
+  if (snapshot === undefined || snapshot.value !== nextValue || !isObjectLike(nextValue)) {
+    return false;
+  }
+
+  for (const key of Reflect.ownKeys(nextValue)) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(nextValue, key);
+    if (descriptor !== undefined && "value" in descriptor) {
+      if (!snapshot.entries.has(key) || !Object.is(snapshot.entries.get(key), descriptor.value)) {
+        return true;
+      }
+    }
+  }
+
+  for (const key of snapshot.entries.keys()) {
+    const descriptor = Reflect.getOwnPropertyDescriptor(nextValue, key);
+    if (descriptor === undefined || !("value" in descriptor)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function shouldNotifyReactivePropProperty(
+  previous: Record<string, unknown>,
+  next: Record<string, unknown>,
+  property: PropertyKey,
+  snapshot: ShallowObjectSnapshot | undefined,
+): boolean {
+  if ((property in previous) !== (property in next)) {
+    return true;
+  }
+
+  const previousValue = Reflect.get(previous, property);
+  const nextValue = Reflect.get(next, property);
+  return !Object.is(previousValue, nextValue) ||
+    hasShallowObjectSnapshotChanged(snapshot, nextValue);
+}
+
 export function setReactivePropCell(
   cell: ReactivePropCell,
   next: Record<string, unknown>,
@@ -102,7 +188,14 @@ export function setReactivePropCell(
 
   if (propertySources !== undefined) {
     for (const [property, source] of propertySources) {
-      if (!Object.is(previous[property as string], next[property as string])) {
+      if (
+        shouldNotifyReactivePropProperty(
+          previous,
+          next,
+          property,
+          cell.propertySnapshots?.get(property),
+        )
+      ) {
         notifySubscribers(source);
         notified = true;
       }
