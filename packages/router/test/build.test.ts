@@ -5440,6 +5440,42 @@ export default function Page() {
     expect(await assetResponse.text()).toBe("main { color: red; }");
   });
 
+  test("serves built public assets before middleware redirects", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-public-before-middleware-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "public"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `globalThis.__mreactPublicAssetMiddlewareLoaded =
+  (globalThis.__mreactPublicAssetMiddlewareLoaded ?? 0) + 1;
+
+export function middleware() {
+  return new Response(null, { status: 303, headers: { location: "/login" } });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>public before middleware</main>;
+}`,
+    );
+    await writeFile(join(appDir, "public", "asset.txt"), "public asset");
+    const state = globalThis as { __mreactPublicAssetMiddlewareLoaded?: number | undefined };
+    state.__mreactPublicAssetMiddlewareLoaded = 0;
+
+    await buildApp({ appDir, outDir });
+    const assetResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/asset.txt"),
+    });
+
+    expect(assetResponse.status).toBe(200);
+    expect(assetResponse.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await assetResponse.text()).toBe("public asset");
+    expect(state.__mreactPublicAssetMiddlewareLoaded).toBe(0);
+  });
+
   test("keeps comment-only client markers out of the production client manifest", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-comment-client-marker-"));
     const appDir = join(rootDir, "app");

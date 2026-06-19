@@ -57,6 +57,38 @@ describe("built server module artifact loading", () => {
     expect(runtime.serverModules.get(depFile)?.request?.code).toContain("dep = true");
   });
 
+  test("falls back to source import closure when manifest closure files are absent", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-built-server-artifacts-source-fallback-"));
+    const appDir = join(rootDir, "app");
+    const serverDir = join(rootDir, "server");
+    const requestDir = join(serverDir, "server-modules", "request");
+    await mkdir(requestDir, { recursive: true });
+    await writeFile(
+      join(requestDir, "page.json"),
+      JSON.stringify({ loader: { code: "export function loader() {}", sourceHash: "page" } }),
+    );
+    await writeFile(
+      join(requestDir, "dep.json"),
+      JSON.stringify({ request: { code: "export const dep = true;", sourceHash: "dep" } }),
+    );
+
+    const pageFile = join(appDir, "page.tsx");
+    const depFile = join(appDir, "server", "dep.ts");
+    const runtime = createRuntime(appDir);
+    runtime.serverSourceFiles.set(pageFile, `import { dep } from "./server/dep"; export { dep };`);
+    runtime.serverSourceFiles.set(depFile, "export const dep = true;");
+    runtime.serverModuleRequestFiles.set(pageFile, join(requestDir, "page.json"));
+    runtime.serverModuleRequestFiles.set(depFile, join(requestDir, "dep.json"));
+
+    await loadBuiltServerModuleArtifactsForRequest(runtime, pageFile, {
+      includeShells: false,
+    });
+
+    expect(runtime.serverModules.get(pageFile)?.loader?.code).toContain("loader");
+    expect(runtime.serverModules.get(depFile)?.request?.code).toContain("dep = true");
+    expect(runtime.serverModuleClosureFiles.get(pageFile)).toEqual([pageFile, depFile]);
+  });
+
   test("enumerates split and unsplit server module files once", () => {
     const rootDir = join(tmpdir(), "mreact-built-server-artifact-enumerate");
     const runtime = createRuntime(join(rootDir, "app"));

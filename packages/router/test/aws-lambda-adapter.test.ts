@@ -1,4 +1,4 @@
-import { access, lstat, mkdir, mkdtemp, rename, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
@@ -651,19 +651,26 @@ export default function Slow() {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preload-hot-route-requests-");
     await mkdir(join(appDir, "hot"), { recursive: true });
     await writeFile(
+      join(appDir, "hot", "loader-dependency.ts"),
+      `export function message() {
+  return "hot";
+}`,
+    );
+    await writeFile(
       join(appDir, "hot", "page-dependency.ts"),
       `globalThis.__mreactHotRouteRequestPreload = [
   ...(globalThis.__mreactHotRouteRequestPreload ?? []),
   "page-module",
 ];
 
-export function message(value) {
+export function renderMessage(value) {
   return value;
 }`,
     );
     await writeFile(
       join(appDir, "hot", "page.tsx"),
-      `import { message } from "./page-dependency";
+      `import { message } from "./loader-dependency";
+import { renderMessage } from "./page-dependency";
 
 export function loader() {
   globalThis.__mreactHotRouteRequestPreload = [
@@ -674,7 +681,7 @@ export function loader() {
 }
 
 export default function Hot({ data }) {
-  return <main>{message(data.message)}</main>;
+  return <main>{renderMessage(data.message)}</main>;
 }`,
     );
     const state = globalThis as { __mreactHotRouteRequestPreload?: string[] | undefined };
@@ -685,6 +692,12 @@ export default function Hot({ data }) {
       outDir,
       preload: { mode: "hot-route-requests", routes: ["/hot"] },
     });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleRequestFiles?: Record<string, string>;
+    };
+    const requestArtifact = manifest.serverModuleRequestFiles?.["hot/page.tsx"];
+    expect(requestArtifact).toMatch(/^server-modules\/request\/[a-f0-9]{16}\.json$/);
+    await rm(join(outDir, "server", requestArtifact ?? ""));
 
     expect(state.__mreactHotRouteRequestPreload).toEqual([]);
     const result = await handler(lambdaEvent("/hot"));
