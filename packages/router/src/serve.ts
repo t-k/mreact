@@ -34,7 +34,7 @@ import {
   type AppRouterServerRenderArtifactLoader,
   type AppRouterRenderPreload,
   type AppRouterResponseHook,
-  type RenderAppRequestOptions,
+  type RenderAppRequestRuntimeOptions,
 } from "./render.js";
 import type { RouterInstrumentation } from "./trace.js";
 import {
@@ -776,7 +776,7 @@ function builtRenderAppRequestOptions(
     requestUrl?: URL | undefined;
     runtime: BuiltRuntime;
   },
-): RenderAppRequestOptions {
+): RenderAppRequestRuntimeOptions {
   const serverRenderArtifactLoader: AppRouterServerRenderArtifactLoader = {
     async load(routeFile: string) {
       await loadBuiltServerModuleArtifactsForRequest(options.runtime, routeFile, {
@@ -784,7 +784,7 @@ function builtRenderAppRequestOptions(
       });
     },
   };
-  const renderOptions: RenderAppRequestOptions = {
+  const renderOptions: RenderAppRequestRuntimeOptions = {
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,

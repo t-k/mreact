@@ -205,7 +205,6 @@ export interface RenderAppRequestOptions {
   routes?: readonly AppRoute[] | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
-  serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
   // True when serving through a dev server: request-time server transforms
   // are expected there and must not trigger the production prebuild warning.
   dev?: boolean | undefined;
@@ -217,6 +216,10 @@ export interface RenderAppRequestOptions {
   skipMiddleware?: boolean | undefined;
   preload?: AppRouterRenderPreload | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
+}
+
+export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions {
+  serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
 }
 
 export interface AppRouterRenderPreload {
@@ -737,7 +740,7 @@ async function waitForRenderPreload(
 }
 
 async function loadServerRenderArtifacts(
-  options: RenderAppRequestOptions,
+  options: RenderAppRequestRuntimeOptions,
   routeFile: string,
   timing: RenderTiming | undefined,
 ): Promise<void> {
@@ -756,7 +759,7 @@ async function loadServerRenderArtifacts(
 }
 
 function emitRenderTiming(
-  options: RenderAppRequestOptions,
+  options: RenderAppRequestRuntimeOptions,
   timing: RenderTiming | undefined,
   status: number,
 ): void {
@@ -808,7 +811,7 @@ export async function resolveAppRouterMiddleware(options: {
   return { response: middlewareResponse, type: "response" };
 }
 
-async function renderAppRequestInternal(options: RenderAppRequestOptions): Promise<Response> {
+async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions): Promise<Response> {
   warnProductionRenderWithoutPrebuiltModules(options);
   const timing = createRenderTiming(options.logger);
   const clientRouteInferenceCache =
