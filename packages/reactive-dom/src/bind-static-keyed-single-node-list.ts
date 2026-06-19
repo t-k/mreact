@@ -181,6 +181,24 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       return;
     }
 
+    const fastSwappedRecords = ownsCurrentParent
+      ? trySwapSingleNodeItems(
+          insertionParent,
+          marker,
+          records,
+          currentItems,
+          options.key,
+          renderArity,
+          selectedClassState,
+        )
+      : undefined;
+
+    if (fastSwappedRecords !== undefined) {
+      records = fastSwappedRecords;
+      ownsParent = true;
+      return;
+    }
+
     const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key);
     const keys = keyedItems.keys;
 
@@ -725,6 +743,115 @@ function tryRemoveSingleNodeItems<T>(
   return { records, staleRecords };
 }
 
+function trySwapSingleNodeItems<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, SingleNodeRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderArity: number,
+  selectedClassState: SelectedClassState | undefined,
+): Map<unknown, SingleNodeRecord> | undefined {
+  if (currentItems.length !== records.size || currentItems.length < 2) {
+    return undefined;
+  }
+
+  const previousRecords = records[Symbol.iterator]();
+  const orderedRecords: SingleNodeRecord[] = [];
+  let bufferedRecords: SingleNodeRecord[] | undefined;
+  let firstIndex = -1;
+  let secondIndex = -1;
+  let firstPreviousKey: unknown;
+  let secondPreviousKey: unknown;
+  let firstNextKey: unknown;
+  let secondNextKey: unknown;
+  let firstRecord: SingleNodeRecord | undefined;
+  let secondRecord: SingleNodeRecord | undefined;
+
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const previousRecord = previousRecords.next();
+
+    if (previousRecord.done) {
+      return undefined;
+    }
+
+    const nextKey = key(currentItems[index] as T, index, currentItems);
+    const previousKey = previousRecord.value[0];
+    const record = previousRecord.value[1];
+
+    if (Object.is(previousKey, nextKey)) {
+      if (firstIndex === -1 || secondIndex !== -1) {
+        orderedRecords.push(record);
+      } else {
+        (bufferedRecords as SingleNodeRecord[]).push(record);
+      }
+      continue;
+    }
+
+    if (firstIndex === -1) {
+      firstIndex = index;
+      firstPreviousKey = previousKey;
+      firstNextKey = nextKey;
+      firstRecord = record;
+      bufferedRecords = [];
+    } else if (secondIndex === -1) {
+      secondIndex = index;
+      secondPreviousKey = previousKey;
+      secondNextKey = nextKey;
+      secondRecord = record;
+
+      if (
+        !Object.is(firstPreviousKey, secondNextKey) ||
+        !Object.is(secondPreviousKey, firstNextKey)
+      ) {
+        return undefined;
+      }
+
+      orderedRecords.push(secondRecord);
+      for (const bufferedRecord of bufferedRecords as SingleNodeRecord[]) {
+        orderedRecords.push(bufferedRecord);
+      }
+      orderedRecords.push(firstRecord as SingleNodeRecord);
+    } else {
+      return undefined;
+    }
+  }
+
+  if (
+    firstIndex === -1 ||
+    secondIndex === -1 ||
+    orderedRecords.length !== currentItems.length ||
+    firstRecord === undefined ||
+    secondRecord === undefined
+  ) {
+    return undefined;
+  }
+
+  const nextRecords = new Map<unknown, SingleNodeRecord>();
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const item = currentItems[index] as T;
+    const record = orderedRecords[index] as SingleNodeRecord;
+
+    if (
+      !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+      !updateSingleNodeRecord(record, renderArity, item, index, currentItems)
+    ) {
+      return undefined;
+    }
+
+    if (refreshSelectedClasses) {
+      refreshSelectedClassRecord(selectedClassState, record);
+    }
+    nextRecords.set(record.key, record);
+  }
+
+  const secondAnchor = orderedRecords[secondIndex + 1]?.node ?? marker;
+
+  return moveSwappedSingleNodeRecords(parent, nextRecords, secondRecord, firstRecord, secondAnchor);
+}
+
 function updateSameOrderRecords<T>(
   records: Map<unknown, SingleNodeRecord>,
   keyedItems: SingleNodeKeyedItems<T>,
@@ -1047,13 +1174,23 @@ function trySwapSingleNodeRecords<T>(
 
   const firstRecord = nextRecords.get(keys[firstIndex]);
   const secondRecord = nextRecords.get(keys[secondIndex]);
+  const secondAnchor = nextRecords.get(keys[secondIndex + 1])?.node ?? marker;
 
+  return moveSwappedSingleNodeRecords(parent, nextRecords, firstRecord, secondRecord, secondAnchor);
+}
+
+function moveSwappedSingleNodeRecords(
+  parent: ParentNode,
+  nextRecords: Map<unknown, SingleNodeRecord>,
+  firstRecord: SingleNodeRecord | undefined,
+  secondRecord: SingleNodeRecord | undefined,
+  secondAnchor: ChildNode,
+): Map<unknown, SingleNodeRecord> | undefined {
   if (firstRecord === undefined || secondRecord === undefined) {
     return undefined;
   }
 
   const firstAnchor = secondRecord.node;
-  const secondAnchor = nextRecords.get(keys[secondIndex + 1])?.node ?? marker;
 
   parent.insertBefore(firstRecord.node, firstAnchor);
   parent.insertBefore(secondRecord.node, secondAnchor);

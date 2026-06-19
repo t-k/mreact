@@ -72,7 +72,8 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
 
     expect(main).toContain("batch(() =>");
-    expect(main).toContain("row.label.set((label) => `${label} !!!`)");
+    expect(main).toContain('row.label.set(`${row.label.get()} !!!`)');
+    expect(main).not.toContain("row.label.set((label)");
     expect(main).toContain("if (selected.get() !== null)");
     expect(main).toContain("rows.findIndex((row) => row.id === id)");
     expect(main).toContain("const next = new Array<Row>(rows.length - 1)");

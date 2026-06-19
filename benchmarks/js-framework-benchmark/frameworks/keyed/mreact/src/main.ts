@@ -118,7 +118,7 @@ function updateEveryTenthRow(): void {
       const row = rows[index];
 
       if (row !== undefined) {
-        row.label.set((label) => `${label} !!!`);
+        row.label.set(`${row.label.get()} !!!`);
       }
     }
   });
