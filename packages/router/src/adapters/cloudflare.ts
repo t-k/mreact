@@ -1,5 +1,6 @@
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
 import type { ClientRouteManifestEntry } from "../client.js";
+import { clientManifestAssetPaths } from "../client-manifest-assets.js";
 import type { AppRouterResponseHook } from "../render.js";
 import {
   __MREACT_QUERY_STATE_SCRIPT_ID,
@@ -974,39 +975,10 @@ export function cloudflareClientAssetPaths(
   options: { extraPaths?: readonly string[] | undefined; prefix?: string | undefined } = {},
 ): Set<string> {
   const prefix = normalizeAssetPrefix(options.prefix ?? clientPrefix);
-  const paths = new Set<string>([`${prefix}manifest.json`]);
-
-  for (const route of manifest.routes) {
-    for (const asset of [
-      route.script,
-      route.sourceMap,
-      route.navigationScript,
-      ...(route.css ?? []),
-      ...(route.imports ?? []),
-    ]) {
-      const path = safeClientAssetPath(prefix, asset);
-
-      if (path !== undefined) {
-        paths.add(path);
-      }
-    }
-  }
-
-  for (const asset of manifest.assets ?? []) {
-    const path = safeClientAssetPath(prefix, asset);
-
-    if (path !== undefined) {
-      paths.add(path);
-    }
-  }
-
-  for (const extraPath of options.extraPaths ?? []) {
-    const path = safeClientAssetPath(prefix, extraPath);
-
-    if (path !== undefined) {
-      paths.add(path);
-    }
-  }
+  const paths = clientManifestAssetPaths(manifest, {
+    extraPaths: options.extraPaths,
+    prefix,
+  });
 
   for (const publicAsset of manifest.publicAssets ?? []) {
     const path = safePublicAssetPath(publicAsset);
@@ -1427,20 +1399,6 @@ function normalizeAssetPrefix(prefix: string): string {
   return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
 }
 
-function safeClientAssetPath(prefix: string, asset: string | undefined): string | undefined {
-  if (asset === undefined || asset === "" || asset.startsWith("/") || asset.includes("\\")) {
-    return undefined;
-  }
-
-  const segments = asset.split("/");
-
-  if (segments.some((segment) => unsafeAssetSegment(segment))) {
-    return undefined;
-  }
-
-  return `${prefix}${segments.join("/")}`;
-}
-
 function withCloudflareHydrationMarkers(options: {
   data: unknown;
   html: string;
@@ -1523,19 +1481,6 @@ function cloudflareRouteIdForPath(path: string): string {
     .replaceAll("/", "_")
     .replaceAll(":", "_")
     .replace(/[^A-Za-z0-9_$-]/g, "_");
-}
-
-function unsafeAssetSegment(segment: string): boolean {
-  if (segment === "" || segment === "." || segment === "..") {
-    return true;
-  }
-
-  try {
-    const decoded = decodeURIComponent(segment);
-    return decoded === "." || decoded === ".." || decoded.includes("/") || decoded.includes("\\");
-  } catch {
-    return true;
-  }
 }
 
 async function loadCloudflareRouteModule<Env>(

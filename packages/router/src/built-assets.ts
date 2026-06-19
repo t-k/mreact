@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, normalize, sep } from "node:path";
 import type { ClientRouteManifestEntry } from "./client-route-inference.js";
+import { clientManifestAssetPaths } from "./client-manifest-assets.js";
 import { bytesResponse, rawNodeRequestUrl } from "./http.js";
 
 const builtPublicAssetCache = new Map<
@@ -73,45 +74,7 @@ export function builtClientAssetPaths(manifest: {
   assets?: readonly string[] | undefined;
   routes: readonly ClientRouteManifestEntry[];
 }): ReadonlySet<string> {
-  const paths = new Set<string>(["manifest.json"]);
-
-  for (const route of manifest.routes) {
-    for (const asset of [
-      route.script,
-      route.sourceMap,
-      route.navigationScript,
-      ...(route.css ?? []),
-      ...(route.imports ?? []),
-    ]) {
-      const path = safeClientManifestAssetPath(asset);
-
-      if (path !== undefined) {
-        paths.add(path);
-      }
-    }
-  }
-
-  for (const asset of manifest.assets ?? []) {
-    const path = safeClientManifestAssetPath(asset);
-
-    if (path !== undefined) {
-      paths.add(path);
-    }
-  }
-
-  return paths;
-}
-
-function safeClientManifestAssetPath(asset: string | undefined): string | undefined {
-  if (asset === undefined || asset === "" || asset.startsWith("/") || asset.includes("\\")) {
-    return undefined;
-  }
-
-  const segments = asset.split("/");
-
-  return segments.some((segment) => segment === "" || segment === "." || segment === "..")
-    ? undefined
-    : segments.join("/");
+  return clientManifestAssetPaths(manifest);
 }
 
 export async function readBuiltPublicAsset(
