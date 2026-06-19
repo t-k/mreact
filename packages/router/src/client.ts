@@ -2657,7 +2657,7 @@ export async function __mreactPrefetch(url) {
     return true;
   }
 
-  __mreactNavigationState.prefetchedUrls.add(href);
+  __mreactRememberPrefetchedUrl(href);
 
   const script = __mreactRouteScriptForNavigationUrl(href);
 
@@ -2684,6 +2684,33 @@ function __mreactPrefetchNavigationHtml(href) {
 }
 
 const __mreactNavigationHtmlCacheMaxEntries = 64;
+const __mreactNavigationPrefetchHistoryMaxEntries = 64;
+
+function __mreactRememberPrefetchedUrl(href) {
+  __mreactRememberPrefetchHistory(__mreactNavigationState.prefetchedUrls, href);
+}
+
+function __mreactRememberPrefetchedScript(href) {
+  __mreactRememberPrefetchHistory(__mreactNavigationState.prefetchedScripts, href);
+}
+
+function __mreactRememberPrefetchHistory(history, href) {
+  if (history.has(href)) {
+    history.delete(href);
+  }
+
+  history.add(href);
+
+  while (history.size > __mreactNavigationPrefetchHistoryMaxEntries) {
+    const oldestHref = history.keys().next().value;
+
+    if (oldestHref === undefined) {
+      return;
+    }
+
+    history.delete(oldestHref);
+  }
+}
 
 function __mreactCachedNavigationHtml(href) {
   const html = __mreactNavigationState.cache.get(href);
@@ -2712,6 +2739,7 @@ function __mreactRememberNavigationHtml(href, html) {
     }
 
     __mreactNavigationState.cache.delete(oldestHref);
+    __mreactNavigationState.prefetchedUrls.delete(oldestHref);
   }
 }
 
@@ -2732,7 +2760,7 @@ function __mreactPrefetchRouteScript(script) {
 
   for (const link of Array.from(document.querySelectorAll('link[rel="modulepreload"][href]'))) {
     if (link.href === href) {
-      __mreactNavigationState.prefetchedScripts.add(href);
+      __mreactRememberPrefetchedScript(href);
       return true;
     }
   }
@@ -2741,7 +2769,7 @@ function __mreactPrefetchRouteScript(script) {
   link.rel = "modulepreload";
   link.href = href;
   document.head.appendChild(link);
-  __mreactNavigationState.prefetchedScripts.add(href);
+  __mreactRememberPrefetchedScript(href);
   return true;
 }
 

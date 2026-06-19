@@ -98,7 +98,9 @@ interface BuiltRuntimeCacheEntry {
 }
 
 const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
+const builtRuntimeReadInflight = new Map<string, Promise<BuiltRuntime>>();
 const builtPublicAssetCache = new Map<string, BuiltPublicAsset>();
+let builtRuntimeMaterializeCountForTest = 0;
 
 interface BuiltPublicAsset {
   bytes: Uint8Array;
@@ -851,6 +853,16 @@ async function readBuiltPublicAsset(
 
 export const __readBuiltPublicAssetForTest = readBuiltPublicAsset;
 
+export function __clearBuiltRuntimeCacheForTest(): void {
+  builtRuntimeCache.clear();
+  builtRuntimeReadInflight.clear();
+  builtRuntimeMaterializeCountForTest = 0;
+}
+
+export function __getBuiltRuntimeMaterializeCountForTest(): number {
+  return builtRuntimeMaterializeCountForTest;
+}
+
 export function __clearBuiltPublicAssetCacheForTest(): void {
   builtPublicAssetCache.clear();
 }
@@ -873,6 +885,44 @@ async function readBuiltRuntime(options: {
     return cached.runtime;
   }
 
+  if (cached === undefined) {
+    const inflight = builtRuntimeReadInflight.get(cacheKey);
+    if (inflight !== undefined) {
+      return inflight;
+    }
+
+    const runtime = readBuiltRuntimeUncached({
+      cacheKey,
+      cached,
+      outDir,
+      runtimeDir,
+    });
+    builtRuntimeReadInflight.set(cacheKey, runtime);
+    void runtime
+      .finally(() => {
+        if (builtRuntimeReadInflight.get(cacheKey) === runtime) {
+          builtRuntimeReadInflight.delete(cacheKey);
+        }
+      })
+      .catch(() => {});
+    return runtime;
+  }
+
+  return readBuiltRuntimeUncached({
+    cacheKey,
+    cached,
+    outDir,
+    runtimeDir,
+  });
+}
+
+async function readBuiltRuntimeUncached(options: {
+  cached: BuiltRuntimeCacheEntry | undefined;
+  cacheKey: string;
+  outDir: string;
+  runtimeDir: string;
+}): Promise<BuiltRuntime> {
+  const { cacheKey, cached, outDir, runtimeDir } = options;
   const serverManifestPath = join(outDir, "server", "manifest.json");
   const clientManifestPath = join(outDir, "client", "manifest.json");
   const importPolicyPath = join(outDir, "server", "import-policy.json");
@@ -908,6 +958,11 @@ async function readBuiltRuntime(options: {
     runtime,
     serverManifestText,
   });
+  runtime.catch(() => {
+    if (builtRuntimeCache.get(cacheKey)?.runtime === runtime) {
+      builtRuntimeCache.delete(cacheKey);
+    }
+  });
 
   return runtime;
 }
@@ -922,6 +977,7 @@ async function materializeBuiltRuntime(options: {
   serverManifestText: string;
   serverManifestPath: string;
 }): Promise<BuiltRuntime> {
+  builtRuntimeMaterializeCountForTest += 1;
   const serverManifest = parseBuiltJsonArtifact<BuiltServerManifest>(
     options.serverManifestText,
     options.serverManifestPath,

@@ -5441,6 +5441,59 @@ export default function Page() {
     expect(cache?.has(`${location.origin}/server-69`)).toBe(true);
   });
 
+  test("refetches navigation HTML after prefetched URL history eviction", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-url-history-bound");
+    const requests: string[] = [];
+    globalThis.fetch = async (url) => {
+      requests.push(String(url));
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          `<div data-mreact-route-id="server"><main>${String(url)}</main></div>`,
+          '<script type="application/json" id="mreact-props-server">{}</script>',
+        ].join(""),
+      );
+    };
+
+    for (let index = 0; index < 70; index += 1) {
+      await expect(routeModule.__mreactPrefetch(`/server-${index}`)).resolves.toBe(true);
+    }
+    await expect(routeModule.__mreactPrefetch("/server-0")).resolves.toBe(true);
+
+    expect(requests.filter((url) => url === `${location.origin}/server-0`)).toHaveLength(2);
+  });
+
+  test("bounds prefetched route script history entries", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-script-history-bound");
+    installRoutePrefetchManifest(
+      Array.from({ length: 70 }, (_, index) => ({
+        path: `/client-${index}`,
+        script: `/_mreact/client/assets/routes/client-${index}.12345678.js`,
+      })),
+    );
+
+    for (let index = 0; index < 70; index += 1) {
+      await expect(routeModule.__mreactPrefetch(`/client-${index}`)).resolves.toBe(true);
+    }
+
+    const prefetchedScripts = (
+      globalThis as {
+        __mreactNavigationState?: { prefetchedScripts?: Set<string> };
+      }
+    ).__mreactNavigationState?.prefetchedScripts;
+    expect(prefetchedScripts?.size).toBeLessThanOrEqual(64);
+    expect(
+      prefetchedScripts?.has(
+        `${location.origin}/_mreact/client/assets/routes/client-0.12345678.js`,
+      ),
+    ).toBe(false);
+    expect(
+      prefetchedScripts?.has(
+        `${location.origin}/_mreact/client/assets/routes/client-69.12345678.js`,
+      ),
+    ).toBe(true);
+  });
+
   test("skips cross-origin navigation HTML prefetches", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-cross-origin-html");
     const requests: string[] = [];

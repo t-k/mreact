@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { buildApp } from "../src/build.js";
-import { createBuiltRequestRuntime } from "../src/serve.js";
+import {
+  __clearBuiltRuntimeCacheForTest,
+  __getBuiltRuntimeMaterializeCountForTest,
+  createBuiltRequestRuntime,
+} from "../src/serve.js";
 
 describe("built request runtime", () => {
   test("renders built pages and server routes through one runtime interface", async () => {
@@ -44,6 +48,23 @@ export default function Page() { return <main>Preload policy</main>; }`,
 
     const response = await runtime.render(new Request("http://local.test/"));
     expect(await response.text()).toContain("<main>Preload policy</main>");
+  });
+
+  test("shares in-flight built runtime materialization for concurrent cold callers", async () => {
+    const { appDir, outDir } = await createBuiltApp("mreact-built-runtime-inflight-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Shared runtime</main>; }`,
+    );
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    __clearBuiltRuntimeCacheForTest();
+
+    await Promise.all([
+      createBuiltRequestRuntime({ immutableRuntime: true, outDir }),
+      createBuiltRequestRuntime({ immutableRuntime: true, outDir }),
+    ]);
+
+    expect(__getBuiltRuntimeMaterializeCountForTest()).toBe(1);
   });
 });
 
