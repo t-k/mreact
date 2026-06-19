@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.175 - 2026-06-19
+
+### Changed
+
+- Improved React-compatible compiler-lowered static reactive DOM block rows and keyed memo row reconciliation for table-style append, remove, selection, and partial-update paths by batching prop-cell updates, using compiler-proven memo compare props, and avoiding unnecessary row component/comparator work.
+- Improved React-compatible prop reactive DOM block lowering so independent prop bindings can update through narrower reactive subscriptions and generated event handlers can evaluate the latest reactive props without rebinding listeners on every prop update.
+
+### Fixed
+
+- Fixed React-compatible reactive prop-cell invalidation so property-presence checks and same-reference shallow object prop mutations can update the subscribed reactive DOM block effects without rerunning unrelated prop effects.
+
 ## 0.0.174 - 2026-06-19
 
 ### Changed
