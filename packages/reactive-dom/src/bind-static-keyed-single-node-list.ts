@@ -757,12 +757,16 @@ function trySwapSingleNodeItems<T>(
   }
 
   const previousRecords = records[Symbol.iterator]();
+  const orderedRecords: SingleNodeRecord[] = [];
+  let bufferedRecords: SingleNodeRecord[] | undefined;
   let firstIndex = -1;
   let secondIndex = -1;
   let firstPreviousKey: unknown;
   let secondPreviousKey: unknown;
   let firstNextKey: unknown;
   let secondNextKey: unknown;
+  let firstRecord: SingleNodeRecord | undefined;
+  let secondRecord: SingleNodeRecord | undefined;
 
   for (let index = 0; index < currentItems.length; index += 1) {
     const previousRecord = previousRecords.next();
@@ -772,19 +776,42 @@ function trySwapSingleNodeItems<T>(
     }
 
     const nextKey = key(currentItems[index] as T, index, currentItems);
+    const previousKey = previousRecord.value[0];
+    const record = previousRecord.value[1];
 
-    if (Object.is(previousRecord.value[0], nextKey)) {
+    if (Object.is(previousKey, nextKey)) {
+      if (firstIndex === -1 || secondIndex !== -1) {
+        orderedRecords.push(record);
+      } else {
+        (bufferedRecords as SingleNodeRecord[]).push(record);
+      }
       continue;
     }
 
     if (firstIndex === -1) {
       firstIndex = index;
-      firstPreviousKey = previousRecord.value[0];
+      firstPreviousKey = previousKey;
       firstNextKey = nextKey;
+      firstRecord = record;
+      bufferedRecords = [];
     } else if (secondIndex === -1) {
       secondIndex = index;
-      secondPreviousKey = previousRecord.value[0];
+      secondPreviousKey = previousKey;
       secondNextKey = nextKey;
+      secondRecord = record;
+
+      if (
+        !Object.is(firstPreviousKey, secondNextKey) ||
+        !Object.is(secondPreviousKey, firstNextKey)
+      ) {
+        return undefined;
+      }
+
+      orderedRecords.push(secondRecord);
+      for (const bufferedRecord of bufferedRecords as SingleNodeRecord[]) {
+        orderedRecords.push(bufferedRecord);
+      }
+      orderedRecords.push(firstRecord as SingleNodeRecord);
     } else {
       return undefined;
     }
@@ -793,27 +820,23 @@ function trySwapSingleNodeItems<T>(
   if (
     firstIndex === -1 ||
     secondIndex === -1 ||
-    !Object.is(firstPreviousKey, secondNextKey) ||
-    !Object.is(secondPreviousKey, firstNextKey)
+    orderedRecords.length !== currentItems.length ||
+    firstRecord === undefined ||
+    secondRecord === undefined
   ) {
     return undefined;
   }
 
   const nextRecords = new Map<unknown, SingleNodeRecord>();
   const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
-  let firstRecord: SingleNodeRecord | undefined;
-  let secondRecord: SingleNodeRecord | undefined;
-  let secondAnchor: ChildNode = marker;
 
   for (let index = 0; index < currentItems.length; index += 1) {
     const item = currentItems[index] as T;
-    const itemKey = key(item, index, currentItems);
-    const record = records.get(itemKey);
+    const record = orderedRecords[index] as SingleNodeRecord;
 
     if (
-      record === undefined ||
-      (!canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
-        !updateSingleNodeRecord(record, renderArity, item, index, currentItems))
+      !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+      !updateSingleNodeRecord(record, renderArity, item, index, currentItems)
     ) {
       return undefined;
     }
@@ -821,17 +844,12 @@ function trySwapSingleNodeItems<T>(
     if (refreshSelectedClasses) {
       refreshSelectedClassRecord(selectedClassState, record);
     }
-    if (index === firstIndex) {
-      firstRecord = record;
-    } else if (index === secondIndex) {
-      secondRecord = record;
-    } else if (index === secondIndex + 1) {
-      secondAnchor = record.node;
-    }
-    nextRecords.set(itemKey, record);
+    nextRecords.set(record.key, record);
   }
 
-  return moveSwappedSingleNodeRecords(parent, nextRecords, firstRecord, secondRecord, secondAnchor);
+  const secondAnchor = orderedRecords[secondIndex + 1]?.node ?? marker;
+
+  return moveSwappedSingleNodeRecords(parent, nextRecords, secondRecord, firstRecord, secondAnchor);
 }
 
 function updateSameOrderRecords<T>(
