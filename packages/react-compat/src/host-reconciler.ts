@@ -12,6 +12,7 @@ import {
   STRICT_MODE_TYPE,
   Suspense,
   SuspenseList,
+  type MemoType,
   type ReactCompatElement,
   type ReactCompatPortal,
   type ReactiveDomBlockProps,
@@ -784,12 +785,53 @@ function isKeyedMemoRowCandidate(node: ReactCompatNode): boolean {
 // reconciler can drive its committed block straight through the prop cell instead
 // of re-invoking the component (the block's bound DOM updates via subscriptions).
 const STATIC_REACTIVE_BLOCK_MARKER = "__mreactStaticBlock";
+const MEMO_COMPARE_PROPS_MARKER = "__mreactMemoCompareProps";
 
 function isStaticReactiveBlockComponent(type: unknown): boolean {
   return (
     typeof type === "function" &&
     (type as unknown as Record<string, unknown>)[STATIC_REACTIVE_BLOCK_MARKER] === true
   );
+}
+
+function areCompilerMemoComparePropsEqual(
+  memoType: MemoType<Record<string, unknown>>,
+  previousProps: Record<string, unknown>,
+  nextProps: Record<string, unknown>,
+): boolean | undefined {
+  const keys = memoType[MEMO_COMPARE_PROPS_MARKER];
+  if (keys === undefined) {
+    return undefined;
+  }
+
+  if (keys.length === 1) {
+    const key = keys[0] as string;
+    return previousProps[key] === nextProps[key];
+  }
+
+  if (keys.length === 2) {
+    const first = keys[0] as string;
+    const second = keys[1] as string;
+    return previousProps[first] === nextProps[first] &&
+      previousProps[second] === nextProps[second];
+  }
+
+  if (keys.length === 3) {
+    const first = keys[0] as string;
+    const second = keys[1] as string;
+    const third = keys[2] as string;
+    return previousProps[first] === nextProps[first] &&
+      previousProps[second] === nextProps[second] &&
+      previousProps[third] === nextProps[third];
+  }
+
+  for (const key of keys) {
+    if (previousProps[key] !== nextProps[key]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function tryCreateInitialStaticBlockMemoFiber(
@@ -892,13 +934,18 @@ function tryReuseDependencyFreeKeyedMemoRow(
     state === undefined ||
     state.hasDirtyInstanceDependencies !== false ||
     state.hasUnflushedEffectDependencies !== false ||
-    state.hasRetainedInstanceDependencies !== false ||
-    !areMemoPropsEqual(
-      child.type as { compare?: (a: Record<string, unknown>, b: Record<string, unknown>) => boolean },
-      state.props,
-      child.props as Record<string, unknown>,
-    )
+    state.hasRetainedInstanceDependencies !== false
   ) {
+    return undefined;
+  }
+
+  const memoType = child.type as MemoType<Record<string, unknown>>;
+  const nextProps = child.props as Record<string, unknown>;
+  const propsEqual =
+    areCompilerMemoComparePropsEqual(memoType, state.props, nextProps) ??
+    areMemoPropsEqual(memoType, state.props, nextProps);
+
+  if (!propsEqual) {
     return undefined;
   }
 
@@ -1005,9 +1052,13 @@ function reconcileKeyedMemoRowHostChildren(
     currentFirstChild === undefined ||
     runtime === undefined ||
     options.previousNodes !== undefined ||
-    !isKeyedMemoRowCandidate(children[0]) ||
-    !hasSameAppendOrSingleDeleteKeyOrder(currentFirstChild, children)
+    !isKeyedMemoRowCandidate(children[0])
   ) {
+    return undefined;
+  }
+
+  const memoRowType = (children[0] as ReactCompatElement).type;
+  if (!hasSameAppendOrSingleDeleteKeyOrder(currentFirstChild, children, memoRowType)) {
     return undefined;
   }
 
@@ -1024,13 +1075,8 @@ function reconcileKeyedMemoRowHostChildren(
   let dirtyChildren: Fiber[] | undefined;
 
   for (let index = 0; index < children.length; index += 1) {
-    const child = children[index];
-
-    if (!isKeyedMemoRowCandidate(child)) {
-      return undefined;
-    }
-
-    const childElement = child as ReactCompatElement;
+    const child = children[index] as ReactCompatElement;
+    const childElement = child;
     let matched: Fiber | undefined = currentKeyed;
 
     if (matched === undefined) {
@@ -1138,12 +1184,18 @@ function reconcileKeyedMemoRowHostChildren(
 function hasSameAppendOrSingleDeleteKeyOrder(
   currentFirstChild: Fiber,
   children: readonly ReactCompatNode[],
+  expectedType: ReactCompatElement["type"],
 ): boolean {
   let current: Fiber | undefined = currentFirstChild;
   let skippedDeletion = false;
 
   for (let index = 0; index < children.length; index += 1) {
-    const key = getNodeKey(children[index]);
+    const child = children[index];
+    if (!isSameKeyedMemoRowCandidate(child, expectedType)) {
+      return false;
+    }
+
+    const key = (child as ReactCompatElement).key;
 
     if (current === undefined) {
       return true;
@@ -1170,6 +1222,18 @@ function hasSameAppendOrSingleDeleteKeyOrder(
   }
 
   return current === undefined || (!skippedDeletion && current.sibling === undefined);
+}
+
+function isSameKeyedMemoRowCandidate(
+  node: ReactCompatNode,
+  expectedType: ReactCompatElement["type"],
+): boolean {
+  return (
+    isReactCompatElement(node) &&
+    node.key !== null &&
+    node.ref === null &&
+    node.type === expectedType
+  );
 }
 
 function canReuseDependencyFreeMemoAtKey(

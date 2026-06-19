@@ -325,6 +325,7 @@ export interface MemoType<P = Record<string, unknown>> {
   $$typeof: typeof MEMO_TYPE;
   type: ElementType<P>;
   compare?: (previous: P, next: P) => boolean;
+  __mreactMemoCompareProps?: readonly string[];
 }
 
 /** Element type record produced by lazy. */

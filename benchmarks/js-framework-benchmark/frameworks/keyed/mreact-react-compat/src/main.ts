@@ -178,6 +178,7 @@ function requireElement(id) {
 	return element;
 }
 const RowMemo = memo(Row, (previous, next) => previous.selected === next.selected && previous.row === next.row);
+RowMemo.__mreactMemoCompareProps = ["selected", "row"];
 function App() {
 	const [state, dispatch] = useReducer(reduceAppState, {
 		rows: [],

@@ -264,6 +264,83 @@ describe("keyed memo-row reconcile (same-order fast path contract)", () => {
     });
   });
 
+  test("marked static-block rows with compiler-proven memo compare keys skip comparator calls", () => {
+    withProdEnv(() => {
+      const container = document.createElement("div");
+      let compareCalls = 0;
+      let setSelected: (id: number | null) => void = () => {};
+
+      type RowProps = { row: RowData; selected: boolean };
+      const RowComponent = (props: RowProps) =>
+        createReactiveDomBlock((p: RowProps) => {
+          const node = document.createElement("div");
+          node.setAttribute("data-id", String(p.row.id));
+          const text = document.createTextNode("");
+          node.appendChild(text);
+          const dispose = effect(() => {
+            const className = p.selected ? "danger" : "";
+            if (node.className !== className) {
+              node.className = className;
+            }
+            if (text.data !== p.row.label) {
+              text.data = p.row.label;
+            }
+          });
+          return { node, dispose };
+        }, props);
+
+      (RowComponent as unknown as Record<string, unknown>).__mreactStaticBlock = true;
+      const Row = memo(
+        RowComponent,
+        (a, b) => {
+          compareCalls += 1;
+          return a.selected === b.selected && a.row === b.row;
+        },
+      );
+      (Row as unknown as Record<string, unknown>).__mreactMemoCompareProps = [
+        "selected",
+        "row",
+      ];
+
+      const rows: RowData[] = [
+        { id: 1, label: "a" },
+        { id: 2, label: "b" },
+        { id: 3, label: "c" },
+      ];
+
+      function App() {
+        const [selected, setSelectedState] = useState<number | null>(null);
+        setSelected = setSelectedState;
+        return rows.map((row) =>
+          createElement(Row, {
+            key: row.id,
+            row,
+            selected: selected === row.id,
+          }),
+        );
+      }
+
+      flushSync(() => {
+        createRoot(container).render(createElement(App, null));
+      });
+      flushQueuedComputations();
+      expect(compareCalls).toBe(0);
+      expect(ids(container)).toEqual(["1", "2", "3"]);
+      expect(Array.from(container.querySelectorAll(".danger"))).toHaveLength(0);
+
+      flushSync(() => setSelected(2));
+      flushQueuedComputations();
+      expect(compareCalls).toBe(0);
+      expect(ids(container)).toEqual(["1", "2", "3"]);
+      expect(container.querySelector(".danger")?.textContent).toBe("b");
+
+      flushSync(() => setSelected(3));
+      flushQueuedComputations();
+      expect(compareCalls).toBe(0);
+      expect(container.querySelector(".danger")?.textContent).toBe("c");
+    });
+  });
+
   test("marked static-block rows keep remove handlers after a prior row deletion", async () => {
     await withProdEnvAsync(async () => {
       const container = document.createElement("tbody");

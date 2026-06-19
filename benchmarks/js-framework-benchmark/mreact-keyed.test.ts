@@ -211,6 +211,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain('case "update":');
     expect(main).toContain("dispatchBenchAction");
     expect(main).toContain("previous.selected === next.selected && previous.row === next.row");
+    expect(main).toContain('RowMemo.__mreactMemoCompareProps = ["selected", "row"];');
     expect(main).toContain("return _createReactiveDomBlock((props) =>");
     expect(main).toContain("document.createElement(\"tr\")");
     expect(main).toContain("bindEvent");

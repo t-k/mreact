@@ -34,8 +34,12 @@ export function emitCompat(
     };
   }
 
-  const normalizedModuleStatements = normalizeCompatModuleStatements(ir.moduleStatements);
   const dev = options.dev === true;
+  const staticPropBlockComponentNames = collectStaticPropBlockComponentNames(ir, dev);
+  const normalizedModuleStatements = normalizeCompatModuleStatements(
+    ir.moduleStatements,
+    staticPropBlockComponentNames,
+  );
   const componentImportSource = dev ? JSX_DEV_RUNTIME_SOURCE : JSX_RUNTIME_SOURCE;
   const componentSpecifiers = collectComponentImportSpecifiers(ir, dev);
   const reactiveDomSpecifiers = collectReactiveDomImportSpecifiers(ir, dev);
@@ -264,16 +268,114 @@ interface NormalizedModuleStatements {
   importSpecifiers: CompatRuntimeImportSpecifier[];
 }
 
-function normalizeCompatModuleStatements(statements: readonly string[]): NormalizedModuleStatements {
+function normalizeCompatModuleStatements(
+  statements: readonly string[],
+  staticPropBlockComponentNames: ReadonlySet<string>,
+): NormalizedModuleStatements {
   const importSpecifiers = new Map<string, CompatRuntimeImportSpecifier>();
-  const normalizedStatements = statements.map((statement) =>
-    stripCompatRuntimeImports(statement, importSpecifiers)
-  );
+  const normalizedStatements = statements.map((statement) => {
+    const stripped = stripCompatRuntimeImports(statement, importSpecifiers);
+    return annotateCompatMemoCompareProps(stripped, staticPropBlockComponentNames);
+  });
 
   return {
     statements: normalizedStatements,
     importSpecifiers: Array.from(importSpecifiers.values()),
   };
+}
+
+function collectStaticPropBlockComponentNames(
+  ir: ModuleIr,
+  dev: boolean,
+): ReadonlySet<string> {
+  const names = new Set<string>();
+  if (dev) {
+    return names;
+  }
+
+  for (const component of ir.components) {
+    if (getPropReactiveDomBlock(component) !== undefined) {
+      names.add(component.name);
+    }
+  }
+
+  return names;
+}
+
+function annotateCompatMemoCompareProps(
+  statement: string,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+): string {
+  const match = statement.match(
+    /^\s*(?:export\s+)?(?:const|let|var)\s+(?<memoName>[A-Za-z_$][\w$]*)\s*=\s*memo\s*\(\s*(?<componentName>[A-Za-z_$][\w$]*)\s*,\s*\(\s*(?<previousName>[A-Za-z_$][\w$]*)\s*,\s*(?<nextName>[A-Za-z_$][\w$]*)\s*\)\s*=>\s*(?<body>[\s\S]*?)\s*,?\s*\)\s*;?\s*$/,
+  );
+
+  const groups = match?.groups;
+  if (groups === undefined) {
+    return statement;
+  }
+
+  const { memoName, componentName, previousName, nextName, body } = groups;
+  if (
+    memoName === undefined ||
+    componentName === undefined ||
+    previousName === undefined ||
+    nextName === undefined ||
+    body === undefined ||
+    !staticPropBlockComponentNames.has(componentName)
+  ) {
+    return statement;
+  }
+
+  const compareProps = readStrictEqualityMemoCompareProps(body, previousName, nextName);
+  if (compareProps === undefined) {
+    return statement;
+  }
+
+  const propsLiteral = `[${compareProps.map((prop) => JSON.stringify(prop)).join(", ")}]`;
+  return `${statement}\n${memoName}.__mreactMemoCompareProps = ${propsLiteral};`;
+}
+
+function readStrictEqualityMemoCompareProps(
+  body: string,
+  previousName: string,
+  nextName: string,
+): string[] | undefined {
+  const parts = body.split(/\s*&&\s*/).map((part) => stripOuterParens(part.trim()));
+  if (parts.length === 0 || parts.some((part) => part === "")) {
+    return undefined;
+  }
+
+  const props: string[] = [];
+  const propName = "([A-Za-z_$][\\w$]*)";
+  const previous = escapeRegex(previousName);
+  const next = escapeRegex(nextName);
+  const forward = new RegExp(`^${previous}\\.${propName}\\s*===\\s*${next}\\.\\1$`);
+  const reverse = new RegExp(`^${next}\\.${propName}\\s*===\\s*${previous}\\.\\1$`);
+
+  for (const part of parts) {
+    const prop = part.match(forward)?.[1] ?? part.match(reverse)?.[1];
+    if (prop === undefined) {
+      return undefined;
+    }
+    if (!props.includes(prop)) {
+      props.push(prop);
+    }
+  }
+
+  return props;
+}
+
+function stripOuterParens(value: string): string {
+  let current = value;
+  while (current.startsWith("(") && current.endsWith(")")) {
+    current = current.slice(1, -1).trim();
+  }
+  return current;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function stripCompatRuntimeImports(

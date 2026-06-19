@@ -114,6 +114,79 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(container.querySelector("td.col-md-4")?.textContent).toBe("hi");
   });
 
+  test("annotates pure strict-equality memo comparators for prop reactive blocks", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return (
+            <tr className={props.selected ? "danger" : ""}>
+              <td>{props.row.label}</td>
+            </tr>
+          );
+        }
+
+        export const RowMemo = memo(
+          Row,
+          (previous, next) => previous.selected === next.selected && previous.row === next.row,
+        );
+
+        export function App(props) {
+          return <RowMemo row={props.row} selected={props.selected} />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('RowMemo.__mreactMemoCompareProps = ["selected", "row"];');
+  });
+
+  test("does not annotate non-strict or non-prop-block memo comparators", () => {
+    const nonStrict = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr>{props.row.label}</tr>;
+        }
+
+        export const RowMemo = memo(
+          Row,
+          (previous, next) => previous.row.id === next.row.id,
+        );`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(nonStrict.diagnostics).toEqual([]);
+    expect(nonStrict.code).not.toContain("__mreactMemoCompareProps");
+
+    const nonPropBlock = transform({
+      code: `import { memo, useState } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          const [value] = useState(props.row.label);
+          return <tr>{value}</tr>;
+        }
+
+        export const RowMemo = memo(
+          Row,
+          (previous, next) => previous.row === next.row,
+        );`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(nonPropBlock.diagnostics).toEqual([]);
+    expect(nonPropBlock.code).not.toContain("__mreactMemoCompareProps");
+  });
+
   test("compiled prop block event handlers use latest parent props after updates", async () => {
     const output = transform({
       code: `import { useState } from "@reckona/mreact-compat";
