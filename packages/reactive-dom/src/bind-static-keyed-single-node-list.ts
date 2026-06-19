@@ -817,8 +817,29 @@ function trySwapSingleNodeItems<T>(
     }
   }
 
+  if (firstIndex === -1) {
+    const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+
+    for (let index = 0; index < currentItems.length; index += 1) {
+      const item = currentItems[index] as T;
+      const record = orderedRecords[index] as SingleNodeRecord;
+
+      if (
+        !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+        !updateSingleNodeRecord(record, renderArity, item, index, currentItems)
+      ) {
+        return undefined;
+      }
+
+      if (refreshSelectedClasses) {
+        refreshSelectedClassRecord(selectedClassState, record);
+      }
+    }
+
+    return records;
+  }
+
   if (
-    firstIndex === -1 ||
     secondIndex === -1 ||
     orderedRecords.length !== currentItems.length ||
     firstRecord === undefined ||

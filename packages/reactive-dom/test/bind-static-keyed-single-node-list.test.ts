@@ -545,6 +545,45 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("keeps same-order single-node rows without a second full key scan", async () => {
+    const initialRows = Array.from({ length: 1_000 }, (_, index) => ({
+      id: index + 1,
+      label: String(index + 1),
+    }));
+    const items = cell(initialRows);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    let keyCalls = 0;
+
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const tr = document.createElement("tr");
+        tr.textContent = item.label;
+        return tr;
+      },
+      {
+        key: (item) => {
+          keyCalls += 1;
+          return item.id;
+        },
+      },
+    );
+
+    keyCalls = 0;
+    items.set(initialRows.slice());
+    await flushEffects();
+
+    expect(keyCalls).toBeLessThanOrEqual(initialRows.length + 1);
+    expect(parent.children[1]?.textContent).toBe("2");
+    expect(parent.children[998]?.textContent).toBe("999");
+
+    dispose();
+  });
+
   test("has dedicated bulk replacement and selected-class clear helpers", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
