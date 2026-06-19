@@ -2270,6 +2270,7 @@ export async function buildClientRouteEntrySource(
   },
   fetchRevalidationInstalled: false,
   installed: false,
+  pendingHtmlFetches: new Map(),
   prefetchedUrls: new Set(),
   prefetchedScripts: new Set(),
   reloadNextNavigationFetch: false,
@@ -2673,14 +2674,9 @@ function __mreactPrefetchNavigationHtml(href) {
     return true;
   }
 
-  return __mreactFetchNavigationHtml(href).then((html) => {
-    if (typeof html !== "string") {
-      return false;
-    }
-
-    __mreactRememberNavigationHtml(href, html);
-    return true;
-  }).catch(() => false);
+  return __mreactFetchNavigationHtmlOnce(href)
+    .then((html) => typeof html === "string")
+    .catch(() => false);
 }
 
 const __mreactNavigationHtmlCacheMaxEntries = 64;
@@ -2788,7 +2784,7 @@ export async function __mreactNavigate(url, options = {}) {
     if (script !== undefined) {
       void __mreactPrefetchRouteScript(script);
     }
-    const html = cachedHtml ?? await __mreactFetchNavigationHtml(href);
+    const html = cachedHtml ?? await __mreactFetchNavigationHtmlOnce(href);
 
     if (typeof html !== "string") {
       return false;
@@ -2937,10 +2933,16 @@ export function __mreactInvalidateNavigationCache(path) {
     return;
   }
 
-  for (const href of Array.from(__mreactNavigationState.cache.keys())) {
+  const hrefs = new Set([
+    ...Array.from(__mreactNavigationState.cache.keys()),
+    ...Array.from(__mreactNavigationState.pendingHtmlFetches.keys()),
+  ]);
+
+  for (const href of hrefs) {
     if (__mreactNormalizeNavigationPath(href) === normalizedPath) {
       __mreactNavigationState.cache.delete(href);
       __mreactNavigationState.prefetchedUrls.delete(href);
+      __mreactNavigationState.pendingHtmlFetches.delete(href);
     }
   }
 }
@@ -2948,6 +2950,35 @@ export function __mreactInvalidateNavigationCache(path) {
 function __mreactInvalidateAllNavigationCache() {
   __mreactNavigationState.cache.clear();
   __mreactNavigationState.prefetchedUrls.clear();
+  __mreactNavigationState.pendingHtmlFetches.clear();
+}
+
+function __mreactFetchNavigationHtmlOnce(href) {
+  const pending = __mreactNavigationState.pendingHtmlFetches.get(href);
+
+  if (pending !== undefined) {
+    return pending;
+  }
+
+  const request = __mreactFetchNavigationHtml(href)
+    .then((html) => {
+      if (
+        typeof html === "string" &&
+        __mreactNavigationState.pendingHtmlFetches.get(href) === request
+      ) {
+        __mreactRememberNavigationHtml(href, html);
+      }
+
+      return html;
+    })
+    .finally(() => {
+      if (__mreactNavigationState.pendingHtmlFetches.get(href) === request) {
+        __mreactNavigationState.pendingHtmlFetches.delete(href);
+      }
+    });
+
+  __mreactNavigationState.pendingHtmlFetches.set(href, request);
+  return request;
 }
 
 function __mreactFetchNavigationHtml(href) {
@@ -3523,6 +3554,13 @@ function __mreactInstallNavigation() {
       location.reload();
     }
   });
+  document.addEventListener("pointerover", (event) => {
+    const anchor = __mreactAnchorFromEvent(event);
+
+    if (anchor !== null && __mreactAnchorPrefetchMode(anchor) === "intent") {
+      void __mreactPrefetch(anchor.href);
+    }
+  }, true);
   document.addEventListener("pointerenter", (event) => {
     const anchor = __mreactAnchorFromEvent(event);
 

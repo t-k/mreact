@@ -5381,6 +5381,49 @@ export default function Page() {
     ]);
   });
 
+  test("reuses in-flight server route HTML prefetch for navigation", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-server-html-in-flight");
+    const requests: Array<{ headers: string | null; url: string }> = [];
+    let resolveFetch: ((response: Response) => void) | undefined;
+    globalThis.fetch = async (url, init) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        headers: headers.get("x-mreact-navigation"),
+        url: String(url),
+      });
+
+      return new Promise<Response>((resolve) => {
+        resolveFetch = resolve;
+      });
+    };
+
+    const prefetch = routeModule.__mreactPrefetch("/server");
+    await Promise.resolve();
+    const navigation = routeModule.__mreactNavigate("/server");
+    await Promise.resolve();
+
+    expect(requests).toEqual([
+      {
+        headers: "1",
+        url: "http://localhost:3000/server",
+      },
+    ]);
+
+    resolveFetch?.(
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="server"><main>Server</main></div>',
+          '<script type="application/json" id="mreact-props-server">{}</script>',
+        ].join(""),
+      ),
+    );
+
+    await expect(prefetch).resolves.toBe(true);
+    await expect(navigation).resolves.toBe(true);
+    expect(document.querySelector("[data-mreact-route-id='server']")?.textContent).toBe("Server");
+  });
+
   test("preloads matching client route scripts while navigation HTML is still loading", async () => {
     const { routeModule } = await importRouteRuntime("navigation-preloads-script-before-html");
     let resolveFetch: ((response: Response) => void) | undefined;
@@ -5739,6 +5782,24 @@ export default function Page() {
     ]);
     document.body.insertAdjacentHTML("beforeend", '<a href="/about">About</a>');
     document.querySelector("a")?.dispatchEvent(new PointerEvent("pointerenter", { bubbles: true }));
+
+    expect(
+      document.head.querySelector<HTMLLinkElement>(
+        'link[rel="modulepreload"][href="http://localhost:3000/_mreact/client/assets/routes/about.12345678.js"]',
+      ),
+    ).not.toBeNull();
+  });
+
+  test("intent-prefetches internal anchors from pointerover before click", async () => {
+    await importRouteRuntime("prefetch-intent-pointerover");
+    installRoutePrefetchManifest([
+      {
+        path: "/about",
+        script: "/_mreact/client/assets/routes/about.12345678.js",
+      },
+    ]);
+    document.body.insertAdjacentHTML("beforeend", '<a href="/about">About</a>');
+    document.querySelector("a")?.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }));
 
     expect(
       document.head.querySelector<HTMLLinkElement>(
