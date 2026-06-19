@@ -167,6 +167,13 @@ interface RenderTiming {
 }
 
 /**
+ * Loads prebuilt server render artifacts immediately before a route render needs them.
+ */
+export interface AppRouterServerRenderArtifactLoader {
+  load(routeFile: string): Promise<void>;
+}
+
+/**
  * Configures server rendering for a source app-router request.
  */
 export interface RenderAppRequestOptions {
@@ -192,6 +199,7 @@ export interface RenderAppRequestOptions {
   routes?: readonly AppRoute[] | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
   // True when serving through a dev server: request-time server transforms
   // are expected there and must not trigger the production prebuild warning.
   dev?: boolean | undefined;
@@ -727,11 +735,7 @@ async function loadServerRenderArtifacts(
   routeFile: string,
   timing: RenderTiming | undefined,
 ): Promise<void> {
-  const loader = (
-    options as RenderAppRequestOptions & {
-      __mreactLoadServerRenderArtifacts?: ((routeFile: string) => Promise<void>) | undefined;
-    }
-  ).__mreactLoadServerRenderArtifacts;
+  const loader = options.serverRenderArtifactLoader;
 
   if (loader === undefined) {
     return;
@@ -739,7 +743,7 @@ async function loadServerRenderArtifacts(
 
   const phaseStartedAt = renderTimingPhaseStartedAt(timing);
   try {
-    await loader(routeFile);
+    await loader.load(routeFile);
   } finally {
     finishRenderTimingPhase(timing, phaseStartedAt, "renderArtifactLoadMs");
   }

@@ -21,6 +21,7 @@ import {
   preloadBuiltRequestModules,
   renderAppRequest,
   resolveAppRouterMiddleware,
+  type AppRouterServerRenderArtifactLoader,
   type AppRouterRenderPreload,
   type AppRouterResponseHook,
   type RenderAppRequestOptions,
@@ -1525,9 +1526,14 @@ function builtRenderAppRequestOptions(
     runtime: BuiltRuntime;
   },
 ): RenderAppRequestOptions {
-  const renderOptions: RenderAppRequestOptions & {
-    __mreactLoadServerRenderArtifacts?: ((routeFile: string) => Promise<void>) | undefined;
-  } = {
+  const serverRenderArtifactLoader: AppRouterServerRenderArtifactLoader = {
+    async load(routeFile: string) {
+      await loadBuiltServerModuleArtifactsForRequest(options.runtime, routeFile, {
+        includeRender: true,
+      });
+    },
+  };
+  const renderOptions: RenderAppRequestOptions = {
     appDir: options.runtime.appDir,
     assetBaseUrl: options.runtime.assetBaseUrl,
     clientScripts: options.runtime.clientScripts,
@@ -1547,11 +1553,7 @@ function builtRenderAppRequestOptions(
     routeMatcher: options.runtime.routeMatcher,
     requestUrl: options.requestUrl,
     routes: options.runtime.routes,
-    __mreactLoadServerRenderArtifacts: async (routeFile: string) => {
-      await loadBuiltServerModuleArtifactsForRequest(options.runtime, routeFile, {
-        includeRender: true,
-      });
-    },
+    serverRenderArtifactLoader,
     serverModules: options.runtime.serverModules,
     serverModuleCacheVersion: options.runtime.serverModuleCacheVersion,
     serverSourceFiles: options.runtime.serverSourceFiles,

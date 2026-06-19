@@ -4036,6 +4036,63 @@ export default function Page() {
     expect(state.__mreactRenderHeavyPageDependencyLoaded).toBe(0);
   });
 
+  test("calls the explicit server render artifact loader only when rendering proceeds", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-explicit-render-artifact-loader-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main>render artifact loader</main>;
+}`,
+    );
+    const loadedRouteFiles: string[] = [];
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+      serverRenderArtifactLoader: {
+        async load(routeFile) {
+          loadedRouteFiles.push(routeFile);
+        },
+      },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>render artifact loader</main>");
+    expect(loadedRouteFiles).toHaveLength(1);
+    expect(loadedRouteFiles[0]?.endsWith("page.tsx")).toBe(true);
+  });
+
+  test("does not call the explicit server render artifact loader before loader redirects settle", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-redirect-render-artifact-loader-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { redirect } from "@reckona/mreact-router";
+
+export function loader() {
+  redirect("/login", { status: 303 });
+}
+
+export default function Page() {
+  return <main>should not render</main>;
+}`,
+    );
+    const loadedRouteFiles: string[] = [];
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+      serverRenderArtifactLoader: {
+        async load(routeFile) {
+          loadedRouteFiles.push(routeFile);
+        },
+      },
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(loadedRouteFiles).toEqual([]);
+  });
+
   test("splits loader module load and loader execution timing for redirects", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-redirect-timing-split-"));
     const events: Array<{ phases?: Record<string, number>; status?: number; type: string }> = [];
