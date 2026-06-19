@@ -8,10 +8,7 @@ import {
   type BuiltServerModuleArtifactRuntime,
 } from "../src/built-server-module-artifacts.js";
 
-function createRuntime(
-  appDir: string,
-  serverDir: string,
-): BuiltServerModuleArtifactRuntime {
+function createRuntime(appDir: string): BuiltServerModuleArtifactRuntime {
   return {
     appDir,
     serverModuleArtifactLoads: new Map(),
@@ -45,7 +42,7 @@ describe("built server module artifact loading", () => {
 
     const pageFile = join(appDir, "page.tsx");
     const depFile = join(appDir, "server", "dep.ts");
-    const runtime = createRuntime(appDir, serverDir);
+    const runtime = createRuntime(appDir);
     runtime.serverModuleClosureFiles.set(pageFile, [pageFile, depFile]);
     runtime.serverModuleRequestFiles.set(pageFile, join(requestDir, "page.json"));
     runtime.serverModuleRequestFiles.set(depFile, join(requestDir, "dep.json"));
@@ -62,7 +59,7 @@ describe("built server module artifact loading", () => {
 
   test("enumerates split and unsplit server module files once", () => {
     const rootDir = join(tmpdir(), "mreact-built-server-artifact-enumerate");
-    const runtime = createRuntime(join(rootDir, "app"), join(rootDir, "server"));
+    const runtime = createRuntime(join(rootDir, "app"));
     runtime.serverModuleFiles.set(join(rootDir, "app", "layout.tsx"), "layout.json");
     runtime.serverModuleRequestFiles.set(join(rootDir, "app", "page.tsx"), "page-request.json");
     runtime.serverModuleRenderFiles.set(join(rootDir, "app", "page.tsx"), "page-render.json");
