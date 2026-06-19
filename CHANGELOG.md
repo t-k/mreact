@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.176 - 2026-06-19
+
+### Changed
+
+- Improved built App Router request startup and preload behavior by sharing built runtime materialization across concurrent cold callers, persisting server module closure manifests, splitting request and render artifact loading, and reusing manifest-derived client asset allowlists across Node and Cloudflare runtimes.
+- Improved AWS Lambda App Router first-hit behavior so direct handlers keep default background preload focused on middleware/shared request work, hot-route request preloads warm only request-plane modules, and page render artifacts are loaded only when rendering proceeds.
+- Bounded client navigation prefetch history for route HTML and modulepreload scripts so long browsing sessions do not retain unbounded prefetched URL/script sets.
+
+### Fixed
+
+- Fixed built App Router fast paths so public assets, middleware redirects, and loader redirects can complete without importing matched page render artifacts or render-only dependencies.
+- Fixed built server module artifact loading so older manifests without closure data can still fall back to source import closure discovery for request artifact hydration.
+
 ## 0.0.175 - 2026-06-19
 
 ### Changed
