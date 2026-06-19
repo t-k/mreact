@@ -1,0 +1,1 @@
+{"framework":"marko-v6.1.11-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":1.3523979187011719,"max":1.3523979187011719,"median":1.3523979187011719,"mean":1.3523979187011719,"stddev":null,"values":[1.3523979187011719]}}}
