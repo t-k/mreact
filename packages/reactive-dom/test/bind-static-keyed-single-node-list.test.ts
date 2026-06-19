@@ -488,6 +488,18 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).not.toContain("const staleKeys");
   });
 
+  test("checks simple swaps before building the generic keyed item set", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+
+    expect(source).toContain("function trySwapSingleNodeItems");
+    expect(source.indexOf("trySwapSingleNodeItems(")).toBeLessThan(
+      source.indexOf("const keyedItems = uniqueSingleNodeKeyedItems("),
+    );
+  });
+
   test("has dedicated bulk replacement and selected-class clear helpers", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
