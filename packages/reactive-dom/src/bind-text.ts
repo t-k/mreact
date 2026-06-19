@@ -35,31 +35,22 @@ export function bindText(
   const reactiveText = node as Text & { __mreactReactiveText?: true };
 
   reactiveText.__mreactReactiveText = true;
-  let shouldWrite = options?.preserveInitial !== true;
 
   if (typeof value !== "function") {
     const directDispose = subscribeCell(value, (nextValue) => {
-      const text = normalizeText(nextValue);
-
-      if (!shouldWrite) {
-        shouldWrite = true;
-        return;
-      }
-
-      node.data = text;
+      node.data = normalizeText(nextValue);
     });
 
     if (directDispose !== undefined) {
-      if (shouldWrite) {
+      if (options?.preserveInitial !== true) {
         node.data = normalizeText(untrack(() => value.get()));
-      } else {
-        shouldWrite = true;
       }
 
       return registerIdempotentDispose(directDispose);
     }
   }
 
+  let shouldWrite = options?.preserveInitial !== true;
   const readValue = typeof value === "function" ? value : () => value.get();
   const dispose = effect(() => {
     const text = normalizeText(readValue());

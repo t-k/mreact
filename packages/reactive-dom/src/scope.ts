@@ -75,6 +75,11 @@ export function disposeScope(scope: DomScope): void {
 
   scope.disposers = undefined;
 
+  if (disposers.length === 1) {
+    disposers[0]!();
+    return;
+  }
+
   let firstError: unknown;
 
   for (let index = disposers.length - 1; index >= 0; index -= 1) {

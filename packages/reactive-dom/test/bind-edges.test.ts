@@ -2,6 +2,7 @@
 
 import { cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import {
   bindList,
@@ -267,6 +268,12 @@ describe("reactive-dom scope: edge branches", () => {
     disposeScope(scope);
     disposeScope(scope);
     expect(calls).toBe(1);
+  });
+
+  test("disposeScope keeps a fast path for a single registered disposer", async () => {
+    const source = await readFile("packages/reactive-dom/src/scope.ts", "utf8");
+
+    expect(source).toContain("disposers.length === 1");
   });
 
   test("disposeScope with no registered disposers does not allocate a disposer array", () => {

@@ -6,7 +6,7 @@ import {
 } from "./bind-event.js";
 import { createScopedRenderNodeScope } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import { disposeScope, type DomScope } from "./scope.js";
+import type { DomScope } from "./scope.js";
 import type { Dispose } from "./types.js";
 
 export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode = ChildNode> {
@@ -48,6 +48,18 @@ interface SingleNodeRecord {
   scope?: DomScope | undefined;
 }
 
+type RemovedSingleNodeRecords =
+  | {
+      records: Map<unknown, SingleNodeRecord>;
+      staleRecord: SingleNodeRecord;
+      staleRecords?: undefined;
+    }
+  | {
+      records: Map<unknown, SingleNodeRecord>;
+      staleRecord?: undefined;
+      staleRecords: SingleNodeRecord[];
+    };
+
 interface SingleNodeKeyedItems<T> {
   indexes: readonly number[] | null;
   items: readonly T[];
@@ -70,39 +82,107 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     | BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>
     | undefined;
   const selectedClassState: SelectedClassState | undefined =
-    selectedClass === undefined ? undefined : createSelectedClassState(selectedClass);
+    selectedClass === undefined
+      ? undefined
+      : createSelectedClassState(selectedClass, () => records.values());
 
   const dispose = effect(() => {
     const currentItems = items();
     const insertionParent = marker.parentNode as ListParentNode | null;
 
     if (insertionParent === null) {
-      unregisterSelectedClassRecords(selectedClassState, records.values());
-      removeRecordNodes(records.values());
+      clearSelectedClassRecords(selectedClassState);
+      removeRecordNodes(records.values(), deferEventPromotion);
       records = new Map();
       ownsParent = false;
       return;
     }
 
-    const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key);
-    const keys = keyedItems.keys;
     const ownsCurrentParent =
       ownsParent &&
       insertionParent.childNodes.length === records.size + 1 &&
       marker.nextSibling === null;
 
-    if (keys.length === 0) {
-      unregisterSelectedClassRecords(selectedClassState, records.values());
+    if (currentItems.length === 0) {
+      clearSelectedClassRecords(selectedClassState);
       if (ownsCurrentParent) {
-        disposeRecords(records.values());
+        disposeRecords(records.values(), deferEventPromotion);
         insertionParent.replaceChildren(marker);
       } else {
-        removeRecordNodes(records.values());
+        removeRecordNodes(records.values(), deferEventPromotion);
       }
       records = new Map();
       ownsParent = marker.nextSibling === null && insertionParent.childNodes.length === 1;
       return;
     }
+
+    const fastReplacementRecords =
+      (records.size === 0 &&
+        insertionParent.childNodes.length === 1 &&
+        marker.nextSibling === null) ||
+      (ownsCurrentParent && records.size === currentItems.length && records.size > 0)
+        ? tryReplaceDisjointSingleNodeItems(
+            insertionParent,
+            marker,
+            records,
+            currentItems,
+            options.key,
+            renderItem,
+            renderArity,
+            deferEventPromotion,
+            selectedClassState,
+          )
+        : undefined;
+
+    if (fastReplacementRecords !== undefined) {
+      records = fastReplacementRecords;
+      ownsParent = true;
+      return;
+    }
+
+    const fastAppendedRecords = ownsCurrentParent
+      ? tryAppendSingleNodeItems(
+          insertionParent,
+          marker,
+          records,
+          currentItems,
+          options.key,
+          renderItem,
+          renderArity,
+          deferEventPromotion,
+          selectedClassState,
+        )
+      : undefined;
+
+    if (fastAppendedRecords !== undefined) {
+      records = fastAppendedRecords;
+      ownsParent = true;
+      return;
+    }
+
+    const fastRemovedRecords = ownsCurrentParent
+      ? tryRemoveSingleNodeItems(
+          records,
+          currentItems,
+          options.key,
+          renderArity,
+          selectedClassState,
+        )
+      : undefined;
+
+    if (fastRemovedRecords !== undefined) {
+      removeChangedSingleNodeRecords(
+        fastRemovedRecords,
+        selectedClassState,
+        deferEventPromotion,
+      );
+      records = fastRemovedRecords.records;
+      ownsParent = true;
+      return;
+    }
+
+    const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key);
+    const keys = keyedItems.keys;
 
     if (records.size === keys.length && records.size > 0) {
       const sameOrderRecords = updateSameOrderRecords(
@@ -136,6 +216,47 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       return;
     }
 
+    const appendedRecords = ownsCurrentParent
+      ? tryAppendSingleNodeRecords(
+          insertionParent,
+          marker,
+          records,
+          keyedItems,
+          currentItems,
+          renderItem,
+          renderArity,
+          deferEventPromotion,
+          selectedClassState,
+        )
+      : undefined;
+
+    if (appendedRecords !== undefined) {
+      records = appendedRecords;
+      ownsParent = true;
+      return;
+    }
+
+    const removedRecords = ownsCurrentParent
+      ? tryRemoveSingleNodeRecords(
+          records,
+          keyedItems,
+          currentItems,
+          renderArity,
+          selectedClassState,
+        )
+      : undefined;
+
+    if (removedRecords !== undefined) {
+      removeChangedSingleNodeRecords(
+        removedRecords,
+        selectedClassState,
+        deferEventPromotion,
+      );
+      records = removedRecords.records;
+      ownsParent = true;
+      return;
+    }
+
     const canBulkReplace =
       (records.size === 0 &&
         insertionParent.childNodes.length === 1 &&
@@ -143,7 +264,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       (ownsCurrentParent && keys.length === records.size && areKeysDisjoint(records, keys));
 
     if (canBulkReplace) {
-      const nextRecords = createSingleNodeRecords(
+      const next = createSingleNodeRecordsWithFragment(
         insertionParent,
         keyedItems,
         currentItems,
@@ -152,16 +273,13 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
         deferEventPromotion,
         selectedClassState,
       );
-      const fragment = document.createDocumentFragment();
 
-      for (const record of nextRecords.values()) {
-        fragment.appendChild(record.node);
+      const disposeError = disposeRecordValues(records.values(), deferEventPromotion);
+      insertionParent.replaceChildren(next.fragment, marker);
+      if (deferEventPromotion) {
+        promoteRecordEvents(next.records.values());
       }
-
-      const disposeError = disposeRecordValues(records.values());
-      insertionParent.replaceChildren(fragment, marker);
-      promoteRecordEvents(nextRecords.values());
-      records = nextRecords;
+      records = next.records;
       ownsParent = true;
 
       if (disposeError !== undefined) {
@@ -182,8 +300,8 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       let record = records.get(itemKey);
 
       if (
-          record === undefined ||
-          !updateSingleNodeRecord(record, renderArity, item, sourceIndex, currentItems)
+        record === undefined ||
+        !updateSingleNodeRecord(record, renderArity, item, sourceIndex, currentItems)
       ) {
         unregisterSelectedClassRecord(selectedClassState, record);
         disposeSingleNodeRecord(record);
@@ -205,9 +323,11 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       orderedRecords.push(record);
     }
 
-    removeStaleSingleNodeRecords(records, nextRecords, selectedClassState);
+    removeStaleSingleNodeRecords(records, nextRecords, selectedClassState, deferEventPromotion);
     reconcileSingleNodeRecordOrder(insertionParent, marker, orderedRecords);
-    promoteRecordEvents(nextRecords.values());
+    if (deferEventPromotion) {
+      promoteRecordEvents(nextRecords.values());
+    }
     records = nextRecords;
     ownsParent =
       insertionParent.childNodes.length === records.size + 1 && marker.nextSibling === null;
@@ -217,7 +337,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     dispose();
     selectedClassState?.dispose();
     unregisterSelectedClassRecords(selectedClassState, records.values());
-    removeRecordNodes(records.values());
+    removeRecordNodes(records.values(), deferEventPromotion);
     records = new Map();
   });
 }
@@ -276,7 +396,7 @@ function dedupedSingleNodeKeyedItems<T>(
   return { indexes, items: dedupedItems, keys };
 }
 
-function createSingleNodeRecords<T, TNode extends ChildNode>(
+function createSingleNodeRecordsWithFragment<T, TNode extends ChildNode>(
   parent: ParentNode,
   keyedItems: SingleNodeKeyedItems<T>,
   currentItems: readonly T[],
@@ -284,30 +404,63 @@ function createSingleNodeRecords<T, TNode extends ChildNode>(
   renderArity: number,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
-): Map<unknown, SingleNodeRecord> {
+): { fragment: DocumentFragment; records: Map<unknown, SingleNodeRecord> } {
   const records = new Map<unknown, SingleNodeRecord>();
+  const fragment = document.createDocumentFragment();
   const keys = keyedItems.keys;
   const items = keyedItems.items;
   const indexes = keyedItems.indexes;
 
   for (let slot = 0; slot < keys.length; slot += 1) {
-    records.set(
+    const record = createSingleNodeRecord(
+      parent,
       keys[slot],
-      createSingleNodeRecord(
-        parent,
-        keys[slot],
-        items[slot] as T,
-        indexes === null ? slot : (indexes[slot] as number),
-        currentItems,
-        renderItem,
-        renderArity,
-        deferEventPromotion,
-        selectedClassState,
-      ),
+      items[slot] as T,
+      indexes === null ? slot : (indexes[slot] as number),
+      currentItems,
+      renderItem,
+      renderArity,
+      deferEventPromotion,
+      selectedClassState,
     );
+
+    records.set(keys[slot], record);
+    fragment.appendChild(record.node);
   }
 
-  return records;
+  return { fragment, records };
+}
+
+function createSingleNodeRecordsFromKeysWithFragment<T, TNode extends ChildNode>(
+  parent: ParentNode,
+  keys: readonly unknown[],
+  items: readonly T[],
+  renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
+  selectedClassState: SelectedClassState | undefined,
+): { fragment: DocumentFragment; records: Map<unknown, SingleNodeRecord> } {
+  const records = new Map<unknown, SingleNodeRecord>();
+  const fragment = document.createDocumentFragment();
+
+  for (let index = 0; index < keys.length; index += 1) {
+    const record = createSingleNodeRecord(
+      parent,
+      keys[index],
+      items[index] as T,
+      index,
+      items,
+      renderItem,
+      renderArity,
+      deferEventPromotion,
+      selectedClassState,
+    );
+
+    records.set(keys[index], record);
+    fragment.appendChild(record.node);
+  }
+
+  return { fragment, records };
 }
 
 function createSingleNodeRecord<T, TNode extends ChildNode>(
@@ -359,6 +512,210 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
   return record;
 }
 
+function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
+  parent: ListParentNode,
+  marker: ChildNode,
+  records: Map<unknown, SingleNodeRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
+  selectedClassState: SelectedClassState | undefined,
+): Map<unknown, SingleNodeRecord> | undefined {
+  const length = currentItems.length;
+  // oxlint-disable-next-line unicorn/no-new-array -- keys are filled sequentially and reused while creating records.
+  const keys = new Array<unknown>(length);
+  const seenKeys = new Set<unknown>();
+
+  for (let index = 0; index < length; index += 1) {
+    const itemKey = key(currentItems[index] as T, index, currentItems);
+
+    if (seenKeys.has(itemKey) || records.has(itemKey)) {
+      return undefined;
+    }
+
+    seenKeys.add(itemKey);
+    keys[index] = itemKey;
+  }
+
+  const next = createSingleNodeRecordsFromKeysWithFragment(
+    parent,
+    keys,
+    currentItems,
+    renderItem,
+    renderArity,
+    deferEventPromotion,
+    selectedClassState,
+  );
+  const disposeError = disposeRecordValues(records.values(), deferEventPromotion);
+  unregisterSelectedClassRecords(selectedClassState, records.values());
+  parent.replaceChildren(next.fragment, marker);
+  if (deferEventPromotion) {
+    promoteRecordEvents(next.records.values());
+  }
+
+  if (disposeError !== undefined) {
+    throw disposeError;
+  }
+
+  return next.records;
+}
+
+function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, SingleNodeRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
+  selectedClassState: SelectedClassState | undefined,
+): Map<unknown, SingleNodeRecord> | undefined {
+  if (currentItems.length <= records.size || records.size === 0) {
+    return undefined;
+  }
+
+  const previousSize = records.size;
+  const previousRecords = records[Symbol.iterator]();
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+
+  for (let index = 0; index < previousSize; index += 1) {
+    const previousRecord = previousRecords.next();
+    const item = currentItems[index] as T;
+    const itemKey = key(item, index, currentItems);
+
+    if (previousRecord.done || !Object.is(previousRecord.value[0], itemKey)) {
+      return undefined;
+    }
+
+    const record = previousRecord.value[1];
+
+    if (
+      !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+      !updateSingleNodeRecord(record, renderArity, item, index, currentItems)
+    ) {
+      return undefined;
+    }
+
+    if (refreshSelectedClasses) {
+      refreshSelectedClassRecord(selectedClassState, record);
+    }
+  }
+
+  const appendedLength = currentItems.length - previousSize;
+  // oxlint-disable-next-line unicorn/no-new-array -- appended keys are validated once and reused for record creation.
+  const appendedKeys = new Array<unknown>(appendedLength);
+  const seenAppendedKeys = appendedLength > 1 ? new Set<unknown>() : undefined;
+
+  for (let index = previousSize; index < currentItems.length; index += 1) {
+    const itemKey = key(currentItems[index] as T, index, currentItems);
+
+    if (
+      records.has(itemKey) ||
+      seenAppendedKeys?.has(itemKey) === true
+    ) {
+      return undefined;
+    }
+
+    seenAppendedKeys?.add(itemKey);
+    appendedKeys[index - previousSize] = itemKey;
+  }
+
+  const appendFragment = document.createDocumentFragment();
+  const appendedRecords: SingleNodeRecord[] | undefined = deferEventPromotion ? [] : undefined;
+
+  for (let index = previousSize; index < currentItems.length; index += 1) {
+    const record = createSingleNodeRecord(
+      parent,
+      appendedKeys[index - previousSize],
+      currentItems[index] as T,
+      index,
+      currentItems,
+      renderItem,
+      renderArity,
+      deferEventPromotion,
+      selectedClassState,
+    );
+
+    records.set(appendedKeys[index - previousSize], record);
+    appendedRecords?.push(record);
+    appendFragment.appendChild(record.node);
+  }
+
+  parent.insertBefore(appendFragment, marker);
+  if (appendedRecords !== undefined) {
+    promoteRecordEvents(appendedRecords);
+  }
+  return records;
+}
+
+function tryRemoveSingleNodeItems<T>(
+  records: Map<unknown, SingleNodeRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderArity: number,
+  selectedClassState: SelectedClassState | undefined,
+): RemovedSingleNodeRecords | undefined {
+  if (currentItems.length >= records.size || currentItems.length === 0) {
+    return undefined;
+  }
+
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+  let index = 0;
+  let staleRecord: SingleNodeRecord | undefined;
+  let staleRecords: SingleNodeRecord[] | undefined;
+
+  for (const [previousKey, record] of records) {
+    if (index < currentItems.length) {
+      const item = currentItems[index] as T;
+      const itemKey = key(item, index, currentItems);
+
+      if (Object.is(previousKey, itemKey)) {
+        if (
+          !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+          !updateSingleNodeRecord(record, renderArity, item, index, currentItems)
+        ) {
+          return undefined;
+        }
+
+        if (refreshSelectedClasses) {
+          refreshSelectedClassRecord(selectedClassState, record);
+        }
+        index += 1;
+        continue;
+      }
+    }
+
+    if (staleRecord === undefined && staleRecords === undefined) {
+      staleRecord = record;
+    } else {
+      staleRecords ??= [staleRecord as SingleNodeRecord];
+      staleRecord = undefined;
+      staleRecords.push(record);
+    }
+  }
+
+  if (
+    index !== currentItems.length ||
+    (staleRecord === undefined && staleRecords === undefined)
+  ) {
+    return undefined;
+  }
+
+  if (staleRecords === undefined) {
+    records.delete((staleRecord as SingleNodeRecord).key);
+    return { records, staleRecord: staleRecord as SingleNodeRecord };
+  }
+
+  for (const record of staleRecords) {
+    records.delete(record.key);
+  }
+
+  return { records, staleRecords };
+}
+
 function updateSameOrderRecords<T>(
   records: Map<unknown, SingleNodeRecord>,
   keyedItems: SingleNodeKeyedItems<T>,
@@ -370,6 +727,7 @@ function updateSameOrderRecords<T>(
   const items = keyedItems.items;
   const indexes = keyedItems.indexes;
   const previousKeys = records.keys();
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
 
   for (let slot = 0; slot < keys.length; slot += 1) {
     const previousKey = previousKeys.next();
@@ -382,18 +740,21 @@ function updateSameOrderRecords<T>(
 
     if (
       record === undefined ||
-      !updateSingleNodeRecord(
-        record,
-        renderArity,
-        items[slot],
-        indexes === null ? slot : (indexes[slot] as number),
-        currentItems,
-      )
+      (!canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+        !updateSingleNodeRecord(
+          record,
+          renderArity,
+          items[slot],
+          indexes === null ? slot : (indexes[slot] as number),
+          currentItems,
+        ))
     ) {
       return false;
     }
 
-    refreshSelectedClassRecord(selectedClassState, record);
+    if (refreshSelectedClasses) {
+      refreshSelectedClassRecord(selectedClassState, record);
+    }
   }
 
   return true;
@@ -432,6 +793,13 @@ function isObjectLike(value: unknown): value is object {
   return typeof value === "object" && value !== null;
 }
 
+function canKeepSingleNodeRecordWithoutUpdate(
+  record: SingleNodeRecord,
+  renderArity: number,
+): boolean {
+  return renderArity < 2 && isObjectLike(record.currentItem);
+}
+
 function areKeysDisjoint(
   records: Map<unknown, SingleNodeRecord>,
   keys: readonly unknown[],
@@ -443,6 +811,146 @@ function areKeysDisjoint(
   }
 
   return true;
+}
+
+function tryAppendSingleNodeRecords<T, TNode extends ChildNode>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, SingleNodeRecord>,
+  keyedItems: SingleNodeKeyedItems<T>,
+  currentItems: readonly T[],
+  renderItem: SingleNodeRenderer<T, TNode>,
+  renderArity: number,
+  deferEventPromotion: boolean,
+  selectedClassState: SelectedClassState | undefined,
+): Map<unknown, SingleNodeRecord> | undefined {
+  const keys = keyedItems.keys;
+  const items = keyedItems.items;
+  const indexes = keyedItems.indexes;
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+
+  if (indexes !== null || keys.length <= records.size || records.size === 0) {
+    return undefined;
+  }
+
+  const previousRecords = records[Symbol.iterator]();
+
+  for (let slot = 0; slot < records.size; slot += 1) {
+    const previousRecord = previousRecords.next();
+    const itemKey = keys[slot];
+
+    if (previousRecord.done || !Object.is(previousRecord.value[0], itemKey)) {
+      return undefined;
+    }
+
+    const record = previousRecord.value[1];
+
+    if (
+      !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+      !updateSingleNodeRecord(record, renderArity, items[slot], slot, currentItems)
+    ) {
+      return undefined;
+    }
+
+    if (refreshSelectedClasses) {
+      refreshSelectedClassRecord(selectedClassState, record);
+    }
+  }
+
+  for (let slot = records.size; slot < keys.length; slot += 1) {
+    if (records.has(keys[slot])) {
+      return undefined;
+    }
+  }
+
+  const appendFragment = document.createDocumentFragment();
+  const appendedRecords: SingleNodeRecord[] | undefined = deferEventPromotion ? [] : undefined;
+
+  for (let slot = records.size; slot < keys.length; slot += 1) {
+    const record = createSingleNodeRecord(
+      parent,
+      keys[slot],
+      items[slot] as T,
+      slot,
+      currentItems,
+      renderItem,
+      renderArity,
+      deferEventPromotion,
+      selectedClassState,
+    );
+
+    records.set(keys[slot], record);
+    appendedRecords?.push(record);
+
+    appendFragment.appendChild(record.node);
+  }
+
+  parent.insertBefore(appendFragment, marker);
+
+  if (appendedRecords !== undefined) {
+    promoteRecordEvents(appendedRecords);
+  }
+  return records;
+}
+
+function tryRemoveSingleNodeRecords<T>(
+  records: Map<unknown, SingleNodeRecord>,
+  keyedItems: SingleNodeKeyedItems<T>,
+  currentItems: readonly T[],
+  renderArity: number,
+  selectedClassState: SelectedClassState | undefined,
+): RemovedSingleNodeRecords | undefined {
+  const keys = keyedItems.keys;
+  const items = keyedItems.items;
+  const indexes = keyedItems.indexes;
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+
+  if (indexes !== null || keys.length >= records.size || keys.length === 0) {
+    return undefined;
+  }
+
+  let slot = 0;
+  let staleRecord: SingleNodeRecord | undefined;
+  let staleRecords: SingleNodeRecord[] | undefined;
+
+  for (const [previousKey, record] of records) {
+    if (slot < keys.length && Object.is(previousKey, keys[slot])) {
+      if (
+        !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+        !updateSingleNodeRecord(record, renderArity, items[slot], slot, currentItems)
+      ) {
+        return undefined;
+      }
+
+      if (refreshSelectedClasses) {
+        refreshSelectedClassRecord(selectedClassState, record);
+      }
+      slot += 1;
+    } else {
+      if (staleRecord === undefined && staleRecords === undefined) {
+        staleRecord = record;
+      } else {
+        staleRecords ??= [staleRecord as SingleNodeRecord];
+        staleRecord = undefined;
+        staleRecords.push(record);
+      }
+    }
+  }
+
+  if (slot !== keys.length || (staleRecord === undefined && staleRecords === undefined)) {
+    return undefined;
+  }
+
+  if (staleRecords === undefined) {
+    records.delete((staleRecord as SingleNodeRecord).key);
+    return { records, staleRecord: staleRecord as SingleNodeRecord };
+  }
+
+  for (const record of staleRecords) {
+    records.delete(record.key);
+  }
+
+  return { records, staleRecords };
 }
 
 function trySwapSingleNodeRecords<T>(
@@ -465,6 +973,7 @@ function trySwapSingleNodeRecords<T>(
   let secondIndex = -1;
   let firstPreviousKey: unknown;
   let secondPreviousKey: unknown;
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
 
   for (let slot = 0; slot < keys.length; slot += 1) {
     const previousKey = previousKeys.next();
@@ -505,12 +1014,15 @@ function trySwapSingleNodeRecords<T>(
 
     if (
       record === undefined ||
-      !updateSingleNodeRecord(record, renderArity, items[slot], slot, currentItems)
+      (!canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+        !updateSingleNodeRecord(record, renderArity, items[slot], slot, currentItems))
     ) {
       return undefined;
     }
 
-    refreshSelectedClassRecord(selectedClassState, record);
+    if (refreshSelectedClasses) {
+      refreshSelectedClassRecord(selectedClassState, record);
+    }
     nextRecords.set(keys[slot], record);
   }
 
@@ -558,6 +1070,7 @@ function removeStaleSingleNodeRecords(
   records: Map<unknown, SingleNodeRecord>,
   nextRecords: Map<unknown, SingleNodeRecord>,
   selectedClassState: SelectedClassState | undefined,
+  batchDelegatedRootReleases: boolean,
 ): void {
   const staleRecords: SingleNodeRecord[] = [];
 
@@ -568,57 +1081,177 @@ function removeStaleSingleNodeRecords(
     }
   }
 
-  removeRecordNodes(staleRecords);
+  removeRecordNodes(staleRecords, batchDelegatedRootReleases);
 }
 
-function removeRecordNodes(records: Iterable<SingleNodeRecord>): void {
+function removeChangedSingleNodeRecords(
+  removed: RemovedSingleNodeRecords,
+  selectedClassState: SelectedClassState | undefined,
+  batchDelegatedRootReleases: boolean,
+): void {
+  if (removed.staleRecord !== undefined) {
+    unregisterSelectedClassRecord(selectedClassState, removed.staleRecord);
+    removeRecordNode(removed.staleRecord, batchDelegatedRootReleases);
+    return;
+  }
+
+  for (const staleRecord of removed.staleRecords) {
+    unregisterSelectedClassRecord(selectedClassState, staleRecord);
+  }
+  removeRecordNodes(removed.staleRecords, batchDelegatedRootReleases);
+}
+
+function removeRecordNode(
+  record: SingleNodeRecord,
+  batchDelegatedRootReleases: boolean,
+): void {
   let firstError: unknown;
-
-  withBatchedDelegatedRootReleases(() => {
-    for (const record of records) {
-      try {
-        disposeSingleNodeRecord(record);
-      } catch (error) {
-        firstError ??= error;
-      }
-
-      record.node.parentNode?.removeChild(record.node);
+  const removeRecord = () => {
+    try {
+      disposeSingleNodeRecord(record);
+    } catch (error) {
+      firstError = error;
     }
-  });
+
+    record.node.parentNode?.removeChild(record.node);
+  };
+
+  if (batchDelegatedRootReleases) {
+    withBatchedDelegatedRootReleases(removeRecord);
+  } else {
+    removeRecord();
+  }
 
   if (firstError !== undefined) {
     throw firstError;
   }
 }
 
-function disposeRecordValues(records: Iterable<SingleNodeRecord>): unknown {
+function removeRecordNodes(
+  records: Iterable<SingleNodeRecord>,
+  batchDelegatedRootReleases: boolean,
+): void {
   let firstError: unknown;
-
-  withBatchedDelegatedRootReleases(() => {
+  const removeRecords = () => {
     for (const record of records) {
       try {
-        disposeSingleNodeRecord(record);
+        const scope = record.scope;
+        if (scope !== undefined) {
+          record.scope = undefined;
+          disposeSingleNodeRecordScope(scope);
+        }
+      } catch (error) {
+        firstError ??= error;
+      }
+
+      record.node.parentNode?.removeChild(record.node);
+    }
+  };
+
+  if (batchDelegatedRootReleases) {
+    withBatchedDelegatedRootReleases(removeRecords);
+  } else {
+    removeRecords();
+  }
+
+  if (firstError !== undefined) {
+    throw firstError;
+  }
+}
+
+function disposeRecordValues(
+  records: Iterable<SingleNodeRecord>,
+  batchDelegatedRootReleases: boolean,
+): unknown {
+  let firstError: unknown;
+  const disposeRecordScopes = () => {
+    for (const record of records) {
+      try {
+        const scope = record.scope;
+        if (scope !== undefined) {
+          record.scope = undefined;
+          disposeSingleNodeRecordScope(scope);
+        }
       } catch (error) {
         firstError ??= error;
       }
     }
-  });
+  };
+
+  if (batchDelegatedRootReleases) {
+    withBatchedDelegatedRootReleases(disposeRecordScopes);
+  } else {
+    disposeRecordScopes();
+  }
 
   return firstError;
 }
 
-function disposeRecords(records: Iterable<SingleNodeRecord>): void {
-  withBatchedDelegatedRootReleases(() => {
-    for (const record of records) {
-      disposeSingleNodeRecord(record);
+function disposeRecords(
+  records: Iterable<SingleNodeRecord>,
+  batchDelegatedRootReleases: boolean,
+): void {
+  if (batchDelegatedRootReleases) {
+    withBatchedDelegatedRootReleases(() => {
+      for (const record of records) {
+        const scope = record.scope;
+        if (scope !== undefined) {
+          record.scope = undefined;
+          disposeSingleNodeRecordScope(scope);
+        }
+      }
+    });
+    return;
+  }
+
+  for (const record of records) {
+    const scope = record.scope;
+    if (scope !== undefined) {
+      record.scope = undefined;
+      disposeSingleNodeRecordScope(scope);
     }
-  });
+  }
 }
 
 function disposeSingleNodeRecord(record: SingleNodeRecord | undefined): void {
   if (record?.scope !== undefined) {
-    disposeScope(record.scope);
+    disposeSingleNodeRecordScope(record.scope);
     record.scope = undefined;
+  }
+}
+
+function disposeSingleNodeRecordScope(scope: DomScope): void {
+  if (scope.disposed) {
+    return;
+  }
+
+  scope.disposed = true;
+
+  const disposers = scope.disposers;
+
+  if (disposers === undefined || disposers.length === 0) {
+    return;
+  }
+
+  scope.disposers = undefined;
+
+  if (disposers.length === 1) {
+    disposers[0]!();
+    return;
+  }
+
+  let firstError: unknown;
+
+  for (let index = disposers.length - 1; index >= 0; index -= 1) {
+    try {
+      disposers[index]!();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+
+  if (firstError !== undefined) {
+    throw firstError;
   }
 }
 
@@ -630,11 +1263,13 @@ function promoteRecordEvents(records: Iterable<SingleNodeRecord>): void {
 }
 
 interface SelectedClassState {
+  activeRecords: boolean;
   className: string;
   current: unknown;
   dispose: Dispose;
   preserveInitial: boolean;
   records: Map<unknown, Element>;
+  recordsSource: () => Iterable<SingleNodeRecord>;
   target?: (
     node: ChildNode,
     item: unknown,
@@ -645,13 +1280,17 @@ interface SelectedClassState {
 
 function createSelectedClassState<T, TNode extends ChildNode>(
   options: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>,
+  recordsSource: () => Iterable<SingleNodeRecord>,
 ): SelectedClassState {
+  const preserveInitial = options.preserveInitial === true;
   const state: SelectedClassState = {
+    activeRecords: !preserveInitial,
     className: options.className,
     current: untrack(() => options.source.get()),
     dispose: () => {},
-    preserveInitial: options.preserveInitial === true,
+    preserveInitial,
     records: new Map(),
+    recordsSource,
     ...(options.target === undefined
       ? {}
       : {
@@ -672,6 +1311,20 @@ function createSelectedClassState<T, TNode extends ChildNode>(
   return state;
 }
 
+function activateSelectedClassRecords(state: SelectedClassState): void {
+  if (state.activeRecords) {
+    return;
+  }
+
+  state.activeRecords = true;
+
+  for (const record of state.recordsSource()) {
+    if (record.selectedClassElement !== undefined) {
+      state.records.set(record.key, record.selectedClassElement);
+    }
+  }
+}
+
 function updateSelectedClassValue(
   state: SelectedClassState,
   next: unknown,
@@ -680,6 +1333,7 @@ function updateSelectedClassValue(
     return;
   }
 
+  activateSelectedClassRecords(state);
   state.records.get(state.current)?.classList.remove(state.className);
   state.current = next;
   state.records.get(next)?.classList.add(state.className);
@@ -705,6 +1359,11 @@ function registerSelectedClassRecord<T, TNode extends ChildNode>(
   }
 
   record.selectedClassElement = element;
+
+  if (!state.activeRecords) {
+    return;
+  }
+
   state.records.set(record.key, element);
 
   if (state.preserveInitial) {
@@ -737,11 +1396,21 @@ function refreshSelectedClassRecord(
   }
 }
 
+function shouldRefreshSelectedClassRecords(
+  state: SelectedClassState | undefined,
+): boolean {
+  return state !== undefined && !state.preserveInitial;
+}
+
 function unregisterSelectedClassRecord(
   state: SelectedClassState | undefined,
   record: SingleNodeRecord | undefined,
 ): void {
-  if (state === undefined || record?.selectedClassElement === undefined) {
+  if (
+    state === undefined ||
+    !state.activeRecords ||
+    record?.selectedClassElement === undefined
+  ) {
     return;
   }
 
@@ -760,5 +1429,11 @@ function unregisterSelectedClassRecords(
 
   for (const record of records) {
     unregisterSelectedClassRecord(state, record);
+  }
+}
+
+function clearSelectedClassRecords(state: SelectedClassState | undefined): void {
+  if (state?.activeRecords === true) {
+    state.records.clear();
   }
 }

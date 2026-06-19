@@ -126,7 +126,10 @@ function updateEveryTenthRow(): void {
 
 function clearRows(): void {
   data.set([]);
-  selected.set(null);
+
+  if (selected.get() !== null) {
+    selected.set(null);
+  }
 }
 
 function swapRows(): void {
@@ -150,7 +153,25 @@ function swapRows(): void {
 }
 
 function removeRow(id: number): void {
-  data.set((rows) => rows.filter((row) => row.id !== id));
+  data.set((rows) => {
+    const index = rows.findIndex((row) => row.id === id);
+
+    if (index === -1) {
+      return rows;
+    }
+
+    const next = new Array<Row>(rows.length - 1);
+
+    for (let nextIndex = 0; nextIndex < index; nextIndex += 1) {
+      next[nextIndex] = rows[nextIndex] as Row;
+    }
+
+    for (let rowIndex = index + 1; rowIndex < rows.length; rowIndex += 1) {
+      next[rowIndex - 1] = rows[rowIndex] as Row;
+    }
+
+    return next;
+  });
 }
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -164,7 +185,7 @@ function requireElement<T extends HTMLElement>(id: string): T {
 }
 
 const createRowTemplate = createTemplateElement<HTMLTableRowElement>(
-  '<tr><td class="col-md-1"> </td><td class="col-md-4"><a data-action="select"> </a></td><td class="col-md-1"><a data-action="remove"><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
+  '<tr><td class="col-md-1"> </td><td class="col-md-4"><a> </a></td><td class="col-md-1"><a><span aria-hidden="true" class="glyphicon glyphicon-remove"></span></a></td><td class="col-md-6"></td></tr>',
 );
 
 function renderRow(row: Row): HTMLTableRowElement {
@@ -200,7 +221,7 @@ function handleRowClick(event: MouseEvent): void {
     return;
   }
 
-  const actionLink = target.closest<HTMLAnchorElement>("a[data-action]");
+  const actionLink = target.closest<HTMLAnchorElement>("a");
 
   if (actionLink === null || !tbody.contains(actionLink)) {
     return;
@@ -213,10 +234,10 @@ function handleRowClick(event: MouseEvent): void {
     return;
   }
 
-  if (actionLink.dataset.action === "select") {
-    selected.set(id);
-  } else if (actionLink.dataset.action === "remove") {
+  if (actionLink.firstElementChild?.classList.contains("glyphicon-remove") === true) {
     removeRow(id);
+  } else {
+    selected.set(id);
   }
 }
 

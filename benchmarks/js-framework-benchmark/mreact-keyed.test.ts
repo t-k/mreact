@@ -65,11 +65,15 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
 
     expect(main).toContain("batch(() =>");
     expect(main).toContain("row.label.set((label) => `${label} !!!`)");
+    expect(main).toContain("if (selected.get() !== null)");
+    expect(main).toContain("rows.findIndex((row) => row.id === id)");
+    expect(main).toContain("const next = new Array<Row>(rows.length - 1)");
+    expect(main).toContain("return next");
     expect(main).toContain("createTemplateElement");
     expect(main).toContain("const createRowTemplate = createTemplateElement<HTMLTableRowElement>(");
     expect(main).toContain('class="col-md-1"> </td>');
-    expect(main).toContain('data-action="select"');
-    expect(main).toContain('data-action="remove"');
+    expect(main).not.toContain('data-action="select"');
+    expect(main).not.toContain('data-action="remove"');
     expect(main).toContain("const idText = idCell.firstChild as Text;");
     expect(main).toContain("const labelText = selectLink.firstChild as Text;");
     expect(main).toContain("function getRowId(rowElement: HTMLTableRowElement): number | undefined");
@@ -81,7 +85,8 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).toContain("preserveInitial: true");
     expect(main).toContain("source: selected");
     expect(main).toContain('bindEvent(tbody, "click", handleRowClick);');
-    expect(main).toContain('target.closest<HTMLAnchorElement>("a[data-action]")');
+    expect(main).toContain('target.closest<HTMLAnchorElement>("a")');
+    expect(main).toContain('classList.contains("glyphicon-remove")');
     expect(main).toContain("key: (row) => row.id");
     expect(main).not.toContain("bindList(");
     expect(main).not.toContain('itemMode: "static"');

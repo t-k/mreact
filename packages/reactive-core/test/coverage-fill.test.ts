@@ -1,5 +1,7 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { batch, cell, computed, effect, untrack } from "../src/index.js";
+import { subscribeCell } from "../src/internal.js";
 import { resetSchedulerStateForTesting, setScheduler } from "../src/scheduler.js";
 import { runtimeState, type ReactiveComputation, type Source } from "../src/state.js";
 import { notifySubscribers } from "../src/tracking.js";
@@ -229,6 +231,52 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
       resetSchedulerStateForTesting();
       restoreScheduler();
     }
+  });
+
+  test("cell subscription dispose only deletes pending queued subscriptions", () => {
+    const source = cell(0);
+    const originalDelete = runtimeState.pendingComputed.delete.bind(
+      runtimeState.pendingComputed,
+    );
+    let pendingDeletes = 0;
+
+    runtimeState.pendingComputed.delete = ((value) => {
+      pendingDeletes += 1;
+      return originalDelete(value);
+    }) as typeof runtimeState.pendingComputed.delete;
+
+    try {
+      const disposeClean = subscribeCell(source, () => {});
+      disposeClean?.();
+
+      expect(pendingDeletes).toBe(0);
+
+      const disposeQueued = subscribeCell(source, () => {});
+      source.set(1);
+      disposeQueued?.();
+
+      expect(pendingDeletes).toBe(1);
+    } finally {
+      runtimeState.pendingComputed.delete = originalDelete;
+      resetSchedulerStateForTesting();
+    }
+  });
+
+  test("cell subscription dispose keeps the single-subscriber teardown fast path", async () => {
+    const source = await readFile("packages/reactive-core/src/cell-subscription.ts", "utf8");
+
+    expect(source).toContain("function removeCellSubscriptionSourceSubscriber");
+    expect(source).toContain("if ((subscribers as unknown) === subscription)");
+    expect(source).toContain("current === subscription");
+    expect(source).toContain("const onNoSubscribers = source.onNoSubscribers");
+  });
+
+  test("cell subscription run reads the cached source value directly", async () => {
+    const source = await readFile("packages/reactive-core/src/cell-subscription.ts", "utf8");
+
+    expect(source).toContain("interface CellValueSource");
+    expect(source).toContain("subscription.listener(subscription.source.value)");
+    expect(source).not.toContain("subscription.cell.get()");
   });
 
   test("notifySubscribers still flushes pending computed when cached subscriber is queued", () => {

@@ -2,12 +2,15 @@ import { getCellSource } from "./cell.js";
 import { queueComputation } from "./scheduler.js";
 import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
 import type { ReadonlyCell } from "./types.js";
-import { addSourceSubscriber, removeSourceSubscriber } from "./tracking.js";
+import { addSourceSubscriber } from "./tracking.js";
+
+interface CellValueSource<T> extends Source {
+  value: T;
+}
 
 interface CellSubscription<T> extends Omit<ReactiveComputation, "deps"> {
-  cell: ReadonlyCell<T>;
   listener: (value: T) => void;
-  source: Source;
+  source: CellValueSource<T>;
 }
 
 const CELL_SUBSCRIPTION_COMPUTATION_METHODS = {
@@ -20,14 +23,13 @@ export function subscribeCell<T>(
   cell: ReadonlyCell<T>,
   listener: (value: T) => void,
 ): (() => void) | undefined {
-  const source = getCellSource(cell);
+  const source = getCellSource(cell) as CellValueSource<T> | undefined;
 
   if (source === undefined) {
     return undefined;
   }
 
   const computation: CellSubscription<T> = {
-    cell,
     dispose: CELL_SUBSCRIPTION_COMPUTATION_METHODS.dispose,
     disposed: false,
     id: runtimeState.nextComputationId,
@@ -55,7 +57,7 @@ function cellSubscriptionRun(this: ReactiveComputation): void {
     return;
   }
 
-  subscription.listener(subscription.cell.get());
+  subscription.listener(subscription.source.value);
 }
 
 function cellSubscriptionDispose(this: ReactiveComputation): void {
@@ -66,10 +68,52 @@ function cellSubscriptionDispose(this: ReactiveComputation): void {
   }
 
   subscription.disposed = true;
-  subscription.queued = false;
-  runtimeState.pendingComputed.delete(subscription as unknown as ReactiveComputation);
-  removeSourceSubscriber(
-    subscription.source,
-    subscription as unknown as ReactiveComputation,
-  );
+  if (subscription.queued) {
+    subscription.queued = false;
+    runtimeState.pendingComputed.delete(subscription as unknown as ReactiveComputation);
+  }
+
+  const source = subscription.source;
+  const subscribers = source.subscribers;
+
+  if ((subscribers as unknown) === subscription) {
+    source.subscribers = null;
+    const onNoSubscribers = source.onNoSubscribers;
+    if (onNoSubscribers !== undefined) {
+      onNoSubscribers();
+    }
+    return;
+  }
+
+  removeCellSubscriptionSourceSubscriber(subscription.source, subscription);
+}
+
+function removeCellSubscriptionSourceSubscriber(
+  source: Source,
+  subscription: CellSubscription<unknown>,
+): void {
+  const subscribers = source.subscribers;
+  const computation = subscription as unknown as ReactiveComputation;
+  const current = subscribers as unknown;
+
+  if (current === subscription) {
+    source.subscribers = null;
+    const onNoSubscribers = source.onNoSubscribers;
+    if (onNoSubscribers !== undefined) {
+      onNoSubscribers();
+    }
+    return;
+  }
+
+  if (!(subscribers instanceof Set) || !subscribers.delete(computation)) {
+    return;
+  }
+
+  if (subscribers.size === 0) {
+    source.subscribers = null;
+    const onNoSubscribers = source.onNoSubscribers;
+    if (onNoSubscribers !== undefined) {
+      onNoSubscribers();
+    }
+  }
 }
