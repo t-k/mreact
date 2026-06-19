@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.177 - 2026-06-20
+
+### Changed
+
+- Improved App Router client navigation so in-flight server-rendered navigation HTML prefetches can be reused by the following navigation instead of issuing a duplicate request.
+- Improved `@reckona/mreact-reactive-dom` static keyed single-node list updates by reducing key scans for same-order and simple swap updates.
+
+### Fixed
+
+- Fixed App Router client navigation cache invalidation so revalidated paths also drop matching in-flight prefetched HTML before stale responses can populate the navigation cache.
+
 ## 0.0.176 - 2026-06-19
 
 ### Changed
