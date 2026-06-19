@@ -106,6 +106,50 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("does not retain detached appended records when append rendering throws", async () => {
+    const items = cell([{ id: 1, label: "A" }]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    let throwOnId: number | undefined;
+
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        if (item.id === throwOnId) {
+          throw new Error("render failed");
+        }
+
+        const tr = document.createElement("tr");
+        tr.textContent = item.label;
+        return tr;
+      },
+      { key: (item) => item.id, deferEventPromotion: false },
+    );
+
+    throwOnId = 3;
+    items.set([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+      { id: 3, label: "C" },
+    ]);
+    await expect(flushEffects()).rejects.toThrow("render failed");
+    expect(parent.innerHTML).toBe("<tr>A</tr><!--rows-->");
+
+    throwOnId = undefined;
+    items.set([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    await flushEffects();
+
+    expect(parent.innerHTML).toBe("<tr>A</tr><tr>B</tr><!--rows-->");
+
+    dispose();
+  });
+
   test("preserves sibling nodes around an embedded marker", async () => {
     const items = cell([1, 2]);
     const parent = document.createElement("section");
@@ -485,7 +529,8 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("removeRecordNodes(records.values(), deferEventPromotion)");
     expect(source).toContain("if (batchDelegatedRootReleases)");
     expect(source).toContain("if (deferEventPromotion)");
-    expect(source).toContain("deferEventPromotion ? [] : undefined");
+    expect(source).toContain("const appendedRecords: SingleNodeRecord[] = []");
+    expect(source).toContain("disposeRecordValues(appendedRecords, deferEventPromotion)");
     expect(source).toContain("function removeChangedSingleNodeRecords");
     expect(source).toContain("staleRecord: SingleNodeRecord");
   });

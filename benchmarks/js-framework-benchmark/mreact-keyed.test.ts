@@ -1,6 +1,9 @@
+// @vitest-environment happy-dom
+
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 const fixtureRoot = join(
   process.cwd(),
@@ -28,6 +31,11 @@ const reactCompatVdomFixtureRoot = join(
 );
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    vi.resetModules();
+  });
+
   test("declares the metadata and build command expected by js-framework-benchmark", async () => {
     const packageJson = JSON.parse(await readFile(join(fixtureRoot, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
@@ -102,6 +110,60 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).not.toContain("new WeakMap<HTMLTableRowElement, number>()");
     expect(main).not.toContain("rowIdProperty");
     expect(main).not.toContain("document.createTextNode(String(row.id))");
+  });
+
+  test("runs official keyed table actions through delegated row events", async () => {
+    document.body.innerHTML = [
+      '<div id="main">',
+      '<button id="run"></button>',
+      '<button id="runlots"></button>',
+      '<button id="add"></button>',
+      '<button id="update"></button>',
+      '<button id="clear"></button>',
+      '<button id="swaprows"></button>',
+      '<table><tbody id="tbody"></tbody></table>',
+      "</div>",
+    ].join("");
+    vi.resetModules();
+
+    await import("./frameworks/keyed/mreact/src/main.ts");
+
+    const click = async (selector: string): Promise<void> => {
+      const element = document.querySelector<HTMLElement>(selector);
+
+      if (element === null) {
+        throw new Error(`Missing ${selector}`);
+      }
+
+      element.click();
+      await flushEffects();
+    };
+    const rows = (): HTMLTableRowElement[] =>
+      Array.from(document.querySelectorAll<HTMLTableRowElement>("#tbody tr"));
+    const rowId = (row: HTMLTableRowElement): string => row.cells[0]?.textContent ?? "";
+    const rowLabel = (row: HTMLTableRowElement): string => row.cells[1]?.textContent ?? "";
+
+    await click("#run");
+    expect(rows()).toHaveLength(1_000);
+    expect(rowId(rows()[0] as HTMLTableRowElement)).toBe("1");
+
+    const firstLabel = rowLabel(rows()[0] as HTMLTableRowElement);
+    await click("#update");
+    expect(rowLabel(rows()[0] as HTMLTableRowElement)).toBe(`${firstLabel} !!!`);
+
+    await click("#tbody tr:nth-child(2) td:nth-child(2) a");
+    expect(rows()[1]?.className).toBe("danger");
+
+    await click("#swaprows");
+    expect(rowId(rows()[998] as HTMLTableRowElement)).toBe("2");
+    expect(rows()[998]?.className).toBe("danger");
+
+    await click("#tbody tr:nth-child(999) td:nth-child(3) a");
+    expect(rows()).toHaveLength(999);
+    expect(rows().some((row) => rowId(row) === "2")).toBe(false);
+
+    await click("#clear");
+    expect(rows()).toHaveLength(0);
   });
 });
 

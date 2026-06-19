@@ -624,28 +624,37 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
   }
 
   const appendFragment = document.createDocumentFragment();
-  const appendedRecords: SingleNodeRecord[] | undefined = deferEventPromotion ? [] : undefined;
+  const appendedRecords: SingleNodeRecord[] = [];
 
-  for (let index = previousSize; index < currentItems.length; index += 1) {
-    const record = createSingleNodeRecord(
-      parent,
-      appendedKeys[index - previousSize],
-      currentItems[index] as T,
-      index,
-      currentItems,
-      renderItem,
-      renderArity,
-      deferEventPromotion,
-      selectedClassState,
-    );
+  try {
+    for (let index = previousSize; index < currentItems.length; index += 1) {
+      const record = createSingleNodeRecord(
+        parent,
+        appendedKeys[index - previousSize],
+        currentItems[index] as T,
+        index,
+        currentItems,
+        renderItem,
+        renderArity,
+        deferEventPromotion,
+        selectedClassState,
+      );
 
-    records.set(appendedKeys[index - previousSize], record);
-    appendedRecords?.push(record);
-    appendFragment.appendChild(record.node);
+      appendedRecords.push(record);
+      appendFragment.appendChild(record.node);
+    }
+  } catch (error) {
+    unregisterSelectedClassRecords(selectedClassState, appendedRecords);
+    disposeRecordValues(appendedRecords, deferEventPromotion);
+    throw error;
+  }
+
+  for (let index = 0; index < appendedRecords.length; index += 1) {
+    records.set(appendedKeys[index], appendedRecords[index] as SingleNodeRecord);
   }
 
   parent.insertBefore(appendFragment, marker);
-  if (appendedRecords !== undefined) {
+  if (deferEventPromotion) {
     promoteRecordEvents(appendedRecords);
   }
   return records;
@@ -864,30 +873,40 @@ function tryAppendSingleNodeRecords<T, TNode extends ChildNode>(
   }
 
   const appendFragment = document.createDocumentFragment();
-  const appendedRecords: SingleNodeRecord[] | undefined = deferEventPromotion ? [] : undefined;
+  const appendedRecords: SingleNodeRecord[] = [];
 
-  for (let slot = records.size; slot < keys.length; slot += 1) {
-    const record = createSingleNodeRecord(
-      parent,
-      keys[slot],
-      items[slot] as T,
-      slot,
-      currentItems,
-      renderItem,
-      renderArity,
-      deferEventPromotion,
-      selectedClassState,
-    );
+  try {
+    for (let slot = records.size; slot < keys.length; slot += 1) {
+      const record = createSingleNodeRecord(
+        parent,
+        keys[slot],
+        items[slot] as T,
+        slot,
+        currentItems,
+        renderItem,
+        renderArity,
+        deferEventPromotion,
+        selectedClassState,
+      );
 
-    records.set(keys[slot], record);
-    appendedRecords?.push(record);
+      appendedRecords.push(record);
+      appendFragment.appendChild(record.node);
+    }
+  } catch (error) {
+    unregisterSelectedClassRecords(selectedClassState, appendedRecords);
+    disposeRecordValues(appendedRecords, deferEventPromotion);
+    throw error;
+  }
 
-    appendFragment.appendChild(record.node);
+  const firstAppendedSlot = keys.length - appendedRecords.length;
+
+  for (let index = 0; index < appendedRecords.length; index += 1) {
+    records.set(keys[firstAppendedSlot + index], appendedRecords[index] as SingleNodeRecord);
   }
 
   parent.insertBefore(appendFragment, marker);
 
-  if (appendedRecords !== undefined) {
+  if (deferEventPromotion) {
     promoteRecordEvents(appendedRecords);
   }
   return records;
