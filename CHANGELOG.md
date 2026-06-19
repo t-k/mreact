@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.174 - 2026-06-19
+
+### Changed
+
+- Improved `@reckona/mreact-reactive-dom` static keyed single-node list hot paths for append, remove, swap, selected-class, direct text binding, and scope cleanup work used by DOM-heavy keyed table operations.
+- Improved `@reckona/mreact-reactive-core` direct cell subscription cleanup and notification paths by reading cached source values directly and avoiding unnecessary pending-queue deletion work.
+
+### Fixed
+
+- Fixed `bindStaticKeyedSingleNodeList()` append fast paths so renderer exceptions cannot leave detached appended records or selected-class entries in retained list state.
+
 ## 0.0.173 - 2026-06-19
 
 ### Added
