@@ -332,7 +332,7 @@ export default function Page() {
   return (
     <main>
       <Counter />
-      <Link href="/target">Details</Link>
+      <Link href="/target" prefetch="viewport">Details</Link>
     </main>
   );
 }`
@@ -342,7 +342,7 @@ export default function Page() {
   return (
     <main>
       <button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>
-      <a href="/target">Details</a>
+      <a href="/target" data-mreact-prefetch="viewport">Details</a>
     </main>
     );
   }`,
