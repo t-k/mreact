@@ -5463,6 +5463,69 @@ export default function Page() {
     expect(requests.filter((url) => url === `${location.origin}/server-0`)).toHaveLength(2);
   });
 
+  test("does not cache stale in-flight prefetch HTML after revalidation", async () => {
+    const { routeModule } = await importRouteRuntime("prefetch-in-flight-revalidate");
+    const fetchCalls: string[] = [];
+    let resolveStalePrefetch: ((response: Response) => void) | undefined;
+    let staleRequests = 0;
+    globalThis.fetch = async (input: string | URL | Request) => {
+      const url = String(input);
+      fetchCalls.push(url);
+
+      if (url.endsWith("/stale")) {
+        staleRequests += 1;
+
+        if (staleRequests === 1) {
+          return new Promise<Response>((resolve) => {
+            resolveStalePrefetch = resolve;
+          });
+        }
+
+        return new Response(
+          [
+            "<!DOCTYPE html>",
+            '<div data-mreact-route-id="stale"><main>Fresh Stale</main></div>',
+            '<script type="application/json" id="mreact-props-stale">{}</script>',
+          ].join(""),
+        );
+      }
+
+      if (url.endsWith("/refresh")) {
+        return new Response(
+          [
+            "<!DOCTYPE html>",
+            '<div data-mreact-route-id="refresh"><main>Refresh</main></div>',
+            '<script type="application/json" id="mreact-props-refresh">{}</script>',
+          ].join(""),
+          { headers: { "x-mreact-revalidate": "/stale" } },
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${url}`);
+    };
+
+    const prefetch = routeModule.__mreactPrefetch("/stale");
+    await Promise.resolve();
+    await routeModule.__mreactNavigate("/refresh");
+    resolveStalePrefetch?.(
+      new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="stale"><main>Old Stale</main></div>',
+          '<script type="application/json" id="mreact-props-stale">{}</script>',
+        ].join(""),
+      ),
+    );
+    await expect(prefetch).resolves.toBe(true);
+    await routeModule.__mreactNavigate("/stale");
+
+    const origin = location.origin;
+    expect(fetchCalls).toEqual([`${origin}/stale`, `${origin}/refresh`, `${origin}/stale`]);
+    expect(document.querySelector("[data-mreact-route-id='stale']")?.textContent).toBe(
+      "Fresh Stale",
+    );
+  });
+
   test("bounds prefetched route script history entries", async () => {
     const { routeModule } = await importRouteRuntime("prefetch-script-history-bound");
     installRoutePrefetchManifest(
