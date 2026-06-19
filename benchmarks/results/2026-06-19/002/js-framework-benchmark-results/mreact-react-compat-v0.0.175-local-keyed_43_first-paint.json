@@ -1,0 +1,1 @@
+{"framework":"mreact-react-compat-v0.0.175-local-keyed","keyed":true,"benchmark":"43_first-paint","type":"size","values":{"DEFAULT":{"min":273.5,"max":273.5,"median":273.5,"mean":273.5,"stddev":null,"values":[273.5]}}}
