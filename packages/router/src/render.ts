@@ -149,6 +149,7 @@ import {
   type RouteDataContext,
   type RouteLoaderModule,
 } from "./route-loader-runtime.js";
+import { pageRouteMethodResponse } from "./route-dispatch.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -976,18 +977,9 @@ async function renderAppRequestInternal(options: RenderAppRequestOptions): Promi
     // methods (PUT, PATCH, DELETE, PROPFIND, ...) get 405 with an
     // Allow header so the response shape complies with RFC 9110 §9
     // and so caching intermediaries do not cross-cache method results.
-    const method = options.request.method;
-    if (method === "OPTIONS") {
-      return new Response(null, {
-        status: 204,
-        headers: { allow: "GET, HEAD, OPTIONS" },
-      });
-    }
-    if (method !== "GET" && method !== "HEAD") {
-      return new Response("Method Not Allowed", {
-        status: 405,
-        headers: { allow: "GET, HEAD, OPTIONS" },
-      });
+    const methodResponse = pageRouteMethodResponse(options.request.method);
+    if (methodResponse !== undefined) {
+      return methodResponse;
     }
 
     routeCacheContext = beginRouteCacheContext(options.routeCache);
