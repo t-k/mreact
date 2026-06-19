@@ -80,6 +80,11 @@ export interface RouteMatcher {
   match(pathname: string): MatchedRoute | undefined;
 }
 
+interface MatchRouteCacheEntry {
+  fingerprint: string;
+  matcher: RouteMatcher;
+}
+
 export type CompiledRouteMatcherSegment =
   | { kind: "static"; value: string }
   | { kind: "dynamic"; name: string }
@@ -98,6 +103,11 @@ export interface CompiledRouteMatcherArtifact {
   routes: readonly CompiledRouteMatcherEntry[];
   version: 1;
 }
+
+let matchRouteMatcherCache = new WeakMap<readonly AppRoute[], MatchRouteCacheEntry>();
+let matchRouteMatcherBuildCountForTest = 0;
+let matchRouteFingerprintIds = new WeakMap<AppRoute, number>();
+let nextMatchRouteFingerprintId = 1;
 
 /**
  * Scans an app directory and returns sorted app-router route definitions.
@@ -137,7 +147,28 @@ export function matchRoute(
   routes: readonly AppRoute[],
   pathname: string,
 ): MatchedRoute | undefined {
-  return createRouteMatcher(routes).match(pathname);
+  const fingerprint = routeMatcherFingerprint(routes);
+  const cached = matchRouteMatcherCache.get(routes);
+
+  if (cached !== undefined && cached.fingerprint === fingerprint) {
+    return cached.matcher.match(pathname);
+  }
+
+  const matcher = createRouteMatcher(routes);
+  matchRouteMatcherBuildCountForTest += 1;
+  matchRouteMatcherCache.set(routes, { fingerprint, matcher });
+  return matcher.match(pathname);
+}
+
+export function __resetMatchRouteCacheForTest(): void {
+  matchRouteMatcherCache = new WeakMap();
+  matchRouteMatcherBuildCountForTest = 0;
+  matchRouteFingerprintIds = new WeakMap();
+  nextMatchRouteFingerprintId = 1;
+}
+
+export function __getMatchRouteMatcherBuildCountForTest(): number {
+  return matchRouteMatcherBuildCountForTest;
 }
 
 export function compileRouteMatcherArtifact(
@@ -202,6 +233,44 @@ function compileRouteMatcherEntry(
         ...shared,
         suffixLength: route.segments.length - catchAllIndex - 1,
       };
+}
+
+function routeMatcherFingerprint(routes: readonly AppRoute[]): string {
+  const parts: string[] = [String(routes.length)];
+
+  for (const route of routes) {
+    parts.push(
+      String(routeMatcherRouteFingerprintId(route)),
+      route.kind,
+      route.path,
+      String(route.segments.length),
+    );
+
+    for (const segment of route.segments) {
+      parts.push(segment.kind);
+
+      if (segment.kind === "static") {
+        parts.push(segment.value);
+      } else {
+        parts.push(segment.name);
+      }
+    }
+  }
+
+  return parts.map((part) => `${part.length}:${part}`).join("|");
+}
+
+function routeMatcherRouteFingerprintId(route: AppRoute): number {
+  const cached = matchRouteFingerprintIds.get(route);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const id = nextMatchRouteFingerprintId;
+  nextMatchRouteFingerprintId += 1;
+  matchRouteFingerprintIds.set(route, id);
+  return id;
 }
 
 function matchCompiledRoutes(

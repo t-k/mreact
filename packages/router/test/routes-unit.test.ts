@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  __getMatchRouteMatcherBuildCountForTest,
+  __resetMatchRouteCacheForTest,
   createRouteMatcher,
   matchRoute,
   safeDecodeURIComponent,
@@ -76,6 +78,54 @@ describe("router routes matcher edge branches", () => {
   test("matchRoute matches the root segment", () => {
     const routes = [pageRoute("/")];
     expect(matchRoute(routes, "/")?.route.path).toBe("/");
+  });
+
+  test("matchRoute reuses the matcher for repeated calls with unchanged routes", () => {
+    const routes = [pageRoute("/users/:id")];
+    __resetMatchRouteCacheForTest();
+
+    expect(matchRoute(routes, "/users/42")?.params).toEqual({ id: "42" });
+    expect(matchRoute(routes, "/missing")).toBeUndefined();
+
+    expect(__getMatchRouteMatcherBuildCountForTest()).toBe(1);
+  });
+
+  test("matchRoute rebuilds the cached matcher after route list mutation", () => {
+    const routes = [pageRoute("/users/:id")];
+    __resetMatchRouteCacheForTest();
+
+    expect(matchRoute(routes, "/users/42")?.params).toEqual({ id: "42" });
+    routes.push(pageRoute("/about"));
+
+    expect(matchRoute(routes, "/about")?.route.path).toBe("/about");
+    expect(__getMatchRouteMatcherBuildCountForTest()).toBe(2);
+  });
+
+  test("matchRoute rebuilds the cached matcher after route segment mutation", () => {
+    const route = pageRoute("/users/:id");
+    const routes = [route];
+    __resetMatchRouteCacheForTest();
+
+    expect(matchRoute(routes, "/users/42")?.params).toEqual({ id: "42" });
+    route.path = "/users/me";
+    route.segments[1] = { kind: "static", value: "me" };
+
+    expect(matchRoute(routes, "/users/42")).toBeUndefined();
+    expect(matchRoute(routes, "/users/me")?.route.path).toBe("/users/me");
+    expect(__getMatchRouteMatcherBuildCountForTest()).toBe(2);
+  });
+
+  test("matchRoute rebuilds the cached matcher after route object replacement", () => {
+    const original = pageRoute("/about", "/first/page.tsx");
+    const replacement = pageRoute("/about", "/second/page.tsx");
+    const routes = [original];
+    __resetMatchRouteCacheForTest();
+
+    expect(matchRoute(routes, "/about")?.route).toBe(original);
+    routes[0] = replacement;
+
+    expect(matchRoute(routes, "/about")?.route).toBe(replacement);
+    expect(__getMatchRouteMatcherBuildCountForTest()).toBe(2);
   });
 
   test("safeDecodeURIComponent returns undefined on malformed input rather than throwing", () => {
