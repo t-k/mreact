@@ -279,6 +279,7 @@ export interface BuiltServerManifest {
   routesDir?: string;
   routeServerActionReferences?: Record<string, BuiltServerActionExpressionReference[]>;
   serverActionManifest?: BuiltServerActionReference[];
+  serverModuleClosureFiles?: Record<string, string[]>;
   serverModuleFiles?: Record<string, string>;
   serverModuleRenderFiles?: Record<string, string>;
   serverModuleRequestFiles?: Record<string, string>;
@@ -625,6 +626,10 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       ...(navigationRuntimeScript === undefined ? [] : [navigationRuntimeScript]),
     ]),
   ).sort();
+  const serverModuleClosureFiles = buildServerModuleClosureManifest(
+    serverModules,
+    sourceAnalysis,
+  );
   const prerenderedRoutes =
     shouldTrackBuildPhases === false
       ? await prerenderStaticRoutes({
@@ -708,6 +713,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...(serverActionManifest.allowedActions.length === 0
       ? {}
       : { serverActionManifest: serverActionManifest.allowedActions }),
+    ...(Object.keys(serverModuleClosureFiles).length === 0
+      ? {}
+      : { serverModuleClosureFiles }),
     ...(Object.keys(serverModuleArtifacts.files).length === 0
       ? {}
       : { serverModuleFiles: serverModuleArtifacts.files }),
@@ -986,6 +994,141 @@ function buildSourceAnalysisForFile(
   file: string,
 ): BuildSourceAnalysis | undefined {
   return sourceAnalysis.byFile.get(relative(projectRoot, file).split(sep).join("/"));
+}
+
+function buildServerModuleClosureManifest(
+  serverModules: Record<string, BuiltServerModuleArtifact>,
+  sourceAnalysis: BuildSourceAnalysisScope,
+): Record<string, string[]> {
+  const sourceFiles = new Set(sourceAnalysis.byFile.keys());
+  const closureFiles: Record<string, string[]> = {};
+
+  for (const file of Object.keys(serverModules).sort()) {
+    const closure: string[] = [];
+    collectManifestServerModuleClosureFiles(file, sourceAnalysis, sourceFiles, new Set(), closure);
+
+    if (closure.length > 0) {
+      closureFiles[file] = closure;
+    }
+  }
+
+  return closureFiles;
+}
+
+function collectManifestServerModuleClosureFiles(
+  file: string,
+  sourceAnalysis: BuildSourceAnalysisScope,
+  sourceFiles: ReadonlySet<string>,
+  seen: Set<string>,
+  closure: string[],
+): void {
+  if (seen.has(file)) {
+    return;
+  }
+  seen.add(file);
+  closure.push(file);
+
+  const source = sourceAnalysis.byFile.get(file)?.source;
+  if (source === undefined) {
+    return;
+  }
+
+  for (const specifier of localManifestServerModuleSpecifiers(source)) {
+    const resolved = resolveManifestLocalServerSourceImport(file, specifier, sourceFiles);
+    if (resolved !== undefined) {
+      collectManifestServerModuleClosureFiles(
+        resolved,
+        sourceAnalysis,
+        sourceFiles,
+        seen,
+        closure,
+      );
+    }
+  }
+}
+
+const localManifestServerModuleImportPattern =
+  /\b(?:import|export)\s+(?:type\s+)?(?:[^"']*?\s+from\s*)?["'](?<source>\.{1,2}\/[^"']+)["']/g;
+
+function localManifestServerModuleSpecifiers(code: string): string[] {
+  const specifiers = new Set<string>();
+  localManifestServerModuleImportPattern.lastIndex = 0;
+
+  for (const match of code.matchAll(localManifestServerModuleImportPattern)) {
+    const source = match.groups?.source;
+
+    if (source !== undefined) {
+      specifiers.add(source);
+    }
+  }
+
+  return Array.from(specifiers);
+}
+
+function resolveManifestLocalServerSourceImport(
+  fromFile: string,
+  specifier: string,
+  sourceFiles: ReadonlySet<string>,
+): string | undefined {
+  const base = resolveManifestRelativePath(manifestDirname(fromFile), specifier);
+
+  for (const candidate of manifestLocalServerSourceImportCandidates(base)) {
+    if (sourceFiles.has(candidate)) {
+      return candidate;
+    }
+  }
+
+  return undefined;
+}
+
+function manifestLocalServerSourceImportCandidates(base: string): string[] {
+  const candidates = [base];
+
+  if (base.endsWith(".js")) {
+    const withoutJs = base.slice(0, -".js".length);
+    candidates.push(`${withoutJs}.ts`, `${withoutJs}.tsx`, `${withoutJs}.mreact.tsx`);
+  } else if (base.endsWith(".jsx")) {
+    const withoutJsx = base.slice(0, -".jsx".length);
+    candidates.push(`${withoutJsx}.tsx`, `${withoutJsx}.mreact.tsx`);
+  } else if (base.endsWith(".mreact")) {
+    candidates.push(`${base}.tsx`);
+  } else {
+    candidates.push(
+      `${base}.ts`,
+      `${base}.tsx`,
+      `${base}.mreact.tsx`,
+      `${base}/index.ts`,
+      `${base}/index.tsx`,
+      `${base}/index.mreact.tsx`,
+    );
+  }
+
+  return candidates;
+}
+
+function manifestDirname(file: string): string {
+  const index = file.lastIndexOf("/");
+
+  return index === -1 ? "" : file.slice(0, index);
+}
+
+function resolveManifestRelativePath(fromDir: string, specifier: string): string {
+  const segments = fromDir === "" ? [] : fromDir.split("/");
+
+  for (const segment of specifier.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      segments.pop();
+      continue;
+    }
+
+    segments.push(segment);
+  }
+
+  return segments.join("/");
 }
 
 function canUseBuildServerActionPlaceholders(

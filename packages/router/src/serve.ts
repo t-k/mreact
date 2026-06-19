@@ -863,6 +863,12 @@ async function materializeBuiltRuntime(options: {
       artifact,
     ]),
   );
+  const serverModuleClosureFiles = new Map<string, readonly string[]>(
+    Object.entries(serverManifest.serverModuleClosureFiles ?? {}).map(([file, closure]) => [
+      join(appDir, safeManifestFilePath(file)),
+      closure.map((closureFile) => join(appDir, safeManifestFilePath(closureFile))),
+    ]),
+  );
   const serverModuleFiles = new Map(
     Object.entries(serverManifest.serverModuleFiles ?? {}).map(([file, artifactFile]) => [
       join(appDir, file),
@@ -960,7 +966,7 @@ async function materializeBuiltRuntime(options: {
       ? {}
       : { serverActionManifest: serverManifest.serverActionManifest }),
     serverModuleArtifactLoads: new Map(),
-    serverModuleClosureFiles: new Map(),
+    serverModuleClosureFiles,
     serverModuleFiles,
     serverModuleRenderFiles,
     serverModuleRequestFiles,

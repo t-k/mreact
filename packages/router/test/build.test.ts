@@ -7037,6 +7037,44 @@ export default function Page({ data }) {
     expect(await response.text()).toContain("<main>loader-secret</main>");
   });
 
+  test("writes server module closure files into the server manifest", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-module-closure-manifest-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "server", "nested"), { recursive: true });
+    await writeFile(
+      join(appDir, "server", "nested", "message.ts"),
+      `export const message = "closure-message";`,
+    );
+    await writeFile(
+      join(appDir, "server", "data.ts"),
+      `export { message } from "./nested/message";`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { message } from "./server/data";
+
+export function loader() {
+  return { message };
+}
+
+export default function Page({ data }) {
+  return <main>{data.message}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["node"] });
+    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+      serverModuleClosureFiles?: Record<string, string[]>;
+    };
+
+    expect(manifest.serverModuleClosureFiles?.["page.tsx"]).toEqual([
+      "page.tsx",
+      "server/data.ts",
+      "server/nested/message.ts",
+    ]);
+  });
+
   test("preserves source import.meta.url for built loader dependency asset paths", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-import-meta-assets-"));
     const appDir = join(rootDir, "app");
