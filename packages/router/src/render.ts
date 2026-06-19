@@ -144,6 +144,11 @@ import {
   prebuiltServerModuleOutputOptionsMatch,
   type BuiltServerModuleOutputLike,
 } from "./route-module-loader.js";
+import {
+  loadRouteDataFromModule,
+  type RouteDataContext,
+  type RouteLoaderModule,
+} from "./route-loader-runtime.js";
 
 const nativeEscapeTransform = {
   batchImportName: "escapeHtmlBatch",
@@ -4393,17 +4398,6 @@ async function loadRouteMiddlewareControlFile(options: {
   return control;
 }
 
-interface RouteDataContext {
-  env?: unknown;
-  params: RouteParams;
-  queryClient: QueryClient;
-  request: Request;
-}
-
-interface RouteLoaderModule {
-  loader?: (context: RouteDataContext) => unknown;
-}
-
 interface RouteMetadataContext {
   data: unknown;
   params: RouteParams;
@@ -4431,34 +4425,19 @@ async function loadRouteData(options: {
   timing?: RenderTiming | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<unknown> {
-  if (!hasLoaderExport(options.code)) {
-    return undefined;
-  }
-
-  let module: RouteLoaderModule;
-  const moduleLoadStartedAt = renderTimingPhaseStartedAt(options.timing);
-  try {
-    module = await loadRouteLoaderModule(options);
-  } finally {
-    finishRenderTimingPhase(options.timing, moduleLoadStartedAt, "loaderModuleLoadMs");
-  }
-
-  if (module.loader === undefined) {
-    return undefined;
-  }
-
-  const executionStartedAt = renderTimingPhaseStartedAt(options.timing);
-  try {
-    return await module.loader(options.context);
-  } catch (error) {
-    if (error instanceof Response) {
-      return error;
-    }
-
-    throw error;
-  } finally {
-    finishRenderTimingPhase(options.timing, executionStartedAt, "loaderExecutionMs");
-  }
+  return await loadRouteDataFromModule({
+    context: options.context,
+    hasLoader: hasLoaderExport(options.code),
+    loadModule: () => loadRouteLoaderModule(options),
+    timing: {
+      finish(startedAt, phase) {
+        finishRenderTimingPhase(options.timing, startedAt, phase);
+      },
+      start() {
+        return renderTimingPhaseStartedAt(options.timing);
+      },
+    },
+  });
 }
 
 async function loadRouteDataWithInstrumentation(options: {
