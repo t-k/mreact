@@ -43,10 +43,19 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain("(props.row.id)");
     expect(output.code).toContain("(props.row.label)");
     expect(output.code).toMatch(/\.className !== /);
-    // Event handlers are rebound from the reactive props proxy, not captured once.
+    // Event handlers are bound once and evaluate the reactive props proxy when
+    // the event fires.
     expect(output.code).toContain('bindEvent');
     expect(output.code).toContain('"click"');
+    expect(output.code).toMatch(
+      /const _disposeEvent = _bindEvent\(_a, "click", \(event\) => \{/,
+    );
+    expect(output.code).toContain("return (selectRow(props.row.id));");
+    expect(output.code).not.toContain("const _h = (() => selectRow(props.row.id));");
     expect(output.code).not.toContain("addEventListener");
+    expect(output.code).not.toContain(
+      'const _disposeEvent = typeof _h === "function" ? _bindEvent',
+    );
   });
 
   test("does not lower components with hooks (non-empty body) or destructured props", () => {

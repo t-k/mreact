@@ -227,25 +227,31 @@ function Row(props) {
     const _td$3 = document.createElement("td");
     _td$3.className = "col-md-6";
     _tr.appendChild(_td$3);
-    const _dispose = _effect(() => {
+    const _disposeEvent = _bindEvent(_a, "click", (event) => {
+      return (selectRow(props.row.id));
+    });
+    const _disposeEvent$1 = _bindEvent(_a$1, "click", (event$1) => {
+      return (removeRow(props.row.id));
+    });
+    const _disposeEffect = _effect(() => {
       const _r = (props.selected ? "danger" : "");
       const _v = _r == null ? "" : String(_r);
       if (_tr.className !== _v) _tr.className = _v;
+    });
+    const _disposeEffect$1 = _effect(() => {
       const _r$1 = (props.row.id);
       const _v$1 = _r$1 == null ? "" : String(_r$1);
       if (_text.data !== _v$1) _text.data = _v$1;
-      const _h = (() => selectRow(props.row.id));
-      const _disposeEvent = typeof _h === "function" ? _bindEvent(_a, "click", _h) : undefined;
-      const _r$3 = (props.row.label);
-      const _v$2 = _r$3 == null ? "" : String(_r$3);
+      const _r$2 = (props.row.label);
+      const _v$2 = _r$2 == null ? "" : String(_r$2);
       if (_text$1.data !== _v$2) _text$1.data = _v$2;
-      const _h$1 = (() => removeRow(props.row.id));
-      const _disposeEvent$1 = typeof _h$1 === "function" ? _bindEvent(_a$1, "click", _h$1) : undefined;
-      return () => {
-        _disposeEvent?.();
-        _disposeEvent$1?.();
-      };
     });
+    const _dispose = () => {
+      _disposeEffect();
+      _disposeEffect$1();
+      _disposeEvent();
+      _disposeEvent$1();
+    };
     return { node: _tr, dispose: _dispose };
   }, props);
 }

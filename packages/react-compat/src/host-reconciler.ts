@@ -21,6 +21,7 @@ import {
   type ReactCompatNode,
 } from "./element.js";
 import {
+  batchReactivePropCellUpdates,
   createReactivePropCell,
   createReactivePropProxy,
   setReactivePropCell,
@@ -227,13 +228,18 @@ export function renderHostFiberRoot(
 ): Fiber {
   const workInProgress = createWorkInProgress(root.current, { children: element });
   const rootDocument = root.container.ownerDocument;
-  const result = reconcileHostChild(
-    workInProgress,
-    root.current.child,
-    element,
-    runtime,
-    options.previousNodes === undefined ? "0" : "",
-    { ...options, documentRef: options.documentRef ?? rootDocument },
+  const result = batchReactivePropCellUpdates(() =>
+    reconcileHostChild(
+      workInProgress,
+      root.current.child,
+      element,
+      runtime,
+      options.previousNodes === undefined ? "0" : "",
+      {
+        ...options,
+        documentRef: options.documentRef ?? rootDocument,
+      },
+    ),
   );
   workInProgress.child = result.fiber;
   workInProgress.memoizedProps = { children: element };
@@ -786,6 +792,78 @@ function isStaticReactiveBlockComponent(type: unknown): boolean {
   );
 }
 
+function tryCreateInitialStaticBlockMemoFiber(
+  node: ReactCompatElement,
+  key: string | undefined,
+  memoType: {
+    type: ReactCompatElement["type"];
+    compare?: (
+      previous: Record<string, unknown>,
+      next: Record<string, unknown>,
+    ) => boolean;
+  },
+  runtime: RootRuntime,
+  memoPath: string,
+  options: FiberHydrationOptions,
+): FiberReconcileResult | undefined {
+  if (
+    options.previousNodes !== undefined ||
+    node.ref !== null ||
+    !isStaticReactiveBlockComponent(memoType.type)
+  ) {
+    return undefined;
+  }
+
+  const props = node.props as Record<string, unknown>;
+  const componentType = memoType.type as (props: Record<string, unknown>) => ReactCompatNode;
+  const rendered = componentType(props);
+
+  if (!isReactCompatElement(rendered) || rendered.type !== REACTIVE_DOM_BLOCK_TYPE) {
+    return undefined;
+  }
+
+  const memoFiber = createFiber("memo", props, key);
+  memoFiber.type = memoType;
+
+  const componentFiber = createFiber("function-component", props, key);
+  componentFiber.type = componentType;
+
+  const childResult = createHostFiber(
+    componentFiber,
+    undefined,
+    rendered,
+    key,
+    runtime,
+    `${memoPath}.0`,
+    options,
+  );
+  componentFiber.child = childResult.fiber;
+  if (componentFiber.child !== undefined) {
+    componentFiber.child.return = componentFiber;
+    componentFiber.child.sibling = undefined;
+    bubbleHostChild(componentFiber, componentFiber.child);
+  }
+  componentFiber.stateNode = {
+    element: node,
+    props,
+    instanceKeys: emptyInstanceKeys,
+    hasContextDependencies: false,
+  } satisfies FunctionFiberState;
+
+  memoFiber.child = componentFiber;
+  componentFiber.return = memoFiber;
+  bubbleHostChild(memoFiber, componentFiber);
+  memoFiber.memoizedState = {
+    props,
+    instanceKeys: emptyInstanceKeys,
+    hasDirtyInstanceDependencies: false,
+    hasUnflushedEffectDependencies: false,
+    hasRetainedInstanceDependencies: false,
+  } satisfies MemoFiberState;
+
+  return { fiber: memoFiber, consumed: childResult.consumed };
+}
+
 // In-place bailout for a keyed memo row whose props are unchanged and which has
 // no hook/context/effect dependencies. The caller has proven the key order is
 // unchanged (hasSameKeyOrderPrefix), so the fiber keeps its position and can be
@@ -890,8 +968,10 @@ function tryCellUpdateStaticBlockMemoRow(
 
   // Drive the bound DOM through the prop cell (the marker guarantees the block's
   // props are the component's props verbatim), then reuse the memo fiber in place.
-  setReactivePropCell(blockState.propCell, child.props as Record<string, unknown>);
-  matched.memoizedState = { ...state, props: child.props as Record<string, unknown> };
+  const nextProps = child.props as Record<string, unknown>;
+  setReactivePropCell(blockState.propCell, nextProps);
+  state.props = nextProps;
+  matched.memoizedState = state;
   matched.pendingProps = child.props;
   matched.flags = NoFlags;
   matched.subtreeFlags = NoFlags;
@@ -903,12 +983,15 @@ function tryCellUpdateStaticBlockMemoRow(
 }
 
 // Fast path for a keyed list of memo-wrapped rows (e.g. `<RowMemo key={id} />`)
-// whose key order is UNCHANGED between renders — the js-framework-benchmark
-// "select row" and "partial update" shapes. Walks current fibers and new
-// children in lockstep: unchanged rows bail in place (no allocation, no general
-// keyed-reconcile machinery), changed rows re-render through the proven
-// per-child path. Any reorder / insert / delete / non-memo child / length change
-// makes it return undefined so the general reconcile takes over.
+// whose key order is UNCHANGED, append-only, or a single deletion between
+// renders — the js-framework-benchmark "select row", "partial update",
+// "append rows", and "remove row" shapes. Walks current fibers and new children
+// in lockstep: unchanged rows bail in place (no allocation, no general
+// keyed-reconcile machinery), changed rows cell-update through the proven
+// per-child path, appended rows are created as a suffix, and a single deleted
+// row is removed while the suffix is retained. Any reorder / insert /
+// multi-delete / non-memo child makes it return undefined so the general
+// reconcile takes over.
 function reconcileKeyedMemoRowHostChildren(
   parent: Fiber,
   currentFirstChild: Fiber | undefined,
@@ -923,7 +1006,7 @@ function reconcileKeyedMemoRowHostChildren(
     runtime === undefined ||
     options.previousNodes !== undefined ||
     !isKeyedMemoRowCandidate(children[0]) ||
-    !hasSameKeyOrderPrefix(currentFirstChild, children)
+    !hasSameAppendOrSingleDeleteKeyOrder(currentFirstChild, children)
   ) {
     return undefined;
   }
@@ -935,22 +1018,43 @@ function reconcileKeyedMemoRowHostChildren(
   let subtreeChildListChanged = false;
   let hasRefSubtree = false;
   let hasDisposableResources = false;
+  let listShapeChanged = false;
+  let appendSuffix: AppendSuffixCommitHint | undefined;
+  let removedFiber: Fiber | undefined;
   let dirtyChildren: Fiber[] | undefined;
 
   for (let index = 0; index < children.length; index += 1) {
     const child = children[index];
 
-    if (currentKeyed === undefined || !isKeyedMemoRowCandidate(child)) {
+    if (!isKeyedMemoRowCandidate(child)) {
       return undefined;
     }
 
-    const matched = currentKeyed;
-    currentKeyed = currentKeyed.sibling;
     const childElement = child as ReactCompatElement;
+    let matched: Fiber | undefined = currentKeyed;
+
+    if (matched === undefined) {
+      // append-only suffix
+    } else if (matched.key === childElement.key) {
+      currentKeyed = matched.sibling;
+    } else if (
+      removedFiber === undefined &&
+      matched.sibling?.key === childElement.key &&
+      canSkipSingleDeletedKeyedFiber(children, index, matched.sibling)
+    ) {
+      removedFiber = matched;
+      matched = matched.sibling;
+      currentKeyed = matched.sibling;
+      listShapeChanged = true;
+    } else {
+      return undefined;
+    }
 
     let fiber =
-      tryReuseDependencyFreeKeyedMemoRow(matched, childElement) ??
-      tryCellUpdateStaticBlockMemoRow(matched, childElement);
+      matched === undefined
+        ? undefined
+        : tryReuseDependencyFreeKeyedMemoRow(matched, childElement) ??
+          tryCellUpdateStaticBlockMemoRow(matched, childElement);
     if (fiber === undefined) {
       const result = createHostFiber(
         parent,
@@ -968,9 +1072,14 @@ function reconcileKeyedMemoRowHostChildren(
         return undefined;
       }
 
-      if (fiber !== matched && fiber.alternate !== matched) {
+      if (matched !== undefined && fiber !== matched && fiber.alternate !== matched) {
         markOptimizedChildForDeletion(parent, matched);
       }
+    }
+
+    if (matched === undefined) {
+      listShapeChanged = true;
+      appendSuffix ??= { fiber, index };
     }
 
     if (first === undefined) {
@@ -1003,16 +1112,64 @@ function reconcileKeyedMemoRowHostChildren(
   }
 
   if (currentKeyed !== undefined) {
-    return undefined;
+    if (removedFiber !== undefined || currentKeyed.sibling !== undefined) {
+      return undefined;
+    }
+    removedFiber = currentKeyed;
+    listShapeChanged = true;
   }
 
   parent.hasRefSubtree = hasRefSubtree;
   parent.hasDisposableResources = hasDisposableResources;
   parent.subtreeFlags = subtreeFlags;
   parent.subtreeChildListChanged = subtreeChildListChanged;
-  parent.childListChanged = false;
+  parent.childListChanged = listShapeChanged;
+  if (appendSuffix !== undefined && canStoreAppendSuffixCommitHint(parent)) {
+    parent.memoizedState = appendSuffix;
+  }
+  if (removedFiber !== undefined) {
+    parent.deletions = [removedFiber];
+    markOptimizedChildForDeletion(parent, removedFiber);
+  }
   recordDirtyChildCommitHints(parent, dirtyChildren);
   return { fiber: first, consumed: 0 };
+}
+
+function hasSameAppendOrSingleDeleteKeyOrder(
+  currentFirstChild: Fiber,
+  children: readonly ReactCompatNode[],
+): boolean {
+  let current: Fiber | undefined = currentFirstChild;
+  let skippedDeletion = false;
+
+  for (let index = 0; index < children.length; index += 1) {
+    const key = getNodeKey(children[index]);
+
+    if (current === undefined) {
+      return true;
+    }
+
+    if (current.key === key) {
+      current = current.sibling;
+      continue;
+    }
+
+    const sibling = current.sibling;
+    if (
+      !skippedDeletion &&
+      sibling !== undefined &&
+      sibling.key === key &&
+      canSkipSingleDeletedKeyedFiber(children, index, sibling)
+    ) {
+      skippedDeletion = true;
+      current = sibling.sibling;
+      continue;
+    }
+
+    return false;
+  }
+
+  return current === undefined || (!skippedDeletion && current.sibling === undefined);
 }
 
 function canReuseDependencyFreeMemoAtKey(
@@ -1926,6 +2083,22 @@ function createHostFiberImpl(
     const memoPath = `${path}.memo`;
     const previousMemoFiber =
       current?.tag === "memo" && current.type === memoType ? current : undefined;
+    const initialStaticBlockMemoFiber =
+      previousMemoFiber === undefined
+        ? tryCreateInitialStaticBlockMemoFiber(
+          node,
+          key,
+          memoType,
+          runtime,
+          memoPath,
+          options,
+        )
+        : undefined;
+
+    if (initialStaticBlockMemoFiber !== undefined) {
+      return initialStaticBlockMemoFiber;
+    }
+
     const previousMemoState =
       previousMemoFiber !== undefined
         ? (previousMemoFiber.memoizedState as MemoFiberState | undefined)
@@ -2935,6 +3108,7 @@ function commitHostSingleRemoval(fiber: Fiber, parent: ParentNode): boolean {
   }
 
   if (removedAny) {
+    disposeHostFiberResources(removed);
     fiber.deletions = undefined;
   }
 

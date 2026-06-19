@@ -129,7 +129,9 @@ function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[
       if (propBlockHasEvent(component.root)) {
         specifiers.add("bindEvent");
       }
-      specifiers.add("effect");
+      if (propBlockHasEffectBinding(component.root)) {
+        specifiers.add("effect");
+      }
     }
   }
 
@@ -1065,6 +1067,22 @@ function propBlockHasEvent(node: JsxNodeIr): boolean {
   return node.children.some(propBlockHasEvent);
 }
 
+function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return true;
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  if (node.attributes.some((attr) => attr.kind === "dynamic-attr")) {
+    return true;
+  }
+
+  return node.children.some(propBlockHasEffectBinding);
+}
+
 interface PropBlockBinding {
   kind: "text" | "className" | "htmlFor" | "event";
   eventName?: string | undefined;
@@ -1087,53 +1105,81 @@ function emitPropReactiveDomBlockComponent(
   const bindings: PropBlockBinding[] = [];
   const rootVar = emitPropBlockNode(block.root, undefined, build, bindings, allocator);
   const disposeName = allocator("_dispose");
+  const eventDisposeNames: string[] = [];
+  const eventBindLines = bindings
+    .filter((binding) => binding.kind === "event")
+    .map((binding) => {
+      const eventName = allocator("event");
+      const handlerName = allocator("_h");
+      const eventDisposeName = allocator("_disposeEvent");
+      eventDisposeNames.push(eventDisposeName);
+      return [
+        `const ${eventDisposeName} = ${bindEvent}(${binding.target}, ${JSON.stringify(binding.eventName ?? "")}, (${eventName}) => {`,
+        ...emitPropBlockEventHandlerLines(binding.code, handlerName, eventName).map((line) => `  ${line}`),
+        `});`,
+      ].join("\n");
+    });
 
   // Drive every binding from a single effect: all read the same prop cell, so
   // they re-run together on any change anyway, and one effect means one
   // subscriber, one re-run, and one disposer per block.
-  const cleanupNames: string[] = [];
-  const effectBody = bindings.map((binding) => {
-    const rawName = allocator("_r");
+  const effectBodiesByKey = new Map<string, string[]>();
+  for (const binding of bindings) {
     if (binding.kind === "event") {
-      const handlerName = allocator("_h");
-      const eventDisposeName = allocator("_disposeEvent");
-      cleanupNames.push(eventDisposeName);
-      return [
-        `      const ${handlerName} = (${binding.code});`,
-        `      const ${eventDisposeName} = typeof ${handlerName} === "function" ? ${bindEvent}(${binding.target}, ${JSON.stringify(binding.eventName ?? "")}, ${handlerName}) : undefined;`,
-      ].join("\n");
+      continue;
     }
 
+    const rawName = allocator("_r");
     const valueName = allocator("_v");
     const property = binding.kind === "text" ? "data" : binding.kind;
-    // Evaluate the prop expression once (it may have side effects / be a
-    // ternary), normalize null/undefined to "", and write only on change.
-    return [
+    const body = [
       `      const ${rawName} = (${binding.code});`,
       `      const ${valueName} = ${rawName} == null ? "" : String(${rawName});`,
       `      if (${binding.target}.${property} !== ${valueName}) ${binding.target}.${property} = ${valueName};`,
     ].join("\n");
-  });
-  const effectCleanup =
-    cleanupNames.length === 0
+    const key = propBindingDependencyKey(binding.code, block.propsParam);
+    const effectBody = effectBodiesByKey.get(key);
+    if (effectBody === undefined) {
+      effectBodiesByKey.set(key, [body]);
+    } else {
+      effectBody.push(body);
+    }
+  }
+  const effectDisposeNames =
+    effectBodiesByKey.size === 0
       ? []
-      : cleanupNames.length === 1
-        ? [`      return ${cleanupNames[0]};`]
-        : [
-            `      return () => {`,
-            ...cleanupNames.map((name) => `        ${name}?.();`),
-            `      };`,
-          ];
+      : Array.from({ length: effectBodiesByKey.size }, () => allocator("_disposeEffect"));
+  const disposeTargets = [
+    ...effectDisposeNames,
+    ...eventDisposeNames,
+  ];
 
-  const disposeLines =
-    bindings.length === 0
-      ? [`    const ${disposeName} = undefined;`]
-      : [
-          `    const ${disposeName} = ${effectName}(() => {`,
-          ...effectBody,
-          ...effectCleanup,
-          `    });`,
-        ];
+  const disposeLines: string[] = [
+    ...eventBindLines.flatMap((line) => line.split("\n").map((part) => `    ${part}`)),
+  ];
+
+  let effectIndex = 0;
+  for (const effectBody of effectBodiesByKey.values()) {
+    const effectDisposeName = effectDisposeNames[effectIndex]!;
+    disposeLines.push(
+      `    const ${effectDisposeName} = ${effectName}(() => {`,
+      ...effectBody,
+      `    });`,
+    );
+    effectIndex += 1;
+  }
+
+  if (disposeTargets.length === 0) {
+    disposeLines.push(`    const ${disposeName} = undefined;`);
+  } else if (disposeTargets.length === 1) {
+    disposeLines.push(`    const ${disposeName} = ${disposeTargets[0]};`);
+  } else {
+    disposeLines.push(
+      `    const ${disposeName} = () => {`,
+      ...disposeTargets.map((name) => `      ${name}();`),
+      `    };`,
+    );
+  }
 
   return [
     `${functionKeyword} ${component.name}(${block.propsParam}) {`,
@@ -1150,6 +1196,48 @@ function emitPropReactiveDomBlockComponent(
     // committed block instead of re-invoking the component (see host-reconciler).
     `${component.name}.__mreactStaticBlock = true;`,
   ].join("\n");
+}
+
+function emitPropBlockEventHandlerLines(
+  code: string,
+  handlerName: string,
+  eventName: string,
+): string[] {
+  const inlineBody = readZeroParameterArrowExpressionBody(code);
+  if (inlineBody !== undefined) {
+    return [`return (${inlineBody});`];
+  }
+
+  return [
+    `const ${handlerName} = (${code});`,
+    `if (typeof ${handlerName} === "function") return ${handlerName}(${eventName});`,
+  ];
+}
+
+function readZeroParameterArrowExpressionBody(code: string): string | undefined {
+  const match = code.match(/^\s*\(\s*\)\s*=>\s*(?<body>[\s\S]*?)\s*$/);
+  const body = match?.groups?.body;
+  if (body === undefined || body.startsWith("{")) {
+    return undefined;
+  }
+
+  return body;
+}
+
+function propBindingDependencyKey(code: string, propsParam: string): string {
+  const escaped = propsParam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(^|[^A-Za-z_$\\d])${escaped}\\.([A-Za-z_$][\\w$]*)`, "g");
+  const names = new Set<string>();
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(code)) !== null) {
+    const name = match[2];
+    if (name !== undefined) {
+      names.add(name);
+    }
+  }
+
+  return names.size === 0 ? code : Array.from(names).sort().join(".");
 }
 
 function emitPropBlockNode(

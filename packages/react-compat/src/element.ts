@@ -211,6 +211,16 @@ export function createElementFromJsxConfig<P extends object>(
     ? String(keyArgument)
     : config?.key === undefined ? null : String(config.key);
   const ref = config?.ref ?? null;
+  if (canReuseJsxConfigAsComponentProps(normalizedType, config)) {
+    return {
+      $$typeof: REACT_COMPAT_ELEMENT_TYPE,
+      type: normalizedType as ElementType<P>,
+      key,
+      ref,
+      props: config as P & { children?: ReactCompatNode },
+    };
+  }
+
   const hasChildren = config !== null && config !== undefined && hasOwnProperty.call(config, "children");
   const children = config?.children;
   const copiedProps = copyElementProps(config, undefined, true);
@@ -235,6 +245,34 @@ export function createElementFromJsxConfig<P extends object>(
     ref,
     props,
   };
+}
+
+function canReuseJsxConfigAsComponentProps(
+  type: unknown,
+  config: object | null | undefined,
+): boolean {
+  if (
+    config === null ||
+    config === undefined ||
+    typeof type === "string" ||
+    hasDefaultProps(type)
+  ) {
+    return false;
+  }
+
+  for (const name in config) {
+    if (
+      hasOwnProperty.call(config, name) &&
+      (name === "key" ||
+        name === "ref" ||
+        name === "__self" ||
+        name === "__source")
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /** Returns true when a value is a React-compatible element record. */
@@ -497,7 +535,7 @@ function applyDefaultProps(
   type: unknown,
   props: Record<string, unknown>,
 ): Record<string, unknown> {
-  if (typeof type !== "function" && (typeof type !== "object" || type === null)) {
+  if (!canHaveDefaultProps(type)) {
     return props;
   }
 
@@ -515,6 +553,15 @@ function applyDefaultProps(
   }
 
   return props;
+}
+
+function hasDefaultProps(type: unknown): boolean {
+  return canHaveDefaultProps(type) &&
+    (type as { defaultProps?: Record<string, unknown> }).defaultProps !== undefined;
+}
+
+function canHaveDefaultProps(type: unknown): boolean {
+  return typeof type === "function" || (typeof type === "object" && type !== null);
 }
 
 interface ReactReservedProps {

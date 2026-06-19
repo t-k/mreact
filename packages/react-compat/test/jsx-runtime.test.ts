@@ -131,6 +131,30 @@ describe("react-compat automatic JSX runtime", () => {
     expect("key" in element.props).toBe(false);
   });
 
+  test("jsx reuses safe component props without copying", () => {
+    const Component = (props: { label: string }) => props.label;
+    const props = { label: "Save" };
+    const element = jsx(Component, props, "row-1");
+
+    expect(element.props).toBe(props);
+    expect(element.key).toBe("row-1");
+  });
+
+  test("jsx copies component props when reserved props or defaultProps are present", () => {
+    const Component = (props: { label?: string; ref?: unknown }) => props.label;
+    Component.defaultProps = { label: "Default" };
+
+    const withRef = { label: "Save", ref: "button" };
+    const refElement = jsx(Component, withRef);
+    expect(refElement.props).not.toBe(withRef);
+    expect("ref" in refElement.props).toBe(false);
+
+    const withDefault = {};
+    const defaultElement = jsx(Component, withDefault);
+    expect(defaultElement.props).not.toBe(withDefault);
+    expect(defaultElement.props.label).toBe("Default");
+  });
+
   test("jsxDEV accepts the React dev runtime signature", () => {
     const element = jsxDEV(
       "section",

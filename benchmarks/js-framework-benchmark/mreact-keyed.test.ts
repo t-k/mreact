@@ -214,6 +214,13 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("return _createReactiveDomBlock((props) =>");
     expect(main).toContain("document.createElement(\"tr\")");
     expect(main).toContain("bindEvent");
+    expect(main).toContain('const _disposeEvent = _bindEvent(_a, "click", (event) => {');
+    expect(main).toContain("return (selectRow(props.row.id));");
+    expect(main).toContain("return (removeRow(props.row.id));");
+    expect(main).not.toContain("const _h = (() => selectRow(props.row.id));");
+    expect(main).not.toContain(
+      'const _disposeEvent = typeof _h === "function" ? _bindEvent',
+    );
     expect(main.slice(main.indexOf("function Row"))).not.toContain("addEventListener");
   });
 

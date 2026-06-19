@@ -2,7 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { flushQueuedComputations } from "@reckona/mreact-reactive-core/internal";
-import { bindText } from "@reckona/mreact-reactive-dom";
+import { bindText, effect } from "@reckona/mreact-reactive-dom";
 import { createElement, createRoot, flushSync, memo, useState } from "../src/index.js";
 import { createReactiveDomBlock } from "../src/jsx-runtime.js";
 
@@ -104,6 +104,74 @@ describe("reactive-dom-block prop bridging", () => {
       expect(container.textContent).toBe("stable");
       expect(rowRenders).toBe(1); // memo bailout: Row not re-rendered
       expect(blockBuilds).toBe(1);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  test("prop effects only re-run for the properties they read", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const container = document.createElement("div");
+    let setSelected: (value: boolean) => void = () => {};
+    let setRow: (value: { label: string }) => void = () => {};
+    let rowEffectRuns = 0;
+    let selectedEffectRuns = 0;
+
+    const Row = memo(
+      (props: { row: { label: string }; selected: boolean }) =>
+        createReactiveDomBlock(
+          (reactiveProps: { row: { label: string }; selected: boolean }) => {
+            const node = document.createElement("span");
+            const disposeRow = effect(() => {
+              rowEffectRuns += 1;
+              node.textContent = reactiveProps.row.label;
+            });
+            const disposeSelected = effect(() => {
+              selectedEffectRuns += 1;
+              node.className = reactiveProps.selected ? "selected" : "";
+            });
+            return {
+              node,
+              dispose: () => {
+                disposeRow();
+                disposeSelected();
+              },
+            };
+          },
+          props,
+        ),
+      () => false,
+    );
+
+    function App() {
+      const [row, setRowState] = useState({ label: "a" });
+      const [selected, setSelectedState] = useState(false);
+      setRow = setRowState;
+      setSelected = setSelectedState;
+      return createElement(Row, { row, selected });
+    }
+
+    try {
+      flushSync(() => {
+        createRoot(container).render(createElement(App, null));
+      });
+      expect(rowEffectRuns).toBe(1);
+      expect(selectedEffectRuns).toBe(1);
+
+      flushSync(() => setSelected(true));
+      flushQueuedComputations();
+
+      expect(container.querySelector("span")?.className).toBe("selected");
+      expect(rowEffectRuns).toBe(1);
+      expect(selectedEffectRuns).toBe(2);
+
+      flushSync(() => setRow({ label: "b" }));
+      flushQueuedComputations();
+
+      expect(container.textContent).toBe("b");
+      expect(rowEffectRuns).toBe(2);
+      expect(selectedEffectRuns).toBe(2);
     } finally {
       process.env.NODE_ENV = previousNodeEnv;
     }
