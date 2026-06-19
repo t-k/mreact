@@ -10,6 +10,14 @@ import type {
 import type { AppRouterCache } from "./cache.js";
 import type { ClientRouteManifestEntry } from "./client-route-inference.js";
 import {
+  builtClientAssetPathname,
+  builtClientAssetPaths,
+  clearBuiltPublicAssetCacheForTest,
+  getBuiltPublicAssetCacheSizeForTest,
+  readBuiltClientAsset,
+  readBuiltPublicAsset,
+} from "./built-assets.js";
+import {
   createRouteMatcher,
   type AppRoute,
   type MatchedRoute,
@@ -31,7 +39,6 @@ import {
   bytesResponse,
   htmlResponse,
   nodeRequestToWebRequest,
-  rawNodeRequestUrl,
   sendResponse,
 } from "./http.js";
 import {
@@ -100,13 +107,7 @@ interface BuiltRuntimeCacheEntry {
 
 const builtRuntimeCache = new Map<string, BuiltRuntimeCacheEntry>();
 const builtRuntimeReadInflight = new Map<string, Promise<BuiltRuntime>>();
-const builtPublicAssetCache = new Map<string, BuiltPublicAsset>();
 let builtRuntimeMaterializeCountForTest = 0;
-
-interface BuiltPublicAsset {
-  bytes: Uint8Array;
-  headers: HeadersInit;
-}
 
 /**
  * Strategy for the final response body shape sent to the HTTP layer.
@@ -709,149 +710,6 @@ export async function startServer(
   };
 }
 
-async function readBuiltClientAsset(
-  outDir: string,
-  pathname: string,
-  allowedPaths: ReadonlySet<string>,
-): Promise<Response> {
-  const clientPrefix = "/_mreact/client/";
-  const normalized = safeBuiltClientAssetPath(pathname.slice(clientPrefix.length));
-
-  if (normalized === undefined || !allowedPaths.has(normalized)) {
-    return new Response("Not Found", { status: 404 });
-  }
-
-  try {
-    const code = await readFile(join(outDir, "client", normalized), "utf8");
-
-    return new Response(code, {
-      headers: clientAssetHeaders(normalized),
-    });
-  } catch {
-    return new Response("Not Found", { status: 404 });
-  }
-}
-
-function builtClientAssetPathname(request: Request, url: URL): string | undefined {
-  const rawUrl = rawNodeRequestUrl(request);
-  const rawPathname = rawUrl?.split(/[?#]/, 1)[0];
-  const pathname = rawPathname === undefined || rawPathname === "" ? url.pathname : rawPathname;
-  const normalizedPathname = pathname.startsWith("/") ? pathname : `/${pathname}`;
-
-  return normalizedPathname.startsWith("/_mreact/client/") ? normalizedPathname : undefined;
-}
-
-function safeBuiltClientAssetPath(relativePath: string): string | undefined {
-  let decoded: string;
-
-  try {
-    decoded = decodeURIComponent(relativePath);
-  } catch {
-    return undefined;
-  }
-
-  if (decoded.includes("\\") || decoded.includes("\0")) {
-    return undefined;
-  }
-
-  if (decoded.split("/").some((segment) => segment === "..")) {
-    return undefined;
-  }
-
-  const normalized = normalize(decoded);
-
-  if (isAbsolute(normalized) || normalized === ".." || normalized.startsWith(`..${sep}`)) {
-    return undefined;
-  }
-
-  return normalized;
-}
-
-function builtClientAssetPaths(manifest: {
-  assets?: readonly string[] | undefined;
-  routes: readonly ClientRouteManifestEntry[];
-}): ReadonlySet<string> {
-  const paths = new Set<string>(["manifest.json"]);
-
-  for (const route of manifest.routes) {
-    for (const asset of [
-      route.script,
-      route.sourceMap,
-      route.navigationScript,
-      ...(route.css ?? []),
-      ...(route.imports ?? []),
-    ]) {
-      const path = safeClientManifestAssetPath(asset);
-
-      if (path !== undefined) {
-        paths.add(path);
-      }
-    }
-  }
-
-  for (const asset of manifest.assets ?? []) {
-    const path = safeClientManifestAssetPath(asset);
-
-    if (path !== undefined) {
-      paths.add(path);
-    }
-  }
-
-  return paths;
-}
-
-function safeClientManifestAssetPath(asset: string | undefined): string | undefined {
-  if (asset === undefined || asset === "" || asset.startsWith("/") || asset.includes("\\")) {
-    return undefined;
-  }
-
-  const segments = asset.split("/");
-
-  return segments.some((segment) => segment === "" || segment === "." || segment === "..")
-    ? undefined
-    : segments.join("/");
-}
-
-async function readBuiltPublicAsset(
-  outDir: string,
-  pathname: string,
-): Promise<Response | undefined> {
-  const relativePath = pathname.startsWith("/") ? pathname.slice(1) : pathname;
-
-  if (relativePath === "") {
-    return undefined;
-  }
-
-  const normalized = normalize(relativePath);
-
-  if (isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) {
-    return undefined;
-  }
-
-  try {
-    const cacheKey = `${outDir}\0${normalized}`;
-    const cached = builtPublicAssetCache.get(cacheKey);
-
-    if (cached !== undefined) {
-      return bytesResponse(cached.bytes, {
-        headers: cached.headers,
-      });
-    }
-
-    const bytes = await readFile(join(outDir, "client", "public", normalized));
-    const headers = publicAssetHeaders(normalized);
-
-    builtPublicAssetCache.set(cacheKey, {
-      bytes,
-      headers,
-    });
-
-    return bytesResponse(bytes, { headers });
-  } catch {
-    return undefined;
-  }
-}
-
 export const __readBuiltPublicAssetForTest = readBuiltPublicAsset;
 
 export function __clearBuiltRuntimeCacheForTest(): void {
@@ -865,11 +723,11 @@ export function __getBuiltRuntimeMaterializeCountForTest(): number {
 }
 
 export function __clearBuiltPublicAssetCacheForTest(): void {
-  builtPublicAssetCache.clear();
+  clearBuiltPublicAssetCacheForTest();
 }
 
 export function __getBuiltPublicAssetCacheSizeForTest(): number {
-  return builtPublicAssetCache.size;
+  return getBuiltPublicAssetCacheSizeForTest();
 }
 
 async function readBuiltRuntime(options: {
@@ -1712,42 +1570,4 @@ function safeManifestFilePath(pathname: string): string {
   }
 
   return normalized;
-}
-
-function clientAssetHeaders(pathname: string): HeadersInit {
-  if (pathname === "manifest.json") {
-    return {
-      "cache-control": "no-cache",
-      "content-type": "application/json; charset=utf-8",
-    };
-  }
-
-  return {
-    "cache-control": "public, max-age=31536000, immutable",
-    "content-type": pathname.endsWith(".css")
-      ? "text/css; charset=utf-8"
-      : "text/javascript; charset=utf-8",
-  };
-}
-
-function publicAssetHeaders(pathname: string): HeadersInit {
-  return {
-    "cache-control": "public, max-age=3600",
-    "content-type": publicAssetContentType(pathname),
-  };
-}
-
-function publicAssetContentType(pathname: string): string {
-  if (pathname.endsWith(".css")) return "text/css; charset=utf-8";
-  if (pathname.endsWith(".html")) return "text/html; charset=utf-8";
-  if (pathname.endsWith(".js")) return "text/javascript; charset=utf-8";
-  if (pathname.endsWith(".json")) return "application/json; charset=utf-8";
-  if (pathname.endsWith(".svg")) return "image/svg+xml";
-  if (pathname.endsWith(".png")) return "image/png";
-  if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) return "image/jpeg";
-  if (pathname.endsWith(".webp")) return "image/webp";
-  if (pathname.endsWith(".ico")) return "image/x-icon";
-  if (pathname.endsWith(".txt")) return "text/plain; charset=utf-8";
-
-  return "application/octet-stream";
 }
