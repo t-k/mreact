@@ -737,6 +737,10 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       writeFile(join(serverDir, "manifest.json"), JSON.stringify(serverManifest, null, 2)),
       writeFile(join(options.outDir, "routes.d.ts"), typedRoutesDeclaration(routes)),
       writeFile(
+        join(options.outDir, "public-assets.d.ts"),
+        typedPublicAssetsDeclaration(publicAssets),
+      ),
+      writeFile(
         join(serverDir, "import-policy.json"),
         JSON.stringify(generatedImportPolicy, null, 2),
       ),
@@ -815,6 +819,17 @@ function typedRoutesDeclaration(routes: readonly AppRoute[]): string {
     `  interface AppRouteDeclarations {`,
     `    readonly path: AppRoutePath;`,
     `  }`,
+    `}`,
+    ``,
+  ].join("\n");
+}
+
+function typedPublicAssetsDeclaration(publicAssets: readonly string[]): string {
+  const assetUnion = publicAssets.map((assetPath) => JSON.stringify(assetPath)).join(" | ");
+
+  return [
+    `declare module "mreact:public-assets" {`,
+    `  export type PublicAssetPath = ${assetUnion === "" ? "never" : assetUnion};`,
     `}`,
     ``,
   ].join("\n");

@@ -93,6 +93,30 @@ export default function Page() {
 
 `public/favicon.svg` is served as `/favicon.svg`. These public assets are not fingerprinted, so replacing `/logo.svg` in place can be cached differently from a hashed route asset. In the built Node server, public assets use `Cache-Control: public, max-age=3600`; for CDN deployments, keep non-fingerprinted public assets on a shorter cache or deploy them under versioned filenames when you need long caching.
 
+## Typed public assets
+
+Build output includes `.mreact/public-assets.d.ts`, which declares the discovered public asset paths as a type-only `mreact:public-assets` module. Include that declaration in your TypeScript program when you want compile-time checks for root-relative public asset strings.
+
+```json
+{
+  "include": ["src", ".mreact/routes.d.ts", ".mreact/public-assets.d.ts"]
+}
+```
+
+Use `import type` with `satisfies` so TypeScript checks the string while the generated JavaScript stays unchanged.
+
+```tsx
+import type { PublicAssetPath } from "mreact:public-assets";
+
+const logo = "/logo.svg" satisfies PublicAssetPath;
+
+export default function Page() {
+  return <img src={logo} alt="Acme" width="160" height="40" />;
+}
+```
+
+The declaration includes files copied from `public/` and root app file convention assets such as `/robots.txt` and `/manifest.webmanifest`. It does not add a runtime helper and does not rewrite manually written root-relative URLs.
+
 ## Assets referenced from CSS
 
 Use relative `url()` references for images or fonts that are owned by a CSS file. Vite rewrites the reference to a hashed client asset and Mreact keeps that asset in the built client closure.

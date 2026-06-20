@@ -662,6 +662,67 @@ export function Navigation() {
       rmSync(directory, { force: true, recursive: true });
     }
   }, packageEntrypointTypeCheckTimeoutMs);
+
+  test("generated public asset declarations type-check asset paths without a runtime helper import", () => {
+    const directory = mkdtempSync(
+      join(process.cwd(), "node_modules", ".tmp-mreact-public-assets-"),
+    );
+    const publicAssetsFilename = join(directory, "public-assets.d.ts");
+    const filename = join(directory, "public-assets.tsx");
+
+    writeFileSync(
+      publicAssetsFilename,
+      `
+declare module "mreact:public-assets" {
+  export type PublicAssetPath = "/favicon.svg" | "/images/hero.avif" | "/robots.txt";
+}
+`,
+    );
+    writeFileSync(
+      filename,
+      `
+import type { PublicAssetPath } from "mreact:public-assets";
+
+const hero = "/images/hero.avif" satisfies PublicAssetPath;
+// @ts-expect-error missing public assets are rejected.
+const missing = "/images/missing.avif" satisfies PublicAssetPath;
+
+export function Hero() {
+  return <img src={hero} alt="Hero" width="1200" height="630" />;
+}
+`,
+    );
+
+    try {
+      const program = ts.createProgram({
+        rootNames: [publicAssetsFilename, filename],
+        options: {
+          baseUrl: process.cwd(),
+          jsx: ts.JsxEmit.ReactJSX,
+          jsxImportSource: "@reckona/mreact",
+          ignoreDeprecations: "6.0",
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          noEmit: true,
+          paths: {
+            "@reckona/mreact": ["packages/react/src/index.ts"],
+            "@reckona/mreact/jsx-runtime": ["packages/react/src/jsx-runtime.ts"],
+            "@reckona/mreact/jsx-dev-runtime": ["packages/react/src/jsx-dev-runtime.ts"],
+          },
+          strict: true,
+          target: ts.ScriptTarget.ES2022,
+          types: [],
+        },
+      });
+      const diagnostics = ts
+        .getPreEmitDiagnostics(program)
+        .map((diagnostic) => flattenDiagnostic(diagnostic));
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  }, packageEntrypointTypeCheckTimeoutMs);
 });
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {

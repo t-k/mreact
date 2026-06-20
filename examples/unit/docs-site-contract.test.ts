@@ -988,6 +988,11 @@ describe("docs-site example contract", () => {
     expect(cssAssets).toContain('src="/logo.svg"');
     expect(cssAssets).toContain("public assets are not fingerprinted");
     expect(cssAssets).toContain("Cache-Control: public, max-age=3600");
+    expect(cssAssets).toContain("## Typed public assets");
+    expect(cssAssets).toContain(".mreact/public-assets.d.ts");
+    expect(cssAssets).toContain('import type { PublicAssetPath } from "mreact:public-assets";');
+    expect(cssAssets).toContain('const logo = "/logo.svg" satisfies PublicAssetPath;');
+    expect(cssAssets).toContain("does not add a runtime helper");
     expect(cssAssets).toContain("## Assets referenced from CSS");
     expect(cssAssets).toContain('background-image: url("./assets/logo.svg");');
     expect(cssAssets).toContain("hashed client asset");

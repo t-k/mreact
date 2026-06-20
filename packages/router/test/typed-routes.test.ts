@@ -46,4 +46,38 @@ describe("typed routes", () => {
     expect(declarations).toContain("readonly path: AppRoutePath;");
     expect(declarations).toContain('"/users/:id/files/:...path"');
   });
+
+  test("buildApp emits generated public asset declaration paths without runtime exports", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-public-asset-types-"));
+    const appDir = join(rootDir, "app");
+    const publicDir = join(rootDir, "public");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(publicDir, "images"), { recursive: true });
+    await mkdir(join(publicDir, "_mreact", "client"), { recursive: true });
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Assets</main>; }`,
+    );
+    await writeFile(join(appDir, "robots.txt"), "User-agent: *\n");
+    await writeFile(join(publicDir, "favicon.svg"), "<svg></svg>");
+    await writeFile(join(publicDir, "images", "hero.avif"), "image");
+    await writeFile(join(publicDir, "_mreact", "client", "manifest.json"), "reserved");
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      publicDir: "public",
+      routesDir: "app",
+    });
+
+    const declarations = await readFile(join(outDir, "public-assets.d.ts"), "utf8");
+
+    expect(declarations).toContain('declare module "mreact:public-assets"');
+    expect(declarations).toContain(
+      'export type PublicAssetPath = "/favicon.svg" | "/images/hero.avif" | "/robots.txt";',
+    );
+    expect(declarations).not.toContain("export declare const");
+    expect(declarations).not.toContain("/_mreact/client/manifest.json");
+  });
 });
