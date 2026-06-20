@@ -8,8 +8,8 @@ export const metadata = {
   description: "Why Mreact exists, what it optimizes for, and how experimental it is today.",
 };
 
-export default function HomePage() {
-  const page = pageForSlug("");
+export default async function HomePage() {
+  const page = await pageForSlug("");
 
   if (page === undefined) {
     return <p>Missing overview.</p>;

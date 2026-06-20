@@ -1,4 +1,5 @@
 import "./globals.css";
+import { Link } from "@reckona/mreact-router/link";
 import { sidebar } from "../nav.config.js";
 import { sitePath } from "../site-path.js";
 
@@ -133,9 +134,9 @@ export default function RootLayout() {
                     <ul class="nav-list">
                       {group.items.map((item) => (
                         <li key={item.slug}>
-                          <a class="nav-link" href={sitePath(item.slug)}>
+                          <Link class="nav-link" href={sitePath(item.slug)} prefetch="intent">
                             {item.text}
-                          </a>
+                          </Link>
                         </li>
                       ))}
                     </ul>

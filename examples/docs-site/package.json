@@ -5,6 +5,7 @@
   "scripts": {
     "build": "pnpm sync:api && pnpm sync:benchmarks && mreact-router build --target=node && tsx scripts/export-static.ts && pagefind --site dist",
     "dev": "pnpm sync:api && pnpm sync:benchmarks && mreact-router dev",
+    "diagnose:dev-latency": "tsx scripts/measure-dev-latency.ts",
     "lint": "oxlint . --ignore-pattern .mreact --ignore-pattern dist",
     "start": "mreact-router start .mreact",
     "sync:api": "tsx scripts/sync-api-reference.ts",

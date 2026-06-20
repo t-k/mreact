@@ -928,6 +928,34 @@ export default {
     expect(JSON.stringify(events)).not.toContain("secret");
   });
 
+  test("emits render timing events when a debug logger is configured", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-render-logger-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Dev render logger</main>; }`,
+    );
+    const events: AppRouterLogEvent[] = [];
+    const logger: AppRouterLogger = {
+      debug(event) {
+        events.push(event);
+      },
+    };
+    const server = await startTrackedDevServer({ appDir, logger, port: 0 });
+
+    const response = await fetch(`${server.url}/`);
+
+    expect(response.status).toBe(200);
+    await eventually(() => {
+      expect(events.some((event) => event.type === "router:render:timing")).toBe(true);
+    });
+    expect(events.find((event) => event.type === "router:render:timing")).toMatchObject({
+      method: "GET",
+      path: "/",
+      status: 200,
+      type: "router:render:timing",
+    });
+  });
+
   test("allows declared server dependencies during dev requests", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-dev-server-deps-"));
     const routesDir = join(projectRoot, "src", "app");

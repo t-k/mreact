@@ -1,61 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { renderToString, type ReactElement } from "@reckona/mreact";
-
-import overview, * as overviewMeta from "./content/overview.mdx";
-import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";
-import gettingStarted, * as gettingStartedMeta from "./content/getting-started.mdx";
-import guidesAppRouter, * as guidesAppRouterMeta from "./content/guides/app-router.mdx";
-import guidesAuthentication, * as guidesAuthenticationMeta from "./content/guides/authentication.mdx";
-import guidesBasics, * as guidesBasicsMeta from "./content/guides/basics.mdx";
-import guidesCacheAndRevalidation, * as guidesCacheAndRevalidationMeta from "./content/guides/cache-and-revalidation.mdx";
-import guidesCookiesAndSessions, * as guidesCookiesAndSessionsMeta from "./content/guides/cookies-and-sessions.mdx";
-import guidesCsp, * as guidesCspMeta from "./content/guides/csp.mdx";
-import guidesCssAndAssets, * as guidesCssAndAssetsMeta from "./content/guides/css-and-assets.mdx";
-import guidesDataLoading, * as guidesDataLoadingMeta from "./content/guides/data-loading.mdx";
-import guidesEnvironmentVariables, * as guidesEnvironmentVariablesMeta from "./content/guides/environment-variables.mdx";
-import guidesExternalScripts, * as guidesExternalScriptsMeta from "./content/guides/external-scripts.mdx";
-import guidesFileUploadsAndCsrf, * as guidesFileUploadsAndCsrfMeta from "./content/guides/file-uploads-and-csrf.mdx";
-import guidesFormsAndValidation, * as guidesFormsAndValidationMeta from "./content/guides/forms-and-validation.mdx";
-import guidesHttpApis, * as guidesHttpApisMeta from "./content/guides/http-apis.mdx";
-import guidesLayoutsAndSlots, * as guidesLayoutsAndSlotsMeta from "./content/guides/layouts-and-slots.mdx";
-import guidesLinkAndNavigation, * as guidesLinkAndNavigationMeta from "./content/guides/link-and-navigation.mdx";
-import guidesMetadataAndHead, * as guidesMetadataAndHeadMeta from "./content/guides/metadata-and-head.mdx";
-import guidesMiddleware, * as guidesMiddlewareMeta from "./content/guides/middleware.mdx";
-import guidesProjectStructure, * as guidesProjectStructureMeta from "./content/guides/project-structure.mdx";
-import guidesReactCompatibility, * as guidesReactCompatibilityMeta from "./content/guides/react-compatibility.mdx";
-import guidesRouting, * as guidesRoutingMeta from "./content/guides/routing.mdx";
-import guidesServerActions, * as guidesServerActionsMeta from "./content/guides/server-actions.mdx";
-import guidesServerAndClientModel, * as guidesServerAndClientModelMeta from "./content/guides/server-and-client-model.mdx";
-import guidesSsgAndStaticExport, * as guidesSsgAndStaticExportMeta from "./content/guides/ssg-and-static-export.mdx";
-import guidesSsrAndStreaming, * as guidesSsrAndStreamingMeta from "./content/guides/ssr-and-streaming.mdx";
-import guidesTesting, * as guidesTestingMeta from "./content/guides/testing.mdx";
-import guidesAdvancedI18n, * as guidesAdvancedI18nMeta from "./content/guides/advanced/i18n.mdx";
-import guidesAdvancedMdx, * as guidesAdvancedMdxMeta from "./content/guides/advanced/mdx.mdx";
-import guidesAdvancedVitePluginIntegration, * as guidesAdvancedVitePluginIntegrationMeta from "./content/guides/advanced/vite-plugin-integration.mdx";
-import deploymentsAwsLambda, * as deploymentsAwsLambdaMeta from "./content/deployments/aws-lambda.mdx";
-import deploymentsCachePolicy, * as deploymentsCachePolicyMeta from "./content/deployments/cache-policy.mdx";
-import deploymentsCdnAssets, * as deploymentsCdnAssetsMeta from "./content/deployments/cdn-assets.mdx";
-import deploymentsCloudflare, * as deploymentsCloudflareMeta from "./content/deployments/cloudflare.mdx";
-import deploymentsContainerAndCloudRun, * as deploymentsContainerAndCloudRunMeta from "./content/deployments/container-and-cloud-run.mdx";
-import deploymentsHostPolicyAndProxies, * as deploymentsHostPolicyAndProxiesMeta from "./content/deployments/host-policy-and-proxies.mdx";
-import deploymentsLoggingAndDiagnostics, * as deploymentsLoggingAndDiagnosticsMeta from "./content/deployments/logging-and-diagnostics.mdx";
-import deploymentsSourceMaps, * as deploymentsSourceMapsMeta from "./content/deployments/source-maps.mdx";
-import deploymentsStaticHosting, * as deploymentsStaticHostingMeta from "./content/deployments/static-hosting.mdx";
-import examples, * as examplesMeta from "./content/examples.mdx";
-import referenceAdapters, * as referenceAdaptersMeta from "./content/reference/adapters.mdx";
-import referenceAuthApi, * as referenceAuthApiMeta from "./content/reference/auth-api.mdx";
-import referenceCacheApi, * as referenceCacheApiMeta from "./content/reference/cache-api.mdx";
-import referenceCli, * as referenceCliMeta from "./content/reference/cli.mdx";
-import referenceConfig, * as referenceConfigMeta from "./content/reference/config.mdx";
-import referenceEnvironmentVariables, * as referenceEnvironmentVariablesMeta from "./content/reference/environment-variables.mdx";
-import referenceApi, * as referenceApiMeta from "./content/reference/api.mdx";
-import referenceMetadataApi, * as referenceMetadataApiMeta from "./content/reference/metadata-api.mdx";
-import referenceResponseHelpers, * as referenceResponseHelpersMeta from "./content/reference/response-helpers.mdx";
-import referenceRouteHandlerContext, * as referenceRouteHandlerContextMeta from "./content/reference/route-handler-context.mdx";
-import referenceRouteModuleExports, * as referenceRouteModuleExportsMeta from "./content/reference/route-module-exports.mdx";
-import utilitiesServerState, * as utilitiesServerStateMeta from "./content/utilities/server-state.mdx";
-import utilitiesStore, * as utilitiesStoreMeta from "./content/utilities/store.mdx";
-import utilitiesVirtualizedLists, * as utilitiesVirtualizedListsMeta from "./content/utilities/virtualized-lists.mdx";
-import { BenchmarkResults } from "./ui/BenchmarkResults.js";
 
 export interface DocsPage {
   description: string;
@@ -64,20 +10,127 @@ export interface DocsPage {
   title: string;
 }
 
+export interface DocsPageEntry {
+  readonly file: string;
+  readonly load?: (() => Promise<DocsPageModule>) | undefined;
+  readonly options?: {
+    readonly replacements?: (() => Promise<readonly HtmlReplacement[]> | readonly HtmlReplacement[]) | undefined;
+  } | undefined;
+  readonly slug: string;
+}
+
+export interface DocsPageModule {
+  readonly default: () => ReactElement | null;
+  readonly description?: string | undefined;
+  readonly title?: string | undefined;
+}
+
+export interface DocsPageRegistry {
+  allSlugs(): readonly string[];
+  metadataForSlug(slug: string): DocsPageMetadata | undefined;
+  pageForSlug(slug: string): Promise<DocsPage | undefined>;
+}
+
+export interface DocsPageMetadata {
+  readonly description: string;
+  readonly title: string;
+}
+
+export type RenderDocsPageEntry = (entry: DocsPageEntry) => Promise<DocsPage> | DocsPage;
+
 function page(
   slug: string,
-  Content: () => ReactElement | null,
-  meta: { description?: string | undefined; title?: string | undefined },
-  options?: { readonly replacements?: readonly HtmlReplacement[] | undefined },
-): DocsPage {
-  const renderedHtml = applyHtmlReplacements(renderToString(Content), options?.replacements ?? []);
+  file: string,
+  options?: DocsPageEntry["options"],
+): DocsPageEntry {
+  return { file, options, slug };
+}
+
+async function renderDocsPage(entry: DocsPageEntry): Promise<DocsPage> {
+  const module = await loadPageModule(entry);
+  const renderedHtml = applyHtmlReplacements(
+    renderToString(module.default),
+    await (entry.options?.replacements?.() ?? []),
+  );
 
   return {
-    description: meta.description ?? "Mreact documentation.",
+    description: module.description ?? "Mreact documentation.",
     html: enhanceCodeBlocks(renderedHtml),
-    slug,
-    title: meta.title ?? slug,
+    slug: entry.slug,
+    title: module.title ?? entry.slug,
   };
+}
+
+const contentModules = import.meta.glob<DocsPageModule>("./content/**/*.mdx");
+
+async function loadPageModule(entry: DocsPageEntry): Promise<DocsPageModule> {
+  if (entry.load !== undefined) {
+    return await entry.load();
+  }
+
+  const load = contentModules[`./content/${entry.file}`];
+  if (load === undefined) {
+    throw new Error(`Missing docs content module: ${entry.file}`);
+  }
+
+  return await load();
+}
+
+export function createPageRegistry(
+  entries: readonly DocsPageEntry[],
+  renderEntry: RenderDocsPageEntry = renderDocsPage,
+): DocsPageRegistry {
+  const metadata = new Map<string, DocsPageMetadata>();
+  const renderedPages = new Map<string, Promise<DocsPage>>();
+
+  return {
+    allSlugs: () => entries.map((entry) => entry.slug).filter((slug) => slug !== ""),
+    metadataForSlug: (slug) => {
+      const cached = metadata.get(slug);
+      if (cached !== undefined) {
+        return cached;
+      }
+
+      const found = entries.find((entry) => entry.slug === slug);
+      if (found === undefined) {
+        return undefined;
+      }
+
+      const loaded = readPageMetadata(found);
+      metadata.set(slug, loaded);
+      return loaded;
+    },
+    pageForSlug: async (slug) => {
+      const cached = renderedPages.get(slug);
+      if (cached !== undefined) {
+        return await cached;
+      }
+
+      const found = entries.find((entry) => entry.slug === slug);
+      if (found === undefined) {
+        return undefined;
+      }
+
+      const rendered = Promise.resolve(renderEntry(found));
+      renderedPages.set(slug, rendered);
+      return await rendered;
+    },
+  };
+}
+
+const contentRoot = resolve(dirname(fileURLToPath(import.meta.url)), "content");
+
+function readPageMetadata(entry: DocsPageEntry): DocsPageMetadata {
+  const source = readFileSync(resolve(contentRoot, entry.file), "utf8");
+
+  return {
+    description: readStringExport(source, "description") ?? "Mreact documentation.",
+    title: readStringExport(source, "title") ?? entry.slug,
+  };
+}
+
+function readStringExport(source: string, name: string): string | undefined {
+  return source.match(new RegExp(`export const ${name} = "([^"]*)";`))?.[1];
 }
 
 interface HtmlReplacement {
@@ -189,79 +242,81 @@ function fileTreePathClass(path: string): string {
   return "tree-path is-file";
 }
 
-export const docsPages = [
-  page("", overview, overviewMeta),
-  page("benchmarks", benchmarks, benchmarksMeta, {
-    replacements: [
+const docsPageEntries = [
+  page("", "overview.mdx"),
+  page("benchmarks", "benchmarks.mdx", {
+    replacements: async () => [
       {
-        html: renderToString(BenchmarkResults),
+        html: renderToString((await import("./ui/BenchmarkResults.js")).BenchmarkResults),
         marker: "<p>BENCHMARK_RESULTS_PLACEHOLDER</p>",
       },
     ],
   }),
-  page("getting-started", gettingStarted, gettingStartedMeta),
-  page("guides/basics", guidesBasics, guidesBasicsMeta),
-  page("guides/app-router", guidesAppRouter, guidesAppRouterMeta),
-  page("guides/project-structure", guidesProjectStructure, guidesProjectStructureMeta),
-  page("guides/environment-variables", guidesEnvironmentVariables, guidesEnvironmentVariablesMeta),
-  page("guides/routing", guidesRouting, guidesRoutingMeta),
-  page("guides/layouts-and-slots", guidesLayoutsAndSlots, guidesLayoutsAndSlotsMeta),
-  page("guides/server-and-client-model", guidesServerAndClientModel, guidesServerAndClientModelMeta),
-  page("guides/react-compatibility", guidesReactCompatibility, guidesReactCompatibilityMeta),
-  page("guides/ssr-and-streaming", guidesSsrAndStreaming, guidesSsrAndStreamingMeta),
-  page("guides/ssg-and-static-export", guidesSsgAndStaticExport, guidesSsgAndStaticExportMeta),
-  page("guides/link-and-navigation", guidesLinkAndNavigation, guidesLinkAndNavigationMeta),
-  page("guides/data-loading", guidesDataLoading, guidesDataLoadingMeta),
-  page("guides/http-apis", guidesHttpApis, guidesHttpApisMeta),
-  page("guides/middleware", guidesMiddleware, guidesMiddlewareMeta),
-  page("guides/server-actions", guidesServerActions, guidesServerActionsMeta),
-  page("guides/cache-and-revalidation", guidesCacheAndRevalidation, guidesCacheAndRevalidationMeta),
-  page("guides/cookies-and-sessions", guidesCookiesAndSessions, guidesCookiesAndSessionsMeta),
-  page("guides/authentication", guidesAuthentication, guidesAuthenticationMeta),
-  page("guides/forms-and-validation", guidesFormsAndValidation, guidesFormsAndValidationMeta),
-  page("guides/testing", guidesTesting, guidesTestingMeta),
-  page("guides/metadata-and-head", guidesMetadataAndHead, guidesMetadataAndHeadMeta),
-  page("guides/css-and-assets", guidesCssAndAssets, guidesCssAndAssetsMeta),
-  page("guides/csp", guidesCsp, guidesCspMeta),
-  page("guides/external-scripts", guidesExternalScripts, guidesExternalScriptsMeta),
-  page("guides/file-uploads-and-csrf", guidesFileUploadsAndCsrf, guidesFileUploadsAndCsrfMeta),
-  page("guides/advanced/mdx", guidesAdvancedMdx, guidesAdvancedMdxMeta),
-  page("guides/advanced/i18n", guidesAdvancedI18n, guidesAdvancedI18nMeta),
-  page(
-    "guides/advanced/vite-plugin-integration",
-    guidesAdvancedVitePluginIntegration,
-    guidesAdvancedVitePluginIntegrationMeta,
-  ),
-  page("deployments/host-policy-and-proxies", deploymentsHostPolicyAndProxies, deploymentsHostPolicyAndProxiesMeta),
-  page("deployments/source-maps", deploymentsSourceMaps, deploymentsSourceMapsMeta),
-  page("deployments/logging-and-diagnostics", deploymentsLoggingAndDiagnostics, deploymentsLoggingAndDiagnosticsMeta),
-  page("deployments/cdn-assets", deploymentsCdnAssets, deploymentsCdnAssetsMeta),
-  page("deployments/cache-policy", deploymentsCachePolicy, deploymentsCachePolicyMeta),
-  page("deployments/cloudflare", deploymentsCloudflare, deploymentsCloudflareMeta),
-  page("deployments/aws-lambda", deploymentsAwsLambda, deploymentsAwsLambdaMeta),
-  page("deployments/container-and-cloud-run", deploymentsContainerAndCloudRun, deploymentsContainerAndCloudRunMeta),
-  page("deployments/static-hosting", deploymentsStaticHosting, deploymentsStaticHostingMeta),
-  page("examples", examples, examplesMeta),
-  page("utilities/virtualized-lists", utilitiesVirtualizedLists, utilitiesVirtualizedListsMeta),
-  page("utilities/store", utilitiesStore, utilitiesStoreMeta),
-  page("utilities/server-state", utilitiesServerState, utilitiesServerStateMeta),
-  page("reference/cli", referenceCli, referenceCliMeta),
-  page("reference/config", referenceConfig, referenceConfigMeta),
-  page("reference/environment-variables", referenceEnvironmentVariables, referenceEnvironmentVariablesMeta),
-  page("reference/route-module-exports", referenceRouteModuleExports, referenceRouteModuleExportsMeta),
-  page("reference/route-handler-context", referenceRouteHandlerContext, referenceRouteHandlerContextMeta),
-  page("reference/response-helpers", referenceResponseHelpers, referenceResponseHelpersMeta),
-  page("reference/adapters", referenceAdapters, referenceAdaptersMeta),
-  page("reference/metadata-api", referenceMetadataApi, referenceMetadataApiMeta),
-  page("reference/auth-api", referenceAuthApi, referenceAuthApiMeta),
-  page("reference/cache-api", referenceCacheApi, referenceCacheApiMeta),
-  page("reference/api", referenceApi, referenceApiMeta),
-] as const satisfies readonly DocsPage[];
+  page("getting-started", "getting-started.mdx"),
+  page("guides/basics", "guides/basics.mdx"),
+  page("guides/app-router", "guides/app-router.mdx"),
+  page("guides/project-structure", "guides/project-structure.mdx"),
+  page("guides/environment-variables", "guides/environment-variables.mdx"),
+  page("guides/routing", "guides/routing.mdx"),
+  page("guides/layouts-and-slots", "guides/layouts-and-slots.mdx"),
+  page("guides/server-and-client-model", "guides/server-and-client-model.mdx"),
+  page("guides/react-compatibility", "guides/react-compatibility.mdx"),
+  page("guides/ssr-and-streaming", "guides/ssr-and-streaming.mdx"),
+  page("guides/ssg-and-static-export", "guides/ssg-and-static-export.mdx"),
+  page("guides/link-and-navigation", "guides/link-and-navigation.mdx"),
+  page("guides/data-loading", "guides/data-loading.mdx"),
+  page("guides/http-apis", "guides/http-apis.mdx"),
+  page("guides/middleware", "guides/middleware.mdx"),
+  page("guides/server-actions", "guides/server-actions.mdx"),
+  page("guides/cache-and-revalidation", "guides/cache-and-revalidation.mdx"),
+  page("guides/cookies-and-sessions", "guides/cookies-and-sessions.mdx"),
+  page("guides/authentication", "guides/authentication.mdx"),
+  page("guides/forms-and-validation", "guides/forms-and-validation.mdx"),
+  page("guides/testing", "guides/testing.mdx"),
+  page("guides/metadata-and-head", "guides/metadata-and-head.mdx"),
+  page("guides/css-and-assets", "guides/css-and-assets.mdx"),
+  page("guides/csp", "guides/csp.mdx"),
+  page("guides/external-scripts", "guides/external-scripts.mdx"),
+  page("guides/file-uploads-and-csrf", "guides/file-uploads-and-csrf.mdx"),
+  page("guides/advanced/mdx", "guides/advanced/mdx.mdx"),
+  page("guides/advanced/i18n", "guides/advanced/i18n.mdx"),
+  page("guides/advanced/vite-plugin-integration", "guides/advanced/vite-plugin-integration.mdx"),
+  page("deployments/host-policy-and-proxies", "deployments/host-policy-and-proxies.mdx"),
+  page("deployments/source-maps", "deployments/source-maps.mdx"),
+  page("deployments/logging-and-diagnostics", "deployments/logging-and-diagnostics.mdx"),
+  page("deployments/cdn-assets", "deployments/cdn-assets.mdx"),
+  page("deployments/cache-policy", "deployments/cache-policy.mdx"),
+  page("deployments/cloudflare", "deployments/cloudflare.mdx"),
+  page("deployments/aws-lambda", "deployments/aws-lambda.mdx"),
+  page("deployments/container-and-cloud-run", "deployments/container-and-cloud-run.mdx"),
+  page("deployments/static-hosting", "deployments/static-hosting.mdx"),
+  page("examples", "examples.mdx"),
+  page("utilities/virtualized-lists", "utilities/virtualized-lists.mdx"),
+  page("utilities/store", "utilities/store.mdx"),
+  page("utilities/server-state", "utilities/server-state.mdx"),
+  page("reference/cli", "reference/cli.mdx"),
+  page("reference/config", "reference/config.mdx"),
+  page("reference/environment-variables", "reference/environment-variables.mdx"),
+  page("reference/route-module-exports", "reference/route-module-exports.mdx"),
+  page("reference/route-handler-context", "reference/route-handler-context.mdx"),
+  page("reference/response-helpers", "reference/response-helpers.mdx"),
+  page("reference/adapters", "reference/adapters.mdx"),
+  page("reference/metadata-api", "reference/metadata-api.mdx"),
+  page("reference/auth-api", "reference/auth-api.mdx"),
+  page("reference/cache-api", "reference/cache-api.mdx"),
+  page("reference/api", "reference/api.mdx"),
+] as const satisfies readonly DocsPageEntry[];
 
-export function pageForSlug(slug: string): DocsPage | undefined {
-  return docsPages.find((page) => page.slug === slug);
+const docsPageRegistry = createPageRegistry(docsPageEntries);
+
+export function pageForSlug(slug: string): Promise<DocsPage | undefined> {
+  return docsPageRegistry.pageForSlug(slug);
+}
+
+export function metadataForSlug(slug: string): DocsPageMetadata | undefined {
+  return docsPageRegistry.metadataForSlug(slug);
 }
 
 export function allSlugs(): readonly string[] {
-  return docsPages.map((page) => page.slug).filter((slug) => slug !== "");
+  return docsPageRegistry.allSlugs();
 }

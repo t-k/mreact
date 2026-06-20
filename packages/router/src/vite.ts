@@ -39,6 +39,7 @@ import {
   navigationRuntimeScriptForDev,
 } from "./navigation-runtime.js";
 import { nodeRequestToWebRequest, sendResponse } from "./http.js";
+import type { AppRouterLogger } from "./logger.js";
 import { renderAppRequest } from "./render.js";
 import { stripRouteClientOnlyExports } from "./route-source.js";
 import {
@@ -60,6 +61,7 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
   define?: UserConfig["define"] | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -78,6 +80,7 @@ export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
   allowedHosts?: readonly string[] | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
+  logger?: AppRouterLogger | undefined;
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
 }
@@ -578,6 +581,7 @@ async function handleAppRouterViteRequest(
         clientRouteInferenceCache: options.clientRouteInferenceCache,
         navigationScripts,
         request,
+        logger: options.logger,
         routeCache: options.routeCache,
         routeMatcher,
         routes,

@@ -137,6 +137,7 @@ export async function startDevServer(
         publicDir: project.publicDir,
         routesDir: project.routesDir,
         importPolicy,
+        logger: options.logger,
         routeCache,
         serverActions: options.serverActions,
       }),
