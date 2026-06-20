@@ -1,16 +1,18 @@
 import { notFound, type GenerateMetadataContext, type RouteMetadata } from "@reckona/mreact-router";
-import { allSlugs, metadataForSlug, pageForSlug } from "../../content-registry.js";
 import { DocPage } from "../../ui/DocPage.js";
 
 export const prerender = true;
 
-export function generateStaticParams(): Array<{ slug: string[] }> {
+export async function generateStaticParams(): Promise<Array<{ slug: string[] }>> {
+  const { allSlugs } = await import("../../content-metadata.js");
+
   return allSlugs().map((slug) => ({ slug: slug.split("/") }));
 }
 
 export async function generateMetadata(
   context: GenerateMetadataContext<unknown, { slug: readonly string[] }>,
 ): Promise<RouteMetadata> {
+  const { metadataForSlug } = await import("../../content-metadata.js");
   const slug = context.params.slug.join("/");
   const metadata = metadataForSlug(slug);
 
@@ -28,6 +30,7 @@ export async function generateMetadata(
 }
 
 export default async function Page(props: { params: { slug: readonly string[] } }) {
+  const { pageForSlug } = await import("../../content-registry.js");
   const slug = props.params.slug.join("/");
   const page = await pageForSlug(slug);
 

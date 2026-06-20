@@ -195,7 +195,7 @@ function readContentForSlug(slug: string): string {
 }
 
 function readContentRegistrySlugs(): string[] {
-  const source = readFileSync(join(import.meta.dirname, "content-registry.ts"), "utf8");
+  const source = readFileSync(join(import.meta.dirname, "content-pages.ts"), "utf8");
 
   return [...source.matchAll(/\bpage\(\s*"([^"]*)"/g)].map((match) => match[1] ?? "");
 }

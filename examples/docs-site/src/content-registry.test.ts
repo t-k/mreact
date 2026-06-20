@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
-import { createPageRegistry, type DocsPageEntry, type DocsPageModule } from "./content-registry.js";
+import { createPageRegistry } from "./content-registry.js";
+import type { DocsPageEntry, DocsPageModule } from "./content-pages.js";
 
 function testEntry(slug: string, title: string): DocsPageEntry {
   const module: DocsPageModule = {
