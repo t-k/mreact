@@ -22,16 +22,26 @@ const response = await renderBuiltAppRequest({
 });
 ```
 
+For new applications, start with `@reckona/create-mreact-app` unless you need to wire the router into an existing Vite project:
+
+```bash
+npx @reckona/create-mreact-app my-app --template basic --src-dir --pm pnpm
+```
+
 For application projects, configure the router explicitly in `vite.config.ts`:
 
 ```ts
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   plugins: [
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "src/app",
       publicDir: "public",
     }),

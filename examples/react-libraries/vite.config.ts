@@ -1,5 +1,9 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import { mreactRouter } from "@reckona/mreact-router/vite";
+
+const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   server: {
@@ -35,7 +39,7 @@ export default defineConfig({
   },
   plugins: [
     mreactRouter({
-      projectRoot: __dirname,
+      projectRoot,
       routesDir: "app",
       publicDir: "public",
       importPolicy: {

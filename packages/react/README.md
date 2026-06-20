@@ -4,7 +4,23 @@
 re-exports the compatibility runtime and JSX runtimes under the package name
 used by application code.
 
+## New Apps
+
+For app-router projects, start with the project generator. It installs the router, configures TypeScript, and creates a working route structure:
+
+```bash
+npx @reckona/create-mreact-app my-app --template basic --src-dir --pm pnpm
+```
+
 ## Installation
+
+Install the runtime packages directly when you are wiring Mreact into an existing project:
+
+```bash
+pnpm add @reckona/mreact @reckona/mreact-dom
+```
+
+Then configure TypeScript's automatic JSX runtime:
 
 ```json
 {

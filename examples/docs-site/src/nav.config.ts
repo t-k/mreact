@@ -13,14 +13,15 @@ export const sidebar: readonly NavGroup[] = [
     text: "Overview",
     items: [
       { text: "Overview", slug: "" },
-      { text: "Benchmarks", slug: "benchmarks" },
       { text: "Getting Started", slug: "getting-started" },
+      { text: "Basics", slug: "guides/basics" },
+      { text: "Examples", slug: "examples" },
+      { text: "Benchmarks", slug: "benchmarks" },
     ],
   },
   {
     text: "Guides",
     items: [
-      { text: "Basics", slug: "guides/basics" },
       { text: "Project Structure", slug: "guides/project-structure" },
       { text: "App Router", slug: "guides/app-router" },
       { text: "Routing", slug: "guides/routing" },
@@ -76,10 +77,6 @@ export const sidebar: readonly NavGroup[] = [
       { text: "Container and Cloud Run", slug: "deployments/container-and-cloud-run" },
       { text: "Static Hosting", slug: "deployments/static-hosting" },
     ],
-  },
-  {
-    text: "Examples",
-    items: [{ text: "Examples", slug: "examples" }],
   },
   {
     text: "Reference",

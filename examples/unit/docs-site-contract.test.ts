@@ -69,7 +69,7 @@ describe("docs-site example contract", () => {
   test("keeps the navigation aligned with the approved information architecture", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
 
-    for (const section of ["Overview", "Guides", "Utilities", "Deployments", "Examples", "Reference"]) {
+    for (const section of ["Overview", "Guides", "Utilities", "Deployments", "Reference"]) {
       expect(nav).toContain(`text: "${section}"`);
     }
 
@@ -78,12 +78,17 @@ describe("docs-site example contract", () => {
     }
     expect(nav).toContain(`items: [
       { text: "Overview", slug: "" },
-      { text: "Benchmarks", slug: "benchmarks" },
       { text: "Getting Started", slug: "getting-started" },
+      { text: "Basics", slug: "guides/basics" },
+      { text: "Examples", slug: "examples" },
+      { text: "Benchmarks", slug: "benchmarks" },
     ],`);
-    expect(nav.indexOf('slug: "guides/basics"')).toBeLessThan(
-      nav.indexOf('slug: "guides/project-structure"'),
+    expect(nav.indexOf('slug: ""')).toBeLessThan(nav.indexOf('slug: "getting-started"'));
+    expect(nav.indexOf('slug: "getting-started"')).toBeLessThan(
+      nav.indexOf('slug: "guides/basics"'),
     );
+    expect(nav.indexOf('slug: "guides/basics"')).toBeLessThan(nav.indexOf('slug: "examples"'));
+    expect(nav.indexOf('slug: "examples"')).toBeLessThan(nav.indexOf('slug: "benchmarks"'));
     expect(nav.indexOf('slug: "guides/project-structure"')).toBeLessThan(
       nav.indexOf('slug: "guides/app-router"'),
     );
