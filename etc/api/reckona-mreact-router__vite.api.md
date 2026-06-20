@@ -28,6 +28,10 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
     //
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
+    // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point vite.d.ts
+    //
+    // (undocumented)
+    logger?: AppRouterLogger | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterCache" needs to be exported by the entry point vite.d.ts
     //
     // (undocumented)
@@ -48,6 +52,8 @@ export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
     hostPolicy?: RequestHostPolicy | undefined;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
+    // (undocumented)
+    logger?: AppRouterLogger | undefined;
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
     // (undocumented)

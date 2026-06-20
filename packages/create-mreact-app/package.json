@@ -1,6 +1,6 @@
 {
   "name": "@reckona/create-mreact-app",
-  "version": "0.0.177",
+  "version": "0.0.178",
   "description": "Project scaffolder for mreact app-router applications.",
   "keywords": [
     "cli",

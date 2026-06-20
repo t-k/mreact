@@ -140,15 +140,14 @@ describe("docs-site example contract", () => {
 
   test("starts the guide section with Mreact basics", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
     const basics = await readDocsSite("src/content/guides/basics.mdx");
 
     expect(nav).toContain('{ text: "Basics", slug: "guides/basics" }');
     expect(nav.indexOf('slug: "guides/basics"')).toBeLessThan(
       nav.indexOf('slug: "guides/project-structure"'),
     );
-    expect(contentRegistry).toContain('from "./content/guides/basics.mdx"');
-    expect(contentRegistry).toContain('page("guides/basics"');
+    expect(contentPages).toContain('page("guides/basics", "guides/basics.mdx")');
     expect(basics).toContain('export const title = "Basics"');
     expect(basics).toContain("cell");
     expect(basics).toContain("computed");
@@ -211,15 +210,15 @@ describe("docs-site example contract", () => {
 
   test("removes the standalone Route Handlers guide from the public docs", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
     const routing = await readDocsSite("src/content/guides/routing.mdx");
     const dataLoading = await readDocsSite("src/content/guides/data-loading.mdx");
     const httpApis = await readDocsSite("src/content/guides/http-apis.mdx");
 
     expect(nav).not.toContain("Route Handlers");
     expect(nav).not.toContain('slug: "guides/route-handlers"');
-    expect(contentRegistry).not.toContain("route-handlers.mdx");
-    expect(contentRegistry).not.toContain('page("guides/route-handlers"');
+    expect(contentPages).not.toContain("route-handlers.mdx");
+    expect(contentPages).not.toContain('page("guides/route-handlers"');
     expect(routing).not.toContain("[Route Handlers](/guides/route-handlers/)");
     expect(dataLoading).not.toContain("[Route Handlers](/guides/route-handlers/)");
     expect(httpApis).not.toContain("[Route Handlers](/guides/route-handlers/)");
@@ -401,17 +400,15 @@ describe("docs-site example contract", () => {
   });
 
   test("serves Overview only at the root route and keeps Benchmarks as the next page", async () => {
+    const contentPages = await readDocsSite("src/content-pages.ts");
     const contentRegistry = await readDocsSite("src/content-registry.ts");
     const homePage = await readDocsSite("src/app/page.tsx");
     const exportScript = await readDocsSite("scripts/export-static.ts");
 
-    expect(contentRegistry).toContain(
-      'import benchmarks, * as benchmarksMeta from "./content/benchmarks.mdx";',
-    );
-    expect(contentRegistry).toContain('page("", overview, overviewMeta)');
-    expect(contentRegistry).toContain('page("benchmarks", benchmarks, benchmarksMeta, {');
+    expect(contentPages).toContain('page("", "overview.mdx")');
+    expect(contentPages).toContain('page("benchmarks", "benchmarks.mdx", {');
     expect(contentRegistry).toContain('filter((slug) => slug !== "")');
-    expect(contentRegistry).not.toContain('page("overview", overview, overviewMeta)');
+    expect(contentPages).not.toContain('page("overview", "overview.mdx")');
     expect(homePage).toContain('pageForSlug("")');
     expect(homePage).toContain(
       "Why Mreact exists, what it optimizes for, and how experimental it is today.",
@@ -508,7 +505,7 @@ describe("docs-site example contract", () => {
 
   test("documents companion packages without promoting the Next.js integration", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
     const virtual = await readDocsSite("src/content/utilities/virtualized-lists.mdx");
     const store = await readDocsSite("src/content/utilities/store.mdx");
     const query = await readDocsSite("src/content/utilities/server-state.mdx");
@@ -526,12 +523,12 @@ describe("docs-site example contract", () => {
     expect(nav).not.toContain("mreact-next");
     expect(nav).not.toContain("Mreact Next");
 
-    expect(contentRegistry).toContain('page("utilities/virtualized-lists"');
-    expect(contentRegistry).toContain('page("utilities/store"');
-    expect(contentRegistry).toContain('page("utilities/server-state"');
-    expect(contentRegistry).not.toContain('page("reference/packages/virtual"');
-    expect(contentRegistry).not.toContain('page("reference/packages/query"');
-    expect(contentRegistry).toContain('page("guides/react-compatibility"');
+    expect(contentPages).toContain('page("utilities/virtualized-lists"');
+    expect(contentPages).toContain('page("utilities/store"');
+    expect(contentPages).toContain('page("utilities/server-state"');
+    expect(contentPages).not.toContain('page("reference/packages/virtual"');
+    expect(contentPages).not.toContain('page("reference/packages/query"');
+    expect(contentPages).toContain('page("guides/react-compatibility"');
 
     expect(virtual).toContain('export const title = "Virtualized Lists (@reckona/mreact-virtual)"');
     expect(virtual).toContain("# Virtualized Lists (@reckona/mreact-virtual)");
@@ -606,7 +603,7 @@ describe("docs-site example contract", () => {
 
   test("renders the generated TypeDoc JSON API reference as docs-site routes", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
     const apiReference = await readDocsSite("src/content/reference/api.mdx");
     const typedocConfig = await readFile(join(root, "typedoc.json"), "utf8");
     const generatedApiJson = await readFile(join(root, "docs", "api", "index.json"), "utf8");
@@ -617,9 +614,8 @@ describe("docs-site example contract", () => {
 
     expect(nav).toContain('{ text: "API Reference", slug: "reference/api" }');
     expect(nav).not.toContain("Generated API");
-    expect(contentRegistry).toContain("referenceApi");
-    expect(contentRegistry).toContain('page("reference/api", referenceApi, referenceApiMeta)');
-    expect(contentRegistry).not.toContain("generated-api.mdx");
+    expect(contentPages).toContain('page("reference/api", "reference/api.mdx")');
+    expect(contentPages).not.toContain("generated-api.mdx");
     expect(apiReference).toContain('export const title = "API Reference"');
     expect(apiReference).toContain("[Open the full API Reference](/api/)");
     expect(apiReference).toContain("[@reckona/mreact-router](/api/modules/_reckona_mreact-router.html)");
@@ -830,7 +826,7 @@ describe("docs-site example contract", () => {
 
   test("consolidates client boundaries into the server and client model guide", async () => {
     const serverClientModel = await readDocsSite("src/content/guides/server-and-client-model.mdx");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
 
     expect(serverClientModel).toContain("## Server by default");
     expect(serverClientModel).toContain("JavaScript-free");
@@ -855,8 +851,8 @@ describe("docs-site example contract", () => {
     expect(serverClientModel).toContain("[Link and Navigation](/guides/link-and-navigation/)");
     expect(serverClientModel).toContain("[SSR and Streaming](/guides/ssr-and-streaming/)");
     expect(serverClientModel).toContain("[Route Module Exports](/reference/route-module-exports/)");
-    expect(contentRegistry).not.toContain("guidesClientBoundaries");
-    expect(contentRegistry).not.toContain('page("guides/client-boundaries"');
+    expect(contentPages).not.toContain("guidesClientBoundaries");
+    expect(contentPages).not.toContain('page("guides/client-boundaries"');
   });
 
   test("documents SSR, streaming boundaries, deferred data, and runtime behavior", async () => {
@@ -1645,13 +1641,10 @@ describe("docs-site example contract", () => {
   test("documents testing strategy with unit, route, build, E2E, forms, security, and CI guidance", async () => {
     const testing = await readDocsSite("src/content/guides/testing.mdx");
     const nav = await readDocsSite("src/nav.config.ts");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
 
     expect(nav).toContain('{ text: "Testing", slug: "guides/testing" }');
-    expect(contentRegistry).toContain(
-      'import guidesTesting, * as guidesTestingMeta from "./content/guides/testing.mdx";',
-    );
-    expect(contentRegistry).toContain('page("guides/testing", guidesTesting, guidesTestingMeta)');
+    expect(contentPages).toContain('page("guides/testing", "guides/testing.mdx")');
     expect(testing).toContain("## Testing layers");
     expect(testing).toContain("Vitest");
     expect(testing).toContain("Playwright");
@@ -1872,7 +1865,7 @@ describe("docs-site example contract", () => {
 
   test("documents deployment operations without a standalone production checklist page", async () => {
     const nav = await readDocsSite("src/nav.config.ts");
-    const contentRegistry = await readDocsSite("src/content-registry.ts");
+    const contentPages = await readDocsSite("src/content-pages.ts");
     const hostPolicy = await readDocsSite("src/content/deployments/host-policy-and-proxies.mdx");
     const sourceMaps = await readDocsSite("src/content/deployments/source-maps.mdx");
     const logging = await readDocsSite("src/content/deployments/logging-and-diagnostics.mdx");
@@ -1884,8 +1877,8 @@ describe("docs-site example contract", () => {
     const staticHosting = await readDocsSite("src/content/deployments/static-hosting.mdx");
 
     expect(nav).not.toContain("Production Checklist");
-    expect(contentRegistry).not.toContain("production-checklist.mdx");
-    expect(contentRegistry).not.toContain('page("deployments/production-checklist"');
+    expect(contentPages).not.toContain("production-checklist.mdx");
+    expect(contentPages).not.toContain('page("deployments/production-checklist"');
     await expect(
       access(join(docsSiteRoot, "src", "content", "deployments", "production-checklist.mdx")),
     ).rejects.toThrow();
@@ -2010,7 +2003,7 @@ describe("docs-site example contract", () => {
     expect(css).toContain(".benchmark-bar-track");
     expect(css).toContain(".benchmark-bar-fill");
     expect(benchmarks).toContain("BENCHMARK_RESULTS_PLACEHOLDER");
-    expect(await readDocsSite("src/content-registry.ts")).toContain(
+    expect(await readDocsSite("src/content-pages.ts")).toContain(
       "renderToString(BenchmarkResults)",
     );
     expect(benchmarkData).toContain("Generated by scripts/sync-benchmark-results.ts");

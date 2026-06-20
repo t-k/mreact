@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.178 - 2026-06-20
+
+### Added
+
+- Added `.mreact/public-assets.d.ts` generation for App Router builds, exposing a type-only `mreact:public-assets` module with discovered public asset paths for runtime-free `import type` and `satisfies` checks.
+- Added `logger` support to App Router Vite plugin and middleware options so integrations can receive router diagnostics from dev-server rendering paths.
+
 ## 0.0.177 - 2026-06-20
 
 ### Changed
