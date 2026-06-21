@@ -29,6 +29,7 @@ export {
 import {
   formCsrfFieldName,
   readExistingFormCsrfToken,
+  serverActionCookieName,
   validateFormCsrf,
 } from "./csrf.js";
 import {
@@ -434,7 +435,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
       options.serverActions.allowedActions === "any"
         ? {}
         : { allowedActions: jsonAllowedServerActions(options.serverActions.allowedActions) }),
-      csrf: true,
+      csrf: { cookieName: serverActionCookieName() },
       maxBodyBytes: options.serverActions?.maxBodyBytes ?? DEFAULT_ACTION_BODY_MAX_BYTES,
       replayProtection: { seen: replayStore },
     });

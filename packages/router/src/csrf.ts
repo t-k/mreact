@@ -23,6 +23,10 @@ export function serverActionCookie(csrfToken: string): string {
   return parts.join("; ");
 }
 
+export function serverActionCookieName(): string {
+  return currentCsrfCookieName();
+}
+
 /**
  * Creates or reuses the CSRF token embedded into server-rendered forms.
  */

@@ -728,6 +728,64 @@ export default function Page() {
     });
   });
 
+  test("production JSON server actions require the production CSRF cookie name", async () => {
+    await withNodeEnv("production", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-json-prod-csrf-"));
+      await writeActionFixture(appDir);
+      const accepted = await renderAppRequest({
+        appDir,
+        serverActions: { allowedActions: [{ exportName: "echo", moduleId: "actions.ts" }] },
+        request: new Request("http://local.test/_mreact/actions", {
+          body: JSON.stringify({
+            args: ["Production JSON title"],
+            exportName: "echo",
+            moduleId: "actions.ts",
+          }),
+          headers: {
+            "content-type": "application/json",
+            cookie: "__Host-mreact.csrf=csrf-json-prod",
+            origin: "http://local.test",
+            "x-mreact-action-nonce": "nonce-json-prod",
+            "x-mreact-csrf": "csrf-json-prod",
+          },
+          method: "POST",
+        }),
+      });
+      const acceptedJson = await accepted.json();
+      const rejectedLegacyCookie = await renderAppRequest({
+        appDir,
+        serverActions: { allowedActions: [{ exportName: "echo", moduleId: "actions.ts" }] },
+        request: new Request("http://local.test/_mreact/actions", {
+          body: JSON.stringify({
+            args: ["Legacy JSON title"],
+            exportName: "echo",
+            moduleId: "actions.ts",
+          }),
+          headers: {
+            "content-type": "application/json",
+            cookie: "mreact.csrf=csrf-json-legacy",
+            origin: "http://local.test",
+            "x-mreact-action-nonce": "nonce-json-legacy",
+            "x-mreact-csrf": "csrf-json-legacy",
+          },
+          method: "POST",
+        }),
+      });
+      const rejectedLegacyCookieJson = await rejectedLegacyCookie.json();
+
+      expect(accepted.status, JSON.stringify(acceptedJson)).toBe(200);
+      expect(acceptedJson).toEqual({
+        ok: true,
+        value: { title: "Production JSON title" },
+      });
+      expect(rejectedLegacyCookie.status).toBe(403);
+      expect(rejectedLegacyCookieJson).toEqual({
+        ok: false,
+        error: "Invalid CSRF token.",
+      });
+    });
+  });
+
   test("rejects registered JSON actions outside the configured allowlist", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-allowlist-json-"));
     await writeActionFixture(appDir);
