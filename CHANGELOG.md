@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.179 - 2026-06-21
+
+### Fixed
+
+- Fixed production App Router JSON server actions so CSRF validation accepts the `__Host-mreact.csrf` cookie emitted by the router and rejects the development `mreact.csrf` cookie name in production.
+
 ## 0.0.178 - 2026-06-20
 
 ### Added
