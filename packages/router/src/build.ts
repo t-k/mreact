@@ -514,8 +514,8 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
           }),
         ),
   ]);
-  const { artifacts: serverModules, sharedChunks: serverModuleSharedChunks } = await (
-    shouldTrackBuildPhases === false
+  const { artifacts: serverModules, sharedChunks: serverModuleSharedChunks } =
+    await (shouldTrackBuildPhases === false
       ? buildServerModuleArtifacts({
           bundleRequestRuntimePackages: shouldBuildAwsLambda,
           bundleCache: new Map(),
@@ -547,8 +547,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
             serverTransformCache,
             vitePlugins,
           }),
-        )
-  );
+        ));
   const serverRoutes = routes.map((route) => ({
     ...route,
     file: relative(project.projectRoot, route.file),
@@ -626,10 +625,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
       ...(navigationRuntimeScript === undefined ? [] : [navigationRuntimeScript]),
     ]),
   ).sort();
-  const serverModuleClosureFiles = buildServerModuleClosureManifest(
-    serverModules,
-    sourceAnalysis,
-  );
+  const serverModuleClosureFiles = buildServerModuleClosureManifest(serverModules, sourceAnalysis);
   const prerenderedRoutes =
     shouldTrackBuildPhases === false
       ? await prerenderStaticRoutes({
@@ -713,9 +709,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     ...(serverActionManifest.allowedActions.length === 0
       ? {}
       : { serverActionManifest: serverActionManifest.allowedActions }),
-    ...(Object.keys(serverModuleClosureFiles).length === 0
-      ? {}
-      : { serverModuleClosureFiles }),
+    ...(Object.keys(serverModuleClosureFiles).length === 0 ? {} : { serverModuleClosureFiles }),
     ...(Object.keys(serverModuleArtifacts.files).length === 0
       ? {}
       : { serverModuleFiles: serverModuleArtifacts.files }),
@@ -1051,13 +1045,7 @@ function collectManifestServerModuleClosureFiles(
   for (const specifier of localManifestServerModuleSpecifiers(source)) {
     const resolved = resolveManifestLocalServerSourceImport(file, specifier, sourceFiles);
     if (resolved !== undefined) {
-      collectManifestServerModuleClosureFiles(
-        resolved,
-        sourceAnalysis,
-        sourceFiles,
-        seen,
-        closure,
-      );
+      collectManifestServerModuleClosureFiles(resolved, sourceAnalysis, sourceFiles, seen, closure);
     }
   }
 }
@@ -2238,7 +2226,10 @@ async function buildServerModuleArtifacts(options: {
   project: ResolvedAppRouterProject;
   projectRoot: string;
   routes: readonly AppRoute[];
-  serverActionReferencesByFile: ReadonlyMap<string, readonly BuiltServerActionExpressionReference[]>;
+  serverActionReferencesByFile: ReadonlyMap<
+    string,
+    readonly BuiltServerActionExpressionReference[]
+  >;
   sourceAnalysis: BuildSourceAnalysisScope;
   serverTransformCache: ServerTransformCache;
   vitePlugins?: readonly PluginOption[] | undefined;
@@ -2323,11 +2314,7 @@ async function buildServerModuleArtifacts(options: {
       continue;
     }
 
-    if (
-      requestArtifactFiles.has(file) &&
-      route?.kind !== "server" &&
-      route?.kind !== "metadata"
-    ) {
+    if (requestArtifactFiles.has(file) && route?.kind !== "server" && route?.kind !== "metadata") {
       requestBatchEntries.push({
         code: stripRouteRequestOnlyExports(source, absoluteFile),
         filename: absoluteFile,
@@ -3138,6 +3125,8 @@ interface RouteRequestModuleBatchOutput {
   sharedChunks: readonly SharedServerModuleChunk[];
 }
 
+const cloudflareMiddlewareRouteModuleKey = "__middleware__";
+
 async function writeCloudflareRouteModules(options: {
   cacheDir?: string | undefined;
   cloudflareDir: string;
@@ -3195,6 +3184,26 @@ async function writeCloudflareRouteModules(options: {
     root: options.projectRoot,
     vitePlugins: options.vitePlugins,
   });
+  const cloudflareMiddlewareFile = findCloudflareMiddlewareFile({
+    files: options.files,
+    projectRoot: options.projectRoot,
+    routesDir: options.routesDir,
+  });
+  const middlewareRouteModules = await buildCloudflareMiddlewareModuleBatch({
+    cacheDir: options.cacheDir,
+    define: options.define,
+    root: options.projectRoot,
+    routes:
+      cloudflareMiddlewareFile === undefined
+        ? []
+        : [
+            {
+              filename: cloudflareMiddlewareFile,
+              routeId: cloudflareMiddlewareRouteModuleKey,
+            },
+          ],
+    vitePlugins: options.vitePlugins,
+  });
   const directComponentRoutes = await collectCloudflareDirectComponentRoutes({
     requiredRoutes,
     routesDir: options.routesDir,
@@ -3235,6 +3244,7 @@ async function writeCloudflareRouteModules(options: {
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, loaderRouteModules),
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, directComponentModules),
     writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, stringShellComponentModules),
+    writeCloudflareBatchedRouteModuleChunks(options.cloudflareDir, middlewareRouteModules),
   ]);
 
   const registryEntries = await mapWithBuildConcurrency(
@@ -3354,6 +3364,7 @@ async function writeCloudflareRouteModules(options: {
 
   const registrySource = [
     `export const routeModules = {`,
+    ...cloudflareMiddlewareRegistryEntries(middlewareRouteModules),
     ...registryEntries.map((entry) => `  ${entry},`),
     `};`,
     `export default routeModules;`,
@@ -3363,6 +3374,31 @@ async function writeCloudflareRouteModules(options: {
   await writeFile(join(options.cloudflareDir, "route-modules.mjs"), registrySource);
 
   return { registryFile: "route-modules.mjs" };
+}
+
+function findCloudflareMiddlewareFile(options: {
+  files: Record<string, string>;
+  projectRoot: string;
+  routesDir: string;
+}): string | undefined {
+  const relativeRoutesDir = relative(options.projectRoot, options.routesDir).replaceAll(sep, "/");
+
+  const relativeFile = ["middleware.ts", "middleware.mreact.ts"]
+    .map((file) => (relativeRoutesDir === "" ? file : `${relativeRoutesDir}/${file}`))
+    .find((file) => options.files[file] !== undefined);
+
+  return relativeFile === undefined ? undefined : join(options.projectRoot, relativeFile);
+}
+
+function cloudflareMiddlewareRegistryEntries(modules: CloudflareBatchedRouteModules): string[] {
+  const middleware = modules.entries.get(cloudflareMiddlewareRouteModuleKey);
+  if (middleware === undefined) {
+    return [];
+  }
+
+  return [
+    `  ${JSON.stringify(cloudflareMiddlewareRouteModuleKey)}: () => import(${JSON.stringify(`./${middleware.fileName}`)}),`,
+  ];
 }
 
 function cloudflarePageRouteFacadeModuleSource(componentImport: string): string {
@@ -4904,6 +4940,27 @@ async function buildCloudflareRouteLoaderModuleBatch(options: {
   });
 }
 
+async function buildCloudflareMiddlewareModuleBatch(options: {
+  cacheDir?: string | undefined;
+  define?: UserConfig["define"] | undefined;
+  routes: readonly { filename: string; routeId: string }[];
+  root: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<CloudflareBatchedRouteModules> {
+  return await bundleCloudflareModuleBatch({
+    cacheDir: options.cacheDir,
+    define: options.define,
+    entries: options.routes.map((route) => ({
+      code: cloudflareMiddlewareModuleEntry(route.filename),
+      filename: `${route.filename}.mreact-cloudflare-middleware.js`,
+      name: `${route.routeId}.middleware`,
+      routeId: route.routeId,
+    })),
+    root: options.root,
+    vitePlugins: options.vitePlugins,
+  });
+}
+
 export async function __buildCloudflareRouteLoaderModuleBatchForTests(options: {
   cacheDir?: string | undefined;
   define?: UserConfig["define"] | undefined;
@@ -4999,6 +5056,15 @@ async function bundleCloudflareModuleBatch(options: {
 
 function cloudflareRouteLoaderModuleEntry(filename: string): string {
   return `export { loader } from ${JSON.stringify(filename)};`;
+}
+
+function cloudflareMiddlewareModuleEntry(filename: string): string {
+  return `import * as middlewareModule from ${JSON.stringify(filename)};
+
+export const config = middlewareModule.config;
+export const middleware = middlewareModule.middleware;
+const defaultMiddleware = middlewareModule.default;
+export default defaultMiddleware;`;
 }
 
 async function buildCloudflareRouteMetadataExportModule(options: {
@@ -5678,10 +5744,7 @@ async function writeClientRouteBundles(options: {
     await writeFile(join(options.clientDir, asset.fileName), source);
   }
 
-  const generatedAssets = new Set<string>([
-    ...routeCssAssets.assets,
-    ...specialCssAssets.assets,
-  ]);
+  const generatedAssets = new Set<string>([...routeCssAssets.assets, ...specialCssAssets.assets]);
 
   for (const chunk of output.chunks) {
     generatedAssets.add(chunk.fileName);
@@ -5777,13 +5840,13 @@ async function writeSpecialRouteCssAssetBatches(options: {
 
     return batch.css.length === 0
       ? undefined
-      : ({
+      : {
           assets: batch.assets,
           style: {
             css: batch.css,
             file: relative(options.appDir, file).split(sep).join("/"),
           } satisfies ClientStyleManifestEntry,
-        });
+        };
   });
 
   return {

@@ -28,10 +28,11 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "../logger.js";
+import { middlewareMatches, type MiddlewareModule } from "../middleware.js";
 import { normalizeRoutePath } from "../route-path.js";
 import type { AppRoute } from "../routes.js";
 import { contentSecurityPolicy } from "../csp.js";
-import { isNotFoundError } from "../navigation.js";
+import { isNotFoundError, rewriteLocation } from "../navigation.js";
 import { validateRouteMetadata } from "../metadata.js";
 import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
@@ -202,7 +203,9 @@ export interface CloudflareMetadataRouteContext {
  * Defines the default export accepted from a Cloudflare metadata route module.
  */
 export interface CloudflareMetadataRouteModule {
-  default?: ((context: CloudflareMetadataRouteContext) => unknown | PromiseLike<unknown>) | undefined;
+  default?:
+    | ((context: CloudflareMetadataRouteContext) => unknown | PromiseLike<unknown>)
+    | undefined;
 }
 
 /**
@@ -219,7 +222,9 @@ export type CloudflareRouteModuleRegistryEntry<Env = unknown> =
 export type CloudflareRouteModuleRegistry<Env = unknown> = Record<
   string,
   | CloudflareRouteModuleRegistryEntry<Env>
-  | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
+  | (() =>
+      | CloudflareRouteModuleRegistryEntry<Env>
+      | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
 >;
 
 /**
@@ -243,7 +248,9 @@ export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
 export type CloudflareRouteModuleGlob<Env = unknown> = Record<
   string,
   | CloudflareRouteModuleRegistryEntry<Env>
-  | (() => CloudflareRouteModuleRegistryEntry<Env> | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
+  | (() =>
+      | CloudflareRouteModuleRegistryEntry<Env>
+      | PromiseLike<CloudflareRouteModuleRegistryEntry<Env>>)
 >;
 
 /**
@@ -317,6 +324,7 @@ export interface CloudflarePrerenderStoreOptions {
 }
 
 const clientPrefix = "/_mreact/client/";
+const cloudflareMiddlewareRouteModuleKey = "__middleware__";
 const defaultPrerenderCacheOrigin = "https://mreact.local";
 const defaultPrerenderCachePrefix = "/_mreact/prerender";
 
@@ -375,10 +383,7 @@ export function createCloudflareBuiltRequestHandler<Env = unknown>(
   return createCloudflareRequestHandler({
     ...options,
     render(request, context) {
-      const matched = matchCloudflareRoute(
-        sortedRoutes,
-        new URL(request.url).pathname,
-      );
+      const matched = matchCloudflareRoute(sortedRoutes, new URL(request.url).pathname);
 
       if (matched === undefined || options.renderRoute === undefined) {
         return new Response("Not Found", { status: 404 });
@@ -402,6 +407,12 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
   options: CloudflareRouteModuleRendererOptions<Env>,
 ): NonNullable<CloudflareBuiltRequestHandlerOptions<Env>["renderRoute"]> {
   return async (request, context) => {
+    const middlewareResult = await resolveCloudflareRouteModuleMiddleware(options.modules, request);
+    if (middlewareResult.type === "response") {
+      return middlewareResult.response;
+    }
+    request = middlewareResult.request;
+
     if (context.route.kind !== "server" && isCloudflareNavigationRequest(request)) {
       return cloudflareDocumentReloadNavigationResponse();
     }
@@ -460,7 +471,9 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       data =
         pageModule.loader === undefined
           ? undefined
-          : await runWithCloudflareQueryClient(queryClient, () => pageModule.loader!(loaderContext));
+          : await runWithCloudflareQueryClient(queryClient, () =>
+              pageModule.loader!(loaderContext),
+            );
     } catch (error) {
       if (error instanceof Response) {
         return error;
@@ -534,6 +547,39 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
   };
 }
 
+async function resolveCloudflareRouteModuleMiddleware<Env>(
+  modules: CloudflareRouteModuleRegistry<Env>,
+  request: Request,
+): Promise<{ request: Request; type: "continue" } | { response: Response; type: "response" }> {
+  const module = (await loadCloudflareRouteModule(modules, cloudflareMiddlewareRouteModuleKey)) as
+    | MiddlewareModule
+    | undefined;
+
+  if (module === undefined || !middlewareMatches(module.config, new URL(request.url).pathname)) {
+    return { request, type: "continue" };
+  }
+
+  const middleware = module.middleware ?? module.default;
+  if (typeof middleware !== "function") {
+    return { request, type: "continue" };
+  }
+
+  const response = await middleware(request);
+  if (!(response instanceof Response)) {
+    return { request, type: "continue" };
+  }
+
+  const location = rewriteLocation(response);
+  if (location !== undefined) {
+    return {
+      request: new Request(new URL(location, request.url), request),
+      type: "continue",
+    };
+  }
+
+  return { response, type: "response" };
+}
+
 async function injectCloudflareQueryState<T extends Response | string>(
   document: T,
   state: DehydratedQueryClient,
@@ -605,7 +651,10 @@ async function runWithSerializedCloudflareQueryClient<T>(
   const current = new Promise<void>((resolve) => {
     releaseCurrent = resolve;
   });
-  cloudflareQueryClientFallbackQueue = previous.then(() => current, () => current);
+  cloudflareQueryClientFallbackQueue = previous.then(
+    () => current,
+    () => current,
+  );
 
   await previous;
 
@@ -669,7 +718,9 @@ async function dispatchCloudflareServerRoute<Env>(
   context: CloudflareServerRouteContext<Env>,
 ): Promise<Response> {
   const handler =
-    module[request.method as keyof CloudflareServerRouteModule<Env>] ?? module.ALL ?? module.default;
+    module[request.method as keyof CloudflareServerRouteModule<Env>] ??
+    module.ALL ??
+    module.default;
 
   if (typeof handler !== "function") {
     return new Response("Method Not Allowed", { status: 405 });
@@ -728,17 +779,17 @@ function selectCloudflarePageComponent<Data, Env>(
     return appExport as CloudflareRouteModuleComponent<Data, Env>;
   }
 
-  const cloudflareRouteComponentExport = readCloudflareModuleExport(module, "CloudflareRouteComponent");
+  const cloudflareRouteComponentExport = readCloudflareModuleExport(
+    module,
+    "CloudflareRouteComponent",
+  );
   if (typeof cloudflareRouteComponentExport === "function") {
     return cloudflareRouteComponentExport as CloudflareRouteModuleComponent<Data, Env>;
   }
 
   for (const name of Object.keys(module)) {
     const value = readCloudflareModuleExport(module, name);
-    if (
-      !cloudflareReservedPageModuleExportNames.has(name) &&
-      typeof value === "function"
-    ) {
+    if (!cloudflareReservedPageModuleExportNames.has(name) && typeof value === "function") {
       return value as CloudflareRouteModuleComponent<Data, Env>;
     }
   }
@@ -759,7 +810,12 @@ function readCloudflareModuleExport(module: object, name: string): unknown {
   return descriptor.get?.call(module);
 }
 
-const cloudflareDiagnosticPageModuleExportNames = ["default", "App", "CloudflareRouteComponent", "slots"] as const;
+const cloudflareDiagnosticPageModuleExportNames = [
+  "default",
+  "App",
+  "CloudflareRouteComponent",
+  "slots",
+] as const;
 
 // Fixed names + typeof only (never values) so the 500 response is useful without
 // listing app-specific export names. Accessors are not invoked.
@@ -848,9 +904,10 @@ async function dispatchCloudflareMetadataRoute(
     return new Response(body, {
       headers: {
         "cache-control": "public, max-age=3600",
-        "content-type": typeof value === "string" && value.trimStart().startsWith("<svg")
-          ? "image/svg+xml"
-          : "application/octet-stream",
+        "content-type":
+          typeof value === "string" && value.trimStart().startsWith("<svg")
+            ? "image/svg+xml"
+            : "application/octet-stream",
       },
     });
   }
@@ -1142,7 +1199,10 @@ async function handleCloudflareRequest<Env>(
   return response;
 }
 
-function isCloudflarePublicAssetPath(manifest: CloudflareClientManifest, pathname: string): boolean {
+function isCloudflarePublicAssetPath(
+  manifest: CloudflareClientManifest,
+  pathname: string,
+): boolean {
   return (manifest.publicAssets ?? []).includes(pathname);
 }
 
@@ -1197,9 +1257,7 @@ function cacheControlHasDirective(cacheControl: string | null, directive: string
   }
 
   const normalizedDirective = directive.toLowerCase();
-  return cacheControl
-    .split(",")
-    .some((part) => part.trim().toLowerCase() === normalizedDirective);
+  return cacheControl.split(",").some((part) => part.trim().toLowerCase() === normalizedDirective);
 }
 
 function prerenderedResponse(
@@ -1228,10 +1286,7 @@ function prerenderedResponse(
   });
 }
 
-function cloudflareRouteRequiresModule(
-  route: AppRoute,
-  manifest: BuiltServerManifest,
-): boolean {
+function cloudflareRouteRequiresModule(route: AppRoute, manifest: BuiltServerManifest): boolean {
   return (
     route.kind === "metadata" ||
     route.kind === "server" ||
@@ -1245,17 +1300,11 @@ function cloudflareRouteGlobKeyMatchesRoute(key: string, routeFile: string): boo
   const normalizedKey = normalizeCloudflareRouteModulePath(key);
   const normalizedRoute = normalizeCloudflareRouteModulePath(routeFile);
 
-  return (
-    normalizedKey === normalizedRoute ||
-    normalizedKey.endsWith(`/${normalizedRoute}`)
-  );
+  return normalizedKey === normalizedRoute || normalizedKey.endsWith(`/${normalizedRoute}`);
 }
 
 function normalizeCloudflareRouteModulePath(path: string): string {
-  const withoutPrefix = path
-    .replace(/\\/g, "/")
-    .replace(/^\.\//, "")
-    .replace(/^\/+/, "");
+  const withoutPrefix = path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
 
   return withoutPrefix.replace(/\.(?:mjs|js|ts|tsx)$/, "");
 }
@@ -1277,8 +1326,7 @@ function matchCloudflareRoute(
 
     if (
       catchAllIndex !== -1 &&
-      pathSegments.length <
-        catchAllIndex + 1 + route.segments.length - catchAllIndex - 1
+      pathSegments.length < catchAllIndex + 1 + route.segments.length - catchAllIndex - 1
     ) {
       continue;
     }
@@ -1375,7 +1423,9 @@ function matchCloudflareRoute(
 function compareCloudflareRoutes(a: AppRoute, b: AppRoute): number {
   const scoreDelta = routeSpecificityScore(b) - routeSpecificityScore(a);
 
-  return scoreDelta === 0 ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind) : scoreDelta;
+  return scoreDelta === 0
+    ? a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind)
+    : scoreDelta;
 }
 
 function routeSpecificityScore(route: AppRoute): number {
@@ -1537,7 +1587,9 @@ function isCloudflareRouteMetadata(value: RouteMetadata | undefined): value is R
   return value !== undefined;
 }
 
-function mergeCloudflareRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata | undefined {
+function mergeCloudflareRouteMetadata(
+  metadata: readonly RouteMetadata[],
+): RouteMetadata | undefined {
   if (metadata.length === 0) {
     return undefined;
   }
@@ -1562,7 +1614,12 @@ function mergeCloudflareRouteMetadata(metadata: readonly RouteMetadata[]): Route
       ...(icons === undefined ? {} : { icons }),
       ...(openGraph === undefined && openGraphImages === undefined
         ? {}
-        : { openGraph: { ...openGraph, ...(openGraphImages === undefined ? {} : { images: openGraphImages }) } }),
+        : {
+            openGraph: {
+              ...openGraph,
+              ...(openGraphImages === undefined ? {} : { images: openGraphImages }),
+            },
+          }),
     };
 
     return mergedMetadata;

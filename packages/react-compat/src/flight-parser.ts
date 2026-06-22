@@ -19,7 +19,38 @@ interface ReactFlightRow {
   payloadBytes?: Uint8Array;
 }
 
-export function parseReactFlightPayload(payload: string | ArrayBuffer | Uint8Array): FlightResponse {
+const MAX_FLIGHT_DECODE_DEPTH = 256;
+
+class FlightDecodeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FlightDecodeError";
+  }
+}
+
+interface FlightDecodeContext {
+  inProgressChunkIds: Set<number>;
+}
+
+function createFlightDecodeContext(): FlightDecodeContext {
+  return {
+    inProgressChunkIds: new Set(),
+  };
+}
+
+function flightTooDeep(): never {
+  throw new FlightDecodeError(
+    `MR_FLIGHT_TOO_DEEP: nested deeper than ${MAX_FLIGHT_DECODE_DEPTH} levels`,
+  );
+}
+
+function flightCycle(id: number): never {
+  throw new FlightDecodeError(`MR_FLIGHT_CYCLE: cyclic chunk reference ${id}`);
+}
+
+export function parseReactFlightPayload(
+  payload: string | ArrayBuffer | Uint8Array,
+): FlightResponse {
   if (typeof payload !== "string") {
     return parseReactFlightBinaryRows(payload);
   }
@@ -225,7 +256,7 @@ function parseReactFlightRow(line: string): ReactFlightRow {
 }
 
 function looksLikeUnsupportedReactFlightTag(tag: string, body: string): boolean {
-  return /^[A-Z]$/.test(tag) && (body[1] === "{" || body[1] === "[" || body[1] === "\"");
+  return /^[A-Z]$/.test(tag) && (body[1] === "{" || body[1] === "[" || body[1] === '"');
 }
 
 function parseReactFlightTextChunk(payload: string): string {
@@ -425,7 +456,9 @@ function parseReactFlightServerReference(
   const actionId = String(object.id ?? "");
   const separator = actionId.lastIndexOf("#");
   const bound = Array.isArray(object.bound)
-    ? object.bound.map((entry) => decodeReactFlightModel(entry, modelChunks, errorChunks))
+    ? object.bound.map((entry) =>
+        decodeReactFlightModel(entry, modelChunks, errorChunks, 0, createFlightDecodeContext()),
+      )
     : undefined;
 
   return {
@@ -445,13 +478,17 @@ function decodeReactFlightModel(
   value: unknown,
   modelChunks: ReadonlyMap<number, unknown> = new Map(),
   errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+  depth = 0,
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): FlightModel {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
+
   if (value === null || typeof value === "number" || typeof value === "boolean") {
     return value;
   }
 
   if (typeof value === "string") {
-    return decodeReactFlightString(value, modelChunks, errorChunks);
+    return decodeReactFlightString(value, modelChunks, errorChunks, depth, context);
   }
 
   if (Array.isArray(value)) {
@@ -464,11 +501,15 @@ function decodeReactFlightModel(
           valueIsObject(value[3]) ? value[3] : {},
           modelChunks,
           errorChunks,
+          depth + 1,
+          context,
         ),
       };
     }
 
-    return value.map((item) => decodeReactFlightModel(item, modelChunks, errorChunks));
+    return value.map((item) =>
+      decodeReactFlightModel(item, modelChunks, errorChunks, depth + 1, context),
+    );
   }
 
   if (isReactFlightBinaryModel(value)) {
@@ -476,7 +517,7 @@ function decodeReactFlightModel(
   }
 
   if (valueIsObject(value)) {
-    return decodeReactFlightProps(value, modelChunks, errorChunks);
+    return decodeReactFlightProps(value, modelChunks, errorChunks, depth + 1, context);
   }
 
   return { kind: "undefined" };
@@ -486,6 +527,8 @@ function decodeReactFlightString(
   value: string,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth: number,
+  context: FlightDecodeContext,
 ): FlightModel {
   if (value === "$undefined" || value === "$u") {
     return { kind: "undefined" };
@@ -534,7 +577,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$[AOoUSsLlGgMmV][0-9a-f]+$/.test(value)) {
-    return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
   }
 
   if (value.startsWith("$S")) {
@@ -549,7 +592,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$Q[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
     const entries = Array.isArray(decoded)
       ? decoded.map((entry): [FlightModel, FlightModel] =>
           Array.isArray(entry)
@@ -565,7 +614,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$W[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
 
     return {
       kind: "set",
@@ -574,7 +629,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$K[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
     const entries = Array.isArray(decoded)
       ? decoded.flatMap((entry): [string, FlightModel][] =>
           Array.isArray(entry) && typeof entry[0] === "string"
@@ -590,7 +651,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$i[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
 
     return {
       kind: "iterable",
@@ -599,11 +666,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$Z[0-9a-f]+$/i.test(value)) {
-    return errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
-      kind: "error",
-      name: "Error",
-      message: "Unknown React Flight error.",
-    };
+    return (
+      errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
+        kind: "error",
+        name: "Error",
+        message: "Unknown React Flight error.",
+      }
+    );
   }
 
   if (value === "$Y" || value.startsWith("$E")) {
@@ -611,7 +680,7 @@ function decodeReactFlightString(
   }
 
   if (/^\$[0-9a-f]+$/i.test(value)) {
-    return decodeReactFlightChunk(value.slice(1), modelChunks, errorChunks);
+    return decodeReactFlightChunk(value.slice(1), modelChunks, errorChunks, depth + 1, context);
   }
 
   return value;
@@ -621,7 +690,10 @@ function decodeReactFlightChunk(
   id: string,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth: number,
+  context: FlightDecodeContext,
 ): FlightModel {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
   const numericId = parseReactFlightId(id);
   const error = errorChunks.get(numericId);
 
@@ -636,7 +708,22 @@ function decodeReactFlightChunk(
     };
   }
 
-  return decodeReactFlightModel(modelChunks.get(numericId), modelChunks, errorChunks);
+  if (context.inProgressChunkIds.has(numericId)) {
+    flightCycle(numericId);
+  }
+
+  context.inProgressChunkIds.add(numericId);
+  try {
+    return decodeReactFlightModel(
+      modelChunks.get(numericId),
+      modelChunks,
+      errorChunks,
+      depth,
+      context,
+    );
+  } finally {
+    context.inProgressChunkIds.delete(numericId);
+  }
 }
 
 function decodeReactFlightElementType(value: unknown): FlightElementModel["type"] {
@@ -658,11 +745,15 @@ function decodeReactFlightProps(
   value: Record<string, unknown>,
   modelChunks: ReadonlyMap<number, unknown>,
   errorChunks: ReadonlyMap<number, FlightErrorModel>,
+  depth = 0,
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): Record<string, FlightModel> {
+  if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
+
   return Object.fromEntries(
     Object.entries(value).map(([key, child]) => [
       key,
-      decodeReactFlightModel(child, modelChunks, errorChunks),
+      decodeReactFlightModel(child, modelChunks, errorChunks, depth + 1, context),
     ]),
   );
 }

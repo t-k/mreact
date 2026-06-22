@@ -88,6 +88,10 @@ export interface ServerActionHandlerOptions {
 }
 
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
+const MAX_SERVER_ACTION_ARGUMENT_DEPTH = 64;
+const MAX_SERVER_ACTION_ARGUMENT_ARRAY_LENGTH = 2_000;
+const MAX_SERVER_ACTION_ARGUMENT_OBJECT_KEYS = 200;
+const SERVER_ACTION_FORBIDDEN_JSON_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
 /** Options for embedding a serialized Flight response in a script tag. */
 export interface FlightScriptOptions {
@@ -274,8 +278,38 @@ export type FlightTypedArrayName =
   | "BigInt64Array"
   | "BigUint64Array";
 
-const reactFlightBinaryRowTags = ["A", "O", "o", "U", "S", "s", "L", "l", "G", "g", "M", "m", "V"] as const;
-const reactFlightRowTags = ["C", "D", "E", "F", "H", "I", "J", "N", "P", "R", "T", "W", "X", "x", "r"] as const;
+const reactFlightBinaryRowTags = [
+  "A",
+  "O",
+  "o",
+  "U",
+  "S",
+  "s",
+  "L",
+  "l",
+  "G",
+  "g",
+  "M",
+  "m",
+  "V",
+] as const;
+const reactFlightRowTags = [
+  "C",
+  "D",
+  "E",
+  "F",
+  "H",
+  "I",
+  "J",
+  "N",
+  "P",
+  "R",
+  "T",
+  "W",
+  "X",
+  "x",
+  "r",
+] as const;
 const reactFlightModelTokens = [
   "$",
   "$$",
@@ -425,8 +459,7 @@ export function createServerActionHandler(
   const allowedActionKeys = options.allowedActions?.map((reference) =>
     serverActionKey(reference.moduleId, reference.exportName),
   );
-  const allowedActionSet =
-    allowedActionKeys === undefined ? undefined : new Set(allowedActionKeys);
+  const allowedActionSet = allowedActionKeys === undefined ? undefined : new Set(allowedActionKeys);
 
   return async (request: Request): Promise<Response> => {
     if (request.method !== "POST") {
@@ -485,7 +518,20 @@ export function createServerActionHandler(
     const action = getServerAction(actionEntry);
     const validateArgs = getServerActionArgsValidator(actionEntry);
     const boundArgs = Array.isArray(payload.bound) ? payload.bound : [];
-    const args = [...boundArgs, ...(Array.isArray(payload.args) ? payload.args : [])];
+    const extraArgs = Array.isArray(payload.args) ? payload.args : [];
+    const argsStructure = validateServerActionJsonArgumentStructure(boundArgs, extraArgs);
+
+    if (!argsStructure.valid) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: "Invalid server action argument structure.",
+        },
+        400,
+      );
+    }
+
+    const args = [...boundArgs, ...extraArgs];
     const validationResult = validateArgs?.(args);
 
     if (validationResult !== undefined && validationResult !== true) {
@@ -501,11 +547,7 @@ export function createServerActionHandler(
       );
     }
 
-    const authorizationResult = await options.authorize?.(
-      request,
-      reference,
-      args,
-    );
+    const authorizationResult = await options.authorize?.(request, reference, args);
 
     if (authorizationResult !== undefined && authorizationResult !== true) {
       return jsonResponse(
@@ -580,9 +622,10 @@ export function toReactFlightRows(response: FlightResponse): string {
     rows.push(
       `${formatReactFlightId(wireId)}:F${JSON.stringify({
         id: serverActionKey(reference.moduleId, reference.exportName),
-        bound: reference.bound === undefined
-          ? null
-          : reference.bound.map((value) => encodeReactFlightModel(value, state)),
+        bound:
+          reference.bound === undefined
+            ? null
+            : reference.bound.map((value) => encodeReactFlightModel(value, state)),
         name: reference.exportName,
       })}`,
     );
@@ -637,7 +680,9 @@ export function fromReactFlightRows(rows: string): FlightResponse {
     }
 
     if (row.tag === "F") {
-      serverReferences.push(parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks));
+      serverReferences.push(
+        parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks),
+      );
       continue;
     }
 
@@ -687,10 +732,7 @@ export function fromReactFlightRows(rows: string): FlightResponse {
 }
 
 /** Merges additional React Flight row text into an existing Flight response. */
-export function mergeReactFlightRows(
-  response: FlightResponse,
-  rows: string,
-): FlightResponse {
+export function mergeReactFlightRows(response: FlightResponse, rows: string): FlightResponse {
   // Issue 081 note: same finding as `fromReactFlightRows` — the native
   // merge path is slower than the JS one given the double-JSON tax.
   const modelChunks = new Map<number, unknown>();
@@ -707,7 +749,9 @@ export function mergeReactFlightRows(
     }
 
     if (row.tag === "F") {
-      serverReferences.push(parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks));
+      serverReferences.push(
+        parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks),
+      );
       continue;
     }
 
@@ -773,9 +817,7 @@ export function renderFlightPreloadLinks(
       seen.add(chunk);
       return true;
     })
-    .map((chunk) =>
-      `<link rel="modulepreload" href="${escapeAttribute(chunk)}"${nonceAttribute}>`,
-    )
+    .map((chunk) => `<link rel="modulepreload" href="${escapeAttribute(chunk)}"${nonceAttribute}>`)
     .join("");
 }
 
@@ -885,11 +927,7 @@ interface ReactFlightEncodingState {
 }
 
 function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingState): unknown {
-  if (
-    model === null ||
-    typeof model === "number" ||
-    typeof model === "boolean"
-  ) {
+  if (model === null || typeof model === "number" || typeof model === "boolean") {
     return model;
   }
 
@@ -967,7 +1005,9 @@ function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingSt
   if (model.kind === "error") {
     const id = state.nextWireId;
     state.nextWireId += 1;
-    state.outlineRows.push(`${formatReactFlightId(id)}:E${JSON.stringify(encodeReactFlightError(model))}`);
+    state.outlineRows.push(
+      `${formatReactFlightId(id)}:E${JSON.stringify(encodeReactFlightError(model))}`,
+    );
     return `$Z${formatReactFlightId(id)}`;
   }
 
@@ -999,10 +1039,7 @@ function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingSt
   return encodeReactFlightProps(model, state);
 }
 
-function allocateReactFlightOutlineRow(
-  state: ReactFlightEncodingState,
-  payload: unknown,
-): number {
+function allocateReactFlightOutlineRow(state: ReactFlightEncodingState, payload: unknown): number {
   const id = state.nextWireId;
   state.nextWireId += 1;
   state.outlineRows.push(`${formatReactFlightId(id)}:${JSON.stringify(payload)}`);
@@ -1031,10 +1068,7 @@ function encodeReactFlightProps(
   return Object.fromEntries(
     Object.entries(props)
       .filter((entry): entry is [string, FlightModel] => entry[1] !== undefined)
-      .map(([key, value]) => [
-        key,
-        encodeReactFlightModel(value, state),
-      ]),
+      .map(([key, value]) => [key, encodeReactFlightModel(value, state)]),
   );
 }
 
@@ -1083,7 +1117,7 @@ function parseReactFlightRow(line: string): ReactFlightRow {
 }
 
 function looksLikeUnsupportedReactFlightTag(tag: string, body: string): boolean {
-  return /^[A-Z]$/.test(tag) && (body[1] === "{" || body[1] === "[" || body[1] === "\"");
+  return /^[A-Z]$/.test(tag) && (body[1] === "{" || body[1] === "[" || body[1] === '"');
 }
 
 function parseReactFlightTextChunk(payload: string): string {
@@ -1201,7 +1235,9 @@ function createReactFlightBinaryModel(
   };
 }
 
-function getReactFlightTypedArrayName(tag: Exclude<ReactFlightBinaryRowTag, "A" | "V">): FlightTypedArrayName {
+function getReactFlightTypedArrayName(
+  tag: Exclude<ReactFlightBinaryRowTag, "A" | "V">,
+): FlightTypedArrayName {
   switch (tag) {
     case "O":
       return "Int8Array";
@@ -1344,11 +1380,7 @@ function decodeReactFlightModel(
   context: FlightDecodeContext = createFlightDecodeContext(),
 ): FlightModel {
   if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
-  if (
-    value === null ||
-    typeof value === "number" ||
-    typeof value === "boolean"
-  ) {
+  if (value === null || typeof value === "number" || typeof value === "boolean") {
     return value;
   }
 
@@ -1457,10 +1489,18 @@ function decodeReactFlightString(
   }
 
   if (/^\$Q[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
     const entries = Array.isArray(decoded)
       ? decoded.map((entry): [FlightModel, FlightModel] =>
-          Array.isArray(entry) ? [entry[0] ?? { kind: "undefined" }, entry[1] ?? { kind: "undefined" }] : [entry, { kind: "undefined" }],
+          Array.isArray(entry)
+            ? [entry[0] ?? { kind: "undefined" }, entry[1] ?? { kind: "undefined" }]
+            : [entry, { kind: "undefined" }],
         )
       : [];
 
@@ -1471,7 +1511,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$W[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
 
     return {
       kind: "set",
@@ -1480,7 +1526,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$K[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
     const entries = Array.isArray(decoded)
       ? decoded.flatMap((entry): [string, FlightModel][] =>
           Array.isArray(entry) && typeof entry[0] === "string"
@@ -1496,7 +1548,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$i[0-9a-f]+$/i.test(value)) {
-    const decoded = decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
+    const decoded = decodeReactFlightChunk(
+      value.slice(2),
+      modelChunks,
+      errorChunks,
+      depth + 1,
+      context,
+    );
 
     return {
       kind: "iterable",
@@ -1505,11 +1563,13 @@ function decodeReactFlightString(
   }
 
   if (/^\$Z[0-9a-f]+$/i.test(value)) {
-    return errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
-      kind: "error",
-      name: "Error",
-      message: "Unknown React Flight error.",
-    };
+    return (
+      errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
+        kind: "error",
+        name: "Error",
+        message: "Unknown React Flight error.",
+      }
+    );
   }
 
   if (value === "$Y" || value.startsWith("$E")) {
@@ -1628,10 +1688,7 @@ function encodeReactFlightError(model: FlightErrorModel): Record<string, unknown
 
 function isFlightErrorModel(model: FlightModel): model is FlightErrorModel {
   return (
-    typeof model === "object" &&
-    model !== null &&
-    !Array.isArray(model) &&
-    model.kind === "error"
+    typeof model === "object" && model !== null && !Array.isArray(model) && model.kind === "error"
   );
 }
 
@@ -1664,10 +1721,7 @@ async function serializeFlightValue(
     return { kind: "undefined" };
   }
 
-  if (
-    typeof awaited === "string" ||
-    typeof awaited === "boolean"
-  ) {
+  if (typeof awaited === "string" || typeof awaited === "boolean") {
     return awaited;
   }
 
@@ -1722,10 +1776,13 @@ async function serializeFlightValue(
     return {
       kind: "map",
       entries: await Promise.all(
-        Array.from(awaited.entries()).map(async ([key, value]) => [
-          await serializeFlightValue(key, state, depth + 1),
-          await serializeFlightValue(value, state, depth + 1),
-        ] as [FlightModel, FlightModel]),
+        Array.from(awaited.entries()).map(
+          async ([key, value]) =>
+            [
+              await serializeFlightValue(key, state, depth + 1),
+              await serializeFlightValue(value, state, depth + 1),
+            ] as [FlightModel, FlightModel],
+        ),
       ),
     };
   }
@@ -1743,10 +1800,10 @@ async function serializeFlightValue(
     return {
       kind: "form-data",
       entries: await Promise.all(
-        Array.from(awaited.entries()).map(async ([key, value]) => [
-          key,
-          await serializeFlightValue(value, state, depth + 1),
-        ] as [string, FlightModel]),
+        Array.from(awaited.entries()).map(
+          async ([key, value]) =>
+            [key, await serializeFlightValue(value, state, depth + 1)] as [string, FlightModel],
+        ),
       ),
     };
   }
@@ -1823,10 +1880,9 @@ async function serializeProps(
   depth: number,
 ): Promise<Record<string, FlightModel>> {
   const entries = await Promise.all(
-    Object.entries(props).map(async ([key, value]) => [
-      key,
-      await serializeFlightValue(value, state, depth + 1),
-    ] as const),
+    Object.entries(props).map(
+      async ([key, value]) => [key, await serializeFlightValue(value, state, depth + 1)] as const,
+    ),
   );
 
   return Object.fromEntries(entries);
@@ -1839,18 +1895,14 @@ async function serializeObject(
 ): Promise<FlightObjectModel> {
   return Object.fromEntries(
     await Promise.all(
-      Object.entries(object).map(async ([key, value]) => [
-        key,
-        await serializeFlightValue(value, state, depth + 1),
-      ] as const),
+      Object.entries(object).map(
+        async ([key, value]) => [key, await serializeFlightValue(value, state, depth + 1)] as const,
+      ),
     ),
   ) as FlightObjectModel;
 }
 
-function getClientReferenceId(
-  reference: ClientReference,
-  state: FlightSerializationState,
-): number {
+function getClientReferenceId(reference: ClientReference, state: FlightSerializationState): number {
   const key = `${reference.moduleId}:${reference.exportName}`;
   const existing = state.clientReferenceIndexes.get(key);
 
@@ -1873,9 +1925,10 @@ async function getServerReferenceId(
   reference: ServerReference,
   state: FlightSerializationState,
 ): Promise<number> {
-  const serializedBound = reference.bound === undefined
-    ? undefined
-    : await Promise.all(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
+  const serializedBound =
+    reference.bound === undefined
+      ? undefined
+      : await Promise.all(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
   const key = `${reference.moduleId}:${reference.exportName}:${JSON.stringify(serializedBound ?? null)}`;
   const existing = state.serverReferenceIndexes.get(key);
 
@@ -1969,6 +2022,62 @@ async function readServerActionPayload(
   } catch {
     return jsonResponse({ ok: false, error: "Invalid JSON payload." }, 400);
   }
+}
+
+function validateServerActionJsonArgumentStructure(
+  boundArgs: readonly unknown[],
+  args: readonly unknown[],
+): { valid: true } | { valid: false } {
+  const stack: { depth: number; value: unknown }[] = [
+    { depth: 0, value: boundArgs },
+    { depth: 0, value: args },
+  ];
+  const seen = new WeakSet<object>();
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === undefined) {
+      continue;
+    }
+
+    if (current.depth > MAX_SERVER_ACTION_ARGUMENT_DEPTH) {
+      return { valid: false };
+    }
+
+    if (current.value === null || typeof current.value !== "object") {
+      continue;
+    }
+
+    if (seen.has(current.value)) {
+      continue;
+    }
+    seen.add(current.value);
+
+    if (Array.isArray(current.value)) {
+      if (current.value.length > MAX_SERVER_ACTION_ARGUMENT_ARRAY_LENGTH) {
+        return { valid: false };
+      }
+
+      for (const item of current.value) {
+        stack.push({ depth: current.depth + 1, value: item });
+      }
+      continue;
+    }
+
+    const entries = Object.entries(current.value);
+    if (entries.length > MAX_SERVER_ACTION_ARGUMENT_OBJECT_KEYS) {
+      return { valid: false };
+    }
+
+    for (const [key, value] of entries) {
+      if (SERVER_ACTION_FORBIDDEN_JSON_KEYS.has(key)) {
+        return { valid: false };
+      }
+      stack.push({ depth: current.depth + 1, value });
+    }
+  }
+
+  return { valid: true };
 }
 
 function getServerAction(entry: ServerAction | ServerActionDescriptor): ServerAction {
@@ -2078,10 +2187,7 @@ function validateServerActionNonce(
 
   if (replayProtection.seen.has(nonce)) {
     return {
-      response: jsonResponse(
-        { ok: false, error: "Server action nonce was already used." },
-        409,
-      ),
+      response: jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409),
     };
   }
 

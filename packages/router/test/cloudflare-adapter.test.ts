@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import {
-  __resetQueryClientForTesting,
-  getQueryClient,
-} from "@reckona/mreact-query";
+import { __resetQueryClientForTesting, getQueryClient } from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
 import {
   createCloudflareBuiltRequestHandler,
@@ -81,7 +78,9 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
 }`,
     );
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -133,7 +132,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -185,7 +186,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -473,10 +476,7 @@ export async function POST(request: Request) {
         modules: {
           "api/upload/route.ts": {
             async POST(request, context) {
-              const result = await context.env.MEDIA.put(
-                context.params.id,
-                await request.text(),
-              );
+              const result = await context.env.MEDIA.put(context.params.id, await request.text());
 
               return Response.json({
                 contextMatches: context.context === executionContext,
@@ -678,7 +678,10 @@ export async function POST(request: Request) {
       createExecutionContext(),
     );
     const html = await response.text();
-    const queryStateJson = /<script type="application\/json" id="__mreact_query_state">([\s\S]*?)<\/script>/.exec(html)?.[1];
+    const queryStateJson =
+      /<script type="application\/json" id="__mreact_query_state">([\s\S]*?)<\/script>/.exec(
+        html,
+      )?.[1];
 
     expect(response.status).toBe(200);
     expect(html).toContain("<main>Ada</main>");
@@ -1096,7 +1099,7 @@ export async function POST(request: Request) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = await import(pathToFileURL(registryPath).href) as {
+    const registry = (await import(pathToFileURL(registryPath).href)) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
 
@@ -1170,24 +1173,26 @@ export async function POST(request: Request) {
     );
     const module = await registry["users/$id/page.tsx"]?.();
 
-    expect(module?.default?.({
-      clientManifest: { routes: [] },
-      context: createExecutionContext(),
-      data: undefined,
-      env: {},
-      params: { id: "ada" },
-      request: new Request("https://app.example/users/ada"),
-      route: {
-        file: "users/$id/page.tsx",
-        kind: "page",
-        path: "/users/:id",
-        segments: [
-          { kind: "static", value: "users" },
-          { kind: "dynamic", name: "id" },
-        ],
-      },
-      serverManifest: { files: {}, routes: [], version: 1 },
-    })).toBe("<main>ada</main>");
+    expect(
+      module?.default?.({
+        clientManifest: { routes: [] },
+        context: createExecutionContext(),
+        data: undefined,
+        env: {},
+        params: { id: "ada" },
+        request: new Request("https://app.example/users/ada"),
+        route: {
+          file: "users/$id/page.tsx",
+          kind: "page",
+          path: "/users/:id",
+          segments: [
+            { kind: "static", value: "users" },
+            { kind: "dynamic", name: "id" },
+          ],
+        },
+        serverManifest: { files: {}, routes: [], version: 1 },
+      }),
+    ).toBe("<main>ada</main>");
   });
 
   test("renders shared page component functions that are exported under generated names", async () => {
@@ -1541,7 +1546,7 @@ export default function Page(props) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = await import(pathToFileURL(registryPath).href) as {
+    const registry = (await import(pathToFileURL(registryPath).href)) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
 
@@ -1604,7 +1609,7 @@ export default function Page(props) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = await import(pathToFileURL(registryPath).href) as {
+    const registry = (await import(pathToFileURL(registryPath).href)) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
 
@@ -1652,7 +1657,7 @@ export default function Page(props) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = await import(pathToFileURL(registryPath).href) as {
+    const registry = (await import(pathToFileURL(registryPath).href)) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
 
@@ -1737,7 +1742,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -1803,7 +1810,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -1855,7 +1864,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -1909,7 +1920,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -1984,7 +1997,9 @@ export default function Layout() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2036,7 +2051,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2096,7 +2113,9 @@ export default function Page() {
     }
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2148,13 +2167,12 @@ export default function Page() {
   return <main>source route</main>;
 }`,
     );
-    await writeFile(
-      join(appDir, "alias", "page.tsx"),
-      `export { default } from "../source/page";`,
-    );
+    await writeFile(join(appDir, "alias", "page.tsx"), `export { default } from "../source/page";`);
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2223,7 +2241,7 @@ export default function Page(props) {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = await import(pathToFileURL(registryPath).href) as {
+    const registry = (await import(pathToFileURL(registryPath).href)) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const handler = createCloudflareBuiltRequestHandler({
@@ -2291,7 +2309,7 @@ export default function Page() {
     const clientManifest = JSON.parse(
       await readFile(join(outDir, "client", "manifest.json"), "utf8"),
     );
-    const registry = await import(pathToFileURL(registryPath).href) as {
+    const registry = (await import(pathToFileURL(registryPath).href)) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const handler = createCloudflareBuiltRequestHandler({
@@ -2348,7 +2366,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2376,7 +2396,7 @@ export default function Page() {
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).toContain('<link rel="stylesheet" href="/styles.css">');
     expect(html).toContain("<header>Cloudflare shell</header>");
-    expect(html).toContain("<nav><a href=\"/\">Top</a></nav>");
+    expect(html).toContain('<nav><a href="/">Top</a></nav>');
     expect(html).toContain("<main>");
     expect(html).toContain("<strong>Ada</strong>");
   });
@@ -2404,7 +2424,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2469,7 +2491,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2594,7 +2618,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2648,7 +2674,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2722,7 +2750,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2808,7 +2838,9 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -2960,7 +2992,9 @@ export default function Page() {
     await expect(
       loader.fetch?.(
         "/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css",
-        new Request("https://app.example/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css"),
+        new Request(
+          "https://app.example/_mreact/client/assets/routes/shared.f810e3ef.e0edde13.css",
+        ),
         {},
         context,
       ),
@@ -3006,12 +3040,7 @@ export default function Page() {
       ),
     ).resolves.toBeUndefined();
     await expect(
-      loader.fetch?.(
-        "/absolute.js",
-        new Request("https://app.example/absolute.js"),
-        {},
-        context,
-      ),
+      loader.fetch?.("/absolute.js", new Request("https://app.example/absolute.js"), {}, context),
     ).resolves.toBeUndefined();
     await expect(
       loader.fetch?.(
@@ -3075,15 +3104,16 @@ export default function Page() {
       },
     );
     const html = await response.text();
-    const propsJson = /<script type="application\/json" id="mreact-props-[^"]+">([\s\S]*?)<\/script>/.exec(html)?.[1];
+    const propsJson =
+      /<script type="application\/json" id="mreact-props-[^"]+">([\s\S]*?)<\/script>/.exec(
+        html,
+      )?.[1];
 
     expect(response.status).toBe(200);
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).not.toContain(' data-injected="yes');
     expect(html).toContain('data-mreact-route-id="payload&quot; data-injected=&quot;yes&lt;"');
-    expect(html).toContain(
-      'src="/_mreact/client/assets/routes/payload.&quot;&lt;&amp;.js"',
-    );
+    expect(html).toContain('src="/_mreact/client/assets/routes/payload.&quot;&lt;&amp;.js"');
     expect(propsJson).toBeDefined();
     expect(propsJson).not.toContain("<");
     expect(propsJson).not.toContain(">");
@@ -3137,7 +3167,9 @@ export async function POST(request) {
 `,
     );
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
-    const registry = await import(pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href) as {
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
       routeModules: Record<string, () => Promise<unknown>>;
     };
     const serverManifest = JSON.parse(
@@ -3191,6 +3223,140 @@ export async function POST(request) {
     expect(invalidPost.status).toBe(403);
   });
 
+  test("runs built middleware before protected Cloudflare page routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-page-middleware-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { matcher: "/admin/:path*" };
+
+export function middleware() {
+  globalThis.__mreactCloudflareMiddlewareHits = (globalThis.__mreactCloudflareMiddlewareHits ?? 0) + 1;
+  return new Response(null, { status: 303, headers: { location: "/login", "x-middleware-hit": "1" } });
+}`,
+    );
+    await writeFile(
+      join(appDir, "admin", "page.tsx"),
+      `export default function Admin() {
+  globalThis.__mreactCloudflarePageRenders = (globalThis.__mreactCloudflarePageRenders ?? 0) + 1;
+  return <main>admin page</main>;
+}`,
+    );
+    const state = globalThis as {
+      __mreactCloudflareMiddlewareHits?: number | undefined;
+      __mreactCloudflarePageRenders?: number | undefined;
+    };
+    state.__mreactCloudflareMiddlewareHits = 0;
+    state.__mreactCloudflarePageRenders = 0;
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const handler = await createBuiltCloudflareTestHandler(outDir);
+    const response = await handler.fetch(
+      new Request("https://app.example/admin"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(response.headers.get("x-middleware-hit")).toBe("1");
+    expect(state.__mreactCloudflareMiddlewareHits).toBe(1);
+    expect(state.__mreactCloudflarePageRenders).toBe(0);
+  });
+
+  test("runs built middleware before protected Cloudflare server routes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-server-route-middleware-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "api", "admin"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { matcher: "/api/admin/:path*" };
+
+export function middleware() {
+  globalThis.__mreactCloudflareServerMiddlewareHits = (globalThis.__mreactCloudflareServerMiddlewareHits ?? 0) + 1;
+  return new Response(null, { status: 303, headers: { location: "/login", "x-middleware-hit": "1" } });
+}`,
+    );
+    await writeFile(
+      join(appDir, "api", "admin", "route.ts"),
+      `export function GET() {
+  globalThis.__mreactCloudflareServerRouteRuns = (globalThis.__mreactCloudflareServerRouteRuns ?? 0) + 1;
+  return Response.json({ ok: true });
+}`,
+    );
+    const state = globalThis as {
+      __mreactCloudflareServerMiddlewareHits?: number | undefined;
+      __mreactCloudflareServerRouteRuns?: number | undefined;
+    };
+    state.__mreactCloudflareServerMiddlewareHits = 0;
+    state.__mreactCloudflareServerRouteRuns = 0;
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const handler = await createBuiltCloudflareTestHandler(outDir);
+    const response = await handler.fetch(
+      new Request("https://app.example/api/admin"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(response.headers.get("x-middleware-hit")).toBe("1");
+    expect(state.__mreactCloudflareServerMiddlewareHits).toBe(1);
+    expect(state.__mreactCloudflareServerRouteRuns).toBe(0);
+  });
+
+  test("does not let untrusted Cloudflare middleware bypass headers skip protected pages", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-middleware-bypass-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "admin"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { matcher: "/admin/:path*" };
+
+export function middleware() {
+  return new Response(null, { status: 303, headers: { location: "/login", "x-middleware-hit": "1" } });
+}`,
+    );
+    await writeFile(
+      join(appDir, "admin", "page.tsx"),
+      `export default function Admin() {
+  return <main>admin page</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const handler = await createBuiltCloudflareTestHandler(outDir);
+    const subrequestResponse = await handler.fetch(
+      new Request("https://app.example/admin", {
+        headers: { "x-middleware-subrequest": "middleware" },
+      }),
+      {},
+      createExecutionContext(),
+    );
+    const navigationResponse = await handler.fetch(
+      new Request("https://app.example/admin", {
+        headers: {
+          "x-mreact-navigation": "1",
+          "x-mreact-navigation-cache": "reload",
+        },
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(subrequestResponse.status).toBe(303);
+    expect(subrequestResponse.headers.get("location")).toBe("/login");
+    expect(subrequestResponse.headers.get("x-middleware-hit")).toBe("1");
+    expect(navigationResponse.status).toBe(303);
+    expect(navigationResponse.headers.get("location")).toBe("/login");
+    expect(navigationResponse.headers.get("x-middleware-hit")).toBe("1");
+  });
+
   test("keeps the Cloudflare adapter runtime free of Node imports", async () => {
     const source = await readFile(
       join(process.cwd(), "packages/router/src/adapters/cloudflare.ts"),
@@ -3202,6 +3368,29 @@ export async function POST(request) {
     expect(source).not.toContain("node:path");
   });
 });
+
+async function createBuiltCloudflareTestHandler(outDir: string) {
+  const registry = (await import(
+    pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+  )) as {
+    routeModules: Record<string, () => Promise<unknown>>;
+  };
+  const serverManifest = JSON.parse(
+    await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+  );
+  const clientManifest = JSON.parse(
+    await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+  );
+
+  return createCloudflareBuiltRequestHandler({
+    assets: {},
+    clientManifest,
+    renderRoute: createCloudflareRouteModuleRenderer({
+      modules: registry.routeModules,
+    }),
+    serverManifest,
+  });
+}
 
 function createExecutionContext(): ExecutionContext {
   return {

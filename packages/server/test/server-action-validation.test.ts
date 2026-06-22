@@ -2,6 +2,14 @@ import { describe, expect, test } from "vitest";
 import { createServerActionHandler } from "../src/index.js";
 
 describe("createServerActionHandler validation branches", () => {
+  const nestedArray = (depth: number): unknown[] => {
+    let value: unknown[] = ["leaf"];
+    for (let i = 0; i < depth; i += 1) {
+      value = [value];
+    }
+    return value;
+  };
+
   const actions = {
     "actions/save#save": (...args: unknown[]) => ({ ok: true, args }),
     "actions/fail#fail": () => {
@@ -197,5 +205,141 @@ describe("createServerActionHandler validation branches", () => {
       ok: true,
       value: { ok: true, args: ["bound-a", "bound-b", "extra"] },
     });
+  });
+
+  test("rejects deeply nested args before validation, authorization, or action invocation", async () => {
+    let invocations = 0;
+    let validations = 0;
+    let authorizations = 0;
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": {
+          action: () => {
+            invocations += 1;
+          },
+          validateArgs: () => {
+            validations += 1;
+            return true;
+          },
+        },
+      },
+      {
+        authorize: () => {
+          authorizations += 1;
+          return true;
+        },
+        csrf: false,
+      },
+    );
+    const response = await handle(
+      sameOriginPost({
+        moduleId: "actions/save",
+        exportName: "save",
+        args: [nestedArray(80)],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Invalid server action argument structure.",
+    });
+    expect(validations).toBe(0);
+    expect(authorizations).toBe(0);
+    expect(invocations).toBe(0);
+  });
+
+  test("rejects deeply nested bound args before action invocation", async () => {
+    let invocations = 0;
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => {
+          invocations += 1;
+        },
+      },
+      { csrf: false },
+    );
+    const response = await handle(
+      sameOriginPost({
+        moduleId: "actions/save",
+        exportName: "save",
+        bound: [nestedArray(80)],
+        args: [],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Invalid server action argument structure.",
+    });
+    expect(invocations).toBe(0);
+  });
+
+  test("rejects excessive server action array lengths before action invocation", async () => {
+    let invocations = 0;
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => {
+          invocations += 1;
+        },
+      },
+      { csrf: false },
+    );
+    const response = await handle(
+      sameOriginPost({
+        moduleId: "actions/save",
+        exportName: "save",
+        args: [Array.from({ length: 2_001 }, (_, index) => index)],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(invocations).toBe(0);
+  });
+
+  test("rejects excessive server action object key counts before action invocation", async () => {
+    let invocations = 0;
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => {
+          invocations += 1;
+        },
+      },
+      { csrf: false },
+    );
+    const response = await handle(
+      sameOriginPost({
+        moduleId: "actions/save",
+        exportName: "save",
+        args: [Object.fromEntries(Array.from({ length: 201 }, (_, index) => [`k${index}`, index]))],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(invocations).toBe(0);
+  });
+
+  test("rejects prototype-shaped keys in server action JSON arguments", async () => {
+    let invocations = 0;
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": () => {
+          invocations += 1;
+        },
+      },
+      { csrf: false },
+    );
+    const response = await handle(
+      sameOriginPost({
+        moduleId: "actions/save",
+        exportName: "save",
+        args: [JSON.parse('{"__proto__":{"polluted":true}}')],
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(invocations).toBe(0);
+    expect(({} as { polluted?: true }).polluted).toBeUndefined();
   });
 });
