@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.0.181 - 2026-06-22
+
+### Changed
+
+- Hardened React-compatible Flight row parsing so deeply nested row payloads and cyclic chunk references fail with deterministic Flight decode errors instead of native stack overflows.
+- Hardened JSON server action dispatch so `args` and `bound` payloads are rejected before validation, authorization, or action invocation when they exceed default structural limits or contain prototype-shaped keys.
+- Hardened Cloudflare built App Router runtime so app middleware runs before protected page and server route modules, including requests with middleware-subrequest or client-navigation headers.
+
 ## 0.0.180 - 2026-06-22
 
 ### Changed

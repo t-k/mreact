@@ -276,6 +276,8 @@ Use `"any"` only when the integration is deliberately exposing all registered ac
 
 Server action requests reject `Content-Length` values over `10 MiB` by default before parsing `FormData` or JSON. Configure the limit when your app has a real need for larger submissions.
 
+JSON action calls also use default structural limits before action validation, authorization, or invocation. Mreact rejects excessively deep values, very large arrays, very large plain objects, and prototype-shaped keys such as `__proto__`, `prototype`, and `constructor`; keep action-specific validation in your own action for business rules and use HTTP APIs when clients need a general JSON endpoint.
+
 ```ts
 startServer({
   outDir: ".mreact",
