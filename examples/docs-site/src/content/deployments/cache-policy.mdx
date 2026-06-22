@@ -22,7 +22,7 @@ export async function loader() {
 }
 ```
 
-Do not cache route HTML that depends on `Authorization`, `Cookie`, per-user headers, or session state. Mreact skips shared route cache for requests with `Authorization` or `Cookie`, and it avoids storing responses that set `Set-Cookie`, but your CDN and proxy rules must also avoid caching personalized responses.
+Do not cache route HTML that depends on `Authorization`, `Cookie`, per-user headers, or session state. Mreact skips shared route cache for requests with credentials, avoids storing responses that set `Set-Cookie`, and treats unknown request headers as private unless they are part of its public route-cache header allowlist. Your CDN and proxy rules must apply the same rule: cache only pages whose request headers cannot change the rendered user or authorization state.
 
 ## Hashed client assets
 

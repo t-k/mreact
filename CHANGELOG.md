@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.180 - 2026-06-22
+
+### Changed
+
+- Hardened App Router route HTML caching so requests with unknown non-public headers are treated as private and do not read from or write to the shared route cache.
+- Hardened React-compatible server cache scopes so Node runtimes use AsyncLocalStorage for concurrent SSR and Flight renders, while runtimes without AsyncLocalStorage fail closed instead of sharing async cache scope state.
+
+### Fixed
+
+- Fixed Cloudflare query-client fallback isolation so Workers without AsyncLocalStorage serialize fallback query-client scopes after the fallback storage is installed.
+- Fixed compiler and server-rendered URL attribute safety for imperative DOM lowering, SSR output, server-stream output, spread attributes, `srcset`/`imageSrcSet`, and `<object data>`/`codebase`, including non-string URL-like values.
+- Fixed App Router form server actions so body size limits are enforced while streaming form and multipart bodies without relying on `Content-Length`.
+- Fixed default server action request context so `clientIp` is not derived from attacker-controlled forwarded headers without a trusted proxy boundary.
+- Fixed cookie serialization to enforce `__Secure-` and `__Host-` prefix invariants.
+- Fixed form validation error merging so Standard Schema issue paths using dangerous object keys are routed to root errors instead of throwing.
+
 ## 0.0.179 - 2026-06-21
 
 ### Fixed
