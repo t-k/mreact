@@ -11,6 +11,8 @@ const URL_ATTRIBUTE_NAMES = new Set([
   "poster",
   "background",
   "manifest",
+  "data",
+  "codebase",
 ]);
 
 const SRCSET_ATTRIBUTE_NAMES = new Set(["srcset", "imagesrcset"]);

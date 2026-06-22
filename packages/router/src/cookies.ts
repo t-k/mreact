@@ -73,6 +73,20 @@ export function serializeCookie(
   if (options.sameSite === "None" && options.secure !== true) {
     throw new TypeError("SameSite=None requires Secure");
   }
+  if (name.startsWith("__Secure-") && options.secure !== true) {
+    throw new TypeError("__Secure- cookies require Secure");
+  }
+  if (name.startsWith("__Host-")) {
+    if (options.secure !== true) {
+      throw new TypeError("__Host- cookies require Secure");
+    }
+    if (options.path !== "/") {
+      throw new TypeError("__Host- cookies require Path=/");
+    }
+    if (options.domain !== undefined) {
+      throw new TypeError("__Host- cookies must not set Domain");
+    }
+  }
 
   const parts = [`${name}=${encodeURIComponent(value)}`];
 

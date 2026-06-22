@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cache, createElement } from "@reckona/mreact-compat";
+import { cache, cacheSignal, createElement } from "@reckona/mreact-compat";
 import {
   createFlightClientManifest,
   createClientReference,
@@ -117,6 +117,44 @@ describe("server Flight runtime", () => {
       },
     });
     expect(calls).toBe(1);
+  });
+
+  test("keeps concurrent Flight cache scopes isolated across async components", async () => {
+    const releaseA = createDeferred<void>();
+    const bStarted = createDeferred<void>();
+    const releaseB = createDeferred<void>();
+
+    async function App(props: { name: string }) {
+      if (props.name === "A") {
+        await releaseA.promise;
+      } else {
+        bStarted.resolve();
+        await releaseB.promise;
+      }
+      return createElement("p", null, cacheSignal()?.aborted === false ? props.name : "missing");
+    }
+
+    const a = renderToFlightResponse(App, { name: "A" });
+    const b = renderToFlightResponse(App, { name: "B" });
+    await bStarted.promise;
+
+    releaseA.resolve();
+    await expect(a).resolves.toMatchObject({
+      root: {
+        props: {
+          children: "A",
+        },
+      },
+    });
+
+    releaseB.resolve();
+    await expect(b).resolves.toMatchObject({
+      root: {
+        props: {
+          children: "B",
+        },
+      },
+    });
   });
 
   test("rejects deeply nested Flight encode values with a bounded error", async () => {
@@ -866,3 +904,14 @@ describe("server Flight runtime", () => {
     ]);
   });
 });
+
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, reject, resolve };
+}

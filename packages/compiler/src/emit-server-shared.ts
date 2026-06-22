@@ -16,6 +16,10 @@ const URL_ATTRIBUTE_NAMES = new Set([
   "poster",
   "background",
   "manifest",
+  "data",
+  "codebase",
+  "srcset",
+  "imagesrcset",
 ]);
 
 const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
@@ -63,6 +67,7 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   readOnly: "readonly",
   rowSpan: "rowspan",
   spellCheck: "spellcheck",
+  imageSrcSet: "imagesrcset",
   srcDoc: "srcdoc",
   srcSet: "srcset",
   tabIndex: "tabindex",
@@ -82,13 +87,18 @@ export function isVoidHtmlElement(tagName: string): boolean {
 }
 
 export function isStaticUrlValueUnsafe(name: string, value: string): boolean {
-  let start = 0;
-
-  while (start < value.length && value.charCodeAt(start) <= 0x20) {
-    start += 1;
+  if (name === "srcset" || name === "imagesrcset") {
+    const canonicalSet = canonicalizeUrlForSchemeCheck(value);
+    for (const candidate of canonicalSet.split(",")) {
+      const url = candidate.trim().split(/\s+/)[0] ?? "";
+      if (url !== "" && isStaticUrlValueUnsafe("src", url)) {
+        return true;
+      }
+    }
+    return false;
   }
 
-  const canonical = value.slice(start).replace(/[\t\r\n]/g, "");
+  const canonical = canonicalizeUrlForSchemeCheck(value);
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(canonical);
   if (match === null || match[1] === undefined) return false;
   const scheme = match[1].toLowerCase();
@@ -98,6 +108,16 @@ export function isStaticUrlValueUnsafe(name: string, value: string): boolean {
     return true;
   }
   return false;
+}
+
+function canonicalizeUrlForSchemeCheck(value: string): string {
+  let start = 0;
+
+  while (start < value.length && value.charCodeAt(start) <= 0x20) {
+    start += 1;
+  }
+
+  return value.slice(start).replace(/[\t\r\n]/g, "");
 }
 
 export function parseStyleLiteralValue(code: string): string | number | null | undefined {

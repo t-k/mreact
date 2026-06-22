@@ -46,6 +46,7 @@ import {
   unstable_useCacheRefresh,
 } from "../src/index.js";
 import {
+  __setCacheScopeStorageForTesting,
   createCacheScope,
   refreshCacheScope,
   runWithCacheScope,
@@ -2883,6 +2884,58 @@ describe("react-compat common API subset", () => {
     expect(scopedSignal?.aborted).toBe(true);
   });
 
+  test("runWithCacheScope keeps concurrent async scopes isolated", async () => {
+    const scopeA = createCacheScope();
+    const scopeB = createCacheScope();
+    const aStarted = createDeferred<void>();
+    const releaseA = createDeferred<void>();
+    const bStarted = createDeferred<void>();
+    const releaseB = createDeferred<void>();
+
+    const a = runWithCacheScope(scopeA, async () => {
+      aStarted.resolve();
+      await releaseA.promise;
+      return cacheSignal();
+    });
+    await aStarted.promise;
+
+    const b = runWithCacheScope(scopeB, async () => {
+      bStarted.resolve();
+      await releaseB.promise;
+      return cacheSignal();
+    });
+    await bStarted.promise;
+
+    releaseA.resolve();
+    await expect(a).resolves.toBe(scopeA.controller.signal);
+
+    releaseB.resolve();
+    await expect(b).resolves.toBe(scopeB.controller.signal);
+  });
+
+  test("runWithCacheScope fails closed for concurrent async scopes without AsyncLocalStorage", async () => {
+    const scopeA = createCacheScope();
+    const scopeB = createCacheScope();
+    const releaseA = createDeferred<void>();
+
+    __setCacheScopeStorageForTesting(undefined);
+    try {
+      const a = runWithCacheScope(scopeA, async () => {
+        await releaseA.promise;
+        return cacheSignal();
+      });
+
+      expect(() => runWithCacheScope(scopeB, () => cacheSignal())).toThrow(
+        /requires AsyncLocalStorage/,
+      );
+
+      releaseA.resolve();
+      await expect(a).resolves.toBe(scopeA.controller.signal);
+    } finally {
+      __setCacheScopeStorageForTesting(createNodeAsyncLocalStorage());
+    }
+  });
+
   test("useActionState applies multiple dispatches to the latest queued state", () => {
     const container = document.createElement("div");
 
@@ -3147,3 +3200,21 @@ describe("react-compat common API subset", () => {
     ]);
   });
 });
+
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, reject, resolve };
+}
+
+function createNodeAsyncLocalStorage() {
+  const { AsyncLocalStorage } = process.getBuiltinModule(
+    "node:async_hooks",
+  ) as typeof import("node:async_hooks");
+  return new AsyncLocalStorage();
+}

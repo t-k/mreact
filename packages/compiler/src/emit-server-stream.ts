@@ -102,7 +102,15 @@ export function emitServerStream(
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
-    `  if (typeof value !== "string") return value;`,
+    `  value = String(value);`,
+    `  if (name === "srcset" || name === "imagesrcset") {`,
+    `    const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, "").replace(/[\\t\\r\\n]/g, "");`,
+    `    for (const _candidate of _canonicalSet.split(",")) {`,
+    `      const _url = (_candidate.trim().split(/\\s+/)[0] || "");`,
+    `      if (_url !== "" && ${urlSafeHelperName}("src", _url) === undefined) return undefined;`,
+    `    }`,
+    `    return value;`,
+    `  }`,
     `  const _canonical = value`,
     `    .replace(/^[\\x00-\\x20]+/u, "")`,
     `    .replace(/[\\t\\r\\n]/g, "");`,
@@ -341,6 +349,7 @@ function emitSpreadAttributesHelper(
     readOnly: "readonly",
     rowSpan: "rowspan",
     spellCheck: "spellcheck",
+    imageSrcSet: "imagesrcset",
     srcDoc: "srcdoc",
     srcSet: "srcset",
     tabIndex: "tabindex",
@@ -356,6 +365,10 @@ function emitSpreadAttributesHelper(
     "poster",
     "background",
     "manifest",
+    "data",
+    "codebase",
+    "srcset",
+    "imagesrcset",
   ]);
   const dangerousAttributes = JSON.stringify(["srcdoc"]);
 

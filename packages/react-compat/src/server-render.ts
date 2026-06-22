@@ -490,6 +490,7 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   playsInline: "playsinline",
   rowSpan: "rowspan",
   spellCheck: "spellcheck",
+  imageSrcSet: "imagesrcset",
   srcDoc: "srcdoc",
   srcSet: "srcset",
   tabIndex: "tabindex",

@@ -289,7 +289,6 @@ export default function Page() {
       value: {
         cookie: "abc",
         header: "req-123",
-        ip: "203.0.113.10",
         title: "Context",
         url: "http://local.test/_mreact/actions",
       },
@@ -625,6 +624,37 @@ export default function Page() {
           "content-length": "17",
           "content-type": "application/x-www-form-urlencoded",
           cookie: "mreact.csrf=csrf-large",
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Server action request body is too large.",
+    });
+    expect((globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls).toBeUndefined();
+  });
+
+  test("rejects form server action bodies over the configured limit without Content-Length", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-form-stream-limit-"));
+    await writeActionFixture(appDir);
+    delete (globalThis as { __mreactActionCalls?: unknown[] }).__mreactActionCalls;
+    const response = await renderAppRequest({
+      appDir,
+      serverActions: { maxBodyBytes: 16 },
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: "nonce-stream-limit",
+          __mreact_csrf: "csrf-stream-limit",
+          __mreact_export_name: "save",
+          __mreact_module_id: "actions.ts",
+          title: "This form body is intentionally larger than sixteen bytes.",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie: "mreact.csrf=csrf-stream-limit",
         },
         method: "POST",
       }),

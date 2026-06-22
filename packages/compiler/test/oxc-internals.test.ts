@@ -1329,6 +1329,122 @@ export default function Page() {
     );
   });
 
+  test("lowers DOM URL and srcdoc attributes through safety guards", () => {
+    const code =
+      '<a href={url} formAction="javascript:alert(1)"><img srcSet="javascript:alert(1) 1x" imageSrcSet="javascript:alert(2) 1x" /><iframe srcDoc={html} /></a>';
+    const urlStart = code.indexOf("url");
+    const htmlStart = code.indexOf("html");
+    const lowered = lowerOxcDomNodeExpression(code, {
+      type: "JSXElement",
+      openingElement: {
+        name: { type: "JSXIdentifier", name: "a" },
+        attributes: [
+          {
+            type: "JSXAttribute",
+            name: { name: "href" },
+            value: {
+              type: "JSXExpressionContainer",
+              expression: { start: urlStart, end: urlStart + "url".length },
+            },
+          },
+          {
+            type: "JSXAttribute",
+            name: { name: "formAction" },
+            value: { type: "Literal", value: "javascript:alert(1)" },
+          },
+        ],
+      },
+      children: [
+        {
+          type: "JSXElement",
+          openingElement: {
+            name: { type: "JSXIdentifier", name: "img" },
+            attributes: [
+              {
+                type: "JSXAttribute",
+                name: { name: "srcSet" },
+                value: { type: "Literal", value: "javascript:alert(1) 1x" },
+              },
+              {
+                type: "JSXAttribute",
+                name: { name: "imageSrcSet" },
+                value: { type: "Literal", value: "javascript:alert(2) 1x" },
+              },
+            ],
+          },
+          children: [],
+        },
+        {
+          type: "JSXElement",
+          openingElement: {
+            name: { type: "JSXIdentifier", name: "iframe" },
+            attributes: [
+              {
+                type: "JSXAttribute",
+                name: { name: "srcDoc" },
+                value: {
+                  type: "JSXExpressionContainer",
+                  expression: { start: htmlStart, end: htmlStart + "html".length },
+                },
+              },
+            ],
+          },
+          children: [],
+        },
+      ],
+    });
+
+    expect(lowered).toContain("__mreactSafeDomUrlAttribute");
+    expect(lowered).not.toContain('setAttribute("formaction", "javascript:alert(1)")');
+    expect(lowered).not.toContain('setAttribute("srcset", "javascript:alert(1) 1x")');
+    expect(lowered).not.toContain('setAttribute("imagesrcset", "javascript:alert(2) 1x")');
+
+    const documentStub = {
+      createElement(tagName: string) {
+        const attributes = new Map<string, string>();
+        return {
+          attributes,
+          children: [] as unknown[],
+          append(child: unknown) {
+            this.children.push(child);
+          },
+          setAttribute(name: string, value: string) {
+            attributes.set(name, value);
+          },
+          tagName,
+        };
+      },
+    };
+    const node = Function(
+      "document",
+      "url",
+      "html",
+      `return ${lowered};`,
+    )(documentStub, "javascript:alert(1)", "<img src=x onerror=alert(1)>") as {
+      attributes: Map<string, string>;
+      children: Array<{ attributes: Map<string, string> }>;
+    };
+
+    expect(node.attributes.has("href")).toBe(false);
+    expect(node.attributes.has("formaction")).toBe(false);
+    expect(node.children[0]?.attributes.has("srcset")).toBe(false);
+    expect(node.children[0]?.attributes.has("imagesrcset")).toBe(false);
+    expect(node.children[1]?.attributes.has("srcdoc")).toBe(false);
+
+    const safeNode = Function(
+      "document",
+      "url",
+      "html",
+      `return ${lowered};`,
+    )(documentStub, "https://example.test/", { __html: "<p>trusted</p>" }) as {
+      attributes: Map<string, string>;
+      children: Array<{ attributes: Map<string, string> }>;
+    };
+
+    expect(safeNode.attributes.get("href")).toBe("https://example.test/");
+    expect(safeNode.children[1]?.attributes.get("srcdoc")).toBe("<p>trusted</p>");
+  });
+
   test("lowers DOM logical-or expressions without duplicating the left operand", () => {
     const code = 'sideEffect() || <span>Fallback</span>';
     const lowered = lowerOxcDomNodeExpression(code, {

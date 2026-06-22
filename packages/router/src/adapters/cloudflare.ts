@@ -574,11 +574,17 @@ async function runWithCloudflareQueryClient<T>(
   queryClient: QueryClient,
   fn: () => T,
 ): Promise<Awaited<T>> {
+  if (cloudflareQueryClientFallbackInstalled) {
+    installQueryAsyncStorage(cloudflareQueryClientStorage);
+    return await runWithSerializedCloudflareQueryClient(queryClient, fn);
+  }
+
   try {
     return await runWithQueryClient(queryClient, fn);
   } catch (error) {
     if (isQueryClientScopeUnavailableError(error)) {
       installQueryAsyncStorage(cloudflareQueryClientStorage);
+      cloudflareQueryClientFallbackInstalled = true;
       return await runWithSerializedCloudflareQueryClient(queryClient, fn);
     }
 
@@ -588,6 +594,7 @@ async function runWithCloudflareQueryClient<T>(
 
 const cloudflareQueryClientStorage = createCloudflareQueryClientStorage();
 let cloudflareQueryClientFallbackQueue: Promise<void> = Promise.resolve();
+let cloudflareQueryClientFallbackInstalled = false;
 
 async function runWithSerializedCloudflareQueryClient<T>(
   queryClient: QueryClient,

@@ -195,6 +195,19 @@ describe("bindProp", () => {
     expect(iframe.getAttribute("srcdoc")).toBe("<p>safe</p>");
   });
 
+  test("treats imageSrcSet as a srcset-style URL attribute alias", async () => {
+    const value = cell("javascript:alert(1) 1x");
+    const image = document.createElement("img");
+
+    bindProp(image, "imageSrcSet", () => value.get());
+    await flushEffects();
+    expect(image.hasAttribute("imagesrcset")).toBe(false);
+
+    value.set("https://example.test/a.png 1x, /b.png 2x");
+    await flushEffects();
+    expect(image.getAttribute("imagesrcset")).toBe("https://example.test/a.png 1x, /b.png 2x");
+  });
+
   test("sets dynamic SVG geometry attributes through attributes instead of readonly properties", async () => {
     const viewBox = cell("0 0 24 24");
     const className = cell("icon");

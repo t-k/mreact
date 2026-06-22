@@ -39,6 +39,25 @@ describe("router cookie helpers", () => {
     );
   });
 
+  test("__Secure- and __Host- cookie prefixes enforce browser invariants", () => {
+    expect(() => serializeCookie("__Secure-session", "x")).toThrow(
+      /__Secure- cookies require Secure/i,
+    );
+    expect(() => serializeCookie("__Host-session", "x", { secure: true })).toThrow(
+      /__Host- cookies require Path=\/+/i,
+    );
+    expect(() =>
+      serializeCookie("__Host-session", "x", {
+        domain: "example.test",
+        path: "/",
+        secure: true,
+      })
+    ).toThrow(/__Host- cookies must not set Domain/i);
+    expect(serializeCookie("__Host-session", "x", { path: "/", secure: true })).toBe(
+      "__Host-session=x; Path=/; Secure",
+    );
+  });
+
   test("setCookie appends without replacing existing Set-Cookie headers", () => {
     const response = new Response("ok");
     setCookie(response, "a", "1", { path: "/" });

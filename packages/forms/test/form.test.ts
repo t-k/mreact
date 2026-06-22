@@ -369,6 +369,30 @@ describe("createForm", () => {
     });
   });
 
+  it("maps dangerous Standard Schema issue path keys to root errors", async () => {
+    const form = createForm({
+      initialValues: { email: "" },
+      schema: standardSchema<{ email: string }>(() => ({
+        issues: [
+          { message: "Prototype key is invalid", path: ["__proto__"] },
+          { message: "Constructor key is invalid", path: [{ key: "constructor" }] },
+        ],
+      })),
+    });
+
+    const result = await form.validate();
+
+    expect(result).toEqual({
+      errors: {
+        root: ["Prototype key is invalid", "Constructor key is invalid"],
+      },
+      success: false,
+    });
+    expect(form.state.get().errors).toEqual({
+      root: ["Prototype key is invalid", "Constructor key is invalid"],
+    });
+  });
+
   it("aggregates many Standard Schema issues for one field without quadratic copying", async () => {
     const issues = Array.from({ length: 20_000 }, (_unused, index) => ({
       message: `Issue ${index}`,

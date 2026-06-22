@@ -228,6 +228,7 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   readOnly: "readonly",
   rowSpan: "rowspan",
   spellCheck: "spellcheck",
+  imageSrcSet: "imagesrcset",
   srcDoc: "srcdoc",
   srcSet: "srcset",
   tabIndex: "tabindex",

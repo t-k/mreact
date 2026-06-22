@@ -348,8 +348,69 @@ function requestCarriesCredentials(request: Request | undefined): boolean {
     return false;
   }
 
-  return request.headers.has("authorization") || request.headers.has("cookie");
+  if (request.headers.has("authorization") || request.headers.has("cookie")) {
+    return true;
+  }
+
+  for (const name of request.headers.keys()) {
+    const lower = name.toLowerCase();
+    if (PUBLIC_ROUTE_CACHE_REQUEST_HEADERS.has(lower)) {
+      continue;
+    }
+
+    if (
+      lower === "x-api-key" ||
+      lower === "cf-access-jwt-assertion" ||
+      lower === "proxy-authorization" ||
+      lower === "x-auth-token" ||
+      lower === "x-authenticated-user" ||
+      lower === "x-forwarded-user" ||
+      lower === "x-session-id" ||
+      lower === "x-user-email" ||
+      lower === "x-user-id" ||
+      lower.endsWith("-api-key") ||
+      lower.endsWith("-auth-token") ||
+      lower.endsWith("-session-id") ||
+      lower.endsWith("-user") ||
+      lower.endsWith("-user-email") ||
+      lower.endsWith("-user-id") ||
+      lower.includes("-jwt-") ||
+      lower.endsWith("-jwt")
+    ) {
+      return true;
+    }
+
+    return true;
+  }
+
+  return false;
 }
+
+const PUBLIC_ROUTE_CACHE_REQUEST_HEADERS = new Set([
+  "accept",
+  "accept-encoding",
+  "accept-language",
+  "cache-control",
+  "connection",
+  "dnt",
+  "host",
+  "pragma",
+  "purpose",
+  "referer",
+  "sec-ch-prefers-color-scheme",
+  "sec-ch-prefers-reduced-motion",
+  "sec-ch-ua",
+  "sec-ch-ua-mobile",
+  "sec-ch-ua-platform",
+  "sec-fetch-dest",
+  "sec-fetch-mode",
+  "sec-fetch-site",
+  "sec-fetch-user",
+  "upgrade-insecure-requests",
+  "user-agent",
+  "x-mreact-navigation",
+  "x-mreact-navigation-cache",
+]);
 
 /**
  * Invalidates cached route responses for a normalized app-router path.

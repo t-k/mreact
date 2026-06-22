@@ -28,6 +28,8 @@ const urlAttributes = [
   "poster",
   "background",
   "manifest",
+  "data",
+  "codebase",
 ] as const;
 
 describe("URL safety helpers", () => {

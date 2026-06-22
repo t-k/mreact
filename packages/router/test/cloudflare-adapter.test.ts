@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, test } from "vitest";
-import { __resetQueryClientForTesting, getQueryClient } from "@reckona/mreact-query";
+import {
+  __resetQueryClientForTesting,
+  getQueryClient,
+} from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
 import {
   createCloudflareBuiltRequestHandler,
@@ -876,6 +879,95 @@ export async function POST(request: Request) {
 
       expect(response.status).toBe(500);
       expect(calls).toBe(1);
+    } finally {
+      if (previous === undefined) {
+        delete globalWithStorage.AsyncLocalStorage;
+      } else {
+        globalWithStorage.AsyncLocalStorage = previous;
+      }
+      __resetQueryClientForTesting();
+    }
+  });
+
+  test("serializes Cloudflare query-client fallback calls after storage is installed", async () => {
+    __resetQueryClientForTesting();
+    const globalWithStorage = globalThis as {
+      AsyncLocalStorage?: typeof AsyncLocalStorage;
+    };
+    const previous = globalWithStorage.AsyncLocalStorage;
+    delete globalWithStorage.AsyncLocalStorage;
+    const firstStarted = createDeferred<void>();
+    const releaseFirst = createDeferred<void>();
+    let secondStarted = false;
+
+    try {
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {},
+        clientManifest: { routes: [] },
+        renderRoute: createCloudflareRouteModuleRenderer({
+          modules: {
+            "first.tsx": {
+              async loader() {
+                firstStarted.resolve();
+                await releaseFirst.promise;
+                expect(getQueryClient()).toBeDefined();
+                return undefined;
+              },
+              default() {
+                return "<main>First</main>";
+              },
+            },
+            "second.tsx": {
+              loader() {
+                secondStarted = true;
+                expect(getQueryClient()).toBeDefined();
+                return undefined;
+              },
+              default() {
+                return "<main>Second</main>";
+              },
+            },
+          },
+        }),
+        serverManifest: {
+          files: {},
+          routes: [
+            {
+              file: "first.tsx",
+              kind: "page",
+              path: "/first",
+              segments: [{ kind: "static", value: "first" }],
+            },
+            {
+              file: "second.tsx",
+              kind: "page",
+              path: "/second",
+              segments: [{ kind: "static", value: "second" }],
+            },
+          ],
+          version: 1,
+        },
+      });
+
+      const first = handler.fetch(
+        new Request("https://app.example/first"),
+        {},
+        createExecutionContext(),
+      );
+      await firstStarted.promise;
+      const second = handler.fetch(
+        new Request("https://app.example/second"),
+        {},
+        createExecutionContext(),
+      );
+
+      await Promise.resolve();
+      expect(secondStarted).toBe(false);
+
+      releaseFirst.resolve();
+      await expect(first).resolves.toMatchObject({ status: 200 });
+      await expect(second).resolves.toMatchObject({ status: 200 });
+      expect(secondStarted).toBe(true);
     } finally {
       if (previous === undefined) {
         delete globalWithStorage.AsyncLocalStorage;
@@ -3141,4 +3233,15 @@ function createMemoryCloudflareCache() {
 
 function cacheKey(input: Request | string): string {
   return typeof input === "string" ? input : input.url;
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T | PromiseLike<T>) => void = () => {};
+  let reject: (reason?: unknown) => void = () => {};
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+
+  return { promise, reject, resolve };
 }

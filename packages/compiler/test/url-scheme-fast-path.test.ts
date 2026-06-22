@@ -37,6 +37,17 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(out).not.toContain("alert(1)");
   });
 
+  test("dynamic URL object href drops javascript: scheme", async () => {
+    const code = compileServer(
+      `export default function Page({ url }) { return <a href={url}>x</a>; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { url: URL }) => string;
+    const out = Page({ url: new URL("javascript:alert(1)") });
+    expect(out).not.toContain("javascript:");
+    expect(out).not.toContain("alert(1)");
+  });
+
   test("spread href drops javascript: scheme", async () => {
     const code = compileServer(
       `export default function Page({ url }) { return <a {...{ href: url, title: "safe" }}>x</a>; }`,
@@ -47,6 +58,17 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(out).not.toContain("javascript:");
     expect(out).not.toContain("alert(1)");
     expect(out).toContain('title="safe"');
+  });
+
+  test("spread URL object href drops javascript: scheme", async () => {
+    const code = compileServer(
+      `export default function Page({ url }) { return <a {...{ href: url }}>x</a>; }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { url: URL }) => string;
+    const out = Page({ url: new URL("javascript:alert(1)") });
+    expect(out).not.toContain("javascript:");
+    expect(out).not.toContain("alert(1)");
   });
 
   test("spread srcdoc only emits explicit __html values", async () => {
@@ -111,6 +133,56 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(out).not.toContain("javascript:");
   });
 
+  test("dynamic srcset and object URL attributes drop unsafe schemes", async () => {
+    const code = compileServer(
+      `export default function Page({ url, srcset }) {
+        return <main><img srcSet={srcset} imageSrcSet={srcset} /><object data={url} codebase={url}></object></main>;
+      }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { srcset: string; url: string }) => string;
+    const out = Page({
+      srcset: "/safe.png 1x, javascript:alert(1) 2x",
+      url: "javascript:alert(2)",
+    });
+
+    expect(out).not.toMatch(/javascript:|alert\(/i);
+    expect(Page({ srcset: "/safe.png 1x, https://example.test/a.png 2x", url: "/plugin.swf" }))
+      .toContain('data="/plugin.swf"');
+  });
+
+  test("dynamic URL object srcset and object URL attributes drop unsafe schemes", async () => {
+    const code = compileServer(
+      `export default function Page({ url, srcset }) {
+        return <main><img srcSet={srcset} /><object data={url}></object></main>;
+      }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { srcset: URL; url: URL }) => string;
+    const out = Page({
+      srcset: new URL("javascript:alert(1)"),
+      url: new URL("javascript:alert(2)"),
+    });
+
+    expect(out).not.toMatch(/javascript:|alert\(/i);
+  });
+
+  test("spread srcset and object URL attributes drop unsafe schemes", async () => {
+    const code = compileServer(
+      `export default function Page({ url, srcset }) {
+        return <main><img {...{ srcSet: srcset, imageSrcSet: srcset }} /><object {...{ data: url, codebase: url }}></object></main>;
+      }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as (props: { srcset: string; url: string }) => string;
+    const out = Page({
+      srcset: "/safe.png 1x, javascript:alert(1) 2x",
+      url: "data:text/html,<script>alert(2)</script>",
+    });
+
+    expect(out).not.toMatch(/javascript:|data:text\/html|alert\(/i);
+  });
+
   test("dynamic vbscript: scheme is dropped", async () => {
     const code = compileServer(
       `export default function Page({ url }) { return <a href={url}>x</a>; }`,
@@ -140,6 +212,19 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     const out = Page();
     expect(out).not.toContain("javascript:");
     expect(out).not.toContain("alert(1)");
+  });
+
+  test("static srcset and object URL attributes drop unsafe schemes at compile time", async () => {
+    const code = compileServer(
+      `export default function Page() {
+        return <main><img srcSet="/safe.png 1x, javascript:alert(1) 2x" imageSrcSet="javascript:alert(2) 1x" /><object data="javascript:alert(3)" codebase="data:text/html,<script>alert(4)</script>"></object></main>;
+      }`,
+    );
+    const mod = await evaluateCompiled(code);
+    const Page = mod.default as () => string;
+    const out = Page();
+
+    expect(out).not.toMatch(/srcset|imagesrcset|data=|codebase=|javascript:|data:text\/html|alert\(/i);
   });
 
   test("non-URL attributes are unaffected", async () => {
@@ -189,5 +274,18 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
 
     expect(code).toContain("_urlAttrSafe");
     expect(code).not.toContain('href={url}');
+  });
+
+  test("server stream emit guards srcset and object URL attributes", async () => {
+    const code = compileServerStream(
+      `export function App(sink, url, srcset) {
+        return <main><img srcSet={srcset} imageSrcSet="javascript:alert(1) 1x" /><object data={url} codebase="data:text/html,<script>alert(2)</script>"></object></main>;
+      }`,
+    );
+
+    expect(code).toContain("_urlAttrSafe");
+    expect(code).toContain('srcset');
+    expect(code).not.toContain('javascript:alert(1)');
+    expect(code).not.toContain('data:text/html');
   });
 });

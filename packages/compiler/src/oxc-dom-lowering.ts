@@ -67,7 +67,7 @@ export function lowerOxcDomNodeExpression(
 }
 
 function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): string[] {
-  return attributes.flatMap((attribute): string[] => {
+  const lines = attributes.flatMap((attribute): string[] => {
     const object = readObject(attribute);
 
     if (object.type !== "JSXAttribute") {
@@ -93,21 +93,118 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
     }
 
     if (Object.keys(value).length === 0) {
+      if (isDangerousHtmlAttribute(domName)) {
+        return [];
+      }
       return [`  _node.setAttribute(${JSON.stringify(domName)}, "");`];
     }
 
     if (value.type === "Literal") {
+      const literal = typeof value.value === "string" ? value.value : String(value.value);
+      if (
+        (isUrlAttribute(domName) || isSrcsetAttribute(domName)) &&
+        isUnsafeStaticUrlAttribute(domName, literal)
+      ) {
+        return [];
+      }
+      if (isDangerousHtmlAttribute(domName)) {
+        return [];
+      }
       return [`  _node.setAttribute(${JSON.stringify(domName)}, ${JSON.stringify(value.value)});`];
     }
 
     if (value.type === "JSXExpressionContainer") {
+      const expression = readSource(code, readObject(value.expression));
+      if (isUrlAttribute(domName) || isSrcsetAttribute(domName)) {
+        return [
+          `  { const _value = __mreactSafeDomUrlAttribute(${JSON.stringify(domName)}, String(${expression})); if (_value !== undefined) _node.setAttribute(${JSON.stringify(domName)}, _value); }`,
+        ];
+      }
+      if (isDangerousHtmlAttribute(domName)) {
+        return [
+          `  { const _value = (${expression}); if (_value && typeof _value === "object" && typeof _value.__html === "string") _node.setAttribute(${JSON.stringify(domName)}, _value.__html); }`,
+        ];
+      }
       return [
-        `  _node.setAttribute(${JSON.stringify(domName)}, String(${readSource(code, readObject(value.expression))}));`,
+        `  _node.setAttribute(${JSON.stringify(domName)}, String(${expression}));`,
       ];
     }
 
     return [];
   });
+
+  return lines.some((line) => line.includes("__mreactSafeDomUrlAttribute"))
+    ? [...safeDomAttributeHelperLines(), ...lines]
+    : lines;
+}
+
+function safeDomAttributeHelperLines(): string[] {
+  return [
+    "  const __mreactSafeDomUrlAttribute = (name, value) => {",
+    '    if (name === "srcset" || name === "imagesrcset") {',
+    "      const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, \"\").replace(/[\\t\\r\\n]/g, \"\");",
+    "      for (const _candidate of _canonicalSet.split(\",\")) {",
+    "        const _url = (_candidate.trim().split(/\\s+/)[0] || \"\");",
+    '        if (_url !== "" && __mreactSafeDomUrlAttribute("src", _url) === undefined) return undefined;',
+    "      }",
+    "      return value;",
+    "    }",
+    '    const _canonical = value.replace(/^[\\x00-\\x20]+/u, "").replace(/[\\t\\r\\n]/g, "");',
+    "    const _match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(_canonical);",
+    "    if (_match === null) return value;",
+    "    const _scheme = _match[1].toLowerCase();",
+    '    if (_scheme !== "javascript" && _scheme !== "vbscript" && _scheme !== "livescript" && _scheme !== "mhtml" && _scheme !== "file" && _scheme !== "data") return value;',
+    '    if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\/(?!svg\\+xml(?:[;,]|$))/i.test(_canonical)) return value;',
+    "    return undefined;",
+    "  };",
+  ];
+}
+
+function isUrlAttribute(name: string): boolean {
+  return urlAttributeNames.has(name);
+}
+
+function isSrcsetAttribute(name: string): boolean {
+  return srcsetAttributeNames.has(name);
+}
+
+function isDangerousHtmlAttribute(name: string): boolean {
+  return dangerousHtmlAttributeNames.has(name);
+}
+
+function isUnsafeStaticUrlAttribute(name: string, value: string): boolean {
+  return safeDomUrlAttributeValue(name, value) === undefined;
+}
+
+function safeDomUrlAttributeValue(name: string, value: string): string | undefined {
+  if (isSrcsetAttribute(name)) {
+    const canonical = canonicalizeUrl(value);
+    for (const candidate of canonical.split(",")) {
+      const url = candidate.trim().split(/\s+/)[0] ?? "";
+      if (url !== "" && safeDomUrlAttributeValue("src", url) === undefined) {
+        return undefined;
+      }
+    }
+    return value;
+  }
+
+  const canonical = canonicalizeUrl(value);
+  const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(canonical);
+  if (match === null || match[1] === undefined) return value;
+  const scheme = match[1].toLowerCase();
+  if (!unsafeUrlSchemes.has(scheme)) return value;
+  if (
+    scheme === "data" &&
+    (name === "src" || name === "poster") &&
+    /^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)
+  ) {
+    return value;
+  }
+  return undefined;
+}
+
+function canonicalizeUrl(value: string): string {
+  return value.replace(/^[\x00-\x20]+/u, "").replace(/[\t\r\n]/g, "");
 }
 
 const htmlAttributeAliases: Record<string, string> = {
@@ -131,11 +228,29 @@ const htmlAttributeAliases: Record<string, string> = {
   readOnly: "readonly",
   rowSpan: "rowspan",
   spellCheck: "spellcheck",
+  imageSrcSet: "imagesrcset",
   srcDoc: "srcdoc",
   srcSet: "srcset",
   tabIndex: "tabindex",
   useMap: "usemap",
 };
+
+const urlAttributeNames = new Set([
+  "href",
+  "src",
+  "action",
+  "formaction",
+  "xlink:href",
+  "ping",
+  "poster",
+  "background",
+  "manifest",
+  "data",
+  "codebase",
+]);
+const srcsetAttributeNames = new Set(["srcset", "imagesrcset"]);
+const dangerousHtmlAttributeNames = new Set(["srcdoc"]);
+const unsafeUrlSchemes = new Set(["javascript", "data", "vbscript", "livescript", "mhtml", "file"]);
 
 function lowerOxcDomChildren(code: string, children: readonly unknown[]): string[] {
   return children.flatMap((child, index): string[] => {

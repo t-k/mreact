@@ -73,7 +73,7 @@ let warnedUnrestrictedServerActions = false;
 /**
  * Request context passed to authorized server actions.
  *
- * It exposes normalized cookies, headers, the original `Request`, and an optional client IP so authorization hooks can make request-aware decisions.
+ * It exposes normalized cookies, headers, and the original `Request`. `clientIp` is reserved for trusted adapter integrations and is omitted by the default header-only dispatcher because forwarded IP headers are attacker-controlled without a trusted proxy boundary.
  */
 export interface ServerActionContext {
   clientIp?: string | undefined;
@@ -455,7 +455,15 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return manifestResponse;
   }
 
-  const formData = await options.request.formData();
+  const boundedRequest = await readServerActionRequestWithLimit(
+    options.request,
+    options.serverActions?.maxBodyBytes ?? DEFAULT_ACTION_BODY_MAX_BYTES,
+  );
+  if (boundedRequest instanceof Response) {
+    return boundedRequest;
+  }
+
+  const formData = await boundedRequest.formData();
   const fieldCountResponse = validateServerActionFormFieldCount(
     formData,
     options.serverActions?.maxFormFields ?? DEFAULT_ACTION_FORM_MAX_FIELDS,
@@ -575,14 +583,8 @@ function createServerActionContext(request: Request): ServerActionContext {
 }
 
 function clientIpFromRequest(request: Request): string | undefined {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-
-  if (forwarded !== undefined && forwarded !== "") {
-    return forwarded;
-  }
-
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return realIp === "" ? undefined : realIp;
+  void request;
+  return undefined;
 }
 
 function validateServerActionBodySize(
@@ -608,6 +610,54 @@ function validateServerActionBodySize(
   }
 
   return undefined;
+}
+
+async function readServerActionRequestWithLimit(
+  request: Request,
+  maxBodyBytes: number,
+): Promise<Request | Response> {
+  if (!Number.isFinite(maxBodyBytes) || maxBodyBytes < 0) {
+    return request;
+  }
+
+  const body = request.body;
+  if (body === null) {
+    return request;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBodyBytes) {
+        await reader.cancel();
+        return jsonResponse({ ok: false, error: "Server action request body is too large." }, 413);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+
+  const buffer = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buffer.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  const headers = new Headers(request.headers);
+  headers.delete("content-length");
+  return new Request(request.url, {
+    body: buffer,
+    headers,
+    method: request.method,
+  });
 }
 
 function validateServerActionFormFieldCount(

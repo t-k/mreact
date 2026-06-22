@@ -1,10 +1,10 @@
+import { createCacheScope, runWithCacheScope } from "@reckona/mreact-compat/internal";
 import { getNativeFlight } from "./native-flight.js";
 
 /** Symbol tag used to identify client references in serialized Flight values. */
 export const CLIENT_REFERENCE_TYPE = Symbol.for("modular.react.client_reference");
 /** Symbol tag used to identify server references in serialized Flight values. */
 export const SERVER_REFERENCE_TYPE = Symbol.for("modular.react.server_reference");
-const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("react.fragment");
@@ -326,12 +326,6 @@ interface FlightSerializationState {
   clientReferenceIndexes: Map<string, number>;
   serverReferences: FlightServerReference[];
   serverReferenceIndexes: Map<string, number>;
-}
-
-interface ServerCacheScope {
-  functionCaches: WeakMap<(...args: never[]) => unknown, unknown>;
-  controller: AbortController;
-  ownerStack: string[];
 }
 
 /** Creates a runtime client reference marker for a module export. */
@@ -1999,49 +1993,9 @@ function getServerActionArgsValidator(
 }
 
 function runWithFlightCacheScope<T>(callback: () => T): T {
-  const previousScope = getGlobalCacheScope();
-  setGlobalCacheScope({
-    functionCaches: new WeakMap(),
-    controller: new AbortController(),
-    ownerStack: ["renderToFlightResponse"],
-  });
-
-  try {
-    const result = callback();
-
-    if (isPromiseLike(result)) {
-      return Promise.resolve(result).finally(() => {
-        setGlobalCacheScope(previousScope);
-      }) as T;
-    }
-
-    setGlobalCacheScope(previousScope);
-    return result;
-  } catch (error) {
-    setGlobalCacheScope(previousScope);
-    throw error;
-  }
-}
-
-function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
-  return (
-    (typeof value === "object" || typeof value === "function") &&
-    value !== null &&
-    typeof (value as { then?: unknown }).then === "function"
-  );
-}
-
-function getGlobalCacheScope(): ServerCacheScope | undefined {
-  return (globalThis as { [CACHE_SCOPE_SYMBOL]?: ServerCacheScope })[CACHE_SCOPE_SYMBOL];
-}
-
-function setGlobalCacheScope(scope: ServerCacheScope | undefined): void {
-  if (scope === undefined) {
-    delete (globalThis as { [CACHE_SCOPE_SYMBOL]?: ServerCacheScope })[CACHE_SCOPE_SYMBOL];
-    return;
-  }
-
-  (globalThis as { [CACHE_SCOPE_SYMBOL]?: ServerCacheScope })[CACHE_SCOPE_SYMBOL] = scope;
+  const scope = createCacheScope();
+  scope.ownerStack.push("renderToFlightResponse");
+  return runWithCacheScope(scope, callback);
 }
 
 function validateRequestOrigin(

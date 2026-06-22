@@ -212,6 +212,8 @@ const hookRenderState =
     queuedEffectFlushRerenders: new Set<RootRuntime>(),
   });
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
+let cacheScopeStorage = createCacheScopeStorage();
+let fallbackAsyncCacheScopeActive = false;
 const emptyCacheOwnerStack: string[] = [];
 let syncVersion = 0;
 let transitionVersion = 0;
@@ -470,6 +472,16 @@ export function refreshCacheScope(scope: CacheScope): void {
 
 /** Runs a callback with a cache scope active for nested cache() calls. */
 export function runWithCacheScope<T>(scope: CacheScope, callback: () => T): T {
+  if (cacheScopeStorage !== undefined) {
+    return cacheScopeStorage.run(scope, callback);
+  }
+
+  if (fallbackAsyncCacheScopeActive) {
+    throw new Error(
+      "mreact cache scope requires AsyncLocalStorage for concurrent async server renders.",
+    );
+  }
+
   const previousScope = hookRenderState.currentCacheScope;
   const previousGlobalScope = getGlobalCacheScope();
   hookRenderState.currentCacheScope = scope;
@@ -479,7 +491,9 @@ export function runWithCacheScope<T>(scope: CacheScope, callback: () => T): T {
     const result = callback();
 
     if (isThenable(result)) {
+      fallbackAsyncCacheScopeActive = true;
       return Promise.resolve(result).finally(() => {
+        fallbackAsyncCacheScopeActive = false;
         hookRenderState.currentCacheScope = previousScope;
         setGlobalCacheScope(previousGlobalScope);
       }) as T;
@@ -2328,7 +2342,7 @@ function createCacheTrieNode(): CacheTrieNode {
 }
 
 function getCurrentCacheScope(): CacheScope | undefined {
-  return hookRenderState.currentCacheScope ?? getGlobalCacheScope();
+  return cacheScopeStorage?.getStore() ?? hookRenderState.currentCacheScope ?? getGlobalCacheScope();
 }
 
 function getGlobalCacheScope(): CacheScope | undefined {
@@ -2342,6 +2356,38 @@ function setGlobalCacheScope(scope: CacheScope | undefined): void {
   }
 
   (globalThis as { [CACHE_SCOPE_SYMBOL]?: CacheScope })[CACHE_SCOPE_SYMBOL] = scope;
+}
+
+interface AsyncLocalStorageLike<T> {
+  getStore(): T | undefined;
+  run<TResult>(store: T, callback: () => TResult): TResult;
+}
+
+type AsyncLocalStorageConstructor = new <T>() => AsyncLocalStorageLike<T>;
+
+function createCacheScopeStorage(): AsyncLocalStorageLike<CacheScope> | undefined {
+  const globalConstructor = (globalThis as {
+    AsyncLocalStorage?: AsyncLocalStorageConstructor | undefined;
+  }).AsyncLocalStorage;
+  if (typeof globalConstructor === "function") {
+    return new globalConstructor<CacheScope>();
+  }
+
+  const builtinConstructor = (globalThis as {
+    process?: {
+      getBuiltinModule?: (name: string) => { AsyncLocalStorage?: AsyncLocalStorageConstructor };
+    };
+  }).process?.getBuiltinModule?.("node:async_hooks")?.AsyncLocalStorage;
+  return typeof builtinConstructor === "function"
+    ? new builtinConstructor<CacheScope>()
+    : undefined;
+}
+
+export function __setCacheScopeStorageForTesting(
+  storage: AsyncLocalStorageLike<CacheScope> | undefined,
+): void {
+  cacheScopeStorage = storage;
+  fallbackAsyncCacheScopeActive = false;
 }
 
 function cleanupStrictEffects(effects: PendingEffect[]): void {
