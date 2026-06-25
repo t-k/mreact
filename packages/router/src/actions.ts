@@ -46,7 +46,8 @@ const formFieldNonce = "__mreact_action_nonce";
 const formFieldActionToken = "__mreact_action_token";
 const csrfTokenPlaceholder = "__mreact_action_csrf_placeholder__";
 const actionNoncePlaceholder = "__mreact_action_nonce_placeholder__";
-const actionTokenSecret = process.env.MREACT_SERVER_ACTION_SECRET ?? defaultActionTokenSecret();
+const MIN_ACTION_TOKEN_SECRET_BYTES = 32;
+const actionTokenSecret = configuredActionTokenSecret(process.env.MREACT_SERVER_ACTION_SECRET);
 // Bounded default replay store for form-action nonces. The previous
 // implementation was an unbounded Set that grew with every successful
 // submission (Issue 069). Production callers should still pass a shared
@@ -90,6 +91,20 @@ function defaultActionTokenSecret(): string {
   }
 
   return randomBytes(32).toString("base64url");
+}
+
+function configuredActionTokenSecret(value: string | undefined): string {
+  if (value === undefined) {
+    return defaultActionTokenSecret();
+  }
+
+  if (Buffer.byteLength(value, "utf8") < MIN_ACTION_TOKEN_SECRET_BYTES) {
+    throw new Error(
+      `MREACT_SERVER_ACTION_SECRET must be at least ${MIN_ACTION_TOKEN_SECRET_BYTES} bytes.`,
+    );
+  }
+
+  return value;
 }
 
 class BoundedReplayStore {

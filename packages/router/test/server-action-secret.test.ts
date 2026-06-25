@@ -35,11 +35,23 @@ describe("server action token secret configuration", () => {
   test("does not warn when production uses MREACT_SERVER_ACTION_SECRET", async () => {
     vi.resetModules();
     process.env.NODE_ENV = "production";
-    process.env.MREACT_SERVER_ACTION_SECRET = "shared-secret";
+    process.env.MREACT_SERVER_ACTION_SECRET = "0123456789abcdef0123456789abcdef";
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await import("../src/actions.js");
 
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  test("rejects an explicitly configured short MREACT_SERVER_ACTION_SECRET", async () => {
+    for (const value of ["", "short"]) {
+      vi.resetModules();
+      process.env.NODE_ENV = "production";
+      process.env.MREACT_SERVER_ACTION_SECRET = value;
+
+      await expect(import("../src/actions.js")).rejects.toThrow(
+        /MREACT_SERVER_ACTION_SECRET must be at least 32 bytes/,
+      );
+    }
   });
 });
