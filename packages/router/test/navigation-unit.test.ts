@@ -82,6 +82,18 @@ describe("router navigation helpers", () => {
     expect(() => redirect("")).toThrow(/unsafe redirect target/);
   });
 
+  test("redirect() and rewrite() reject embedded control characters", () => {
+    for (const value of ["/admin\tpanel", "/admin\npanel", "/admin\rpanel", "/admin\u0000panel"]) {
+      expect(() => redirect(value)).toThrow(/unsafe redirect target/);
+      expect(() => rewrite(value)).toThrow(/unsafe rewrite target/);
+      expect(() => redirect303(value)).toThrow(/unsafe redirect target/);
+    }
+
+    expect(() => redirectExternal("https://example.com/\nnext")).toThrow(
+      /unsafe redirect target/,
+    );
+  });
+
   test("redirectExternal() only allows http(s) targets", () => {
     expect(() => redirectExternal("javascript:alert(1)")).toThrow(/unsafe redirect target/);
     expect(() => redirectExternal("ftp://example.com/")).toThrow(/unsafe redirect target/);

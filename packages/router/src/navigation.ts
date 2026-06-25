@@ -31,11 +31,23 @@ function stripLeadingControlOrWhitespace(value: string): string {
   return value.slice(start);
 }
 
+function containsControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Returns true if `location` is safe to use as a same-origin Location header.
 // Allowed: path-absolute (`/foo`), query-only (`?x=1`), hash-only (`#x`),
 // relative (`foo`). Rejected: protocol-relative (`//evil`), backslash variants
 // (`/\evil`, `\\evil`), and anything with a scheme like `javascript:`.
 function isSafeInternalRedirect(location: string): boolean {
+  if (containsControlCharacter(location)) return false;
   const trimmed = stripLeadingControlOrWhitespace(location);
   if (trimmed === "") return false;
   if (trimmed.startsWith("//")) return false;
@@ -47,6 +59,7 @@ function isSafeInternalRedirect(location: string): boolean {
 }
 
 function isSafeExternalRedirect(location: string): boolean {
+  if (containsControlCharacter(location)) return false;
   const trimmed = stripLeadingControlOrWhitespace(location);
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
   if (match === null || match[1] === undefined) return false;
