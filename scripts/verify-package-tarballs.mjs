@@ -179,6 +179,9 @@ function verifyEntrypoints(packageInfo, tarball) {
       if (!content.startsWith("#!/usr/bin/env node")) {
         fail(manifest.name, `bin ${name} must start with a node shebang`);
       }
+      if (!isPackedExecutable(tarball, packedPath)) {
+        fail(manifest.name, `bin ${name} must be executable in the tarball`);
+      }
     }
   }
 
@@ -196,6 +199,12 @@ function verifyRelativePath(packageInfo, tarball, path, label) {
   if (!tarball.entries.has(packedPath)) {
     fail(packageInfo.packageJson.name, `${label} path ${path} is missing from tarball`);
   }
+}
+
+function isPackedExecutable(tarball, packedPath) {
+  const listing = execFileSync("tar", ["-tvf", tarball.path, packedPath], { encoding: "utf8" });
+  const mode = listing.trim().split(/\s+/, 1)[0] ?? "";
+  return mode.length >= 10 && mode[3] === "x" && mode[6] === "x" && mode[9] === "x";
 }
 
 function exportPaths(exportsField) {
