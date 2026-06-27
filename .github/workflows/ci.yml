@@ -30,35 +30,37 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
+      - parallel:
+          - name: Lint
+            run: pnpm lint
 
-      - name: Build
-        run: pnpm build
+          - name: Build
+            run: pnpm build
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+          - name: Install Playwright Chromium
+            run: pnpm exec playwright install --with-deps chromium
 
-      - name: Test router client build
-        run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+          - name: Format
+            run: pnpm format
 
-      - name: Test
-        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
+      - parallel:
+          - name: Test router client build
+            run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
-      - name: E2E smoke
-        run: pnpm test:e2e:smoke
+          - name: Test
+            run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
 
-      - name: Format
-        run: pnpm format
+          - name: E2E smoke
+            run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts --grep "client navigation preserves layouts"
 
-      - name: API reports
-        run: pnpm api:report:check
+          - name: API reports
+            run: node scripts/generate-api-reports.mjs --check
 
-      - name: API reference
-        run: pnpm docs:api:check
+          - name: API reference
+            run: pnpm exec typedoc --options typedoc.json --emit none
 
-      - name: Test router build
-        run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+          - name: Test router build
+            run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
   native-artifacts:
     name: Native build (${{ matrix.os }})

@@ -49,35 +49,37 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
-        run: pnpm lint
+      - parallel:
+          - name: Lint
+            run: pnpm lint
 
-      - name: Build
-        run: pnpm build
+          - name: Build
+            run: pnpm build
 
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+          - name: Install Playwright Chromium
+            run: pnpm exec playwright install --with-deps chromium
 
-      - name: Test router client build
-        run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+          - name: Format
+            run: pnpm format
 
-      - name: Test
-        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
+      - parallel:
+          - name: Test router client build
+            run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
-      - name: Format
-        run: pnpm format
+          - name: Test
+            run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
 
-      - name: API reports
-        run: pnpm api:report:check
+          - name: API reports
+            run: node scripts/generate-api-reports.mjs --check
 
-      - name: API reference
-        run: pnpm docs:api:check
+          - name: API reference
+            run: pnpm exec typedoc --options typedoc.json --emit none
+
+          - name: Test router build
+            run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
       - name: Standalone tarball smoke
         run: pnpm publish:standalone-smoke
-
-      - name: Test router build
-        run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
   native-artifacts:
     name: Native artifacts (${{ matrix.os }})
@@ -150,23 +152,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download Linux native artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: router-native-linux-x64-gnu
-          path: packages/router-native-linux-x64-gnu
+      - parallel:
+          - name: Download Linux native artifact
+            uses: actions/download-artifact@v8
+            with:
+              name: router-native-linux-x64-gnu
+              path: packages/router-native-linux-x64-gnu
 
-      - name: Download macOS native artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: router-native-darwin-arm64
-          path: packages/router-native-darwin-arm64
+          - name: Download macOS native artifact
+            uses: actions/download-artifact@v8
+            with:
+              name: router-native-darwin-arm64
+              path: packages/router-native-darwin-arm64
 
-      - name: Download Windows native artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: router-native-win32-x64-msvc
-          path: packages/router-native-win32-x64-msvc
+          - name: Download Windows native artifact
+            uses: actions/download-artifact@v8
+            with:
+              name: router-native-win32-x64-msvc
+              path: packages/router-native-win32-x64-msvc
 
       - name: Build packages
         run: pnpm build

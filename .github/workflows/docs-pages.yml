@@ -38,9 +38,10 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
-      - id: pages
-        uses: actions/configure-pages@v6
-      - run: pnpm install --frozen-lockfile
+      - parallel:
+          - id: pages
+            uses: actions/configure-pages@v6
+          - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: pnpm install --frozen-lockfile --prefer-offline
       - run: pnpm --filter @reckona/example-docs-site build
