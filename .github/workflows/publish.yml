@@ -66,9 +66,6 @@ jobs:
           - name: Test router client build
             run: pnpm exec vitest run packages/router/test/client-build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
 
-          - name: Test
-            run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
-
           - name: API reports
             run: node scripts/generate-api-reports.mjs --check
 
@@ -77,6 +74,9 @@ jobs:
 
           - name: Test router build
             run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1
+
+      - name: Test
+        run: pnpm exec vitest run --passWithNoTests --maxWorkers=1 --maxConcurrency=1 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
 
       - name: Standalone tarball smoke
         run: pnpm publish:standalone-smoke

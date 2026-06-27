@@ -13,7 +13,8 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("          - name: Install Playwright Chromium");
     expect(workflow).toContain("          - name: Format\n            run: pnpm format");
     expect(workflow).toContain("- parallel:\n          - name: Test router client build");
-    expect(workflow).toContain("          - name: Test\n            run: pnpm exec vitest run");
+    expect(workflow).not.toContain("          - name: Test\n            run: pnpm exec vitest run");
+    expect(workflow).toContain("\n      - name: Test\n        run: pnpm exec vitest run");
     expect(workflow).toContain("          - name: E2E smoke\n            run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts");
     expect(workflow).toContain("          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check");
     expect(workflow).toContain("          - name: API reference\n            run: pnpm exec typedoc --options typedoc.json --emit none");
@@ -27,6 +28,8 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("          - name: Build\n            run: pnpm build");
     expect(workflow).toContain("          - name: Format\n            run: pnpm format");
     expect(workflow).toContain("- parallel:\n          - name: Test router client build");
+    expect(workflow).not.toContain("          - name: Test\n            run: pnpm exec vitest run");
+    expect(workflow).toContain("\n      - name: Test\n        run: pnpm exec vitest run");
     expect(workflow).toContain("          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check");
     expect(workflow).toContain("          - name: API reference\n            run: pnpm exec typedoc --options typedoc.json --emit none");
     expect(workflow).toContain("- parallel:\n          - name: Download Linux native artifact");
