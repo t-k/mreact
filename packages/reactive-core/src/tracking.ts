@@ -291,7 +291,9 @@ export function flushPendingComputed(): void {
     ) {
       if (iteration >= maxPendingComputedFlushIterations) {
         runtimeState.pendingComputed.clear();
-        throw new Error("Reactive computed flush limit exceeded");
+        throw new Error(
+          `Reactive computed flush limit exceeded after ${maxPendingComputedFlushIterations} iterations; a computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell.`,
+        );
       }
 
       const computations =

@@ -99,7 +99,9 @@ export function flushQueuedComputations(): void {
   try {
     for (let iteration = 0; queue.length > 0; iteration += 1) {
       if (iteration >= maxFlushIterations) {
-        throw new Error("Reactive flush limit exceeded");
+        throw new Error(
+          `Reactive flush limit exceeded after ${maxFlushIterations} iterations; an effect or computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell. Queued computations: ${queue.length}.`,
+        );
       }
 
       const current = takeQueuedComputations();
