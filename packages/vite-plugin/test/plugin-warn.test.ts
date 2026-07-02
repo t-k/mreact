@@ -29,7 +29,9 @@ describe("modularReact warn diagnostic path", () => {
     // At least one warn must have fired; error must NOT have.
     expect(warn).toHaveBeenCalled();
     expect(error).not.toHaveBeenCalled();
-    const msg = warn.mock.calls[0]?.[0] as string;
-    expect(msg).toContain("MR_UNSERIALIZABLE_AWAIT_VALUE");
+    expect(warn.mock.calls[0]?.[0]).toMatchObject({
+      id: "/src/page.tsx",
+      message: expect.stringContaining("MR_UNSERIALIZABLE_AWAIT_VALUE"),
+    });
   });
 });

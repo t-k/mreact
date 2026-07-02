@@ -18,6 +18,17 @@ export type FieldValidator<TValue, TValues extends FormValues> = (
   values: TValues,
 ) => readonly string[] | string | undefined | Promise<readonly string[] | string | undefined>;
 
+/** Configures one field validator and which other fields should re-trigger it. */
+export interface FieldValidationConfig<TValue, TValues extends FormValues> {
+  deps?: readonly FieldName<TValues>[] | undefined;
+  validate: FieldValidator<TValue, TValues>;
+}
+
+/** Provides either a validator function or a validator descriptor with dependencies. */
+export type FieldValidationEntry<TValue, TValues extends FormValues> =
+  | FieldValidator<TValue, TValues>
+  | FieldValidationConfig<TValue, TValues>;
+
 /** Names the form events that can trigger validation. */
 export type FormValidateMode = "change" | "blur" | "submit";
 
@@ -64,25 +75,51 @@ export interface FieldApi<TValues extends FormValues, Name extends FieldName<TVa
   setValue(value: TValues[Name]): Promise<void>;
 }
 
+/** Extracts an array field's item type. */
+export type ArrayFieldValue<
+  TValues extends FormValues,
+  Name extends FieldName<TValues>,
+> = TValues[Name] extends readonly (infer Item)[] ? Item : never;
+
+/** Describes one rendered row in a form array field. */
+export interface FieldArrayRow<TValue> {
+  index: number;
+  key: string;
+  value: TValue;
+}
+
+/** Exposes stable keyed row state and mutation helpers for an array field. */
+export interface FieldArrayApi<TValues extends FormValues, Name extends FieldName<TValues>> {
+  readonly fields: ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>>;
+  append(value: ArrayFieldValue<TValues, Name>): Promise<void>;
+  insert(index: number, value: ArrayFieldValue<TValues, Name>): Promise<void>;
+  move(from: number, to: number): Promise<void>;
+  remove(index: number): Promise<void>;
+  swap(first: number, second: number): Promise<void>;
+}
+
 interface BaseCreateFormOptions<TValues extends FormValues> {
   initialValues: TValues;
   validate?:
     | Partial<{
-        [Name in FieldName<TValues>]: FieldValidator<TValues[Name], TValues>;
+        [Name in FieldName<TValues>]: FieldValidationEntry<TValues[Name], TValues>;
       }>
     | undefined;
   validateOn?: FormValidateMode | readonly FormValidateMode[] | undefined;
 }
 
 /** Configures form creation without schema-level submit value transformation. */
-export interface CreateFormOptionsWithoutSchema<TValues extends FormValues>
-  extends BaseCreateFormOptions<TValues> {
+export interface CreateFormOptionsWithoutSchema<
+  TValues extends FormValues,
+> extends BaseCreateFormOptions<TValues> {
   schema?: undefined;
 }
 
 /** Configures form creation with a Standard Schema validator that may transform submit values. */
-export interface CreateFormOptionsWithSchema<TValues extends FormValues, TSubmitValues>
-  extends BaseCreateFormOptions<TValues> {
+export interface CreateFormOptionsWithSchema<
+  TValues extends FormValues,
+  TSubmitValues,
+> extends BaseCreateFormOptions<TValues> {
   schema: StandardSchemaV1<TValues, TSubmitValues>;
 }
 
@@ -129,6 +166,7 @@ export interface ServerActionErrors<TValues extends FormValues> {
 /** Provides reactive form state, field access, validation, submit, reset, and error controls. */
 export interface FormApi<TValues extends FormValues, TSubmitValues> {
   readonly state: ReadonlyCell<FormState<TValues>>;
+  fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name>;
   field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name>;
   getValues(): TValues;
   reset(values?: TValues): void;
@@ -168,6 +206,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   });
   const validationGenerations = new Map<FieldName<TValues>, number>();
   const dirtyFields = new Set<FieldName<TValues>>();
+  const dependentFields = buildDependentFields(options.validate);
+  const fieldArrayKeys = new Map<FieldName<TValues>, string[]>();
+  let nextFieldArrayKey = 0;
   let activeSubmit: Promise<FormSubmitResult<TValues, unknown>> | undefined;
 
   function commit(patch: Partial<FormState<TValues>>, dirty = dirtyFields.size > 0): void {
@@ -199,7 +240,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   }
 
   async function validateField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
-    const validator = options.validate?.[name];
+    const validator = validatorForField(options.validate?.[name]);
     const generation = (validationGenerations.get(name) ?? 0) + 1;
     validationGenerations.set(name, generation);
 
@@ -259,7 +300,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     });
 
     if (validateOn.has("change")) {
-      await validateField(name);
+      await validateFields([name, ...dependentFieldsFor(name)]);
     }
   }
 
@@ -272,7 +313,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     });
 
     if (validateOn.has("blur")) {
-      await validateField(name);
+      await validateFields([name, ...dependentFieldsFor(name)]);
     }
   }
 
@@ -284,10 +325,11 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
     for (const name of fieldNames) {
       const validator = options.validate?.[name];
-      if (validator === undefined) {
+      const validate = validatorForField(validator);
+      if (validate === undefined) {
         continue;
       }
-      const fieldErrors = normalizeFieldErrors(await validator(values[name], values));
+      const fieldErrors = normalizeFieldErrors(await validate(values[name], values));
       if (fieldErrors.length > 0) {
         errors[name] = fieldErrors;
       }
@@ -322,8 +364,134 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     };
   }
 
+  async function validateFields(names: readonly FieldName<TValues>[]): Promise<void> {
+    const uniqueNames = [...new Set(names)];
+    await Promise.all(uniqueNames.map((fieldName) => validateField(fieldName)));
+  }
+
+  function dependentFieldsFor(name: FieldName<TValues>): readonly FieldName<TValues>[] {
+    return dependentFields.get(name) ?? [];
+  }
+
+  function arrayValues<Name extends FieldName<TValues>>(
+    name: Name,
+  ): Array<ArrayFieldValue<TValues, Name>> {
+    const value = state.get().values[name];
+    return Array.isArray(value) ? ([...value] as Array<ArrayFieldValue<TValues, Name>>) : [];
+  }
+
+  function createFieldArrayKey(name: FieldName<TValues>): string {
+    const key = `${name}:${nextFieldArrayKey}`;
+    nextFieldArrayKey += 1;
+    return key;
+  }
+
+  function ensureFieldArrayKeys(name: FieldName<TValues>, length: number): string[] {
+    const keys = fieldArrayKeys.get(name) ?? [];
+    if (keys.length > length) {
+      keys.length = length;
+    }
+
+    while (keys.length < length) {
+      keys.push(createFieldArrayKey(name));
+    }
+
+    fieldArrayKeys.set(name, keys);
+    return keys;
+  }
+
+  function fieldArrayRows<Name extends FieldName<TValues>>(
+    name: Name,
+  ): Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>> {
+    const values = arrayValues(name);
+    const keys = ensureFieldArrayKeys(name, values.length);
+    return values.map((value, index) => ({
+      index,
+      key: keys[index] ?? createFieldArrayKey(name),
+      value,
+    }));
+  }
+
+  async function setArrayValue<Name extends FieldName<TValues>>(
+    name: Name,
+    values: Array<ArrayFieldValue<TValues, Name>>,
+    keys: string[],
+  ): Promise<void> {
+    fieldArrayKeys.set(name, keys);
+    await setValue(name, values as TValues[Name]);
+  }
+
+  async function validateArrayField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
+    if (validateOn.has("change")) {
+      await validateFields([name, ...dependentFieldsFor(name)]);
+    }
+  }
+
   return {
     state,
+    fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name> {
+      return {
+        fields: {
+          get: () => fieldArrayRows(name),
+        },
+        async append(value) {
+          const values = arrayValues(name);
+          const keys = [...ensureFieldArrayKeys(name, values.length), createFieldArrayKey(name)];
+          values.push(value);
+          await setArrayValue(name, values, keys);
+        },
+        async insert(index, value) {
+          const values = arrayValues(name);
+          const insertIndex = clampIndex(index, 0, values.length);
+          const keys = [...ensureFieldArrayKeys(name, values.length)];
+          values.splice(insertIndex, 0, value);
+          keys.splice(insertIndex, 0, createFieldArrayKey(name));
+          await setArrayValue(name, values, keys);
+        },
+        async move(from, to) {
+          const values = arrayValues(name);
+          const keys = [...ensureFieldArrayKeys(name, values.length)];
+          if (!isArrayIndex(from, values.length)) {
+            await validateArrayField(name);
+            return;
+          }
+
+          const [value] = values.splice(from, 1);
+          const [key] = keys.splice(from, 1);
+          const insertIndex = clampIndex(to, 0, values.length);
+          values.splice(insertIndex, 0, value as ArrayFieldValue<TValues, Name>);
+          keys.splice(insertIndex, 0, key as string);
+          await setArrayValue(name, values, keys);
+        },
+        async remove(index) {
+          const values = arrayValues(name);
+          const keys = [...ensureFieldArrayKeys(name, values.length)];
+          if (!isArrayIndex(index, values.length)) {
+            await validateArrayField(name);
+            return;
+          }
+
+          values.splice(index, 1);
+          keys.splice(index, 1);
+          await setArrayValue(name, values, keys);
+        },
+        async swap(first, second) {
+          const values = arrayValues(name);
+          const keys = [...ensureFieldArrayKeys(name, values.length)];
+          if (!isArrayIndex(first, values.length) || !isArrayIndex(second, values.length)) {
+            await validateArrayField(name);
+            return;
+          }
+
+          [values[first], values[second]] = [
+            values[second] as ArrayFieldValue<TValues, Name>,
+            values[first] as ArrayFieldValue<TValues, Name>,
+          ];
+          [keys[first], keys[second]] = [keys[second] as string, keys[first] as string];
+          await setArrayValue(name, values, keys);
+        },
+      };
+    },
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
       return {
         state: {
@@ -370,6 +538,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
       initialValues = cloneValues(values);
       dirtyFields.clear();
+      fieldArrayKeys.clear();
       commit({
         errors: {},
         initialValues,
@@ -545,6 +714,45 @@ function normalizeFieldErrors(errors: readonly string[] | string | undefined): s
   }
 
   return typeof errors === "string" ? [errors] : [...errors];
+}
+
+function clampIndex(index: number, min: number, max: number): number {
+  return Math.min(Math.max(Math.trunc(index), min), max);
+}
+
+function isArrayIndex(index: number, length: number): boolean {
+  return Number.isInteger(index) && index >= 0 && index < length;
+}
+
+function validatorForField<TValue, TValues extends FormValues>(
+  entry: FieldValidationEntry<TValue, TValues> | undefined,
+): FieldValidator<TValue, TValues> | undefined {
+  return typeof entry === "function" ? entry : entry?.validate;
+}
+
+function buildDependentFields<TValues extends FormValues>(
+  validate: BaseCreateFormOptions<TValues>["validate"],
+): Map<FieldName<TValues>, FieldName<TValues>[]> {
+  const dependents = new Map<FieldName<TValues>, FieldName<TValues>[]>();
+
+  for (const [fieldName, entry] of Object.entries(validate ?? {}) as Array<
+    [FieldName<TValues>, FieldValidationEntry<TValues[FieldName<TValues>], TValues> | undefined]
+  >) {
+    if (entry === undefined || typeof entry === "function") {
+      continue;
+    }
+
+    for (const dep of entry.deps ?? []) {
+      const fields = dependents.get(dep);
+      if (fields === undefined) {
+        dependents.set(dep, [fieldName]);
+        continue;
+      }
+      fields.push(fieldName);
+    }
+  }
+
+  return dependents;
 }
 
 function cloneValues<TValues extends FormValues>(values: TValues): TValues {

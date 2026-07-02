@@ -24,16 +24,43 @@ export interface StoreInstrumentationEvent<T extends object> {
   type: "replace" | "set" | "transaction";
 }
 
+export interface StorePersistedState<T extends object> {
+  state: T;
+  version: number;
+}
+
+export interface StorePersistOptions<T extends object> {
+  load?:
+    | (() =>
+        | StorePersistedState<T>
+        | T
+        | undefined
+        | Promise<StorePersistedState<T> | T | undefined>)
+    | undefined;
+  migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+  save?: ((state: T) => void | Promise<void>) | undefined;
+  version?: number | undefined;
+}
+
+export type StorePersist<T extends object> =
+  | ((state: T) => void | Promise<void>)
+  | StorePersistOptions<T>;
+
 interface StoreListenerEntry<T extends object> {
   addedVersion: number;
   listener: StoreListener<T>;
   removedVersion?: number;
 }
 
+interface NormalizedPersistedState<T extends object> {
+  state: T;
+  version?: number | undefined;
+}
+
 /** Configures store instrumentation and persistence hooks. */
 export interface StoreOptions<T extends object> {
   instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
-  persist?: ((state: T) => void | Promise<void>) | undefined;
+  persist?: StorePersist<T> | undefined;
 }
 
 /** Represents a selected reactive value that can be disposed manually. */
@@ -60,6 +87,8 @@ export interface Store<T extends object> {
  */
 export function createStore<T extends object>(initial: T, options: StoreOptions<T> = {}): Store<T> {
   const state = cell(initial);
+  const persistDescriptor = options.persist !== undefined && typeof options.persist !== "function";
+  const persist = normalizePersistOptions(options.persist);
   const listeners = new Set<StoreListener<T>>();
   let listenerEntries: Array<StoreListenerEntry<T>> = [];
   let listenerVersion = 0;
@@ -69,12 +98,20 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let transactionChanged = false;
   let transactionType: StoreInstrumentationEvent<T>["type"] | undefined;
   let transactionMutationCount = 0;
+  let persistSaveQueue: Promise<void> = Promise.resolve();
+
+  void hydratePersistedState();
 
   function readUntracked(): T {
     return untrack(() => state.get());
   }
 
-  function commit(next: T, previous: T, type: StoreInstrumentationEvent<T>["type"]): void {
+  function commit(
+    next: T,
+    previous: T,
+    type: StoreInstrumentationEvent<T>["type"],
+    commitOptions: { persist?: boolean | undefined } = {},
+  ): void {
     if (Object.is(next, previous)) {
       return;
     }
@@ -93,10 +130,15 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       return;
     }
 
-    notify(next, previous, type);
+    notify(next, previous, type, commitOptions);
   }
 
-  function notify(next: T, previous: T, type: StoreInstrumentationEvent<T>["type"]): void {
+  function notify(
+    next: T,
+    previous: T,
+    type: StoreInstrumentationEvent<T>["type"],
+    notifyOptions: { persist?: boolean | undefined } = {},
+  ): void {
     const notifyVersion = listenerVersion;
     const notifyLength = listenerEntries.length;
     notificationDepth += 1;
@@ -128,7 +170,42 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       state: next,
       type: `store:${type}`,
     });
-    void options.persist?.(next);
+    if (notifyOptions.persist !== false) {
+      queuePersistSave(next);
+    }
+  }
+
+  async function hydratePersistedState(): Promise<void> {
+    const loaded = await persist.load?.();
+    if (loaded === undefined) {
+      return;
+    }
+
+    const persisted = normalizePersistedState(loaded);
+    const migrated =
+      persist.migrate !== undefined &&
+      persist.version !== undefined &&
+      persisted.version !== persist.version
+        ? await persist.migrate(persisted.state, persisted.version)
+        : persisted.state;
+    commit(migrated, readUntracked(), "replace", { persist: false });
+  }
+
+  function queuePersistSave(next: T): void {
+    if (persist.save === undefined) {
+      return;
+    }
+
+    if (!persistDescriptor) {
+      void persist.save(next);
+      return;
+    }
+
+    persistSaveQueue = persistSaveQueue
+      .catch(() => undefined)
+      .then(async () => {
+        await persist.save?.(next);
+      });
   }
 
   function subscribeListener(listener: StoreListener<T>): () => void {
@@ -341,8 +418,40 @@ function mergePatch<T extends object>(previous: T, patch: StorePatch<T> | T): T 
   return changed ? (next as T) : previous;
 }
 
+function normalizePersistOptions<T extends object>(
+  persist: StorePersist<T> | undefined,
+): StorePersistOptions<T> {
+  if (persist === undefined) {
+    return {};
+  }
+
+  return typeof persist === "function" ? { save: persist } : persist;
+}
+
+function normalizePersistedState<T extends object>(
+  value: StorePersistedState<T> | T,
+): NormalizedPersistedState<T> {
+  return isPersistedStateDescriptor(value) ? value : { state: value };
+}
+
+function isPersistedStateDescriptor<T extends object>(
+  value: StorePersistedState<T> | T,
+): value is StorePersistedState<T> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "version" in value &&
+    "state" in value &&
+    isObject((value as { state: unknown }).state)
+  );
+}
+
 function isDangerousObjectKey(key: PropertyKey): boolean {
   return key === "__proto__" || key === "constructor" || key === "prototype";
+}
+
+function isObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

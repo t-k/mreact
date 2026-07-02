@@ -18,10 +18,7 @@ export interface ModularReactViteOptions {
   serverBootstrapSrc?: string;
   serverHydration?: boolean;
   reactSuspenseRevealScriptSrc?: string;
-  onFlightClientReferences?: (
-    filename: string,
-    entries: ClientReferenceMetadata[],
-  ) => void;
+  onFlightClientReferences?: (filename: string, entries: ClientReferenceMetadata[]) => void;
 }
 
 /** Creates a Vite plugin that compiles mreact modules for client and server builds. */
@@ -79,26 +76,24 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
 
       const output = compile(input);
 
-      if (
-        transformOptions?.ssr === true &&
-        output.metadata.clientReferenceManifest !== undefined
-      ) {
+      if (transformOptions?.ssr === true && output.metadata.clientReferenceManifest !== undefined) {
         options.onFlightClientReferences?.(filename, output.metadata.clientReferenceManifest);
       }
 
       for (const diagnostic of output.diagnostics) {
         const message = formatDiagnostic(filename, diagnostic);
+        const viteDiagnostic = {
+          message,
+          id: filename,
+          ...(diagnostic.loc === undefined
+            ? {}
+            : { loc: { line: diagnostic.loc.line, column: diagnostic.loc.column } }),
+        };
 
         if (diagnostic.level === "error") {
-          this.error({
-            message,
-            id: filename,
-            ...(diagnostic.loc === undefined
-              ? {}
-              : { loc: { line: diagnostic.loc.line, column: diagnostic.loc.column } }),
-          });
+          this.error(viteDiagnostic);
         } else {
-          this.warn(message);
+          this.warn(viteDiagnostic);
         }
       }
 

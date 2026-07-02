@@ -102,6 +102,90 @@ describe("createForm", () => {
     expect(form.field("email").state.get().errors).toEqual([]);
   });
 
+  it("revalidates dependent fields declared by validator deps on change", async () => {
+    const form = createForm({
+      initialValues: { confirmPassword: "", password: "" },
+      validate: {
+        confirmPassword: {
+          deps: ["password"],
+          validate(value, values) {
+            return value === values.password ? [] : ["Passwords must match"];
+          },
+        },
+      },
+      validateOn: "change",
+    });
+
+    await form.setValue("confirmPassword", "old-secret");
+    expect(form.field("confirmPassword").state.get().errors).toEqual(["Passwords must match"]);
+
+    await form.setValue("password", "old-secret");
+
+    expect(form.field("confirmPassword").state.get().errors).toEqual([]);
+  });
+
+  it("does not revalidate unrelated fields without declared deps", async () => {
+    let confirmValidations = 0;
+    const form = createForm({
+      initialValues: { confirmPassword: "", password: "" },
+      validate: {
+        confirmPassword(value, values) {
+          confirmValidations += 1;
+          return value === values.password ? [] : ["Passwords must match"];
+        },
+      },
+      validateOn: "change",
+    });
+
+    await form.setValue("confirmPassword", "old-secret");
+    await form.setValue("password", "old-secret");
+
+    expect(confirmValidations).toBe(1);
+    expect(form.field("confirmPassword").state.get().errors).toEqual(["Passwords must match"]);
+  });
+
+  it("manages array fields with stable row keys across mutations", async () => {
+    const form = createForm({
+      initialValues: { items: ["A", "B"] },
+    });
+    const items = form.fieldArray("items");
+    const initial = items.fields.get();
+
+    await items.append("C");
+    const appended = items.fields.get();
+    await items.move(2, 0);
+    const moved = items.fields.get();
+    await items.remove(1);
+    const removed = items.fields.get();
+
+    expect(initial.map((row) => row.value)).toEqual(["A", "B"]);
+    expect(appended.map((row) => row.value)).toEqual(["A", "B", "C"]);
+    expect(moved.map((row) => row.value)).toEqual(["C", "A", "B"]);
+    expect(moved[0]?.key).toBe(appended[2]?.key);
+    expect(moved[1]?.key).toBe(initial[0]?.key);
+    expect(removed.map((row) => row.value)).toEqual(["C", "B"]);
+    expect(removed.map((row) => row.key)).toEqual([appended[2]?.key, initial[1]?.key]);
+  });
+
+  it("validates array fields after fieldArray updates", async () => {
+    const form = createForm({
+      initialValues: { tags: [] as string[] },
+      validate: {
+        tags(value) {
+          return value.length === 0 ? ["Add at least one tag"] : [];
+        },
+      },
+      validateOn: "change",
+    });
+    const tags = form.fieldArray("tags");
+
+    await tags.remove(0);
+    expect(form.field("tags").state.get().errors).toEqual(["Add at least one tag"]);
+
+    await tags.append("docs");
+    expect(form.field("tags").state.get().errors).toEqual([]);
+  });
+
   it("keeps change validation state notifications bounded for large forms", async () => {
     const initialValues = Object.fromEntries(
       Array.from({ length: 30 }, (_unused, index) => [`field${index}`, ""]),

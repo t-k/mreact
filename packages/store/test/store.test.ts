@@ -237,7 +237,84 @@ describe("createStore", () => {
       Array.from = originalFrom;
     }
   });
+
+  it("hydrates from a persist descriptor load result", async () => {
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load() {
+            return { count: 2 };
+          },
+          save() {},
+        },
+      },
+    );
+
+    await flushMicrotasks();
+
+    expect(store.get()).toEqual({ count: 2 });
+  });
+
+  it("runs persist migrations when the loaded version differs", async () => {
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load() {
+            return { state: { count: 1 }, version: 1 };
+          },
+          migrate(state, version) {
+            return { count: state.count + (version ?? 0) };
+          },
+          save() {},
+          version: 2,
+        },
+      },
+    );
+
+    await flushMicrotasks();
+
+    expect(store.get()).toEqual({ count: 2 });
+  });
+
+  it("serializes async persist descriptor saves in commit order", async () => {
+    let releaseFirst: (() => void) | undefined;
+    const saved: number[] = [];
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          async save(state) {
+            if (state.count === 1) {
+              await new Promise<void>((resolve) => {
+                releaseFirst = resolve;
+              });
+            }
+            saved.push(state.count);
+          },
+        },
+      },
+    );
+
+    store.set({ count: 1 });
+    store.set({ count: 2 });
+    await flushMicrotasks();
+    expect(saved).toEqual([]);
+    expect(releaseFirst).toBeDefined();
+
+    releaseFirst?.();
+    await flushMicrotasks();
+
+    expect(saved).toEqual([1, 2]);
+  });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) {
+    await Promise.resolve();
+  }
+}
 
 describe("shallowEqual", () => {
   it("does not treat distinct built-in objects as equal plain objects", () => {

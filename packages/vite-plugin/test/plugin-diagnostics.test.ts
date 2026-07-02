@@ -26,27 +26,67 @@ describe("modularReact diagnostics", () => {
     expect((result as { code: string }).code).toContain("Hello SSR");
   });
 
-  test("throws Vite error for unsupported server event handlers", () => {
+  test("warns through Vite for unsupported server event handlers", () => {
     const plugin = modularReact();
     const transform = plugin.transform;
+    const warnings: unknown[] = [];
 
     if (typeof transform !== "function") {
       throw new Error("transform hook is not a function");
     }
 
-    expect(() =>
+    expect(
       transform.call(
         {
           error(error: string | Error): never {
             throw typeof error === "string" ? new Error(error) : error;
           },
-          warn() {},
+          warn(warning: unknown) {
+            warnings.push(warning);
+          },
         } as never,
         "export function App() { return <button onClick={() => {}}>Click</button>; }",
         "/src/App.tsx",
         { ssr: true },
       ),
-    ).toThrow("MR_UNSUPPORTED_SERVER_EVENT_HANDLER");
+    ).toEqual(expect.objectContaining({ code: expect.stringContaining("Click") }));
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        id: "/src/App.tsx",
+        message: expect.stringContaining("MR_UNSUPPORTED_SERVER_EVENT_HANDLER"),
+      }),
+    ]);
+  });
+
+  test("passes structured location data to Vite warnings", () => {
+    const plugin = modularReact();
+    const transform = plugin.transform;
+    const warnings: unknown[] = [];
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    expect(
+      transform.call(
+        {
+          error(error: string | Error): never {
+            throw typeof error === "string" ? new Error(error) : error;
+          },
+          warn(warning: unknown) {
+            warnings.push(warning);
+          },
+        } as never,
+        "export function App() {\n  return <button onClick={() => {}}>Click</button>;\n}",
+        "/src/App.tsx",
+        { ssr: true },
+      ),
+    ).toEqual(expect.objectContaining({ code: expect.stringContaining("Click") }));
+    expect(warnings[0]).toMatchObject({
+      id: "/src/App.tsx",
+      loc: { line: 2, column: 18 },
+      message: expect.stringContaining("MR_UNSUPPORTED_SERVER_EVENT_HANDLER"),
+    });
   });
 
   test("passes structured location data to Vite errors", () => {
@@ -67,15 +107,14 @@ describe("modularReact diagnostics", () => {
           },
           warn() {},
         } as never,
-        "export function App() {\n  return <button onClick={() => {}}>Click</button>;\n}",
+        "export function App() {\n  const value = ;\n  return <button>Click</button>;\n}",
         "/src/App.tsx",
         { ssr: true },
       ),
     ).toThrow("captured");
     expect(received).toMatchObject({
       id: "/src/App.tsx",
-      loc: { line: 2, column: 18 },
-      message: expect.stringContaining("MR_UNSUPPORTED_SERVER_EVENT_HANDLER"),
+      message: expect.stringContaining("MR_OXC_PARSE_ERROR"),
     });
   });
 
@@ -122,6 +161,8 @@ describe("modularReact diagnostics", () => {
         "/src/App.tsx",
         { ssr: true },
       ),
-    ).toEqual(expect.objectContaining({ code: expect.stringContaining("_renderSpreadAttributes") }));
+    ).toEqual(
+      expect.objectContaining({ code: expect.stringContaining("_renderSpreadAttributes") }),
+    );
   });
 });
