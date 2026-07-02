@@ -1711,7 +1711,7 @@ async function serializeFlightValue(
 ): Promise<FlightModel> {
   if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
 
-  const awaited = await value;
+  const awaited = isThenable(value) ? await value : value;
 
   if (awaited === null) {
     return null;
@@ -1952,6 +1952,14 @@ function isReactCompatElement(value: unknown): value is ReactCompatElementLike {
     typeof value === "object" &&
     value !== null &&
     (value as { $$typeof?: unknown }).$$typeof === REACT_COMPAT_ELEMENT_TYPE
+  );
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
   );
 }
 

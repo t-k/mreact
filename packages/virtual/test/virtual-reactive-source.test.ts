@@ -157,4 +157,31 @@ describe("reactive item sources", () => {
 
     expect(estimateCalls).toBe(callsAfterMeasure);
   });
+
+  it("reuses span grid placement when only scroll offset changes", () => {
+    const scrollTop = cell(0);
+    const items = Array.from({ length: 100 }, (_unused, index) => ({ id: `item-${index}` }));
+    let spanCalls = 0;
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 40,
+      getColumnCount: () => 4,
+      getItemSpan: (_item, index) => {
+        spanCalls += 1;
+        return index % 7 === 0 ? { colSpan: 2, rowSpan: 1 } : { colSpan: 1, rowSpan: 1 };
+      },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => scrollTop.get(),
+      viewportSize: () => 80,
+    });
+
+    virtual.entries.get();
+    const callsAfterInitialLayout = spanCalls;
+
+    scrollTop.set(160);
+    virtual.entries.get();
+
+    expect(spanCalls).toBe(callsAfterInitialLayout);
+  });
 });

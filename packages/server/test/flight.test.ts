@@ -1,3 +1,4 @@
+import { createHook } from "node:async_hooks";
 import { describe, expect, test } from "vitest";
 import { cache, cacheSignal, createElement } from "@reckona/mreact-compat";
 import {
@@ -93,6 +94,48 @@ describe("server Flight runtime", () => {
       serverReferences: [],
     });
     expect(JSON.parse(stringifyFlightResponse(response))).toEqual(response);
+  });
+
+  test("does not read then from primitive Flight leaves", async () => {
+    const primitive = "Ada";
+    let thenReads = 0;
+    Object.defineProperty(String.prototype, "then", {
+      configurable: true,
+      get() {
+        thenReads += 1;
+        return undefined;
+      },
+    });
+
+    try {
+      const response = await renderToFlightResponse({ name: primitive });
+
+      expect(response.root).toEqual({ name: "Ada" });
+      expect(thenReads).toBe(0);
+    } finally {
+      delete (String.prototype as { then?: unknown }).then;
+    }
+  });
+
+  test("serializes primitive arrays without one promise hop per leaf", async () => {
+    const values = Array.from({ length: 100 }, (_unused, index) => index);
+    let promiseInits = 0;
+    const hook = createHook({
+      init(_asyncId, type) {
+        if (type === "PROMISE") {
+          promiseInits += 1;
+        }
+      },
+    });
+
+    hook.enable();
+    try {
+      await renderToFlightResponse(values);
+    } finally {
+      hook.disable();
+    }
+
+    expect(promiseInits).toBeLessThan(320);
   });
 
   test("uses one cache scope while rendering a Flight response", async () => {

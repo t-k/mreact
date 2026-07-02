@@ -105,6 +105,12 @@ interface MeasuredRowLayout<TItem> {
   totalSizePx: number;
 }
 
+interface SpanRowLayout<TItem> extends MeasuredRowLayout<TItem> {
+  getItemSpan: VirtualGridOptions<TItem>["getItemSpan"];
+  placements: readonly SpanPlacement[];
+  rowCount: number;
+}
+
 /**
  * Calculates the visible and overscanned range for a fixed-size virtual list or grid.
  *
@@ -175,6 +181,7 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
   const refreshVersion = cell(0);
   let measuredVersion = 0;
   let measuredRowLayout: MeasuredRowLayout<TItem> | undefined;
+  let spanRowLayout: SpanRowLayout<TItem> | undefined;
   let lastItems: readonly TItem[] | undefined;
   let keyIndex: Map<VirtualKey, number> | undefined;
   let keyIndexItems: readonly TItem[] | undefined;
@@ -192,8 +199,12 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
       measuredRowLayout,
       measuredVersion,
       pruneStaleMeasuredSizes: items !== lastItems,
+      spanRowLayout,
       updateMeasuredRowLayout(nextLayout) {
         measuredRowLayout = nextLayout;
+      },
+      updateSpanRowLayout(nextLayout) {
+        spanRowLayout = nextLayout;
       },
     });
     lastItems = items;
@@ -212,6 +223,7 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     keyIndex = undefined;
     keyIndexItems = undefined;
     keyIndexLength = -1;
+    spanRowLayout = undefined;
     refreshVersion.set((version) => version + 1);
   };
   // Scroll helpers are imperative reads: they must observe the latest inputs
@@ -409,7 +421,9 @@ function createSnapshot<TItem>(
     measuredRowLayout?: MeasuredRowLayout<TItem> | undefined;
     measuredVersion?: number | undefined;
     pruneStaleMeasuredSizes?: boolean | undefined;
+    spanRowLayout?: SpanRowLayout<TItem> | undefined;
     updateMeasuredRowLayout?: (layout: MeasuredRowLayout<TItem>) => void;
+    updateSpanRowLayout?: (layout: SpanRowLayout<TItem>) => void;
   },
 ): VirtualSnapshot<TItem> {
   const items = snapshotOptions?.items ?? options.items();
@@ -423,7 +437,8 @@ function createSnapshot<TItem>(
       pruneMeasuredSizes(items, options.getKey, measuredSizes);
     }
 
-    return createSpanAwareSnapshot(options, items, itemCount, columnCount, overscan, measuredSizes);
+    const layout = getSpanRowLayout(items, columnCount, options, measuredSizes, snapshotOptions);
+    return createSpanAwareSnapshot(options, items, itemCount, columnCount, overscan, layout);
   }
 
   if (measuredSizes.size === 0) {
@@ -530,6 +545,49 @@ function getMeasuredRowLayout<TItem>(
   return layout;
 }
 
+function getSpanRowLayout<TItem>(
+  items: readonly TItem[],
+  columnCount: number,
+  options: VirtualGridOptions<TItem>,
+  measuredSizes: ReadonlyMap<VirtualKey, number>,
+  snapshotOptions: {
+    measuredVersion?: number | undefined;
+    spanRowLayout?: SpanRowLayout<TItem> | undefined;
+    updateSpanRowLayout?: (layout: SpanRowLayout<TItem>) => void;
+  } | undefined,
+): SpanRowLayout<TItem> {
+  const measuredVersion = snapshotOptions?.measuredVersion ?? 0;
+  const cached = snapshotOptions?.spanRowLayout;
+
+  if (
+    cached !== undefined &&
+    cached.items === items &&
+    cached.columnCount === columnCount &&
+    cached.measuredVersion === measuredVersion &&
+    cached.getItemSpan === options.getItemSpan
+  ) {
+    return cached;
+  }
+
+  const placements = computeSpanPlacements(items, columnCount, options.getItemSpan);
+  const rowSizes = computeSpanRowSizes(items, placements.entries, options, measuredSizes, placements.rowCount);
+  const rowOffsets = computeRowOffsets(rowSizes);
+  const layout: SpanRowLayout<TItem> = {
+    columnCount,
+    getItemSpan: options.getItemSpan,
+    items,
+    measuredVersion,
+    placements: placements.entries,
+    rowCount: placements.rowCount,
+    rowOffsets,
+    rowSizes,
+    totalSizePx: rowSizes.reduce((total, size) => total + size, 0),
+  };
+  snapshotOptions?.updateSpanRowLayout?.(layout);
+
+  return layout;
+}
+
 function createFixedSnapshot<TItem>(
   options: VirtualGridOptions<TItem>,
   items: readonly TItem[],
@@ -573,10 +631,10 @@ function createSpanAwareSnapshot<TItem>(
   itemCount: number,
   columnCount: number,
   overscan: number,
-  measuredSizes: ReadonlyMap<VirtualKey, number>,
+  layout: SpanRowLayout<TItem>,
 ): VirtualSnapshot<TItem> {
-  const placements = computeSpanPlacements(items, columnCount, options.getItemSpan);
-  const rowCount = placements.rowCount;
+  const placements = layout.placements;
+  const rowCount = layout.rowCount;
 
   if (itemCount === 0 || rowCount === 0) {
     const range = emptyRange(columnCount);
@@ -591,9 +649,9 @@ function createSpanAwareSnapshot<TItem>(
     };
   }
 
-  const rowSizes = computeSpanRowSizes(items, placements.entries, options, measuredSizes, rowCount);
-  const rowOffsets = computeRowOffsets(rowSizes);
-  const totalSizePx = rowSizes.reduce((total, size) => total + size, 0);
+  const rowSizes = layout.rowSizes;
+  const rowOffsets = layout.rowOffsets;
+  const totalSizePx = layout.totalSizePx;
   const scrollOffset = clampSize(options.scrollOffset());
   const viewportEnd = scrollOffset + clampSize(options.viewportSize());
   const visibleStartRow = findVisibleStartRow(rowOffsets, rowSizes, scrollOffset);
@@ -604,7 +662,7 @@ function createSpanAwareSnapshot<TItem>(
     columnCount,
     endRow,
     itemCount,
-    placements: placements.entries,
+    placements,
     rowCount,
     rowOffsets,
     startRow,
@@ -614,9 +672,9 @@ function createSpanAwareSnapshot<TItem>(
   });
 
   return {
-    entries: createSpanEntries(items, options.getKey, placements.entries, startRow, endRow),
+    entries: createSpanEntries(items, options.getKey, placements, startRow, endRow),
     offsetForIndex: (index) => {
-      const placement = placements.entries[index];
+      const placement = placements[index];
       if (placement === undefined) {
         return totalSizePx;
       }

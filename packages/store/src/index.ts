@@ -24,6 +24,12 @@ export interface StoreInstrumentationEvent<T extends object> {
   type: "replace" | "set" | "transaction";
 }
 
+interface StoreListenerEntry<T extends object> {
+  addedVersion: number;
+  listener: StoreListener<T>;
+  removedVersion?: number;
+}
+
 /** Configures store instrumentation and persistence hooks. */
 export interface StoreOptions<T extends object> {
   instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
@@ -55,6 +61,9 @@ export interface Store<T extends object> {
 export function createStore<T extends object>(initial: T, options: StoreOptions<T> = {}): Store<T> {
   const state = cell(initial);
   const listeners = new Set<StoreListener<T>>();
+  let listenerEntries: Array<StoreListenerEntry<T>> = [];
+  let listenerVersion = 0;
+  let notificationDepth = 0;
   let transactionDepth = 0;
   let transactionPrevious: T | undefined;
   let transactionChanged = false;
@@ -88,8 +97,25 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   }
 
   function notify(next: T, previous: T, type: StoreInstrumentationEvent<T>["type"]): void {
-    for (const listener of Array.from(listeners)) {
-      listener(next, previous);
+    const notifyVersion = listenerVersion;
+    const notifyLength = listenerEntries.length;
+    notificationDepth += 1;
+
+    try {
+      for (let index = 0; index < notifyLength; index += 1) {
+        const entry = listenerEntries[index];
+
+        if (
+          entry !== undefined &&
+          entry.addedVersion <= notifyVersion &&
+          (entry.removedVersion === undefined || entry.removedVersion > notifyVersion)
+        ) {
+          entry.listener(next, previous);
+        }
+      }
+    } finally {
+      notificationDepth -= 1;
+      compactListenerEntries();
     }
 
     options.instrument?.({
@@ -103,6 +129,45 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       type: `store:${type}`,
     });
     void options.persist?.(next);
+  }
+
+  function subscribeListener(listener: StoreListener<T>): () => void {
+    if (!listeners.has(listener)) {
+      listeners.add(listener);
+      listenerVersion += 1;
+      listenerEntries.push({ addedVersion: listenerVersion, listener });
+    }
+
+    return () => {
+      if (!listeners.delete(listener)) {
+        return;
+      }
+
+      listenerVersion += 1;
+      const entry = findActiveListenerEntry(listener);
+      if (entry !== undefined) {
+        entry.removedVersion = listenerVersion;
+      }
+      compactListenerEntries();
+    };
+  }
+
+  function findActiveListenerEntry(listener: StoreListener<T>): StoreListenerEntry<T> | undefined {
+    for (let index = listenerEntries.length - 1; index >= 0; index -= 1) {
+      const entry = listenerEntries[index];
+      if (entry?.listener === listener && entry.removedVersion === undefined) {
+        return entry;
+      }
+    }
+    return undefined;
+  }
+
+  function compactListenerEntries(): void {
+    if (notificationDepth > 0 || listenerEntries.length === listeners.size) {
+      return;
+    }
+
+    listenerEntries = listenerEntries.filter((entry) => entry.removedVersion === undefined);
   }
 
   function set(next: StoreSetter<T>): void {
@@ -163,14 +228,8 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
     transaction,
     update: set,
     select: (selector, equality = Object.is) =>
-      createSelectedCell(readUntracked(), listeners, selector, equality),
-    subscribe: (listener) => {
-      listeners.add(listener);
-
-      return () => {
-        listeners.delete(listener);
-      };
-    },
+      createSelectedCell(readUntracked(), subscribeListener, selector, equality),
+    subscribe: subscribeListener,
   };
 }
 
@@ -224,7 +283,7 @@ function compareOwnEnumerableValues(left: object, right: object): boolean {
 
 function createSelectedCell<T extends object, U>(
   initial: T,
-  listeners: Set<StoreListener<T>>,
+  subscribe: (listener: StoreListener<T>) => () => void,
   selector: (state: T) => U,
   equality: StoreEquality<U>,
 ): SelectedCell<U> {
@@ -250,10 +309,10 @@ function createSelectedCell<T extends object, U>(
     }
 
     disposed = true;
-    listeners.delete(listener);
+    unsubscribe();
   };
 
-  listeners.add(listener);
+  const unsubscribe = subscribe(listener);
   registerCleanup(dispose);
 
   return {

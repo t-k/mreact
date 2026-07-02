@@ -198,6 +198,45 @@ describe("createStore", () => {
 
     expect(calls).toBe(0);
   });
+
+  it("continues notifying an initial listener snapshot when listeners unsubscribe during notify", () => {
+    const store = createStore({ count: 0 });
+    const calls: string[] = [];
+    let unsubscribeSecond: (() => void) | undefined;
+
+    store.subscribe(() => {
+      calls.push("first");
+      unsubscribeSecond?.();
+    });
+    unsubscribeSecond = store.subscribe(() => {
+      calls.push("second");
+    });
+    store.subscribe(() => {
+      calls.push("third");
+    });
+
+    store.set({ count: 1 });
+
+    expect(calls).toEqual(["first", "second", "third"]);
+  });
+
+  it("does not allocate listener snapshots for ordinary notifications", () => {
+    const store = createStore({ count: 0 });
+    const originalFrom = Array.from;
+    store.subscribe(() => {});
+    Array.from = ((value: Iterable<unknown> | ArrayLike<unknown>) => {
+      if (value instanceof Set) {
+        throw new Error("unexpected Set snapshot");
+      }
+      return originalFrom(value);
+    }) as typeof Array.from;
+
+    try {
+      store.set({ count: 1 });
+    } finally {
+      Array.from = originalFrom;
+    }
+  });
 });
 
 describe("shallowEqual", () => {
