@@ -167,6 +167,25 @@ describe("createStore", () => {
     expect(events).toEqual(["transaction"]);
   });
 
+  it("rolls back a throwing transaction without notifying partial state", () => {
+    const store = createStore({ count: 0, name: "Ada" });
+    const calls: Array<[{ count: number; name: string }, { count: number; name: string }]> = [];
+    store.subscribe((state, previous) => {
+      calls.push([state, previous]);
+    });
+
+    expect(() => {
+      store.transaction(() => {
+        store.set({ count: 1 });
+        store.set({ name: "Grace" });
+        throw new Error("abort transaction");
+      });
+    }).toThrow("abort transaction");
+
+    expect(store.get()).toEqual({ count: 0, name: "Ada" });
+    expect(calls).toEqual([]);
+  });
+
   it("skips no-op shallow patches", () => {
     const store = createStore({ count: 0, name: "Ada" });
     let calls = 0;

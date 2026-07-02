@@ -44,6 +44,58 @@ describe("createQuery", () => {
     });
   });
 
+  it("refetches active observers when their query is invalidated", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const query = createQuery(client, {
+      autoFetch: true,
+      queryKey: ["todos"],
+      queryFn: async () => {
+        calls += 1;
+        return calls === 1 ? ["old"] : ["new"];
+      },
+    });
+
+    await waitForTimer();
+    expect(query.result.get()).toMatchObject({
+      data: ["old"],
+      status: "success",
+    });
+
+    client.invalidateQueries({ queryKey: ["todos"] });
+    await waitForTimer();
+
+    expect(query.result.get()).toMatchObject({
+      data: ["new"],
+      isFetching: false,
+      status: "success",
+    });
+  });
+
+  it("can opt out of refetching active observers on invalidation", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const query = createQuery(client, {
+      autoFetch: true,
+      queryKey: ["todos"],
+      queryFn: async () => {
+        calls += 1;
+        return calls === 1 ? ["old"] : ["new"];
+      },
+      refetchOnInvalidate: false,
+    });
+
+    await waitForTimer();
+    client.invalidateQueries({ queryKey: ["todos"] });
+    await waitForTimer();
+
+    expect(query.result.get()).toMatchObject({
+      data: ["old"],
+      status: "success",
+    });
+    expect(calls).toBe(1);
+  });
+
   it("does not re-read the observer query key while processing matching updates", async () => {
     const client = createQueryClient();
     let allowQueryKeyRead = true;

@@ -89,7 +89,10 @@ export interface QueryClient {
   prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void>;
   getQueryData<TData = unknown>(queryKey: QueryKey): TData | undefined;
   getQueryEntry<TData = unknown>(queryKey: QueryKey): QueryEntry<TData> | undefined;
-  setQueryData<TData>(queryKey: QueryKey, data: TData): void;
+  setQueryData<TData>(
+    queryKey: QueryKey,
+    data: TData | ((previous: TData | undefined) => TData),
+  ): void;
   invalidateQueries(options?: InvalidateQueriesOptions): void;
   removeQueries(options?: InvalidateQueriesOptions): void;
   subscribe<TData = unknown>(
@@ -122,6 +125,10 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
    * Defaults to false.
    */
   refetchOnReconnect?: boolean | undefined;
+  /**
+   * Refetch active observers when their query is invalidated. Defaults to true.
+   */
+  refetchOnInvalidate?: boolean | undefined;
 }
 
 /** Observes one query result and exposes refetch and disposal controls. */
@@ -327,6 +334,17 @@ export function createQuery<TData>(
   const unsubscribe = client.subscribe<TData>(options.queryKey, (entry) => {
     if (entry.queryHash === queryHash) {
       result.set(resultFromQueryEntry(entry));
+      if (
+        entry.stale &&
+        !entry.isFetching &&
+        autoFetch &&
+        options.refetchOnInvalidate !== false
+      ) {
+        void client.fetchQuery(options).catch(() => {
+          // The observer receives the error state through the query cache. Avoid an
+          // unhandled rejection for fire-and-forget invalidation refetches.
+        });
+      }
     }
   }, { exact: true, gcTime: options.gcTime });
   const autoFetch = options.autoFetch ?? typeof document !== "undefined";

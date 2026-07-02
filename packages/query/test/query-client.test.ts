@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient, dehydrate, hydrate, hashQueryKey } from "../src/index.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("createQueryClient", () => {
   it("deduplicates concurrent fetches for the same query key", async () => {
@@ -104,6 +108,40 @@ describe("createQueryClient", () => {
     });
   });
 
+  it("uses exponential retry backoff when retryDelay is omitted", async () => {
+    vi.useFakeTimers();
+    const client = createQueryClient();
+    let attempts = 0;
+
+    const pending = client.fetchQuery({
+      queryKey: ["retry-backoff"],
+      retry: 2,
+      queryFn: () => {
+        attempts += 1;
+        if (attempts < 3) {
+          throw new Error(`fail ${attempts}`);
+        }
+        return "ok";
+      },
+    });
+
+    await Promise.resolve();
+    expect(attempts).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(attempts).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempts).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(attempts).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(attempts).toBe(3);
+    await expect(pending).resolves.toBe("ok");
+  });
+
   it("classifies retry-exhausted query failures", async () => {
     const client = createQueryClient();
     let calls = 0;
@@ -174,6 +212,35 @@ describe("createQueryClient", () => {
     deferred.resolve("network");
     await expect(pending).resolves.toBe("network");
     expect(client.getQueryData(["optimistic"])).toBe("manual");
+  });
+
+  it("setQueryData resolves updater functions against the current cached value", () => {
+    const client = createQueryClient();
+
+    client.setQueryData(["counter"], { count: 1 });
+    client.setQueryData(["counter"], (previous: { count: number } | undefined) => ({
+      count: (previous?.count ?? 0) + 1,
+    }));
+
+    expect(client.getQueryData(["counter"])).toEqual({ count: 2 });
+  });
+
+  it("prefetchQuery records errors without rejecting fire-and-forget callers", async () => {
+    const client = createQueryClient();
+    const error = new Error("prefetch failed");
+
+    await expect(
+      client.prefetchQuery({
+        queryKey: ["prefetch-error"],
+        queryFn: () => {
+          throw error;
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(client.getQueryEntry(["prefetch-error"])).toMatchObject({
+      error,
+      status: "error",
+    });
   });
 
   it("does not retry canceled queries", async () => {

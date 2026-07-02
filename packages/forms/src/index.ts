@@ -185,6 +185,19 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     commit({ errors: normalizeErrors(errors) });
   }
 
+  function invalidateFieldValidations(names: readonly FieldName<TValues>[]): void {
+    if (names.length === 0) {
+      return;
+    }
+
+    const validating = { ...state.get().validating };
+    for (const name of names) {
+      validationGenerations.set(name, (validationGenerations.get(name) ?? 0) + 1);
+      validating[name] = false;
+    }
+    commit({ validating });
+  }
+
   async function validateField<Name extends FieldName<TValues>>(name: Name): Promise<void> {
     const validator = options.validate?.[name];
     const generation = (validationGenerations.get(name) ?? 0) + 1;
@@ -266,8 +279,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   async function validateForm(): Promise<FormValidationResult<TValues, TSubmitValues>> {
     const values = state.get().values;
     const errors: FormErrors<TValues> = {};
+    const fieldNames = Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>;
+    invalidateFieldValidations(fieldNames);
 
-    for (const name of Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>) {
+    for (const name of fieldNames) {
       const validator = options.validate?.[name];
       if (validator === undefined) {
         continue;

@@ -118,12 +118,22 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   }
 
   function transaction(fn: () => void): void {
+    const rootTransaction = transactionDepth === 0;
+    let thrown: unknown;
+    let didThrow = false;
     transactionDepth += 1;
 
     try {
       fn();
+    } catch (error) {
+      didThrow = true;
+      thrown = error;
     } finally {
       transactionDepth -= 1;
+
+      if (didThrow && rootTransaction && transactionPrevious !== undefined) {
+        state.set(transactionPrevious);
+      }
 
       if (transactionDepth === 0) {
         const previous = transactionPrevious;
@@ -133,11 +143,15 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
         transactionType = undefined;
         transactionMutationCount = 0;
 
-        if (transactionChanged && previous !== undefined) {
-          transactionChanged = false;
+        if (transactionChanged && previous !== undefined && !didThrow) {
           notify(readUntracked(), previous, type);
         }
+        transactionChanged = false;
       }
+    }
+
+    if (didThrow) {
+      throw thrown;
     }
   }
 

@@ -324,6 +324,40 @@ describe("auth package", () => {
     });
   });
 
+  it("tryRequireRole and tryRequirePermission honor custom session cookie names", async () => {
+    const store = createMemorySessionStore<{
+      permissions: string[];
+      roles: string[];
+      userId: string;
+    }>();
+    const cookieOptions = { cookieName: "custom.session" };
+    const loginResponse = new Response(null);
+    await createSession(
+      loginResponse,
+      store,
+      {
+        permissions: ["audit:read"],
+        roles: ["member"],
+        userId: "ada",
+      },
+      cookieOptions,
+    );
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+
+    await expect(tryRequireRole(request, store, "member", cookieOptions)).resolves.toMatchObject({
+      authorized: true,
+      session: { data: { userId: "ada" } },
+    });
+    await expect(
+      tryRequirePermission(request, store, "audit:read", cookieOptions),
+    ).resolves.toMatchObject({
+      authorized: true,
+      session: { data: { userId: "ada" } },
+    });
+  });
+
   it("stores only default-safe session claims for server-side hand-off", async () => {
     const store = createMemorySessionStore<{
       permissions: string[];

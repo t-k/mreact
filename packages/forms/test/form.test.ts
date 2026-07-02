@@ -260,6 +260,41 @@ describe("createForm", () => {
     });
   });
 
+  it("validate ignores older in-flight field validation results", async () => {
+    let resolveFieldValidation: ((errors: string[]) => void) | undefined;
+    let validationCalls = 0;
+    const form = createForm({
+      initialValues: { email: "" },
+      validate: {
+        email() {
+          validationCalls += 1;
+          if (validationCalls === 1) {
+            return new Promise<string[]>((resolve) => {
+              resolveFieldValidation = resolve;
+            });
+          }
+
+          return ["submit validation failed"];
+        },
+      },
+      validateOn: "change",
+    });
+
+    const pendingFieldValidation = form.field("email").setValue("late@example.test");
+    expect(form.field("email").state.get().validating).toBe(true);
+
+    await expect(form.validate()).resolves.toEqual({
+      errors: { email: ["submit validation failed"] },
+      success: false,
+    });
+    expect(form.field("email").state.get().errors).toEqual(["submit validation failed"]);
+
+    resolveFieldValidation?.([]);
+    await pendingFieldValidation;
+
+    expect(form.field("email").state.get().errors).toEqual(["submit validation failed"]);
+  });
+
   it("merges field-level and schema validation errors for the same field", async () => {
     const form = createForm({
       initialValues: { email: "" },

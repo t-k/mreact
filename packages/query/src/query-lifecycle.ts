@@ -125,16 +125,20 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
 
   function setSuccess<TData>(
     queryKey: QueryKey,
-    data: TData,
+    data: TData | ((previous: TData | undefined) => TData),
     options: SetSuccessOptions = {},
   ): void {
     const entry = getOrCreateEntry<TData>(queryKey);
+    const resolvedData =
+      typeof data === "function"
+        ? (data as (previous: TData | undefined) => TData)(entry.data)
+        : data;
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
     }
 
     entry.version += 1;
-    entry.data = data;
+    entry.data = resolvedData;
     entry.error = undefined;
     entry.errorReason = undefined;
     entry.isFetching = false;
@@ -292,7 +296,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       return entry.promise;
     },
     async prefetchQuery<TData>(options: FetchQueryOptions<TData>): Promise<void> {
-      await this.fetchQuery(options);
+      await this.fetchQuery(options).catch(() => {});
     },
     getQueryData<TData = unknown>(queryKey: QueryKey): TData | undefined {
       return cache.get(hashQueryKey(queryKey))?.data as TData | undefined;
@@ -444,7 +448,7 @@ function retryDelayMs(
 ): number {
   const value = typeof retryDelay === "function" ? retryDelay(attempt, error) : retryDelay;
 
-  return Math.max(0, value ?? 0);
+  return Math.max(0, value ?? Math.min(1_000 * 2 ** (attempt - 1), 30_000));
 }
 
 function classifyQueryError(options: FetchQueryOptions<unknown>, error: unknown): QueryErrorReason {

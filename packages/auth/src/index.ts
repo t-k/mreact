@@ -225,9 +225,9 @@ export async function tryRequireRole<TData extends AuthSessionClaims>(
   request: Request,
   store: SessionStore<TData>,
   role: AuthRequirement,
-  options: Pick<AuthGuardOptions, "mode"> = {},
+  options: Pick<AuthGuardOptions, "mode"> & SessionCookieOptions = {},
 ): Promise<TryAuthResult<TData>> {
-  const session = await getCurrentSession(request, store);
+  const session = await getCurrentSession(request, store, options);
 
   if (session === undefined) {
     return { authorized: false, reason: "missing-session" };
@@ -245,9 +245,9 @@ export async function tryRequirePermission<TData extends AuthSessionClaims>(
   request: Request,
   store: SessionStore<TData>,
   permission: AuthRequirement,
-  options: Pick<AuthGuardOptions, "mode"> = {},
+  options: Pick<AuthGuardOptions, "mode"> & SessionCookieOptions = {},
 ): Promise<TryAuthResult<TData>> {
-  const session = await getCurrentSession(request, store);
+  const session = await getCurrentSession(request, store, options);
 
   if (session === undefined) {
     return { authorized: false, reason: "missing-session" };
