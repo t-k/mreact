@@ -7,7 +7,7 @@ Static hosts serve prerendered route HTML and copied client assets. Use this pat
 
 ## Export prerendered routes
 
-Run a Node build, then call `exportStaticApp()` from a small script.
+Run a Node build, then call `exportStaticApp()` from a small script. A practical script usually cleans the export directory, exports the prerendered routes, writes host-specific marker files, and performs any host-specific path shaping after the framework export has completed.
 
 ```bash
 mreact-router build --target=node
@@ -15,21 +15,138 @@ tsx scripts/export-static.ts
 ```
 
 ```ts
+import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
 
+const outDir = join(process.cwd(), ".mreact");
+const exportDir = join(process.cwd(), "dist");
+const basePath = normalizeBasePath(process.env.MREACT_BASE_PATH ?? "");
+
+await rm(exportDir, { recursive: true, force: true });
+
 await exportStaticApp({
-  exportDir: "dist",
-  outDir: ".mreact",
+  exportDir,
+  outDir,
 });
+
+await flattenHtmlRouteDirectories(exportDir);
+
+if (basePath !== "") {
+  await rewriteHtmlBasePaths(exportDir, basePath);
+}
+
+await writeFile(join(exportDir, ".nojekyll"), "");
+await mkdir(join(exportDir, "404"), { recursive: true });
+await copyFile(join(exportDir, "404", "index.html"), join(exportDir, "404.html"));
+
+function normalizeBasePath(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === "" || trimmed === "/") return "";
+  const withLeadingSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.replace(/\/+$/g, "");
+}
+
+async function flattenHtmlRouteDirectories(directory: string): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const path = join(directory, entry.name);
+    if (entry.name.endsWith(".html")) {
+      const tempFile = `${path}.tmp`;
+      await copyFile(join(path, "index.html"), tempFile);
+      await rm(path, { recursive: true, force: true });
+      await rename(tempFile, path);
+      continue;
+    }
+    await flattenHtmlRouteDirectories(path);
+  }
+}
+
+async function rewriteHtmlBasePaths(directory: string, base: string): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await rewriteHtmlBasePaths(path, base);
+      continue;
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".html")) continue;
+    const html = await readFile(path, "utf8");
+    const rewritten = html.replaceAll(/href="\/(?!\/)/g, `href="${base}/`).replaceAll(/src="\/(?!\/)/g, `src="${base}/`);
+    if (rewritten !== html) await writeFile(path, rewritten);
+  }
+}
 ```
 
 `exportStaticApp()` writes one `index.html` per prerendered route and copies generated client assets into the export directory. Only prerendered routes are exported. Dynamic runtime APIs, route handlers, request-time auth, cookies, and middleware decisions need a server, Worker, or Lambda target.
+
+The directory-flattening step is only needed for static hosts that expect `/about.html` instead of `/about.html/index.html`. Hosts that serve directory indexes correctly can keep the default route-directory output. Keep this step outside `exportStaticApp()` so the framework export remains host-neutral and the host recipe stays explicit.
 
 ## GitHub Pages
 
 For GitHub Pages, write `.nojekyll` so `_mreact` assets are served normally. Add a root-level `404.html` when you want the static host to serve a custom not-found page.
 
 If the site is published under a repository path, configure the base path used by your app and asset URLs. This docs site uses `MREACT_DOCS_BASE_PATH` in CI so links and assets work under the GitHub Pages path.
+
+```yaml
+name: Pages
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.19.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - id: pages
+        uses: actions/configure-pages@v6
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm --filter @reckona/example-docs-site build
+        env:
+          MREACT_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: examples/docs-site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+```
+
+## Verify the export
+
+Check the exported files before uploading the artifact. These commands verify that HTML exists, GitHub Pages will not hide `_mreact` assets, the custom 404 is present, and root-relative links were rewritten when a base path is configured.
+
+```bash
+test -f dist/index.html
+test -f dist/.nojekyll
+test -f dist/404.html
+find dist -path "*/_mreact/*" -type f | head
+grep -R 'href="/' dist/*.html dist/**/*.html
+grep -R 'src="/' dist/*.html dist/**/*.html
+```
 
 ## Cache and release behavior
 
