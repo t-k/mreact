@@ -66,7 +66,7 @@ export function compileMreactComponentModule(
   }
 
   const components = compiled.metadata.components
-    .filter((component) => hasCompiledExport(compiled.code, component.name, component.exportName))
+    .filter((component) => hasSourceExport(code, component.name, component.exportName))
     .map((component) => ({
       name: component.name,
       exportName: component.exportName,
@@ -151,8 +151,20 @@ function emitExportFunction(exportName: string, name: string): string {
   return exportName === "default" ? `export default function ${name}` : `export function ${name}`;
 }
 
-function hasCompiledExport(code: string, name: string, exportName: string): boolean {
-  return code.includes(`${emitExportFunction(exportName, name)}(`);
+function hasSourceExport(code: string, name: string, exportName: string): boolean {
+  if (exportName === "default") {
+    return /\bexport\s+default\b/.test(code);
+  }
+
+  return (
+    new RegExp(`\\bexport\\s+(?:async\\s+)?function\\s+${escapeRegExp(name)}\\b`).test(code) ||
+    new RegExp(`\\bexport\\s+(?:const|let|var)\\s+${escapeRegExp(name)}\\b`).test(code) ||
+    new RegExp(`\\bexport\\s*\\{[^}]*\\b${escapeRegExp(exportName)}\\b[^}]*\\}`).test(code)
+  );
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Formats generated component paths as a human-readable CLI summary. */
