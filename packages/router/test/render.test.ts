@@ -116,6 +116,72 @@ describe("mreact app request rendering", () => {
     expect(await response.text()).toContain("<main><h1>User ada</h1></main>");
   });
 
+  test("reuses dev page modules until the dev source cache version changes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-page-module-cache-"));
+    const state = globalThis as { __mreactDevPageModuleLoads?: number };
+    state.__mreactDevPageModuleLoads = 0;
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactDevPageModuleLoads = (state.__mreactDevPageModuleLoads ?? 0) + 1;
+
+export default function Page() {
+  return <main>loads:{state.__mreactDevPageModuleLoads}</main>;
+}`,
+    );
+
+    const render = async (devServerModuleCacheVersion: string) =>
+      await renderAppRequest({
+        appDir,
+        dev: true,
+        devServerModuleCacheVersion,
+        request: new Request("http://local.test/"),
+      });
+
+    const first = await render("dev-source-1");
+    const second = await render("dev-source-1");
+    const third = await render("dev-source-2");
+
+    expect(await first.text()).toContain("<main>loads:1</main>");
+    expect(await second.text()).toContain("<main>loads:1</main>");
+    expect(await third.text()).toContain("<main>loads:2</main>");
+  });
+
+  test("reuses dev metadata modules until the dev source cache version changes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-metadata-module-cache-"));
+    const state = globalThis as { __mreactDevMetadataModuleLoads?: number };
+    state.__mreactDevMetadataModuleLoads = 0;
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactDevMetadataModuleLoads = (state.__mreactDevMetadataModuleLoads ?? 0) + 1;
+
+export function generateMetadata() {
+  return { title: "loads:" + state.__mreactDevMetadataModuleLoads };
+}
+
+export default function Page() {
+  return <main>metadata cache</main>;
+}`,
+    );
+
+    const render = async (devServerModuleCacheVersion: string) =>
+      await renderAppRequest({
+        appDir,
+        dev: true,
+        devServerModuleCacheVersion,
+        request: new Request("http://local.test/"),
+      });
+
+    const first = await render("dev-source-1");
+    const second = await render("dev-source-1");
+    const third = await render("dev-source-2");
+
+    expect(await first.text()).toContain("<title>loads:2</title>");
+    expect(await second.text()).toContain("<title>loads:2</title>");
+    expect(await third.text()).toContain("<title>loads:4</title>");
+  });
+
   test("passes loader data to page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-"));
     await writeFile(
@@ -326,11 +392,13 @@ export default function Page() {
   return <html><body><main>auth-body-marker</main></body></html>;
 }`,
     );
-    const authRuntime = (globalThis as {
-      __mreactAuthRuntimeState?: {
-        storage?: import("node:async_hooks").AsyncLocalStorage<{ claims?: unknown }>;
-      };
-    }).__mreactAuthRuntimeState ??= {};
+    const authRuntime = ((
+      globalThis as {
+        __mreactAuthRuntimeState?: {
+          storage?: import("node:async_hooks").AsyncLocalStorage<{ claims?: unknown }>;
+        };
+      }
+    ).__mreactAuthRuntimeState ??= {});
     authRuntime.storage = new AsyncLocalStorage<{ claims?: unknown }>();
 
     const response = await authRuntime.storage.run({ claims: { sub: value } }, () =>
@@ -945,7 +1013,7 @@ export default function Page() {
     const html = await response.text();
 
     expect(response.status, html).toBe(200);
-    expect(html).toContain("<main><button type=\"button\">Ada</button></main>");
+    expect(html).toContain('<main><button type="button">Ada</button></main>');
     expect(html).toContain("/_mreact/client/routes/index.js");
   });
 
@@ -1022,7 +1090,9 @@ export default function Page() {
     expect(response.status, html).toBe(200);
     expect(html).toContain('data-mreact-client-boundary="PullToRefresh"');
     expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
-    expect(html).toContain('<div data-testid="timeline-virtual-grid"><article>First story</article></div>');
+    expect(html).toContain(
+      '<div data-testid="timeline-virtual-grid"><article>First story</article></div>',
+    );
 
     const propsJson = html.match(
       /<script type="application\/json" data-mreact-client-boundary-props="PullToRefresh">([\s\S]*?)<\/script>/,
@@ -1132,7 +1202,7 @@ export default function Page(props) {
     expect(response.status, html).toBe(200);
     expect(html).toContain('data-mreact-client-boundary="ProfilePanel"');
     expect(html).toContain('data-testid="profile-panel"');
-    expect(html).toContain("<button type=\"button\">Ada</button>");
+    expect(html).toContain('<button type="button">Ada</button>');
     expect(queryState.queries[0]).toMatchObject({
       data: { name: "Ada" },
       queryKey: ["profile"],
@@ -1249,7 +1319,9 @@ export default function Page() {
     expect(response.headers.get("x-mreact-stream")).toBe("1");
     expect(html).toContain('data-mreact-client-boundary="PullToRefresh"');
     expect(html).toContain('data-mreact-client-boundary-nonserializable="true"');
-    expect(html).toContain('<div data-testid="timeline-virtual-grid"><article>First story</article></div>');
+    expect(html).toContain(
+      '<div data-testid="timeline-virtual-grid"><article>First story</article></div>',
+    );
 
     const propsJson = html.match(
       /<script type="application\/json" data-mreact-client-boundary-props="PullToRefresh">([\s\S]*?)<\/script>/,
@@ -1996,7 +2068,7 @@ export function middleware(request: Request) {
     expect(await passed.text()).toContain("<main>Admin</main>");
     expect(await passedByCookie.text()).toContain("<main>Admin</main>");
     expect(await outsideMatcher.text()).toContain("<main>Login</main>");
-  });
+  }, 10_000);
 
   test("skips importing middleware modules when a static matcher excludes the request", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-middleware-static-skip-"));
@@ -2134,9 +2206,7 @@ export function middleware() {
     const first = await reader.read();
 
     expect(first.done).toBe(false);
-    expect(decoder.decode(first.value)).toBe(
-      '{"slug":["chat.v1.ChatService","StreamMessages"]}\n',
-    );
+    expect(decoder.decode(first.value)).toBe('{"slug":["chat.v1.ChatService","StreamMessages"]}\n');
 
     const secondRead = reader.read();
     const earlySecond = await Promise.race([

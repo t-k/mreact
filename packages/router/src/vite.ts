@@ -69,6 +69,7 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
 
 type AppRouterViteRuntimeMiddlewareOptions = AppRouterViteMiddlewareOptions & {
   clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
+  devServerModuleCacheVersion?: (() => string | undefined) | undefined;
   navigationScanVitePlugins?: readonly PluginOption[] | undefined;
   viteDevServer?: ViteDevServer | undefined;
 };
@@ -193,6 +194,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   // built-in CSS plugin) whose `transform` requires a dev-server environment the
   // lightweight navigation scan cannot provide. Mirrors what the build forwards.
   let userVitePlugins: readonly PluginOption[] | undefined;
+  let devServerModuleCacheVersion = 0;
 
   const plugin: MreactRouterPlugin = {
     [mreactRouterConfigKey]: {
@@ -245,6 +247,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
         const middlewareOptions: AppRouterViteRuntimeMiddlewareOptions = {
           ...options,
           define: server.config.define,
+          devServerModuleCacheVersion: () => `dev:${devServerModuleCacheVersion}`,
           navigationScanVitePlugins: userVitePlugins ?? [],
           viteDevServer: server,
           vitePlugins: server.config.plugins,
@@ -260,6 +263,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
         return;
       }
 
+      devServerModuleCacheVersion += 1;
       const timestamp = Date.now();
       const updates = Array.from(context.server.moduleGraph.idToModuleMap.values())
         .filter((moduleNode) => isMreactClientDevModuleId(moduleNode.id))
@@ -586,6 +590,7 @@ async function handleAppRouterViteRequest(
         routeMatcher,
         routes,
         serverActions: options.serverActions,
+        devServerModuleCacheVersion: options.devServerModuleCacheVersion?.(),
         vitePlugins: routeTransformPlugins,
       }),
     );
@@ -907,9 +912,7 @@ async function devNavigationScripts(
         console.warn(formatClientRouteInferenceDiagnostic(navigationRuntimeDiagnostic));
       }
 
-      return navigation
-        ? ([route.path, navigationRuntimeScriptForDev()] as const)
-        : undefined;
+      return navigation ? ([route.path, navigationRuntimeScriptForDev()] as const) : undefined;
     }),
   );
 

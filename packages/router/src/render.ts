@@ -205,6 +205,7 @@ export interface RenderAppRequestOptions {
   routes?: readonly AppRoute[] | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   // True when serving through a dev server: request-time server transforms
   // are expected there and must not trigger the production prebuild warning.
   dev?: boolean | undefined;
@@ -251,10 +252,9 @@ export async function preloadBuiltRequestModules(options: {
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion: string;
   serverSourceFiles: ReadonlyMap<string, string>;
-  serverActionReferencesByFile?: ReadonlyMap<
-    string,
-    readonly PreparedFormActionReference[]
-  > | undefined;
+  serverActionReferencesByFile?:
+    | ReadonlyMap<string, readonly PreparedFormActionReference[]>
+    | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<void> {
   const clientRouteInferenceCache = createClientRouteInferenceCache();
@@ -535,6 +535,8 @@ const routeOutOfOrderBoundaryAnalysisCache = new Map<string, Promise<boolean>>()
 const routeOutOfOrderBoundaryAnalysisCacheCounters = createRouterRuntimeCacheCounters();
 const routeLoaderModuleCache = new Map<string, Promise<RouteLoaderModule>>();
 const routeLoaderModuleCacheCounters = createRouterRuntimeCacheCounters();
+const routeMetadataModuleCache = new Map<string, Promise<RouteMetadataModule>>();
+const routeMetadataModuleCacheCounters = createRouterRuntimeCacheCounters();
 const middlewareModuleCache = new Map<string, Promise<MiddlewareModule>>();
 const middlewareModuleCacheCounters = createRouterRuntimeCacheCounters();
 const serverRouteModuleCache = new Map<string, Promise<Record<string, unknown>>>();
@@ -549,6 +551,7 @@ const maxRouteOutOfOrderBoundaryAnalysisCacheEntries = resolveRouterCacheLimit(
   512,
 );
 const maxRouteLoaderModuleCacheEntries = resolveRouterCacheLimit("ROUTE_LOADER_MODULE", 512);
+const maxRouteMetadataModuleCacheEntries = resolveRouterCacheLimit("ROUTE_METADATA_MODULE", 512);
 const maxMiddlewareModuleCacheEntries = resolveRouterCacheLimit("MIDDLEWARE_MODULE", 64);
 const maxServerRouteModuleCacheEntries = resolveRouterCacheLimit("SERVER_ROUTE_MODULE", 512);
 const maxComposedRouteMetadataCacheEntries = resolveRouterCacheLimit(
@@ -587,6 +590,12 @@ export function routerRenderRuntimeCacheStats(): RouterRuntimeCacheStat[] {
       routeLoaderModuleCache,
       maxRouteLoaderModuleCacheEntries,
       routeLoaderModuleCacheCounters,
+    ),
+    routerRuntimeCacheStat(
+      "route-metadata-module",
+      routeMetadataModuleCache,
+      maxRouteMetadataModuleCacheEntries,
+      routeMetadataModuleCacheCounters,
     ),
     routerRuntimeCacheStat(
       "middleware-module",
@@ -718,9 +727,11 @@ function addRenderTimingPhaseDuration(
 }
 
 function routeLoaderMayReturnControlResponse(code: string): boolean {
-  return /\b(?:redirect|redirectExternal|rewrite|notFound|throwNotFound)\s*\(/.test(code) ||
+  return (
+    /\b(?:redirect|redirectExternal|rewrite|notFound|throwNotFound)\s*\(/.test(code) ||
     /\bnew\s+Response\s*\(/.test(code) ||
-    /\bResponse\.(?:redirect|json)\s*\(/.test(code);
+    /\bResponse\.(?:redirect|json)\s*\(/.test(code)
+  );
 }
 
 async function waitForRenderPreload(
@@ -811,7 +822,9 @@ export async function resolveAppRouterMiddleware(options: {
   return { response: middlewareResponse, type: "response" };
 }
 
-async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions): Promise<Response> {
+async function renderAppRequestInternal(
+  options: RenderAppRequestRuntimeOptions,
+): Promise<Response> {
   warnProductionRenderWithoutPrebuiltModules(options);
   const timing = createRenderTiming(options.logger);
   const clientRouteInferenceCache =
@@ -822,7 +835,9 @@ async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions)
   const url = options.requestUrl ?? new URL(options.request.url);
   phaseStartedAt = renderTimingPhaseStartedAt(timing);
   const matched =
-    options.matchedRoute ?? options.routeMatcher?.match(url.pathname) ?? matchRoute(routes, url.pathname);
+    options.matchedRoute ??
+    options.routeMatcher?.match(url.pathname) ??
+    matchRoute(routes, url.pathname);
   finishRenderTimingPhase(timing, phaseStartedAt, "routeMatchMs");
   const hasMiddleware =
     options.skipMiddleware === true
@@ -1174,6 +1189,7 @@ async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions)
             options.vitePlugins,
             undefined,
             options.importPolicy,
+            options.devServerModuleCacheVersion,
           ),
         );
         const pageHtml = renderedPage.html;
@@ -1230,6 +1246,7 @@ async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions)
           routes,
           serverModules: options.serverModules,
           serverModuleCacheVersion: options.serverModuleCacheVersion,
+          devServerModuleCacheVersion: options.devServerModuleCacheVersion,
           serverSourceFiles: options.serverSourceFiles,
           define: options.define,
           vitePlugins: options.vitePlugins,
@@ -1448,6 +1465,7 @@ async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions)
         options.vitePlugins,
         timing,
         options.importPolicy,
+        options.devServerModuleCacheVersion,
       ),
     );
     finishRenderTimingPhase(timing, phaseStartedAt, "pageRenderMs");
@@ -1510,12 +1528,13 @@ async function renderAppRequestInternal(options: RenderAppRequestRuntimeOptions)
       filename: matched.route.file,
       importPolicy: options.importPolicy,
       routes,
-          serverModules: options.serverModules,
-          serverModuleCacheVersion: options.serverModuleCacheVersion,
-          serverSourceFiles: options.serverSourceFiles,
-          define: options.define,
-          vitePlugins: options.vitePlugins,
-        });
+      serverModules: options.serverModules,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      devServerModuleCacheVersion: options.devServerModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
+      define: options.define,
+      vitePlugins: options.vitePlugins,
+    });
     finishRenderTimingPhase(timing, phaseStartedAt, "metadataMs");
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     html = injectHeadMetadata(html, metadata);
@@ -2969,6 +2988,7 @@ async function runServerModuleWithSlots(
   vitePlugins?: readonly PluginOption[] | undefined,
   timing?: RenderTiming | undefined,
   importPolicy?: AppRouterImportPolicy | undefined,
+  devServerModuleCacheVersion?: string | undefined,
 ): Promise<{ html: string; slots: Record<string, string> }> {
   const moduleLoadStartedAt = renderTimingPhaseStartedAt(timing);
   const module = await loadServerModule(
@@ -2979,6 +2999,7 @@ async function runServerModuleWithSlots(
     define,
     vitePlugins,
     importPolicy,
+    devServerModuleCacheVersion,
   );
   finishRenderTimingPhase(timing, moduleLoadStartedAt, "pageModuleLoadMs");
   const component = selectServerComponent(module);
@@ -3003,6 +3024,7 @@ async function loadServerModule(
   define?: UserConfig["define"] | undefined,
   vitePlugins?: readonly PluginOption[] | undefined,
   importPolicy?: AppRouterImportPolicy | undefined,
+  devServerModuleCacheVersion?: string | undefined,
 ): Promise<ServerModuleExports> {
   const artifact = serverModules?.get(sourcefile)?.string;
   const codeHash = memoizedHashText(code);
@@ -3020,11 +3042,14 @@ async function loadServerModule(
     });
   }
   const moduleCode =
-    prebuiltCode === undefined ? code : rewriteCompatVendorPlaceholderImportsForRunner(prebuiltCode);
+    prebuiltCode === undefined
+      ? code
+      : rewriteCompatVendorPlaceholderImportsForRunner(prebuiltCode);
+  const sourceModuleCacheVersion = serverModuleCacheVersion ?? devServerModuleCacheVersion;
   const cacheKey =
-    serverModuleCacheVersion === undefined
+    sourceModuleCacheVersion === undefined
       ? undefined
-      : `server-component:${serverModuleCacheVersion}:${sourcefile}:${
+      : `server-component:${serverModuleCacheVersion === undefined ? "dev" : "build"}:${sourceModuleCacheVersion}:${sourcefile}:${
           moduleCode === code ? codeHash : memoizedHashText(moduleCode)
         }:${importPolicyCacheKey(importPolicy)}:${viteDefineCacheKey(define)}:${vitePluginsCacheKey(vitePlugins)}`;
   return await importAppRouterSourceModule<ServerModuleExports>({
@@ -3663,7 +3688,12 @@ async function loadServerStreamModule(
 ): Promise<StreamModuleExports> {
   const artifactCode = serverModules?.get(sourcefile)?.stream;
   const codeHash = memoizedHashText(code);
-  const prebuiltCode = prebuiltServerComponentModuleCode(artifactCode, code, codeHash, outputOptions);
+  const prebuiltCode = prebuiltServerComponentModuleCode(
+    artifactCode,
+    code,
+    codeHash,
+    outputOptions,
+  );
   const usesPrebuiltCompiledCode = artifactCode?.code === code;
   if (
     artifactCode !== undefined &&
@@ -3678,7 +3708,9 @@ async function loadServerStreamModule(
     });
   }
   const moduleCode =
-    prebuiltCode === undefined ? code : rewriteCompatVendorPlaceholderImportsForRunner(prebuiltCode);
+    prebuiltCode === undefined
+      ? code
+      : rewriteCompatVendorPlaceholderImportsForRunner(prebuiltCode);
   const cacheKey =
     serverModuleCacheVersion === undefined
       ? undefined
@@ -3817,19 +3849,19 @@ async function layoutShellsForPage(
   const slotContext = createSlotRenderContext(slots);
   const renderShell = (shell: ShellFile) =>
     renderShellPrefixSuffix(
-        appDir,
-        shell,
-        props,
-        slotContext,
-        serverModules,
-        serverModuleCacheVersion,
-        serverSourceFiles,
-        clientRouteInferenceCache,
-        undefined,
-        define,
-        vitePlugins,
-        importPolicy,
-      );
+      appDir,
+      shell,
+      props,
+      slotContext,
+      serverModules,
+      serverModuleCacheVersion,
+      serverSourceFiles,
+      clientRouteInferenceCache,
+      undefined,
+      define,
+      vitePlugins,
+      importPolicy,
+    );
   const shells =
     Object.keys(slotContext.namedSlots).length === 0
       ? await Promise.all(layoutFiles.map(renderShell))
@@ -3881,8 +3913,7 @@ async function renderShellPrefixSuffix(
     }
   }
 
-  const staticEntry =
-    cacheKey === undefined ? undefined : shellStaticRenderCache.get(cacheKey);
+  const staticEntry = cacheKey === undefined ? undefined : shellStaticRenderCache.get(cacheKey);
   const loadedStaticEntry =
     staticEntry ??
     (await loadShellStaticRenderEntry({
@@ -4065,19 +4096,28 @@ async function renderShellStreamComponent(
 // next request.
 const shellFilesCache = new Map<string, ShellFile[]>();
 const MAX_SHELL_FILES_CACHE_ENTRIES = 1024;
-const devShellFilesCache = new Map<string, { directoryStats: readonly FileStat[]; files: ShellFile[] }>();
+const devShellFilesCache = new Map<
+  string,
+  { directoryStats: readonly FileStat[]; files: ShellFile[] }
+>();
 const shellStaticRenderCache = new Map<string, ShellStaticRenderEntry>();
 const MAX_SHELL_STATIC_RENDER_CACHE_ENTRIES = 1024;
 const routeMiddlewareControlCache = new Map<string, Promise<RouteMiddlewareControl | undefined>>();
 const MAX_ROUTE_MIDDLEWARE_CONTROL_CACHE_ENTRIES = 1024;
 const appMiddlewareFileCache = new Map<string, Promise<boolean>>();
 const MAX_APP_MIDDLEWARE_FILE_CACHE_ENTRIES = 1024;
-const devAppMiddlewareFileCache = new Map<string, { directoryStat: FileStat; hasMiddleware: boolean }>();
+const devAppMiddlewareFileCache = new Map<
+  string,
+  { directoryStat: FileStat; hasMiddleware: boolean }
+>();
 const routeMiddlewareControlSourceCache = new Map<
   string,
   { control: RouteMiddlewareControl | undefined; mtimeMs: number }
 >();
-const devServerSourceFileCache = new Map<string, { mtimeMs: number; size: number; source: string }>();
+const devServerSourceFileCache = new Map<
+  string,
+  { mtimeMs: number; size: number; source: string }
+>();
 const MAX_DEV_SERVER_SOURCE_FILE_CACHE_ENTRIES = 2048;
 
 interface FileStat {
@@ -4111,10 +4151,7 @@ async function shellFilesForPage(
   if (devCacheKey !== undefined) {
     const directoryStats = await routeShellDirectoryStats(appDir, pageFile);
     const cached = devShellFilesCache.get(devCacheKey);
-    if (
-      cached !== undefined &&
-      sameFileStats(cached.directoryStats, directoryStats)
-    ) {
+    if (cached !== undefined && sameFileStats(cached.directoryStats, directoryStats)) {
       return cached.files;
     }
 
@@ -4194,10 +4231,7 @@ async function hasAppMiddleware(options: {
   if (cacheKey === undefined) {
     const directoryStat = await fileStat(options.appDir);
     const cached = devAppMiddlewareFileCache.get(options.appDir);
-    if (
-      cached !== undefined &&
-      sameFileStat(cached.directoryStat, directoryStat)
-    ) {
+    if (cached !== undefined && sameFileStat(cached.directoryStat, directoryStat)) {
       return cached.hasMiddleware;
     }
 
@@ -4614,6 +4648,7 @@ async function loadRouteMetadata(options: {
   code: string;
   context: RouteMetadataContext;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -4640,20 +4675,83 @@ async function loadRouteMetadata(options: {
     return await resolveRouteMetadataModule(module, options.context);
   }
 
-  const code = prebuiltArtifact?.code ?? (await bundleRouteMetadataModuleCode(options));
-
-  const module = await importAppRouterSourceModule<RouteMetadataModule>({
-    ...(options.serverModuleCacheVersion === undefined
-      ? {}
-      : {
-          cacheKey: `metadata:${options.filename}:${options.serverModuleCacheVersion}:${memoizedHashText(code)}:${viteDefineCacheKey(options.define)}`,
-        }),
-    code,
-    define: options.define,
-    label: `metadata:${options.filename}`,
-  });
+  const module = await loadRouteMetadataModule(options, prebuiltArtifact);
 
   return await resolveRouteMetadataModule(module, options.context);
+}
+
+async function loadRouteMetadataModule(
+  options: {
+    appDir: string;
+    code: string;
+    define?: UserConfig["define"] | undefined;
+    devServerModuleCacheVersion?: string | undefined;
+    filename: string;
+    serverModuleCacheVersion?: string | undefined;
+    vitePlugins?: readonly PluginOption[] | undefined;
+  },
+  prebuiltArtifact: BuiltServerModuleArtifact["routeMetadata"] | undefined,
+): Promise<RouteMetadataModule> {
+  if (prebuiltArtifact?.moduleFile !== undefined) {
+    return await importBuiltServerModuleFile<RouteMetadataModule>({
+      file: prebuiltArtifact.moduleFile,
+      label: `metadata:${options.filename}`,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+    });
+  }
+
+  const sourceHash = memoizedHashText(options.code);
+  const moduleCacheVersion =
+    options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion;
+  const moduleCacheKey =
+    moduleCacheVersion === undefined
+      ? undefined
+      : `metadata-module:${options.serverModuleCacheVersion === undefined ? "dev" : "build"}:${options.filename}:${moduleCacheVersion}:${sourceHash}:${viteDefineCacheKey(options.define)}:${vitePluginsCacheKey(options.vitePlugins)}`;
+
+  if (moduleCacheKey !== undefined) {
+    const cached = readRouterRuntimeCacheEntry(
+      routeMetadataModuleCache,
+      moduleCacheKey,
+      routeMetadataModuleCacheCounters,
+    );
+    if (cached !== undefined) {
+      return await cached;
+    }
+  }
+
+  const loaded = (async () => {
+    const code = prebuiltArtifact?.code ?? (await bundleRouteMetadataModuleCode(options));
+
+    return await importAppRouterSourceModule<RouteMetadataModule>({
+      ...(moduleCacheVersion === undefined
+        ? {}
+        : {
+            cacheKey: `metadata:${options.serverModuleCacheVersion === undefined ? "dev" : "build"}:${options.filename}:${moduleCacheVersion}:${memoizedHashText(code)}:${viteDefineCacheKey(options.define)}`,
+          }),
+      code,
+      define: options.define,
+      label: `metadata:${options.filename}`,
+    });
+  })();
+
+  if (moduleCacheKey !== undefined) {
+    setBoundedCacheEntry(
+      routeMetadataModuleCache,
+      moduleCacheKey,
+      loaded,
+      maxRouteMetadataModuleCacheEntries,
+      routeMetadataModuleCacheCounters,
+    );
+  }
+
+  try {
+    return await loaded;
+  } catch (error) {
+    if (moduleCacheKey !== undefined) {
+      routeMetadataModuleCache.delete(moduleCacheKey);
+    }
+    throw error;
+  }
 }
 
 async function resolveRouteMetadataModule(
@@ -4727,6 +4825,7 @@ async function loadComposedRouteMetadata(options: {
   code: string;
   context: RouteMetadataContext;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   routes: readonly AppRoute[];
@@ -4772,14 +4871,18 @@ function composedRouteMetadataCacheKey(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModuleCacheVersion?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): string | undefined {
-  return options.serverModuleCacheVersion === undefined
+  const moduleCacheVersion =
+    options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion;
+
+  return moduleCacheVersion === undefined
     ? undefined
-    : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+    : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion === undefined ? "dev" : "build"}\0${moduleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
 }
 
 export const __composedRouteMetadataCacheKeyForTesting = composedRouteMetadataCacheKey;
@@ -4789,6 +4892,7 @@ async function loadComposedRouteMetadataUncached(options: {
   code: string;
   context: RouteMetadataContext;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   routes: readonly AppRoute[];
@@ -4822,6 +4926,7 @@ async function loadComposedRouteMetadataUncached(options: {
       importPolicy: options.importPolicy,
       serverModules: options.serverModules,
       serverModuleCacheVersion: options.serverModuleCacheVersion,
+      devServerModuleCacheVersion: options.devServerModuleCacheVersion,
       define: options.define,
       vitePlugins: options.vitePlugins,
     });
@@ -4836,6 +4941,7 @@ async function loadComposedRouteMetadataUncached(options: {
     importPolicy: options.importPolicy,
     serverModules: options.serverModules,
     serverModuleCacheVersion: options.serverModuleCacheVersion,
+    devServerModuleCacheVersion: options.devServerModuleCacheVersion,
     define: options.define,
     vitePlugins: options.vitePlugins,
   });
@@ -5083,9 +5189,7 @@ function injectQueryState(html: string, state: DehydratedQueryClient): string {
     JSON.stringify(state),
   )}</script>`;
 
-  return /<\/body>/i.test(html)
-    ? replaceFinalBodyCloseTag(html, script)
-    : `${html}${script}`;
+  return /<\/body>/i.test(html) ? replaceFinalBodyCloseTag(html, script) : `${html}${script}`;
 }
 
 function injectAuthSessionClaims(html: string, claims: unknown): string {
@@ -5097,9 +5201,7 @@ function injectAuthSessionClaims(html: string, claims: unknown): string {
     JSON.stringify(claims),
   )}</script>`;
 
-  return /<\/body>/i.test(html)
-    ? replaceFinalBodyCloseTag(html, script)
-    : `${html}${script}`;
+  return /<\/body>/i.test(html) ? replaceFinalBodyCloseTag(html, script) : `${html}${script}`;
 }
 
 function replaceFinalBodyCloseTag(html: string, insertion: string): string {
@@ -5183,11 +5285,7 @@ function readServerSourceFile(
 async function readDevServerSourceFile(file: string): Promise<string> {
   const stats = await fileStat(file);
   const cached = devServerSourceFileCache.get(file);
-  if (
-    cached !== undefined &&
-    cached.mtimeMs === stats.mtimeMs &&
-    cached.size === stats.size
-  ) {
+  if (cached !== undefined && cached.mtimeMs === stats.mtimeMs && cached.size === stats.size) {
     return cached.source;
   }
 
