@@ -38,9 +38,10 @@ hydrate(getQueryClient(), state);
 - `removeQueries()` aborts matching in-flight queries, evicts matching cache entries, and resets subscribed observers to an empty pending result.
 - `createQuery()` creates a reactive query observer. It auto-fetches empty queries in browsers by default and remains observe-only during server render. Hydrated entries render immediately, then revalidate on mount unless their server `updatedAt` timestamp is still covered by `staleTime`; pass `autoFetch: false` to require loader-prefetched data only.
 - `createQuery()` accepts `gcTime` to evict an idle cache entry after the last observer disposes. It is disabled by default; pass a non-negative millisecond value when short-lived browser views should release data after unmount.
-- `createQuery()` can opt into browser revalidation with `refetchOnWindowFocus` and `refetchOnReconnect`. These hooks are disabled by default and refetch through the same cache entry and abort signal path as manual `refetch()`.
+- `createQuery()` can opt into browser revalidation with `refetchOnWindowFocus`, `refetchOnReconnect`, and `refetchOnInvalidate`. These hooks are disabled by default and refetch through the same cache entry and abort signal path as manual `refetch()`.
 - `createInfiniteQuery()` stores cursor pages under one query key, exposes `pages`, `pageParams`, `hasNextPage`, and `fetchNextPage()`, and dedupes concurrent requests for the same next page.
 - `createMutation()` handles mutations and invalidation.
+- `queryClient.setQueryData(queryKey, updater)` can derive a new cached value from the previous value without fetching.
 - Mutation lifecycle hooks run in this order: `onMutate`, `mutationFn`, state update, `onSuccess`, query invalidation, then `onSettled`. On failure, state updates before `onError` and `onSettled`. The value returned by `onMutate` is passed to `onError` and `onSettled`, which supports optimistic rollback without external bookkeeping.
 - `dehydrate()` and `hydrate()` move query state from server to client while preserving each successful query's `updatedAt` timestamp for `staleTime` checks.
 - `getQueryClient()` returns the browser singleton query client.

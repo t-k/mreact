@@ -7,6 +7,9 @@
 import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 
 // @public
+export type ArrayFieldValue<TValues extends FormValues, Name extends FieldName<TValues>> = TValues[Name] extends readonly (infer Item)[] ? Item : never;
+
+// @public
 export function createForm<TValues extends FormValues>(options: CreateFormOptionsWithoutSchema<TValues>): FormApi<TValues, TValues>;
 
 // @public (undocumented)
@@ -39,6 +42,32 @@ export interface FieldApi<TValues extends FormValues, Name extends FieldName<TVa
     setValue(value: TValues[Name]): Promise<void>;
     // (undocumented)
     readonly state: ReadonlyCell<FieldState<TValues[Name]>>;
+}
+
+// @public
+export interface FieldArrayApi<TValues extends FormValues, Name extends FieldName<TValues>> {
+    // (undocumented)
+    append(value: ArrayFieldValue<TValues, Name>): Promise<void>;
+    // (undocumented)
+    readonly fields: ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>>;
+    // (undocumented)
+    insert(index: number, value: ArrayFieldValue<TValues, Name>): Promise<void>;
+    // (undocumented)
+    move(from: number, to: number): Promise<void>;
+    // (undocumented)
+    remove(index: number): Promise<void>;
+    // (undocumented)
+    swap(first: number, second: number): Promise<void>;
+}
+
+// @public
+export interface FieldArrayRow<TValue> {
+    // (undocumented)
+    index: number;
+    // (undocumented)
+    key: string;
+    // (undocumented)
+    value: TValue;
 }
 
 // @public
@@ -77,12 +106,25 @@ export interface FieldState<TValue> {
 }
 
 // @public
+export interface FieldValidationConfig<TValue, TValues extends FormValues> {
+    // (undocumented)
+    deps?: readonly FieldName<TValues>[] | undefined;
+    // (undocumented)
+    validate: FieldValidator<TValue, TValues>;
+}
+
+// @public
+export type FieldValidationEntry<TValue, TValues extends FormValues> = FieldValidator<TValue, TValues> | FieldValidationConfig<TValue, TValues>;
+
+// @public
 export type FieldValidator<TValue, TValues extends FormValues> = (value: TValue, values: TValues) => readonly string[] | string | undefined | Promise<readonly string[] | string | undefined>;
 
 // @public
 export interface FormApi<TValues extends FormValues, TSubmitValues> {
     // (undocumented)
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name>;
+    // (undocumented)
+    fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name>;
     // (undocumented)
     getValues(): TValues;
     // (undocumented)

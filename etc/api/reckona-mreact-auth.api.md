@@ -136,10 +136,10 @@ export type TryAuthResult<TData> = {
 };
 
 // @public
-export function tryRequirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: Pick<AuthGuardOptions, "mode">): Promise<TryAuthResult<TData>>;
+export function tryRequirePermission<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, permission: AuthRequirement, options?: Pick<AuthGuardOptions, "mode"> & SessionCookieOptions): Promise<TryAuthResult<TData>>;
 
 // @public
-export function tryRequireRole<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, role: AuthRequirement, options?: Pick<AuthGuardOptions, "mode">): Promise<TryAuthResult<TData>>;
+export function tryRequireRole<TData extends AuthSessionClaims>(request: Request, store: SessionStore<TData>, role: AuthRequirement, options?: Pick<AuthGuardOptions, "mode"> & SessionCookieOptions): Promise<TryAuthResult<TData>>;
 
 // (No @packageDocumentation comment for this package)
 

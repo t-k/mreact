@@ -1021,6 +1021,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     dev?: boolean | undefined;
     // (undocumented)
+    devServerModuleCacheVersion?: string | undefined;
+    // (undocumented)
     env?: unknown;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;

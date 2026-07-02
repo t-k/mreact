@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.0.182 - 2026-07-02
+
+### Added
+
+- Added `form.fieldArray(name)` to `@reckona/mreact-forms`, with stable keyed rows and `append`, `insert`, `move`, `remove`, and `swap` helpers for array-valued form fields.
+- Added dependent field validation descriptors to `@reckona/mreact-forms` so validators can declare `deps` and revalidate when related fields change or blur.
+- Added descriptor-based `@reckona/mreact-store` persistence with `load`, `save`, `version`, and `migrate`, including hydration without immediate resave and serialized asynchronous saves.
+- Added `refetchOnInvalidate` to `@reckona/mreact-query` observers so active queries can refetch when their key is invalidated.
+
+### Changed
+
+- Improved App Router development route rendering by caching page and metadata module imports until app source files change, reducing repeated dev document request latency.
+- Improved `@reckona/mreact-virtual` span grid scrolling so layout spans are not recomputed when only the scroll offset changes.
+- Improved React-compatible Flight serialization for primitive array payloads by avoiding unnecessary promise work on primitive leaves.
+- Improved `@reckona/mreact-store` notification hot paths by avoiding listener snapshot allocation while preserving unsubscribe safety during notifications.
+- Improved compiler and Vite diagnostic delivery so warn-level diagnostics retain structured file and location data without being promoted to fatal Vite errors.
+- Improved React-compatible package source exports used by Next.js integrations.
+- Improved `@reckona/mreact-query` cache updates so `setQueryData()` can accept an updater function based on the previous cached value.
+- Improved `@reckona/mreact-auth` optional authorization helpers so `tryRequireRole()` and `tryRequirePermission()` accept custom session cookie options.
+- Improved reactive flush limit diagnostics for easier debugging of runaway reactive update loops.
+
+### Fixed
+
+- Hardened server action request checks so Origin and Referer validation, production action allowlists, and CSRF cookie names fail closed outside local development and test environments.
+- Fixed compiler parse diagnostics so JavaScript parse failures keep codeframes and are not misclassified as JSX parse errors outside JSX contexts.
+- Hardened compiler event attribute diagnostics and out-of-band HTML reordering for safer server output.
+- Fixed route cache and built asset safety gaps in App Router runtimes.
+- Fixed query auth form and store behavior gaps, including cross-tab query data sharing warnings for unscoped channels.
+- Hardened redirect helpers against control characters and server action secret configuration against weak secrets.
+- Fixed generated package tarball validation so published bin executability is checked.
+
 ## 0.0.181 - 2026-06-22
 
 ### Changed

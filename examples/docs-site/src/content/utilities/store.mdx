@@ -78,6 +78,54 @@ This keeps request-isolated state separate from process-level state in long-live
 
 The `persist` option connects store state to a storage adapter. Use it for non-secret browser preferences such as theme, density, or last-opened panel. Do not persist secrets, access tokens, authorization data, or server-only state in browser storage.
 
+For simple write-only adapters, pass a callback. The callback runs after each committed change and receives the next store state.
+
+```ts
+const preferences = createStore(
+  { density: "comfortable", theme: "system" },
+  {
+    persist(state) {
+      localStorage.setItem("preferences", JSON.stringify(state));
+    },
+  },
+);
+```
+
+Use the descriptor form when the store should hydrate from storage, migrate older versions, or serialize asynchronous writes in commit order. `load()` runs after store creation, and a hydrated state does not immediately save itself back to storage. When the saved version differs from the configured `version`, `migrate(state, savedVersion)` can normalize the loaded state before it replaces the current value.
+
+```ts
+interface Preferences {
+  density: "compact" | "comfortable";
+  theme: "dark" | "light" | "system";
+}
+
+const preferences = createStore<Preferences>(
+  { density: "comfortable", theme: "system" },
+  {
+    persist: {
+      load() {
+        const text = localStorage.getItem("preferences");
+        return text === null
+          ? undefined
+          : JSON.parse(text) as { state: Preferences; version: number };
+      },
+      migrate(state, savedVersion) {
+        return savedVersion === 1
+          ? { ...state, density: state.density ?? "comfortable" }
+          : state;
+      },
+      save(state) {
+        localStorage.setItem(
+          "preferences",
+          JSON.stringify({ state, version: 2 }),
+        );
+      },
+      version: 2,
+    },
+  },
+);
+```
+
 ## Outside the framework runtime
 
 Use `store.subscribe()` for integration code that lives outside a component lifecycle, such as devtools, adapters, or imperative widgets. Dispose the subscription when the integration shuts down.

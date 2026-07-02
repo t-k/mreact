@@ -159,7 +159,7 @@ export function DashboardLiveSummary(props: { initialSummary: DashboardSummary }
 }
 ```
 
-`refetchOnWindowFocus` listens for focus and visible-tab transitions. `refetchOnReconnect` listens for the browser `online` event. Mreact Query does not currently have a built-in `refetchInterval` option, so use a small client-side timer when the view needs periodic polling. Always dispose long-lived observers and timers when integrating outside a component cleanup lifecycle.
+`refetchOnWindowFocus` listens for focus and visible-tab transitions. `refetchOnReconnect` listens for the browser `online` event. `refetchOnInvalidate` lets an active observer refetch when its query key is invalidated, which is useful when a mutation updates server state and the visible view should refresh without waiting for focus, reconnect, or a manual `refetch()`. Mreact Query does not currently have a built-in `refetchInterval` option, so use a small client-side timer when the view needs periodic polling. Always dispose long-lived observers and timers when integrating outside a component cleanup lifecycle.
 
 ## Cross-tab sync
 
@@ -216,6 +216,15 @@ const saveProfile = createMutation<{ name: string }, Profile>(getQueryClient(), 
 ```
 
 For optimistic updates, return rollback context from `onMutate`; `onError` and `onSettled` receive that value so failed mutations can restore the previous cache state.
+
+Use `queryClient.setQueryData(queryKey, updater)` when the new value can be derived from the previous cached value without fetching. The updater receives `undefined` when the query is not currently cached, so keep it total and side-effect free.
+
+```ts
+getQueryClient().setQueryData<Profile>(["profile"], (previous) => ({
+  ...(previous ?? { name: "" }),
+  name: "Ada Lovelace",
+}));
+```
 
 ## Cancellation and cleanup
 

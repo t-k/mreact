@@ -201,7 +201,7 @@ export default definePage<typeof loader>(function Page(props) {
 });
 ```
 
-`tryRequireRole()` has the same shape and is useful for optional role-gated controls. Possible failure reasons are `missing-session`, `missing-role`, and `missing-permission`.
+`tryRequireRole()` has the same shape and is useful for optional role-gated controls. Possible failure reasons are `missing-session`, `missing-role`, and `missing-permission`. If your app uses custom session cookie options, pass the same cookie options to `tryRequireRole()` or `tryRequirePermission()` so optional authorization checks read the same session cookie as redirecting guards.
 
 ## Expose safe claims to client code
 

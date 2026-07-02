@@ -24,7 +24,7 @@ counter.set((state) => ({ count: state.count + 1 }));
 - `store.subscribe()` observes changes from outside the framework runtime.
 - `store.transaction()` batches multiple updates into one notification.
 - `createRequestStoreFactory()` creates request-isolated store instances.
-- The `persist` option connects store state to a storage adapter.
+- The `persist` option connects store state to a storage adapter. Pass a callback for write-only persistence, or use `{ load, save, version, migrate }` when the store should hydrate and migrate saved state.
 
 ## Positioning
 

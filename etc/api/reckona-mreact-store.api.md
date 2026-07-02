@@ -62,11 +62,34 @@ export interface StoreOptions<T extends object> {
     // (undocumented)
     instrument?: ((event: StoreInstrumentationEvent<T>) => void) | undefined;
     // (undocumented)
-    persist?: ((state: T) => void | Promise<void>) | undefined;
+    persist?: StorePersist<T> | undefined;
 }
 
 // @public
 export type StorePatch<T extends object> = Partial<T>;
+
+// @public (undocumented)
+export type StorePersist<T extends object> = ((state: T) => void | Promise<void>) | StorePersistOptions<T>;
+
+// @public (undocumented)
+export interface StorePersistedState<T extends object> {
+    // (undocumented)
+    state: T;
+    // (undocumented)
+    version: number;
+}
+
+// @public (undocumented)
+export interface StorePersistOptions<T extends object> {
+    // (undocumented)
+    load?: (() => StorePersistedState<T> | T | undefined | Promise<StorePersistedState<T> | T | undefined>) | undefined;
+    // (undocumented)
+    migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+    // (undocumented)
+    save?: ((state: T) => void | Promise<void>) | undefined;
+    // (undocumented)
+    version?: number | undefined;
+}
 
 // @public
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);

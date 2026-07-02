@@ -108,7 +108,9 @@ await inviteForm.submit((values) => {
 
 - `createForm()` creates reactive form state.
 - `form.field(name).bind()` returns `{ value, onInput, onChange, onBlur }` and handles string values and boolean checkbox-style values. Pass `{ event: "change" }` to update from `onChange`; the default updates from `onInput`.
+- `form.fieldArray(name)` returns stable keyed rows and `append`, `insert`, `move`, `remove`, and `swap` helpers for array-valued form fields.
 - Field state includes `validating`, which is true while the latest async field validator is pending. Slower stale validator results are ignored.
+- Field validators can use `{ validate, deps }` when one field should be revalidated after another field changes or blurs.
 - `setServerErrors()` applies errors returned by a route handler or server action.
 - `form.submit()` dedupes concurrent submissions and keeps `submitting` true until the active validation and handler finish.
 - `form.reset()` restores the initial values.

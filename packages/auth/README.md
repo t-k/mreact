@@ -46,7 +46,7 @@ export async function loader({ request }) {
   and clears the request-local claims cache.
 - `getCurrentSession()` returns the current request session.
 - `requireRole()` and `requirePermission()` redirect or reject when the policy is not met.
-- `tryRequireRole()` and `tryRequirePermission()` return a boolean policy result.
+- `tryRequireRole()` and `tryRequirePermission()` return a boolean policy result and accept custom session cookie options for apps that override session cookie defaults.
 - `getSessionClaims()` reads session claims on both server and client hand-off paths.
 - `runWithAuthRequest()` creates an explicit request-local claims scope for custom server handlers that call auth helpers outside the app router request lifecycle, and can receive per-request auth config overrides.
 
