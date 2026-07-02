@@ -12,6 +12,7 @@ describe("cross-tab query sync", () => {
   const originalLocksDescriptor = Object.getOwnPropertyDescriptor(navigator, "locks");
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (originalLocksDescriptor === undefined) {
       delete (navigator as { locks?: unknown }).locks;
     } else {
@@ -262,6 +263,22 @@ describe("cross-tab query sync", () => {
     } finally {
       disposeFirst();
       disposeSecond();
+    }
+  });
+
+  it("warns when explicit query data sharing lacks scoped channel options", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const client = createQueryClient();
+    const dispose = syncQueryClientAcrossTabs(client, {
+      broadcastQueryData: true,
+    });
+
+    try {
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("broadcastQueryData requires a custom channel and includeQuery"),
+      );
+    } finally {
+      dispose();
     }
   });
 

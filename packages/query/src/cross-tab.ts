@@ -133,6 +133,15 @@ export function syncQueryClientAcrossTabs(
   const broadcastRemovals = options.broadcastRemovals !== false;
   let disposed = false;
 
+  if (
+    !canShareQueryData &&
+    (options.broadcastQueryData === true || options.singleFlight === true)
+  ) {
+    console.warn(
+      "syncQueryClientAcrossTabs broadcastQueryData requires a custom channel and includeQuery predicate; query data sharing was disabled.",
+    );
+  }
+
   channel.addEventListener("message", (event) => {
     const message = normalizeMessage(event.data);
 
