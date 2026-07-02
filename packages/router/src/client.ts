@@ -3849,6 +3849,20 @@ function __mreactObserveViewportPrefetchAnchors(root) {
 
 function __mreactApplyOutOfOrderFragments(root) {
   const fragments = Array.from(root.querySelectorAll("template[data-mreact-oob-fragment]"));
+  const completionMarkers = new Map();
+  for (const marker of root.querySelectorAll("[data-mreact-oob-complete]")) {
+    const id = marker.getAttribute("data-mreact-oob-complete");
+    if (!completionMarkers.has(id)) {
+      completionMarkers.set(id, marker);
+    }
+  }
+  const placeholders = new Map();
+  for (const placeholder of root.querySelectorAll("[data-mreact-oob-placeholder]")) {
+    const id = placeholder.getAttribute("data-mreact-oob-placeholder");
+    if (!placeholders.has(id)) {
+      placeholders.set(id, placeholder);
+    }
+  }
 
   for (const fragment of fragments) {
     const id = fragment.getAttribute("data-mreact-oob-fragment");
@@ -3857,16 +3871,12 @@ function __mreactApplyOutOfOrderFragments(root) {
       continue;
     }
 
-    const completionMarker = Array.from(root.querySelectorAll("[data-mreact-oob-complete]"))
-      .find((candidate) => candidate.getAttribute("data-mreact-oob-complete") === id);
-
+    const completionMarker = completionMarkers.get(id);
     if (completionMarker === undefined) {
       continue;
     }
 
-    const placeholder = Array.from(root.querySelectorAll("[data-mreact-oob-placeholder]"))
-      .find((candidate) => candidate.getAttribute("data-mreact-oob-placeholder") === id);
-
+    const placeholder = placeholders.get(id);
     if (placeholder === undefined) {
       continue;
     }

@@ -739,6 +739,25 @@ export default function Page() {
     expect(diagnostics).toEqual([]);
   });
 
+  test("analyzes lowercase event attributes as event handlers", () => {
+    const code = '<button onclick={save} />';
+    const diagnostics: { code: string; message: string }[] = [];
+
+    expect(
+      analyzeOxcAttribute(
+        code,
+        {
+          type: "JSXAttribute",
+          name: { name: "onclick", start: 8, end: 15 },
+          value: { type: "JSXExpressionContainer", expression: { start: 17, end: 21 } },
+        },
+        "client",
+        diagnostics,
+      ),
+    ).toEqual([{ kind: "event", name: "onclick", eventName: "click", code: "save" }]);
+    expect(diagnostics).toEqual([]);
+  });
+
   test("reads JSX attribute code for boolean, literal, and expression values", () => {
     const code = '<Panel enabled title="Ada" count={items.length} />';
     const countStart = code.indexOf("items.length");
@@ -1327,6 +1346,31 @@ export default function Page() {
         "})()",
       ].join("\n"),
     );
+  });
+
+  test("lowers lowercase DOM event attributes to addEventListener", () => {
+    const code = '<button onclick={save}>Save</button>';
+    const saveStart = code.indexOf("save");
+    const lowered = lowerOxcDomNodeExpression(code, {
+      type: "JSXElement",
+      openingElement: {
+        name: { type: "JSXIdentifier", name: "button" },
+        attributes: [
+          {
+            type: "JSXAttribute",
+            name: { name: "onclick" },
+            value: {
+              type: "JSXExpressionContainer",
+              expression: { start: saveStart, end: saveStart + "save".length },
+            },
+          },
+        ],
+      },
+      children: [{ type: "JSXText", value: "Save" }],
+    });
+
+    expect(lowered).toContain('_node.addEventListener("click", save);');
+    expect(lowered).not.toContain('setAttribute("onclick"');
   });
 
   test("lowers DOM URL and srcdoc attributes through safety guards", () => {

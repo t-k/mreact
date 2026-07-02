@@ -141,6 +141,38 @@ export function App() {
     );
   });
 
+  test("does not emit static lowercase event attributes in server output", () => {
+    const output = transform({
+      code: 'export function App() { return <button onclick="alert(1)">Open</button>; }',
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+      }),
+    );
+    expect(runServerComponent(output.code)).toBe("<button>Open</button>");
+  });
+
+  test("does not emit dynamic lowercase event attributes in server output", () => {
+    const output = transform({
+      code: 'export function App() { const handler = "alert(1)"; return <img src="x" onerror={handler} />; }',
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+      }),
+    );
+    expect(runServerComponent(output.code)).toBe('<img src="x">');
+  });
+
   test("renders optional-chained method calls in JSX child expressions", () => {
     const output = transform({
       code: `export function App() {

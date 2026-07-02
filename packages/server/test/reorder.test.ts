@@ -71,4 +71,40 @@ describe("out-of-order fragment reorder helper", () => {
 
     expect(root.innerHTML).toBe("<section><ol><li>1.</li></ol></section>");
   });
+
+  test("indexes completion markers once for many fragments", () => {
+    const root = document.createElement("main");
+    root.innerHTML = Array.from(
+      { length: 4 },
+      (_, index) =>
+        `<span data-mreact-oob-placeholder="frag-${index}">Loading</span><template data-mreact-oob-fragment="frag-${index}"><strong>${index}</strong></template><mreact-oob-complete hidden data-mreact-oob-complete="frag-${index}"></mreact-oob-complete>`,
+    ).join("");
+    const originalQuerySelectorAll = root.querySelectorAll.bind(root);
+    let completionMarkerScans = 0;
+    root.querySelectorAll = ((selector: string) => {
+      if (selector === "[data-mreact-oob-complete]") {
+        completionMarkerScans += 1;
+      }
+
+      return originalQuerySelectorAll(selector);
+    }) as typeof root.querySelectorAll;
+
+    applyOutOfOrderFragments(root);
+
+    expect(completionMarkerScans).toBe(1);
+    expect(root.querySelectorAll("[data-mreact-oob-fragment]")).toHaveLength(0);
+    expect(root.querySelectorAll("[data-mreact-oob-complete]")).toHaveLength(0);
+  });
+
+  test("keeps first matching placeholder and completion marker when duplicate ids exist", () => {
+    const root = document.createElement("main");
+    root.innerHTML =
+      '<span data-mreact-oob-placeholder="dup">first loading</span><span data-mreact-oob-placeholder="dup">second loading</span><template data-mreact-oob-fragment="dup"><strong>Ada</strong></template><mreact-oob-complete data-mreact-oob-complete="dup" data-order="first"></mreact-oob-complete><mreact-oob-complete data-mreact-oob-complete="dup" data-order="second"></mreact-oob-complete>';
+
+    applyOutOfOrderFragments(root);
+
+    expect(root.innerHTML).toBe(
+      '<strong>Ada</strong><span data-mreact-oob-placeholder="dup">second loading</span><mreact-oob-complete data-mreact-oob-complete="dup" data-order="second"></mreact-oob-complete>',
+    );
+  });
 });

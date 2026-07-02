@@ -5,6 +5,20 @@ export function applyOutOfOrderFragments(root: ParentNode = document): void {
       "template[data-mreact-oob-fragment]",
     ),
   );
+  const completionMarkers = new Map<string | null, Element>();
+  for (const marker of root.querySelectorAll<Element>("[data-mreact-oob-complete]")) {
+    const id = marker.getAttribute("data-mreact-oob-complete");
+    if (!completionMarkers.has(id)) {
+      completionMarkers.set(id, marker);
+    }
+  }
+  const placeholders = new Map<string | null, Element>();
+  for (const placeholder of root.querySelectorAll<Element>("[data-mreact-oob-placeholder]")) {
+    const id = placeholder.getAttribute("data-mreact-oob-placeholder");
+    if (!placeholders.has(id)) {
+      placeholders.set(id, placeholder);
+    }
+  }
 
   for (const fragment of fragments) {
     const id = fragment.dataset.mreactOobFragment;
@@ -13,19 +27,13 @@ export function applyOutOfOrderFragments(root: ParentNode = document): void {
       continue;
     }
 
-    const completionMarker = Array.from(
-      root.querySelectorAll<Element>("[data-mreact-oob-complete]"),
-    ).find((candidate) => candidate.getAttribute("data-mreact-oob-complete") === id);
-
+    const completionMarker = completionMarkers.get(id);
     if (completionMarker === undefined) {
       continue;
     }
 
-    const placeholder = root.querySelector<Element>(
-      `[data-mreact-oob-placeholder="${cssEscape(id)}"]`,
-    );
-
-    if (placeholder === null) {
+    const placeholder = placeholders.get(id);
+    if (placeholder === undefined) {
       continue;
     }
 
@@ -33,8 +41,4 @@ export function applyOutOfOrderFragments(root: ParentNode = document): void {
     fragment.remove();
     completionMarker.remove();
   }
-}
-
-function cssEscape(value: string): string {
-  return value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
 }

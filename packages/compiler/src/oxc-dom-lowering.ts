@@ -82,7 +82,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
       return [];
     }
 
-    if (/^on[A-Z]/.test(name)) {
+    if (/^on[A-Za-z]/.test(name)) {
       if (value.type !== "JSXExpressionContainer") {
         return [];
       }

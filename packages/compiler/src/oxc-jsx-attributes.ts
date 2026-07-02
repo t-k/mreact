@@ -39,9 +39,37 @@ export function analyzeOxcAttribute(
 
   const name = String(readObject(object.name).name);
   const value = readObject(object.value);
+  const isEventAttribute = /^on[A-Za-z]/.test(name);
 
   if (name === "ref" && options.allowRef !== true) {
     diagnostics.push(unsupportedRefAttributeDiagnostic(getOxcLocation(code, object.name)));
+  }
+
+  if (isEventAttribute) {
+    if (target === "server") {
+      const loc = getOxcLocation(code, object.name);
+      diagnostics.push({
+        level: "error",
+        code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
+        message: `Server target does not support event handler '${name}'.`,
+        ...(loc === undefined ? {} : { loc }),
+      });
+    }
+
+    if (value.type !== "JSXExpressionContainer") {
+      return [];
+    }
+
+    const expression = readObject(value.expression);
+    const expressionCode = options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
+    return [
+      {
+        kind: "event",
+        name,
+        eventName: name.slice(2).toLowerCase(),
+        code: expressionCode,
+      },
+    ];
   }
 
   if (value.type === "Literal") {
@@ -51,27 +79,6 @@ export function analyzeOxcAttribute(
   if (value.type === "JSXExpressionContainer") {
     const expression = readObject(value.expression);
     const expressionCode = options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
-
-    if (/^on[A-Z]/.test(name)) {
-      if (target === "server") {
-        const loc = getOxcLocation(code, object.name);
-        diagnostics.push({
-          level: "error",
-          code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-          message: `Server target does not support event handler '${name}'.`,
-          ...(loc === undefined ? {} : { loc }),
-        });
-      }
-
-      return [
-        {
-          kind: "event",
-          name,
-          eventName: name.slice(2).toLowerCase(),
-          code: expressionCode,
-        },
-      ];
-    }
 
     return [{ kind: "dynamic-attr", name, code: expressionCode }];
   }
