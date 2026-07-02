@@ -40,9 +40,13 @@ export function unsupportedServerEventHandlerDiagnostic(
   loc?: SourceLocation,
 ): Diagnostic {
   return {
-    level: "error",
+    level: "warn",
     code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-    message: `Event handler '${name}' cannot be emitted by the server target.`,
+    message: `Server target does not emit event handler '${name}' into string HTML.`,
+    suggestion: {
+      title:
+        "Move the handler into a client boundary, or keep it on server output only if inert HTML is intended.",
+    },
     ...(loc === undefined ? {} : { loc }),
   };
 }

@@ -140,8 +140,11 @@ describe("compiler diagnostics", () => {
     expect(output.diagnostics).toContainEqual(
       expect.objectContaining({
         code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-        level: "error",
+        level: "warn",
         loc: { line: 2, column: 18 },
+        suggestion: expect.objectContaining({
+          title: expect.stringContaining("client"),
+        }),
       }),
     );
   });
@@ -163,8 +166,11 @@ describe("compiler diagnostics", () => {
     expect(output.diagnostics).toContainEqual(
       expect.objectContaining({
         code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-        level: "error",
+        level: "warn",
         loc: { line: 2, column: 18 },
+        suggestion: expect.objectContaining({
+          title: expect.stringContaining("client"),
+        }),
       }),
     );
   });
@@ -333,11 +339,40 @@ describe("compiler diagnostics", () => {
       mode: "compat",
     });
 
-    expect(output.diagnostics).toContainEqual(
+    const diagnostic = output.diagnostics.find(
+      (candidate) => candidate.code === "MR_INVALID_JSX_EXPRESSION",
+    );
+
+    expect(diagnostic).toEqual(
       expect.objectContaining({
-        code: "MR_INVALID_JSX_EXPRESSION",
         level: "error",
         loc: { line: 2, column: 17 },
+      }),
+    );
+    expect(diagnostic?.message).toContain("return <div>{</div>;");
+    expect(diagnostic?.message).toContain("^");
+  });
+
+  test("does not classify plain JavaScript parse errors as JSX expression errors", () => {
+    const output = transform({
+      code: `const = 3;
+export function App() { return <div />; }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+      mode: "compat",
+      parser: "oxc",
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_OXC_PARSE_ERROR",
+        level: "error",
+      }),
+    );
+    expect(output.diagnostics).not.toContainEqual(
+      expect.objectContaining({
+        code: "MR_INVALID_JSX_EXPRESSION",
       }),
     );
   });

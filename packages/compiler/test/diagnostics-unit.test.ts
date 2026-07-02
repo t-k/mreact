@@ -21,7 +21,11 @@ describe("compiler diagnostics: factory branches with and without loc", () => {
   });
 
   test("unsupportedServerEventHandlerDiagnostic loc is optional", () => {
-    expect(unsupportedServerEventHandlerDiagnostic("onClick").loc).toBeUndefined();
+    const diagnostic = unsupportedServerEventHandlerDiagnostic("onClick");
+
+    expect(diagnostic.level).toBe("warn");
+    expect(diagnostic.suggestion?.title).toContain("client");
+    expect(diagnostic.loc).toBeUndefined();
     expect(unsupportedServerEventHandlerDiagnostic("onClick", loc).loc).toEqual(loc);
   });
 

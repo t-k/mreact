@@ -13,7 +13,10 @@ describe("compiler server diagnostics", () => {
     expect(output.diagnostics).toContainEqual(
       expect.objectContaining({
         code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-        level: "error",
+        level: "warn",
+        suggestion: expect.objectContaining({
+          title: expect.stringContaining("client"),
+        }),
       }),
     );
   });

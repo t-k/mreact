@@ -28,6 +28,16 @@ describe("serverActionCookie() hardening (Issue 064)", () => {
     expect(value).toMatch(/;\s*HttpOnly/i);
   });
 
+  test("staging: uses __Host- prefix with Secure + HttpOnly", () => {
+    process.env.NODE_ENV = "staging";
+    const value = serverActionCookie("token-1234");
+    expect(value.startsWith("__Host-mreact.csrf=")).toBe(true);
+    expect(value).toMatch(/;\s*Path=\//i);
+    expect(value).toMatch(/;\s*SameSite=Lax/i);
+    expect(value).toMatch(/;\s*Secure(?:;|$)/i);
+    expect(value).toMatch(/;\s*HttpOnly/i);
+  });
+
   test("production: __Host- requirement — no Domain attribute", () => {
     process.env.NODE_ENV = "production";
     const value = serverActionCookie("token-1234");
@@ -42,6 +52,22 @@ describe("serverActionCookie() hardening (Issue 064)", () => {
 
   test("production: rejects the development CSRF cookie name", () => {
     process.env.NODE_ENV = "production";
+    const form = new FormData();
+    form.set("__mreact_csrf", "token-1234");
+
+    const response = validateFormCsrf(
+      new Request("https://app.test/action", {
+        headers: { cookie: "mreact.csrf=token-1234" },
+        method: "POST",
+      }),
+      form,
+    );
+
+    expect(response?.status).toBe(403);
+  });
+
+  test("staging: rejects the development CSRF cookie name", () => {
+    process.env.NODE_ENV = "staging";
     const form = new FormData();
     form.set("__mreact_csrf", "token-1234");
 

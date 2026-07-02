@@ -1087,6 +1087,45 @@ export default function Page() {
     });
   });
 
+  test("rejects staging server action requests with a foreign Origin", async () => {
+    await withNodeEnv("staging", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-origin-staging-"));
+      await writeActionFixture(appDir);
+      const pageResponse = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const html = await pageResponse.text();
+      const csrf = extractInputValue(html, "__mreact_csrf");
+      const nonce = extractInputValue(html, "__mreact_action_nonce");
+      const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/_mreact/actions", {
+          body: new URLSearchParams({
+            __mreact_action_nonce: nonce,
+            __mreact_csrf: csrf,
+            __mreact_export_name: "save",
+            __mreact_module_id: "actions.ts",
+            title: "Blocked origin",
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            cookie,
+            origin: "https://evil.test",
+          },
+          method: "POST",
+        }),
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "Origin not allowed.",
+      });
+    });
+  });
+
   test("rejects production server action requests without an allowed action manifest", async () => {
     await withNodeEnv("production", async () => {
       const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-referer-"));
@@ -1108,6 +1147,45 @@ export default function Page() {
             __mreact_export_name: "save",
             __mreact_module_id: "actions.ts",
             title: "Allowed referer",
+          }),
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            cookie,
+            referer: "https://local.test/form",
+          },
+          method: "POST",
+        }),
+      });
+
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({
+        ok: false,
+        error: "Server action manifest required.",
+      });
+    });
+  });
+
+  test("rejects staging server action requests without an allowed action manifest", async () => {
+    await withNodeEnv("staging", async () => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-manifest-staging-"));
+      await writeActionFixture(appDir);
+      const pageResponse = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const html = await pageResponse.text();
+      const csrf = extractInputValue(html, "__mreact_csrf");
+      const nonce = extractInputValue(html, "__mreact_action_nonce");
+      const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+      const response = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/_mreact/actions", {
+          body: new URLSearchParams({
+            __mreact_action_nonce: nonce,
+            __mreact_csrf: csrf,
+            __mreact_export_name: "save",
+            __mreact_module_id: "actions.ts",
+            title: "Blocked manifest",
           }),
           headers: {
             "content-type": "application/x-www-form-urlencoded",

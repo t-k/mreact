@@ -1,5 +1,8 @@
 import type { AttributeIr } from "./ir.js";
-import { unsupportedRefAttributeDiagnostic } from "./diagnostics.js";
+import {
+  unsupportedRefAttributeDiagnostic,
+  unsupportedServerEventHandlerDiagnostic,
+} from "./diagnostics.js";
 import { getOxcLocation, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
@@ -48,12 +51,7 @@ export function analyzeOxcAttribute(
   if (isEventAttribute) {
     if (target === "server") {
       const loc = getOxcLocation(code, object.name);
-      diagnostics.push({
-        level: "error",
-        code: "MR_UNSUPPORTED_SERVER_EVENT_HANDLER",
-        message: `Server target does not support event handler '${name}'.`,
-        ...(loc === undefined ? {} : { loc }),
-      });
+      diagnostics.push(unsupportedServerEventHandlerDiagnostic(name, loc));
     }
 
     if (value.type !== "JSXExpressionContainer") {

@@ -214,6 +214,11 @@ export function analyzeCompilerModuleContextWithOxc(
 function oxcParseErrorDiagnostic(code: string, error: unknown): Diagnostic {
   const object = readObject(error);
   const firstLabel = readObject(readArray(object.labels)[0]);
+  const labelMessage = typeof firstLabel.message === "string" ? firstLabel.message : undefined;
+  const message = typeof object.message === "string" ? object.message : "Oxc parse error";
+  const helpMessage = typeof object.helpMessage === "string" ? object.helpMessage : undefined;
+  const codeframe =
+    typeof object.codeframe === "string" ? object.codeframe.trimEnd() : undefined;
   const loc =
     typeof firstLabel.start === "number"
       ? getOxcLocationFromOffset(code, firstLabel.start)
@@ -222,10 +227,36 @@ function oxcParseErrorDiagnostic(code: string, error: unknown): Diagnostic {
   return {
     level: "error",
     code:
-      object.message === "Unexpected token" ? "MR_INVALID_JSX_EXPRESSION" : "MR_OXC_PARSE_ERROR",
-    message: typeof object.message === "string" ? object.message : "Oxc parse error",
+      typeof firstLabel.start === "number" && isLikelyInvalidJsxExpression(code, firstLabel.start)
+        ? "MR_INVALID_JSX_EXPRESSION"
+        : "MR_OXC_PARSE_ERROR",
+    message: [labelMessage ?? message, helpMessage, codeframe].filter(isPresentString).join("\n"),
     ...(loc === undefined ? {} : { loc }),
   };
+}
+
+function isLikelyInvalidJsxExpression(code: string, offset: number): boolean {
+  const before = code.slice(0, offset);
+  const lastOpenExpression = before.lastIndexOf("{");
+
+  if (lastOpenExpression < 0 || before.lastIndexOf("}") > lastOpenExpression) {
+    return false;
+  }
+
+  const beforeExpression = before.slice(0, lastOpenExpression);
+  const lastTagOpen = beforeExpression.lastIndexOf("<");
+  const lastTagClose = beforeExpression.lastIndexOf(">");
+  if (lastTagOpen < 0 || lastTagClose < lastTagOpen) {
+    return false;
+  }
+
+  const expressionPrefix = before.slice(lastOpenExpression + 1);
+  const trimmedExpressionPrefix = expressionPrefix.trim();
+  return trimmedExpressionPrefix === "" || trimmedExpressionPrefix.startsWith("<");
+}
+
+function isPresentString(value: string | undefined): value is string {
+  return value !== undefined && value.length > 0;
 }
 
 function readUnsupportedExportName(statement: unknown): string | undefined {

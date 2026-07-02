@@ -8,7 +8,7 @@ const formFieldCsrf = "__mreact_csrf";
 export const formCsrfFieldName = formFieldCsrf;
 
 export function serverActionCookie(csrfToken: string): string {
-  const production = isProductionEnvironment();
+  const secure = shouldUseSecureCsrfCookie();
   const parts = [
     `${currentCsrfCookieName()}=${encodeURIComponent(csrfToken)}`,
     "Path=/",
@@ -16,7 +16,7 @@ export function serverActionCookie(csrfToken: string): string {
     "HttpOnly",
   ];
 
-  if (production) {
+  if (secure) {
     parts.push("Secure");
   }
 
@@ -97,16 +97,23 @@ function randomToken(): string {
   return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 
-function isProductionEnvironment(): boolean {
-  return typeof process !== "undefined" && process.env?.NODE_ENV === "production";
+function isLocalCsrfEnvironment(): boolean {
+  return (
+    typeof process !== "undefined" &&
+    (process.env?.NODE_ENV === "development" || process.env?.NODE_ENV === "test")
+  );
+}
+
+function shouldUseSecureCsrfCookie(): boolean {
+  return !isLocalCsrfEnvironment();
 }
 
 function currentCsrfCookieName(): string {
-  return isProductionEnvironment() ? csrfCookieNameProduction : csrfCookieNameDevelopment;
+  return shouldUseSecureCsrfCookie() ? csrfCookieNameProduction : csrfCookieNameDevelopment;
 }
 
 function csrfCookieNamesRead(): readonly string[] {
-  return isProductionEnvironment()
+  return shouldUseSecureCsrfCookie()
     ? [csrfCookieNameProduction]
     : [csrfCookieNameProduction, csrfCookieNameDevelopment];
 }

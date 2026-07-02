@@ -40,6 +40,10 @@ import {
 function isProductionEnvironment(): boolean {
   return process.env.NODE_ENV === "production";
 }
+
+function isLocalServerActionEnvironment(): boolean {
+  return process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test";
+}
 const formFieldModuleId = "__mreact_module_id";
 const formFieldExportName = "__mreact_export_name";
 const formFieldNonce = "__mreact_action_nonce";
@@ -905,7 +909,7 @@ function warnIfUnrestrictedServerActions(
 ): void {
   if (
     allowedActions !== undefined ||
-    !isProductionEnvironment() ||
+    isLocalServerActionEnvironment() ||
     warnedUnrestrictedServerActions
   ) {
     return;
@@ -920,7 +924,7 @@ function warnIfUnrestrictedServerActions(
 function validateServerActionManifest(
   allowedActions: readonly AppRouterAllowedServerAction[] | "any" | undefined,
 ): Response | undefined {
-  if (allowedActions !== undefined || !isProductionEnvironment()) {
+  if (allowedActions !== undefined || isLocalServerActionEnvironment()) {
     return undefined;
   }
 
@@ -1452,10 +1456,6 @@ function moduleIdForFile(appDir: string, file: string): string {
 }
 
 function validateServerActionRequestOrigin(request: Request): Response | undefined {
-  if (!isProductionEnvironment()) {
-    return undefined;
-  }
-
   const expectedOrigin = new URL(request.url).origin;
   const origin = request.headers.get("origin");
 
@@ -1467,8 +1467,10 @@ function validateServerActionRequestOrigin(request: Request): Response | undefin
 
   const referer = request.headers.get("referer");
 
-  if (referer === null) {
-    return jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
+  if (referer === null || isLocalServerActionEnvironment()) {
+    return isLocalServerActionEnvironment()
+      ? undefined
+      : jsonResponse({ ok: false, error: "Origin not allowed." }, 403);
   }
 
   try {
