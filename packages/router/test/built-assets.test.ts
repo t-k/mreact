@@ -53,4 +53,15 @@ describe("built asset handling", () => {
     expect(await second?.text()).toBe("asset");
     expect(getBuiltPublicAssetCacheSizeForTest()).toBe(1);
   });
+
+  test("rejects public asset paths that fail decoded path containment checks", async () => {
+    const outDir = await mkdtemp(join(tmpdir(), "mreact-built-assets-"));
+    await mkdir(join(outDir, "client", "public"), { recursive: true });
+    await writeFile(join(outDir, "client", "public", "bad%ZZ.txt"), "bad percent");
+    await writeFile(join(outDir, "client", "public", "safe\\asset.txt"), "backslash");
+    clearBuiltPublicAssetCacheForTest();
+
+    await expect(readBuiltPublicAsset(outDir, "/bad%ZZ.txt")).resolves.toBeUndefined();
+    await expect(readBuiltPublicAsset(outDir, "/safe\\asset.txt")).resolves.toBeUndefined();
+  });
 });

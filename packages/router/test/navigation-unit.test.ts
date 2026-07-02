@@ -151,7 +151,7 @@ describe("router navigation helpers", () => {
       expect(rewriteLocation(new Response(null, {
         headers: { "x-mreact-rewrite": location },
       }))).toBeUndefined();
-      expect(() => rewrite(location)).toThrow(/unsafe rewrite target/);
+      expect(() => rewrite(location)).toThrow(/rewrite\(\) only accepts same-origin paths/);
     }
   });
 

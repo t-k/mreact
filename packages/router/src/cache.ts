@@ -203,6 +203,11 @@ export function routeCachePolicyFromSource(code: string): RouteCachePolicy | und
   const seconds = match?.groups?.seconds === undefined ? undefined : Number(match.groups.seconds);
 
   if (seconds === undefined || !Number.isFinite(seconds)) {
+    if (/^\s*export\s+const\s+revalidate\s*=/m.test(code)) {
+      console.warn(
+        "export const revalidate must be a plain integer literal, e.g. export const revalidate = 3600",
+      );
+    }
     return undefined;
   }
 
@@ -362,8 +367,10 @@ function requestCarriesCredentials(request: Request | undefined): boolean {
       lower === "x-api-key" ||
       lower === "cf-access-jwt-assertion" ||
       lower === "proxy-authorization" ||
+      lower === "x-access-token" ||
       lower === "x-auth-token" ||
       lower === "x-authenticated-user" ||
+      lower === "x-id-token" ||
       lower === "x-forwarded-user" ||
       lower === "x-session-id" ||
       lower === "x-user-email" ||
@@ -380,7 +387,7 @@ function requestCarriesCredentials(request: Request | undefined): boolean {
       return true;
     }
 
-    return true;
+    continue;
   }
 
   return false;
@@ -391,12 +398,18 @@ const PUBLIC_ROUTE_CACHE_REQUEST_HEADERS = new Set([
   "accept-encoding",
   "accept-language",
   "cache-control",
+  "cf-connecting-ip",
+  "cf-ipcountry",
+  "cf-ray",
   "connection",
   "dnt",
   "host",
+  "if-none-match",
   "pragma",
+  "priority",
   "purpose",
   "referer",
+  "save-data",
   "sec-ch-prefers-color-scheme",
   "sec-ch-prefers-reduced-motion",
   "sec-ch-ua",
@@ -408,8 +421,14 @@ const PUBLIC_ROUTE_CACHE_REQUEST_HEADERS = new Set([
   "sec-fetch-user",
   "upgrade-insecure-requests",
   "user-agent",
+  "via",
   "x-mreact-navigation",
   "x-mreact-navigation-cache",
+  "x-real-ip",
+  "x-request-id",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-proto",
 ]);
 
 /**

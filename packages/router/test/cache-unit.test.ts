@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   cacheRouteResponse,
   cacheControl,
@@ -11,6 +11,10 @@ import {
   stripRevalidateExport,
   withRouteCacheContext,
 } from "../src/cache.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("router cache helpers", () => {
   test("cacheControl records Qwik-style directives in the active route cache context", async () => {
@@ -49,6 +53,16 @@ describe("router cache helpers", () => {
       revalidateSeconds: 0,
     });
     expect(routeCachePolicyFromSource("no revalidate here")).toBeUndefined();
+  });
+
+  test("routeCachePolicyFromSource warns when revalidate is present but not a bare integer", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(routeCachePolicyFromSource("export const revalidate = 60 * 60;")).toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("revalidate must be a plain integer literal"),
+    );
   });
 
   test("stripRevalidateExport removes the export and leaves the rest intact", () => {
@@ -155,6 +169,35 @@ describe("router cache helpers", () => {
       expect(result.headers.get("cache-control")).toBe("private, no-store");
       expect(await cachedRouteResponse({ cache, key })).toBeUndefined();
     }
+  });
+
+  test("cacheRouteResponse treats CDN and proxy infrastructure headers as public", async () => {
+    const cache = createMemoryRouteCache();
+    const request = new Request("https://app.test/blog", {
+      headers: {
+        "cf-connecting-ip": "203.0.113.10",
+        "cf-ray": "abc123",
+        "x-forwarded-for": "203.0.113.10",
+        "x-forwarded-proto": "https",
+      },
+    });
+    const result = await cacheRouteResponse({
+      cache,
+      key: "cdn-public",
+      path: "/blog",
+      policy: { cacheControl: "s-maxage=10", revalidateSeconds: 10 },
+      request,
+      response: new Response("<p>public</p>", {
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      }),
+    });
+
+    expect(result.headers.get("cache-control")).toBe("s-maxage=10");
+    expect(result.headers.get("x-mreact-cache")).toBe("MISS");
+    await expect(cachedRouteResponse({ cache, key: "cdn-public", request })).resolves.toBeInstanceOf(
+      Response,
+    );
   });
 
   test("cacheRouteResponse preserves Set-Cookie when skipping shared storage", async () => {

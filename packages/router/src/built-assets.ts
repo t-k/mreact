@@ -87,9 +87,8 @@ export async function readBuiltPublicAsset(
     return undefined;
   }
 
-  const normalized = normalize(relativePath);
-
-  if (isAbsolute(normalized) || normalized === ".." || normalized.startsWith("../")) {
+  const normalized = safeBuiltClientAssetPath(relativePath);
+  if (normalized === undefined) {
     return undefined;
   }
 

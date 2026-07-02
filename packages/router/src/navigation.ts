@@ -74,7 +74,9 @@ function throwUnsafeRedirect(location: string): never {
 }
 
 function throwUnsafeRewrite(location: string): never {
-  throw new TypeError(`unsafe rewrite target: ${JSON.stringify(location)}`);
+  throw new TypeError(
+    `unsafe rewrite target: ${JSON.stringify(location)} - rewrite() only accepts same-origin paths, query strings, or hashes; external, protocol-relative, backslash, and control-character targets are rejected`,
+  );
 }
 
 /**
