@@ -90,7 +90,13 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
         const message = formatDiagnostic(filename, diagnostic);
 
         if (diagnostic.level === "error") {
-          this.error(message);
+          this.error({
+            message,
+            id: filename,
+            ...(diagnostic.loc === undefined
+              ? {}
+              : { loc: { line: diagnostic.loc.line, column: diagnostic.loc.column } }),
+          });
         } else {
           this.warn(message);
         }

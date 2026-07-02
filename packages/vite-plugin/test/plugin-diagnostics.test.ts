@@ -49,6 +49,36 @@ describe("modularReact diagnostics", () => {
     ).toThrow("MR_UNSUPPORTED_SERVER_EVENT_HANDLER");
   });
 
+  test("passes structured location data to Vite errors", () => {
+    const plugin = modularReact();
+    const transform = plugin.transform;
+    let received: unknown;
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    expect(() =>
+      transform.call(
+        {
+          error(error: unknown): never {
+            received = error;
+            throw new Error("captured");
+          },
+          warn() {},
+        } as never,
+        "export function App() {\n  return <button onClick={() => {}}>Click</button>;\n}",
+        "/src/App.tsx",
+        { ssr: true },
+      ),
+    ).toThrow("captured");
+    expect(received).toMatchObject({
+      id: "/src/App.tsx",
+      loc: { line: 2, column: 18 },
+      message: expect.stringContaining("MR_UNSUPPORTED_SERVER_EVENT_HANDLER"),
+    });
+  });
+
   test("allows trusted server dangerouslySetInnerHTML", () => {
     const plugin = modularReact();
     const transform = plugin.transform;

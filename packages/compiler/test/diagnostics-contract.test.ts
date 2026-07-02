@@ -62,4 +62,22 @@ export function redirectToLogin(request: Request): Response {
 
     expect(output.diagnostics).toEqual([]);
   });
+
+  test("names and locates unsupported component returns", () => {
+    const output = transform({
+      code: `export function Header() { return <h1>Title</h1>; }
+export function Broken() { return 1; }`,
+      filename: "components.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toContainEqual(
+      expect.objectContaining({
+        code: "MR_UNSUPPORTED_COMPONENT_RETURN",
+        loc: { line: 2, column: 1 },
+        message: "Exported component 'Broken' must return a JSX element or supported React node.",
+      }),
+    );
+  });
 });

@@ -228,6 +228,22 @@ function oxcParseErrorDiagnostic(code: string, error: unknown): Diagnostic {
   };
 }
 
+function readUnsupportedExportName(statement: unknown): string | undefined {
+  const object = readObject(statement);
+  const declaration = readObject(object.declaration);
+
+  if (declaration.type === "FunctionDeclaration") {
+    const name = readObject(declaration.id).name;
+    return typeof name === "string" && name !== "" ? name : "default";
+  }
+
+  if (declaration.type === "VariableDeclaration") {
+    return collectBindingNames(declaration)[0];
+  }
+
+  return undefined;
+}
+
 function analyzeOxcToIr(
   code: string,
   program: unknown,
@@ -316,10 +332,16 @@ function analyzeOxcToIr(
       continue;
     } else {
       if (isOxcUnsupportedExportedFunction(statement, options, localJsxReturnFunctionNames)) {
+        const componentName = readUnsupportedExportName(statement);
+        const loc = getOxcLocation(code, statement);
         diagnostics.push({
           level: "error",
           code: "MR_UNSUPPORTED_COMPONENT_RETURN",
-          message: "Exported component must return a JSX element or supported React node.",
+          message:
+            componentName === undefined
+              ? "Exported component must return a JSX element or supported React node."
+              : `Exported component '${componentName}' must return a JSX element or supported React node.`,
+          ...(loc === undefined ? {} : { loc }),
         });
         continue;
       }
