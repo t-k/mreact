@@ -10,6 +10,8 @@ describe("GitHub workflows", () => {
     const workflow = await readWorkflow("ci.yml");
 
     expect(workflow).toContain("- parallel:\n          - name: Lint");
+    expect(workflow).not.toContain("Cache TypeScript build info");
+    expect(workflow).not.toContain("tsbuildinfo");
     expect(workflow).toContain("          - name: Build\n            run: pnpm build");
     expect(workflow).toContain("          - name: Install Playwright Chromium");
     expect(workflow).toContain("          - name: Format\n            run: pnpm format");

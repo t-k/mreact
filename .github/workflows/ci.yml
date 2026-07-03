@@ -38,16 +38,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-24-pnpm-
 
-      - name: Cache TypeScript build info
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/*/dist/.tsbuildinfo
-            packages/*/dist/tsconfig.tsbuildinfo
-          key: ${{ runner.os }}-node-24-tsbuildinfo-${{ hashFiles('packages/*/tsconfig.json', 'tsconfig.json', 'tsconfig.base.json', 'pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-node-24-tsbuildinfo-
-
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
