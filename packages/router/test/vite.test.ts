@@ -493,6 +493,52 @@ export default function Page() {
     expect(body).toContain("Browser build cannot import Node builtin");
   });
 
+  test("sends render errors to the Vite error overlay websocket", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-render-error-overlay-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  throw new Error("fixture render exploded");
+}`,
+    );
+    const sent: unknown[] = [];
+    const middleware = createAppRouterViteMiddleware({
+      appDir,
+      viteDevServer: {
+        ssrFixStacktrace(error: Error) {
+          error.stack = "fixed stack";
+        },
+        ws: {
+          send(payload: unknown) {
+            sent.push(payload);
+          },
+        },
+      },
+    } as never);
+    const server = await listenWithMiddleware((request, response, next) => {
+      middleware(request, response, (error?: unknown) => {
+        if (error === undefined) {
+          next();
+          return;
+        }
+        response.statusCode = 500;
+        response.end(error instanceof Error ? error.message : String(error));
+      });
+    });
+
+    const response = await fetch(`${server.url}/`);
+    await response.text();
+
+    expect(response.status).toBe(500);
+    expect(sent).toContainEqual({
+      type: "error",
+      err: expect.objectContaining({
+        message: expect.stringContaining("fixture render exploded"),
+        stack: "fixed stack",
+      }),
+    });
+  });
+
   test("links layout CSS imports to Vite CSS proxy URLs in dev HTML", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-css-"));
     const appDir = join(projectRoot, "src", "app");

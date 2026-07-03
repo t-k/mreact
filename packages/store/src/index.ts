@@ -87,7 +87,6 @@ export interface Store<T extends object> {
  */
 export function createStore<T extends object>(initial: T, options: StoreOptions<T> = {}): Store<T> {
   const state = cell(initial);
-  const persistDescriptor = options.persist !== undefined && typeof options.persist !== "function";
   const persist = normalizePersistOptions(options.persist);
   const listeners = new Set<StoreListener<T>>();
   let listenerEntries: Array<StoreListenerEntry<T>> = [];
@@ -99,6 +98,8 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let transactionType: StoreInstrumentationEvent<T>["type"] | undefined;
   let transactionMutationCount = 0;
   let persistSaveQueue: Promise<void> = Promise.resolve();
+  let persistSaveQueued = false;
+  let persistSavePendingState: T | undefined;
 
   void hydratePersistedState();
 
@@ -196,16 +197,36 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       return;
     }
 
-    if (!persistDescriptor) {
-      void persist.save(next);
+    if (persistSaveQueued) {
+      persistSavePendingState = next;
       return;
     }
-
+    persistSaveQueued = true;
+    const first = next;
     persistSaveQueue = persistSaveQueue
       .catch(() => undefined)
       .then(async () => {
-        await persist.save?.(next);
+        await persist.save?.(first);
+        await flushPersistSaveQueue();
+      })
+      .catch(async () => {
+        await flushPersistSaveQueue();
       });
+  }
+
+  async function flushPersistSaveQueue(): Promise<void> {
+    try {
+      while (persistSavePendingState !== undefined) {
+        const next = persistSavePendingState;
+        persistSavePendingState = undefined;
+        await persist.save?.(next);
+      }
+    } finally {
+      persistSaveQueued = false;
+      if (persistSavePendingState !== undefined) {
+        queuePersistSave(persistSavePendingState);
+      }
+    }
   }
 
   function subscribeListener(listener: StoreListener<T>): () => void {

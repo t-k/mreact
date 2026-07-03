@@ -9,6 +9,13 @@ describe("router project config", () => {
     expect(resolveBuildTargets(undefined)).toEqual(["node"]);
   });
 
+  test("keeps configured build concurrency on the resolved project", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-build-concurrency-"));
+
+    expect(resolveAppRouterProjectOptions({ buildConcurrency: 6, projectRoot }).buildConcurrency)
+      .toBe(6);
+  });
+
   test("defaults production client source maps to none", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-sourcemaps-default-"));
 

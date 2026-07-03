@@ -10,9 +10,13 @@ import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/r
 interface RouterBuildTimeRow {
   caseName: string;
   meanMs: number;
+  meanRssDeltaBytes: number;
   p75Ms: number;
+  p75RssDeltaBytes: number;
   p99Ms: number;
+  p99RssDeltaBytes: number;
   routeCount: number;
+  rssDeltaBytesSamples: number[];
   samplesMs: number[];
 }
 
@@ -34,11 +38,13 @@ const outDir = join(rootDir, ".mreact");
 try {
   await writeFixtureApp(appDir, routeCount);
   const samplesMs: number[] = [];
+  const rssDeltaBytesSamples: number[] = [];
   const phaseSamples = new Map<string, number[]>();
 
   for (let index = 0; index < repeatCount; index += 1) {
     await rm(outDir, { force: true, recursive: true });
     const phaseTimings: BuildAppPhaseTiming[] = [];
+    const beforeRss = process.memoryUsage().rss;
     const startedAt = performance.now();
     await buildApp({
       appDir,
@@ -52,6 +58,7 @@ try {
         : {}),
     });
     samplesMs.push(round(performance.now() - startedAt));
+    rssDeltaBytesSamples.push(Math.max(0, process.memoryUsage().rss - beforeRss));
 
     for (const timing of phaseTimings) {
       const samples = phaseSamples.get(timing.phase) ?? [];
@@ -63,9 +70,13 @@ try {
   const row: RouterBuildTimeRow = {
     caseName: "app build with rendered-export client inference",
     meanMs: round(mean(samplesMs)),
+    meanRssDeltaBytes: round(mean(rssDeltaBytesSamples)),
     p75Ms: percentile(samplesMs, 75),
+    p75RssDeltaBytes: percentile(rssDeltaBytesSamples, 75),
     p99Ms: percentile(samplesMs, 99),
+    p99RssDeltaBytes: percentile(rssDeltaBytesSamples, 99),
     routeCount,
+    rssDeltaBytesSamples,
     samplesMs,
   };
   const phaseRows = [...phaseSamples.entries()].map<RouterBuildPhaseTimingRow>(
@@ -95,9 +106,9 @@ try {
     "",
     "## Results",
     "",
-    "| case | routes | mean ms | p75 ms | p99 ms | raw samples ms |",
-    "| --- | ---: | ---: | ---: | ---: | --- |",
-    `| ${row.caseName} | ${row.routeCount} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${row.samplesMs.join(", ")} |`,
+    "| case | routes | mean ms | p75 ms | p99 ms | mean RSS delta bytes | p75 RSS delta bytes | p99 RSS delta bytes | raw samples ms | raw RSS delta bytes |",
+    "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    `| ${row.caseName} | ${row.routeCount} | ${row.meanMs} | ${row.p75Ms} | ${row.p99Ms} | ${row.meanRssDeltaBytes} | ${row.p75RssDeltaBytes} | ${row.p99RssDeltaBytes} | ${row.samplesMs.join(", ")} | ${row.rssDeltaBytesSamples.join(", ")} |`,
     ...(phaseRows.length === 0
       ? []
       : [

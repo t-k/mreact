@@ -584,6 +584,9 @@ async function handleAppRouterViteRequest(
         clientStylesByFile,
         clientRouteInferenceCache: options.clientRouteInferenceCache,
         navigationScripts,
+        onRenderError(error) {
+          sendViteErrorOverlay(options.viteDevServer, error);
+        },
         request,
         logger: options.logger,
         routeCache: options.routeCache,
@@ -595,8 +598,35 @@ async function handleAppRouterViteRequest(
       }),
     );
   } catch (error) {
+    sendViteErrorOverlay(options.viteDevServer, error);
     next(error);
   }
+}
+
+function sendViteErrorOverlay(server: ViteDevServer | undefined, error: unknown): void {
+  if (server === undefined) {
+    return;
+  }
+
+  if (error instanceof Error) {
+    server.ssrFixStacktrace(error);
+  }
+  server.ws.send({
+    type: "error",
+    err: viteErrorPayload(error),
+  });
+}
+
+function viteErrorPayload(error: unknown): { message: string; stack: string } {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      stack: error.stack ?? error.message,
+    };
+  }
+
+  const message = String(error);
+  return { message, stack: message };
 }
 
 /**

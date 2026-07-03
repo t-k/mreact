@@ -278,7 +278,7 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ count: 2 });
   });
 
-  it("serializes async persist descriptor saves in commit order", async () => {
+  it("coalesces pending async persist descriptor saves to the latest state", async () => {
     let releaseFirst: (() => void) | undefined;
     const saved: number[] = [];
     const store = createStore(
@@ -299,6 +299,7 @@ describe("createStore", () => {
 
     store.set({ count: 1 });
     store.set({ count: 2 });
+    store.set({ count: 3 });
     await flushMicrotasks();
     expect(saved).toEqual([]);
     expect(releaseFirst).toBeDefined();
@@ -306,7 +307,59 @@ describe("createStore", () => {
     releaseFirst?.();
     await flushMicrotasks();
 
-    expect(saved).toEqual([1, 2]);
+    expect(saved).toEqual([1, 3]);
+  });
+
+  it("continues coalesced persist descriptor saves after a rejected save", async () => {
+    const saved: number[] = [];
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          async save(state) {
+            if (state.count === 1) {
+              throw new Error("fixture save failed");
+            }
+            saved.push(state.count);
+          },
+        },
+      },
+    );
+
+    store.set({ count: 1 });
+    await flushMicrotasks();
+    store.set({ count: 2 });
+    store.set({ count: 3 });
+    await flushMicrotasks();
+
+    expect(saved).toEqual([2, 3]);
+  });
+
+  it("coalesces pending async persist callback saves to the latest state", async () => {
+    let releaseFirst: (() => void) | undefined;
+    const saved: number[] = [];
+    const store = createStore({ count: 0 }, {
+      persist: async (state) => {
+        if (state.count === 1) {
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+        }
+        saved.push(state.count);
+      },
+    });
+
+    store.set({ count: 1 });
+    store.set({ count: 2 });
+    store.set({ count: 3 });
+    await flushMicrotasks();
+    expect(saved).toEqual([]);
+    expect(releaseFirst).toBeDefined();
+
+    releaseFirst?.();
+    await flushMicrotasks();
+
+    expect(saved).toEqual([1, 3]);
   });
 });
 

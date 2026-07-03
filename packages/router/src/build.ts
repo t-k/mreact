@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { Dirent } from "node:fs";
 import {
   copyFile,
@@ -108,7 +109,8 @@ const nativeEscapeTransform = {
   batchImportSource: "@reckona/mreact-router/native-escape",
 } as const;
 
-const defaultBuildConcurrency = Math.max(1, Math.min(2, availableParallelism()));
+const maxDefaultBuildConcurrency = 8;
+const buildConcurrencyStorage = new AsyncLocalStorage<number>();
 const serverArtifactFilesystemConcurrency = 2;
 
 type ServerTransformOutput = ReturnType<typeof transform>;
@@ -377,10 +379,23 @@ type StaticParams = Record<string, string | number | boolean | readonly string[]
  * Use this from custom build scripts when the CLI is too coarse-grained; the returned manifest paths describe the files written under `outDir`. The build reads route files, loaders, middleware, metadata, server actions, and client references, so callers should pass the same project root and source allow-list they expect to deploy.
  */
 export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult> {
+  const project = resolveAppRouterProjectOptions(options);
+  const buildConcurrency = resolveBuildConcurrency(
+    options.buildConcurrency ?? project.buildConcurrency,
+  );
+
+  return await buildConcurrencyStorage.run(buildConcurrency, async () =>
+    await buildAppWithResolvedProject(options, project),
+  );
+}
+
+async function buildAppWithResolvedProject(
+  options: BuildAppOptions,
+  project: ResolvedAppRouterProject,
+): Promise<BuildAppResult> {
   const timingSink = options.onBuildPhaseTiming;
   const progressSink = options.onBuildProgress;
   const shouldTrackBuildPhases = timingSink !== undefined || progressSink !== undefined;
-  const project = resolveAppRouterProjectOptions(options);
   const buildTargets = resolveBuildTargets(options.targets ?? project.buildTargets);
   const shouldBuildCloudflare = buildTargets.includes("cloudflare");
   const shouldBuildAwsLambda = buildTargets.includes("aws-lambda");
@@ -786,6 +801,24 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
   return { routes };
 }
 
+function defaultBuildConcurrency(): number {
+  return Math.max(1, Math.min(maxDefaultBuildConcurrency, availableParallelism()));
+}
+
+function currentBuildConcurrency(): number {
+  return buildConcurrencyStorage.getStore() ?? defaultBuildConcurrency();
+}
+
+function resolveBuildConcurrency(value: number | undefined, cores = availableParallelism()): number {
+  const resolved = value ?? Math.max(1, Math.min(maxDefaultBuildConcurrency, cores));
+
+  if (!Number.isSafeInteger(resolved) || resolved < 1) {
+    throw new Error("mreactRouter buildConcurrency must be a positive integer.");
+  }
+
+  return resolved;
+}
+
 function typedRoutesDeclaration(routes: readonly AppRoute[]): string {
   const routePaths = Array.from(
     new Set(
@@ -861,7 +894,7 @@ function roundBuildPhaseMs(value: number): number {
 async function mapWithBuildConcurrency<T, R>(
   items: readonly T[],
   map: (item: T, index: number) => Promise<R>,
-  concurrency = defaultBuildConcurrency,
+  concurrency = currentBuildConcurrency(),
 ): Promise<R[]> {
   if (items.length === 0) {
     return [];
@@ -895,6 +928,27 @@ export async function __mapWithBuildConcurrencyForTests<T, R>(
   concurrency?: number,
 ): Promise<R[]> {
   return await mapWithBuildConcurrency(items, map, concurrency);
+}
+
+async function mapServerOutputsWithBuildConcurrency<R>(
+  serverOutputs: readonly ServerOutputMode[],
+  map: (serverOutput: ServerOutputMode, index: number) => Promise<R>,
+): Promise<R[]> {
+  return await mapWithBuildConcurrency(serverOutputs, map, 1);
+}
+
+export async function __mapServerOutputsWithBuildConcurrencyForTests<R>(
+  serverOutputs: readonly ServerOutputMode[],
+  map: (serverOutput: ServerOutputMode, index: number) => Promise<R>,
+): Promise<R[]> {
+  return await mapServerOutputsWithBuildConcurrency(serverOutputs, map);
+}
+
+export function __resolveBuildConcurrencyForTests(
+  value: number | undefined,
+  cores: number,
+): number {
+  return resolveBuildConcurrency(value, cores);
 }
 
 async function analyzeBuildRouteSources(options: {
@@ -2479,7 +2533,7 @@ async function buildServerModuleArtifacts(options: {
         });
       }
 
-      const serverOutputArtifacts = await mapWithBuildConcurrency(
+      const serverOutputArtifacts = await mapServerOutputsWithBuildConcurrency(
         serverOutputs,
         async (serverOutput) => {
           const output = await transformServerRouteSource({

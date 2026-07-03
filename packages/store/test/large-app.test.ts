@@ -50,7 +50,7 @@ describe("store large-app capabilities", () => {
     expect(second.get()).toEqual({ count: 0 });
   });
 
-  it("notifies persistence and instrumentation hooks without loading adapters", () => {
+  it("notifies persistence and instrumentation hooks without loading adapters", async () => {
     const persisted: unknown[] = [];
     const events: string[] = [];
     const store = createStore(
@@ -70,8 +70,15 @@ describe("store large-app capabilities", () => {
       store.set({ count: 2 });
       store.set({ count: 3 });
     });
+    await flushMicrotasks();
 
     expect(persisted).toEqual([{ count: 1 }, { count: 3 }]);
     expect(events).toEqual(["set", "transaction"]);
   });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) {
+    await Promise.resolve();
+  }
+}

@@ -24,6 +24,8 @@ import {
   __bundleRouteRequestModuleBatchForTests,
   __buildCloudflareRouteLoaderModuleBatchForTests,
   __mapWithBuildConcurrencyForTests,
+  __mapServerOutputsWithBuildConcurrencyForTests,
+  __resolveBuildConcurrencyForTests,
   __writeServerModuleArtifactFilesForTests,
   buildApp,
   packageAwsLambdaArtifact,
@@ -527,6 +529,33 @@ export default function Layout(props) {
 
     expect(maxActive).toBe(2);
     expect(results).toEqual(["0:30", "1:10", "2:20"]);
+  });
+
+  test("build concurrency defaults from available cores and accepts explicit configuration", () => {
+    expect(__resolveBuildConcurrencyForTests(undefined, 1)).toBe(1);
+    expect(__resolveBuildConcurrencyForTests(undefined, 4)).toBe(4);
+    expect(__resolveBuildConcurrencyForTests(undefined, 32)).toBe(8);
+    expect(__resolveBuildConcurrencyForTests(12, 32)).toBe(12);
+    expect(() => __resolveBuildConcurrencyForTests(0, 32)).toThrow(/buildConcurrency/);
+  });
+
+  test("server output transforms run one at a time inside each build worker", async () => {
+    let active = 0;
+    let maxActive = 0;
+
+    await __mapWithBuildConcurrencyForTests(
+      [0, 1, 2],
+      async () =>
+        await __mapServerOutputsWithBuildConcurrencyForTests(["stream", "string"], async () => {
+          active += 1;
+          maxActive = Math.max(maxActive, active);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          active -= 1;
+        }),
+      3,
+    );
+
+    expect(maxActive).toBe(3);
   });
 
   test("server module artifact writer externalizes modules with stable manifest entries", async () => {

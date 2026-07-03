@@ -182,6 +182,42 @@ export default function Page() {
     expect(await third.text()).toContain("<title>loads:4</title>");
   });
 
+  test("reuses dev loader modules until the dev source cache version changes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-loader-module-cache-"));
+    const state = globalThis as { __mreactDevLoaderModuleLoads?: number };
+    state.__mreactDevLoaderModuleLoads = 0;
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `const state = globalThis;
+state.__mreactDevLoaderModuleLoads = (state.__mreactDevLoaderModuleLoads ?? 0) + 1;
+const loaderModuleLoads = state.__mreactDevLoaderModuleLoads;
+
+export function loader() {
+  return { loads: loaderModuleLoads };
+}
+
+export default function Page(props) {
+  return <main>loader loads:{props.data.loads}</main>;
+}`,
+    );
+
+    const render = async (devServerModuleCacheVersion: string) =>
+      await renderAppRequest({
+        appDir,
+        dev: true,
+        devServerModuleCacheVersion,
+        request: new Request("http://local.test/"),
+      });
+
+    const first = await render("dev-source-1");
+    const second = await render("dev-source-1");
+    const third = await render("dev-source-2");
+
+    expect(await first.text()).toContain("<main>loader loads:1</main>");
+    expect(await second.text()).toContain("<main>loader loads:1</main>");
+    expect(await third.text()).toContain("<main>loader loads:3</main>");
+  });
+
   test("passes loader data to page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loader-"));
     await writeFile(
@@ -1958,6 +1994,44 @@ export default function Page() {
     expect(response.status).toBe(451);
     expect(response.headers.get("x-middleware")).toBe("hit");
     expect(await response.text()).toBe("blocked");
+  });
+
+  test("reuses dev middleware modules until the dev source cache version changes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-middleware-module-cache-"));
+    const state = globalThis as { __mreactDevMiddlewareModuleLoads?: number };
+    state.__mreactDevMiddlewareModuleLoads = 0;
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `const state = globalThis;
+state.__mreactDevMiddlewareModuleLoads = (state.__mreactDevMiddlewareModuleLoads ?? 0) + 1;
+const middlewareModuleLoads = state.__mreactDevMiddlewareModuleLoads;
+
+export function middleware() {
+  return new Response("loads:" + middlewareModuleLoads, {
+    headers: { "x-middleware-loads": String(middlewareModuleLoads) },
+  });
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>middleware cache</main>; }",
+    );
+
+    const render = async (devServerModuleCacheVersion: string) =>
+      await renderAppRequest({
+        appDir,
+        dev: true,
+        devServerModuleCacheVersion,
+        request: new Request("http://local.test/"),
+      });
+
+    const first = await render("dev-source-1");
+    const second = await render("dev-source-1");
+    const third = await render("dev-source-2");
+
+    expect(first.headers.get("x-middleware-loads")).toBe("1");
+    expect(second.headers.get("x-middleware-loads")).toBe("1");
+    expect(third.headers.get("x-middleware-loads")).toBe("2");
   });
 
   test("supports route-local middleware skip controls", async () => {

@@ -195,6 +195,7 @@ export interface RenderAppRequestOptions {
   instrumentation?: RouterInstrumentation | undefined;
   logger?: AppRouterLogger | undefined;
   navigationScripts?: ReadonlyMap<string, string> | undefined;
+  onRenderError?: ((error: unknown) => void) | undefined;
   onResponse?: AppRouterResponseHook | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
@@ -794,6 +795,7 @@ export type AppRouterMiddlewareResult =
 export async function resolveAppRouterMiddleware(options: {
   appDir: string;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
   middlewareControl?: RouteMiddlewareControl | undefined;
@@ -862,6 +864,7 @@ async function renderAppRequestInternal(
       ? ({ request: options.request, type: "continue" } satisfies AppRouterMiddlewareResult)
       : await resolveAppRouterMiddleware({
           appDir: options.appDir,
+          devServerModuleCacheVersion: options.devServerModuleCacheVersion,
           importPolicy: options.importPolicy,
           instrumentation: options.instrumentation,
           middlewareControl,
@@ -1097,6 +1100,7 @@ async function renderAppRequestInternal(
           filename: matched.route.file,
           importPolicy: options.importPolicy,
           instrumentation: options.instrumentation,
+          devServerModuleCacheVersion: options.devServerModuleCacheVersion,
           request: options.request,
           routeId: routeIdForPath(matched.route.path),
           routePath: matched.route.path,
@@ -1629,6 +1633,7 @@ async function renderAppRequestInternal(
       filename: "error.mreact.tsx",
       pageFile: matched.route.file,
     });
+    options.onRenderError?.(error);
 
     const response = await renderSpecialRoute({
       appDir: options.appDir,
@@ -2370,6 +2375,7 @@ function devExternalSourceDirs(
 async function runMiddleware(options: {
   appDir: string;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
   middlewareControl?: RouteMiddlewareControl | undefined;
@@ -2440,6 +2446,7 @@ async function runMiddleware(options: {
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
         serverSourceFiles: options.serverSourceFiles,
+        devServerModuleCacheVersion: options.devServerModuleCacheVersion,
         vitePlugins: options.vitePlugins,
       });
     } finally {
@@ -2538,6 +2545,7 @@ async function loadMiddlewareModule(options: {
   appDir: string;
   code?: string | undefined;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -2552,10 +2560,12 @@ async function loadMiddlewareModule(options: {
       options.serverModuleCacheVersion,
       options.serverSourceFiles,
     ));
+  const moduleCacheVersion =
+    options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion;
   const cacheKey =
-    options.serverModuleCacheVersion === undefined
+    moduleCacheVersion === undefined
       ? undefined
-      : `middleware\0${options.appDir}\0${options.file}\0${options.serverModuleCacheVersion}\0${memoizedHashText(code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+      : `middleware\0${options.serverModuleCacheVersion === undefined ? "dev" : "build"}\0${options.appDir}\0${options.file}\0${moduleCacheVersion}\0${memoizedHashText(code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
 
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
@@ -2576,6 +2586,7 @@ async function loadMiddlewareModule(options: {
     file: options.file,
     importPolicy: options.importPolicy,
     prebuiltArtifact: prebuiltRequestModuleArtifact(options.serverModules, options.file, code),
+    devServerModuleCacheVersion: options.devServerModuleCacheVersion,
     serverModuleCacheVersion: options.serverModuleCacheVersion,
     vitePlugins: options.vitePlugins,
   }).catch((error) => {
@@ -2637,6 +2648,7 @@ async function loadBundledMiddlewareModule(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   file: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   prebuiltArtifact?: BuiltServerModuleOutputLike | undefined;
@@ -2663,10 +2675,10 @@ async function loadBundledMiddlewareModule(options: {
     }));
 
   return importAppRouterSourceModule<MiddlewareModule>({
-    ...(options.serverModuleCacheVersion === undefined
+    ...((options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion) === undefined
       ? {}
       : {
-          cacheKey: `middleware:${options.file}:${options.serverModuleCacheVersion}:${memoizedHashText(compiled)}:${viteDefineCacheKey(options.define)}:${vitePluginsCacheKey(options.vitePlugins)}`,
+          cacheKey: `middleware:${options.serverModuleCacheVersion === undefined ? "dev" : "build"}:${options.file}:${options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion}:${memoizedHashText(compiled)}:${viteDefineCacheKey(options.define)}:${vitePluginsCacheKey(options.vitePlugins)}`,
         }),
     code: compiled,
     define: options.define,
@@ -4447,6 +4459,7 @@ async function loadRouteData(options: {
   code: string;
   context: RouteDataContext;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -4474,6 +4487,7 @@ async function loadRouteDataWithInstrumentation(options: {
   code: string;
   context: RouteDataContext;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
@@ -4514,16 +4528,19 @@ async function loadRouteLoaderModule(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<RouteLoaderModule> {
+  const moduleCacheVersion =
+    options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion;
   const cacheKey =
-    options.serverModuleCacheVersion === undefined
+    moduleCacheVersion === undefined
       ? undefined
-      : `${options.appDir}\0${options.filename}\0${options.serverModuleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
+      : `${options.serverModuleCacheVersion === undefined ? "dev" : "build"}\0${options.appDir}\0${options.filename}\0${moduleCacheVersion}\0${memoizedHashText(options.code)}\0${importPolicyCacheKey(options.importPolicy)}\0${viteDefineCacheKey(options.define)}\0${vitePluginsCacheKey(options.vitePlugins)}`;
 
   if (cacheKey !== undefined) {
     const cached = readRouterRuntimeCacheEntry(
@@ -4602,6 +4619,7 @@ async function loadBundledRouteLoaderModule(options: {
   appDir: string;
   code: string;
   define?: UserConfig["define"] | undefined;
+  devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   prebuiltArtifact?: BuiltServerModuleOutputLike | undefined;
@@ -4632,10 +4650,10 @@ async function loadBundledRouteLoaderModule(options: {
     }));
 
   return await importAppRouterSourceModule<RouteLoaderModule>({
-    ...(options.serverModuleCacheVersion === undefined
+    ...((options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion) === undefined
       ? {}
       : {
-          cacheKey: `loader:${options.filename}:${options.serverModuleCacheVersion}:${memoizedHashText(code)}:${viteDefineCacheKey(options.define)}`,
+          cacheKey: `loader:${options.serverModuleCacheVersion === undefined ? "dev" : "build"}:${options.filename}:${options.serverModuleCacheVersion ?? options.devServerModuleCacheVersion}:${memoizedHashText(code)}:${viteDefineCacheKey(options.define)}:${vitePluginsCacheKey(options.vitePlugins)}`,
         }),
     code,
     define: options.define,

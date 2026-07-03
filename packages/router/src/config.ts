@@ -26,6 +26,7 @@ export interface AppRouterProductionOptions {
 
 export interface AppRouterProjectOptions {
   assetBaseUrl?: string | undefined;
+  buildConcurrency?: number | undefined;
   buildTargets?: readonly AppRouterBuildTarget[] | undefined;
   clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
   /**
@@ -48,6 +49,7 @@ export interface AppRouterProjectOptions {
 export interface ResolvedAppRouterProject {
   allowedSourceDirs: readonly string[];
   assetBaseUrl?: string | undefined;
+  buildConcurrency?: number | undefined;
   buildTargets: readonly AppRouterBuildTarget[];
   clientSourceMaps: AppRouterClientSourceMapMode;
   clientConsolePureFunctions?: readonly string[] | undefined;
@@ -76,6 +78,9 @@ export function resolveAppRouterProjectOptions(
         resolveProjectPath(appDir, directory, "allowedSourceDirs"),
       ),
       ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
+      ...(options.buildConcurrency === undefined
+        ? {}
+        : { buildConcurrency: options.buildConcurrency }),
       buildTargets: resolveBuildTargets(options.buildTargets),
       clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
       ...(clientConsolePureFunctions === undefined ? {} : { clientConsolePureFunctions }),
@@ -98,6 +103,9 @@ export function resolveAppRouterProjectOptions(
       resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
     ),
     ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
+    ...(options.buildConcurrency === undefined
+      ? {}
+      : { buildConcurrency: options.buildConcurrency }),
     buildTargets: resolveBuildTargets(options.buildTargets),
     clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
     ...(clientConsolePureFunctions === undefined ? {} : { clientConsolePureFunctions }),
