@@ -41,15 +41,14 @@ const defaultMaxEvents = 200;
 const maxEventDetailsLength = 4_000;
 
 /** Mounts a browser devtools overlay that groups recent mreact events by category. */
-export function mountDevtoolsOverlay(
-  options: DevtoolsOverlayOptions = {},
-): MountedDevtoolsOverlay {
+export function mountDevtoolsOverlay(options: DevtoolsOverlayOptions = {}): MountedDevtoolsOverlay {
   const ownerDocument = options.document ?? documentFromGlobal();
   const maxEvents = normalizeMaxEvents(options.maxEvents);
   const devtools = options.devtools ?? getInstalledDevtools() ?? installDevtools(createDevtools());
   const events = devtools.events().slice(-maxEvents);
   const element = ownerDocument.createElement("section");
   const tabList = ownerDocument.createElement("nav");
+  const summaryList = ownerDocument.createElement("div");
   const eventList = ownerDocument.createElement("ol");
   let activeTab: DevtoolsOverlayTab = "reactive";
   let disposed = false;
@@ -88,8 +87,12 @@ export function mountDevtoolsOverlay(
     overflow: "auto",
     padding: "0",
   });
+  Object.assign(summaryList.style, {
+    display: "grid",
+    gap: "6px",
+  });
 
-  element.append(tabList, eventList);
+  element.append(tabList, summaryList, eventList);
   ownerDocument.body.append(element);
 
   const unsubscribe = devtools.subscribe((event) => {
@@ -118,6 +121,7 @@ export function mountDevtoolsOverlay(
     }
 
     tabList.replaceChildren(...tabs.map((tab) => renderTab(ownerDocument, tab)));
+    summaryList.replaceChildren(...renderSummary(ownerDocument, activeTab, events));
     const visibleEvents = [...events].filter((event) => eventTab(event) === activeTab).reverse();
 
     if (visibleEvents.length === 0) {
@@ -172,6 +176,89 @@ export function mountDevtoolsOverlay(
 
     return button;
   }
+}
+
+function renderSummary(
+  doc: Document,
+  activeTab: DevtoolsOverlayTab,
+  events: readonly DevtoolsEvent[],
+): Node[] {
+  if (activeTab !== "query") {
+    return [];
+  }
+
+  const queries = latestQueryStates(events);
+
+  if (queries.length === 0) {
+    return [];
+  }
+
+  const section = doc.createElement("section");
+  const heading = doc.createElement("div");
+  const list = doc.createElement("ol");
+
+  heading.textContent = "Current queries";
+  Object.assign(section.style, {
+    background: "#121a25",
+    border: "1px solid #303846",
+    borderRadius: "6px",
+    display: "grid",
+    gap: "4px",
+    padding: "8px",
+  });
+  Object.assign(heading.style, {
+    color: "#ffffff",
+    fontWeight: "700",
+  });
+  Object.assign(list.style, {
+    display: "grid",
+    gap: "3px",
+    listStyle: "none",
+    margin: "0",
+    padding: "0",
+  });
+
+  list.replaceChildren(...queries.map((query) => renderQuerySummary(doc, query)));
+  section.append(heading, list);
+
+  return [section];
+}
+
+interface QuerySummary {
+  hash: string;
+  isFetching: boolean;
+  stale: boolean;
+  status: string;
+}
+
+function latestQueryStates(events: readonly DevtoolsEvent[]): QuerySummary[] {
+  const byHash = new Map<string, QuerySummary>();
+
+  for (const event of events) {
+    if (event.type !== "query:update" || typeof event.queryHash !== "string") {
+      continue;
+    }
+
+    byHash.set(event.queryHash, {
+      hash: event.queryHash,
+      isFetching: event.isFetching === true,
+      stale: event.stale === true,
+      status: typeof event.status === "string" ? event.status : "unknown",
+    });
+  }
+
+  return Array.from(byHash.values()).sort((left, right) => left.hash.localeCompare(right.hash));
+}
+
+function renderQuerySummary(doc: Document, query: QuerySummary): HTMLLIElement {
+  const item = doc.createElement("li");
+  item.textContent = `${query.hash} | ${query.status}${query.isFetching ? " | fetching" : ""}${query.stale ? " | stale" : ""}`;
+  Object.assign(item.style, {
+    color: "#c8d7ec",
+    overflowWrap: "anywhere",
+  });
+
+  return item;
 }
 
 function renderEvent(doc: Document, event: DevtoolsEvent): HTMLLIElement {

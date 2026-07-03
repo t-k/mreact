@@ -71,6 +71,34 @@ describe("mreact devtools overlay", () => {
     expect(mounted.element.textContent).not.toContain("query:ignored");
   });
 
+  test("summarizes the latest query states above the raw event log", () => {
+    const devtools = createDevtools();
+    devtools.emit({
+      isFetching: true,
+      package: "@reckona/mreact-query",
+      queryHash: '["profile"]',
+      stale: false,
+      status: "pending",
+      type: "query:update",
+    });
+    devtools.emit({
+      isFetching: false,
+      package: "@reckona/mreact-query",
+      queryHash: '["profile"]',
+      stale: false,
+      status: "success",
+      type: "query:update",
+    });
+
+    const mounted = mountDevtoolsOverlay({ devtools });
+    clickTab("Query");
+
+    expect(mounted.element.textContent).toContain("Current queries");
+    expect(mounted.element.textContent).toContain('["profile"]');
+    expect(mounted.element.textContent).toContain("success");
+    expect(mounted.element.textContent).not.toContain("pending | fetching");
+  });
+
   test("caps large event details and survives cyclic details", () => {
     const devtools = createDevtools();
     const large = "x".repeat(20_000);
