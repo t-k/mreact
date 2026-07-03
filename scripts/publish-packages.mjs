@@ -17,9 +17,8 @@ await preflightRequiredFiles(packagesToPublish);
 await rm(packDir, { force: true, recursive: true });
 await mkdir(packDir, { recursive: true });
 
-for (const packageInfo of packagesToPublish) {
-  const tarball = await packPackage(packageInfo);
-  await publishPackage(tarball, packageInfo);
+for (const packageLevel of groupPackagesByDependencyLevel(packagesToPublish)) {
+  await Promise.all(packageLevel.map(packAndPublishPackage));
 }
 
 if (packagesToPublish.length === 0) {
@@ -166,6 +165,42 @@ function sortPackages(packageInfos) {
   }
 }
 
+function groupPackagesByDependencyLevel(packageInfos) {
+  const remaining = new Map(packageInfos.map((packageInfo) => [packageInfo.name, packageInfo]));
+  const publishNames = new Set(remaining.keys());
+  const published = new Set();
+  const levels = [];
+
+  while (remaining.size > 0) {
+    const packageLevel = [];
+
+    for (const packageInfo of remaining.values()) {
+      const blocked = packageInfo.dependencies.some(
+        (dependency) => publishNames.has(dependency) && !published.has(dependency),
+      );
+
+      if (!blocked) {
+        packageLevel.push(packageInfo);
+      }
+    }
+
+    if (packageLevel.length === 0) {
+      throw new Error(
+        `Could not group packages by dependency level: ${Array.from(remaining.keys()).join(", ")}`,
+      );
+    }
+
+    for (const packageInfo of packageLevel) {
+      remaining.delete(packageInfo.name);
+      published.add(packageInfo.name);
+    }
+
+    levels.push(packageLevel);
+  }
+
+  return levels;
+}
+
 async function publishablePackages(packageInfos) {
   const publishable = [];
 
@@ -229,6 +264,11 @@ async function packageExists(spec) {
   }
 
   throw new Error(`Failed to check ${spec} on npm:\n${output}`);
+}
+
+async function packAndPublishPackage(packageInfo) {
+  const tarball = await packPackage(packageInfo);
+  await publishPackage(tarball, packageInfo);
 }
 
 async function packPackage(packageInfo) {

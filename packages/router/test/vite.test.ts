@@ -83,10 +83,14 @@ describe("router Vite middleware", () => {
     const configHook = typeof plugin.config === "function" ? plugin.config : plugin.config?.handler;
     expect(configHook).toBeDefined();
 
-    const partialConfig = await configHook?.call({} as never, {}, {
-      command: "serve",
-      mode: "development",
-    });
+    const partialConfig = await configHook?.call(
+      {} as never,
+      {},
+      {
+        command: "serve",
+        mode: "development",
+      },
+    );
 
     // Prebundling any package that links against reactive-core duplicates the
     // reactive runtime in dev and silently breaks cross-package cell tracking,
@@ -158,9 +162,8 @@ describe("router Vite middleware", () => {
       publicDir: "packages/router/test",
       routesDir: "packages/router/test",
     });
-    const resolveId = typeof plugin.resolveId === "function"
-      ? plugin.resolveId
-      : plugin.resolveId?.handler;
+    const resolveId =
+      typeof plugin.resolveId === "function" ? plugin.resolveId : plugin.resolveId?.handler;
     expect(resolveId).toBeDefined();
 
     const runtimeImporter = join(projectRoot, "packages", "reactive-dom", "src", "bind-list.ts");
@@ -199,14 +202,74 @@ describe("router Vite middleware", () => {
     const load = typeof plugin.load === "function" ? plugin.load : plugin.load?.handler;
     expect(load).toBeDefined();
 
-    const source = await load?.call(
-      {} as never,
-      "\0mreact-router-reactive-devtools",
-      {},
-    );
+    const source = await load?.call({} as never, "\0mreact-router-reactive-devtools", {});
 
     expect(source).toContain("export function currentReactiveDevtools()");
     expect(source).toContain("return undefined");
+  });
+
+  test("invalidates only Vite hot update modules for mreact client dev modules", () => {
+    const projectRoot = process.cwd();
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["packages/router/test"],
+      projectRoot,
+      publicDir: "packages/router/test",
+      routesDir: "packages/router/test",
+    });
+    const handleHotUpdate =
+      typeof plugin.handleHotUpdate === "function"
+        ? plugin.handleHotUpdate
+        : plugin.handleHotUpdate?.handler;
+    expect(handleHotUpdate).toBeDefined();
+
+    const changedModule = {
+      id: `${join(projectRoot, "packages/router/test/page.tsx")}?mreact-router-client-route=/page`,
+      url: "/@id/page",
+    };
+    const unrelatedModule = {
+      id: `${join(projectRoot, "packages/router/test/other.tsx")}?mreact-router-client-route=/other`,
+      url: "/@id/other",
+    };
+    const invalidated: unknown[] = [];
+    const messages: unknown[] = [];
+
+    const result = handleHotUpdate?.call(
+      {} as never,
+      {
+        file: join(projectRoot, "packages/router/test/page.tsx"),
+        modules: [changedModule],
+        server: {
+          moduleGraph: {
+            idToModuleMap: new Map([
+              [changedModule.id, changedModule],
+              [unrelatedModule.id, unrelatedModule],
+            ]),
+            invalidateModule(moduleNode: unknown) {
+              invalidated.push(moduleNode);
+            },
+          },
+          ws: {
+            send(message: unknown) {
+              messages.push(message);
+            },
+          },
+        },
+      } as never,
+    );
+
+    expect(result).toEqual([]);
+    expect(invalidated).toEqual([changedModule]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      type: "update",
+      updates: [
+        {
+          acceptedPath: changedModule.url,
+          path: changedModule.url,
+          type: "js-update",
+        },
+      ],
+    });
   });
 
   test("resolves the mreact root runtime to ESM in dev SSR", async () => {
@@ -217,9 +280,8 @@ describe("router Vite middleware", () => {
       publicDir: "packages/router/test",
       routesDir: "packages/router/test",
     });
-    const resolveId = typeof plugin.resolveId === "function"
-      ? plugin.resolveId
-      : plugin.resolveId?.handler;
+    const resolveId =
+      typeof plugin.resolveId === "function" ? plugin.resolveId : plugin.resolveId?.handler;
     expect(resolveId).toBeDefined();
 
     const appImporter = join(projectRoot, "packages", "router", "test", "page.tsx");
@@ -603,7 +665,7 @@ export default function Layout(props) {
     const html = await page.text();
 
     expect(page.status).toBe(404);
-    expect(html).toContain("<main class=\"missing\">Missing</main>");
+    expect(html).toContain('<main class="missing">Missing</main>');
     expect(html).toContain('<link rel="stylesheet" href="/_mreact/dev-css/src/global.css">');
   });
 

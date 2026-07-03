@@ -265,7 +265,11 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
 
       devServerModuleCacheVersion += 1;
       const timestamp = Date.now();
-      const updates = Array.from(context.server.moduleGraph.idToModuleMap.values())
+      const hotModules =
+        context.modules.length > 0
+          ? context.modules
+          : Array.from(context.server.moduleGraph.idToModuleMap.values());
+      const updates = hotModules
         .filter((moduleNode) => isMreactClientDevModuleId(moduleNode.id))
         .map((moduleNode) => {
           context.server.moduleGraph.invalidateModule(moduleNode);
