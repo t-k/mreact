@@ -598,6 +598,9 @@ function replaceEqualDeep(previous: unknown, next: unknown): unknown {
     const result: Record<string, unknown> = {};
 
     for (const key of nextKeys) {
+      if (!Object.hasOwn(previousRecord, key)) {
+        equalEntries = false;
+      }
       const replaced = replaceEqualDeep(previousRecord[key], nextRecord[key]);
       result[key] = replaced;
       if (!Object.is(replaced, previousRecord[key])) {

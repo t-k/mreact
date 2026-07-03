@@ -225,6 +225,15 @@ describe("createQueryClient", () => {
     expect(client.getQueryData(["counter"])).toEqual({ count: 2 });
   });
 
+  it("does not structurally share objects when keys change to an undefined value", () => {
+    const client = createQueryClient();
+
+    client.setQueryData(["profile"], { name: "Ada" });
+    client.setQueryData(["profile"], { displayName: undefined });
+
+    expect(client.getQueryData(["profile"])).toEqual({ displayName: undefined });
+  });
+
   it("prefetchQuery records errors without rejecting fire-and-forget callers", async () => {
     const client = createQueryClient();
     const error = new Error("prefetch failed");
