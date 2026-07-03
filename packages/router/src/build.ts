@@ -6166,6 +6166,7 @@ async function writeClientRouteBundles(options: {
       scriptBasename: routeOutput.chunk.fileName.split("/").pop() ?? "route.js",
       sourceMaps: options.sourceMaps,
     });
+    const navigation = entry.navigation === true || entry.build.clientNavigation !== false;
 
     return {
       bytes: Buffer.byteLength(code),
@@ -6178,7 +6179,7 @@ async function writeClientRouteBundles(options: {
         : { clientReferenceManifest: entry.build.clientReferenceManifest }),
       ...(entry.css.length === 0 ? {} : { css: entry.css }),
       ...(routeOutput.chunk.imports.length === 0 ? {} : { imports: routeOutput.chunk.imports }),
-      ...(entry.navigation ? { navigation: entry.navigation } : {}),
+      ...(navigation ? { navigation } : {}),
       routeId,
       script: routeOutput.chunk.fileName,
       ...(options.sourceMaps === "linked" ? { sourceMap } : {}),

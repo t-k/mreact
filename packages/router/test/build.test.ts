@@ -5711,6 +5711,43 @@ export default function Page() {
     expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
   });
 
+  test("emits navigation runtime descriptor for default client routes with plain anchors", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-navigation-anchor-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "about"), { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button><a href="/about">About</a></main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "about", "page.tsx"),
+      `export default function Page() { return <main>About</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+    const html = await (
+      await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/"),
+      })
+    ).text();
+
+    expect(home).toMatchObject({ navigation: true });
+    expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
+    expect(html).toContain('<script type="application/json" id="mreact-navigation-runtime">');
+    expect(html).toContain(`"/_mreact/client/${home?.navigationScript}"`);
+  });
+
   test("prerendered static routes include navigation runtime for Link prefetch", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-prerender-"));
     const appDir = join(rootDir, "app");
