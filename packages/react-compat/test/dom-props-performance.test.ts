@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { applyPostChildFormProps, applyProps } from "../src/dom-props.js";
+import {
+  __domPropsAttributeNameCacheForTesting,
+  applyPostChildFormProps,
+  applyProps,
+} from "../src/dom-props.js";
 
 type FormConstructors = Pick<
   typeof globalThis,
@@ -238,6 +242,28 @@ describe("react-compat DOM prop performance", () => {
       Object.prototype.hasOwnProperty = originalHasOwnProperty;
       vi.resetModules();
     }
+  });
+
+  test("reuses cached attribute names for repeated same-shape updates", () => {
+    const root = document.createElement("div");
+    const row = document.createElement("tr");
+
+    applyProps(row, { className: "row", "data-id": 0, title: "0", children: "0" }, "0", {
+      eventRoot: root,
+    });
+
+    __domPropsAttributeNameCacheForTesting.clear();
+
+    for (let index = 1; index <= 20; index += 1) {
+      applyProps(
+        row,
+        { className: "row", "data-id": index, title: String(index), children: String(index) },
+        "0",
+        { eventRoot: root },
+      );
+    }
+
+    expect(__domPropsAttributeNameCacheForTesting.missCount()).toBe(1);
   });
 
 });

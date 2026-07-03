@@ -639,7 +639,34 @@ function removePreviousStyle(
   }
 }
 
+const ATTRIBUTE_NAME_SHAPE_CACHE = new Map<string, readonly string[]>();
+const ATTRIBUTE_NAME_SHAPE_CACHE_LIMIT = 1024;
+let attributeNameShapeCacheMissCount = 0;
+
+export const __domPropsAttributeNameCacheForTesting = {
+  clear() {
+    ATTRIBUTE_NAME_SHAPE_CACHE.clear();
+    attributeNameShapeCacheMissCount = 0;
+  },
+  missCount() {
+    return attributeNameShapeCacheMissCount;
+  },
+  size() {
+    return ATTRIBUTE_NAME_SHAPE_CACHE.size;
+  },
+};
+
 function collectAttributeNames(props: Record<string, unknown>): string[] {
+  const cacheKey = attributeNameShapeCacheKey(props);
+
+  if (cacheKey !== undefined) {
+    const cached = ATTRIBUTE_NAME_SHAPE_CACHE.get(cacheKey);
+    if (cached !== undefined) {
+      return [...cached];
+    }
+  }
+
+  attributeNameShapeCacheMissCount += 1;
   const names: string[] = [];
 
   for (const name in props) {
@@ -683,7 +710,39 @@ function collectAttributeNames(props: Record<string, unknown>): string[] {
     pushUniqueAttributeName(names, attributeName);
   }
 
+  if (cacheKey !== undefined && ATTRIBUTE_NAME_SHAPE_CACHE.size < ATTRIBUTE_NAME_SHAPE_CACHE_LIMIT) {
+    ATTRIBUTE_NAME_SHAPE_CACHE.set(cacheKey, names);
+  }
+
   return names;
+}
+
+function attributeNameShapeCacheKey(props: Record<string, unknown>): string | undefined {
+  let key = "";
+
+  for (const name in props) {
+    if (!Object.prototype.hasOwnProperty.call(props, name)) {
+      continue;
+    }
+
+    const value = props[name];
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    const attributeName = toDomAttributeName(name);
+    if (
+      value === false &&
+      !isBooleanishStringAttribute(attributeName) &&
+      !isDataAttribute(attributeName)
+    ) {
+      return undefined;
+    }
+
+    key += key === "" ? name : `\0${name}`;
+  }
+
+  return key;
 }
 
 function pushUniqueAttributeName(names: string[], name: string): void {
