@@ -1275,7 +1275,7 @@ async function renderAppRequestInternal(
                 assetBaseUrl: options.assetBaseUrl,
                 currentStyleSheets: clientStyleSheets,
                 currentScript: clientRoute ? clientScript : undefined,
-                currentNavigationScript: clientRoute ? undefined : navigationScript,
+                currentNavigationScript: navigationScript,
                 routeScripts: options.clientScripts,
               })}${html}`,
               preparedActions.htmlReplacements,
@@ -1562,7 +1562,7 @@ async function renderAppRequestInternal(
             assetBaseUrl: options.assetBaseUrl,
             currentStyleSheets: clientStyleSheets,
             currentScript: clientRoute ? clientScript : undefined,
-            currentNavigationScript: clientRoute ? undefined : navigationScript,
+            currentNavigationScript: navigationScript,
             routeScripts: options.clientScripts,
           })}${html}`,
           preparedActions.htmlReplacements,
@@ -1772,11 +1772,15 @@ function navigationRuntimeScriptTag(
   script: string | undefined,
   assetBaseUrl: string | undefined,
 ): string {
-  return script === undefined
-    ? ""
-    : `<script type="module" src="${escapeHtmlAttribute(
-        assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
-      )}"></script>`;
+  if (script === undefined) {
+    return "";
+  }
+
+  const json = JSON.stringify({
+    script: assetPath(script, assetBaseUrl ?? "/_mreact/client/"),
+  }).replaceAll("<", "\\u003c");
+
+  return `<script type="application/json" id="mreact-navigation-runtime">${json}</script>`;
 }
 
 function routePrefetchManifestScript(

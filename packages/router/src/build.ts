@@ -659,9 +659,7 @@ async function buildAppWithResolvedProject(
         ),
   ]);
   const clientRoutes = clientBundle.routes;
-  const navigationRuntimeScript = clientRoutes.some(
-    (route) => route.navigation === true && !route.client,
-  )
+  const navigationRuntimeScript = clientRoutes.some((route) => route.navigation === true)
     ? shouldTrackBuildPhases === false
       ? await writeNavigationRuntimeBundle(clientDir, project.clientConsolePureFunctions)
       : await timeBuildPhase(timingSink, progressSink, "navigationRuntime", () =>
@@ -672,7 +670,7 @@ async function buildAppWithResolvedProject(
     navigationRuntimeScript === undefined
       ? clientRoutes
       : clientRoutes.map((route) =>
-          route.navigation === true && !route.client
+          route.navigation === true
             ? { ...route, navigationScript: navigationRuntimeScript }
             : route,
         );

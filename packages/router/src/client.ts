@@ -79,6 +79,7 @@ export interface BuildClientRouteOutputOptions {
   sourceMap?: boolean | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   clientNavigation?: boolean | undefined;
+  forceInlineNavigationRuntime?: boolean | undefined;
 }
 
 export interface BuildClientRouteBatchOutput {
@@ -2085,6 +2086,7 @@ export async function buildNavigationRuntimeBundle(
     filename: "__mreact_navigation_runtime.tsx",
     routePath: "/__mreact_navigation_runtime",
     clientNavigation: true,
+    forceInlineNavigationRuntime: true,
     ...(options.dropConsoleFunctions === undefined
       ? {}
       : { dropConsoleFunctions: options.dropConsoleFunctions }),
@@ -2212,6 +2214,9 @@ export async function buildClientRouteEntrySource(
   }
 
   const clientNavigation = options.clientNavigation ?? detectClientNavigationHint(options.code);
+  const inlineClientNavigation =
+    clientNavigation && (options.forceInlineNavigationRuntime === true || options.minify !== true);
+  const deferredClientNavigation = clientNavigation && !inlineClientNavigation;
   const clientReferenceManifest =
     options.clientReferenceManifest ?? (await inferClientReferenceManifestForBundle(options));
   const compatClientReferenceNames = compatClientReferenceComponentNames(clientReferenceManifest);
@@ -2259,7 +2264,7 @@ export async function buildClientRouteEntrySource(
   const routeReactiveDomMetadataImport = !routeUsesOnlyClientReferenceBoundaries
     ? `import { withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
     : "";
-  const navigationStateDeclaration = clientNavigation
+  const navigationStateDeclaration = inlineClientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
   cache: new Map(),
   current: {
@@ -2279,6 +2284,105 @@ export async function buildClientRouteEntrySource(
   viewportAnchors: new WeakSet(),
   viewportObserver: undefined,
 };`
+    : "";
+  const deferredNavigationRuntime = deferredClientNavigation
+    ? `
+let __mreactDeferredNavigationRuntime = undefined;
+
+function __mreactNavigationRuntimeScript() {
+  if (typeof document === "undefined") {
+    return undefined;
+  }
+
+  const element = document.getElementById("mreact-navigation-runtime");
+  const text = element?.textContent;
+
+  if (text === undefined || text === "") {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(text);
+    return typeof parsed?.script === "string" ? parsed.script : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function __mreactLoadNavigationRuntime() {
+  if (__mreactDeferredNavigationRuntime !== undefined) {
+    return __mreactDeferredNavigationRuntime;
+  }
+
+  const script = __mreactNavigationRuntimeScript();
+  __mreactDeferredNavigationRuntime = script === undefined
+    ? Promise.resolve(undefined)
+    : import(/* @vite-ignore */ script).catch(() => undefined);
+  return __mreactDeferredNavigationRuntime;
+}
+
+function __mreactInstallNavigation() {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  const load = () => {
+    void __mreactLoadNavigationRuntime();
+  };
+  const loadFromAnchorEvent = (event) => {
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest("a[href]") : null;
+
+    if (anchor instanceof HTMLAnchorElement && anchor.origin === location.origin) {
+      load();
+    }
+  };
+
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(load);
+  } else {
+    setTimeout(load, 0);
+  }
+
+  addEventListener("popstate", load);
+  document.addEventListener("pointerover", loadFromAnchorEvent, true);
+  document.addEventListener("pointerdown", loadFromAnchorEvent, true);
+  document.addEventListener("focusin", loadFromAnchorEvent);
+}
+
+export async function __mreactNavigate(url, options = {}) {
+  const runtime = await __mreactLoadNavigationRuntime();
+  return typeof runtime?.__mreactNavigate === "function"
+    ? runtime.__mreactNavigate(url, options)
+    : false;
+}
+
+export async function __mreactPrefetch(url) {
+  const runtime = await __mreactLoadNavigationRuntime();
+  return typeof runtime?.__mreactPrefetch === "function"
+    ? runtime.__mreactPrefetch(url)
+    : false;
+}
+
+export async function __mreactInvalidateNavigationCache(path) {
+  const runtime = await __mreactLoadNavigationRuntime();
+  runtime?.__mreactInvalidateNavigationCache?.(path);
+}
+
+export async function __mreactRestoreHistoryState(state) {
+  const runtime = await __mreactLoadNavigationRuntime();
+  return typeof runtime?.__mreactRestoreHistoryState === "function"
+    ? runtime.__mreactRestoreHistoryState(state)
+    : false;
+}
+
+export async function __mreactGetNavigationState() {
+  const runtime = await __mreactLoadNavigationRuntime();
+  return typeof runtime?.__mreactGetNavigationState === "function"
+    ? runtime.__mreactGetNavigationState()
+    : { from: null, pending: false, to: null, type: null };
+}
+`
     : "";
   const routeCellStateDeclaration = routeUsesCells
     ? `const __mreactRouteStates = __mreactGlobal.__mreactRouteStates ??= new Map();
@@ -2451,6 +2555,7 @@ const __mreactRouteId = ${JSON.stringify(routeId)};
   const __mreactPropsScriptPrefix = ${JSON.stringify(routeHydrationContract.propsScriptPrefix)};
   const __mreactClientReferencesScriptPrefix = ${JSON.stringify(routeHydrationContract.clientReferencesScriptPrefix)};
   const __mreactGlobal = globalThis;
+  __mreactGlobal.__mreactHydrateRoute;
 ${navigationStateDeclaration}
 ${routeCellStateDeclaration}
 ${routeCleanupStateDeclaration}
@@ -2548,11 +2653,12 @@ function __mreactRunRouteHydration(factory) {
   }
 }
 
+${deferredNavigationRuntime}
 __mreactRunRouteHydration(() => __mreactHydrateRoute());
 ${clientNavigation ? "__mreactInstallNavigation();" : ""}
 
 ${
-  clientNavigation
+  inlineClientNavigation
     ? `export function __mreactNavigateToHtml(html, url, options = {}) {
   __mreactSaveCurrentHistoryState();
   const applied = __mreactApplyNavigationHtml(html, url);

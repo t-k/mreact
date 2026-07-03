@@ -5679,7 +5679,7 @@ export default function Page() {
     expect(home?.script).toBeUndefined();
     expect(home?.navigationScript).toMatch(/^assets\/navigation\.[a-f0-9]{8}\.js$/);
     await expect(access(join(outDir, "client", home?.navigationScript ?? ""))).resolves.toBeUndefined();
-    expect(html).toContain(`<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`);
+    expect(html).not.toContain(`<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`);
     expect(html).not.toContain("mreact-props-index");
   });
 
@@ -5746,12 +5746,12 @@ export default function Page() {
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
       'data-mreact-prefetch="viewport"',
     );
-    expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain(
+    expect(serverManifest.prerenderedRoutes?.["/"]?.html).not.toContain(
       `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
     );
 
     await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
-    expect(await readFile(join(exportDir, "index.html"), "utf8")).toContain(
+    expect(await readFile(join(exportDir, "index.html"), "utf8")).not.toContain(
       `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
     );
   });

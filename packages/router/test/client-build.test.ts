@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { gzipSync } from "node:zlib";
 import { beforeEach, describe, expect, test } from "vitest";
 // @vitest-environment happy-dom
 
@@ -101,6 +102,85 @@ export default function Page() {
     expect(withoutNav.code.length).toBeLessThan(withNav.code.length);
     // The savings must be substantive (>= 600 raw bytes ~ navigation block).
     expect(withNav.code.length - withoutNav.code.length).toBeGreaterThanOrEqual(600);
+  });
+
+  test("interactive client bundles stay within absolute gzip budgets", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-size-budget-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const interactiveCode = `import { cell } from "@reckona/mreact-reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    await writeFile(file, interactiveCode);
+
+    const withNav = await buildClientRouteOutput({
+      code: interactiveCode,
+      filename: file,
+      minify: true,
+      routePath: "/",
+    });
+    const withoutNav = await buildClientRouteOutput({
+      code: interactiveCode,
+      filename: file,
+      minify: true,
+      routePath: "/",
+      clientNavigation: false,
+    });
+    const serverOnly = await buildClientRouteOutput({
+      code: `export default function Page() { return <main>Home</main>; }`,
+      filename: file,
+      minify: true,
+      routePath: "/",
+      clientNavigation: false,
+    });
+
+    expect(gzipSync(withNav.code).length, "default interactive gzip bytes").toBeLessThanOrEqual(
+      12_200,
+    );
+    expect(
+      gzipSync(withoutNav.code).length,
+      "minimal opt-out interactive gzip bytes",
+    ).toBeLessThanOrEqual(7_800);
+    expect(gzipSync(serverOnly.code).length, "server-only route gzip bytes").toBeLessThanOrEqual(
+      3_600,
+    );
+  });
+
+  test("batch client route builds share hydration glue across interactive route chunks", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shared-glue-"));
+    const routeCode = `import { cell } from "@reckona/mreact-reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+    const routes = await Promise.all(
+      ["/", "/about", "/settings"].map(async (routePath) => {
+        const filename = join(appDir, `${routePath === "/" ? "index" : routePath.slice(1)}.mreact.tsx`);
+        await writeFile(filename, routeCode);
+        return {
+          code: routeCode,
+          filename,
+          minify: true,
+          routePath,
+        };
+      }),
+    );
+
+    const output = await import("../src/client.js").then((module) =>
+      module.buildClientRouteBatchOutput({
+        minify: true,
+        projectRoot: appDir,
+        routes,
+      }),
+    );
+    const sharedChunks = output.chunks.filter((chunk) => !chunk.isEntry);
+
+    expect(sharedChunks.length).toBeGreaterThan(0);
+    expect(output.routes.every((route) => route.chunk.imports.length > 0)).toBe(true);
+    for (const route of output.routes) {
+      expect(gzipSync(route.chunk.code).length).toBeLessThan(4_800);
+    }
   });
 
   test("omits route cell state runtime when the client route does not call cell", async () => {
