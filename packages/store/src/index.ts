@@ -89,6 +89,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   const state = cell(initial);
   const persist = normalizePersistOptions(options.persist);
   const listeners = new Set<StoreListener<T>>();
+  const listenerEntriesByListener = new Map<StoreListener<T>, StoreListenerEntry<T>>();
   let listenerEntries: Array<StoreListenerEntry<T>> = [];
   let listenerVersion = 0;
   let notificationDepth = 0;
@@ -231,11 +232,12 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   }
 
   function subscribeListener(listener: StoreListener<T>): () => void {
-    let entry: StoreListenerEntry<T> | undefined;
+    let entry = listenerEntriesByListener.get(listener);
     if (!listeners.has(listener)) {
       listeners.add(listener);
       listenerVersion += 1;
       entry = { addedVersion: listenerVersion, listener };
+      listenerEntriesByListener.set(listener, entry);
       listenerEntries.push(entry);
     }
 
@@ -245,6 +247,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       }
 
       listenerVersion += 1;
+      listenerEntriesByListener.delete(listener);
       if (entry !== undefined) {
         entry.removedVersion = listenerVersion;
         removedListenerEntryCount += 1;

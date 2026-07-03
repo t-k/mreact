@@ -130,6 +130,21 @@ describe("createStore", () => {
     expect(calls).toEqual([[{ count: 1 }, { count: 0 }]]);
   });
 
+  it("does not notify a duplicate listener after either subscription is unsubscribed", () => {
+    const store = createStore({ count: 0 });
+    let calls = 0;
+    const listener = () => {
+      calls += 1;
+    };
+
+    store.subscribe(listener);
+    const unsubscribeDuplicate = store.subscribe(listener);
+    unsubscribeDuplicate();
+    store.set({ count: 1 });
+
+    expect(calls).toBe(0);
+  });
+
   it("reports a single replace operation inside a transaction as a replace event", () => {
     const events: string[] = [];
     const store = createStore(
