@@ -60,16 +60,16 @@ export function formatRouterBenchmarkMarkdown(
 
   lines.push("## Results", "");
   lines.push(
-    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | gzip bytes | hz | mean ms | p75 ms | p99 ms | raw samples ms | note |",
+    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | gzip bytes | hz | mean ms | p75 ms | p99 ms | sample count | raw samples | note |",
   );
   lines.push(
-    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
   );
 
   for (const row of rows) {
     const bestRow = rankCompletedRows(rows, row.caseName)[0];
     lines.push(
-      `| router | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.version)} | ${escapeMarkdownCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.gzipBytes ?? 0} | ${row.hz ?? 0} | ${row.meanMs ?? 0} | ${row.p75Ms ?? 0} | ${row.p99Ms ?? 0} | ${formatSamples(row.samplesMs)} | ${escapeMarkdownCell(row.note ?? "")} |`,
+      `| router | ${escapeMarkdownCell(row.framework)} | ${escapeMarkdownCell(row.version)} | ${escapeMarkdownCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${row.value} | ${formatDiffVsBest(row, bestRow)} | ${row.gzipBytes ?? 0} | ${row.hz ?? 0} | ${row.meanMs ?? 0} | ${row.p75Ms ?? 0} | ${row.p99Ms ?? 0} | ${row.samplesMs?.length ?? 0} | ${formatSamples(row.samplesMs)} | ${escapeMarkdownCell(row.note ?? "")} |`,
     );
   }
 

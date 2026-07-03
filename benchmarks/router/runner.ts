@@ -9,6 +9,7 @@ import type {
 
 const nodeCount = 1_000;
 const dynamicAttrCellCount = 200;
+const valueBenchmarkSampleCount = 5;
 
 export interface RouterBenchmarkCase {
   description: string;
@@ -469,20 +470,7 @@ export async function runRouterBenchmarks(
     }
 
     for (const benchmarkCase of valueRouterBenchmarkCases) {
-      for (const adapter of activeAdapters) {
-        try {
-          const value = await benchmarkCase.invoke(adapter);
-
-          if (value === undefined) {
-            rows.push(unsupportedRow(adapter, benchmarkCase));
-            continue;
-          }
-
-          rows.push(valueRow(adapter, benchmarkCase, value));
-        } catch (error) {
-          rows.push(failedRow(adapter, benchmarkCase, error));
-        }
-      }
+      rows.push(...(await collectValueRowsRoundRobin(activeAdapters, benchmarkCase)));
     }
 
     for (const benchmarkCase of sizeRouterBenchmarkCases) {
@@ -527,12 +515,78 @@ export async function runRouterBenchmarks(
   return rows;
 }
 
-function valueRow(
+async function collectValueRowsRoundRobin(
+  adapters: readonly RouterBenchmarkAdapter[],
+  benchmarkCase: ValueRouterBenchmarkCase,
+): Promise<RouterBenchmarkRow[]> {
+  const states = adapters.map((adapter) => ({
+    adapter,
+    error: undefined as unknown,
+    failed: false,
+    samples: [] as number[],
+    unsupported: false,
+  }));
+
+  for (const state of states) {
+    try {
+      const value = await benchmarkCase.invoke(state.adapter);
+
+      if (value === undefined) {
+        state.unsupported = true;
+      }
+    } catch (error) {
+      state.failed = true;
+      state.error = error;
+    }
+  }
+
+  for (let sampleIndex = 0; sampleIndex < valueBenchmarkSampleCount; sampleIndex += 1) {
+    const offset = states.length === 0 ? 0 : sampleIndex % states.length;
+
+    for (let stateIndex = 0; stateIndex < states.length; stateIndex += 1) {
+      const state = states[(stateIndex + offset) % states.length]!;
+
+      if (state.failed || state.unsupported) {
+        continue;
+      }
+
+      try {
+        const value = await benchmarkCase.invoke(state.adapter);
+
+        if (value === undefined) {
+          state.unsupported = true;
+          continue;
+        }
+
+        state.samples.push(value);
+      } catch (error) {
+        state.failed = true;
+        state.error = error;
+      }
+    }
+  }
+
+  return states.map((state) => {
+    if (state.failed) {
+      return failedRow(state.adapter, benchmarkCase, state.error);
+    }
+
+    if (state.unsupported) {
+      return unsupportedRow(state.adapter, benchmarkCase);
+    }
+
+    return valueRowFromSamples(state.adapter, benchmarkCase, state.samples);
+  });
+}
+
+function valueRowFromSamples(
   adapter: RouterBenchmarkAdapter,
   benchmarkCase: ValueRouterBenchmarkCase,
-  value: number,
+  samples: readonly number[],
 ): RouterBenchmarkRow {
-  const rounded = round(value, benchmarkCase.metric === "memory" ? 0 : 4);
+  const digits = benchmarkCase.metric === "memory" ? 0 : 4;
+  const roundedValue = round(median(samples), digits);
+  const roundedMean = round(mean(samples), digits);
 
   return {
     framework: adapter.name,
@@ -541,11 +595,12 @@ function valueRow(
     status: "completed",
     metric: benchmarkCase.metric,
     unit: benchmarkCase.unit,
-    value: rounded,
-    hz: benchmarkCase.metric === "throughput" ? rounded : 0,
-    meanMs: benchmarkCase.metric === "duration" ? rounded : 0,
+    value: roundedValue,
+    hz: benchmarkCase.metric === "throughput" ? roundedValue : 0,
+    meanMs: benchmarkCase.metric === "duration" ? roundedMean : 0,
     p75Ms: 0,
     p99Ms: 0,
+    samplesMs: samples.map((sample) => round(sample, digits)),
   };
 }
 

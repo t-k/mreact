@@ -51,7 +51,7 @@ describe("router benchmark report", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
     expect(markdown).toContain(
-      "| router | mreact-app-router | test | app streaming first byte 1000 nodes | completed | duration | ms | 8 | best | 0 | 0 | 0 | 0 | 0 | 7.5, 8, 8.5 |  |",
+      "| router | mreact-app-router | test | app streaming first byte 1000 nodes | completed | duration | ms | 8 | best | 0 | 0 | 0 | 0 | 0 | 3 | 7.5, 8, 8.5 |  |",
     );
   });
 

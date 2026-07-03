@@ -542,6 +542,34 @@ describe("router benchmark configuration", () => {
       samplesMs: [10, 10, 10, 10, 10, 10, 10],
     });
   });
+
+  it("warms up and samples value probes before reporting the median", async () => {
+    const values = [999, 5, 1, 9, 3, 7];
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async renderToString(nodeCount: number) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+          async measureNestedLayoutsDepth5Ms() {
+            return values.shift() ?? 0;
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(
+      rows.find((row) => row.caseName === "app nested layouts depth 5"),
+    ).toMatchObject({
+      status: "completed",
+      value: 5,
+      meanMs: 5,
+      samplesMs: [5, 1, 9, 3, 7],
+    });
+  });
 });
 
 function completedRow(
