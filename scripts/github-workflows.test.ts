@@ -19,6 +19,9 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("shard: [1, 2, 3]");
     expect(workflow).toContain("--shard=${{ matrix.shard }}/3");
     expect(workflow).toContain(
+      "      - name: Build\n        run: pnpm build\n\n      - name: Install Playwright Chromium\n        run: pnpm exec playwright install --with-deps chromium\n\n      - name: Test shard",
+    );
+    expect(workflow).toContain(
       "          - name: E2E smoke\n            run: pnpm exec playwright test packages/router/e2e/navigation.spec.ts",
     );
     expect(workflow).toContain(
@@ -41,6 +44,9 @@ describe("GitHub workflows", () => {
     expect(workflow).toContain("  test-shard:\n    name: Test shard ${{ matrix.shard }}/3");
     expect(workflow).toContain("shard: [1, 2, 3]");
     expect(workflow).toContain("--shard=${{ matrix.shard }}/3");
+    expect(workflow).toContain(
+      "      - name: Build\n        run: pnpm build\n\n      - name: Install Playwright Chromium\n        run: pnpm exec playwright install --with-deps chromium\n\n      - name: Test shard",
+    );
     expect(workflow).toContain("      - test-shard");
     expect(workflow).toContain(
       "          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check",

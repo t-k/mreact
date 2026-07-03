@@ -105,6 +105,9 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Test shard
         run: pnpm exec vitest run --passWithNoTests --shard=${{ matrix.shard }}/3 --exclude packages/router/test/build.test.ts --exclude packages/router/test/client-build.test.ts
 
