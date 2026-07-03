@@ -2310,15 +2310,97 @@ function __mreactNavigationRuntimeScript() {
 }
 
 function __mreactLoadNavigationRuntime() {
+  const script = __mreactNavigationRuntimeScript();
+  if (script === undefined) {
+    return Promise.resolve(undefined);
+  }
+
   if (__mreactDeferredNavigationRuntime !== undefined) {
     return __mreactDeferredNavigationRuntime;
   }
 
-  const script = __mreactNavigationRuntimeScript();
-  __mreactDeferredNavigationRuntime = script === undefined
-    ? Promise.resolve(undefined)
-    : import(/* @vite-ignore */ script).catch(() => undefined);
+  __mreactDeferredNavigationRuntime = import(/* @vite-ignore */ script).catch(() => undefined);
   return __mreactDeferredNavigationRuntime;
+}
+
+function __mreactDeferredAnchorFromEvent(event) {
+  const target = event.target;
+  const anchor = target instanceof Element ? target.closest("a[href]") : null;
+
+  return anchor instanceof HTMLAnchorElement ? anchor : null;
+}
+
+function __mreactDeferredAnchorScrollMode(anchor) {
+  return anchor.dataset.mreactScroll === "preserve" ? false : true;
+}
+
+function __mreactDeferredAnchorTransitionMode(anchor) {
+  return anchor.dataset.mreactTransition === "auto" ? "auto" : false;
+}
+
+function __mreactDeferredIsHashOnlyNavigation(nextUrl) {
+  return nextUrl.origin === location.origin &&
+    nextUrl.pathname === location.pathname &&
+    nextUrl.search === location.search &&
+    nextUrl.hash !== "" &&
+    nextUrl.hash !== location.hash;
+}
+
+function __mreactDeferredIsCurrentLocationNavigation(nextUrl) {
+  return nextUrl.origin === location.origin &&
+    nextUrl.pathname === location.pathname &&
+    nextUrl.search === location.search;
+}
+
+function __mreactDeferredHandleClick(event) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+    return;
+  }
+
+  const anchor = __mreactDeferredAnchorFromEvent(event);
+
+  if (anchor === null || anchor.dataset.mreactReload === "true") {
+    return;
+  }
+
+  const nextUrl = new URL(anchor.href, location.href);
+
+  if (nextUrl.origin !== location.origin || __mreactDeferredIsHashOnlyNavigation(nextUrl)) {
+    return;
+  }
+
+  if (__mreactNavigationRuntimeScript() === undefined) {
+    return;
+  }
+
+  if (__mreactDeferredIsCurrentLocationNavigation(nextUrl)) {
+    event.preventDefault();
+
+    if (__mreactDeferredAnchorScrollMode(anchor) !== false && nextUrl.hash === "") {
+      scrollTo(0, 0);
+    }
+
+    return;
+  }
+
+  event.preventDefault();
+  void __mreactLoadNavigationRuntime()
+    .then((runtime) =>
+      typeof runtime?.__mreactNavigate === "function"
+        ? runtime.__mreactNavigate(nextUrl.href, {
+            scroll: __mreactDeferredAnchorScrollMode(anchor),
+            transition: __mreactDeferredAnchorTransitionMode(anchor),
+          })
+        : false,
+    )
+    .then((navigated) => {
+      if (!navigated) {
+        location.href = nextUrl.href;
+      }
+    })
+    .catch(() => {
+      location.href = nextUrl.href;
+    });
 }
 
 function __mreactInstallNavigation() {
@@ -2347,6 +2429,7 @@ function __mreactInstallNavigation() {
   addEventListener("popstate", load);
   document.addEventListener("pointerover", loadFromAnchorEvent, true);
   document.addEventListener("pointerdown", loadFromAnchorEvent, true);
+  document.addEventListener("click", __mreactDeferredHandleClick, true);
   document.addEventListener("focusin", loadFromAnchorEvent);
 }
 

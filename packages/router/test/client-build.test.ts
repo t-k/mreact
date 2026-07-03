@@ -6752,6 +6752,56 @@ export default function Page(props) {
     expect(document.getElementById("mreact-props-layout")?.textContent).toBe('{"layout":"root"}');
     expect(document.getElementById("mreact-client-references-layout")).not.toBeNull();
   });
+
+  test("deferred navigation runtime intercepts immediate same-origin link clicks", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-deferred-nav-click-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return <main><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`;
+    await writeFile(file, code);
+    const runtimeCalls: Array<{ options: unknown; url: string }> = [];
+    (globalThis as { __mreactDeferredNavigationCalls?: typeof runtimeCalls }).__mreactDeferredNavigationCalls =
+      runtimeCalls;
+    const runtimeUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+export async function __mreactNavigate(url, options) {
+  globalThis.__mreactDeferredNavigationCalls.push({ url, options });
+  return true;
+}
+`)}`;
+    document.body.innerHTML = [
+      '<script type="application/json" id="mreact-navigation-runtime">',
+      JSON.stringify({ script: runtimeUrl }),
+      "</script>",
+      '<a href="/target" data-mreact-prefetch="viewport">Details</a>',
+    ].join("");
+    const output = await buildClientRouteOutput({
+      code,
+      filename: file,
+      minify: true,
+      routePath: "/",
+    });
+
+    await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(output.code)}`);
+    const event = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      button: 0,
+    });
+    document.querySelector("a")?.dispatchEvent(event);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushRouterMicrotasks();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(runtimeCalls).toEqual([
+      {
+        options: { scroll: true, transition: false },
+        url: "http://localhost:3000/target",
+      },
+    ]);
+  });
 });
 
 async function readDirectoryText(directory: string): Promise<string> {
@@ -6784,6 +6834,12 @@ function installRoutePrefetchManifest(routes: Array<{ path: string; script: stri
     "beforeend",
     `<script type="application/json" id="mreact-route-prefetch-manifest">${JSON.stringify(routes)}</script>`,
   );
+}
+
+async function flushRouterMicrotasks(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 async function importRouteRuntime(
