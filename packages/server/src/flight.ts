@@ -1704,202 +1704,228 @@ function parseReactFlightId(value: string): number {
   return Number.parseInt(value, 16);
 }
 
-async function serializeFlightValue(
+type FlightSerializationResult<T extends FlightModel = FlightModel> = T | Promise<T>;
+
+function serializeFlightValue(
   value: unknown,
   state: FlightSerializationState,
   depth: number,
-): Promise<FlightModel> {
+): FlightSerializationResult {
   if (depth > MAX_FLIGHT_DECODE_DEPTH) flightTooDeep();
 
-  const awaited = isThenable(value) ? await value : value;
+  if (isThenable(value)) {
+    return Promise.resolve(value).then((awaited) => serializeFlightValue(awaited, state, depth));
+  }
 
-  if (awaited === null) {
+  if (value === null) {
     return null;
   }
 
-  if (awaited === undefined) {
+  if (value === undefined) {
     return { kind: "undefined" };
   }
 
-  if (typeof awaited === "string" || typeof awaited === "boolean") {
-    return awaited;
+  if (typeof value === "string" || typeof value === "boolean") {
+    return value;
   }
 
-  if (typeof awaited === "number") {
-    if (Number.isNaN(awaited)) {
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) {
       return { kind: "number", value: "NaN" };
     }
 
-    if (awaited === Infinity) {
+    if (value === Infinity) {
       return { kind: "number", value: "Infinity" };
     }
 
-    if (awaited === -Infinity) {
+    if (value === -Infinity) {
       return { kind: "number", value: "-Infinity" };
     }
 
-    if (Object.is(awaited, -0)) {
+    if (Object.is(value, -0)) {
       return { kind: "number", value: "-0" };
     }
 
-    return awaited;
+    return value;
   }
 
-  if (typeof awaited === "bigint") {
-    return { kind: "bigint", value: awaited.toString() };
+  if (typeof value === "bigint") {
+    return { kind: "bigint", value: value.toString() };
   }
 
-  if (typeof awaited === "symbol") {
-    return { kind: "symbol", name: Symbol.keyFor(awaited) ?? awaited.description ?? "" };
+  if (typeof value === "symbol") {
+    return { kind: "symbol", name: Symbol.keyFor(value) ?? value.description ?? "" };
   }
 
-  if (Array.isArray(awaited)) {
-    return await Promise.all(awaited.map((item) => serializeFlightValue(item, state, depth + 1)));
+  if (Array.isArray(value)) {
+    return resolveFlightArray(value.map((item) => serializeFlightValue(item, state, depth + 1)));
   }
 
-  if (isServerReference(awaited)) {
-    return {
+  if (isServerReference(value)) {
+    const id = getServerReferenceId(value, state);
+    return resolveFlightResult(id, (resolvedId) => ({
       kind: "server-reference",
-      id: await getServerReferenceId(awaited, state),
-    };
+      id: resolvedId,
+    }));
   }
 
-  if (isReactCompatElement(awaited)) {
-    return await serializeElement(awaited, state, depth + 1);
+  if (isReactCompatElement(value)) {
+    return serializeElement(value, state, depth + 1);
   }
 
-  if (awaited instanceof Date) {
-    return { kind: "date", value: awaited.toJSON() };
+  if (value instanceof Date) {
+    return { kind: "date", value: value.toJSON() };
   }
 
-  if (awaited instanceof Map) {
-    return {
+  if (value instanceof Map) {
+    const entries = resolveFlightArray(
+      Array.from(value.entries()).map(([key, entryValue]) =>
+        resolveFlightTuple(
+          serializeFlightValue(key, state, depth + 1),
+          serializeFlightValue(entryValue, state, depth + 1),
+        ),
+      ),
+    );
+    return resolveFlightResult(entries, (resolvedEntries) => ({
       kind: "map",
-      entries: await Promise.all(
-        Array.from(awaited.entries()).map(
-          async ([key, value]) =>
-            [
-              await serializeFlightValue(key, state, depth + 1),
-              await serializeFlightValue(value, state, depth + 1),
-            ] as [FlightModel, FlightModel],
-        ),
-      ),
-    };
+      entries: resolvedEntries,
+    }));
   }
 
-  if (awaited instanceof Set) {
-    return {
+  if (value instanceof Set) {
+    const values = resolveFlightArray(
+      Array.from(value.values()).map((entryValue) =>
+        serializeFlightValue(entryValue, state, depth + 1),
+      ),
+    );
+    return resolveFlightResult(values, (resolvedValues) => ({
       kind: "set",
-      values: await Promise.all(
-        Array.from(awaited.values()).map((value) => serializeFlightValue(value, state, depth + 1)),
-      ),
-    };
+      values: resolvedValues,
+    }));
   }
 
-  if (isFormDataLike(awaited)) {
-    return {
+  if (isFormDataLike(value)) {
+    const entries = resolveFlightArray(
+      Array.from(value.entries()).map(([key, entryValue]) =>
+        resolveFlightResult(serializeFlightValue(entryValue, state, depth + 1), (resolvedValue) => [
+          key,
+          resolvedValue,
+        ] as [string, FlightModel]),
+      ),
+    );
+    return resolveFlightResult(entries, (resolvedEntries) => ({
       kind: "form-data",
-      entries: await Promise.all(
-        Array.from(awaited.entries()).map(
-          async ([key, value]) =>
-            [key, await serializeFlightValue(value, state, depth + 1)] as [string, FlightModel],
-        ),
-      ),
-    };
+      entries: resolvedEntries,
+    }));
   }
 
-  if (isIterableObject(awaited)) {
-    return {
+  if (isIterableObject(value)) {
+    const values = resolveFlightArray(
+      Array.from(value).map((entryValue) => serializeFlightValue(entryValue, state, depth + 1)),
+    );
+    return resolveFlightResult(values, (resolvedValues) => ({
       kind: "iterable",
-      values: await Promise.all(
-        Array.from(awaited).map((value) => serializeFlightValue(value, state, depth + 1)),
-      ),
-    };
+      values: resolvedValues,
+    }));
   }
 
-  if (awaited instanceof Error) {
+  if (value instanceof Error) {
     return {
       kind: "error",
-      name: awaited.name,
-      message: awaited.message,
+      name: value.name,
+      message: value.message,
     };
   }
 
-  if (typeof awaited === "object") {
-    return await serializeObject(awaited as Record<string, unknown>, state, depth + 1);
+  if (typeof value === "object") {
+    return serializeObject(value as Record<string, unknown>, state, depth + 1);
   }
 
-  throw new TypeError(`Unsupported Flight value: ${typeof awaited}`);
+  throw new TypeError(`Unsupported Flight value: ${typeof value}`);
 }
 
-async function serializeElement(
+function serializeElement(
   element: ReactCompatElementLike,
   state: FlightSerializationState,
   depth: number,
-): Promise<FlightElementModel | FlightModel> {
+): FlightSerializationResult<FlightElementModel | FlightModel> {
   if (typeof element.type === "function") {
-    return await serializeFlightValue(element.type(element.props), state, depth + 1);
+    return serializeFlightValue(element.type(element.props), state, depth + 1);
   }
 
   if (isClientReference(element.type)) {
-    return {
+    const elementType = element.type;
+    const props = serializeProps(element.props, state, depth + 1);
+    return resolveFlightResult(props, (resolvedProps) => ({
       kind: "element",
       type: {
         kind: "client-reference",
-        id: getClientReferenceId(element.type, state),
+        id: getClientReferenceId(elementType, state),
       },
       key: element.key,
-      props: await serializeProps(element.props, state, depth + 1),
-    };
+      props: resolvedProps,
+    }));
   }
 
   if (typeof element.type === "string") {
-    return {
+    const elementType = element.type;
+    const props = serializeProps(element.props, state, depth + 1);
+    return resolveFlightResult(props, (resolvedProps) => ({
       kind: "element",
-      type: element.type,
+      type: elementType,
       key: element.key,
-      props: await serializeProps(element.props, state, depth + 1),
-    };
+      props: resolvedProps,
+    }));
   }
 
   if (element.type === REACT_COMPAT_FRAGMENT_TYPE) {
-    return {
+    const props = serializeProps(element.props, state, depth + 1);
+    return resolveFlightResult(props, (resolvedProps) => ({
       kind: "element",
       type: { kind: "fragment" },
       key: element.key,
-      props: await serializeProps(element.props, state, depth + 1),
-    };
+      props: resolvedProps,
+    }));
   }
 
   throw new TypeError("Unsupported Flight element type.");
 }
 
-async function serializeProps(
+function serializeProps(
   props: Record<string, unknown>,
   state: FlightSerializationState,
   depth: number,
-): Promise<Record<string, FlightModel>> {
-  const entries = await Promise.all(
-    Object.entries(props).map(
-      async ([key, value]) => [key, await serializeFlightValue(value, state, depth + 1)] as const,
+): FlightSerializationResult<Record<string, FlightModel>> {
+  const entries = resolveFlightArray(
+    Object.entries(props).map(([key, value]) =>
+      resolveFlightResult(serializeFlightValue(value, state, depth + 1), (resolvedValue) => [
+        key,
+        resolvedValue,
+      ]),
     ),
   );
 
-  return Object.fromEntries(entries);
+  return resolveFlightResult(entries, (resolvedEntries) => Object.fromEntries(resolvedEntries));
 }
 
-async function serializeObject(
+function serializeObject(
   object: Record<string, unknown>,
   state: FlightSerializationState,
   depth: number,
-): Promise<FlightObjectModel> {
-  return Object.fromEntries(
-    await Promise.all(
-      Object.entries(object).map(
-        async ([key, value]) => [key, await serializeFlightValue(value, state, depth + 1)] as const,
+): FlightSerializationResult<FlightObjectModel> {
+  const entries = resolveFlightArray(
+    Object.entries(object).map(([key, value]) =>
+      resolveFlightResult(
+        serializeFlightValue(value, state, depth + 1),
+        (resolvedValue) => [key, resolvedValue] as const,
       ),
     ),
-  ) as FlightObjectModel;
+  );
+
+  return resolveFlightResult(
+    entries,
+    (resolvedEntries) => Object.fromEntries(resolvedEntries) as FlightObjectModel,
+  );
 }
 
 function getClientReferenceId(reference: ClientReference, state: FlightSerializationState): number {
@@ -1921,14 +1947,24 @@ function getClientReferenceId(reference: ClientReference, state: FlightSerializa
   return id;
 }
 
-async function getServerReferenceId(
+function getServerReferenceId(
   reference: ServerReference,
   state: FlightSerializationState,
-): Promise<number> {
+): number | Promise<number> {
   const serializedBound =
     reference.bound === undefined
       ? undefined
-      : await Promise.all(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
+      : resolveFlightArray(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
+  return resolveFlightResult(serializedBound, (resolvedBound) =>
+    getServerReferenceIdForBound(reference, state, resolvedBound),
+  );
+}
+
+function getServerReferenceIdForBound(
+  reference: ServerReference,
+  state: FlightSerializationState,
+  serializedBound: FlightModel[] | undefined,
+): number {
   const key = `${reference.moduleId}:${reference.exportName}:${JSON.stringify(serializedBound ?? null)}`;
   const existing = state.serverReferenceIndexes.get(key);
 
@@ -1945,6 +1981,24 @@ async function getServerReferenceId(
   });
   state.serverReferenceIndexes.set(key, id);
   return id;
+}
+
+function resolveFlightArray<T>(values: Array<T | Promise<T>>): T[] | Promise<T[]> {
+  return values.some(isThenable) ? Promise.all(values) : (values as T[]);
+}
+
+function resolveFlightTuple<TLeft, TRight>(
+  left: TLeft | Promise<TLeft>,
+  right: TRight | Promise<TRight>,
+): [TLeft, TRight] | Promise<[TLeft, TRight]> {
+  return isThenable(left) || isThenable(right) ? Promise.all([left, right]) : [left, right];
+}
+
+function resolveFlightResult<T, TResult>(
+  value: T | Promise<T>,
+  map: (value: T) => TResult,
+): TResult | Promise<TResult> {
+  return isThenable(value) ? value.then(map) : map(value);
 }
 
 function isReactCompatElement(value: unknown): value is ReactCompatElementLike {

@@ -41,23 +41,7 @@ describe("server Flight runtime", () => {
         "$u",
         "$undefined",
       ],
-      rowTags: [
-        "C",
-        "D",
-        "E",
-        "F",
-        "H",
-        "I",
-        "J",
-        "N",
-        "P",
-        "R",
-        "T",
-        "W",
-        "X",
-        "x",
-        "r",
-      ],
+      rowTags: ["C", "D", "E", "F", "H", "I", "J", "N", "P", "R", "T", "W", "X", "x", "r"],
     });
   });
 
@@ -136,6 +120,32 @@ describe("server Flight runtime", () => {
     }
 
     expect(promiseInits).toBeLessThan(320);
+  });
+
+  test("serializes nested plain data without one promise hop per node", async () => {
+    const buildTree = (depth: number): unknown =>
+      depth === 0
+        ? "leaf"
+        : Object.fromEntries(
+            Array.from({ length: 4 }, (_unused, index) => [`k${index}`, buildTree(depth - 1)]),
+          );
+    let promiseInits = 0;
+    const hook = createHook({
+      init(_asyncId, type) {
+        if (type === "PROMISE") {
+          promiseInits += 1;
+        }
+      },
+    });
+
+    hook.enable();
+    try {
+      await renderToFlightResponse(buildTree(5));
+    } finally {
+      hook.disable();
+    }
+
+    expect(promiseInits).toBeLessThan(500);
   });
 
   test("uses one cache scope while rendering a Flight response", async () => {
@@ -289,9 +299,7 @@ describe("server Flight runtime", () => {
     const ClientButton = createClientReference("./Button.client.tsx", "Button");
     const save = createServerReference("actions/save", "save", ["workspace-1"]);
     const calls: unknown[][] = [];
-    const response = await renderToFlightResponse(
-      createElement(ClientButton, { onSave: save }),
-    );
+    const response = await renderToFlightResponse(createElement(ClientButton, { onSave: save }));
     const rows = toReactFlightRows(response);
 
     expect(rows.split("\n")).toContain(
@@ -340,9 +348,7 @@ describe("server Flight runtime", () => {
         entries: [["workspace", "workspace-1"]],
       },
     ]);
-    const response = await renderToFlightResponse(
-      createElement(ClientButton, { onSave: save }),
-    );
+    const response = await renderToFlightResponse(createElement(ClientButton, { onSave: save }));
     const rows = toReactFlightRows(response);
     const parsed = fromReactFlightRows(rows);
 
@@ -845,14 +851,11 @@ describe("server Flight runtime", () => {
     expect(() => fromReactFlightRows("1:Z{}")).toThrow("Unsupported React Flight row tag: Z");
   });
 
-
   test("parses React Flight binary typed array rows on the server adapter", () => {
     const response = fromReactFlightRows(
-      [
-        "1:o4,AQIDBA==",
-        "2:A4,AQIDBA==",
-        '0:["$","div",null,{"bytes":"$o1","buffer":"$A2"}]',
-      ].join("\n"),
+      ["1:o4,AQIDBA==", "2:A4,AQIDBA==", '0:["$","div",null,{"bytes":"$o1","buffer":"$A2"}]'].join(
+        "\n",
+      ),
     );
 
     expect(response.root).toEqual({
@@ -875,7 +878,7 @@ describe("server Flight runtime", () => {
 
   test("merges incremental React Flight rows into an existing response", () => {
     const initial = fromReactFlightRows('0:["$","p",null,{"children":"$@1"}]');
-    const merged = mergeReactFlightRows(initial, '1:T9,Hello Ada');
+    const merged = mergeReactFlightRows(initial, "1:T9,Hello Ada");
 
     expect(merged.root).toEqual({
       kind: "element",
