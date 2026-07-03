@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createQuery, createQueryClient } from "../src/index.js";
 
@@ -94,6 +95,54 @@ describe("createQuery", () => {
       status: "success",
     });
     expect(calls).toBe(1);
+  });
+
+  it("does not notify observer result subscribers for stale-only invalidation", async () => {
+    const client = createQueryClient();
+    client.setQueryData(["profile"], { name: "Ada" });
+    const query = createQuery(client, {
+      autoFetch: false,
+      queryKey: ["profile"],
+      queryFn: async () => ({ name: "Grace" }),
+      refetchOnInvalidate: false,
+    });
+    let notifications = 0;
+    const dispose = effect(() => {
+      query.result.get();
+      notifications += 1;
+    });
+
+    try {
+      await flushEffects();
+      client.invalidateQueries({ queryKey: ["profile"] });
+      await flushEffects();
+
+      expect(notifications).toBe(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("structurally shares deep-equal data after refetch", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const query = createQuery(client, {
+      autoFetch: false,
+      queryKey: ["profile"],
+      queryFn: async () => {
+        calls += 1;
+        return { nested: { name: "Ada" }, roles: ["admin"] };
+      },
+    });
+
+    await query.refetch();
+    const firstData = query.result.get().data;
+    client.invalidateQueries({ queryKey: ["profile"] });
+    await query.refetch();
+    const secondData = query.result.get().data;
+
+    expect(calls).toBe(2);
+    expect(secondData).toBe(firstData);
   });
 
   it("does not re-read the observer query key while processing matching updates", async () => {

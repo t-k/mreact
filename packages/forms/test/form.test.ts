@@ -215,6 +215,50 @@ describe("createForm", () => {
     }
   });
 
+  it("does not notify a field state subscriber when another field changes", async () => {
+    const form = createForm({
+      initialValues: { email: "", name: "" },
+    });
+    const email = form.field("email");
+    let notifications = 0;
+    const dispose = effect(() => {
+      email.state.get();
+      notifications += 1;
+    });
+
+    try {
+      await flushEffects();
+      await form.setValue("name", "Ada");
+      await flushEffects();
+
+      expect(notifications).toBe(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("does not notify a field array subscriber when another field changes", async () => {
+    const form = createForm({
+      initialValues: { items: ["A"], name: "" },
+    });
+    const items = form.fieldArray("items");
+    let notifications = 0;
+    const dispose = effect(() => {
+      items.fields.get();
+      notifications += 1;
+    });
+
+    try {
+      await flushEffects();
+      await form.setValue("name", "Ada");
+      await flushEffects();
+
+      expect(notifications).toBe(1);
+    } finally {
+      dispose();
+    }
+  });
+
   it("updates one field without rescanning every value for dirty state", async () => {
     const initialValues = Object.fromEntries(
       Array.from({ length: 30 }, (_unused, index) => [`field${index}`, ""]),

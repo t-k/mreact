@@ -96,10 +96,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     });
   }
 
-  function notifyPublicEntry(
-    queryKeySegments: readonly string[],
-    publicEntry: QueryEntry,
-  ): void {
+  function notifyPublicEntry(queryKeySegments: readonly string[], publicEntry: QueryEntry): void {
     emitQueryDevtoolsEvent({
       isFetching: publicEntry.isFetching,
       queryHash: publicEntry.queryHash,
@@ -133,12 +130,13 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       typeof data === "function"
         ? (data as (previous: TData | undefined) => TData)(entry.data)
         : data;
+    const sharedData = replaceEqualDeep(entry.data, resolvedData) as TData;
     if (entry.abortController !== undefined && !entry.abortController.signal.aborted) {
       entry.abortController.abort(createQueryAbortReason(entry.queryKey));
     }
 
     entry.version += 1;
-    entry.data = resolvedData;
+    entry.data = sharedData;
     entry.error = undefined;
     entry.errorReason = undefined;
     entry.isFetching = false;
@@ -170,7 +168,10 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     subscriberCounts.set(queryHash, (subscriberCounts.get(queryHash) ?? 0) + 1);
   }
 
-  function releaseSubscription(queryKey: QueryKey, gcTime: QuerySubscriptionOptions["gcTime"]): void {
+  function releaseSubscription(
+    queryKey: QueryKey,
+    gcTime: QuerySubscriptionOptions["gcTime"],
+  ): void {
     const queryHash = hashQueryKey(queryKey);
     const count = Math.max(0, (subscriberCounts.get(queryHash) ?? 0) - 1);
 
@@ -185,17 +186,20 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       return;
     }
 
-    const timer = setTimeout(() => {
-      gcTimers.delete(queryHash);
-      if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
-        return;
-      }
+    const timer = setTimeout(
+      () => {
+        gcTimers.delete(queryHash);
+        if ((subscriberCounts.get(queryHash) ?? 0) > 0) {
+          return;
+        }
 
-      const entry = cache.get(queryHash);
-      if (entry !== undefined) {
-        removeEntry(entry);
-      }
-    }, Math.max(0, gcTime));
+        const entry = cache.get(queryHash);
+        if (entry !== undefined) {
+          removeEntry(entry);
+        }
+      },
+      Math.max(0, gcTime),
+    );
     gcTimers.set(queryHash, timer);
   }
 
@@ -262,36 +266,35 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       const fetchVersion = entry.version;
       notify(entry);
       const removeExternalAbort = linkAbortSignals(options.signal, entry.abortController);
-      entry.promise = executeQueryWithRetry(options, entry.abortController.signal)
-        .then(
-          (data) => {
-            removeExternalAbort();
-            if (cache.get(entry.queryHash) === entry && entry.version === fetchVersion) {
-              setSuccess(options.queryKey, data);
-            }
-            return data;
-          },
-          (error: unknown) => {
-            removeExternalAbort();
-            if (cache.get(entry.queryHash) !== entry || entry.version !== fetchVersion) {
-              throw error;
-            }
-            if (entry.canceled === true || entry.abortController?.signal.aborted === true) {
-              markCanceled(entry, notify);
-              throw error;
-            }
-            entry.error = error;
-            entry.errorReason = classifyQueryError(options, error);
-            entry.isFetching = false;
-            entry.abortController = undefined;
-            entry.promise = undefined;
-            entry.stale = true;
-            entry.status = "error";
-            entry.updatedAt = Date.now();
-            notify(entry);
+      entry.promise = executeQueryWithRetry(options, entry.abortController.signal).then(
+        (data) => {
+          removeExternalAbort();
+          if (cache.get(entry.queryHash) === entry && entry.version === fetchVersion) {
+            setSuccess(options.queryKey, data);
+          }
+          return data;
+        },
+        (error: unknown) => {
+          removeExternalAbort();
+          if (cache.get(entry.queryHash) !== entry || entry.version !== fetchVersion) {
             throw error;
-          },
-        );
+          }
+          if (entry.canceled === true || entry.abortController?.signal.aborted === true) {
+            markCanceled(entry, notify);
+            throw error;
+          }
+          entry.error = error;
+          entry.errorReason = classifyQueryError(options, error);
+          entry.isFetching = false;
+          entry.abortController = undefined;
+          entry.promise = undefined;
+          entry.stale = true;
+          entry.status = "error";
+          entry.updatedAt = Date.now();
+          notify(entry);
+          throw error;
+        },
+      );
 
       return entry.promise;
     },
@@ -423,10 +426,7 @@ function markCanceled(
   notify(entry);
 }
 
-function linkAbortSignals(
-  source: AbortSignal | undefined,
-  target: AbortController,
-): () => void {
+function linkAbortSignals(source: AbortSignal | undefined, target: AbortController): () => void {
   if (source === undefined) {
     return () => {};
   }
@@ -569,4 +569,53 @@ function stableStringify(value: unknown): string {
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
   return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`).join(",")}}`;
+}
+
+function replaceEqualDeep(previous: unknown, next: unknown): unknown {
+  if (Object.is(previous, next)) {
+    return previous;
+  }
+
+  if (Array.isArray(previous) && Array.isArray(next)) {
+    let equalItems = previous.length === next.length;
+    const result = next.map((nextItem, index) => {
+      const replaced = replaceEqualDeep(previous[index], nextItem);
+      if (!Object.is(replaced, previous[index])) {
+        equalItems = false;
+      }
+      return replaced;
+    });
+
+    return equalItems ? previous : result;
+  }
+
+  if (isPlainObject(previous) && isPlainObject(next)) {
+    const previousRecord = previous as Record<string, unknown>;
+    const nextRecord = next as Record<string, unknown>;
+    const previousKeys = Object.keys(previousRecord);
+    const nextKeys = Object.keys(nextRecord);
+    let equalEntries = previousKeys.length === nextKeys.length;
+    const result: Record<string, unknown> = {};
+
+    for (const key of nextKeys) {
+      const replaced = replaceEqualDeep(previousRecord[key], nextRecord[key]);
+      result[key] = replaced;
+      if (!Object.is(replaced, previousRecord[key])) {
+        equalEntries = false;
+      }
+    }
+
+    return equalEntries ? previous : result;
+  }
+
+  return next;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }

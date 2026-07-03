@@ -1,4 +1,4 @@
-import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { cell, computed, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { type StandardSchemaV1, validateStandardSchema } from "./standard-schema.js";
 
 /** Represents the object shape managed by a form instance. */
@@ -208,6 +208,14 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   const dirtyFields = new Set<FieldName<TValues>>();
   const dependentFields = buildDependentFields(options.validate);
   const fieldArrayKeys = new Map<FieldName<TValues>, string[]>();
+  const fieldStateCells = new Map<
+    FieldName<TValues>,
+    ReadonlyCell<FieldState<TValues[FieldName<TValues>]>>
+  >();
+  const fieldArrayCells = new Map<
+    FieldName<TValues>,
+    ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, FieldName<TValues>>>>>
+  >();
   let nextFieldArrayKey = 0;
   let activeSubmit: Promise<FormSubmitResult<TValues, unknown>> | undefined;
 
@@ -412,6 +420,35 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }));
   }
 
+  function fieldArrayCell<Name extends FieldName<TValues>>(
+    name: Name,
+  ): ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>> {
+    const existing = fieldArrayCells.get(name);
+    if (existing !== undefined) {
+      return existing as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, Name>>>>;
+    }
+
+    const next = computed(() => fieldArrayRows(name), { equals: fieldArrayRowsEqual });
+    fieldArrayCells.set(
+      name,
+      next as ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, FieldName<TValues>>>>>,
+    );
+    return next;
+  }
+
+  function fieldStateCell<Name extends FieldName<TValues>>(
+    name: Name,
+  ): ReadonlyCell<FieldState<TValues[Name]>> {
+    const existing = fieldStateCells.get(name);
+    if (existing !== undefined) {
+      return existing as ReadonlyCell<FieldState<TValues[Name]>>;
+    }
+
+    const next = computed(() => fieldState(state.get(), name), { equals: fieldStateEquals });
+    fieldStateCells.set(name, next as ReadonlyCell<FieldState<TValues[FieldName<TValues>]>>);
+    return next;
+  }
+
   async function setArrayValue<Name extends FieldName<TValues>>(
     name: Name,
     values: Array<ArrayFieldValue<TValues, Name>>,
@@ -431,9 +468,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     state,
     fieldArray<Name extends FieldName<TValues>>(name: Name): FieldArrayApi<TValues, Name> {
       return {
-        fields: {
-          get: () => fieldArrayRows(name),
-        },
+        fields: fieldArrayCell(name),
         async append(value) {
           const values = arrayValues(name);
           const keys = [...ensureFieldArrayKeys(name, values.length), createFieldArrayKey(name)];
@@ -494,9 +529,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     },
     field<Name extends FieldName<TValues>>(name: Name): FieldApi<TValues, Name> {
       return {
-        state: {
-          get: () => fieldState(state.get(), name),
-        },
+        state: fieldStateCell(name),
         bind(bindingOptions = {}) {
           const bindingEvent = bindingOptions.event ?? "input";
           const updateValue = async (inputEvent: Event) => {
@@ -641,6 +674,55 @@ function fieldState<TValues extends FormValues, Name extends FieldName<TValues>>
     validating: formState.validating[name] === true,
     value: formState.values[name],
   };
+}
+
+function fieldStateEquals<TValue>(previous: FieldState<TValue>, next: FieldState<TValue>): boolean {
+  return (
+    previous.dirty === next.dirty &&
+    previous.touched === next.touched &&
+    previous.validating === next.validating &&
+    Object.is(previous.value, next.value) &&
+    stringArraysEqual(previous.errors, next.errors)
+  );
+}
+
+function fieldArrayRowsEqual<TValue>(
+  previous: Array<FieldArrayRow<TValue>>,
+  next: Array<FieldArrayRow<TValue>>,
+): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const previousRow = previous[index];
+    const nextRow = next[index];
+    if (
+      previousRow === undefined ||
+      nextRow === undefined ||
+      previousRow.index !== nextRow.index ||
+      previousRow.key !== nextRow.key ||
+      !Object.is(previousRow.value, nextRow.value)
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function stringArraysEqual(previous: readonly string[], next: readonly string[]): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index] !== next[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function eventValue(event: Event, currentValue: unknown): unknown {

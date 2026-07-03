@@ -1,17 +1,11 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
-import {
-  syncQueryClientAcrossTabs,
-  type CrossTabQuerySyncOptions,
-} from "./cross-tab.js";
+import { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions } from "./cross-tab.js";
 import { hydrateQueryDataSymbol, type HydratableQueryClient } from "./hydration-internal.js";
 import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./query-lifecycle.js";
 
 export { hashQueryKey } from "./query-lifecycle.js";
-export {
-  syncQueryClientAcrossTabs,
-  type CrossTabQuerySyncOptions,
-};
+export { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions };
 
 /** Represents the structured key used to identify cached query data. */
 export type QueryKey = readonly unknown[];
@@ -331,22 +325,32 @@ export function createQuery<TData>(
 ): QueryObserver<TData> {
   const queryHash = hashQueryKey(options.queryKey);
   const result = cell(resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey)));
-  const unsubscribe = client.subscribe<TData>(options.queryKey, (entry) => {
-    if (entry.queryHash === queryHash) {
-      result.set(resultFromQueryEntry(entry));
-      if (
-        entry.stale &&
-        !entry.isFetching &&
-        autoFetch &&
-        options.refetchOnInvalidate !== false
-      ) {
-        void client.fetchQuery(options).catch(() => {
-          // The observer receives the error state through the query cache. Avoid an
-          // unhandled rejection for fire-and-forget invalidation refetches.
-        });
-      }
+  const updateResult = (next: QueryResult<TData>): QueryResult<TData> => {
+    if (!queryResultsEqual(result.get(), next)) {
+      result.set(next);
     }
-  }, { exact: true, gcTime: options.gcTime });
+    return result.get();
+  };
+  const unsubscribe = client.subscribe<TData>(
+    options.queryKey,
+    (entry) => {
+      if (entry.queryHash === queryHash) {
+        updateResult(resultFromQueryEntry(entry));
+        if (
+          entry.stale &&
+          !entry.isFetching &&
+          autoFetch &&
+          options.refetchOnInvalidate !== false
+        ) {
+          void client.fetchQuery(options).catch(() => {
+            // The observer receives the error state through the query cache. Avoid an
+            // unhandled rejection for fire-and-forget invalidation refetches.
+          });
+        }
+      }
+    },
+    { exact: true, gcTime: options.gcTime },
+  );
   const autoFetch = options.autoFetch ?? typeof document !== "undefined";
 
   if (autoFetch) {
@@ -360,8 +364,7 @@ export function createQuery<TData>(
     client.invalidateQueries({ queryKey: options.queryKey });
     await client.fetchQuery(options);
     const next = resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey));
-    result.set(next);
-    return next;
+    return updateResult(next);
   };
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
 
@@ -373,6 +376,17 @@ export function createQuery<TData>(
     },
     refetch,
   };
+}
+
+function queryResultsEqual<TData>(previous: QueryResult<TData>, next: QueryResult<TData>): boolean {
+  return (
+    Object.is(previous.data, next.data) &&
+    Object.is(previous.error, next.error) &&
+    previous.errorReason === next.errorReason &&
+    previous.isFetching === next.isFetching &&
+    previous.status === next.status &&
+    previous.updatedAt === next.updatedAt
+  );
 }
 
 /**
