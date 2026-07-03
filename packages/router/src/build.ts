@@ -384,8 +384,9 @@ export async function buildApp(options: BuildAppOptions): Promise<BuildAppResult
     options.buildConcurrency ?? project.buildConcurrency,
   );
 
-  return await buildConcurrencyStorage.run(buildConcurrency, async () =>
-    await buildAppWithResolvedProject(options, project),
+  return await buildConcurrencyStorage.run(
+    buildConcurrency,
+    async () => await buildAppWithResolvedProject(options, project),
   );
 }
 
@@ -809,7 +810,10 @@ function currentBuildConcurrency(): number {
   return buildConcurrencyStorage.getStore() ?? defaultBuildConcurrency();
 }
 
-function resolveBuildConcurrency(value: number | undefined, cores = availableParallelism()): number {
+function resolveBuildConcurrency(
+  value: number | undefined,
+  cores = availableParallelism(),
+): number {
   const resolved = value ?? Math.max(1, Math.min(maxDefaultBuildConcurrency, cores));
 
   if (!Number.isSafeInteger(resolved) || resolved < 1) {
@@ -836,19 +840,58 @@ function typedRoutesDeclaration(routes: readonly AppRoute[]): string {
     return left.localeCompare(right);
   });
   const routeUnion = routePaths.map((routePath) => JSON.stringify(routePath)).join(" | ");
+  const routeParamEntries = routePaths.map(
+    (routePath) => `  readonly ${JSON.stringify(routePath)}: ${routeParamsType(routePath)};`,
+  );
   return [
-    `import type { AppRouteLinkHref as MreactAppRouteLinkHref } from "@reckona/mreact-router";`,
+    `import type { AppRouteLinkHref as MreactAppRouteLinkHref, RouteParamsFor as MreactRouteParamsFor } from "@reckona/mreact-router";`,
     ``,
     `export type AppRoutePath = ${routeUnion === "" ? "never" : routeUnion};`,
     `export type AppRouteHref = MreactAppRouteLinkHref<AppRoutePath>;`,
+    `export type AppRouteParams<Path extends AppRoutePath> = MreactRouteParamsFor<Path>;`,
+    `export interface AppRouteParamMap {`,
+    ...(routeParamEntries.length === 0 ? [`  readonly [path: string]: never;`] : routeParamEntries),
+    `}`,
     ``,
     `declare module "@reckona/mreact-router/link" {`,
     `  interface AppRouteDeclarations {`,
     `    readonly path: AppRoutePath;`,
+    `    readonly params: AppRouteParamMap;`,
     `  }`,
     `}`,
     ``,
   ].join("\n");
+}
+
+function routeParamsType(routePath: string): string {
+  const params = routePath
+    .split("/")
+    .flatMap((segment): Array<{ catchAll: boolean; name: string }> => {
+      if (segment.startsWith(":...")) {
+        return [{ catchAll: true, name: segment.slice(4) }];
+      }
+
+      if (segment.startsWith(":")) {
+        return [{ catchAll: false, name: segment.slice(1) }];
+      }
+
+      return [];
+    });
+
+  if (params.length === 0) {
+    return "Record<never, never>";
+  }
+
+  return `{ ${params
+    .map(
+      (param) =>
+        `readonly ${propertyKeyForType(param.name)}: ${param.catchAll ? "readonly string[]" : "string"}`,
+    )
+    .join("; ")} }`;
+}
+
+function propertyKeyForType(value: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(value) ? value : JSON.stringify(value);
 }
 
 function typedPublicAssetsDeclaration(publicAssets: readonly string[]): string {

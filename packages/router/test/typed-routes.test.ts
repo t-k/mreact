@@ -13,7 +13,9 @@ describe("typed routes", () => {
         params: { id: "ada lovelace", path: ["notes", "a/b"] },
         search: { filter: "recent", page: 2, tag: ["math", "code"] },
       }),
-    ).toBe("/users/ada%20lovelace/files/notes/a%2Fb?filter=recent&page=2&tag=math&tag=code#preview");
+    ).toBe(
+      "/users/ada%20lovelace/files/notes/a%2Fb?filter=recent&page=2&tag=math&tag=code#preview",
+    );
   });
 
   test("href rejects non-internal route patterns at runtime", () => {
@@ -41,9 +43,17 @@ describe("typed routes", () => {
     const declarations = await readFile(join(outDir, "routes.d.ts"), "utf8");
 
     expect(declarations).toContain('export type AppRoutePath = "/" | "/users/:id/files/:...path";');
+    expect(declarations).toContain(
+      "export type AppRouteParams<Path extends AppRoutePath> = MreactRouteParamsFor<Path>;",
+    );
+    expect(declarations).toContain('readonly "/": Record<never, never>;');
+    expect(declarations).toContain(
+      'readonly "/users/:id/files/:...path": { readonly id: string; readonly path: readonly string[] };',
+    );
     expect(declarations).not.toContain("export declare const routes");
     expect(declarations).toContain('declare module "@reckona/mreact-router/link"');
     expect(declarations).toContain("readonly path: AppRoutePath;");
+    expect(declarations).toContain("readonly params: AppRouteParamMap;");
     expect(declarations).toContain('"/users/:id/files/:...path"');
   });
 
