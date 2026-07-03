@@ -4681,6 +4681,10 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
       "@reckona/mreact-compat/scheduler",
       packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
     ],
+    [
+      "@reckona/mreact-compat/server",
+      packageFile("react-compat", "@reckona/mreact-compat", "server"),
+    ],
     ["@reckona/mreact-reactive-dom", reactiveDomPath],
   ]);
 

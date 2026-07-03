@@ -5777,6 +5777,10 @@ function cloudflareWorkspaceRuntimePlugin(): RouterCompatPlugin {
       "@reckona/mreact-compat/scheduler",
       packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
     ],
+    [
+      "@reckona/mreact-compat/server",
+      packageFile("react-compat", "@reckona/mreact-compat", "server"),
+    ],
     ["@reckona/mreact-query", packageFile("query", "@reckona/mreact-query", "index")],
     [
       "@reckona/mreact-reactive-core",

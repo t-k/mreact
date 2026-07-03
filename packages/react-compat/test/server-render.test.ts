@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "../src/index.js";
+import { __serverRenderAttributeCacheForTesting } from "../src/server-render.js";
 
 describe("react-compat server render", () => {
   test("strips unsafe meta refresh content on meta and non-meta hosts alike", () => {
@@ -252,5 +253,30 @@ describe("react-compat server render", () => {
     const html = renderToString(App);
     expect(html).toBe('<img alt="x"/>');
     expect(html).not.toMatch(/\son(?:click|error)=/i);
+  });
+
+  test("caches server attribute name classification without caching URL safety values", () => {
+    __serverRenderAttributeCacheForTesting.clear();
+
+    function App() {
+      return createElement(
+        "main",
+        null,
+        Array.from({ length: 20 }, (_, index) =>
+          createElement("a", {
+            key: index,
+            className: "row",
+            "data-active": index % 2 === 0,
+            href: index % 2 === 0 ? `/safe-${index}` : "javascript:alert(1)",
+          }, `row ${index}`),
+        ),
+      );
+    }
+
+    const html = renderToString(App);
+    expect(html).toContain('<a class="row" data-active="true" href="/safe-0">row 0</a>');
+    expect(html).not.toMatch(/javascript:/i);
+    expect(__serverRenderAttributeCacheForTesting.missCount()).toBe(4);
+    expect(__serverRenderAttributeCacheForTesting.size()).toBe(4);
   });
 });

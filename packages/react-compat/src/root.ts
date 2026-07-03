@@ -44,7 +44,6 @@ import {
   renderHostFiberRoot,
 } from "./fiber-host.js";
 import type { Fiber, FiberRoot } from "./fiber.js";
-import { renderIntoContainer } from "./reconciler.js";
 
 /** Root controller returned by createRoot and hydrateRoot. */
 export interface Root {
@@ -117,7 +116,7 @@ export function createRoot(
           );
         }
 
-        renderIntoContainer(container, runtime.currentElement, runtime);
+        throwUnsupportedRootNode();
       });
     }
   }, options);
@@ -130,7 +129,7 @@ export function createRoot(
           return renderHostFiberIntoContainer(container, fiberRoot, runtime, element);
         }
 
-        renderIntoContainer(container, element, runtime);
+        throwUnsupportedRootNode();
       });
     },
     unmount() {
@@ -318,12 +317,7 @@ export function hydrateRoot(
               );
         }
 
-        renderIntoContainer(
-          container,
-          runtime.currentElement,
-          runtime,
-          useHydratingRerender ? renderOptions : {},
-        );
+        throwUnsupportedRootNode();
       });
     }
   }, {
@@ -341,7 +335,7 @@ export function hydrateRoot(
           return renderHostFiberIntoContainer(container, fiberRoot, runtime, nextElement);
         }
 
-        renderIntoContainer(container, nextElement, runtime);
+        throwUnsupportedRootNode();
       });
     },
     unmount() {
@@ -366,13 +360,17 @@ export function hydrateRoot(
         runtime,
         element,
         renderOptions,
-      );
-    }
+    );
+  }
 
-    renderIntoContainer(container, element, runtime, renderOptions);
+  throwUnsupportedRootNode();
   });
   replayQueuedHydrationEvents(container);
   return root;
+}
+
+function throwUnsupportedRootNode(): never {
+  throw new Error("Unsupported react-compat root node. Pass a valid React-compatible element, portal, fragment, primitive, array, or nullish value.");
 }
 
 function laneForRenderPriority(priority: RenderPriority): Lane {

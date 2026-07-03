@@ -369,39 +369,61 @@ function isEventHandlerName(name: string): boolean {
   );
 }
 
+type AttributeNameClassification =
+  | { kind: "skip" }
+  | { kind: "style" }
+  | {
+      kind: "attribute";
+      attributeName: string;
+      booleanishString: boolean;
+      dataAttribute: boolean;
+      dangerousHtml: boolean;
+    };
+
+const ATTRIBUTE_CLASSIFICATION_CACHE = new Map<string, AttributeNameClassification>();
+const ATTRIBUTE_CLASSIFICATION_CACHE_LIMIT = 1024;
+let attributeClassificationCacheMissCount = 0;
+
+export const __serverRenderAttributeCacheForTesting = {
+  clear() {
+    ATTRIBUTE_CLASSIFICATION_CACHE.clear();
+    attributeClassificationCacheMissCount = 0;
+  },
+  missCount() {
+    return attributeClassificationCacheMissCount;
+  },
+  size() {
+    return ATTRIBUTE_CLASSIFICATION_CACHE.size;
+  },
+};
+
 function renderHtmlAttribute(name: string, value: unknown): string {
   if (
     value === null ||
     value === undefined ||
-    typeof value === "function" ||
-    name === "children" ||
-    name === "key" ||
-    name === "ref" ||
-    isEventHandlerName(name)
+    typeof value === "function"
   ) {
     return "";
   }
 
-  if (name === "style") {
+  const classification = classifyAttributeName(name);
+
+  if (classification.kind === "skip") {
+    return "";
+  }
+
+  if (classification.kind === "style") {
     const style = renderStyleAttribute(value);
     return style === "" ? "" : ` style="${escapeHtml(style)}"`;
   }
 
-  const attributeName = toHtmlAttributeName(name);
+  const { attributeName } = classification;
 
-  if (!VALID_ATTRIBUTE_NAME.test(attributeName)) {
-    return "";
-  }
-
-  if (isEventHandlerName(attributeName)) {
-    return "";
-  }
-
-  if (typeof value === "boolean" && isBooleanishStringAttribute(attributeName)) {
+  if (typeof value === "boolean" && classification.booleanishString) {
     return ` ${attributeName}="${value ? "true" : "false"}"`;
   }
 
-  if (typeof value === "boolean" && isDataAttribute(attributeName)) {
+  if (typeof value === "boolean" && classification.dataAttribute) {
     return ` ${attributeName}="${value ? "true" : "false"}"`;
   }
 
@@ -409,7 +431,7 @@ function renderHtmlAttribute(name: string, value: unknown): string {
     return "";
   }
 
-  if (isDangerousHtmlAttribute(attributeName)) {
+  if (classification.dangerousHtml) {
     return isDangerousHtmlOptIn(value)
       ? ` ${attributeName}="${escapeHtml(value.__html)}"`
       : "";
@@ -433,6 +455,50 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 }
 
 const VALID_ATTRIBUTE_NAME = /^[A-Za-z_][\w.\-:]*$/;
+
+function classifyAttributeName(name: string): AttributeNameClassification {
+  const cached = ATTRIBUTE_CLASSIFICATION_CACHE.get(name);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  attributeClassificationCacheMissCount += 1;
+
+  const classification = createAttributeNameClassification(name);
+  if (ATTRIBUTE_CLASSIFICATION_CACHE.size < ATTRIBUTE_CLASSIFICATION_CACHE_LIMIT) {
+    ATTRIBUTE_CLASSIFICATION_CACHE.set(name, classification);
+  }
+  return classification;
+}
+
+function createAttributeNameClassification(name: string): AttributeNameClassification {
+  if (
+    name === "children" ||
+    name === "key" ||
+    name === "ref" ||
+    isEventHandlerName(name)
+  ) {
+    return { kind: "skip" };
+  }
+
+  if (name === "style") {
+    return { kind: "style" };
+  }
+
+  const attributeName = toHtmlAttributeName(name);
+
+  if (!VALID_ATTRIBUTE_NAME.test(attributeName) || isEventHandlerName(attributeName)) {
+    return { kind: "skip" };
+  }
+
+  return {
+    kind: "attribute",
+    attributeName,
+    booleanishString: isBooleanishStringAttribute(attributeName),
+    dataAttribute: isDataAttribute(attributeName),
+    dangerousHtml: isDangerousHtmlAttribute(attributeName),
+  };
+}
 
 function isBooleanishStringAttribute(attributeName: string): boolean {
   // Callers pass the already-mapped HTML attribute name.

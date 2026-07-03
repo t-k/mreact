@@ -90,6 +90,37 @@ export default function Page() {
   return { appDir, outDir };
 }
 
+async function createServerCompatApp(): Promise<{ appDir: string; outDir: string }> {
+  const rootDir = await mkdtemp(join(tmpdir(), "mreact-server-compat-vendor-"));
+  tempRoots.push(rootDir);
+  const appDir = join(rootDir, "app");
+  const outDir = join(rootDir, ".mreact");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(
+    join(appDir, "layout.tsx"),
+    `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+  );
+  await writeFile(
+    join(appDir, "page.tsx"),
+    `import { createElement, renderToString, useMemo } from "@reckona/mreact-compat/server";
+
+function View() {
+  const label = useMemo(() => "compat:server", []);
+  return createElement("main", { id: "server" }, label);
+}
+
+export default function Page() {
+  return renderToString(View);
+}
+
+export const clientNavigation = false;
+`,
+  );
+  return { appDir, outDir };
+}
+
 async function routeModuleSources(outDir: string): Promise<string[]> {
   const codeDir = join(outDir, "server", "server-modules", "code");
   const sources: string[] = [];
@@ -162,6 +193,16 @@ describe("compat server vendor chunks", () => {
     expect(manifest.prerenderedRoutes?.["/"]?.html).toContain(
       '<main id="prerendered">compat:prerendered</main>',
     );
+  }, 120_000);
+
+  test("keeps server entry imports off the full compat client root", async () => {
+    const { appDir, outDir } = await createServerCompatApp();
+    await buildApp({ appDir, outDir });
+
+    const source = (await routeModuleSources(outDir)).join("\n");
+    expect(source).toContain("renderToString");
+    expect(source).not.toContain("renderIntoContainer");
+    expect(source).not.toContain("commitFiberRoot");
   }, 120_000);
 
   test("keeps non-compat builds free of vendor chunk machinery", async () => {

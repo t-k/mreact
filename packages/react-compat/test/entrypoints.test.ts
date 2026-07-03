@@ -83,6 +83,7 @@ describe("react-compat entrypoints", () => {
     expect(manifest.exports).toHaveProperty("./event-priority");
     expect(manifest.exports).toHaveProperty("./hooks");
     expect(manifest.exports).toHaveProperty("./scheduler");
+    expect(manifest.exports).toHaveProperty("./server");
   });
 
   test("exposes a hooks-only entrypoint for smaller client bundles", async () => {
@@ -92,5 +93,19 @@ describe("react-compat entrypoints", () => {
     expect(hooks.useReducer).toBeTypeOf("function");
     expect(hooks.renderToString).toBeUndefined();
     expect("default" in hooks).toBe(false);
+  });
+
+  test("exposes a server-only entrypoint without client root APIs", async () => {
+    const server = await import("../src/server.js");
+
+    expect(server.createElement).toBeTypeOf("function");
+    expect(server.renderToString).toBeTypeOf("function");
+    expect(server.useMemo).toBeTypeOf("function");
+    expect(server.createRoot).toBeUndefined();
+    expect(server.render).toBeUndefined();
+    expect("default" in server).toBe(false);
+    expect(server.renderToString(() => server.createElement("p", null, "server"))).toBe(
+      "<p>server</p>",
+    );
   });
 });

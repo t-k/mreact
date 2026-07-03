@@ -244,6 +244,8 @@ render(createElement("p", null, "Hello"), container);`;
 
     expect(code).not.toContain("onCommitFiberRoot");
     expect(code).not.toContain("overrideProps");
+    expect(code).not.toContain("renderIntoContainer");
+    expect(code).not.toContain("Invalid react-compat element");
   });
 
   test("exposes React Fiber shaped host nodes and host instance lookup", () => {

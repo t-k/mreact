@@ -230,6 +230,15 @@ const mreactJsxRuntimeAliasPaths = new Map([
       packageName: "@reckona/mreact-compat",
     }),
   ],
+  [
+    "@reckona/mreact-compat/server",
+    workspacePackageFile({
+      currentFileUrl: import.meta.url,
+      entry: "server",
+      monorepoDir: "react-compat",
+      packageName: "@reckona/mreact-compat",
+    }),
+  ],
 ]);
 
 export async function bundleRouterModule(

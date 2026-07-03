@@ -178,6 +178,10 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       "@reckona/mreact-compat/scheduler",
       packageFile("react-compat", "@reckona/mreact-compat", "scheduler"),
     ],
+    [
+      "@reckona/mreact-compat/server",
+      packageFile("react-compat", "@reckona/mreact-compat", "server"),
+    ],
     ["@reckona/mreact-router/link", packageFile("router", "@reckona/mreact-router", "link")],
     [
       "@reckona/mreact-router/navigation-state",

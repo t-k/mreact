@@ -296,6 +296,7 @@ const compatVendorSpecifierEntries = new Map<string, string>([
   ["@reckona/mreact-compat/jsx-dev-runtime", "jsx-dev-runtime"],
   ["@reckona/mreact-compat/jsx-runtime", "jsx-runtime"],
   ["@reckona/mreact-compat/scheduler", "scheduler"],
+  ["@reckona/mreact-compat/server", "server"],
 ]);
 
 const compatVendorEntrySpecifiers = new Map<string, string>([
@@ -307,6 +308,7 @@ const compatVendorEntrySpecifiers = new Map<string, string>([
   ["event-priority", "@reckona/mreact-compat/event-priority"],
   ["flight", "@reckona/mreact-compat/flight"],
   ["internal", "@reckona/mreact-compat/internal"],
+  ["server", "@reckona/mreact-compat/server"],
 ]);
 
 export function compatVendorEntryNames(): readonly string[] {
@@ -1180,6 +1182,10 @@ function workspacePackageResolutionPlugin() {
     [
       "@reckona/mreact-compat/scheduler",
       { entry: "scheduler", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
+    ],
+    [
+      "@reckona/mreact-compat/server",
+      { entry: "server", monorepoDir: "react-compat", packageName: "@reckona/mreact-compat" },
     ],
     [
       "@reckona/mreact-reactive-core",

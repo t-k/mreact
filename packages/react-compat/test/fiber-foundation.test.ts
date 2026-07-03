@@ -147,6 +147,15 @@ describe("host fiber render and commit", () => {
     expect(fiberRoot?.current.child?.type).toBe("p");
     expect(container.innerHTML).toBe('<p class="copy">Fiber</p>');
   });
+
+  it("rejects malformed root nodes without falling back to the legacy reconciler", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+
+    expect(() => root.render(Symbol("invalid") as unknown as string)).toThrow(
+      /Unsupported react-compat root node/,
+    );
+  });
 });
 
 describe("function component fiber adapter", () => {
