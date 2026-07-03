@@ -44,6 +44,8 @@ await startServer({
 
 Keep instrumentation payloads structured and small. If a log line needs request data, record stable IDs and route paths rather than full URLs or headers.
 
+Custom integrations that call `renderAppRequest()` directly can pass `onRenderError(error)` to observe a route render failure before Mreact renders the matching error boundary response. Use it for structured error reporting, and keep the captured payload free of request headers, cookies, form bodies, and raw URLs unless your application has already scrubbed them.
+
 ## AWS Lambda timings
 
 For AWS Lambda latency work, enable adapter timings temporarily and inspect request conversion, runtime materialization, middleware, loader, render, and response conversion phases. AWS Lambda cold starts are sensitive to route preload choices, so compare the same route and the same memory size before and after changing preload.

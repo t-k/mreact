@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.183 - 2026-07-03
+
+### Added
+
+- Added generated App Router route params declarations. `.mreact/routes.d.ts` now exports `AppRouteParams<Path>` and `AppRouteParamMap`, and the generated `@reckona/mreact-router/link` augmentation carries both route paths and params.
+- Added `onRenderError` to `renderAppRequest()` options so custom integrations can observe route render failures before the error boundary response is produced.
+
+### Changed
+
+- Improved `@reckona/mreact-forms` reactivity so field state and field-array bindings update at field granularity instead of rebinding the whole form for every keystroke.
+- Improved `@reckona/mreact-query` observer notifications with structural sharing and result equality checks, reducing rerenders for stale-only notifications and equal refetch results.
+- Improved React-compatible Flight serialization by adding a synchronous fast path for plain payloads and falling back to async work only when thenables or async values are encountered.
+- Improved App Router production builds with an incremental output cache that reuses unchanged build artifacts when source inputs, public assets, route declarations, and build options match.
+- Improved App Router development HMR by invalidating only affected module graph scope for source edits instead of walking and invalidating the whole graph on each update.
+- Improved `@reckona/mreact-compat` initial mount performance for static host-only subtrees by extending the initial host-only fiber path beyond direct text children.
+- Improved `@reckona/mreact-devtools` overlay output from a raw event feed into summarized state tables for reactive cells, query entries, and store snapshots.
+
 ## 0.0.182 - 2026-07-02
 
 ### Added

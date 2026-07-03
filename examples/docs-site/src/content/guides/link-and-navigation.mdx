@@ -29,6 +29,8 @@ The generated file contains `declare module "@reckona/mreact-router/link"` so th
 }
 ```
 
+The same generated declaration exports `AppRouteParams<Path>` and `AppRouteParamMap` for route-aware helper code that needs the params shape without duplicating folder names by hand. A route such as `src/app/users/$id/files/$...path/page.tsx` maps to `AppRouteParams<"/users/:id/files/:...path">` with `{ readonly id: string; readonly path: readonly string[] }`, so renaming a route folder updates the generated params type on the next build.
+
 For dynamic routes, pass a concrete URL to `Link`. The generated declaration checks that the URL matches a discovered route shape, so dynamic params are required at compile time as path segments, unknown route shapes are rejected, and external URLs stay outside the internal route type.
 
 ```tsx

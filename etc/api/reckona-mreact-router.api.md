@@ -1035,6 +1035,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     navigationScripts?: ReadonlyMap<string, string> | undefined;
     // (undocumented)
+    onRenderError?: ((error: unknown) => void) | undefined;
+    // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
     // Warning: (ae-forgotten-export) The symbol "AppRouterRenderPreload" needs to be exported by the entry point index.d.ts
     //
