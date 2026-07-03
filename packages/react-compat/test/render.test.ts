@@ -26,6 +26,8 @@ import {
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 import { getAppliedEventHandler, getAppliedProps } from "../src/host-event-binder.js";
 import { getEventPath, setLogicalEventParent } from "../src/events.js";
+import { bindEvent } from "@reckona/mreact-reactive-dom";
+import { createReactiveDomBlock } from "../src/jsx-runtime.js";
 import type { Fiber } from "../src/fiber.js";
 
 function countFiberSubtree(fiber: Fiber | undefined): number {
@@ -770,6 +772,70 @@ describe("react-compat render", () => {
 
     expect(addedListeners).toContain("div:click");
     expect(addedListeners).not.toContain("button:click");
+  });
+
+  test("promotes delegated events from reactive-dom blocks after commit without detached fallbacks", () => {
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const addedListeners: string[] = [];
+    const originalDocumentAddEventListener = document.addEventListener;
+    const originalAddEventListener = HTMLElement.prototype.addEventListener;
+    const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
+
+    document.addEventListener = function documentAddEventListenerSpy(
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      addedListeners.push(`#document:${type}`);
+      return originalDocumentAddEventListener.call(this, type, listener, options);
+    } as typeof document.addEventListener;
+
+    HTMLElement.prototype.addEventListener = function addEventListenerSpy(
+      this: HTMLElement,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      addedListeners.push(`${this.tagName.toLowerCase()}:${type}`);
+      return originalAddEventListener.call(this, type, listener, options);
+    };
+
+    HTMLElement.prototype.removeEventListener = function removeEventListenerSpy(
+      this: HTMLElement,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) {
+      addedListeners.push(`remove:${this.tagName.toLowerCase()}:${type}`);
+      return originalRemoveEventListener.call(this, type, listener, options);
+    };
+
+    try {
+      render(
+        createReactiveDomBlock(() => {
+          const button = document.createElement("button");
+          button.textContent = "Click";
+          const dispose = bindEvent(button, "click", () => {
+            button.textContent = "Clicked";
+          });
+          return { node: button, dispose };
+        }),
+        container,
+      );
+
+      container.querySelector("button")?.click();
+
+      expect(container.textContent).toBe("Clicked");
+      expect(addedListeners).toContain("#document:click");
+      expect(addedListeners).not.toContain("button:click");
+      expect(addedListeners).not.toContain("remove:button:click");
+    } finally {
+      document.addEventListener = originalDocumentAddEventListener;
+      HTMLElement.prototype.addEventListener = originalAddEventListener;
+      HTMLElement.prototype.removeEventListener = originalRemoveEventListener;
+      container.remove();
+    }
   });
 
   test("reads event handlers from applied props without separate listener metadata", () => {

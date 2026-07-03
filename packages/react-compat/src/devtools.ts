@@ -9,6 +9,8 @@ import {
 } from "./element.js";
 import type { Fiber, FiberRoot, FiberTag } from "./fiber.js";
 
+declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
+
 interface DevToolsHook {
   inject?: (renderer: DevToolsRenderer) => number;
   onCommitFiberRoot?: (
@@ -142,6 +144,11 @@ export function commitDevToolsRoot(
   source: FiberRoot | ReactCompatNode,
   didError = false,
 ): void {
+  if (typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" && __MREACT_CLIENT_DEVTOOLS__ === false) {
+    injectProductionDevToolsRenderer(getDevToolsHook());
+    return;
+  }
+
   const hook = getDevToolsHook();
   const id = injectDevToolsRenderer(hook);
 
@@ -177,6 +184,10 @@ export function commitDevToolsRoot(
 }
 
 export function unmountDevToolsRoot(container: Element): void {
+  if (typeof __MREACT_CLIENT_DEVTOOLS__ !== "undefined" && __MREACT_CLIENT_DEVTOOLS__ === false) {
+    return;
+  }
+
   const hook = getDevToolsHook();
   const id = injectDevToolsRenderer(hook);
   const root = roots.get(container);
@@ -303,6 +314,27 @@ function injectDevToolsRenderer(hook: DevToolsHook | undefined): number | undefi
       };
     },
   });
+  return rendererId;
+}
+
+function injectProductionDevToolsRenderer(hook: DevToolsHook | undefined): number | undefined {
+  if (rendererId !== undefined && injectedHook === hook) {
+    return rendererId;
+  }
+
+  if (hook?.inject === undefined) {
+    return undefined;
+  }
+
+  injectedHook = hook;
+  rendererRoots = new Set();
+  rendererId = hook.inject({
+    bundleType: 0,
+    version: "0.0.0",
+    reconcilerVersion: "0.0.0",
+    rendererPackageName: "@reckona/mreact-compat",
+    supportsFiber: true,
+  } as DevToolsRenderer);
   return rendererId;
 }
 

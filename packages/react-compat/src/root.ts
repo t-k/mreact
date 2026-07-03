@@ -33,6 +33,10 @@ import {
 } from "./fiber-work-loop.js";
 import { commitFiberRoot, detachFiberRefs } from "./fiber-commit.js";
 import {
+  withBatchedDelegatedRootReleases,
+  withDeferredDelegatedEventPromotions,
+} from "@reckona/mreact-reactive-dom";
+import {
   canRenderHostFiber,
   commitHydratingHostFiberRoot,
   disposeHostFiberResources,
@@ -130,13 +134,15 @@ export function createRoot(
       });
     },
     unmount() {
-      runtime.currentElement = undefined;
-      runtime.dispose();
-      detachFiberRefs(fiberRoot.current);
-      disposeHostFiberResources(fiberRoot.current);
-      runtime.instances.clear();
-      unmountDevToolsRoot(container);
-      clearElementChildren(container);
+      withBatchedDelegatedRootReleases(() => {
+        runtime.currentElement = undefined;
+        runtime.dispose();
+        detachFiberRefs(fiberRoot.current);
+        disposeHostFiberResources(fiberRoot.current);
+        runtime.instances.clear();
+        unmountDevToolsRoot(container);
+        clearElementChildren(container);
+      });
     },
   };
 }
@@ -153,7 +159,10 @@ function renderHostFiberIntoContainer(
     let committed = false;
 
     try {
-      const finishedWork = renderHostFiberRoot(fiberRoot, element, runtime);
+      const deferred = withDeferredDelegatedEventPromotions(() =>
+        renderHostFiberRoot(fiberRoot, element, runtime)
+      );
+      const finishedWork = deferred.value;
 
       if (runtime.renderPhaseUpdate) {
         runtime.renderPhaseUpdate = false;
@@ -165,9 +174,10 @@ function renderHostFiberIntoContainer(
       }
 
       fiberRoot.finishedWork = finishedWork;
-      commitFiberRoot(fiberRoot);
+      withBatchedDelegatedRootReleases(() => commitFiberRoot(fiberRoot));
       collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
       removeStalePortalNodes(portalSnapshot, runtime);
+      deferred.promote?.();
       commitDevToolsRoot(container, fiberRoot);
       runtime.idMode = "client";
       committed = true;
@@ -203,13 +213,16 @@ function renderHydratingHostFiberIntoContainer(
 
     try {
       const scope = getHydrationScope(container, options.resumeId);
-      const finishedWork = renderHydratingHostFiberRoot(
-        fiberRoot,
-        element,
-        runtime,
-        scope,
-        options,
+      const deferred = withDeferredDelegatedEventPromotions(() =>
+        renderHydratingHostFiberRoot(
+          fiberRoot,
+          element,
+          runtime,
+          scope,
+          options,
+        )
       );
+      const finishedWork = deferred.value;
 
       if (runtime.renderPhaseUpdate) {
         runtime.renderPhaseUpdate = false;
@@ -220,7 +233,9 @@ function renderHydratingHostFiberIntoContainer(
         continue;
       }
 
-      commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options);
+      withBatchedDelegatedRootReleases(() =>
+        commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options)
+      );
       fiberRoot.current = finishedWork;
       fiberRoot.current.stateNode = fiberRoot;
       fiberRoot.finishedWork = undefined;
@@ -228,6 +243,7 @@ function renderHydratingHostFiberIntoContainer(
       fiberRoot.workInProgressRootRenderLanes = 0;
       collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
       removeStalePortalNodes(portalSnapshot, runtime);
+      deferred.promote?.();
       commitDevToolsRoot(container, fiberRoot);
       runtime.idMode = "client";
       committed = true;
@@ -329,13 +345,15 @@ export function hydrateRoot(
       });
     },
     unmount() {
-      runtime.currentElement = undefined;
-      runtime.dispose();
-      detachFiberRefs(fiberRoot.current);
-      disposeHostFiberResources(fiberRoot.current);
-      runtime.instances.clear();
-      unmountDevToolsRoot(container);
-      clearElementChildren(container);
+      withBatchedDelegatedRootReleases(() => {
+        runtime.currentElement = undefined;
+        runtime.dispose();
+        detachFiberRefs(fiberRoot.current);
+        disposeHostFiberResources(fiberRoot.current);
+        runtime.instances.clear();
+        unmountDevToolsRoot(container);
+        clearElementChildren(container);
+      });
     },
   };
 

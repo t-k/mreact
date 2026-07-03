@@ -5,6 +5,10 @@ import { flushQueuedComputations } from "@reckona/mreact-reactive-core/internal"
 import { bindText, effect } from "@reckona/mreact-reactive-dom";
 import { createElement, createRoot, flushSync, memo, useState } from "../src/index.js";
 import { createReactiveDomBlock } from "../src/jsx-runtime.js";
+import {
+  createReactivePropCell,
+  createReactivePropProxy,
+} from "../src/reactive-prop-cell.js";
 
 describe("reactive-dom-block prop bridging", () => {
   test("updates bound text from new props without re-running the block render", () => {
@@ -279,5 +283,17 @@ describe("reactive-dom-block prop bridging", () => {
     } finally {
       process.env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  test("reuses object prop snapshots while the object identity is unchanged", () => {
+    const row = { label: "a" };
+    const cell = createReactivePropCell({ row });
+    const proxy = createReactivePropProxy<{ row: { label: string } }>(cell);
+
+    expect(proxy.row).toBe(row);
+    const firstSnapshot = cell.propertySnapshots?.get("row");
+
+    expect(proxy.row).toBe(row);
+    expect(cell.propertySnapshots?.get("row")).toBe(firstSnapshot);
   });
 });

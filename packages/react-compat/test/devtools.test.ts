@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { build as viteBuild } from "vite";
+import { join } from "node:path";
 import {
   createElement,
   createRoot,
@@ -196,6 +198,52 @@ describe("react-compat devtools hook", () => {
       "schedule-update",
       "unmount-notification",
     ]);
+  });
+
+  test("production bundles omit the full DevTools integration", async () => {
+    const result = await viteBuild({
+      configFile: false,
+      define: {
+        __MREACT_CLIENT_DEVTOOLS__: "false",
+      },
+      logLevel: "silent",
+      publicDir: false,
+      build: {
+        emptyOutDir: false,
+        minify: true,
+        write: false,
+        rolldownOptions: {
+          input: "entry",
+          output: {
+            format: "es",
+          },
+        },
+      },
+      plugins: [
+        {
+          name: "react-compat-devtools-prod-test",
+          resolveId(id) {
+            return id === "entry" ? id : undefined;
+          },
+          load(id) {
+            if (id !== "entry") {
+              return undefined;
+            }
+            return `import { createElement, render } from ${JSON.stringify(join(process.cwd(), "packages/react-compat/src/index.ts"))};
+const container = document.createElement("div");
+render(createElement("p", null, "Hello"), container);`;
+          },
+        },
+      ],
+    });
+    const output = Array.isArray(result) ? result[0]?.output : result.output;
+    const code = output
+      .filter((item): item is { code: string; type: "chunk" } => item.type === "chunk")
+      .map((chunk) => chunk.code)
+      .join("\n");
+
+    expect(code).not.toContain("onCommitFiberRoot");
+    expect(code).not.toContain("overrideProps");
   });
 
   test("exposes React Fiber shaped host nodes and host instance lookup", () => {

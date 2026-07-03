@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createQueryLifecycle } from "../src/query-lifecycle.js";
+import {
+  createQueryLifecycle,
+  replaceEqualDeepForTesting,
+} from "../src/query-lifecycle.js";
 
 describe("query entry lifecycle", () => {
   it("invalidated fresh data is refetched through observable fetch behavior", async () => {
@@ -59,5 +62,40 @@ describe("query entry lifecycle", () => {
     }
 
     expect(arrayFromCalls).toBe(0);
+  });
+
+  it("skips structural-sharing recursion for identity-equal array prefixes", () => {
+    const previous = Array.from({ length: 500 }, (_, index) => ({
+      id: index,
+      nested: { label: `item-${index}` },
+    }));
+    const next = [...previous, { id: 500, nested: { label: "item-500" } }];
+    const originalMap = Array.prototype.map;
+    let mappedItems = 0;
+
+    Array.prototype.map = function mapSpy<T, U>(
+      this: T[],
+      callback: (value: T, index: number, array: T[]) => U,
+      thisArg?: unknown,
+    ) {
+      return originalMap.call(
+        this,
+        (value, index, array) => {
+          mappedItems += 1;
+          return callback.call(thisArg, value, index, array);
+        },
+        thisArg,
+      );
+    } as typeof Array.prototype.map;
+
+    try {
+      const shared = replaceEqualDeepForTesting(previous, next) as typeof next;
+
+      expect(shared).not.toBe(previous);
+      expect(shared.slice(0, previous.length)).toEqual(previous);
+      expect(mappedItems).toBeLessThanOrEqual(2);
+    } finally {
+      Array.prototype.map = originalMap;
+    }
   });
 });

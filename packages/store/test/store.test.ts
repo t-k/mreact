@@ -238,6 +238,40 @@ describe("createStore", () => {
     }
   });
 
+  it("does not compact the listener entry array once per cleanup-scope unsubscribe", () => {
+    const store = createStore({ count: 0 });
+    const disposers: Array<() => void> = [];
+    const originalFilter = Array.prototype.filter;
+    let filterCalls = 0;
+
+    for (let index = 0; index < 200; index += 1) {
+      withCleanupScope(
+        (dispose) => {
+          disposers.push(dispose);
+        },
+        () => store.select((state) => state.count),
+      );
+    }
+
+    Array.prototype.filter = function filterSpy<T>(
+      this: T[],
+      ...args: Parameters<Array<T>["filter"]>
+    ) {
+      filterCalls += 1;
+      return originalFilter.apply(this, args);
+    } as typeof Array.prototype.filter;
+
+    try {
+      for (const dispose of disposers) {
+        dispose();
+      }
+    } finally {
+      Array.prototype.filter = originalFilter;
+    }
+
+    expect(filterCalls).toBeLessThanOrEqual(2);
+  });
+
   it("hydrates from a persist descriptor load result", async () => {
     const store = createStore(
       { count: 0 },

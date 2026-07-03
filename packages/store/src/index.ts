@@ -92,6 +92,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let listenerEntries: Array<StoreListenerEntry<T>> = [];
   let listenerVersion = 0;
   let notificationDepth = 0;
+  let removedListenerEntryCount = 0;
   let transactionDepth = 0;
   let transactionPrevious: T | undefined;
   let transactionChanged = false;
@@ -230,10 +231,12 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   }
 
   function subscribeListener(listener: StoreListener<T>): () => void {
+    let entry: StoreListenerEntry<T> | undefined;
     if (!listeners.has(listener)) {
       listeners.add(listener);
       listenerVersion += 1;
-      listenerEntries.push({ addedVersion: listenerVersion, listener });
+      entry = { addedVersion: listenerVersion, listener };
+      listenerEntries.push(entry);
     }
 
     return () => {
@@ -242,30 +245,26 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       }
 
       listenerVersion += 1;
-      const entry = findActiveListenerEntry(listener);
       if (entry !== undefined) {
         entry.removedVersion = listenerVersion;
+        removedListenerEntryCount += 1;
       }
       compactListenerEntries();
     };
   }
 
-  function findActiveListenerEntry(listener: StoreListener<T>): StoreListenerEntry<T> | undefined {
-    for (let index = listenerEntries.length - 1; index >= 0; index -= 1) {
-      const entry = listenerEntries[index];
-      if (entry?.listener === listener && entry.removedVersion === undefined) {
-        return entry;
-      }
-    }
-    return undefined;
-  }
-
   function compactListenerEntries(): void {
-    if (notificationDepth > 0 || listenerEntries.length === listeners.size) {
+    if (
+      notificationDepth > 0 ||
+      removedListenerEntryCount === 0 ||
+      removedListenerEntryCount < 128 ||
+      removedListenerEntryCount * 2 <= listenerEntries.length
+    ) {
       return;
     }
 
     listenerEntries = listenerEntries.filter((entry) => entry.removedVersion === undefined);
+    removedListenerEntryCount = 0;
   }
 
   function set(next: StoreSetter<T>): void {

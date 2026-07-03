@@ -110,6 +110,10 @@ function rememberReactivePropObjectSnapshot(
     cell.propertySnapshots = snapshots;
   }
 
+  if (snapshots.get(property)?.value === value) {
+    return;
+  }
+
   snapshots.set(property, createShallowObjectSnapshot(value));
 }
 

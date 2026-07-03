@@ -578,13 +578,26 @@ function replaceEqualDeep(previous: unknown, next: unknown): unknown {
 
   if (Array.isArray(previous) && Array.isArray(next)) {
     let equalItems = previous.length === next.length;
-    const result = next.map((nextItem, index) => {
+    const result = new Array<unknown>(next.length);
+    let index = 0;
+
+    while (
+      index < previous.length &&
+      index < next.length &&
+      Object.is(previous[index], next[index])
+    ) {
+      result[index] = previous[index];
+      index += 1;
+    }
+
+    for (; index < next.length; index += 1) {
+      const nextItem = next[index];
       const replaced = replaceEqualDeep(previous[index], nextItem);
       if (!Object.is(replaced, previous[index])) {
         equalItems = false;
       }
-      return replaced;
-    });
+      result[index] = replaced;
+    }
 
     return equalItems ? previous : result;
   }
@@ -613,6 +626,8 @@ function replaceEqualDeep(previous: unknown, next: unknown): unknown {
 
   return next;
 }
+
+export const replaceEqualDeepForTesting = replaceEqualDeep;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (value === null || typeof value !== "object") {
