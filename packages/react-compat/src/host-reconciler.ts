@@ -2595,7 +2595,6 @@ function tryCreateInitialHostOnlyFiber(
   if (
     current !== undefined ||
     options.previousNodes !== undefined ||
-    !shouldUseDirectHostTextChild() ||
     typeof node.type !== "string" ||
     !canCreateInitialHostOnlyNode(node)
   ) {
@@ -2625,7 +2624,10 @@ function createInitialHostOnlyElementFiber(
   fiber.flags |= Placement;
   fiber.hostChildListChanged = true;
 
-  if (getDirectHostTextChild(node.props.children) === undefined) {
+  if (
+    getDirectHostTextChild(node.props.children) === undefined ||
+    !shouldUseDirectHostTextChild()
+  ) {
     fiber.child = createInitialHostOnlyChildList(
       fiber,
       node.props.children as ReactCompatNode,

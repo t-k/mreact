@@ -173,6 +173,22 @@ describe("host reconciler module", () => {
     expect(hostReconcilerSource).toContain("function tryCreateInitialHostOnlyFiber(");
   });
 
+  test("does not limit the initial host-only subtree builder to direct text children", async () => {
+    const hostReconcilerSource = await readFile(
+      join(process.cwd(), "packages/react-compat/src/host-reconciler.ts"),
+      "utf8",
+    );
+    const fastPathStart = hostReconcilerSource.indexOf("function tryCreateInitialHostOnlyFiber(");
+    const fastPathEnd = hostReconcilerSource.indexOf(
+      "function createInitialHostOnlyElementFiber(",
+      fastPathStart,
+    );
+    const fastPathSource = hostReconcilerSource.slice(fastPathStart, fastPathEnd);
+
+    expect(fastPathSource).toContain("canCreateInitialHostOnlyNode(node)");
+    expect(fastPathSource).not.toContain("shouldUseDirectHostTextChild()");
+  });
+
   test("builds runtime instance key prefixes without repeated slice joins", async () => {
     const hooksSource = await readFile(
       join(process.cwd(), "packages/react-compat/src/hooks.ts"),

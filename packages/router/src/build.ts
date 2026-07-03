@@ -221,6 +221,29 @@ export interface BuildAppResult {
   routes: AppRoute[];
 }
 
+interface IncrementalBuildCacheManifest {
+  fingerprint: string;
+  version: 1;
+}
+
+interface IncrementalBuildServerManifestOutputs {
+  serverModuleFiles?: Record<string, string>;
+  serverModuleRenderFiles?: Record<string, string>;
+  serverModuleRequestFiles?: Record<string, string>;
+}
+
+interface IncrementalBuildClientManifestOutputs {
+  assets?: readonly string[];
+  publicAssets?: readonly string[];
+  routes: readonly {
+    css?: readonly string[];
+    imports?: readonly string[];
+    navigationScript?: string | undefined;
+    script?: string | undefined;
+    sourceMap?: string | undefined;
+  }[];
+}
+
 /**
  * Describes the generated import policy artifact consumed by built request handlers.
  */
@@ -421,6 +444,14 @@ async function buildAppWithResolvedProject(
   const serverDir = join(options.outDir, "server");
   const clientDir = join(options.outDir, "client");
   const cloudflareDir = join(options.outDir, "cloudflare");
+  const incrementalBuildFingerprint = await createIncrementalBuildCacheFingerprint({
+    buildTargets,
+    files,
+    project,
+    routes,
+    viteDefine,
+    vitePlugins,
+  });
   const sourceAnalysis =
     shouldTrackBuildPhases === false
       ? await analyzeBuildRouteSources({
@@ -466,6 +497,17 @@ async function buildAppWithResolvedProject(
         vitePlugins,
       }),
     );
+  }
+
+  if (
+    incrementalBuildFingerprint !== undefined &&
+    (await isIncrementalBuildCacheHit({
+      buildTargets,
+      fingerprint: incrementalBuildFingerprint,
+      outDir: options.outDir,
+    }))
+  ) {
+    return { routes };
   }
 
   if (shouldTrackBuildPhases === false) {
@@ -799,7 +841,261 @@ async function buildAppWithResolvedProject(
     });
   }
 
+  if (incrementalBuildFingerprint !== undefined) {
+    await writeIncrementalBuildCacheManifest(options.outDir, incrementalBuildFingerprint);
+  }
+
   return { routes };
+}
+
+const incrementalBuildCacheFilename = "build-cache.json";
+const incrementalBuildCacheVersion = 1;
+
+async function createIncrementalBuildCacheFingerprint(options: {
+  buildTargets: readonly AppRouterBuildTarget[];
+  files: Record<string, string>;
+  project: ResolvedAppRouterProject;
+  routes: readonly AppRoute[];
+  viteDefine: UserConfig["define"] | undefined;
+  vitePlugins: readonly PluginOption[] | undefined;
+}): Promise<string | undefined> {
+  if (options.vitePlugins !== undefined && options.vitePlugins.length > 0) {
+    return undefined;
+  }
+
+  let define: string;
+  try {
+    const serializedDefine = JSON.stringify(options.viteDefine ?? null);
+    if (serializedDefine === undefined) {
+      return undefined;
+    }
+    define = serializedDefine;
+  } catch {
+    return undefined;
+  }
+
+  const [publicAssets, appConventionAssets] = await Promise.all([
+    collectBuildInputFileHashes(options.project.publicDir, options.project.projectRoot),
+    collectAppConventionAssetInputHashes(options.project.routesDir, options.project.projectRoot),
+  ]);
+  const sourceFiles = Object.keys(options.files)
+    .sort()
+    .map((file) => [normalizeBuildInputPath(file), hashText(options.files[file] ?? "")] as const);
+  const routes = options.routes
+    .map((route) => ({
+      file: normalizeBuildInputPath(relative(options.project.projectRoot, route.file)),
+      kind: route.kind,
+      path: route.path,
+    }))
+    .sort((left, right) => left.file.localeCompare(right.file));
+  const payload = {
+    appDir: normalizeBuildInputPath(relative(options.project.projectRoot, options.project.routesDir)),
+    assetBaseUrl: options.project.assetBaseUrl ?? null,
+    clientConsolePureFunctions: options.project.clientConsolePureFunctions ?? [],
+    clientSourceMaps: options.project.clientSourceMaps,
+    define,
+    nodeEnv: process.env.NODE_ENV ?? null,
+    publicAssetBaseUrl: options.project.publicAssetBaseUrl ?? null,
+    publicDir: normalizeBuildInputPath(relative(options.project.projectRoot, options.project.publicDir)),
+    routes,
+    sourceDirs: options.project.allowedSourceDirs
+      .map((directory) => normalizeBuildInputPath(relative(options.project.projectRoot, directory)))
+      .sort(),
+    sourceFiles,
+    targets: [...options.buildTargets].sort(),
+    version: incrementalBuildCacheVersion,
+    publicAssets,
+    appConventionAssets,
+  };
+
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+async function isIncrementalBuildCacheHit(options: {
+  buildTargets: readonly AppRouterBuildTarget[];
+  fingerprint: string;
+  outDir: string;
+}): Promise<boolean> {
+  const cache = await readJsonBuildOutput<IncrementalBuildCacheManifest>(
+    join(options.outDir, incrementalBuildCacheFilename),
+  );
+  if (cache === undefined) {
+    return false;
+  }
+
+  return (
+    cache.version === incrementalBuildCacheVersion &&
+    cache.fingerprint === options.fingerprint &&
+    (await hasRequiredIncrementalBuildOutputs(options.outDir, options.buildTargets))
+  );
+}
+
+async function hasRequiredIncrementalBuildOutputs(
+  outDir: string,
+  buildTargets: readonly AppRouterBuildTarget[],
+): Promise<boolean> {
+  const serverManifestFile = join(outDir, "server", "manifest.json");
+  const clientManifestFile = join(outDir, "client", "manifest.json");
+  const requiredFiles = [
+    serverManifestFile,
+    join(outDir, "server", "import-policy.json"),
+    clientManifestFile,
+    join(outDir, "client", ".vite", "manifest.json"),
+    join(outDir, "routes.d.ts"),
+    join(outDir, "public-assets.d.ts"),
+    ...(buildTargets.includes("aws-lambda")
+      ? [join(outDir, "aws-lambda", "mreact-handler.mjs")]
+      : []),
+    ...(buildTargets.includes("cloudflare") ? [join(outDir, "cloudflare", "worker.mjs")] : []),
+  ];
+  const [serverManifest, clientManifest] = await Promise.all([
+    readJsonBuildOutput<IncrementalBuildServerManifestOutputs>(serverManifestFile),
+    readJsonBuildOutput<IncrementalBuildClientManifestOutputs>(clientManifestFile),
+  ]);
+  if (serverManifest === undefined || clientManifest === undefined) {
+    return false;
+  }
+
+  for (const file of [
+    ...Object.values(serverManifest.serverModuleFiles ?? {}),
+    ...Object.values(serverManifest.serverModuleRenderFiles ?? {}),
+    ...Object.values(serverManifest.serverModuleRequestFiles ?? {}),
+  ]) {
+    requiredFiles.push(join(outDir, "server", file));
+  }
+
+  for (const file of collectClientManifestOutputFiles(clientManifest)) {
+    requiredFiles.push(join(outDir, "client", file));
+  }
+
+  for (const file of requiredFiles) {
+    if (!(await isExistingFile(file))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function collectClientManifestOutputFiles(
+  manifest: IncrementalBuildClientManifestOutputs,
+): string[] {
+  const files = new Set<string>();
+
+  for (const asset of manifest.assets ?? []) {
+    files.add(asset);
+  }
+  for (const asset of manifest.publicAssets ?? []) {
+    files.add(asset);
+    files.add(`public/${asset}`);
+  }
+  for (const route of manifest.routes) {
+    for (const file of [
+      route.script,
+      route.sourceMap,
+      route.navigationScript,
+      ...(route.css ?? []),
+      ...(route.imports ?? []),
+    ]) {
+      if (file !== undefined) {
+        files.add(file);
+      }
+    }
+  }
+
+  return [...files];
+}
+
+async function readJsonBuildOutput<T>(file: string): Promise<T | undefined> {
+  try {
+    return JSON.parse(await readFile(file, "utf8")) as T;
+  } catch (error) {
+    if (
+      (isNodeError(error) && error.code === "ENOENT") ||
+      error instanceof SyntaxError
+    ) {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function writeIncrementalBuildCacheManifest(
+  outDir: string,
+  fingerprint: string,
+): Promise<void> {
+  const cache = {
+    fingerprint,
+    version: incrementalBuildCacheVersion,
+  } satisfies IncrementalBuildCacheManifest;
+
+  await writeFile(
+    join(outDir, incrementalBuildCacheFilename),
+    `${JSON.stringify(cache, null, 2)}\n`,
+  );
+}
+
+async function collectBuildInputFileHashes(
+  directory: string,
+  projectRoot: string,
+): Promise<readonly (readonly [string, string])[]> {
+  if (!(await isPublicAssetDirectory(directory))) {
+    return [];
+  }
+
+  const files = await collectFiles(directory);
+  const hashes = await mapWithBuildConcurrency(
+    files,
+    async (file) =>
+      [
+        normalizeBuildInputPath(relative(projectRoot, file)),
+        hashBuffer(await readFile(file)),
+      ] as const,
+  );
+
+  return hashes.sort(([left], [right]) => left.localeCompare(right));
+}
+
+async function collectAppConventionAssetInputHashes(
+  appDir: string,
+  projectRoot: string,
+): Promise<readonly (readonly [string, string])[]> {
+  const entries = await readdir(appDir, { withFileTypes: true });
+  const assetFiles = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(appDir, entry.name))
+    .filter((file) => isAppFileConventionAsset(file, appDir));
+  const hashes = await mapWithBuildConcurrency(
+    assetFiles,
+    async (file) =>
+      [
+        normalizeBuildInputPath(relative(projectRoot, file)),
+        hashBuffer(await readFile(file)),
+      ] as const,
+  );
+
+  return hashes.sort(([left], [right]) => left.localeCompare(right));
+}
+
+async function isExistingFile(file: string): Promise<boolean> {
+  try {
+    return (await stat(file)).isFile();
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+function normalizeBuildInputPath(path: string): string {
+  return path.split(sep).join("/");
+}
+
+function hashBuffer(buffer: Buffer): string {
+  return createHash("sha256").update(buffer).digest("hex").slice(0, 16);
 }
 
 function defaultBuildConcurrency(): number {

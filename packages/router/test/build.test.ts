@@ -6966,6 +6966,81 @@ export default function Page() {
     expect((await stat(runtimeFile)).mtimeMs).toBe(firstMtime);
   });
 
+  test("skips rewriting build output when source inputs are unchanged", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-incremental-build-cache-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Incremental</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    const firstServerManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      serverModuleRenderFiles?: Record<string, string>;
+      serverModuleRequestFiles?: Record<string, string>;
+    };
+    const artifactFile =
+      firstServerManifest.serverModuleRenderFiles?.["page.mreact.tsx"] ??
+      firstServerManifest.serverModuleRequestFiles?.["page.mreact.tsx"];
+    expect(artifactFile).toBeDefined();
+    const artifactPath = join(outDir, "server", artifactFile as string);
+    const firstMtime = (await stat(artifactPath)).mtimeMs;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await buildApp({ appDir, outDir });
+
+    expect((await stat(artifactPath)).mtimeMs).toBe(firstMtime);
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>Incremental</main>");
+  });
+
+  test("rebuilds missing artifacts instead of trusting the incremental build cache", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-incremental-build-cache-missing-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Restored</main>; }",
+    );
+
+    await buildApp({ appDir, outDir });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      serverModuleRenderFiles?: Record<string, string>;
+      serverModuleRequestFiles?: Record<string, string>;
+    };
+    const artifactFile =
+      serverManifest.serverModuleRenderFiles?.["page.mreact.tsx"] ??
+      serverManifest.serverModuleRequestFiles?.["page.mreact.tsx"];
+    expect(artifactFile).toBeDefined();
+    const artifactPath = join(outDir, "server", artifactFile as string);
+    await rm(artifactPath);
+
+    await buildApp({ appDir, outDir });
+
+    await expect(access(artifactPath)).resolves.toBeUndefined();
+    expect(
+      await (
+        await renderBuiltAppRequest({
+          outDir,
+          request: new Request("http://local.test/"),
+        })
+      ).text(),
+    ).toContain("<main>Restored</main>");
+  });
+
   test("preloads built loader and route handler modules before requests", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-preload-modules-"));
     const appDir = join(rootDir, "app");
