@@ -11,10 +11,7 @@ describe("router CLI entry", () => {
 
   beforeAll(async () => {
     appDir = await mkdtemp(join(tmpdir(), "mreact-router-cli-"));
-    await writeFile(
-      join(appDir, "package.json"),
-      JSON.stringify({ name: "mreact-cli-test" }),
-    );
+    await writeFile(join(appDir, "package.json"), JSON.stringify({ name: "mreact-cli-test" }));
   });
 
   afterEach(() => {
@@ -36,14 +33,12 @@ describe("router CLI entry", () => {
     try {
       // Importing the CLI module triggers its top-level `await` flow.
       await import("../src/cli.ts");
-      expect(errorSpy).toHaveBeenCalledWith(
-        "Unknown command: totally-not-a-command",
-      );
+      expect(errorSpy).toHaveBeenCalledWith("Unknown command: totally-not-a-command");
       expect(process.exitCode).toBe(1);
     } finally {
       process.exitCode = previousExitCode;
     }
-  });
+  }, 15_000);
 
   test("prints help without loading a project", async () => {
     process.argv = [process.argv[0]!, "cli.ts", "--help"];
@@ -285,9 +280,7 @@ describe("router CLI entry", () => {
         outDir: expect.stringMatching(/\.lambda$/),
         skipRuntimeDependencyCheck: undefined,
       });
-      expect(logSpy).toHaveBeenCalledWith(
-        "Packaged AWS Lambda artifact with 1 files (12 bytes).",
-      );
+      expect(logSpy).toHaveBeenCalledWith("Packaged AWS Lambda artifact with 1 files (12 bytes).");
     } finally {
       process.exitCode = previousExitCode;
     }
