@@ -24,20 +24,15 @@ type EventElement = HTMLElement & {
   __mreactHasEvents?: true;
 };
 type DeferredDelegatedEventPromotion = () => void;
-interface DeferredDelegatedEventPromotionContext {
-  promotions?: DeferredDelegatedEventPromotion[] | undefined;
-}
 
-const delegatedEventTypes = " change click input keydown keyup pointerdown pointermove pointerup submit ";
+const delegatedEventTypes =
+  " change click input keydown keyup pointerdown pointermove pointerup submit ";
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
 const pendingDisconnectedPromotions = new Set<() => void>();
-let currentDeferredDelegatedEventPromotions:
-  | DeferredDelegatedEventPromotionContext
-  | undefined;
-let currentDelegatedRootReleaseBatch:
-  | Map<EventTarget, Record<string, number>>
-  | undefined;
+let currentDeferredDelegatedEventPromotions: DeferredDelegatedEventPromotion[] | null | undefined;
+let currentDelegatedRootReleaseBatch: Map<EventTarget, Record<string, number>> | undefined;
+let delegatedRootReleaseBatchDepth = 0;
 let disconnectedPromotionFlushQueued = false;
 let eventBindingMetadataDepth = 0;
 
@@ -56,14 +51,13 @@ export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
   value: T;
 } {
   const previousPromotions = currentDeferredDelegatedEventPromotions;
-  const context: DeferredDelegatedEventPromotionContext = {};
-  currentDeferredDelegatedEventPromotions = context;
+  currentDeferredDelegatedEventPromotions = null;
 
   try {
     const value = fn();
-    const promotions = context.promotions;
+    const promotions = readCurrentDeferredDelegatedEventPromotions();
 
-    if (promotions === undefined) {
+    if (promotions === null || promotions === undefined) {
       return { value };
     }
 
@@ -80,18 +74,25 @@ export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
   }
 }
 
-export function withBatchedDelegatedRootReleases<T>(fn: () => T): T {
-  const previousBatch = currentDelegatedRootReleaseBatch;
-  const batch = previousBatch ?? new Map<EventTarget, Record<string, number>>();
+function readCurrentDeferredDelegatedEventPromotions():
+  | DeferredDelegatedEventPromotion[]
+  | null
+  | undefined {
+  return currentDeferredDelegatedEventPromotions;
+}
 
-  currentDelegatedRootReleaseBatch = batch;
+export function withBatchedDelegatedRootReleases<T>(fn: () => T): T {
+  const isOuterBatch = delegatedRootReleaseBatchDepth === 0;
+  delegatedRootReleaseBatchDepth += 1;
 
   try {
     return fn();
   } finally {
-    currentDelegatedRootReleaseBatch = previousBatch;
+    delegatedRootReleaseBatchDepth -= 1;
 
-    if (previousBatch === undefined) {
+    if (isOuterBatch) {
+      const batch = currentDelegatedRootReleaseBatch;
+      currentDelegatedRootReleaseBatch = undefined;
       flushDelegatedRootReleaseBatch(batch);
     }
   }
@@ -234,7 +235,7 @@ function addDeferredDelegatedEventPromotion(
     return undefined;
   }
 
-  const promotions = (context.promotions ??= []);
+  const promotions = context ?? (currentDeferredDelegatedEventPromotions = []);
 
   let active = true;
   let delegatedRoot: EventTarget | undefined;
@@ -415,9 +416,11 @@ function retainDelegatedRoot(root: EventTarget, type: string): void {
 }
 
 function releaseDelegatedRoot(root: EventTarget, type: string): void {
-  const batch = currentDelegatedRootReleaseBatch;
-
-  if (batch !== undefined) {
+  if (delegatedRootReleaseBatchDepth > 0) {
+    const batch = (currentDelegatedRootReleaseBatch ??= new Map<
+      EventTarget,
+      Record<string, number>
+    >());
     let releasesByType = batch.get(root);
 
     if (releasesByType === undefined) {
@@ -433,8 +436,12 @@ function releaseDelegatedRoot(root: EventTarget, type: string): void {
 }
 
 function flushDelegatedRootReleaseBatch(
-  batch: Map<EventTarget, Record<string, number>>,
+  batch: Map<EventTarget, Record<string, number>> | undefined,
 ): void {
+  if (batch === undefined) {
+    return;
+  }
+
   for (const [root, releasesByType] of batch) {
     for (const [type, count] of Object.entries(releasesByType)) {
       releaseDelegatedRootCount(root, type, count);
@@ -442,11 +449,7 @@ function flushDelegatedRootReleaseBatch(
   }
 }
 
-function releaseDelegatedRootCount(
-  root: EventTarget,
-  type: string,
-  count: number,
-): void {
+function releaseDelegatedRootCount(root: EventTarget, type: string, count: number): void {
   const rootsByType = delegatedRoots.get(root);
   const current = rootsByType?.get(type);
 

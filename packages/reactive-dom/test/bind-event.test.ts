@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { bindEvent, withEventBindingMetadata } from "../src/index.js";
+import {
+  bindEvent,
+  withBatchedDelegatedRootReleases,
+  withEventBindingMetadata,
+} from "../src/index.js";
 
 describe("bindEvent", () => {
   test("uses native events and removes listener on dispose", () => {
@@ -244,7 +248,9 @@ describe("bindEvent", () => {
 
     const dispose = bindEvent(button, "click", () => {});
 
-    expect((button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings).toBeUndefined();
+    expect(
+      (button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings,
+    ).toBeUndefined();
     expect((button as unknown as { __mreactHasEvents?: true }).__mreactHasEvents).toBeUndefined();
 
     dispose();
@@ -255,7 +261,11 @@ describe("bindEvent", () => {
 
     const dispose = withEventBindingMetadata(() => bindEvent(button, "click", () => {}));
 
-    expect(Array.isArray((button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings)).toBe(false);
+    expect(
+      Array.isArray(
+        (button as unknown as { __mreactEventBindings?: unknown }).__mreactEventBindings,
+      ),
+    ).toBe(false);
 
     dispose();
   });
@@ -320,5 +330,56 @@ describe("bindEvent", () => {
     button.click();
 
     expect(calls).toEqual(["first", "second", "second"]);
+  });
+
+  test("does not allocate a release batch map when no delegated roots are released", () => {
+    const OriginalMap = globalThis.Map;
+    let mapAllocations = 0;
+
+    try {
+      globalThis.Map = class CountingMap<K, V> extends OriginalMap<K, V> {
+        constructor(entries?: readonly (readonly [K, V])[] | null) {
+          mapAllocations += 1;
+          super(entries);
+        }
+      } as MapConstructor;
+
+      withBatchedDelegatedRootReleases(() => undefined);
+    } finally {
+      globalThis.Map = OriginalMap;
+    }
+
+    expect(mapAllocations).toBe(0);
+  });
+
+  test("flushes lazy delegated root releases after the outer batch scope", () => {
+    const button = document.createElement("button");
+    document.body.append(button);
+    const documentRemoveEventListener = document.removeEventListener.bind(document);
+    let documentListenerRemovals = 0;
+
+    document.removeEventListener = ((type, listener, options) => {
+      if (type === "click") {
+        documentListenerRemovals += 1;
+      }
+      documentRemoveEventListener(type, listener, options);
+    }) as typeof document.removeEventListener;
+
+    try {
+      const dispose = bindEvent(button, "click", () => {});
+
+      withBatchedDelegatedRootReleases(() => {
+        withBatchedDelegatedRootReleases(() => {
+          dispose();
+        });
+
+        expect(documentListenerRemovals).toBe(0);
+      });
+
+      expect(documentListenerRemovals).toBe(1);
+    } finally {
+      document.removeEventListener = documentRemoveEventListener;
+      button.remove();
+    }
   });
 });
