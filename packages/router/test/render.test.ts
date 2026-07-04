@@ -4913,6 +4913,8 @@ export default function Page() {
 
   test("streams nearest loading boundary while async loader is pending", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-boundary-"));
+    const state = globalThis as { __mreactResolveLoadingDocs?: () => void };
+    state.__mreactResolveLoadingDocs = undefined;
     await mkdir(join(appDir, "docs"), { recursive: true });
     await writeFile(
       join(appDir, "docs", "loading.mreact.tsx"),
@@ -4923,7 +4925,10 @@ export default function Page() {
       `export const stream = true;
 
 export async function loader() {
-  return await new Promise((resolve) => setTimeout(() => resolve({ title: "Loaded docs" }), 80));
+  const state = globalThis;
+  return await new Promise((resolve) => {
+    state.__mreactResolveLoadingDocs = () => resolve({ title: "Loaded docs" });
+  });
 }
 
 export default function Page(props) {
@@ -4931,22 +4936,35 @@ export default function Page(props) {
 }`,
     );
 
-    const startedAt = Date.now();
-    const response = await renderAppRequest({
-      appDir,
-      request: new Request("http://local.test/docs"),
-    });
-    const fullResponse = response.clone();
-    const firstChunk = await readUntilChunkIncludes(response, "Loading docs");
+    try {
+      const response = await expectResolvesWithin(
+        renderAppRequest({
+          appDir,
+          request: new Request("http://local.test/docs"),
+        }),
+        1000,
+        "stream loading boundary response",
+      );
+      const fullResponse = response.clone();
+      const firstChunk = await expectResolvesWithin(
+        readUntilChunkIncludes(response, "Loading docs"),
+        1000,
+        "stream loading boundary first chunk",
+      );
 
-    expect(Date.now() - startedAt).toBeLessThan(70);
-    expect(response.headers.get("x-mreact-stream")).toBe("1");
-    expect(firstChunk).toContain(
-      '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
-    );
-    expect(firstChunk).not.toContain("Loaded docs");
-    const html = await fullResponse.text();
-    expect(html).toContain("<main><h1>Loaded docs</h1></main>");
+      expect(response.headers.get("x-mreact-stream")).toBe("1");
+      expect(firstChunk).toContain(
+        '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
+      );
+      expect(firstChunk).not.toContain("Loaded docs");
+      expect(state.__mreactResolveLoadingDocs).toBeTypeOf("function");
+      state.__mreactResolveLoadingDocs?.();
+
+      const html = await fullResponse.text();
+      expect(html).toContain("<main><h1>Loaded docs</h1></main>");
+    } finally {
+      delete state.__mreactResolveLoadingDocs;
+    }
   });
 
   test("flushes nested Await fragments inside a streamed loading route boundary", async () => {
@@ -5164,40 +5182,58 @@ export default function Page() {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-built-loading-boundary-"));
     const pageFile = join(appDir, "docs", "page.mreact.tsx");
     const loadingFile = join(appDir, "docs", "loading.mreact.tsx");
-    const startedAt = Date.now();
-    const response = await renderAppRequest({
-      appDir,
-      request: new Request("http://local.test/docs"),
-      routes: [
-        {
-          file: pageFile,
-          kind: "page",
-          path: "/docs",
-          segments: [{ kind: "static", value: "docs" }],
-        },
-      ],
-      serverSourceFiles: new Map([
-        [loadingFile, "export default function Loading() { return <p>Loading docs...</p>; }"],
-        [
-          pageFile,
-          `export const stream = true;
+    const state = globalThis as { __mreactResolveBuiltLoadingDocs?: () => void };
+    state.__mreactResolveBuiltLoadingDocs = undefined;
+
+    try {
+      const response = await expectResolvesWithin(
+        renderAppRequest({
+          appDir,
+          request: new Request("http://local.test/docs"),
+          routes: [
+            {
+              file: pageFile,
+              kind: "page",
+              path: "/docs",
+              segments: [{ kind: "static", value: "docs" }],
+            },
+          ],
+          serverSourceFiles: new Map([
+            [loadingFile, "export default function Loading() { return <p>Loading docs...</p>; }"],
+            [
+              pageFile,
+              `export const stream = true;
 
 export async function loader() {
-  return await new Promise((resolve) => setTimeout(() => resolve({ title: "Loaded docs" }), 80));
+  const state = globalThis;
+  return await new Promise((resolve) => {
+    state.__mreactResolveBuiltLoadingDocs = () => resolve({ title: "Loaded docs" });
+  });
 }
 
 export default function Page(props) {
   return <main><h1>{props.data.title}</h1></main>;
 }`,
-        ],
-      ]),
-    });
-    const firstChunk = await readUntilChunkIncludes(response, "Loading docs");
+            ],
+          ]),
+        }),
+        1000,
+        "built server loading boundary response",
+      );
+      const firstChunk = await expectResolvesWithin(
+        readUntilChunkIncludes(response, "Loading docs"),
+        1000,
+        "built server loading boundary first chunk",
+      );
 
-    expect(Date.now() - startedAt).toBeLessThan(70);
-    expect(firstChunk).toContain(
-      '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
-    );
+      expect(firstChunk).toContain(
+        '<div data-mreact-oob-placeholder="mreact-route"><p>Loading docs...</p></div>',
+      );
+      expect(firstChunk).not.toContain("Loaded docs");
+      state.__mreactResolveBuiltLoadingDocs?.();
+    } finally {
+      delete state.__mreactResolveBuiltLoadingDocs;
+    }
   });
 
   test("renders special not-found routes from built server source files without filesystem access", async () => {
@@ -5364,6 +5400,28 @@ async function readUntilChunkIncludes(response: Response, text: string): Promise
   reader.releaseLock();
 
   return chunks;
+}
+
+async function expectResolvesWithin<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  description: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`${description} did not resolve within ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 async function writePackageFixture(appDir: string): Promise<void> {
