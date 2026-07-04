@@ -393,14 +393,9 @@ function bindKeyedList<T>(
     } else if (ownsCurrentParent) {
       if (
         reusedAllRecords &&
-        nextRecords.size === records.size &&
-        reconcileKeyedRecordOrderWithMoveLimit(
-          insertionParent,
-          marker,
-          orderedRecords,
-          MAX_TARGETED_OWNED_PARENT_MOVES,
-        )
+        nextRecords.size === records.size
       ) {
+        reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords);
         records = nextRecords;
         recordNodeCount = orderedNodeCount;
         ownsParent = true;

@@ -417,7 +417,7 @@ describe("bindList", () => {
     dispose();
   });
 
-  test("reorders keyed list items with one whole-parent replacement", async () => {
+  test("reorders large keyed lists with in-place moves", async () => {
     const values = Array.from({ length: 1000 }, (_, index) => index);
     const items = cell(values);
     const parent = document.createElement("ul");
@@ -453,8 +453,8 @@ describe("bindList", () => {
     items.set(values.toReversed());
     await flushEffects();
 
-    expect(parentInsertions).toBe(0);
-    expect(parentReplacements).toBe(1);
+    expect(parentInsertions).toBe(999);
+    expect(parentReplacements).toBe(0);
     expect(parent.childNodes[0]?.textContent).toBe("999");
     expect(parent.childNodes[999]).toBe(firstNode);
 
@@ -1287,6 +1287,45 @@ describe("bindList", () => {
       originalNodes[4],
     ]);
     expect(parent.innerHTML).toBe("<li>0</li><li>3</li><li>2</li><li>1</li><li>4</li><!--list-->");
+
+    dispose();
+  });
+
+  test("reverses large owned keyed lists with moves instead of replacing the owned parent", async () => {
+    const values = Array.from({ length: 40 }, (_, index) => index);
+    const items = cell(values);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = String(item);
+        return li;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    const originalNodes = Array.from(parent.childNodes).slice(0, values.length);
+    let parentReplacements = 0;
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    parent.replaceChildren = ((...nodes) => {
+      parentReplacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+
+    items.set(values.slice().reverse());
+    await flushEffects();
+
+    expect(parentReplacements).toBe(0);
+    expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(
+      originalNodes.slice().reverse(),
+    );
+    expect(parent.textContent).toBe(values.slice().reverse().join(""));
 
     dispose();
   });
