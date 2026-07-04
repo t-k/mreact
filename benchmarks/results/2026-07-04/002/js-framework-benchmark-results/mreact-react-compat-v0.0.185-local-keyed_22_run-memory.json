@@ -1,0 +1,1 @@
+{"framework":"mreact-react-compat-v0.0.185-local-keyed","keyed":true,"benchmark":"22_run-memory","type":"memory","values":{"DEFAULT":{"min":5.022298812866211,"max":5.022298812866211,"median":5.022298812866211,"mean":5.022298812866211,"stddev":null,"values":[5.022298812866211]}}}
