@@ -133,6 +133,9 @@ function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[
       if (propBlockHasEvent(component.root)) {
         specifiers.add("bindEvent");
       }
+      if (propBlockHasBindPropBinding(component.root)) {
+        specifiers.add("bindProp");
+      }
       if (propBlockHasEffectBinding(component.root)) {
         specifiers.add("effect");
       }
@@ -1131,11 +1134,6 @@ function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
     if (attr.kind === "spread-attr") {
       return false;
     }
-    // Dynamic attributes are applied as properties in the block's single effect,
-    // which has no url-safety handling; restrict to the safe property attributes.
-    if (attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor") {
-      return false;
-    }
   }
 
   return node.children.every(isHostOnlyPropBlockNode);
@@ -1178,15 +1176,36 @@ function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
     return false;
   }
 
-  if (node.attributes.some((attr) => attr.kind === "dynamic-attr")) {
+  if (
+    node.attributes.some(
+      (attr) => attr.kind === "dynamic-attr" && (attr.name === "className" || attr.name === "htmlFor"),
+    )
+  ) {
     return true;
   }
 
   return node.children.some(propBlockHasEffectBinding);
 }
 
+function propBlockHasBindPropBinding(node: JsxNodeIr): boolean {
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  if (
+    node.attributes.some(
+      (attr) => attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor",
+    )
+  ) {
+    return true;
+  }
+
+  return node.children.some(propBlockHasBindPropBinding);
+}
+
 interface PropBlockBinding {
-  kind: "text" | "className" | "htmlFor" | "event";
+  kind: "text" | "className" | "htmlFor" | "prop" | "event";
+  propName?: string | undefined;
   eventName?: string | undefined;
   target: string;
   code: string;
@@ -1202,12 +1221,14 @@ function emitPropReactiveDomBlockComponent(
   const createBlock = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
   const effectName = helperNames.effect ?? "_effect";
   const bindEvent = helperNames.bindEvent ?? "_bindEvent";
+  const bindProp = helperNames.bindProp ?? "_bindProp";
 
   const build: string[] = [];
   const bindings: PropBlockBinding[] = [];
   const rootVar = emitPropBlockNode(block.root, undefined, build, bindings, allocator);
   const disposeName = allocator("_dispose");
   const eventDisposeNames: string[] = [];
+  const propDisposeNames: string[] = [];
   const eventBindLines = bindings
     .filter((binding) => binding.kind === "event")
     .map((binding) => {
@@ -1221,13 +1242,25 @@ function emitPropReactiveDomBlockComponent(
         `});`,
       ].join("\n");
     });
+  const propBindLines = bindings
+    .filter((binding) => binding.kind === "prop")
+    .map((binding) => {
+      const propDisposeName = allocator("_disposeProp");
+      propDisposeNames.push(propDisposeName);
+      return [
+        `const ${propDisposeName} = ${bindProp}(`,
+        `  ${binding.target},`,
+        `  ${JSON.stringify(binding.propName ?? "")},`,
+        `  () => (${binding.code}),`,
+        `);`,
+      ].join("\n");
+    });
 
-  // Drive every binding from a single effect: all read the same prop cell, so
-  // they re-run together on any change anyway, and one effect means one
-  // subscriber, one re-run, and one disposer per block.
+  // Keep text/class/htmlFor bindings grouped by dependency. General DOM
+  // attributes delegate to bindProp above so they reuse the shared safety policy.
   const effectBodiesByKey = new Map<string, string[]>();
   for (const binding of bindings) {
-    if (binding.kind === "event") {
+    if (binding.kind === "event" || binding.kind === "prop") {
       continue;
     }
 
@@ -1254,10 +1287,12 @@ function emitPropReactiveDomBlockComponent(
   const disposeTargets = [
     ...effectDisposeNames,
     ...eventDisposeNames,
+    ...propDisposeNames,
   ];
 
   const disposeLines: string[] = [
     ...eventBindLines.flatMap((line) => line.split("\n").map((part) => `    ${part}`)),
+    ...propBindLines.flatMap((line) => line.split("\n").map((part) => `    ${part}`)),
   ];
 
   let effectIndex = 0;
@@ -1382,11 +1417,20 @@ function emitPropBlockNode(
         build.push(`${name}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
       }
     } else if (attr.kind === "dynamic-attr") {
-      bindings.push({
-        kind: attr.name === "className" ? "className" : "htmlFor",
-        target: name,
-        code: attr.code,
-      });
+      if (attr.name === "className" || attr.name === "htmlFor") {
+        bindings.push({
+          kind: attr.name,
+          target: name,
+          code: attr.code,
+        });
+      } else {
+        bindings.push({
+          kind: "prop",
+          propName: attr.name,
+          target: name,
+          code: attr.code,
+        });
+      }
     } else if (attr.kind === "event") {
       bindings.push({
         kind: "event",

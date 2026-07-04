@@ -114,6 +114,119 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(container.querySelector("td.col-md-4")?.textContent).toBe("hi");
   });
 
+  test("lowers non-class dynamic host attributes through bindProp", () => {
+    const output = transform({
+      code: `export function Row(props) {
+          return (
+            <a
+              aria-label={props.label}
+              data-state={props.state}
+              href={props.href}
+              style={{ color: props.color }}
+            >
+              <svg viewBox={props.viewBox}>
+                <rect width={props.width} />
+              </svg>
+            </a>
+          );
+        }`,
+      filename: "Row.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("bindProp");
+    expect(output.code).toContain('document.createElement("a")');
+    expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"aria-label",\s+\(\) => \(props\.label\),/);
+    expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"data-state",\s+\(\) => \(props\.state\),/);
+    expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"href",\s+\(\) => \(props\.href\),/);
+    expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"style",\s+\(\) => \(\{ color: props\.color \}\),/);
+    expect(output.code).toMatch(/_bindProp\(\s+_svg,\s+"viewBox",\s+\(\) => \(props\.viewBox\),/);
+    expect(output.code).toMatch(/_bindProp\(\s+_rect,\s+"width",\s+\(\) => \(props\.width\),/);
+  });
+
+  test("compiled bindProp attributes update with DOM prop safety semantics", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return (
+            <section>
+              <button
+                id="target"
+                aria-label={props.label}
+                data-state={props.state}
+                disabled={props.disabled}
+                style={{ color: props.color, backgroundColor: props.backgroundColor }}
+              >{props.label}</button>
+              <a id="link" href={props.href}>link</a>
+              <svg viewBox={props.viewBox}>
+                <rect width={props.width} />
+              </svg>
+            </section>
+          );
+        }
+
+        function Controller() {
+          const [on, setOn] = useState(false);
+          return (
+            <div>
+              <button id="switch" onClick={() => setOn(true)}>switch</button>
+              <Row
+                label={on ? null : "Save"}
+                state={on ? "done" : "idle"}
+                disabled={on}
+                color={on ? "blue" : "red"}
+                backgroundColor={on ? null : "yellow"}
+                href={on ? "javascript:alert(1)" : "https://example.test/"}
+                viewBox={on ? "0 0 48 48" : "0 0 24 24"}
+                width={on ? 48 : 24}
+              />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindProp");
+
+    const container = await runCompatComponent(output.code);
+    const target = container.querySelector<HTMLButtonElement>("#target");
+    const link = container.querySelector<HTMLAnchorElement>("#link");
+    const svg = container.querySelector("svg");
+    const rect = container.querySelector("rect");
+
+    expect(target?.getAttribute("aria-label")).toBe("Save");
+    expect(target?.getAttribute("data-state")).toBe("idle");
+    expect(target?.disabled).toBe(false);
+    expect(target?.style.color).toBe("red");
+    expect(target?.style.backgroundColor).toBe("yellow");
+    expect(link?.getAttribute("href")).toBe("https://example.test/");
+    expect(svg?.getAttribute("viewBox")).toBe("0 0 24 24");
+    expect(rect?.getAttribute("width")).toBe("24");
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(target?.hasAttribute("aria-label")).toBe(false);
+    expect(target?.getAttribute("data-state")).toBe("done");
+    expect(target?.disabled).toBe(true);
+    expect(target?.style.color).toBe("blue");
+    expect(target?.style.backgroundColor).toBe("");
+    expect(link?.hasAttribute("href")).toBe(false);
+    expect(svg?.getAttribute("viewBox")).toBe("0 0 48 48");
+    expect(rect?.getAttribute("width")).toBe("48");
+  });
+
   test("annotates pure strict-equality memo comparators for prop reactive blocks", () => {
     const output = transform({
       code: `import { memo } from "@reckona/mreact-compat";
