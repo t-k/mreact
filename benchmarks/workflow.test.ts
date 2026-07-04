@@ -29,11 +29,11 @@ describe("benchmark GitHub workflow", () => {
       "source write with subscriber 1k,text binding update 1k,computed fan-out 1k,computed fan-in 1k,source write 1k,keyed reverse 1k rows,create 1k event targets,repeated create update clear memory",
     );
     expect(workflow).toContain(
-      "Run primitive browser benchmarks\n        if: ${{ inputs.suite == 'primitive-browser' }}",
+      "Run primitive browser benchmarks\n        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}",
     );
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/primitive.md")');
     expect(workflow).toContain(
-      'if [ "${{ inputs.suite }}" = "primitive-browser" ]; then\n            files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")',
+      'if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive-browser" ]; then\n            files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")',
     );
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/js-framework-benchmark.md")');
     expect(workflow).toContain('files+=("${{ steps.results.outputs.dir }}/router.md")');
@@ -62,8 +62,9 @@ describe("benchmark GitHub workflow", () => {
     );
 
     expect(workflow).toContain(
-      "Run primitive browser benchmarks\n        if: ${{ inputs.suite == 'primitive-browser' }}",
+      "Run primitive browser benchmarks\n        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}",
     );
-    expect(benchmarkSync).toContain('id: "primitive-browser",\n    optional: true,');
+    expect(benchmarkSync).toContain('id: "primitive-browser",\n    source: "primitive-browser.md",');
+    expect(benchmarkSync).not.toContain('id: "primitive-browser",\n    optional: true,');
   });
 });

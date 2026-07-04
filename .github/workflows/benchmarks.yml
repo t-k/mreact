@@ -93,7 +93,7 @@ jobs:
         run: NODE_ENV=production pnpm bench:primitive
 
       - name: Run primitive browser benchmarks
-        if: ${{ inputs.suite == 'primitive-browser' }}
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' }}
         env:
           MREACT_BENCHMARK_RESULTS_DIR: ${{ steps.results.outputs.dir }}
         run: NODE_ENV=production pnpm bench:primitive-browser
@@ -125,7 +125,7 @@ jobs:
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive.md")
           fi
-          if [ "${{ inputs.suite }}" = "primitive-browser" ]; then
+          if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "primitive-browser" ]; then
             files+=("${{ steps.results.outputs.dir }}/primitive-browser.md")
           fi
           if [ "${{ inputs.suite }}" = "all" ] || [ "${{ inputs.suite }}" = "js-framework" ]; then

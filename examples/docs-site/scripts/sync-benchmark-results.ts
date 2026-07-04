@@ -99,7 +99,6 @@ const benchmarkSources: readonly BenchmarkSource[] = [
   },
   {
     id: "primitive-browser",
-    optional: true,
     source: "primitive-browser.md",
     title: "Primitive browser benchmarks",
   },
