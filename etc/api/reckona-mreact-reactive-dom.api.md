@@ -105,6 +105,15 @@ export interface ListRenderValue<T = unknown> {
 export type RenderValue = Node | string | number | boolean | null | undefined | ListRenderValue | readonly RenderValue[];
 
 // @public (undocumented)
+export function withBatchedDelegatedRootReleases<T>(fn: () => T): T;
+
+// @public (undocumented)
+export function withDeferredDelegatedEventPromotions<T>(fn: () => T): {
+    promote?: () => void;
+    value: T;
+};
+
+// @public (undocumented)
 export function withEventBindingMetadata<T>(fn: () => T): T;
 
 // @public (undocumented)

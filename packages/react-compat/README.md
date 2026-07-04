@@ -24,6 +24,7 @@ compatibility runtime.
   runtime entrypoints.
 - `@reckona/mreact-compat/hooks` exposes the hook runtime APIs for integrations that import hooks from a dedicated subpath.
 - `@reckona/mreact-compat/scheduler` exposes the scheduler-compatible API.
+- `@reckona/mreact-compat/server` exposes server-safe element, hook, context, and string rendering helpers without client root APIs.
 - `@reckona/mreact-compat/flight` and `./internal` are framework integration
   entrypoints.
 

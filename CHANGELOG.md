@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.0.184 - 2026-07-04
+
+### Added
+
+- Added the `@reckona/mreact-compat/server` subpath for server-safe element, hook, context, and `renderToString()` helpers without client root APIs.
+
+### Changed
+
+- Improved React-compatible DOM update performance by caching repeated DOM attribute shapes and reducing empty delegated event promotion and release batching overhead.
+- Improved React-compatible server rendering performance by caching HTML attribute name classification for repeated host prop names.
+- Improved `@reckona/mreact-reactive-dom` owned keyed list reorders so fully reused keyed records are reordered in place instead of falling back to parent replacement.
+- Improved App Router client route output so navigation runtime loading can be deferred from minified client route bundles while preserving client navigation behavior.
+- Improved `@reckona/mreact-query` structural sharing and `@reckona/mreact-store` listener bookkeeping hot paths to reduce avoidable allocation during cache equality checks and listener unsubscribe churn.
+
+### Fixed
+
+- Fixed delayed delegated event handling for disconnected template nodes so delegated handlers remain interactive before and after the nodes connect to the main document.
+- Fixed App Router client navigation cache invalidation and navigation runtime descriptor handling for client routes.
+- Fixed fresh builds of `@reckona/mreact-compat` by declaring its reactive DOM workspace dependency.
+
 ## 0.0.183 - 2026-07-03
 
 ### Added
