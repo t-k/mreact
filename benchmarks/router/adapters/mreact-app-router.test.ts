@@ -24,6 +24,8 @@ describe("mreact app-router benchmark fixtures", () => {
     const source = await readFile(adapterPath, "utf8");
 
     expect(source).toContain("createMemoryRouteCache");
+    expect(source).toContain('import { cacheControl } from "@reckona/mreact-router";');
+    expect(source).not.toContain("@reckona/mreact-router/cache");
     expect(source).toContain("cacheControl({ maxAge: 60 })");
     expect(source).toContain("routeCache: createMemoryRouteCache()");
   });

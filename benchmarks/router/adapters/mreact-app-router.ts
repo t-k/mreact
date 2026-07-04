@@ -142,7 +142,7 @@ ${spanPageSource(arrayLiteral)}`,
 
   await writeFile(
     join(appDir, "static-page", "page.tsx"),
-    `import { cacheControl } from "@reckona/mreact-router/cache";
+    `import { cacheControl } from "@reckona/mreact-router";
 const items = ${arrayLiteral};
 export default function Page() {
   cacheControl({ maxAge: 60 });
