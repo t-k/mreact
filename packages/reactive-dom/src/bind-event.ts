@@ -190,7 +190,12 @@ function addDelegatedEventListener(
     delegatedRoot = element.ownerDocument;
     retainDelegatedRoot(delegatedRoot, type);
   };
-  const disposeDeferredPromotion = addDeferredDelegatedEventPromotion(element, type);
+  const disposeDeferredPromotion = addDeferredDelegatedEventPromotion(
+    element,
+    type,
+    listener,
+    retainCurrentRoot,
+  );
 
   if (disposeDeferredPromotion !== undefined) {
     return () => {
@@ -220,6 +225,8 @@ function addDelegatedEventListener(
 function addDeferredDelegatedEventPromotion(
   element: HTMLElement,
   type: string,
+  listener: EventListener,
+  retainCurrentRoot: () => void,
 ): Dispose | undefined {
   const context = currentDeferredDelegatedEventPromotions;
 
@@ -231,18 +238,33 @@ function addDeferredDelegatedEventPromotion(
 
   let active = true;
   let delegatedRoot: EventTarget | undefined;
+  let disposeDisconnectedFallback: Dispose | undefined;
   const promote = () => {
-    if (!active || delegatedRoot !== undefined || !element.isConnected) {
+    if (!active || delegatedRoot !== undefined) {
       return;
     }
 
-    delegatedRoot = element.ownerDocument;
-    retainDelegatedRoot(delegatedRoot, type);
+    if (element.isConnected) {
+      delegatedRoot = element.ownerDocument;
+      retainDelegatedRoot(delegatedRoot, type);
+      disposeDisconnectedFallback?.();
+      disposeDisconnectedFallback = undefined;
+      return;
+    }
+
+    disposeDisconnectedFallback ??= addDisconnectedFallback(
+      element,
+      type,
+      listener,
+      retainCurrentRoot,
+    );
   };
   promotions.push(promote);
 
   return () => {
     active = false;
+    disposeDisconnectedFallback?.();
+    disposeDisconnectedFallback = undefined;
 
     if (delegatedRoot !== undefined) {
       releaseDelegatedRoot(delegatedRoot, type);

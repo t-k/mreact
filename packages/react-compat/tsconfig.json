@@ -6,5 +6,9 @@
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "references": [{ "path": "../shared" }]
+  "references": [
+    { "path": "../reactive-core" },
+    { "path": "../reactive-dom" },
+    { "path": "../shared" }
+  ]
 }
