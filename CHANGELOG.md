@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.185 - 2026-07-04
+
+### Changed
+
+- Improved React-compatible compiler prop reactive DOM block lowering so proven-safe host-only components can compile dynamic `aria-*`, `data-*`, URL-bearing, boolean, style, and SVG attributes through `bindProp()` while preserving DOM prop safety behavior.
+
 ## 0.0.184 - 2026-07-04
 
 ### Added
