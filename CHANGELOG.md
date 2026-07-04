@@ -18,6 +18,7 @@
 
 - Fixed delayed delegated event handling for disconnected template nodes so delegated handlers remain interactive before and after the nodes connect to the main document.
 - Fixed App Router client navigation cache invalidation and navigation runtime descriptor handling for client routes.
+- Fixed App Router static prerender evaluation so `import.meta.url` text inside bundled string literals is not rewritten as a module URL.
 - Fixed fresh builds of `@reckona/mreact-compat` by declaring its reactive DOM workspace dependency.
 
 ## 0.0.183 - 2026-07-03

@@ -582,7 +582,185 @@ function withFileImportMetaUrl(source: string, filename: string): string {
     return source;
   }
 
-  return source.replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
+  return replaceImportMetaUrlExpressions(source, JSON.stringify(pathToFileURL(filename).href));
+}
+
+function replaceImportMetaUrlExpressions(source: string, replacement: string): string {
+  return replaceImportMetaUrlInCode(source, 0, source.length, replacement, false).text;
+}
+
+function replaceImportMetaUrlInCode(
+  source: string,
+  start: number,
+  end: number,
+  replacement: string,
+  stopAtTemplateExpressionEnd: boolean,
+): { next: number; text: string } {
+  let output = "";
+  let copyStart = start;
+  let index = start;
+  let braceDepth = 0;
+
+  while (index < end) {
+    const char = source[index];
+
+    if (stopAtTemplateExpressionEnd && char === "}") {
+      if (braceDepth === 0) {
+        break;
+      }
+      braceDepth -= 1;
+      index += 1;
+      continue;
+    }
+
+    if (isImportMetaUrlToken(source, index)) {
+      output += source.slice(copyStart, index);
+      output += replacement;
+      index += "import.meta.url".length;
+      copyStart = index;
+      continue;
+    }
+
+    if (char === '"' || char === "'") {
+      index = skipQuotedString(source, index, char);
+      continue;
+    }
+
+    if (char === "`") {
+      const template = replaceImportMetaUrlInTemplate(source, index, replacement);
+      output += source.slice(copyStart, index);
+      output += template.text;
+      index = template.next;
+      copyStart = index;
+      continue;
+    }
+
+    if (char === "/" && source[index + 1] === "/") {
+      index = skipLineComment(source, index + 2);
+      continue;
+    }
+
+    if (char === "/" && source[index + 1] === "*") {
+      index = skipBlockComment(source, index + 2);
+      continue;
+    }
+
+    if (stopAtTemplateExpressionEnd && char === "{") {
+      braceDepth += 1;
+    }
+
+    index += 1;
+  }
+
+  return {
+    next: index,
+    text: output + source.slice(copyStart, index),
+  };
+}
+
+function replaceImportMetaUrlInTemplate(
+  source: string,
+  start: number,
+  replacement: string,
+): { next: number; text: string } {
+  let output = "`";
+  let copyStart = start + 1;
+  let index = start + 1;
+
+  while (index < source.length) {
+    const char = source[index];
+
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+
+    if (char === "`") {
+      return {
+        next: index + 1,
+        text: output + source.slice(copyStart, index + 1),
+      };
+    }
+
+    if (char === "$" && source[index + 1] === "{") {
+      output += source.slice(copyStart, index + 2);
+      const expression = replaceImportMetaUrlInCode(
+        source,
+        index + 2,
+        source.length,
+        replacement,
+        true,
+      );
+      output += expression.text;
+      index = expression.next;
+
+      if (source[index] === "}") {
+        output += "}";
+        index += 1;
+      }
+
+      copyStart = index;
+      continue;
+    }
+
+    index += 1;
+  }
+
+  return {
+    next: index,
+    text: output + source.slice(copyStart, index),
+  };
+}
+
+function isImportMetaUrlToken(source: string, index: number): boolean {
+  return (
+    source.startsWith("import.meta.url", index) &&
+    !isIdentifierPartCode(source.charCodeAt(index - 1)) &&
+    !isIdentifierPartCode(source.charCodeAt(index + "import.meta.url".length))
+  );
+}
+
+function isIdentifierPartCode(code: number): boolean {
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    code === 36 ||
+    code === 95
+  );
+}
+
+function skipQuotedString(source: string, start: number, quote: string): number {
+  let index = start + 1;
+
+  while (index < source.length) {
+    const char = source[index];
+
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+
+    if (char === quote) {
+      return index + 1;
+    }
+
+    index += 1;
+  }
+
+  return index;
+}
+
+function skipLineComment(source: string, start: number): number {
+  const end = source.indexOf("\n", start);
+
+  return end === -1 ? source.length : end + 1;
+}
+
+function skipBlockComment(source: string, start: number): number {
+  const end = source.indexOf("*/", start);
+
+  return end === -1 ? source.length : end + 2;
 }
 
 function withNodeRequireShimForEsmBundle(options: {

@@ -163,6 +163,22 @@ export default function Page() {
     expect(writes.join("")).not.toContain("data:text/javascript;base64,");
   });
 
+  test("keeps import.meta.url text inside bundled string literals", async () => {
+    const module = await importAppRouterSourceModule<{
+      actual: string;
+      literal: string;
+    }>({
+      code: `export const literal = "import.meta.url";
+export const actual = import.meta.url;`,
+      label: "module-runner-import-meta-url-literal",
+      resolveDir: process.cwd(),
+      sourcefile: join(process.cwd(), "module-runner-import-meta-url-literal.js"),
+    });
+
+    expect(module.literal).toBe("import.meta.url");
+    expect(module.actual).toContain("module-runner-import-meta-url-literal.js");
+  });
+
   test("does not expose bundled source as a base64 data URL through module stack frames", async () => {
     const module = await importAppRouterSourceModule<{
       stack: () => string | undefined;
