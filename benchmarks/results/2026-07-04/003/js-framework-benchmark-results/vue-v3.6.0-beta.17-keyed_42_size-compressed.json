@@ -1,0 +1,1 @@
+{"framework":"vue-v3.6.0-beta.17-keyed","keyed":true,"benchmark":"42_size-compressed","type":"size","values":{"DEFAULT":{"min":23.9,"max":23.9,"median":23.9,"mean":23.9,"stddev":null,"values":[23.9]}}}
