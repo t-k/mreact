@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import {
   buildApp,
+  createMemoryRouteCache,
   packageCloudflarePagesArtifact,
   startDevServer,
   startServer,
@@ -130,31 +131,21 @@ async function ensureFixture(
 
   await writeFile(
     join(appDir, "page.tsx"),
-    reactCompat
-      ? reactCompatSpanPageSource(arrayLiteral)
-      : `const items = ${arrayLiteral};
-export default function Page() {
-  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
-}`,
+    spanPageSource(arrayLiteral),
   );
 
   await writeFile(
     join(appDir, "stream-page", "page.tsx"),
-    reactCompat
-      ? `export const stream = true;\n${reactCompatSpanPageSource(arrayLiteral)}`
-      : `export const stream = true;
-const items = ${arrayLiteral};
-export default function Page() {
-  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
-}`,
+    `export const stream = true;
+${spanPageSource(arrayLiteral)}`,
   );
 
   await writeFile(
     join(appDir, "static-page", "page.tsx"),
-    reactCompat
-      ? reactCompatSpanPageSource(arrayLiteral)
-      : `const items = ${arrayLiteral};
+    `import { cacheControl } from "@reckona/mreact-router/cache";
+const items = ${arrayLiteral};
 export default function Page() {
+  cacheControl({ maxAge: 60 });
   return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
 }`,
   );
@@ -162,18 +153,7 @@ export default function Page() {
   await mkdir(join(appDir, "real-stream-page"), { recursive: true });
   await writeFile(
     join(appDir, "real-stream-page", "page.tsx"),
-    reactCompat
-      ? `import { createElement, renderToString } from "@reckona/mreact-compat";
-export const stream = true;
-const items = ${arrayLiteral};
-async function fetchItems() {
-  return new Promise((resolve) => setTimeout(() => resolve(items), 50));
-}
-export default async function Page() {
-  const data = await fetchItems();
-  return renderToString(() => createElement("main", null, createElement("ul", null, data.map((index) => createElement("span", { key: index }, index)))));
-}`
-      : `export const stream = true;
+    `export const stream = true;
 const items = ${arrayLiteral};
 function fetchItems() {
   return new Promise((resolve) => setTimeout(() => resolve(items), 50));
@@ -196,20 +176,7 @@ export default function Page() {
   await mkdir(join(appDir, "waterfall-page"), { recursive: true });
   await writeFile(
     join(appDir, "waterfall-page", "page.tsx"),
-    reactCompat
-      ? `import { createElement, renderToString } from "@reckona/mreact-compat";
-export const stream = true;
-function fetchA() {
-  return new Promise((resolve) => setTimeout(() => resolve("A"), 50));
-}
-function fetchB() {
-  return new Promise((resolve) => setTimeout(() => resolve("B"), 50));
-}
-export default async function Page() {
-  const [a, b] = await Promise.all([fetchA(), fetchB()]);
-  return renderToString(() => createElement("main", null, createElement("section", { "data-a": a }, "A:", a), createElement("section", { "data-b": b }, "B:", b)));
-}`
-      : `export const stream = true;
+    `export const stream = true;
 function fetchA() {
   return new Promise((resolve) => setTimeout(() => resolve("A"), 50));
 }
@@ -241,9 +208,7 @@ export default function Page() {
   const cellsLiteral = JSON.stringify(cells);
   await writeFile(
     join(appDir, "data-grid", "page.tsx"),
-    reactCompat
-      ? reactCompatDataGridPageSource(cellsLiteral)
-      : `const cells = ${cellsLiteral};
+    `const cells = ${cellsLiteral};
 export default function Page() {
   return (
     <main>
@@ -275,6 +240,7 @@ export default function Page() {
     logger: logEnabled ? createBenchmarkLogger() : undefined,
     outDir,
     port: 0,
+    routeCache: createMemoryRouteCache(),
     sinkStrategy,
   });
   currentNodeCount = nodeCount;
@@ -610,7 +576,7 @@ function createMreactAppRouterAdapter(options: {
       return (await ensureRouteScaleResult(logEnabled, reactCompat)).buildTimeMs;
     },
     async measureRouteScale1000RssDeltaBytes(): Promise<number> {
-      return (await ensureRouteScaleResult(logEnabled, reactCompat)).rssDeltaBytes;
+      return measureRouteScaleRssInChild(logEnabled, reactCompat);
     },
     async measureServerActionPostRoundtripMs(): Promise<number> {
       return measureServerActionPostRoundtrip();
@@ -843,28 +809,24 @@ export default function Page() {
 
 async function ensureRouteScaleResult(
   logEnabled: boolean,
-  reactCompat: boolean,
+  _reactCompat: boolean,
 ): Promise<RouteScaleResult> {
-  const key = browserFixtureKey(logEnabled, reactCompat);
+  const key = `${logEnabled ? "log" : "nolog"}\0server`;
   const cached = routeScaleResults.get(key);
   if (cached !== undefined) {
     return cached;
   }
 
-  const created = measureRouteScale(logEnabled, reactCompat);
+  const created = measureRouteScale(logEnabled);
   routeScaleResults.set(key, created);
   return created;
 }
 
-async function measureRouteScale(
-  logEnabled: boolean,
-  reactCompat: boolean,
-): Promise<RouteScaleResult> {
+async function measureRouteScale(logEnabled: boolean): Promise<RouteScaleResult> {
   const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-route-scale-"));
   const appDir = join(rootDir, "app");
   const outDir = join(rootDir, ".mreact");
   const routeCount = 1_000;
-  const beforeRss = process.memoryUsage().rss;
   await mkdir(appDir, { recursive: true });
   await writeFile(
     join(appDir, "layout.tsx"),
@@ -878,9 +840,7 @@ async function measureRouteScale(
     await mkdir(routeDir, { recursive: true });
     await writeFile(
       join(routeDir, "page.tsx"),
-      reactCompat
-        ? reactCompatTextPageSource(`route:${index}`)
-        : `export default function Page() {
+      `export default function Page() {
   return <main>route:${index}</main>;
 }`,
     );
@@ -911,11 +871,121 @@ async function measureRouteScale(
       coldStartMs,
       matchLatencyMs,
       rootDir,
-      rssDeltaBytes: Math.max(0, process.memoryUsage().rss - beforeRss),
+      rssDeltaBytes: 0,
     };
   } finally {
     await server.close();
   }
+}
+
+async function measureRouteScaleRssInChild(
+  logEnabled: boolean,
+  _reactCompat: boolean,
+): Promise<number> {
+  const script = `
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildApp, startServer } from ${JSON.stringify(join(process.cwd(), "packages/router/dist/index.js"))};
+
+const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-route-rss-"));
+const appDir = join(rootDir, "app");
+const outDir = join(rootDir, ".mreact");
+const routeCount = 1000;
+const beforeRss = process.memoryUsage().rss;
+
+try {
+  await mkdir(appDir, { recursive: true });
+  await writeFile(join(appDir, "layout.tsx"), "export default function Layout() {\\n  return <html lang=\\"en\\"><body><Slot /></body></html>;\\n}\\n");
+  for (let index = 0; index < routeCount; index += 1) {
+    const routeDir = join(appDir, \`route-\${index}\`);
+    await mkdir(routeDir, { recursive: true });
+    await writeFile(join(routeDir, "page.tsx"), \`export default function Page() {\\n  return <main>route:\${index}</main>;\\n}\\n\`);
+  }
+  await buildApp({ appDir, outDir, targets: ["node"] });
+  const logger = process.env.MREACT_BENCH_LOG_ENABLED === "1" ? { info() {}, error() {} } : undefined;
+  const server = await startServer({ logger, outDir, port: 0 });
+  try {
+    const response = await fetch(\`\${server.url}/route-999\`);
+    const html = await response.text();
+    if (!html.includes("route:999")) {
+      throw new Error("route scale RSS probe did not include the last route");
+    }
+    console.log(JSON.stringify({ rssDeltaBytes: Math.max(0, process.memoryUsage().rss - beforeRss) }));
+  } finally {
+    await server.close();
+  }
+} finally {
+  await rm(rootDir, { force: true, recursive: true });
+}
+`;
+
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+    env: {
+      ...process.env,
+      ...(logEnabled ? { MREACT_BENCH_LOG_ENABLED: "1" } : {}),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return waitForRouteScaleRss(child);
+}
+
+async function waitForRouteScaleRss(child: ChildProcessWithoutNullStreams): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      cleanup();
+      child.kill("SIGTERM");
+      reject(new Error(`mreact route-scale RSS child timed out\n${stderr}`));
+    }, 60_000);
+
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      child.stdout.off("data", onStdout);
+      child.stderr.off("data", onStderr);
+      child.off("exit", onExit);
+      child.off("error", onError);
+    };
+    const onStdout = (chunk: Buffer): void => {
+      stdout += chunk.toString("utf8");
+      for (const line of stdout.split(/\r?\n/)) {
+        if (!line.trim().startsWith("{")) {
+          continue;
+        }
+
+        try {
+          const parsed = JSON.parse(line) as { rssDeltaBytes?: unknown };
+          if (typeof parsed.rssDeltaBytes === "number") {
+            cleanup();
+            resolve(parsed.rssDeltaBytes);
+          }
+        } catch {
+          // Keep waiting for a complete JSON line.
+        }
+      }
+    };
+    const onStderr = (chunk: Buffer): void => {
+      stderr += chunk.toString("utf8");
+    };
+    const onExit = (code: number | null): void => {
+      cleanup();
+      reject(new Error(`mreact route-scale RSS child exited before reporting: ${code}\n${stderr}`));
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+
+    child.stdout.on("data", onStdout);
+    child.stderr.on("data", onStderr);
+    child.on("exit", onExit);
+    child.on("error", onError);
+  }).finally(async () => {
+    child.kill("SIGTERM");
+    await waitForChildExit(child);
+  });
 }
 
 async function measureServerActionPostRoundtrip(): Promise<number> {
@@ -1182,35 +1252,18 @@ export const mreactAppRouterLogEnabledAdapter = createMreactAppRouterAdapter({
   name: "mreact-app-router+log enabled",
 });
 
+function spanPageSource(arrayLiteral: string): string {
+  return `const items = ${arrayLiteral};
+export default function Page() {
+  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
+}`;
+}
+
 function reactCompatSpanPageSource(arrayLiteral: string): string {
   return `import { createElement, renderToString } from "@reckona/mreact-compat";
 const items = ${arrayLiteral};
 function View() {
   return createElement("main", null, items.map((index) => createElement("span", { key: index }, index)));
-}
-export default function Page() {
-  return renderToString(View);
-}`;
-}
-
-function reactCompatDataGridPageSource(cellsLiteral: string): string {
-  return `import { createElement, renderToString } from "@reckona/mreact-compat";
-const cells = ${cellsLiteral};
-function View() {
-  return createElement("main", null, cells.map((cell, i) => createElement(
-    "div",
-    {
-      key: i,
-      className: "cell row-" + cell.row + " col-" + cell.col + " kind-" + cell.kind,
-      "data-row": cell.row,
-      "data-col": cell.col,
-      "data-kind": cell.kind,
-      title: cell.title,
-      "aria-label": cell.label,
-      style: { backgroundColor: cell.bg, color: cell.fg },
-    },
-    cell.text,
-  )));
 }
 export default function Page() {
   return renderToString(View);
