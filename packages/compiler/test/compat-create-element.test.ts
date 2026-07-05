@@ -494,7 +494,7 @@ export default function Page() {
       const props = { b: "y" };
       return createElement(
         function View(props: { a: string; b: string }) {
-          const propsAlias = { b: "local" };
+          const _propsAlias = { b: "local" };
           return createElement("main", null, createElement("span", null, props.a), createElement("em", null, "props.a"));
         },
         { a: props.b, b: "x" },
