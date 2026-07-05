@@ -16,6 +16,7 @@ import {
   useRef,
   useState,
 } from "../src/index.js";
+import { disposeHostFiberResources } from "../src/fiber-host.js";
 import { createReactiveDomBlock } from "../src/jsx-runtime.js";
 
 interface RowData {
@@ -641,6 +642,48 @@ describe("keyed memo-row reconcile (same-order fast path contract)", () => {
         [3, 1],
       ]);
     });
+  });
+
+  test("direct reactive-block fiber disposal batches delegated root releases", () => {
+    const first = document.createElement("button");
+    const second = document.createElement("button");
+    document.body.append(first, second);
+    const documentRemoveEventListener = document.removeEventListener.bind(document);
+    let documentListenerRemovals = 0;
+    let removalsInsideDispose = -1;
+
+    document.removeEventListener = ((type, listener, options) => {
+      if (type === "click") {
+        documentListenerRemovals += 1;
+      }
+      documentRemoveEventListener(type, listener, options);
+    }) as typeof document.removeEventListener;
+
+    try {
+      const disposeFirst = bindEvent(first, "click", () => {});
+      const disposeSecond = bindEvent(second, "click", () => {});
+
+      disposeHostFiberResources({
+        child: undefined,
+        hasDisposableResources: true,
+        sibling: undefined,
+        stateNode: {
+          dispose() {
+            disposeFirst();
+            disposeSecond();
+            removalsInsideDispose = documentListenerRemovals;
+          },
+        },
+        tag: "reactive-dom-block",
+      } as never);
+
+      expect(removalsInsideDispose).toBe(0);
+      expect(documentListenerRemovals).toBe(1);
+    } finally {
+      document.removeEventListener = documentRemoveEventListener;
+      first.remove();
+      second.remove();
+    }
   });
 
   test("rows bailed in place reorder correctly on a later swap", () => {

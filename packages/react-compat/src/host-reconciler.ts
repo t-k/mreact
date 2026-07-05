@@ -86,6 +86,7 @@ import {
   type RenderOptions,
   withHydrationComponentStack,
 } from "./hydration.js";
+import { withBatchedDelegatedRootReleases } from "@reckona/mreact-reactive-dom";
 
 interface MemoFiberState {
   props: Record<string, unknown>;
@@ -365,16 +366,18 @@ export function disposeHostFiberResources(fiber: Fiber | undefined): void {
     return;
   }
 
-  // Dispose this fiber and its SUBTREE only — not its siblings. This is called
-  // once per deleted fiber, and deleted siblings are disposed by their own
-  // calls; walking siblings here re-walked the whole deleted list per deletion
-  // (O(n^2) on a cleared 1k-row reactive list). The dedupe set is allocated
-  // once for the subtree walk.
-  const seen = new Set<unknown>();
-  if (fiber.tag === "reactive-dom-block") {
-    disposeReactiveDomBlockState(fiber.stateNode, seen);
-  }
-  disposeHostFiberChildResources(fiber.child, seen);
+  withBatchedDelegatedRootReleases(() => {
+    // Dispose this fiber and its SUBTREE only — not its siblings. This is called
+    // once per deleted fiber, and deleted siblings are disposed by their own
+    // calls; walking siblings here re-walked the whole deleted list per deletion
+    // (O(n^2) on a cleared 1k-row reactive list). The dedupe set is allocated
+    // once for the subtree walk.
+    const seen = new Set<unknown>();
+    if (fiber.tag === "reactive-dom-block") {
+      disposeReactiveDomBlockState(fiber.stateNode, seen);
+    }
+    disposeHostFiberChildResources(fiber.child, seen);
+  });
 }
 
 export function disposeUnretainedHostFiberResources(
@@ -385,8 +388,10 @@ export function disposeUnretainedHostFiberResources(
     return;
   }
 
-  const seen = new Set<unknown>();
-  disposeUnretainedHostFiberSubtreeResources(fiber, seen, retained);
+  withBatchedDelegatedRootReleases(() => {
+    const seen = new Set<unknown>();
+    disposeUnretainedHostFiberSubtreeResources(fiber, seen, retained);
+  });
 }
 
 function disposeHostFiberChildResources(

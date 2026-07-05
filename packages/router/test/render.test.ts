@@ -10,7 +10,7 @@ import { createQueryClient } from "@reckona/mreact-query";
 import { createAppFixture, readQueryState, responseText } from "@reckona/mreact-test-utils";
 import type { AppRouterCache } from "../src/cache.js";
 import type { AppRouterLogEvent } from "../src/logger.js";
-import { renderAppRequest } from "../src/render.js";
+import { bundleMiddlewareModuleCode, renderAppRequest } from "../src/render.js";
 
 describe("mreact app request rendering", () => {
   test("renders a .mreact.tsx page route to HTML", async () => {
@@ -2032,6 +2032,38 @@ export function middleware() {
     expect(first.headers.get("x-middleware-loads")).toBe("1");
     expect(second.headers.get("x-middleware-loads")).toBe("1");
     expect(third.headers.get("x-middleware-loads")).toBe("2");
+  });
+
+  test("externalizes react compat runtime aliases from dev middleware bundles", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-middleware-compat-runtime-"));
+    const file = join(appDir, "middleware.ts");
+    const code = `import { createElement } from "react";
+import { jsx } from "react/jsx-runtime";
+
+export function middleware() {
+  return new Response(typeof createElement + ":" + typeof jsx);
+}
+`;
+    await writeFile(file, code);
+    await writeFile(join(appDir, "page.mreact.tsx"), "export default function Page() { return null; }");
+
+    const bundled = await bundleMiddlewareModuleCode({
+      appDir,
+      code,
+      file,
+    });
+
+    expect(bundled).toContain('from "file://');
+    expect(bundled).not.toContain("REACT_COMPAT_ELEMENT_TYPE");
+    expect(bundled).not.toContain("react-compat/dist");
+
+    const response = await renderAppRequest({
+      appDir,
+      dev: true,
+      devServerModuleCacheVersion: "dev-compat-runtime",
+      request: new Request("http://local.test/"),
+    });
+    await expect(response.text()).resolves.toBe("function:function");
   });
 
   test("supports route-local middleware skip controls", async () => {

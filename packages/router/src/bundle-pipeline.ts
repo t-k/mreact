@@ -19,6 +19,7 @@ export interface RouterBundleOptions {
   define?: InlineConfig["define"] | undefined;
   dropConsoleFunctions?: readonly string[] | undefined;
   externalizeAppSourceModuleDirs?: readonly string[] | undefined;
+  externalizeMreactRuntimeAliases?: boolean | undefined;
   filename: string;
   minify?: boolean | undefined;
   modulePreload?: boolean | undefined;
@@ -278,7 +279,9 @@ async function bundleRouterModuleUncached(
     logLevel: "silent",
     plugins: [
       nodeBuiltinsForBrowserPlugin(options.platform, options.nodeBuiltins ?? "reject"),
-      mreactJsxRuntimeAliasPlugin(),
+      mreactJsxRuntimeAliasPlugin({
+        externalize: options.platform === "node" && options.externalizeMreactRuntimeAliases === true,
+      }),
       ...(options.vitePlugins ?? []),
       virtualEntryPlugin(entryId, options.code),
       ...(options.externalizeAppSourceModuleDirs === undefined
@@ -466,12 +469,18 @@ export async function bundleRouterModules(
   };
 }
 
-function mreactJsxRuntimeAliasPlugin(): VitePlugin {
+function mreactJsxRuntimeAliasPlugin(options?: { externalize?: boolean | undefined }): VitePlugin {
   return {
     name: "mreact-router-jsx-runtime-alias",
     enforce: "pre",
     resolveId(id) {
-      return mreactJsxRuntimeAliasPaths.get(id);
+      const path = mreactJsxRuntimeAliasPaths.get(id);
+
+      if (path === undefined) {
+        return undefined;
+      }
+
+      return options?.externalize === true ? { external: true, id: pathToFileURL(path).href } : path;
     },
   };
 }

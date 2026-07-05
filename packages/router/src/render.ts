@@ -2658,6 +2658,7 @@ export async function bundleMiddlewareModuleCode(options: {
     code: options.code,
     define: options.define,
     filename: options.file,
+    externalizeMreactRuntimeAliases: true,
     platform: "node",
     root: options.importPolicy?.projectRoot,
     plugins: [
