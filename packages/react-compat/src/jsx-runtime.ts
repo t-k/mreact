@@ -1,3 +1,4 @@
+import { installCompatRenderValueNormalizer } from "@reckona/mreact-reactive-dom/compat-normalize";
 import {
   createElementFromJsxConfig,
   Fragment,
@@ -12,6 +13,8 @@ import type {
   ReactCompatElement,
   ReactCompatNode,
 } from "./element.js";
+
+installCompatRenderValueNormalizer();
 
 /** Fragment marker used by the automatic JSX runtime. */
 export { Fragment };

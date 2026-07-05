@@ -34,6 +34,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./compat-normalize": {
+      "types": "./dist/compat-normalize.d.ts",
+      "default": "./dist/compat-normalize.js"
     }
   },
   "publishConfig": {

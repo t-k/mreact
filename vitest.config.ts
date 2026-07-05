@@ -108,6 +108,13 @@ export default defineConfig({
         replacement: new URL("./packages/shared/src/index.ts", import.meta.url).pathname,
       },
       {
+        find: "@reckona/mreact-reactive-dom/compat-normalize",
+        replacement: new URL(
+          "./packages/reactive-dom/src/compat-normalize.ts",
+          import.meta.url,
+        ).pathname,
+      },
+      {
         find: "@reckona/mreact-reactive-dom",
         replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
       },

@@ -124,7 +124,7 @@ export const REACTIVE_TEXT_BINDING_META: unique symbol;
 
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/jsx-runtime.ts:116:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
+// packages/react-compat/src/jsx-runtime.ts:119:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
 
 // (No @packageDocumentation comment for this package)
 

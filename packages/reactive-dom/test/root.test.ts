@@ -4,9 +4,11 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindText, createRoot } from "../src/index.js";
+import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 import { registerDispose } from "../src/scope.js";
 
 const reactCompatElementType = Symbol.for("react.transitional.element");
+installCompatRenderValueNormalizer();
 
 describe("createRoot", () => {
   test("mounts render output and clears it on dispose", () => {
@@ -114,6 +116,27 @@ describe("createRoot", () => {
 
     const iframe = container.querySelector("iframe");
     expect(iframe?.hasAttribute("srcdoc")).toBe(false);
+
+    dispose();
+  });
+
+  test("applies compat image URL props through the DOM prop safety policy", () => {
+    const container = document.createElement("main");
+
+    const dispose = createRoot(container, () => ({
+      $$typeof: reactCompatElementType,
+      type: "img",
+      props: {
+        alt: "preview",
+        src: "data:text/html,<script>alert(1)</script>",
+        srcSet: "javascript:alert(1) 1x, /safe.png 2x",
+      },
+    }));
+
+    const image = container.querySelector("img");
+    expect(image?.getAttribute("src")).toBeNull();
+    expect(image?.getAttribute("srcset")).toBeNull();
+    expect(image?.getAttribute("alt")).toBe("preview");
 
     dispose();
   });

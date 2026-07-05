@@ -1,3 +1,7 @@
+import { installCompatRenderValueNormalizer } from "@reckona/mreact-reactive-dom/compat-normalize";
+
+installCompatRenderValueNormalizer();
+
 export {
   Component,
   PureComponent,
