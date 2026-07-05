@@ -16,6 +16,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("pnpm bench:primitive");
     expect(workflow).toContain("pnpm bench:js-framework");
     expect(workflow).toContain("pnpm bench:router");
+    expect(workflow).toContain("timeout-minutes: 180");
     expect(workflow).toContain("NODE_OPTIONS: --max-old-space-size=6144");
     expect(workflow).toContain("playwright install --with-deps chromium");
     expect(workflow).toContain("benchmarks/results");
