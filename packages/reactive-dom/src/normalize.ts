@@ -1,18 +1,24 @@
 import type { RenderValue } from "./types.js";
 
 const maxRenderValueDepth = 256;
+const renderValueNormalizerGlobalKey = Symbol.for("mreact.reactiveDom.renderValueNormalizer");
+const renderValueNormalizerGlobal = globalThis as typeof globalThis & Record<symbol, unknown>;
 
 export type RenderValueNormalizer = (
   value: unknown,
   depth: number,
 ) => Node[] | undefined;
 
-let customRenderValueNormalizer: RenderValueNormalizer | undefined;
+let customRenderValueNormalizer: RenderValueNormalizer | undefined =
+  typeof renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] === "function"
+    ? (renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] as RenderValueNormalizer)
+    : undefined;
 
 export function registerRenderValueNormalizer(
   normalizer: RenderValueNormalizer,
 ): void {
   customRenderValueNormalizer = normalizer;
+  renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] = normalizer;
 }
 
 export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
@@ -36,7 +42,12 @@ export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
     return [value];
   }
 
-  const customNodes = customRenderValueNormalizer?.(value, depth + 1);
+  const normalizer =
+    customRenderValueNormalizer ??
+    (typeof renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] === "function"
+      ? (renderValueNormalizerGlobal[renderValueNormalizerGlobalKey] as RenderValueNormalizer)
+      : undefined);
+  const customNodes = normalizer?.(value, depth + 1);
 
   if (customNodes !== undefined) {
     return customNodes;
