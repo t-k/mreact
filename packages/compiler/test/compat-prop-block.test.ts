@@ -1,10 +1,24 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { transform } from "../src/index.js";
 import { runCompatComponent } from "./helpers.js";
 
 describe("react-compat prop reactive DOM block lowering", () => {
+  test("resolves static prop block component names without a fixed-point loop", () => {
+    const source = readFileSync(join(process.cwd(), "packages/compiler/src/emit-compat.ts"), "utf8");
+    const start = source.indexOf("function collectStaticPropBlockComponentNames");
+    const end = source.indexOf("interface StaticPropBlockComponentCandidate", start);
+    const implementation = source.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(implementation).not.toContain("let changed");
+    expect(implementation).not.toContain("while (changed)");
+  });
+
   test("lowers a single-props host-only component to a prop-bridged reactive block", () => {
     const output = transform({
       code: `export function Row(props) {

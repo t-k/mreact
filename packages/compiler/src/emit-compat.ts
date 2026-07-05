@@ -399,21 +399,63 @@ function collectStaticPropBlockComponentNames(ir: ModuleIr, dev: boolean): Reado
     return names;
   }
 
-  const candidates = ir.components
-    .map(readStaticPropBlockComponentCandidate)
-    .filter((candidate): candidate is StaticPropBlockComponentCandidate => candidate !== undefined);
+  const candidatesByName = new Map<string, StaticPropBlockComponentCandidate[]>();
+  for (const component of ir.components) {
+    const candidate = readStaticPropBlockComponentCandidate(component);
+    if (candidate === undefined) {
+      continue;
+    }
 
-  let changed = true;
-  while (changed) {
-    changed = false;
+    const sameNameCandidates = candidatesByName.get(candidate.name);
+    if (sameNameCandidates === undefined) {
+      candidatesByName.set(candidate.name, [candidate]);
+    } else {
+      sameNameCandidates.push(candidate);
+    }
+  }
 
+  const dependentsByName = new Map<string, StaticPropBlockComponentPendingCandidate[]>();
+  const readyNames: string[] = [];
+
+  for (const candidates of candidatesByName.values()) {
     for (const candidate of candidates) {
-      if (
-        !names.has(candidate.name) &&
-        [...candidate.dependencies].every((dependency) => names.has(dependency))
-      ) {
-        names.add(candidate.name);
-        changed = true;
+      if (candidate.dependencies.size === 0) {
+        readyNames.push(candidate.name);
+        continue;
+      }
+
+      const pendingCandidate = {
+        name: candidate.name,
+        remainingDependencies: candidate.dependencies.size,
+      };
+
+      for (const dependency of candidate.dependencies) {
+        const dependents = dependentsByName.get(dependency);
+        if (dependents === undefined) {
+          dependentsByName.set(dependency, [pendingCandidate]);
+        } else {
+          dependents.push(pendingCandidate);
+        }
+      }
+    }
+  }
+
+  for (let index = 0; index < readyNames.length; index += 1) {
+    const name = readyNames[index];
+    if (name === undefined || names.has(name)) {
+      continue;
+    }
+
+    names.add(name);
+    const dependents = dependentsByName.get(name);
+    if (dependents === undefined) {
+      continue;
+    }
+
+    for (const dependent of dependents) {
+      dependent.remainingDependencies -= 1;
+      if (dependent.remainingDependencies === 0) {
+        readyNames.push(dependent.name);
       }
     }
   }
@@ -424,6 +466,11 @@ function collectStaticPropBlockComponentNames(ir: ModuleIr, dev: boolean): Reado
 interface StaticPropBlockComponentCandidate {
   name: string;
   dependencies: ReadonlySet<string>;
+}
+
+interface StaticPropBlockComponentPendingCandidate {
+  name: string;
+  remainingDependencies: number;
 }
 
 function readStaticPropBlockComponentCandidate(
