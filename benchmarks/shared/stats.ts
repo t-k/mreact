@@ -15,6 +15,10 @@ export function summarizeSamples(samples: readonly number[]): SampleSummary {
 
   const sorted = [...samples].sort((left, right) => left - right);
   const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+  const median = percentile(sorted, 0.5);
+  const absoluteDeviations = samples
+    .map((sample) => Math.abs(sample - median))
+    .sort((left, right) => left - right);
   const variance =
     samples.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
     samples.length;
@@ -24,7 +28,8 @@ export function summarizeSamples(samples: readonly number[]): SampleSummary {
     min: sorted[0]!,
     max: sorted[sorted.length - 1]!,
     mean: round(mean),
-    median: round(percentile(sorted, 0.5)),
+    median: round(median),
+    medianAbsoluteDeviation: round(percentile(absoluteDeviations, 0.5)),
     p75: round(percentile(sorted, 0.75)),
     p95: round(percentile(sorted, 0.95)),
     p99: round(percentile(sorted, 0.99)),

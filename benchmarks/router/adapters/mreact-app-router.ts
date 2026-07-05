@@ -636,7 +636,7 @@ async function measureConcurrentLoad(
 
   return {
     p99Ms: percentile(latencies, 0.99),
-    rssDeltaBytes: Math.max(0, afterRss - beforeRss),
+    rssDeltaBytes: afterRss - beforeRss,
     throughputOps: totalRequests / (elapsedMs / 1000),
   };
 }
@@ -894,7 +894,7 @@ try {
     if (!html.includes("route:999")) {
       throw new Error("route scale RSS probe did not include the last route");
     }
-    console.log(JSON.stringify({ rssDeltaBytes: Math.max(0, process.memoryUsage().rss - beforeRss) }));
+    console.log(JSON.stringify({ rssDeltaBytes: process.memoryUsage().rss - beforeRss }));
   } finally {
     await server.close();
   }

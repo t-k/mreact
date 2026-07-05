@@ -607,8 +607,25 @@ function valueRowFromSamples(
     meanMs: benchmarkCase.metric === "duration" ? roundedMean : 0,
     p75Ms: 0,
     p99Ms: 0,
+    note: valueRowNote(benchmarkCase, samples),
     samplesMs: samples.map((sample) => round(sample, digits)),
   };
+}
+
+function valueRowNote(
+  benchmarkCase: ValueRouterBenchmarkCase,
+  samples: readonly number[],
+): string | undefined {
+  if (benchmarkCase.metric !== "memory") {
+    return undefined;
+  }
+
+  const negativeCount = samples.filter((sample) => sample < 0).length;
+  if (negativeCount === 0) {
+    return undefined;
+  }
+
+  return `${negativeCount}/${samples.length} samples negative`;
 }
 
 async function collectDurationRowsRoundRobin(

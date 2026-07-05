@@ -16,6 +16,8 @@ export function formatLambdaRouteLatencyMarkdown(
     `- NODE_ENV: ${env.nodeEnv}`,
     `- pnpm: ${env.pnpmVersion}`,
     `- Platform: ${env.platform} ${env.arch}`,
+    `- CI: ${env.ci === true ? "true" : "false"}`,
+    `- Runner label: ${env.runnerLabel ?? "unknown"}`,
     `- CPU: ${env.cpuModel} (${env.cpuCount})`,
     `- Memory: ${env.totalMemoryBytes} bytes`,
     "- Package versions:",

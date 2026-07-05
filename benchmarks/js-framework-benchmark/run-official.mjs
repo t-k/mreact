@@ -263,10 +263,16 @@ const resultMetricDescriptors = [
   },
 ];
 
-const selectedFrameworks = parseFrameworks(
+const defaultSelectedFrameworks = parseFrameworks(
   process.env.MREACT_JS_FRAMEWORKS,
   frameworkMappings.map((mapping) => mapping.official),
 );
+const frameworkOrderOffset = parseIntegerEnv(
+  process.env.MREACT_JS_FRAMEWORK_ORDER_OFFSET,
+  new Date().getUTCDate() - 1,
+);
+const selectedFrameworks = rotateFrameworks(defaultSelectedFrameworks, frameworkOrderOffset);
+const diffAnchorFramework = process.env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR ?? "react-hooks";
 
 const selectedBenchmarks = parseFrameworks(process.env.MREACT_JS_FRAMEWORK_BENCHMARKS, []);
 
@@ -358,6 +364,32 @@ function parseBooleanEnv(value, defaultValue) {
   }
 
   throw new Error(`Expected a boolean environment value, received ${value}`);
+}
+
+function parseIntegerEnv(value, defaultValue) {
+  if (value === undefined || value.trim() === "") {
+    return defaultValue;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new Error(`Expected an integer environment value, received ${value}`);
+  }
+
+  return parsed;
+}
+
+function rotateFrameworks(frameworks, offset) {
+  if (frameworks.length === 0) {
+    return frameworks;
+  }
+
+  const start = ((offset % frameworks.length) + frameworks.length) % frameworks.length;
+  return [...frameworks.slice(start), ...frameworks.slice(0, start)];
+}
+
+function matchesAnchorFramework(framework, anchor) {
+  return framework === anchor || framework.endsWith(`/${anchor}`) || framework.endsWith(anchor);
 }
 
 function benchmarkArgs() {
@@ -570,6 +602,12 @@ async function writeSummary() {
     "| --- | --- |",
     ...frameworkMappings.map((mapping) => `| ${mapping.primitive} | ${mapping.official} |`),
     "",
+    "## Run Order",
+    "",
+    `Framework order offset: ${frameworkOrderOffset}`,
+    `Framework run order: ${selectedFrameworks.join(", ")}`,
+    `Fixed diff anchor: ${diffAnchorFramework}`,
+    "",
     "## Unsupported Primitive Adapters",
     "",
     ...unsupportedPrimitiveAdapters.map((entry) => `- ${entry}`),
@@ -584,11 +622,12 @@ async function writeSummary() {
     ...formatJsFrameworkRankingSections(resultRows),
     "## Results",
     "",
-    "| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st |",
-    "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
+    `| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |`,
+    "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ...resultRows.map((row) => {
       const bestRow = rankJsFrameworkRows(resultRows, row.caseName)[0];
-      return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} |`;
+      const anchorRow = findAnchorRow(resultRows, row.caseName);
+      return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${formatDiffVsBest(row, anchorRow)} |`;
     }),
     "",
   ];
@@ -661,22 +700,23 @@ function formatJsFrameworkRankingSections(resultRows) {
     }
 
     lines.push(`### ${descriptor.caseName}`, "");
-    lines.push("| rank | framework | case | value | script | paint | diff vs 1st | unit |");
-    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |");
+    lines.push(`| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`);
+    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
 
     const bestRow = rankedRows[0];
+    const anchorRow = findAnchorRow(resultRows, descriptor.caseName);
     rankedRows.forEach((row, index) => {
       lines.push(
-        `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${row.unit} |`,
+        `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${formatDiffVsBest(row, anchorRow)} | ${row.unit} |`,
       );
     });
     lines.push("");
   }
 
   if (lines.length === 0) {
-    lines.push("| rank | framework | case | value | script | paint | diff vs 1st | unit |");
-    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | --- |");
-    lines.push("|  | no completed results |  |  |  |  |  |  |");
+    lines.push(`| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`);
+    lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
+    lines.push("|  | no completed results |  |  |  |  |  |  |  |");
     lines.push("");
   }
 
@@ -695,6 +735,15 @@ function rankJsFrameworkRows(resultRows, caseName) {
 
       return left.framework.localeCompare(right.framework);
     });
+}
+
+function findAnchorRow(resultRows, caseName) {
+  return resultRows.find(
+    (row) =>
+      row.caseName === caseName &&
+      row.status === "completed" &&
+      matchesAnchorFramework(row.framework, diffAnchorFramework),
+  );
 }
 
 function formatDiffVsBest(row, bestRow) {

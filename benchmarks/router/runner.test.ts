@@ -598,6 +598,32 @@ describe("router benchmark configuration", () => {
       samplesMs: [5],
     });
   });
+
+  it("surfaces negative memory samples in value probe notes", async () => {
+    const values = [0, -10, 20, -30, 40, -50];
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async renderToString(nodeCount: number) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+          async measureConcurrentRequestRssDeltaBytes() {
+            return values.shift() ?? 0;
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(
+      rows.find((row) => row.caseName === "app concurrent RSS delta 100 connections"),
+    ).toMatchObject({
+      note: "3/5 samples negative",
+      samplesMs: [-10, 20, -30, 40, -50],
+    });
+  });
 });
 
 function completedRow(

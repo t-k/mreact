@@ -18,8 +18,10 @@ export async function collectBenchmarkEnvironment(
     pnpmVersion: readCommand("pnpm", ["--version"]),
     platform: process.platform,
     arch: process.arch,
+    ci: process.env.CI === "true",
     cpuModel: cpus()[0]?.model ?? "unknown",
     cpuCount: cpus().length,
+    runnerLabel: process.env.RUNNER_LABELS ?? process.env.RUNNER_NAME ?? "local",
     totalMemoryBytes: totalmem(),
     packageVersions: Object.fromEntries(
       packages.map((packageName) => [

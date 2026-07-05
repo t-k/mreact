@@ -19,6 +19,8 @@ export function formatBenchmarkMarkdown(
     `- NODE_ENV: ${env.nodeEnv}`,
     `- pnpm: ${env.pnpmVersion}`,
     `- Platform: ${env.platform} ${env.arch}`,
+    `- CI: ${env.ci === true ? "true" : "false"}`,
+    `- Runner label: ${env.runnerLabel ?? "unknown"}`,
     `- CPU: ${env.cpuModel} (${env.cpuCount})`,
     `- Memory: ${env.totalMemoryBytes} bytes`,
     "- Package versions:",
@@ -31,8 +33,8 @@ export function formatBenchmarkMarkdown(
     ...formatRankingSections(rows, options.caseDescriptions ?? {}),
     "## Results",
     "",
-    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | sample count | min | max | mean | median | p75 | p95 | p99 | standard deviation | raw samples | notes |",
-    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
+    "| suite | framework | version | case | status | metric | unit | value | diff vs 1st | sample count | min | max | mean | median | MAD | p75 | p95 | p99 | standard deviation | raw samples | notes |",
+    "| --- | --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |",
   ];
 
   for (const row of rows) {
@@ -53,6 +55,7 @@ export function formatBenchmarkMarkdown(
       String(summary?.max ?? 0),
       String(summary?.mean ?? 0),
       String(summary?.median ?? 0),
+      String(summary?.medianAbsoluteDeviation ?? 0),
       String(summary?.p75 ?? 0),
       String(summary?.p95 ?? 0),
       String(summary?.p99 ?? 0),

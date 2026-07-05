@@ -43,7 +43,7 @@ export async function measureConcurrentRequests(
 
   return {
     p99Ms: percentile(latencies, 0.99),
-    rssDeltaBytes: Math.max(0, process.memoryUsage().rss - beforeRss),
+    rssDeltaBytes: process.memoryUsage().rss - beforeRss,
     throughputOps: totalRequests / (elapsedMs / 1000),
   };
 }

@@ -29,6 +29,7 @@ const reactCompatVdomFixtureRoot = join(
   "keyed",
   "mreact-react-compat-vdom",
 );
+const runnerPath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs");
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
   afterEach(() => {
@@ -165,6 +166,26 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
 
     await click("#clear");
     expect(rows()).toHaveLength(0);
+  });
+});
+
+describe("js-framework-benchmark official runner stability", () => {
+  test("rotates and records framework order to reduce run-order drift", async () => {
+    const source = await readFile(runnerPath, "utf8");
+
+    expect(source).toContain("MREACT_JS_FRAMEWORK_ORDER_OFFSET");
+    expect(source).toContain("new Date().getUTCDate() - 1");
+    expect(source).toContain("function rotateFrameworks(");
+    expect(source).toContain("Framework run order:");
+  });
+
+  test("reports fixed-anchor deltas alongside diff vs first", async () => {
+    const source = await readFile(runnerPath, "utf8");
+
+    expect(source).toContain("MREACT_JS_FRAMEWORK_DIFF_ANCHOR");
+    expect(source).toContain('?? "react-hooks"');
+    expect(source).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)}");
+    expect(source).toContain("function findAnchorRow(");
   });
 });
 
@@ -400,14 +421,15 @@ describe("js-framework-benchmark official runner", () => {
       "Lower values are better for all js-framework-benchmark metrics reported here.",
     );
     expect(runner).toContain(
-      "| rank | framework | case | value | script | paint | diff vs 1st | unit |",
+      "diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |",
     );
     expect(runner).toContain("formatJsFrameworkRankingSections(resultRows)");
     expect(runner).toContain("formatDiffVsBest(row, bestRow)");
+    expect(runner).toContain("formatDiffVsBest(row, anchorRow)");
     expect(runner).toContain("readMetricParts(files, framework, descriptor.caseId");
     expect(runner).toContain("## Results");
     expect(runner).toContain(
-      "| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st |",
+      "diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |",
     );
   });
 

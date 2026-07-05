@@ -18,6 +18,8 @@ export function formatRouterBenchmarkMarkdown(
     `- NODE_ENV: ${env.nodeEnv}`,
     `- pnpm: ${env.pnpmVersion}`,
     `- Platform: ${env.platform} ${env.arch}`,
+    `- CI: ${env.ci === true ? "true" : "false"}`,
+    `- Runner label: ${env.runnerLabel ?? "unknown"}`,
     `- CPU: ${env.cpuModel} (${env.cpuCount})`,
     `- Memory: ${env.totalMemoryBytes} bytes`,
     "- Package versions:",
@@ -36,6 +38,19 @@ export function formatRouterBenchmarkMarkdown(
     if (isMreactVariantOnlyRanking(benchmarkCase.name, rankedRows)) {
       lines.push(
         "This section currently compares mreact app-router variants only; it is not a cross-framework ranking.",
+        "",
+      );
+    }
+
+    const caveat = rankingCaveat(benchmarkCase.name);
+    if (caveat !== undefined) {
+      lines.push(caveat, "");
+    }
+
+    const noiseFloor = sameCoreNoiseFloor(rankedRows);
+    if (noiseFloor !== undefined) {
+      lines.push(
+        `Same-core mreact variant noise floor: ${noiseFloor} spread. Treat smaller cross-framework gaps in this case as inconclusive.`,
         "",
       );
     }
@@ -137,6 +152,32 @@ function isMreactVariantOnlyRanking(
     rankedRows.length > 0 &&
     rankedRows.every((row) => row.framework.includes("mreact"))
   );
+}
+
+function rankingCaveat(caseName: RouterBenchmarkCaseName): string | undefined {
+  if (caseName === "app concurrent RSS delta 100 connections") {
+    return "RSS delta rows are process-model sensitive; compare same-process adapters only and treat negative samples as contamination indicators.";
+  }
+
+  return undefined;
+}
+
+function sameCoreNoiseFloor(rows: readonly RouterBenchmarkRow[]): string | undefined {
+  const variantRows = rows.filter(
+    (row) => row.status === "completed" && row.framework.startsWith("mreact-app-router"),
+  );
+  if (variantRows.length < 2) {
+    return undefined;
+  }
+
+  const values = variantRows.map((row) => row.value);
+  const min = Math.min(...values);
+  if (min <= 0) {
+    return undefined;
+  }
+
+  const max = Math.max(...values);
+  return formatPercent((max / min - 1) * 100);
 }
 
 function escapeMarkdownCell(value: string): string {

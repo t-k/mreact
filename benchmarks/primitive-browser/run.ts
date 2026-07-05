@@ -23,17 +23,20 @@ const qwikPackageDir = dirname(dirname(requireFromHere.resolve("@builder.io/qwik
 const sveltePackageDir = dirname(requireFromHere.resolve("svelte/package.json"));
 const vuePackageDir = dirname(requireFromHere.resolve("vue/package.json"));
 const browserWarmupRuns = parseNonNegativeInteger(
-  process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "2",
+  process.env.MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS ?? "5",
   "MREACT_PRIMITIVE_BROWSER_WARMUP_RUNS",
 );
 const browserMeasuredRuns = parseNonNegativeInteger(
-  process.env.MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS ?? "7",
+  process.env.MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS ?? "15",
   "MREACT_PRIMITIVE_BROWSER_MEASURED_RUNS",
 );
 
 const fixture = await createBrowserFixture();
 const server = await serveDirectory(fixture.outDir);
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  args: ["--js-flags=--expose-gc"],
+  headless: true,
+});
 const rows: BenchmarkRow[] = [];
 
 try {
@@ -98,13 +101,32 @@ try {
               throw new Error("primitive browser benchmark API is not installed");
             }
 
+            const settle = async () => {
+              (globalThis as { gc?: () => void }).gc?.();
+              await new Promise<void>((resolve) => {
+                const requestIdle = (globalThis as {
+                  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => void;
+                }).requestIdleCallback;
+
+                if (requestIdle === undefined) {
+                  setTimeout(resolve, 0);
+                  return;
+                }
+
+                requestIdle(resolve, { timeout: 50 });
+              });
+            };
+
             for (let index = 0; index < options.warmupRuns; index += 1) {
               await api.run(options.framework, options.caseName, options.count);
+              await settle();
             }
 
             const measured: number[] = [];
             for (let index = 0; index < options.measuredRuns; index += 1) {
+              await settle();
               measured.push(await api.run(options.framework, options.caseName, options.count));
+              await settle();
             }
             return measured;
           },
@@ -1180,9 +1202,11 @@ async function serveDirectory(rootDir: string): Promise<{ close(): Promise<void>
       const pathname = new URL(request.url ?? "/", "http://local.test").pathname;
       const filePath = safeStaticPath(rootDir, pathname);
       const body = await readFile(filePath);
-      response.statusCode = 200;
-      response.setHeader("content-type", contentType(filePath));
-      response.end(body);
+	      response.statusCode = 200;
+	      response.setHeader("content-type", contentType(filePath));
+	      response.setHeader("cross-origin-opener-policy", "same-origin");
+	      response.setHeader("cross-origin-embedder-policy", "require-corp");
+	      response.end(body);
     } catch {
       response.statusCode = 404;
       response.end("Not Found");

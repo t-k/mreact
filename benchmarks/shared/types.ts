@@ -8,6 +8,7 @@ export interface SampleSummary {
   max: number;
   mean: number;
   median: number;
+  medianAbsoluteDeviation: number;
   p75: number;
   p95: number;
   p99: number;
@@ -22,8 +23,10 @@ export interface BenchmarkEnvironment {
   pnpmVersion: string;
   platform: NodeJS.Platform;
   arch: NodeJS.Architecture;
+  ci?: boolean;
   cpuModel: string;
   cpuCount: number;
+  runnerLabel?: string;
   totalMemoryBytes: number;
   packageVersions: Record<string, string>;
 }

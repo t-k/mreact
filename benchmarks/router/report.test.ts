@@ -81,6 +81,50 @@ describe("router benchmark report", () => {
     );
   });
 
+  it("prints same-core mreact variant noise floor for comparable variants", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow("mreact-app-router", "app render 1000 nodes", "throughput", "ops/sec", 100),
+      completedRow(
+        "mreact-app-router+mreact react-compat",
+        "app render 1000 nodes",
+        "throughput",
+        "ops/sec",
+        108,
+      ),
+      completedRow(
+        "mreact-app-router+log enabled",
+        "app render 1000 nodes",
+        "throughput",
+        "ops/sec",
+        104,
+      ),
+      completedRow("marko-run", "app render 1000 nodes", "throughput", "ops/sec", 120),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(markdown).toContain(
+      "Same-core mreact variant noise floor: +8% spread. Treat smaller cross-framework gaps in this case as inconclusive.",
+    );
+  });
+
+  it("prints CI and runner provenance in the environment", () => {
+    const markdown = formatRouterBenchmarkMarkdown(
+      { ...testEnvironment, ci: true, runnerLabel: "ubuntu-latest" },
+      [],
+    );
+
+    expect(markdown).toContain("- CI: true");
+    expect(markdown).toContain("- Runner label: ubuntu-latest");
+  });
+
+  it("falls back when benchmark provenance is missing from older result files", () => {
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, []);
+
+    expect(markdown).toContain("- CI: false");
+    expect(markdown).toContain("- Runner label: unknown");
+  });
+
   it("moves mreact-only rankings after cross-framework rankings", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow("mreact-app-router", "app hydration 100 islands", "duration", "ms", 80),
@@ -178,6 +222,31 @@ describe("router benchmark report", () => {
     expect(
       sectionIndex(markdown, "app client bundle gzip bytes (interactive page, minimal opt-out)"),
     ).toBeLessThan(sectionIndex(markdown, "app render 1000 nodes"));
+  });
+
+  it("annotates concurrent RSS delta rankings as process-model sensitive", () => {
+    const rows: RouterBenchmarkRow[] = [
+      completedRow(
+        "mreact-app-router",
+        "app concurrent RSS delta 100 connections",
+        "memory",
+        "bytes",
+        100,
+      ),
+      completedRow(
+        "mreact-app-router+mreact react-compat",
+        "app concurrent RSS delta 100 connections",
+        "memory",
+        "bytes",
+        -20,
+      ),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+
+    expect(markdown).toContain(
+      "RSS delta rows are process-model sensitive; compare same-process adapters only and treat negative samples as contamination indicators.",
+    );
   });
 });
 

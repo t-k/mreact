@@ -39,6 +39,13 @@ describe("mreact app-router benchmark fixtures", () => {
     expect(source).not.toContain("Math.max(0, process.memoryUsage().rss - beforeRss),");
   });
 
+  it("does not clamp RSS deltas to zero", async () => {
+    const source = await readFile(adapterPath, "utf8");
+
+    expect(source).not.toContain("Math.max(0, afterRss - beforeRss)");
+    expect(source).not.toContain("Math.max(0, process.memoryUsage().rss - beforeRss)");
+  });
+
   it("keeps timed concurrent-load probes out of single-flight caches", async () => {
     const source = await readFile(adapterPath, "utf8");
 

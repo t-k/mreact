@@ -11,6 +11,7 @@ describe("summarizeSamples", () => {
       max: 20,
       mean: 10.2,
       median: 10,
+      medianAbsoluteDeviation: 5,
       p75: 15,
       p99: 20,
       p95: 20,

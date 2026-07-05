@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { measureConcurrentRequests } from "./http-probes.js";
 
@@ -42,5 +43,13 @@ describe("router HTTP probes", () => {
         server.close((error) => (error === undefined ? resolve() : reject(error)));
       });
     }
+  });
+
+  it("reports raw RSS deltas without clamping negative samples", async () => {
+    const source = await readFile(new URL("./http-probes.ts", import.meta.url), "utf8");
+    const resultSource = source.slice(source.indexOf("return {"), source.indexOf("function percentile"));
+
+    expect(resultSource).not.toContain("Math.max(0");
+    expect(resultSource).toContain("process.memoryUsage().rss - beforeRss");
   });
 });
