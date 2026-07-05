@@ -109,10 +109,8 @@ export default defineConfig({
       },
       {
         find: "@reckona/mreact-reactive-dom/compat-normalize",
-        replacement: new URL(
-          "./packages/reactive-dom/src/compat-normalize.ts",
-          import.meta.url,
-        ).pathname,
+        replacement: new URL("./packages/reactive-dom/src/compat-normalize.ts", import.meta.url)
+          .pathname,
       },
       {
         find: "@reckona/mreact-reactive-dom",

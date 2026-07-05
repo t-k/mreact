@@ -5,8 +5,11 @@ import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createList, insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
+import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
+
+installCompatRenderValueNormalizer();
 
 function jsx(type: unknown, props: Record<string, unknown>) {
   return {
