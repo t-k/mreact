@@ -99,6 +99,7 @@ interface CompatComponentAnalysis {
   propBlockFacts?: PropBlockFacts;
   propReactiveDomBlock?: PropReactiveDomBlock;
   reactiveDomBlock?: ReactiveDomBlock;
+  rootListReactiveDomBlock?: RootListReactiveDomBlock;
 }
 
 function collectCompatComponentAnalyses(
@@ -117,6 +118,10 @@ function collectCompatComponentAnalyses(
       !dev && reactiveDomBlock === undefined
         ? getPropReactiveDomBlock(component, staticPropBlockComponentNames)
         : undefined;
+    const rootListReactiveDomBlock =
+      !dev && reactiveDomBlock === undefined && propReactiveDomBlock === undefined
+        ? getRootListReactiveDomBlock(component, ir, staticPropBlockComponentNames)
+        : undefined;
     analyses.set(component, {
       directTextBindings,
       ...(reactiveDomBlock === undefined ? {} : { reactiveDomBlock }),
@@ -125,6 +130,12 @@ function collectCompatComponentAnalyses(
         : {
             propReactiveDomBlock,
             propBlockFacts: collectPropBlockFacts(component.root),
+          }),
+      ...(rootListReactiveDomBlock === undefined
+        ? {}
+        : {
+            rootListReactiveDomBlock,
+            propBlockFacts: collectPropBlockFacts(rootListReactiveDomBlock.renderRoot),
           }),
     });
   }
@@ -151,6 +162,12 @@ function collectComponentImportSpecifiers(
     }
 
     if (!dev && analysis?.propReactiveDomBlock !== undefined) {
+      specifiers.add("createReactiveDomBlock");
+      continue;
+    }
+
+    if (!dev && analysis?.rootListReactiveDomBlock !== undefined) {
+      specifiers.add("REACTIVE_STATE_BINDING_META");
       specifiers.add("createReactiveDomBlock");
       continue;
     }
@@ -221,6 +238,33 @@ function collectReactiveDomImportSpecifiers(
       if (facts.hasEffectBinding) {
         specifiers.add("effect");
       }
+      continue;
+    }
+
+    if (analysis?.rootListReactiveDomBlock !== undefined) {
+      const facts = analysis.propBlockFacts ?? collectPropBlockFacts(analysis.rootListReactiveDomBlock.renderRoot);
+      specifiers.add("bindList");
+      if (facts.hasEvent) {
+        specifiers.add("bindEvent");
+      }
+      if (facts.hasBindPropBinding) {
+        specifiers.add("bindProp");
+      }
+      if (facts.hasSpreadBinding) {
+        specifiers.add("bindSpreadProps");
+      }
+      if (facts.hasDynamicInsertion) {
+        specifiers.add("insertDynamic");
+      }
+      if (facts.hasListBinding) {
+        specifiers.add("bindList");
+      }
+      if (facts.hasNestedListRenderValue) {
+        specifiers.add("createList");
+      }
+      if (facts.hasEffectBinding) {
+        specifiers.add("effect");
+      }
     }
   }
 
@@ -253,9 +297,24 @@ interface DirectTextBinding {
   stateBindingName: string;
 }
 
+interface DirectStateBinding {
+  stateName: string;
+  tupleName: string;
+  stateBindingName: string;
+}
+
 interface ReactiveDomBlock {
   element: JsxElementIr;
   binding: DirectTextBinding;
+}
+
+interface RootListReactiveDomBlock {
+  root: Extract<JsxNodeIr, { kind: "list" }>;
+  stateBinding: DirectStateBinding;
+  renderComponent: ComponentIr;
+  renderComponentBlock: PropReactiveDomBlock;
+  renderComponentNode: Extract<JsxNodeIr, { kind: "component" }>;
+  renderRoot: JsxElementIr;
 }
 
 function allocateHelperNames(
@@ -820,9 +879,28 @@ function emitComponent(
       ? (analysis?.propReactiveDomBlock ??
         getPropReactiveDomBlock(component, staticPropBlockComponentNames))
       : undefined;
+  const rootListReactiveDomBlock =
+    !dev && reactiveDomBlock === undefined && propReactiveDomBlock === undefined
+      ? analysis?.rootListReactiveDomBlock
+      : undefined;
   const body = component.bodyStatements.map(
-    (statement) =>
-      `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames, reactiveDomBlock !== undefined)}`,
+    (statement) => {
+      const directTextStatement = rewriteDirectTextBindingStatement(
+        statement,
+        directTextBindings,
+        helperNames,
+        reactiveDomBlock !== undefined,
+      );
+      const rootListStatement =
+        rootListReactiveDomBlock === undefined
+          ? directTextStatement
+          : rewriteDirectStateBindingStatement(
+              directTextStatement,
+              rootListReactiveDomBlock.stateBinding,
+              helperNames,
+            );
+      return `  ${rootListStatement}`;
+    },
   );
   const parameters = component.parameters.join(", ");
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
@@ -852,6 +930,17 @@ function emitComponent(
       emitReactiveDomBlockReturn(reactiveDomBlock, helperNames, templateName, allocator),
       `}`,
     ].join("\n");
+  }
+
+  if (rootListReactiveDomBlock !== undefined) {
+    return emitRootListReactiveDomBlockComponent(
+      component,
+      rootListReactiveDomBlock,
+      body,
+      helperNames,
+      functionKeyword,
+      parameters,
+    );
   }
 
   return [
@@ -1273,6 +1362,27 @@ function rewriteDirectTextBindingStatement(
   return statement;
 }
 
+function rewriteDirectStateBindingStatement(
+  statement: string,
+  binding: DirectStateBinding,
+  helperNames: CompatHelperNames,
+): string {
+  const match = statement.match(
+    /^\s*const\s+\[\s*(?<stateName>[A-Za-z_$][\w$]*)\s*,\s*(?<setterName>[A-Za-z_$][\w$]*)\s*\]\s*=\s*(?<initializer>use(?:State|Reducer)\s*\([\s\S]+\));\s*$/,
+  );
+
+  if (match?.groups?.stateName !== binding.stateName) {
+    return statement;
+  }
+
+  const metadataName = helperNames.REACTIVE_STATE_BINDING_META ?? "_REACTIVE_STATE_BINDING_META";
+  return [
+    `const ${binding.tupleName} = ${match.groups.initializer};`,
+    `  const [${binding.stateName}, ${match.groups.setterName}] = ${binding.tupleName};`,
+    `  const ${binding.stateBindingName} = ${binding.tupleName}[${metadataName}];`,
+  ].join("\n");
+}
+
 function getReactiveDomBlock(
   root: JsxNodeIr,
   directTextBindings: readonly DirectTextBinding[],
@@ -1408,6 +1518,364 @@ function getPropReactiveDomBlock(
   return propAliases === undefined
     ? { root, propsParam }
     : { root, propsParam: "props", propAliases };
+}
+
+function getRootListReactiveDomBlock(
+  component: ComponentIr,
+  ir: ModuleIr,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+): RootListReactiveDomBlock | undefined {
+  const root =
+    component.root.kind === "list"
+      ? component.root
+      : readCompatCreateElementRootList(component.root);
+
+  if (root === undefined || root.keyCode === undefined || root.children.length !== 1) {
+    return undefined;
+  }
+
+  const stateBinding = collectDirectStateBindings(component).find((binding) =>
+    rootListUsesStateBinding(root, binding.stateName),
+  );
+
+  if (stateBinding === undefined || !rootListBodyStatementsAreSafe(component, stateBinding)) {
+    return undefined;
+  }
+
+  const renderComponentNode =
+    root.children[0]?.kind === "component"
+      ? root.children[0]
+      : readCompatRuntimeComponentExpression(root.children[0]);
+  if (
+    renderComponentNode === undefined ||
+    renderComponentNode.children.length > 0 ||
+    renderComponentNode.props.some((prop) => prop.kind === "render-prop" || prop.kind === "spread-prop")
+  ) {
+    return undefined;
+  }
+
+  const memoAliases = collectCompatMemoAliases(ir.moduleStatements);
+  const renderComponentName = memoAliases.get(renderComponentNode.name) ?? renderComponentNode.name;
+  const renderComponent = ir.components.find((candidate) => candidate.name === renderComponentName);
+
+  if (renderComponent === undefined) {
+    return undefined;
+  }
+
+  const renderComponentBlock = getPropReactiveDomBlock(
+    renderComponent,
+    staticPropBlockComponentNames,
+  );
+
+  if (renderComponentBlock === undefined) {
+    return undefined;
+  }
+
+  if (
+    [root.itemName, root.indexName, root.arrayName].some(
+      (name) => name !== undefined && name === renderComponentBlock.propsParam,
+    )
+  ) {
+    return undefined;
+  }
+
+  return {
+    root,
+    stateBinding,
+    renderComponent,
+    renderComponentBlock,
+    renderComponentNode,
+    renderRoot: renderComponentBlock.root,
+  };
+}
+
+function readCompatRuntimeComponentExpression(
+  node: JsxNodeIr | undefined,
+): Extract<JsxNodeIr, { kind: "component" }> | undefined {
+  if (node?.kind !== "expr") {
+    return undefined;
+  }
+
+  const code = stripOuterParentheses(node.code.trim()).replace(/^\/\*[\s\S]*?\*\/\s*/, "");
+  const match = code.match(
+    /^[A-Za-z_$][\w$]*\(\s*(?<componentName>[A-Za-z_$][\w$]*)\s*,\s*\{(?<props>[\s\S]*)\}(?:\s*,\s*(?<keyCode>[\s\S]+))?\s*\)$/,
+  );
+  const groups = match?.groups;
+
+  if (groups?.componentName === undefined || groups.props === undefined) {
+    return undefined;
+  }
+
+  const props = readCompatCreateElementObjectProps(groups.props);
+
+  return {
+    kind: "component",
+    name: groups.componentName,
+    ...(groups.keyCode === undefined ? {} : { keyCode: groups.keyCode.trim() }),
+    props: props.map((prop) => ({ kind: "prop" as const, name: prop.name, code: prop.code })),
+    children: [],
+  };
+}
+
+function readCompatCreateElementRootList(
+  node: JsxNodeIr,
+): Extract<JsxNodeIr, { kind: "list" }> | undefined {
+  if (node.kind !== "expr") {
+    return undefined;
+  }
+
+  const code = stripOuterParentheses(node.code.trim());
+  const match = code.match(
+    /^(?<items>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\.map\(\s*(?:\(\s*)?(?<itemName>[A-Za-z_$][\w$]*)(?:\s*\))?\s*=>\s*(?:\/\*[\s\S]*?\*\/\s*)?[A-Za-z_$][\w$]*\(\s*(?<componentName>[A-Za-z_$][\w$]*)\s*,\s*\{(?<props>[\s\S]*)\}(?:\s*,\s*(?<runtimeKeyCode>[\s\S]+))?\s*\)\s*\)$/,
+  );
+
+  const groups = match?.groups;
+
+  if (
+    groups?.items === undefined ||
+    groups.itemName === undefined ||
+    groups.componentName === undefined ||
+    groups.props === undefined
+  ) {
+    return undefined;
+  }
+
+  const props = readCompatCreateElementObjectProps(groups.props);
+  const key = props.find((prop) => prop.name === "key");
+  const keyCode = groups.runtimeKeyCode?.trim() ?? key?.code;
+
+  if (keyCode === undefined) {
+    return undefined;
+  }
+
+  return {
+    kind: "list",
+    itemsCode: groups.items,
+    itemName: groups.itemName,
+    keyCode,
+    children: [
+      {
+        kind: "component",
+        name: groups.componentName,
+        props: props
+          .filter((prop) => prop.name !== "key")
+          .map((prop) => ({ kind: "prop" as const, name: prop.name, code: prop.code })),
+        children: [],
+      },
+    ],
+  };
+}
+
+function readCompatCreateElementObjectProps(
+  propsCode: string,
+): { name: string; code: string }[] {
+  return splitTopLevelCommaEntries(propsCode)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .flatMap((entry) => {
+      const colonIndex = findTopLevelColon(entry);
+
+      if (colonIndex < 0) {
+        return PROP_BLOCK_IDENTIFIER.test(entry) ? [{ name: entry, code: entry }] : [];
+      }
+
+      const rawName = entry.slice(0, colonIndex).trim();
+      const name = rawName.replace(/^["']|["']$/g, "");
+      const code = entry.slice(colonIndex + 1).trim();
+      return PROP_BLOCK_IDENTIFIER.test(name) && code.length > 0 ? [{ name, code }] : [];
+    });
+}
+
+function splitTopLevelCommaEntries(code: string): string[] {
+  const entries: string[] = [];
+  let start = 0;
+  let depth = 0;
+  let index = 0;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === "\"" || char === "'" || char === "`") {
+      const quoted = readQuotedJavaScript(code, index, char);
+      index += quoted.length;
+      continue;
+    }
+
+    if (char === "(" || char === "{" || char === "[") {
+      depth += 1;
+    } else if (char === ")" || char === "}" || char === "]") {
+      depth -= 1;
+    } else if (char === "," && depth === 0) {
+      entries.push(code.slice(start, index));
+      start = index + 1;
+    }
+
+    index += 1;
+  }
+
+  entries.push(code.slice(start));
+  return entries;
+}
+
+function findTopLevelColon(code: string): number {
+  let depth = 0;
+  let index = 0;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === "\"" || char === "'" || char === "`") {
+      const quoted = readQuotedJavaScript(code, index, char);
+      index += quoted.length;
+      continue;
+    }
+
+    if (char === "(" || char === "{" || char === "[") {
+      depth += 1;
+    } else if (char === ")" || char === "}" || char === "]") {
+      depth -= 1;
+    } else if (char === ":" && depth === 0) {
+      return index;
+    }
+
+    index += 1;
+  }
+
+  return -1;
+}
+
+function stripOuterParentheses(code: string): string {
+  let current = code;
+
+  while (current.startsWith("(") && current.endsWith(")")) {
+    current = current.slice(1, -1).trim();
+  }
+
+  return current;
+}
+
+function collectDirectStateBindings(
+  component: ComponentIr,
+  helperNames?: CompatHelperNames,
+): DirectStateBinding[] {
+  const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
+  const bindings: DirectStateBinding[] = [];
+
+  for (const statement of component.bodyStatements) {
+    const match = statement.match(
+      /^\s*const\s+\[\s*(?<stateName>[A-Za-z_$][\w$]*)\s*,\s*[A-Za-z_$][\w$]*\s*\]\s*=\s*use(?:State|Reducer)\s*\([\s\S]+\);\s*$/,
+    );
+    const stateName = match?.groups?.stateName;
+
+    if (stateName === undefined) {
+      continue;
+    }
+
+    bindings.push({
+      stateName,
+      tupleName: allocator(`_${stateName}StateTuple`),
+      stateBindingName: allocator(`_${stateName}StateBinding`),
+    });
+  }
+
+  return bindings;
+}
+
+function rootListUsesStateBinding(
+  root: Extract<JsxNodeIr, { kind: "list" }>,
+  stateName: string,
+): boolean {
+  if (containsIdentifier(root.itemsCode, stateName)) {
+    return true;
+  }
+
+  if (root.keyCode !== undefined && containsIdentifier(root.keyCode, stateName)) {
+    return true;
+  }
+
+  return root.children.some((child) => nodeContainsIdentifier(child, stateName));
+}
+
+function rootListBodyStatementsAreSafe(
+  component: ComponentIr,
+  binding: DirectStateBinding,
+): boolean {
+  return component.bodyStatements.every(
+    (statement) =>
+      isDirectStateBindingDeclaration(statement, binding.stateName) ||
+      !containsIdentifier(statement, binding.stateName),
+  );
+}
+
+function isDirectStateBindingDeclaration(statement: string, stateName: string): boolean {
+  return new RegExp(
+    `^\\s*const\\s+\\[\\s*${stateName}\\s*,\\s*[A-Za-z_$][\\w$]*\\s*\\]\\s*=\\s*use(?:State|Reducer)\\s*\\([\\s\\S]+\\);\\s*$`,
+  ).test(statement);
+}
+
+function collectCompatMemoAliases(statements: readonly string[]): ReadonlyMap<string, string> {
+  const aliases = new Map<string, string>();
+
+  for (const statement of statements) {
+    const match = statement.match(
+      /^\s*(?:export\s+)?(?:const|let|var)\s+(?<memoName>[A-Za-z_$][\w$]*)\s*=\s*memo\s*\(\s*(?<componentName>[A-Za-z_$][\w$]*)\s*,[\s\S]*\)\s*;?\s*$/,
+    );
+    const memoName = match?.groups?.memoName;
+    const componentName = match?.groups?.componentName;
+
+    if (memoName !== undefined && componentName !== undefined) {
+      aliases.set(memoName, componentName);
+    }
+  }
+
+  return aliases;
+}
+
+function nodeContainsIdentifier(node: JsxNodeIr, name: string): boolean {
+  let found = false;
+
+  visit(node, (current) => {
+    if (found) {
+      return;
+    }
+
+    if (current.kind === "expr") {
+      found = containsIdentifier(current.code, name);
+      return;
+    }
+
+    if (current.kind === "conditional") {
+      found = containsIdentifier(current.conditionCode, name);
+      return;
+    }
+
+    if (current.kind === "list") {
+      found =
+        containsIdentifier(current.itemsCode, name) ||
+        (current.keyCode !== undefined && containsIdentifier(current.keyCode, name)) ||
+        (current.bodyStatements ?? []).some((statement) => containsIdentifier(statement, name));
+      return;
+    }
+
+    if (current.kind === "component") {
+      found =
+        (current.keyCode !== undefined && containsIdentifier(current.keyCode, name)) ||
+        current.props.some(
+          (prop) => prop.kind !== "render-prop" && containsIdentifier(prop.code, name),
+        );
+      return;
+    }
+
+    if (current.kind === "element") {
+      found =
+        (current.keyCode !== undefined && containsIdentifier(current.keyCode, name)) ||
+        current.attributes.some(
+          (attr) => attr.kind !== "static-attr" && containsIdentifier(attr.code, name),
+        );
+    }
+  });
+
+  return found;
 }
 
 // Conventional node-valued slot props (mirrors oxc-render-values.ts): a text
@@ -1643,6 +2111,224 @@ interface PropBlockEmitHelpers {
   createList: string;
   effectName: string;
   insertDynamic: string;
+}
+
+function emitRootListReactiveDomBlockComponent(
+  component: ComponentIr,
+  block: RootListReactiveDomBlock,
+  body: readonly string[],
+  helperNames: CompatHelperNames,
+  functionKeyword: string,
+  parameters: string,
+): string {
+  const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
+  const createBlock = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
+  const markerName = allocator("_marker");
+  const disposeListName = allocator("_disposeList");
+  const setupListName = allocator("_setupList");
+  const disposeName = allocator("_dispose");
+  const listParameters = emitPropBlockListParameters(block.root);
+  const itemsCode = rewriteStateBindingCode(
+    block.root.itemsCode,
+    block.stateBinding.stateName,
+    block.stateBinding.stateBindingName,
+  );
+  const listOptions = emitRootListOptions(block, listParameters);
+  const propBlockHelpers: PropBlockEmitHelpers = {
+    bindEvent: helperNames.bindEvent ?? "_bindEvent",
+    bindList: helperNames.bindList ?? "_bindList",
+    bindProp: helperNames.bindProp ?? "_bindProp",
+    bindSpreadProps: helperNames.bindSpreadProps ?? "_bindSpreadProps",
+    createList: helperNames.createList ?? "_createList",
+    effectName: helperNames.effect ?? "_effect",
+    insertDynamic: helperNames.insertDynamic ?? "_insertDynamic",
+  };
+  const renderer = emitRootListRenderer(block, listParameters, allocator, propBlockHelpers);
+
+  return [
+    `${functionKeyword} ${component.name}(${parameters}) {`,
+    ...body,
+    `  return ${createBlock}(() => {`,
+    `    const ${markerName} = document.createTextNode("");`,
+    `    let ${disposeListName};`,
+    `    const ${setupListName} = () => {`,
+    `      if (${disposeListName} !== undefined || ${markerName}.parentNode === null) return;`,
+    `      ${disposeListName} = ${propBlockHelpers.bindList}(${markerName}.parentNode, ${markerName}, () => (${itemsCode}), ${renderer}${listOptions});`,
+    `    };`,
+    `    const ${disposeName} = () => {`,
+    `      if (${disposeListName} !== undefined) ${disposeListName}();`,
+    `    };`,
+    `    return { node: ${markerName}, dispose: ${disposeName}, afterCommit: ${setupListName} };`,
+    `  });`,
+    `}`,
+  ].join("\n");
+}
+
+function emitRootListRenderer(
+  block: RootListReactiveDomBlock,
+  parameters: string,
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+): string {
+  const valueExpression = emitRootListRenderComponentNode(block, allocator, helperNames);
+  const bodyStatements = block.root.bodyStatements ?? [];
+
+  if (bodyStatements.length === 0) {
+    return `(${parameters}) => ${valueExpression}`;
+  }
+
+  return `(${parameters}) => {\n${bodyStatements
+    .map((statement) =>
+      `    ${rewriteStateBindingCode(statement, block.stateBinding.stateName, block.stateBinding.stateBindingName)}`,
+    )
+    .join("\n")}\n    return ${valueExpression};\n  }`;
+}
+
+function emitRootListRenderComponentNode(
+  block: RootListReactiveDomBlock,
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+): string {
+  const propsName = block.renderComponentBlock.propsParam;
+  const build: string[] = [];
+  const bindings: PropBlockBinding[] = [];
+  const rootVar = emitPropBlockNode(
+    block.renderRoot,
+    undefined,
+    build,
+    bindings,
+    allocator,
+    propsName,
+    block.renderComponentBlock.propAliases,
+    helperNames,
+  );
+  const bindingLines = emitPropBlockBindingLines(
+    bindings,
+    allocator,
+    helperNames,
+    propsName,
+    block.renderComponentBlock.propAliases,
+  ).lines;
+
+  return [
+    "(() => {",
+    `  const ${propsName} = ${emitRootListRenderProps(block)};`,
+    ...build.map((line) => `  ${line}`),
+    ...bindingLines.map((line) => `  ${line}`),
+    `  return ${rootVar};`,
+    "})()",
+  ].join("\n");
+}
+
+function emitRootListRenderProps(block: RootListReactiveDomBlock): string {
+  const entries = block.renderComponentNode.props
+    .map((prop) => {
+      if (prop.kind === "render-prop" || prop.kind === "spread-prop") {
+        return "";
+      }
+
+      const code = rewriteStateBindingCode(
+        prop.code,
+        block.stateBinding.stateName,
+        block.stateBinding.stateBindingName,
+      );
+      return `get ${emitPropName(prop.name)}() { return (${code}); }`;
+    })
+    .filter(Boolean);
+
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitRootListOptions(block: RootListReactiveDomBlock, parameters: string): string {
+  const optionEntries: string[] = [];
+
+  if (block.root.keyCode !== undefined) {
+    optionEntries.push(
+      `key: (${parameters}) => (${rewriteStateBindingCode(
+        block.root.keyCode,
+        block.stateBinding.stateName,
+        block.stateBinding.stateBindingName,
+      )})`,
+    );
+  }
+
+  if (block.root.keyCode !== undefined && listReadsNestedItemObject(block.root, block.root.itemName)) {
+    optionEntries.push("nestedObjectFallback: true");
+  }
+
+  return optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
+}
+
+function rewriteStateBindingCode(code: string, stateName: string, stateBindingName: string): string {
+  let output = "";
+  let index = 0;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === "\"" || char === "'") {
+      const quoted = readQuotedJavaScript(code, index, char);
+      output += quoted;
+      index += quoted.length;
+      continue;
+    }
+
+    if (char === "`") {
+      const template = readQuotedJavaScript(code, index, char);
+      output += template;
+      index += template.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "/") {
+      const end = code.indexOf("\n", index + 2);
+      const comment = end === -1 ? code.slice(index) : code.slice(index, end);
+      output += comment;
+      index += comment.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "*") {
+      const end = code.indexOf("*/", index + 2);
+      if (end === -1) {
+        output += code.slice(index);
+        break;
+      }
+      const comment = code.slice(index, end + 2);
+      output += comment;
+      index += comment.length;
+      continue;
+    }
+
+    if (isIdentifierStart(char)) {
+      const start = index;
+      index += 1;
+      while (index < code.length && isIdentifierPart(code[index] ?? "")) {
+        index += 1;
+      }
+
+      const name = code.slice(start, index);
+      if (name !== stateName) {
+        output += name;
+        continue;
+      }
+
+      const previous = previousNonWhitespace(code, start);
+      const next = nextNonWhitespace(code, index);
+      if (previous === "." || ((previous === "{" || previous === ",") && next === ":")) {
+        output += name;
+        continue;
+      }
+
+      output += `${stateBindingName}.get()`;
+      continue;
+    }
+
+    output += char;
+    index += 1;
+  }
+
+  return output;
 }
 
 function emitPropReactiveDomBlockComponent(

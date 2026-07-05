@@ -109,6 +109,7 @@ interface SuspenseFiberState {
 
 const committedPortalContainers = new Set<Element>();
 const pendingHostRefUpdates: { ref: unknown; node: unknown }[] = [];
+const pendingReactiveDomBlockAfterCommits: (() => void)[] = [];
 const emptyInstanceKeys: string[] = [];
 
 interface FiberHydrationOptions extends RenderOptions {
@@ -279,6 +280,7 @@ export function commitHostFiberRoot(
     try {
       committedPortalContainers.clear();
       pendingHostRefUpdates.length = 0;
+      pendingReactiveDomBlockAfterCommits.length = 0;
       const commitPath = getRootCommitPath(options);
       if (!hasChildListMutation(finishedWork)) {
         commitHostDirtyChildrenOf(
@@ -289,6 +291,7 @@ export function commitHostFiberRoot(
           commitPath,
           options,
         );
+        flushPendingReactiveDomBlockAfterCommits();
         committed = true;
         return;
       }
@@ -303,6 +306,7 @@ export function commitHostFiberRoot(
           options,
         )
       ) {
+        flushPendingReactiveDomBlockAfterCommits();
         committed = true;
         return;
       }
@@ -312,12 +316,14 @@ export function commitHostFiberRoot(
         finishedWork.subtreeChildListChanged &&
         commitHostKeyedChildListMutation(finishedWork.child, root.container, root.container, commitPath, options)
       ) {
+        flushPendingReactiveDomBlockAfterCommits();
         committed = true;
         return;
       }
 
       const nodes = commitHostChildren(finishedWork.child, root.container, root.container, commitPath, options);
       syncChildNodes(root.container, nodes);
+      flushPendingReactiveDomBlockAfterCommits();
       committed = true;
     } finally {
       if (committed) {
@@ -341,15 +347,18 @@ export function commitHydratingHostFiberRoot(
     try {
       committedPortalContainers.clear();
       pendingHostRefUpdates.length = 0;
+      pendingReactiveDomBlockAfterCommits.length = 0;
       const eventRoot = root.container;
       const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
       syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+      flushPendingReactiveDomBlockAfterCommits();
       committed = true;
     } finally {
       if (committed) {
         flushPendingHostRefUpdates();
       } else {
         pendingHostRefUpdates.length = 0;
+        pendingReactiveDomBlockAfterCommits.length = 0;
       }
       committedPortalContainers.clear();
     }
@@ -2928,6 +2937,7 @@ function commitHostDirtyFiber(
         !(isDomElement && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
         syncChildNodes(element as ParentNode, childNodes);
+        flushPendingReactiveDomBlockAfterCommits();
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
       commitHostDirtyChildrenOf(fiber, fiber.child, element, eventRoot, `${path}.c`, options);
@@ -3358,6 +3368,7 @@ function commitHostFiber(
 
   if (fiber.tag === "reactive-dom-block") {
     const node = getReactiveDomBlockNode(fiber.stateNode);
+    enqueueReactiveDomBlockAfterCommit(fiber.stateNode);
     fiber.memoizedProps = fiber.pendingProps;
     finishCommittedFiber(fiber);
     return node === undefined ? [] : [node];
@@ -3432,6 +3443,7 @@ function commitHostFiber(
         !(isDomElement && shouldPreserveContentEditableChildren(element, props, childNodes))
       ) {
         syncChildNodes(element as ParentNode, childNodes);
+        flushPendingReactiveDomBlockAfterCommits();
       }
     } else if (fiber.subtreeFlags !== NoFlags) {
       commitHostChildren(fiber.child, element, eventRoot, `${path}.c`, options);
@@ -3586,6 +3598,22 @@ function getReactiveDomBlockNode(state: unknown): ChildNode | undefined {
   }
 
   return undefined;
+}
+
+function enqueueReactiveDomBlockAfterCommit(state: unknown): void {
+  const afterCommit = (state as { afterCommit?: unknown } | undefined)?.afterCommit;
+
+  if (typeof afterCommit === "function") {
+    pendingReactiveDomBlockAfterCommits.push(afterCommit as () => void);
+  }
+}
+
+function flushPendingReactiveDomBlockAfterCommits(): void {
+  const pending = pendingReactiveDomBlockAfterCommits.splice(0);
+
+  for (const afterCommit of pending) {
+    afterCommit();
+  }
 }
 
 function disposeReactiveDomBlockState(

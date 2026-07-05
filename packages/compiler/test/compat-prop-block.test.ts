@@ -1010,4 +1010,118 @@ describe("react-compat prop reactive DOM block lowering", () => {
       (globalThis as unknown as { __calls?: string[] }).__calls = previousCalls;
     }
   });
+
+  test("lowers hook state root keyed lists to a reactive list block", async () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        const initialRows = [
+          { id: 1, label: "one" },
+          { id: 2, label: "two" },
+          { id: 3, label: "three" },
+        ];
+
+        function reduce(state, action) {
+          if (action.type === "select") {
+            return { ...state, selected: action.id };
+          }
+          if (action.type === "swap") {
+            return { ...state, rows: [state.rows[1], state.rows[0], state.rows[2]] };
+          }
+          if (action.type === "remove") {
+            return { ...state, rows: state.rows.filter((row) => row.id !== action.id) };
+          }
+          return state;
+        }
+
+        export function Row(props) {
+          return (
+            <tr className={props.selected ? "danger" : ""}>
+              <td>{props.row.id}</td>
+              <td>{props.row.label}</td>
+            </tr>
+          );
+        }
+
+        const RowMemo = memo(Row, (previous, next) => previous.row === next.row && previous.selected === next.selected);
+
+        export function App() {
+          globalThis.__rootListRenders = (globalThis.__rootListRenders ?? 0) + 1;
+          const [state, dispatch] = useReducer(reduce, { rows: initialRows, selected: null });
+          globalThis.__rootListDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo key={row.id} row={row} selected={state.selected === row.id} />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("bindList");
+    expect(output.code).toContain("REACTIVE_STATE_BINDING_META");
+
+    const previousRenders = (globalThis as unknown as { __rootListRenders?: number })
+      .__rootListRenders;
+    const previousDispatch = (
+      globalThis as unknown as {
+        __rootListDispatch?: (action: { type: string; id?: number }) => void;
+      }
+    ).__rootListDispatch;
+
+    try {
+      delete (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders;
+      delete (
+        globalThis as unknown as {
+          __rootListDispatch?: (action: { type: string; id?: number }) => void;
+        }
+      ).__rootListDispatch;
+
+      const container = await runCompatComponent(output.code, "Shell");
+      const dispatch = (
+        globalThis as unknown as {
+          __rootListDispatch?: (action: { type: string; id?: number }) => void;
+        }
+      ).__rootListDispatch;
+
+      expect(dispatch).toBeTypeOf("function");
+      expect(
+        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
+      ).toEqual(["1one", "2two", "3three"]);
+      expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
+
+      dispatch?.({ type: "select", id: 2 });
+      expect(
+        Array.from(container.querySelectorAll("tr")).map((row) => row.className),
+      ).toEqual(["", "danger", ""]);
+      expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
+
+      dispatch?.({ type: "swap" });
+      expect(
+        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
+      ).toEqual(["2two", "1one", "3three"]);
+      expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
+
+      dispatch?.({ type: "remove", id: 2 });
+      expect(
+        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
+      ).toEqual(["1one", "3three"]);
+      expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
+    } finally {
+      (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders =
+        previousRenders;
+      (
+        globalThis as unknown as {
+          __rootListDispatch?: (action: { type: string; id?: number }) => void;
+        }
+      ).__rootListDispatch = previousDispatch;
+    }
+  });
 });

@@ -370,6 +370,64 @@ export function hasComponentCallReturn(body: unknown): boolean {
   });
 }
 
+export function readOxcListMapComponent(
+  statement: unknown,
+): { name: string; initializer: Record<string, unknown> } | undefined {
+  const object = readObject(statement);
+
+  if (object.type !== "FunctionDeclaration" || !isOxcListMapReturnExpression(readObject(object.body))) {
+    return undefined;
+  }
+
+  const id = readObject(object.id);
+  return typeof id.name === "string" && /^[A-Z]/.test(id.name)
+    ? { name: id.name, initializer: object }
+    : undefined;
+}
+
+function isOxcListMapReturnExpression(expression: Record<string, unknown>): boolean {
+  if (expression.type === "BlockStatement") {
+    return readArray(expression.body).some((statement) => {
+      const object = readObject(statement);
+      return (
+        object.type === "ReturnStatement" &&
+        isOxcListMapReturnExpression(unwrapOxcParentheses(readObject(object.argument)))
+      );
+    });
+  }
+
+  if (expression.type !== "CallExpression") {
+    return false;
+  }
+
+  const callee = readObject(expression.callee);
+
+  if (callee.type !== "MemberExpression" || readObject(callee.property).name !== "map") {
+    return false;
+  }
+
+  const renderer = readObject(readArray(expression.arguments)[0]);
+
+  if (renderer.type !== "ArrowFunctionExpression") {
+    return false;
+  }
+
+  const body = unwrapOxcParentheses(readObject(renderer.body));
+
+  if (isOxcJsxReturnExpression(body)) {
+    return true;
+  }
+
+  if (body.type !== "BlockStatement") {
+    return false;
+  }
+
+  const statements = readArray(body.body);
+  const last = readObject(statements.at(-1));
+
+  return last.type === "ReturnStatement" && isOxcJsxReturnExpression(readObject(last.argument));
+}
+
 export function hasLocalJsxHelperCallReturn(
   body: unknown,
   localJsxReturnFunctionNames: ReadonlySet<string>,

@@ -51,6 +51,7 @@ import {
   isJsxRoot,
   isOxcJsxComponentStatement,
   isOxcUnsupportedExportedFunction,
+  readOxcListMapComponent,
   readOxcPlainComponent,
   readOxcVariableComponentDeclaration,
   unwrapOxcComponentFunctionLikeInitializer,
@@ -1016,6 +1017,7 @@ function analyzeOxcComponent(
   if (object.type !== "ExportNamedDeclaration") {
     const plainComponent =
       readOxcPlainComponent(statement) ??
+      (compatReactNodeReturn ? readOxcListMapComponent(statement) : undefined) ??
       (serverOutput === "stream"
         ? undefined
         : readCompatCreateElementPlainComponent(

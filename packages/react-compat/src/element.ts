@@ -103,6 +103,7 @@ export interface ReactCompatPortal {
 
 export interface ReactiveDomBlockResult {
   node: ChildNode;
+  afterCommit?: (() => void) | undefined;
   dispose?: (() => void) | undefined;
 }
 

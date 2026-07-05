@@ -22,8 +22,10 @@ import {
   renderContextProviderToString,
   renderToString,
   Suspense,
+  memo,
   useEffect,
   useContext,
+  useReducer,
   useState,
 } from "@reckona/mreact-compat";
 import {
@@ -542,6 +544,10 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
     return Suspense;
   }
 
+  if (importedName === "memo") {
+    return memo;
+  }
+
   if (importedName === "useEffect") {
     return useEffect;
   }
@@ -552,6 +558,10 @@ function getReactCompatRuntimeValue(importedName: string): unknown {
 
   if (importedName === "useState") {
     return useState;
+  }
+
+  if (importedName === "useReducer") {
+    return useReducer;
   }
 
   throw new Error(`Unsupported react-compat runtime import: ${importedName}`);
