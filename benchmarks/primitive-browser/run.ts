@@ -86,58 +86,14 @@ try {
 
       try {
         const samples = await page.evaluate(
-          async (options) => {
-            const api = (globalThis as {
-              __mreactPrimitiveBrowserBench?: {
-                run: (
-                  framework: string,
-                  caseName: string,
-                  count: number,
-                ) => Promise<number>;
-              };
-            }).__mreactPrimitiveBrowserBench;
-
-            if (api === undefined) {
-              throw new Error("primitive browser benchmark API is not installed");
-            }
-
-            const settle = async () => {
-              (globalThis as { gc?: () => void }).gc?.();
-              await new Promise<void>((resolve) => {
-                const requestIdle = (globalThis as {
-                  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => void;
-                }).requestIdleCallback;
-
-                if (requestIdle === undefined) {
-                  setTimeout(resolve, 0);
-                  return;
-                }
-
-                requestIdle(resolve, { timeout: 50 });
-              });
-            };
-
-            for (let index = 0; index < options.warmupRuns; index += 1) {
-              await api.run(options.framework, options.caseName, options.count);
-              await settle();
-            }
-
-            const measured: number[] = [];
-            for (let index = 0; index < options.measuredRuns; index += 1) {
-              await settle();
-              measured.push(await api.run(options.framework, options.caseName, options.count));
-              await settle();
-            }
-            return measured;
-          },
-          {
+          primitiveBrowserMeasurementExpression({
             caseName: benchmarkCase.name,
             count: benchmarkCase.count,
             framework,
             measuredRuns: browserMeasuredRuns,
             warmupRuns: browserWarmupRuns,
-          },
-        );
+          }),
+        ) as number[];
         const summary = summarizeSamples(samples);
 
         rows.push({
@@ -262,6 +218,13 @@ async function createBrowserFixture(): Promise<{
           replacement: join(process.cwd(), "packages/reactive-core/dist/index.js"),
         },
         {
+          find: "@reckona/mreact-reactive-dom/compat-normalize",
+          replacement: join(
+            process.cwd(),
+            "packages/reactive-dom/dist/compat-normalize.js",
+          ),
+        },
+        {
           find: "@reckona/mreact-reactive-dom",
           replacement: join(process.cwd(), "packages/reactive-dom/dist/index.js"),
         },
@@ -340,6 +303,54 @@ async function createBrowserFixture(): Promise<{
 
   const bundle = await readFile(join(outDir, "assets", "bench.js"));
   return { gzipBytes: gzipSync(bundle).length, outDir, rootDir };
+}
+
+function primitiveBrowserMeasurementExpression(options: {
+  caseName: string;
+  count: number;
+  framework: string;
+  measuredRuns: number;
+  warmupRuns: number;
+}): string {
+  const serializedOptions = JSON.stringify(options).replaceAll("<", "\\u003c");
+
+  return `(() => {
+    const options = ${serializedOptions};
+    return (async () => {
+      const api = globalThis.__mreactPrimitiveBrowserBench;
+
+      if (api === undefined) {
+        throw new Error("primitive browser benchmark API is not installed");
+      }
+
+      const settle = async () => {
+        globalThis.gc?.();
+        await new Promise((resolve) => {
+          const requestIdle = globalThis.requestIdleCallback;
+
+          if (requestIdle === undefined) {
+            setTimeout(resolve, 0);
+            return;
+          }
+
+          requestIdle(resolve, { timeout: 50 });
+        });
+      };
+
+      for (let index = 0; index < options.warmupRuns; index += 1) {
+        await api.run(options.framework, options.caseName, options.count);
+        await settle();
+      }
+
+      const measured = [];
+      for (let index = 0; index < options.measuredRuns; index += 1) {
+        await settle();
+        measured.push(await api.run(options.framework, options.caseName, options.count));
+        await settle();
+      }
+      return measured;
+    })();
+  })()`;
 }
 
 async function writeSvelteBrowserComponents(sourceDir: string): Promise<void> {

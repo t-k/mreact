@@ -40,4 +40,24 @@ describe("primitive browser benchmark configuration", () => {
     expect(source).toContain("requestIdleCallback");
     expect(source).toContain("await settle();");
   });
+
+  it("resolves mreact reactive-dom subpath entrypoints before the root alias", async () => {
+    const source = await readFile(new URL("./run.ts", import.meta.url), "utf8");
+
+    const compatNormalizeAlias = source.indexOf(
+      'find: "@reckona/mreact-reactive-dom/compat-normalize"',
+    );
+    const rootAlias = source.indexOf('find: "@reckona/mreact-reactive-dom"');
+
+    expect(compatNormalizeAlias).toBeGreaterThanOrEqual(0);
+    expect(rootAlias).toBeGreaterThanOrEqual(0);
+    expect(compatNormalizeAlias).toBeLessThan(rootAlias);
+  });
+
+  it("evaluates primitive browser measurements without serializing transformed node functions", async () => {
+    const source = await readFile(new URL("./run.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("primitiveBrowserMeasurementExpression(");
+    expect(source).not.toContain("const samples = await page.evaluate(\n          async (options)");
+  });
 });
