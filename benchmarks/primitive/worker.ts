@@ -46,6 +46,10 @@ if (runCase === undefined) {
     },
   );
   const summary = summarizeSamples(result.samples);
+  const notes = [
+    ...(result.notes ?? []),
+    ...negativeSampleNotes(benchmarkCase.metric, result.samples),
+  ];
 
   row = {
     suite: "primitive",
@@ -58,7 +62,7 @@ if (runCase === undefined) {
     value: summary.median,
     summary,
     samples: result.samples,
-    notes: result.notes,
+    notes: notes.length > 0 ? notes : undefined,
   };
 }
 
@@ -112,4 +116,17 @@ function parseNonNegativeInteger(value: string, name: string): number {
   }
 
   return parsed;
+}
+
+function negativeSampleNotes(metric: PrimitiveCaseDefinition["metric"], samples: readonly number[]): string[] {
+  if (metric !== "memory") {
+    return [];
+  }
+
+  const negativeCount = samples.filter((sample) => sample < 0).length;
+  if (negativeCount === 0) {
+    return [];
+  }
+
+  return [`${negativeCount}/${samples.length} samples negative`];
 }

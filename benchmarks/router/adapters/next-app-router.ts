@@ -47,7 +47,6 @@ let server: ServerHandle | undefined;
 let currentNodeCount = 0;
 let browserRootDir: string | undefined;
 let browserServer: ServerHandle | undefined;
-let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
 const nextBinPath = requireFromHere.resolve("next/dist/bin/next");
 
@@ -471,7 +470,6 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
       await rm(browserRootDir, { force: true, recursive: true });
       browserRootDir = undefined;
     }
-    concurrentRequestResult = undefined;
   },
   async renderToString(nodeCount: number): Promise<string> {
     const url = await ensureFixture(nodeCount);
@@ -606,8 +604,7 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
 };
 
 function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  concurrentRequestResult ??= measureConcurrentRequestResult();
-  return concurrentRequestResult;
+  return measureConcurrentRequestResult();
 }
 
 async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {

@@ -30,7 +30,7 @@ export async function collectPrimitiveCaseSamples(
     try {
       result = await runCase(createContext());
     } finally {
-      closeBenchmarkDom();
+      await closeBenchmarkDom();
     }
 
     if (index < warmupRuns) {

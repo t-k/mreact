@@ -39,7 +39,6 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
   let rootDir: string | undefined;
   let server: ServerHandle | undefined;
   let currentNodeCount = 0;
-  let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
   async function ensureFixture(nodeCount: number): Promise<string> {
     if (server !== undefined && rootDir !== undefined && currentNodeCount === nodeCount) {
@@ -57,7 +56,6 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
     await mkdir(fixtureParent, { recursive: true });
     rootDir = await mkdtemp(join(fixtureParent, `${options.name}-fixture-`));
     currentNodeCount = nodeCount;
-    concurrentRequestResult = undefined;
 
     await writeFixtureSources(rootDir, options, nodeCount);
     server = await startFixtureServer(options, nodeCount, rootDir);
@@ -84,13 +82,12 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
   }
 
   async function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-    concurrentRequestResult ??= measureConcurrentRequests(await ensureFixture(1000), {
+    return measureConcurrentRequests(await ensureFixture(1000), {
       path: "/",
       validate(html) {
         validateNodeHtml("concurrent response", html, 1000);
       },
     });
-    return concurrentRequestResult;
   }
 
   return {
@@ -109,7 +106,6 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
         rootDir = undefined;
       }
       currentNodeCount = 0;
-      concurrentRequestResult = undefined;
     },
     async renderToString(nodeCount: number): Promise<string> {
       const html = await renderPath("/", nodeCount);

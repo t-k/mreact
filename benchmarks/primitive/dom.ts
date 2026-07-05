@@ -4,7 +4,7 @@ import type { BenchmarkDomContext } from "./types.js";
 type ClosableHappyDomWindow = HappyDomWindow & {
   happyDOM?: {
     abort?: () => void;
-    close?: () => void;
+    close?: () => Promise<void> | void;
   };
 };
 
@@ -39,7 +39,7 @@ export function createBenchmarkDom(): BenchmarkDomContext {
   };
 }
 
-export function closeBenchmarkDom(): void {
+export async function closeBenchmarkDom(): Promise<void> {
   const window = activeWindow;
 
   if (window === undefined) {
@@ -50,7 +50,7 @@ export function closeBenchmarkDom(): void {
   const controller = window.happyDOM;
 
   if (typeof controller?.close === "function") {
-    controller.close();
+    await controller.close();
   } else {
     controller?.abort?.();
   }

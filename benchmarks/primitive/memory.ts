@@ -13,11 +13,9 @@ export async function forceBenchmarkGarbageCollection(): Promise<void> {
   for (let index = 0; index < 3; index += 1) {
     globalThis.gc();
 
-    if (index < 2) {
-      await new Promise<void>((resolve) => {
-        setImmediate(resolve);
-      });
-    }
+    await new Promise<void>((resolve) => {
+      setImmediate(resolve);
+    });
   }
 }
 

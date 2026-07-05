@@ -47,7 +47,6 @@ export function createProductionAppAdapter(
   let rootDir: string | undefined;
   let server: ServerHandle | undefined;
   let currentNodeCount = 0;
-  let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
   async function ensureFixture(nodeCount: number): Promise<string> {
     if (rootDir !== undefined && server !== undefined && currentNodeCount === nodeCount) {
@@ -65,7 +64,6 @@ export function createProductionAppAdapter(
     await mkdir(fixtureParent, { recursive: true });
     rootDir = await mkdtemp(join(fixtureParent, options.fixturePrefix));
     currentNodeCount = nodeCount;
-    concurrentRequestResult = undefined;
 
     await options.writeFixture(rootDir, nodeCount);
     await options.build(rootDir);
@@ -96,13 +94,12 @@ export function createProductionAppAdapter(
   }
 
   async function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-    concurrentRequestResult ??= measureConcurrentRequests(await ensureFixture(1000), {
+    return measureConcurrentRequests(await ensureFixture(1000), {
       path: "/",
       validate(html) {
         validateNodeHtml("concurrent response", html, 1000);
       },
     });
-    return concurrentRequestResult;
   }
 
   async function interactiveRouteUrl(): Promise<string> {
@@ -126,7 +123,6 @@ export function createProductionAppAdapter(
         rootDir = undefined;
       }
       currentNodeCount = 0;
-      concurrentRequestResult = undefined;
     },
     async renderToString(nodeCount: number): Promise<string> {
       const html = await renderPath("/", nodeCount);

@@ -62,7 +62,6 @@ const browserFixtureLifecycle = createVariantFixtureCache<string, { close(): Pro
 let coldStartRootDir: string | undefined;
 let coldStartOutDir: string | undefined;
 let coldStartReactCompat = false;
-const concurrentLoadResults = new Map<string, Promise<ConcurrentLoadResult>>();
 const routeScaleResults = new Map<string, Promise<RouteScaleResult>>();
 
 interface ConcurrentLoadResult {
@@ -395,7 +394,6 @@ function createMreactAppRouterAdapter(options: {
         coldStartOutDir = undefined;
         coldStartReactCompat = false;
       }
-      concurrentLoadResults.clear();
       for (const result of await Promise.allSettled(routeScaleResults.values())) {
         if (result.status === "fulfilled") {
           await rm(result.value.rootDir, { force: true, recursive: true });
@@ -530,13 +528,13 @@ function createMreactAppRouterAdapter(options: {
       return measureSecondInteractionLatency(url);
     },
     async measureConcurrentRequestThroughputOps(): Promise<number> {
-      return (await ensureConcurrentLoadResult(logEnabled, reactCompat)).throughputOps;
+      return (await measureConcurrentLoad(logEnabled, reactCompat)).throughputOps;
     },
     async measureConcurrentRequestP99Ms(): Promise<number> {
-      return (await ensureConcurrentLoadResult(logEnabled, reactCompat)).p99Ms;
+      return (await measureConcurrentLoad(logEnabled, reactCompat)).p99Ms;
     },
     async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-      return (await ensureConcurrentLoadResult(logEnabled, reactCompat)).rssDeltaBytes;
+      return (await measureConcurrentLoad(logEnabled, reactCompat)).rssDeltaBytes;
     },
     async measureHydration100IslandsMs(): Promise<number> {
       const url = await createHydrationFixture(logEnabled, reactCompat, 100);
@@ -597,21 +595,6 @@ function createMreactAppRouterAdapter(options: {
       return measureBuildOutputGzipBytes([join(rootDir, ".mreact")]);
     },
   };
-}
-
-async function ensureConcurrentLoadResult(
-  logEnabled: boolean,
-  reactCompat: boolean,
-): Promise<ConcurrentLoadResult> {
-  const key = browserFixtureKey(logEnabled, reactCompat);
-  const cached = concurrentLoadResults.get(key);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  const created = measureConcurrentLoad(logEnabled, reactCompat);
-  concurrentLoadResults.set(key, created);
-  return created;
 }
 
 async function measureConcurrentLoad(
@@ -809,9 +792,9 @@ export default function Page() {
 
 async function ensureRouteScaleResult(
   logEnabled: boolean,
-  _reactCompat: boolean,
+  reactCompat: boolean,
 ): Promise<RouteScaleResult> {
-  const key = `${logEnabled ? "log" : "nolog"}\0server`;
+  const key = `${logEnabled ? "log" : "nolog"}\0${reactCompat ? "compat" : "native"}\0server`;
   const cached = routeScaleResults.get(key);
   if (cached !== undefined) {
     return cached;

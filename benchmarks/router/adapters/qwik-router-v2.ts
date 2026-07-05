@@ -40,7 +40,6 @@ let serverProcess: { close(): Promise<void>; url: string } | undefined;
 let currentNodeCount = 0;
 let browserRootDir: string | undefined;
 let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
-let concurrentRequestResult: Promise<ConcurrentRequestProbeResult> | undefined;
 
 async function spawnAndWait(
   command: string,
@@ -578,7 +577,6 @@ export const qwikRouterV2Adapter: AppFrameworkAdapter = {
       await rm(browserRootDir, { force: true, recursive: true });
       browserRootDir = undefined;
     }
-    concurrentRequestResult = undefined;
   },
   async renderToString(nodeCount: number): Promise<string> {
     const url = await ensureFixture(nodeCount);
@@ -685,8 +683,7 @@ export const qwikRouterV2Adapter: AppFrameworkAdapter = {
 };
 
 function ensureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {
-  concurrentRequestResult ??= measureConcurrentRequestResult();
-  return concurrentRequestResult;
+  return measureConcurrentRequestResult();
 }
 
 async function measureConcurrentRequestResult(): Promise<ConcurrentRequestProbeResult> {

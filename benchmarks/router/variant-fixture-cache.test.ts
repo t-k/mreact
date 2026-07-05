@@ -33,4 +33,33 @@ describe("variant fixture cache", () => {
 
     expect(events).toEqual(["close:native-1", "close:compat-1"]);
   });
+
+  test("coalesces concurrent first getOrCreate calls per key", async () => {
+    const cache = createVariantFixtureCache<string, { id: string; close(): Promise<void> }>();
+    let createCalls = 0;
+    let releaseCreate: (() => void) | undefined;
+    const release = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    const create = async () => {
+      createCalls += 1;
+      await release;
+      return {
+        id: "native-1",
+        close: async () => {},
+      };
+    };
+
+    const first = cache.getOrCreate("native", create);
+    const second = cache.getOrCreate("native", create);
+
+    await Promise.resolve();
+    expect(createCalls).toBe(1);
+    releaseCreate?.();
+
+    const [firstFixture, secondFixture] = await Promise.all([first, second]);
+
+    expect(firstFixture).toBe(secondFixture);
+    expect(createCalls).toBe(1);
+  });
 });

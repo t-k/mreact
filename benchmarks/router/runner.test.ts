@@ -570,6 +570,34 @@ describe("router benchmark configuration", () => {
       samplesMs: [5, 1, 9, 3, 7],
     });
   });
+
+  it("reports route-scale value probes as honest single-sample rows", async () => {
+    const values = [999, 5];
+    const rows = await runRouterBenchmarks(
+      [
+        {
+          name: "mreact-app-router",
+          version: "test",
+          async renderToString(nodeCount: number) {
+            return `<span>${nodeCount - 1}</span>`;
+          },
+          async measureRouteScale1000BuildTimeMs() {
+            return values.shift() ?? 0;
+          },
+        },
+      ],
+      { benchTimeMs: 1, warmupTimeMs: 1 },
+    );
+
+    expect(
+      rows.find((row) => row.caseName === "app 1000 route build time"),
+    ).toMatchObject({
+      status: "completed",
+      value: 5,
+      meanMs: 5,
+      samplesMs: [5],
+    });
+  });
 });
 
 function completedRow(

@@ -5,7 +5,7 @@ import { mreactAdapter } from "./adapters/mreact.js";
 import { reactAdapter } from "./adapters/react.js";
 import { solidAdapter, solidAdapterDebugHooks } from "./adapters/solid.js";
 import { primitiveCases } from "./cases.js";
-import { createBenchmarkDom } from "./dom.js";
+import { closeBenchmarkDom, createBenchmarkDom } from "./dom.js";
 import { filterPrimitiveAdapters, filterPrimitiveCases } from "./filter.js";
 import {
   calculateHeapDelta,
@@ -148,10 +148,10 @@ describe("primitive fixtures", () => {
     expect(() => validateTextNodes(nodes, "7")).toThrow("text node 1 expected 7, received 8");
   });
 
-  it("closes the previous happy-dom window before installing a new benchmark DOM", () => {
+  it("closes the previous happy-dom window before installing a new benchmark DOM", async () => {
     createBenchmarkDom();
     const previousWindow = globalThis.window as Window & {
-      happyDOM?: { close: () => void };
+      happyDOM?: { close: () => Promise<void> };
     };
     let closeCalls = 0;
 
@@ -159,13 +159,34 @@ describe("primitive fixtures", () => {
       expect.fail("happy-dom window API missing");
     }
 
-    previousWindow.happyDOM.close = () => {
+    previousWindow.happyDOM.close = async () => {
       closeCalls += 1;
     };
 
-    createBenchmarkDom();
+    await createBenchmarkDom();
 
     expect(closeCalls).toBe(1);
+  });
+
+  it("waits for happy-dom async close before resolving benchmark DOM teardown", async () => {
+    createBenchmarkDom();
+    const previousWindow = globalThis.window as Window & {
+      happyDOM?: { close: () => Promise<void> };
+    };
+    let closeResolved = false;
+
+    if (previousWindow.happyDOM === undefined) {
+      expect.fail("happy-dom window API missing");
+    }
+
+    previousWindow.happyDOM.close = async () => {
+      await Promise.resolve();
+      closeResolved = true;
+    };
+
+    await closeBenchmarkDom();
+
+    expect(closeResolved).toBe(true);
   });
 });
 

@@ -33,6 +33,7 @@ interface SizeRouterBenchmarkCase extends RouterBenchmarkCase {
 
 interface ValueRouterBenchmarkCase extends RouterBenchmarkCase {
   metric: "duration" | "memory" | "throughput";
+  measuredSamples?: number;
   unit: "bytes" | "ms" | "ops/sec";
   invoke(adapter: RouterBenchmarkAdapter): Promise<number> | undefined;
 }
@@ -159,6 +160,7 @@ const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
     description:
       "Builds a 1,000-route app and reports request latency for a route near the end of the route table.",
     metric: "duration",
+    measuredSamples: 1,
     unit: "ms",
     invoke: (adapter) => adapter.measureRouteScale1000MatchLatencyMs?.(),
   },
@@ -167,6 +169,7 @@ const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
     description:
       "Builds a 1,000-route app and reports production server cold-start latency for that route scale.",
     metric: "duration",
+    measuredSamples: 1,
     unit: "ms",
     invoke: (adapter) => adapter.measureRouteScale1000ColdStartMs?.(),
   },
@@ -175,6 +178,7 @@ const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
     description:
       "Reports production build time for a 1,000-route app to catch route-count scaling regressions.",
     metric: "duration",
+    measuredSamples: 1,
     unit: "ms",
     invoke: (adapter) => adapter.measureRouteScale1000BuildTimeMs?.(),
   },
@@ -183,6 +187,7 @@ const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
     description:
       "Reports process RSS growth while building and serving a 1,000-route app.",
     metric: "memory",
+    measuredSamples: 1,
     unit: "bytes",
     invoke: (adapter) => adapter.measureRouteScale1000RssDeltaBytes?.(),
   },
@@ -540,7 +545,9 @@ async function collectValueRowsRoundRobin(
     }
   }
 
-  for (let sampleIndex = 0; sampleIndex < valueBenchmarkSampleCount; sampleIndex += 1) {
+  const measuredSamples = benchmarkCase.measuredSamples ?? valueBenchmarkSampleCount;
+
+  for (let sampleIndex = 0; sampleIndex < measuredSamples; sampleIndex += 1) {
     const offset = states.length === 0 ? 0 : sampleIndex % states.length;
 
     for (let stateIndex = 0; stateIndex < states.length; stateIndex += 1) {
