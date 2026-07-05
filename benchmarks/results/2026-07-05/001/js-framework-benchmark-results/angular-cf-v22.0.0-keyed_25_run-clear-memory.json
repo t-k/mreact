@@ -1,0 +1,1 @@
+{"framework":"angular-cf-v22.0.0-keyed","keyed":true,"benchmark":"25_run-clear-memory","type":"memory","values":{"DEFAULT":{"min":2.56640625,"max":2.56640625,"median":2.56640625,"mean":2.56640625,"stddev":null,"values":[2.56640625]}}}
