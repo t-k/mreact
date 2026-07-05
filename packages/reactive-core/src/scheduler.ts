@@ -1,4 +1,5 @@
 import { invalidateDevtoolsWriteCache } from "./cell.js";
+import { invalidateReactiveDevtoolsCache } from "./devtools.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 
 /** Scheduler used to enqueue pending reactive computations. */
@@ -92,6 +93,7 @@ export function flushQueuedComputations(): void {
   }
 
   invalidateDevtoolsWriteCache();
+  invalidateReactiveDevtoolsCache();
   scheduled = false;
   flushing = true;
   let firstError: unknown;

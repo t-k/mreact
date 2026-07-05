@@ -9,11 +9,15 @@ export function trackSource(source: Source): void {
     return;
   }
 
-  if (tracker.trackSource !== undefined) {
-    tracker.trackSource(source);
+  if (tracker.trackingVersion !== undefined) {
+    trackIncrementalSource(source, tracker);
     return;
   }
 
+  trackSourceDirect(source, tracker);
+}
+
+function trackSourceDirect(source: Source, tracker: ReactiveComputation): void {
   addSourceSubscriber(source, tracker);
   tracker.deps.add(source);
 }
@@ -101,11 +105,7 @@ export function trackIncrementalSource(
   const trackingVersion = computation.trackingVersion;
 
   if (trackingVersion === undefined) {
-    trackSource(source);
-    return;
-  }
-
-  if (source.trackedBy === computation && source.trackedVersion === trackingVersion) {
+    trackSourceDirect(source, computation);
     return;
   }
 
@@ -119,7 +119,7 @@ export function trackIncrementalSource(
   ) {
     if (orderedDeps[orderedIndex] === source) {
       computation.trackingOrderedIndex = orderedIndex + 1;
-      computation.trackingCount = (computation.trackingCount ?? 0) + 1;
+      computation.trackingCount = computation.trackingCount! + 1;
       return;
     }
 
@@ -130,11 +130,15 @@ export function trackIncrementalSource(
     }
   }
 
+  if (source.trackedBy === computation && source.trackedVersion === trackingVersion) {
+    return;
+  }
+
   const alreadyTrackedByComputation = source.trackedBy === computation;
 
   source.trackedBy = computation;
   source.trackedVersion = trackingVersion;
-  computation.trackingCount = (computation.trackingCount ?? 0) + 1;
+  computation.trackingCount = computation.trackingCount! + 1;
   computation.trackingTouchedDeps?.push(source);
 
   if (

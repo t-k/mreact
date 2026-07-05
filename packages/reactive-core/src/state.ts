@@ -31,7 +31,6 @@ export interface ReactiveComputation {
   markDirty(): void;
   run(): void;
   dispose(): void;
-  trackSource?(source: Source): void;
 }
 
 export type Tracker = ReactiveComputation | null;

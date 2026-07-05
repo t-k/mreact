@@ -1,12 +1,14 @@
 import { queueComputation } from "./scheduler.js";
-import { currentReactiveDevtools } from "./devtools.js";
+import {
+  emitReactiveEffectRunDevtoolsEvent,
+  prepareReactiveEffectRunDevtoolsEvent,
+} from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
 import {
   cleanupDeps,
   cleanupUntrackedDeps,
   nextTrackingVersionFor,
-  trackIncrementalSource,
 } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
@@ -60,9 +62,7 @@ export function effect(fn: () => void | (() => void)): () => void {
         return;
       }
 
-      const devtools = currentReactiveDevtools();
-      const emit = devtools?.emit;
-      const startedAt = emit === undefined ? 0 : performanceNow();
+      const devtoolsEvent = prepareReactiveEffectRunDevtoolsEvent();
 
       try {
         const result = fn();
@@ -70,19 +70,10 @@ export function effect(fn: () => void | (() => void)): () => void {
       } finally {
         finishIncrementalTracking(computation, previousDepsSize, nextTrackingVersion);
         runtimeState.activeTracker = previousTracker;
-        if (typeof emit === "function") {
-          emit.call(devtools, {
-            durationMs: performanceNow() - startedAt,
-            id: computation.id,
-            package: "@reckona/mreact-reactive-core",
-            timestamp: Date.now(),
-            type: "reactive:effect:run",
-          });
+        if (devtoolsEvent !== undefined) {
+          emitReactiveEffectRunDevtoolsEvent(devtoolsEvent, computation.id);
         }
       }
-    },
-    trackSource(source) {
-      trackIncrementalSource(source, computation);
     },
     dispose() {
       if (computation.disposed) {
@@ -143,8 +134,4 @@ function finishIncrementalTracking(
   computation.trackingAddedDeps = undefined;
   computation.trackingCount = undefined;
   computation.trackingTouchedDeps = undefined;
-}
-
-function performanceNow(): number {
-  return typeof performance === "undefined" ? Date.now() : performance.now();
 }

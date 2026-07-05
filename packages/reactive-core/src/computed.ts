@@ -8,7 +8,6 @@ import {
   nextTrackingVersionFor,
   notifySubscribers,
   preserveIncrementalTracking,
-  trackIncrementalSource,
   trackSource,
 } from "./tracking.js";
 import type { ReadonlyCell } from "./types.js";
@@ -61,9 +60,6 @@ export function computed<T>(
     },
     run() {
       publishIfChanged();
-    },
-    trackSource(source) {
-      trackIncrementalSource(source, computation);
     },
     dispose() {
       if (computation.disposed) {
