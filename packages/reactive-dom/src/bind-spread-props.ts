@@ -1,4 +1,5 @@
 import { effect } from "@reckona/mreact-reactive-core";
+import { isEventLikePropName } from "@reckona/mreact-shared";
 import { bindEvent } from "./bind-event.js";
 import {
   applyDomProp,
@@ -60,7 +61,7 @@ function applySpreadProps(
         continue;
       }
 
-      if (isEventLikeSpreadProp(name) && typeof value === "function") {
+      if (isEventLikePropName(name) && typeof value === "function") {
         const eventName = name.slice(2).toLowerCase();
         if (previousProps.has(name)) {
           eventDisposers.get(name)?.();
@@ -126,10 +127,6 @@ function shouldSkipSpreadProp(name: string, value: unknown): boolean {
     name === "ref" ||
     name === "suppressHydrationWarning" ||
     name === "value" ||
-    (isEventLikeSpreadProp(name) && typeof value !== "function")
+    (isEventLikePropName(name) && typeof value !== "function")
   );
-}
-
-function isEventLikeSpreadProp(name: string): boolean {
-  return name.length > 2 && name[0]?.toLowerCase() === "o" && name[1]?.toLowerCase() === "n";
 }

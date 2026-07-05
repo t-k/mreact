@@ -10,6 +10,7 @@ import type {
   StaticImportSpecifierReference,
   TopLevelExportRenderInfo,
 } from "./internal.js";
+import { escapeRegExp } from "./string-utils.js";
 import type { Diagnostic } from "./types.js";
 
 /** Classifies the route role of a module used as a boundary graph entry. */
@@ -593,10 +594,6 @@ function objectLiteralPropertyExpression(
   const shorthand = new RegExp(String.raw`(?:^|,)\s*(?<name>${property})\s*(?:,|$)`).exec(body);
 
   return shorthand?.groups?.name;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function importedActionExportName(specifier: StaticImportSpecifierReference): string {

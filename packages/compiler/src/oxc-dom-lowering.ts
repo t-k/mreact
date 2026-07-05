@@ -1,6 +1,7 @@
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
+import { isEventLikePropName } from "@reckona/mreact-shared";
 
 export function lowerOxcDomNodeExpression(
   code: string,
@@ -82,7 +83,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
       return [];
     }
 
-    if (/^on[A-Za-z]/.test(name)) {
+    if (isEventLikePropName(name)) {
       if (value.type !== "JSXExpressionContainer") {
         return [];
       }

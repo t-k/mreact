@@ -233,9 +233,22 @@ export function App() {
     expect(runServerComponent(output.code)).toBe("<ul><li>one</li></ul>");
   });
 
-  test("bails out whole trees containing component references", () => {
-    // Named capital exports with non-lowerable returns keep today's
-    // diagnostics; default exports and local helpers stay verbatim.
+  test("bails out local component createElement calls in exported string output", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+function Row() {
+  return createElement("li", { "data-label": "x" }, "x");
+}
+export default function Page() {
+  return createElement("ul", null, createElement(Row, null));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement(Row");
+    expect(output.code).toContain('createElement("ul"');
+  });
+
+  test("bails out component references with props parameters", () => {
     const source = `import { createElement } from "@reckona/mreact-compat";
 function Row(props) {
   return createElement("li", null, props.label);
@@ -248,6 +261,82 @@ export default function Page() {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("createElement(Row");
     expect(output.code).toContain('createElement("ul"');
+  });
+
+  test("does not inline local components with missing prop reads into caller props", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+function Frame(props) {
+  return createElement("iframe", { srcDoc: props.html });
+}
+export default function Page(props) {
+  return createElement("main", null, createElement(Frame, {}));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement(Frame");
+    expect(output.code).toContain('createElement("main"');
+  });
+
+  test("does not inline local components with unresolved bracket prop reads", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+function Frame(props) {
+  return createElement("iframe", { srcDoc: props["html"] });
+}
+export default function Page(props) {
+  return createElement("main", null, createElement(Frame, {}));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement(Frame");
+    expect(output.code).toContain('createElement("main"');
+  });
+
+  test("does not inline local components with optional prop reads", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+function Frame(props) {
+  return createElement("iframe", { srcDoc: props?.html });
+}
+export default function Page(props) {
+  return createElement("main", null, createElement(Frame, {}));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement(Frame");
+    expect(output.code).toContain('createElement("main"');
+  });
+
+  test("does not inline local components with bare props reads", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+function Frame(props) {
+  return createElement("iframe", { srcDoc: props ? props.html : "" });
+}
+export default function Page(props) {
+  return createElement("main", null, createElement(Frame, { html: "<p>safe</p>" }));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement(Frame");
+    expect(output.code).toContain('createElement("main"');
+  });
+
+  test("does not inline local components with body-local computations", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+function Card(props) {
+  const safeLabel = String(props.label).trim();
+  return createElement("span", { title: safeLabel }, safeLabel);
+}
+export default function Page() {
+  return createElement("main", null, createElement(Card, { label: " Ada " }));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement(Card");
+    expect(output.code).toContain("safeLabel");
   });
 
   test("bails out on spread props and non-literal tags", () => {
@@ -450,13 +539,13 @@ export default function Page() {
     await expect(runServerStreamComponent(streamOutput.code, "default")).resolves.toBe(interpreted);
   });
 
-  test("lowers renderToString wrappers with same-module host-only component calls", async () => {
+  test("keeps renderToString wrappers with same-module local component calls on the interpreter path", async () => {
     const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
-function Row(props) {
-  return createElement("span", null, props.label);
+function Row() {
+  return createElement("span", null, "x");
 }
 function View() {
-  return createElement("main", null, createElement(Row, { label: "x" }));
+  return createElement("main", null, createElement(Row, null));
 }
 export default function Page() {
   return renderToString(View);
@@ -464,98 +553,11 @@ export default function Page() {
     const output = compile(source, "stream");
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).not.toContain("renderToString(View)");
-    expect(output.code).not.toContain("_renderCompatChild(createElement(Row");
-    expect(output.code).toContain('$sink.append("<main><span>");');
+    expect(output.code).toContain("renderToString(View)");
+    expect(output.code).toContain("createElement(Row");
     await expect(runServerStreamComponent(output.code, "default")).resolves.toBe(
       "<main><span>x</span></main>",
     );
   });
 
-  test("does not recursively rewrite inserted inline component prop values", () => {
-    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
-const props = { b: "y" };
-function View(props) {
-  const propsAlias = { b: "local" };
-  return createElement("main", null, createElement("span", null, props.a), createElement("em", null, "props.a"));
-}
-function PageView() {
-  return createElement(View, { a: props.b, b: "x" });
-}
-export default function Page() {
-  return renderToString(PageView);
-}`;
-    const output = compile(source);
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).not.toContain("renderToString(PageView)");
-
-    const interpreted = renderToString(function PageView() {
-      const props = { b: "y" };
-      return createElement(
-        function View(props: { a: string; b: string }) {
-          const _propsAlias = { b: "local" };
-          return createElement("main", null, createElement("span", null, props.a), createElement("em", null, "props.a"));
-        },
-        { a: props.b, b: "x" },
-      );
-    });
-    expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
-  });
-
-  test("does not rewrite inline component prop names used as nested object properties", () => {
-    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
-const other = { props: { a: "other" } };
-function View(props) {
-  return createElement("main", null, createElement("span", null, other.props.a), createElement("em", null, props.a));
-}
-function PageView() {
-  return createElement(View, { a: "passed" });
-}
-export default function Page() {
-  return renderToString(PageView);
-}`;
-    const output = compile(source);
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).not.toContain("other.(\"passed\")");
-
-    const interpreted = renderToString(function PageView() {
-      const other = { props: { a: "other" } };
-      return createElement(
-        function View(props: { a: string }) {
-          return createElement("main", null, createElement("span", null, other.props.a), createElement("em", null, props.a));
-        },
-        { a: "passed" },
-      );
-    });
-    expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
-  });
-
-  test("rewrites inline component prop reads inside template literal expressions", () => {
-    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
-function View(props) {
-  return createElement("main", null, createElement("span", null, \`value:\${props.a}\`));
-}
-function PageView() {
-  return createElement(View, { a: "passed" });
-}
-export default function Page() {
-  return renderToString(PageView);
-}`;
-    const output = compile(source);
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain('`value:${("passed")}`');
-
-    const interpreted = renderToString(function PageView() {
-      return createElement(
-        function View(props: { a: string }) {
-          return createElement("main", null, createElement("span", null, `value:${props.a}`));
-        },
-        { a: "passed" },
-      );
-    });
-    expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
-  });
 });

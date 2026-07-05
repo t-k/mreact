@@ -9,6 +9,8 @@ import type {
   PropAliasIr,
 } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
+import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
+import { escapeRegExp } from "./string-utils.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitCompatResult {
@@ -34,6 +36,11 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
 
   const dev = options.dev === true;
   const staticPropBlockComponentNames = collectStaticPropBlockComponentNames(ir, dev);
+  const componentAnalyses = collectCompatComponentAnalyses(
+    ir,
+    dev,
+    staticPropBlockComponentNames,
+  );
   const normalizedModuleStatements = normalizeCompatModuleStatements(
     ir.moduleStatements,
     staticPropBlockComponentNames,
@@ -42,12 +49,12 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
   const componentSpecifiers = collectComponentImportSpecifiers(
     ir,
     dev,
-    staticPropBlockComponentNames,
+    componentAnalyses,
   );
   const reactiveDomSpecifiers = collectReactiveDomImportSpecifiers(
     ir,
     dev,
-    staticPropBlockComponentNames,
+    componentAnalyses,
   );
   const helperNames = allocateHelperNames(ir, componentSpecifiers, reactiveDomSpecifiers);
   const importGroups = createImportGroups(
@@ -62,7 +69,15 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(normalizedModuleStatements.statements);
   const components = ir.components
-    .map((component) => emitComponent(component, helperNames, dev, staticPropBlockComponentNames))
+    .map((component) =>
+      emitComponent(
+        component,
+        helperNames,
+        dev,
+        staticPropBlockComponentNames,
+        componentAnalyses.get(component),
+      ),
+    )
     .join("\n\n");
 
   return {
@@ -79,18 +94,55 @@ function emitModuleStatements(statements: readonly string[]): string {
   return statements.join("\n");
 }
 
-function collectComponentImportSpecifiers(
+interface CompatComponentAnalysis {
+  directTextBindings: DirectTextBinding[];
+  propBlockFacts?: PropBlockFacts;
+  propReactiveDomBlock?: PropReactiveDomBlock;
+  reactiveDomBlock?: ReactiveDomBlock;
+}
+
+function collectCompatComponentAnalyses(
   ir: ModuleIr,
   dev: boolean,
   staticPropBlockComponentNames: ReadonlySet<string>,
-): string[] {
-  const specifiers = new Set<string>();
+): ReadonlyMap<ComponentIr, CompatComponentAnalysis> {
+  const analyses = new Map<ComponentIr, CompatComponentAnalysis>();
 
   for (const component of ir.components) {
     const directTextBindings = collectDirectTextBindings(component);
     const reactiveDomBlock = dev
       ? undefined
       : getReactiveDomBlock(component.root, directTextBindings);
+    const propReactiveDomBlock =
+      !dev && reactiveDomBlock === undefined
+        ? getPropReactiveDomBlock(component, staticPropBlockComponentNames)
+        : undefined;
+    analyses.set(component, {
+      directTextBindings,
+      ...(reactiveDomBlock === undefined ? {} : { reactiveDomBlock }),
+      ...(propReactiveDomBlock === undefined
+        ? {}
+        : {
+            propReactiveDomBlock,
+            propBlockFacts: collectPropBlockFacts(component.root),
+          }),
+    });
+  }
+
+  return analyses;
+}
+
+function collectComponentImportSpecifiers(
+  ir: ModuleIr,
+  dev: boolean,
+  componentAnalyses: ReadonlyMap<ComponentIr, CompatComponentAnalysis>,
+): string[] {
+  const specifiers = new Set<string>();
+
+  for (const component of ir.components) {
+    const analysis = componentAnalyses.get(component);
+    const directTextBindings = analysis?.directTextBindings ?? collectDirectTextBindings(component);
+    const reactiveDomBlock = analysis?.reactiveDomBlock;
 
     if (reactiveDomBlock !== undefined) {
       specifiers.add("REACTIVE_STATE_BINDING_META");
@@ -98,7 +150,7 @@ function collectComponentImportSpecifiers(
       continue;
     }
 
-    if (!dev && getPropReactiveDomBlock(component, staticPropBlockComponentNames) !== undefined) {
+    if (!dev && analysis?.propReactiveDomBlock !== undefined) {
       specifiers.add("createReactiveDomBlock");
       continue;
     }
@@ -128,7 +180,7 @@ function collectComponentImportSpecifiers(
 function collectReactiveDomImportSpecifiers(
   ir: ModuleIr,
   dev: boolean,
-  staticPropBlockComponentNames: ReadonlySet<string>,
+  componentAnalyses: ReadonlyMap<ComponentIr, CompatComponentAnalysis>,
 ): string[] {
   const specifiers = new Set<string>();
 
@@ -137,10 +189,8 @@ function collectReactiveDomImportSpecifiers(
   }
 
   for (const component of ir.components) {
-    const reactiveDomBlock = getReactiveDomBlock(
-      component.root,
-      collectDirectTextBindings(component),
-    );
+    const analysis = componentAnalyses.get(component);
+    const reactiveDomBlock = analysis?.reactiveDomBlock;
 
     if (reactiveDomBlock !== undefined) {
       specifiers.add("bindText");
@@ -148,26 +198,27 @@ function collectReactiveDomImportSpecifiers(
       continue;
     }
 
-    if (getPropReactiveDomBlock(component, staticPropBlockComponentNames) !== undefined) {
-      if (propBlockHasEvent(component.root)) {
+    if (analysis?.propReactiveDomBlock !== undefined) {
+      const facts = analysis.propBlockFacts ?? collectPropBlockFacts(component.root);
+      if (facts.hasEvent) {
         specifiers.add("bindEvent");
       }
-      if (propBlockHasBindPropBinding(component.root)) {
+      if (facts.hasBindPropBinding) {
         specifiers.add("bindProp");
       }
-      if (propBlockHasSpreadBinding(component.root)) {
+      if (facts.hasSpreadBinding) {
         specifiers.add("bindSpreadProps");
       }
-      if (propBlockHasDynamicInsertion(component.root)) {
+      if (facts.hasDynamicInsertion) {
         specifiers.add("insertDynamic");
       }
-      if (propBlockHasListBinding(component.root)) {
+      if (facts.hasListBinding) {
         specifiers.add("bindList");
       }
-      if (propBlockHasNestedListRenderValue(component.root)) {
+      if (facts.hasNestedListRenderValue) {
         specifiers.add("createList");
       }
-      if (propBlockHasEffectBinding(component.root)) {
+      if (facts.hasEffectBinding) {
         specifiers.add("effect");
       }
     }
@@ -348,19 +399,118 @@ function collectStaticPropBlockComponentNames(ir: ModuleIr, dev: boolean): Reado
     return names;
   }
 
+  const candidates = ir.components
+    .map(readStaticPropBlockComponentCandidate)
+    .filter((candidate): candidate is StaticPropBlockComponentCandidate => candidate !== undefined);
+
   let changed = true;
   while (changed) {
     changed = false;
 
-    for (const component of ir.components) {
-      if (!names.has(component.name) && getPropReactiveDomBlock(component, names) !== undefined) {
-        names.add(component.name);
+    for (const candidate of candidates) {
+      if (
+        !names.has(candidate.name) &&
+        [...candidate.dependencies].every((dependency) => names.has(dependency))
+      ) {
+        names.add(candidate.name);
         changed = true;
       }
     }
   }
 
   return names;
+}
+
+interface StaticPropBlockComponentCandidate {
+  name: string;
+  dependencies: ReadonlySet<string>;
+}
+
+function readStaticPropBlockComponentCandidate(
+  component: ComponentIr,
+): StaticPropBlockComponentCandidate | undefined {
+  if (component.parameters.length !== 1) {
+    return undefined;
+  }
+
+  const propsParam = component.parameters[0];
+  const propAliases = component.parameterPropAliases;
+
+  if (
+    propsParam === undefined ||
+    (!PROP_BLOCK_IDENTIFIER.test(propsParam) && propAliases === undefined) ||
+    component.bodyStatements.length > 0 ||
+    component.root.kind !== "element" ||
+    component.root.keyCode !== undefined ||
+    !collectPropBlockFacts(component.root).hasDynamicPart ||
+    (propAliases !== undefined && !canRewritePropBlockAliasNode(component.root, "props", propAliases))
+  ) {
+    return undefined;
+  }
+
+  const hostOnly = analyzeStaticPropBlockHostOnlyNode(component.root);
+  return hostOnly.supported ? { name: component.name, dependencies: hostOnly.dependencies } : undefined;
+}
+
+interface StaticPropBlockHostOnlyAnalysis {
+  supported: boolean;
+  dependencies: Set<string>;
+}
+
+function analyzeStaticPropBlockHostOnlyNode(node: JsxNodeIr): StaticPropBlockHostOnlyAnalysis {
+  const combine = (children: readonly JsxNodeIr[]): StaticPropBlockHostOnlyAnalysis => {
+    const dependencies = new Set<string>();
+    for (const child of children) {
+      const analysis = analyzeStaticPropBlockHostOnlyNode(child);
+      if (!analysis.supported) {
+        return { supported: false, dependencies };
+      }
+      for (const dependency of analysis.dependencies) {
+        dependencies.add(dependency);
+      }
+    }
+    return { supported: true, dependencies };
+  };
+
+  if (node.kind === "text" || node.kind === "expr") {
+    return { supported: true, dependencies: new Set() };
+  }
+
+  if (node.kind === "conditional") {
+    return combine([...node.whenTrue, ...node.whenFalse]);
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return combine(node.children);
+  }
+
+  if (node.kind === "component") {
+    if (node.props.some((prop) => prop.kind === "render-prop")) {
+      return { supported: false, dependencies: new Set() };
+    }
+    const analysis = combine(node.children);
+    analysis.dependencies.add(node.name);
+    return analysis;
+  }
+
+  if (node.kind !== "element") {
+    return { supported: false, dependencies: new Set() };
+  }
+
+  for (const attr of node.attributes) {
+    if (attr.kind === "spread-attr") {
+      continue;
+    }
+
+    if (
+      attr.kind === "dynamic-attr" &&
+      isUnsupportedPropBlockDynamicAttr(node.tagName, attr.name)
+    ) {
+      return { supported: false, dependencies: new Set() };
+    }
+  }
+
+  return combine(node.children);
 }
 
 function annotateCompatMemoCompareProps(
@@ -435,9 +585,7 @@ function stripOuterParens(value: string): string {
   return current;
 }
 
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
+const escapeRegex = escapeRegExp;
 
 function stripCompatRuntimeImports(
   statement: string,
@@ -614,6 +762,7 @@ function emitComponent(
   helperNames: CompatHelperNames,
   dev: boolean,
   staticPropBlockComponentNames: ReadonlySet<string>,
+  analysis: CompatComponentAnalysis | undefined,
 ): string {
   const directTextBindings = collectDirectTextBindings(component, helperNames);
   const reactiveDomBlock = dev
@@ -621,7 +770,8 @@ function emitComponent(
     : getReactiveDomBlock(component.root, directTextBindings);
   const propReactiveDomBlock =
     !dev && reactiveDomBlock === undefined
-      ? getPropReactiveDomBlock(component, staticPropBlockComponentNames)
+      ? (analysis?.propReactiveDomBlock ??
+        getPropReactiveDomBlock(component, staticPropBlockComponentNames))
       : undefined;
   const body = component.bodyStatements.map(
     (statement) =>
@@ -1199,7 +1349,7 @@ function getPropReactiveDomBlock(
 
   if (
     !isHostOnlyPropBlockNode(root, staticPropBlockComponentNames) ||
-    !propBlockHasDynamicPart(root)
+    !collectPropBlockFacts(root).hasDynamicPart
   ) {
     return undefined;
   }
@@ -1300,231 +1450,115 @@ function isUnsupportedPropBlockDynamicAttr(tagName: string, attrName: string): b
   return PROP_BLOCK_FORM_VALUE_TAGS.has(tagName) && PROP_BLOCK_FORM_VALUE_ATTRS.has(attrName);
 }
 
-function propBlockHasDynamicPart(node: JsxNodeIr): boolean {
-  if (node.kind === "expr") {
-    return true;
-  }
-
-  if (node.kind === "conditional" || node.kind === "list") {
-    return true;
-  }
-
-  if (node.kind === "component") {
-    return true;
-  }
-
-  if (node.kind === "fragment") {
-    return node.children.some(propBlockHasDynamicPart);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  if (
-    node.attributes.some(
-      (attr) => attr.kind === "dynamic-attr" || attr.kind === "event" || attr.kind === "spread-attr",
-    )
-  ) {
-    return true;
-  }
-
-  return node.children.some(propBlockHasDynamicPart);
+interface PropBlockFacts {
+  hasBindPropBinding: boolean;
+  hasDynamicInsertion: boolean;
+  hasDynamicPart: boolean;
+  hasEffectBinding: boolean;
+  hasEvent: boolean;
+  hasListBinding: boolean;
+  hasNestedListRenderValue: boolean;
+  hasSpreadBinding: boolean;
+  hasBranchListRenderValue: boolean;
 }
 
-function propBlockHasEvent(node: JsxNodeIr): boolean {
-  if (node.kind === "conditional") {
-    return (
-      node.whenTrue.some(propBlockHasEvent) ||
-      node.whenFalse.some(propBlockHasEvent)
-    );
+function collectPropBlockFacts(node: JsxNodeIr): PropBlockFacts {
+  const empty = (): PropBlockFacts => ({
+    hasBindPropBinding: false,
+    hasDynamicInsertion: false,
+    hasDynamicPart: false,
+    hasEffectBinding: false,
+    hasEvent: false,
+    hasListBinding: false,
+    hasNestedListRenderValue: false,
+    hasSpreadBinding: false,
+    hasBranchListRenderValue: false,
+  });
+
+  const merge = (children: readonly PropBlockFacts[]): PropBlockFacts => {
+    const facts = empty();
+    for (const child of children) {
+      facts.hasBindPropBinding ||= child.hasBindPropBinding;
+      facts.hasDynamicInsertion ||= child.hasDynamicInsertion;
+      facts.hasDynamicPart ||= child.hasDynamicPart;
+      facts.hasEffectBinding ||= child.hasEffectBinding;
+      facts.hasEvent ||= child.hasEvent;
+      facts.hasListBinding ||= child.hasListBinding;
+      facts.hasNestedListRenderValue ||= child.hasNestedListRenderValue;
+      facts.hasSpreadBinding ||= child.hasSpreadBinding;
+      facts.hasBranchListRenderValue ||= child.hasBranchListRenderValue;
+    }
+    return facts;
+  };
+
+  const childFacts = (children: readonly JsxNodeIr[]) => children.map(collectPropBlockFacts);
+
+  switch (node.kind) {
+    case "expr": {
+      const nodeValued = isPropBlockNodeValuedExpression(node.code);
+      return {
+        ...empty(),
+        hasDynamicInsertion: nodeValued,
+        hasDynamicPart: true,
+        hasEffectBinding: !nodeValued,
+      };
+    }
+    case "conditional": {
+      const branchFacts = [...childFacts(node.whenTrue), ...childFacts(node.whenFalse)];
+      const facts = merge(branchFacts);
+      facts.hasDynamicInsertion = true;
+      facts.hasDynamicPart = true;
+      facts.hasNestedListRenderValue = branchFacts.some((child) => child.hasBranchListRenderValue);
+      facts.hasBranchListRenderValue = facts.hasNestedListRenderValue;
+      return facts;
+    }
+    case "list": {
+      const facts = merge(childFacts(node.children));
+      facts.hasDynamicInsertion = true;
+      facts.hasDynamicPart = true;
+      facts.hasListBinding = true;
+      facts.hasBranchListRenderValue = true;
+      return facts;
+    }
+    case "component": {
+      const children = childFacts(node.children);
+      const facts = merge(children);
+      facts.hasDynamicInsertion = true;
+      facts.hasDynamicPart = true;
+      facts.hasNestedListRenderValue = children.some((child) => child.hasBranchListRenderValue);
+      facts.hasBranchListRenderValue = facts.hasNestedListRenderValue;
+      return facts;
+    }
+    case "fragment": {
+      const facts = merge(childFacts(node.children));
+      facts.hasBranchListRenderValue = facts.hasNestedListRenderValue;
+      return facts;
+    }
+    case "element": {
+      const facts = merge(childFacts(node.children));
+      const hasClassOrForBinding = node.attributes.some(
+        (attr) =>
+          attr.kind === "dynamic-attr" && (attr.name === "className" || attr.name === "htmlFor"),
+      );
+      const hasPropBinding = node.attributes.some(
+        (attr) =>
+          attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor",
+      );
+      facts.hasBindPropBinding ||= hasPropBinding;
+      facts.hasDynamicPart ||= node.attributes.some(
+        (attr) =>
+          attr.kind === "dynamic-attr" || attr.kind === "event" || attr.kind === "spread-attr",
+      );
+      facts.hasEffectBinding ||= hasClassOrForBinding;
+      facts.hasEvent ||= node.attributes.some((attr) => attr.kind === "event");
+      facts.hasSpreadBinding ||= node.attributes.some((attr) => attr.kind === "spread-attr");
+      facts.hasBranchListRenderValue = facts.hasNestedListRenderValue;
+      return facts;
+    }
+    case "async-boundary":
+    case "text":
+      return empty();
   }
-
-  if (node.kind === "list" || node.kind === "fragment") {
-    return node.children.some(propBlockHasEvent);
-  }
-
-  if (node.kind === "component") {
-    return node.children.some(propBlockHasEvent);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  if (node.attributes.some((attr) => attr.kind === "event")) {
-    return true;
-  }
-
-  return node.children.some(propBlockHasEvent);
-}
-
-function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
-  if (node.kind === "expr" && !isPropBlockNodeValuedExpression(node.code)) {
-    return true;
-  }
-
-  if (node.kind === "conditional") {
-    return (
-      node.whenTrue.some(propBlockHasEffectBinding) ||
-      node.whenFalse.some(propBlockHasEffectBinding)
-    );
-  }
-
-  if (node.kind === "list" || node.kind === "fragment") {
-    return node.children.some(propBlockHasEffectBinding);
-  }
-
-  if (node.kind === "component") {
-    return node.children.some(propBlockHasEffectBinding);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  if (
-    node.attributes.some(
-      (attr) =>
-        attr.kind === "dynamic-attr" && (attr.name === "className" || attr.name === "htmlFor"),
-    )
-  ) {
-    return true;
-  }
-
-  return node.children.some(propBlockHasEffectBinding);
-}
-
-function propBlockHasBindPropBinding(node: JsxNodeIr): boolean {
-  if (node.kind === "conditional") {
-    return (
-      node.whenTrue.some(propBlockHasBindPropBinding) ||
-      node.whenFalse.some(propBlockHasBindPropBinding)
-    );
-  }
-
-  if (node.kind === "list" || node.kind === "fragment") {
-    return node.children.some(propBlockHasBindPropBinding);
-  }
-
-  if (node.kind === "component") {
-    return node.children.some(propBlockHasBindPropBinding);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  if (
-    node.attributes.some(
-      (attr) =>
-        attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor",
-    )
-  ) {
-    return true;
-  }
-
-  return node.children.some(propBlockHasBindPropBinding);
-}
-
-function propBlockHasSpreadBinding(node: JsxNodeIr): boolean {
-  if (node.kind === "conditional") {
-    return (
-      node.whenTrue.some(propBlockHasSpreadBinding) ||
-      node.whenFalse.some(propBlockHasSpreadBinding)
-    );
-  }
-
-  if (node.kind === "list" || node.kind === "fragment") {
-    return node.children.some(propBlockHasSpreadBinding);
-  }
-
-  if (node.kind === "component") {
-    return node.children.some(propBlockHasSpreadBinding);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  return (
-    node.attributes.some((attr) => attr.kind === "spread-attr") ||
-    node.children.some(propBlockHasSpreadBinding)
-  );
-}
-
-function propBlockHasDynamicInsertion(node: JsxNodeIr): boolean {
-  if (node.kind === "expr") {
-    return isPropBlockNodeValuedExpression(node.code);
-  }
-
-  if (node.kind === "conditional" || node.kind === "list") {
-    return true;
-  }
-
-  if (node.kind === "component") {
-    return true;
-  }
-
-  if (node.kind === "fragment") {
-    return node.children.some(propBlockHasDynamicInsertion);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  return node.children.some(propBlockHasDynamicInsertion);
-}
-
-function propBlockHasListBinding(node: JsxNodeIr): boolean {
-  if (node.kind === "list") {
-    return true;
-  }
-
-  if (node.kind === "conditional") {
-    return (
-      node.whenTrue.some(propBlockHasListBinding) ||
-      node.whenFalse.some(propBlockHasListBinding)
-    );
-  }
-
-  if (node.kind === "fragment" || node.kind === "component") {
-    return node.children.some(propBlockHasListBinding);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  return node.children.some(propBlockHasListBinding);
-}
-
-function propBlockHasNestedListRenderValue(node: JsxNodeIr): boolean {
-  if (node.kind === "conditional") {
-    return (
-      node.whenTrue.some(propBlockBranchHasListRenderValue) ||
-      node.whenFalse.some(propBlockBranchHasListRenderValue)
-    );
-  }
-
-  if (node.kind === "list" || node.kind === "fragment") {
-    return node.children.some(propBlockHasNestedListRenderValue);
-  }
-
-  if (node.kind === "component") {
-    return node.children.some(propBlockBranchHasListRenderValue);
-  }
-
-  if (node.kind !== "element") {
-    return false;
-  }
-
-  return node.children.some(propBlockHasNestedListRenderValue);
-}
-
-function propBlockBranchHasListRenderValue(node: JsxNodeIr): boolean {
-  return node.kind === "list" || propBlockHasNestedListRenderValue(node);
 }
 
 function isPropBlockNodeValuedExpression(code: string): boolean {
@@ -2281,89 +2315,6 @@ function rewritePropBlockCode(
   return propAliases === undefined
     ? code
     : (rewritePropBlockAliasCode(code, propsParam, propAliases) ?? code);
-}
-
-function listReadsNestedItemObject(
-  node: Extract<JsxNodeIr, { kind: "list" }>,
-  itemName: string,
-): boolean {
-  return node.children.some((child) => nodeReadsNestedItemObject(child, itemName));
-}
-
-function nodeReadsNestedItemObject(node: JsxNodeIr, itemName: string): boolean {
-  switch (node.kind) {
-    case "element":
-      return (
-        codeReadsNestedItemObject(node.keyCode, itemName) ||
-        node.attributes.some((attribute) => {
-          if (attribute.kind === "spread-attr") {
-            return codeReadsNestedItemObject(attribute.code, itemName);
-          }
-
-          if (attribute.kind === "dynamic-attr" || attribute.kind === "event") {
-            return codeReadsNestedItemObject(attribute.code, itemName);
-          }
-
-          return false;
-        }) ||
-        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
-      );
-    case "fragment":
-      return (
-        node.bodyStatements?.some((statement) => codeReadsNestedItemObject(statement, itemName)) ===
-          true || node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
-      );
-    case "conditional":
-      return (
-        codeReadsNestedItemObject(node.conditionCode, itemName) ||
-        node.whenTrue.some((child) => nodeReadsNestedItemObject(child, itemName)) ||
-        node.whenFalse.some((child) => nodeReadsNestedItemObject(child, itemName))
-      );
-    case "list":
-      return (
-        codeReadsNestedItemObject(node.itemsCode, itemName) ||
-        codeReadsNestedItemObject(node.keyCode, itemName) ||
-        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
-      );
-    case "expr":
-      return codeReadsNestedItemObject(node.code, itemName);
-    case "component":
-      return (
-        codeReadsNestedItemObject(node.keyCode, itemName) ||
-        node.props.some((prop) => {
-          if (prop.kind === "spread-prop") {
-            return codeReadsNestedItemObject(prop.code, itemName);
-          }
-
-          if (prop.kind === "render-prop") {
-            return prop.children.some((child) => nodeReadsNestedItemObject(child, itemName));
-          }
-
-          return codeReadsNestedItemObject(prop.code, itemName);
-        }) ||
-        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
-      );
-    case "async-boundary":
-      return (
-        codeReadsNestedItemObject(node.valueCode, itemName) ||
-        node.children.some((child) => nodeReadsNestedItemObject(child, itemName)) ||
-        (node.placeholderChildren?.some((child) =>
-          nodeReadsNestedItemObject(child, itemName),
-        ) ?? false) ||
-        (node.catchChildren?.some((child) => nodeReadsNestedItemObject(child, itemName)) ?? false)
-      );
-    case "text":
-      return false;
-  }
-}
-
-function codeReadsNestedItemObject(code: string | undefined, itemName: string): boolean {
-  if (code === undefined || code.length === 0) {
-    return false;
-  }
-
-  const escapedItemName = itemName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
-  return new RegExp(`\\b${escapedItemName}(?:\\.[A-Za-z_$][\\w$]*){2,}`).test(code);
 }
 
 function canRewritePropBlockAliasNode(

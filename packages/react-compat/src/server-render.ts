@@ -32,7 +32,7 @@ import {
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
-import { isVoidHtmlElement } from "@reckona/mreact-shared";
+import { isEventLikePropName, isVoidHtmlElement } from "@reckona/mreact-shared";
 
 /** Renders a React-compatible component to an HTML string. */
 export function renderToString<TProps>(
@@ -360,15 +360,6 @@ function renderInputAttributesToString(props: Record<string, unknown>): string {
     .join("");
 }
 
-// Matches the /^on/i prefix without allocating a fresh regex per attribute.
-function isEventHandlerName(name: string): boolean {
-  return (
-    name.length > 1 &&
-    (name.charCodeAt(0) | 32) === 111 &&
-    (name.charCodeAt(1) | 32) === 110
-  );
-}
-
 type AttributeNameClassification =
   | { kind: "skip" }
   | { kind: "style" }
@@ -476,7 +467,7 @@ function createAttributeNameClassification(name: string): AttributeNameClassific
     name === "children" ||
     name === "key" ||
     name === "ref" ||
-    isEventHandlerName(name)
+    isEventLikePropName(name)
   ) {
     return { kind: "skip" };
   }
@@ -487,7 +478,7 @@ function createAttributeNameClassification(name: string): AttributeNameClassific
 
   const attributeName = toHtmlAttributeName(name);
 
-  if (!VALID_ATTRIBUTE_NAME.test(attributeName) || isEventHandlerName(attributeName)) {
+  if (!VALID_ATTRIBUTE_NAME.test(attributeName) || isEventLikePropName(attributeName)) {
     return { kind: "skip" };
   }
 

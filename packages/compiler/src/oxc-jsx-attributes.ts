@@ -1,4 +1,5 @@
 import type { AttributeIr } from "./ir.js";
+import { isEventLikePropName } from "@reckona/mreact-shared";
 import {
   unsupportedRefAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
@@ -42,7 +43,7 @@ export function analyzeOxcAttribute(
 
   const name = String(readObject(object.name).name);
   const value = readObject(object.value);
-  const isEventAttribute = /^on[A-Za-z]/.test(name);
+  const isEventAttribute = isEventLikePropName(name);
 
   if (name === "ref" && options.allowRef !== true) {
     diagnostics.push(unsupportedRefAttributeDiagnostic(getOxcLocation(code, object.name)));

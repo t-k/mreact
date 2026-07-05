@@ -17,6 +17,7 @@ import {
   styleNameToCssName,
   type HostElement,
 } from "./dom-host-rules.js";
+import { isEventLikePropName, isReactEventHandlerPropName } from "@reckona/mreact-shared";
 
 export function applyProps(
   element: HostElement,
@@ -749,17 +750,6 @@ function pushUniqueAttributeName(names: string[], name: string): void {
   if (!names.includes(name)) {
     names.push(name);
   }
-}
-
-function isReactEventHandlerPropName(name: string): boolean {
-  const third = name.charCodeAt(2);
-  return name.charCodeAt(0) === 111 && name.charCodeAt(1) === 110 && third >= 65 && third <= 90;
-}
-
-function isEventLikePropName(name: string): boolean {
-  const first = name.charCodeAt(0);
-  const second = name.charCodeAt(1);
-  return (first === 111 || first === 79) && (second === 110 || second === 78);
 }
 
 function sanitizeMetaRefreshElementProps(

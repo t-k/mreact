@@ -1,3 +1,4 @@
+import { isEventLikePropName } from "@reckona/mreact-shared";
 import type { AttributeIr, JsxNodeIr } from "./ir.js";
 import { formatStatement } from "./oxc-bindings.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
@@ -141,14 +142,6 @@ function isActiveCreateElementName(scope: CompatCreateElementScope, name: string
   return scope.names.has(name) && !scope.shadowed.has(name);
 }
 
-function isEventHandlerPropName(name: string): boolean {
-  return (
-    name.length > 1 &&
-    (name.charCodeAt(0) | 32) === 111 &&
-    (name.charCodeAt(1) | 32) === 110
-  );
-}
-
 function isBooleanishStringAttributeName(attributeName: string): boolean {
   const lowerCased = attributeName.toLowerCase();
   return lowerCased.startsWith("aria-") || COMPAT_BOOLEANISH_STRING_ATTRIBUTES.has(lowerCased);
@@ -267,7 +260,7 @@ function lowerCreateElementProps(
       continue;
     }
 
-    if (name === "ref" || isEventHandlerPropName(name)) {
+    if (name === "ref" || isEventLikePropName(name)) {
       continue;
     }
 
@@ -295,7 +288,7 @@ function lowerCreateElementProps(
 
     const attributeName = COMPAT_HTML_ATTRIBUTE_ALIASES[name] ?? name;
 
-    if (!VALID_ATTRIBUTE_NAME.test(attributeName) || isEventHandlerPropName(attributeName)) {
+    if (!VALID_ATTRIBUTE_NAME.test(attributeName) || isEventLikePropName(attributeName)) {
       // The interpreter drops these at runtime; keeping them out of the
       // compiled output matches its bytes.
       continue;
@@ -479,7 +472,7 @@ function lowerCreateElementCall(
 
   if (tagArgument.type !== "Literal" || typeof tagArgument.value !== "string") {
     if (tagArgument.type === "Identifier" && typeof tagArgument.name === "string") {
-      return lowerCreateElementLocalComponentCall(code, tagArgument.name, args, scope);
+      return lowerCreateElementLocalComponentCall(tagArgument.name, scope);
     }
 
     return undefined;
@@ -523,388 +516,14 @@ function lowerCreateElementCall(
 }
 
 function lowerCreateElementLocalComponentCall(
-  code: string,
   componentName: string,
-  args: readonly unknown[],
   scope: CompatCreateElementScope,
 ): JsxNodeIr | undefined {
   if (scope.inlinedLocalFunctions?.has(componentName) === true) {
     return undefined;
   }
 
-  const functionLike = scope.localFunctionLikes?.get(componentName);
-
-  if (functionLike === undefined) {
-    return undefined;
-  }
-
-  const params = readArray(functionLike.params);
-  const firstParam = params.length === 0 ? undefined : readObject(params[0]);
-  const propsParam =
-    firstParam === undefined
-      ? undefined
-      : firstParam.type === "Identifier" && typeof firstParam.name === "string"
-        ? firstParam.name
-        : undefined;
-
-  if (params.length > 0 && propsParam === undefined) {
-    return undefined;
-  }
-
-  const propValues = readInlineComponentPropValues(
-    code,
-    args.length > 1 ? unwrapOxcParentheses(readObject(args[1])) : undefined,
-    args.slice(2).map((argument) => unwrapOxcParentheses(readObject(argument))),
-  );
-
-  if (propValues === undefined) {
-    return undefined;
-  }
-
-  const lowered = analyzeCompatCreateElementFunctionRoot(
-    code,
-    functionLike,
-    scope.names,
-    scope.localFunctionLikes,
-    new Set([...(scope.inlinedLocalFunctions ?? []), componentName]),
-  );
-
-  if (lowered === undefined) {
-    return undefined;
-  }
-
-  return propsParam === undefined
-    ? lowered
-    : rewriteInlineComponentPropsNode(lowered, propsParam, propValues);
-}
-
-function readInlineComponentPropValues(
-  code: string,
-  propsArgument: Record<string, unknown> | undefined,
-  childArguments: readonly Record<string, unknown>[],
-): Map<string, string> | undefined {
-  const values = new Map<string, string>();
-
-  if (
-    propsArgument !== undefined &&
-    !(propsArgument.type === "Literal" && propsArgument.value === null) &&
-    !(propsArgument.type === "Identifier" && propsArgument.name === "undefined")
-  ) {
-    if (propsArgument.type !== "ObjectExpression") {
-      return undefined;
-    }
-
-    for (const property of readArray(propsArgument.properties)) {
-      const propertyObject = readObject(property);
-
-      if (
-        propertyObject.type !== "Property" ||
-        propertyObject.kind !== "init" ||
-        propertyObject.method === true
-      ) {
-        return undefined;
-      }
-
-      const name = readStaticPropertyKey(propertyObject);
-
-      if (name === undefined) {
-        return undefined;
-      }
-
-      if (name === "key" || name === "ref") {
-        continue;
-      }
-
-      values.set(name, readSource(code, unwrapOxcParentheses(readObject(propertyObject.value))));
-    }
-  }
-
-  if (childArguments.length === 1) {
-    values.set("children", readSource(code, childArguments[0] as Record<string, unknown>));
-  } else if (childArguments.length > 1) {
-    values.set(
-      "children",
-      `[${childArguments.map((argument) => readSource(code, argument)).join(", ")}]`,
-    );
-  }
-
-  return values;
-}
-
-function rewriteInlineComponentPropsNode(
-  node: JsxNodeIr,
-  propsParam: string,
-  values: ReadonlyMap<string, string>,
-): JsxNodeIr {
-  if (node.kind === "text") {
-    return node;
-  }
-
-  if (node.kind === "expr") {
-    return { ...node, code: rewriteInlineComponentPropsCode(node.code, propsParam, values) };
-  }
-
-  if (node.kind === "conditional") {
-    return {
-      ...node,
-      conditionCode: rewriteInlineComponentPropsCode(node.conditionCode, propsParam, values),
-      whenTrue: node.whenTrue.map((child) =>
-        rewriteInlineComponentPropsNode(child, propsParam, values),
-      ),
-      whenFalse: node.whenFalse.map((child) =>
-        rewriteInlineComponentPropsNode(child, propsParam, values),
-      ),
-    };
-  }
-
-  if (node.kind === "list") {
-    return {
-      ...node,
-      itemsCode: rewriteInlineComponentPropsCode(node.itemsCode, propsParam, values),
-      ...(node.keyCode === undefined
-        ? {}
-        : { keyCode: rewriteInlineComponentPropsCode(node.keyCode, propsParam, values) }),
-      ...(node.bodyStatements === undefined
-        ? {}
-        : {
-            bodyStatements: node.bodyStatements.map((statement) =>
-              rewriteInlineComponentPropsCode(statement, propsParam, values),
-            ),
-          }),
-      children: node.children.map((child) =>
-        rewriteInlineComponentPropsNode(child, propsParam, values),
-      ),
-    };
-  }
-
-  if (node.kind === "fragment") {
-    return {
-      ...node,
-      children: node.children.map((child) =>
-        rewriteInlineComponentPropsNode(child, propsParam, values),
-      ),
-    };
-  }
-
-  if (node.kind === "component" || node.kind === "async-boundary") {
-    return node;
-  }
-
-  return {
-    ...node,
-    ...(node.keyCode === undefined
-      ? {}
-      : { keyCode: rewriteInlineComponentPropsCode(node.keyCode, propsParam, values) }),
-    attributes: node.attributes.map((attribute) => {
-      if (attribute.kind === "dynamic-attr" || attribute.kind === "event") {
-        return {
-          ...attribute,
-          code: rewriteInlineComponentPropsCode(attribute.code, propsParam, values),
-        };
-      }
-
-      if (attribute.kind === "spread-attr") {
-        return {
-          ...attribute,
-          code: rewriteInlineComponentPropsCode(attribute.code, propsParam, values),
-        };
-      }
-
-      return attribute;
-    }),
-    children: node.children.map((child) =>
-      rewriteInlineComponentPropsNode(child, propsParam, values),
-    ),
-  };
-}
-
-function rewriteInlineComponentPropsCode(
-  code: string,
-  propsParam: string,
-  values: ReadonlyMap<string, string>,
-): string {
-  let output = "";
-  let index = 0;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-
-    if (char === '"' || char === "'") {
-      const quoted = readQuotedJavaScript(code, index, char);
-      output += quoted;
-      index += quoted.length;
-      continue;
-    }
-
-    if (char === "`") {
-      const template = rewriteInlineComponentPropsTemplate(code, index, propsParam, values);
-      output += template.code;
-      index = template.end;
-      continue;
-    }
-
-    if (char === "/" && code[index + 1] === "/") {
-      const end = code.indexOf("\n", index + 2);
-      const comment = end === -1 ? code.slice(index) : code.slice(index, end);
-      output += comment;
-      index += comment.length;
-      continue;
-    }
-
-    if (char === "/" && code[index + 1] === "*") {
-      const end = code.indexOf("*/", index + 2);
-      const comment = end === -1 ? code.slice(index) : code.slice(index, end + 2);
-      output += comment;
-      index += comment.length;
-      continue;
-    }
-
-    if (isIdentifierStart(char)) {
-      const start = index;
-      index += 1;
-      while (index < code.length && isIdentifierPart(code[index] ?? "")) {
-        index += 1;
-      }
-
-      const name = code.slice(start, index);
-      if (
-        name !== propsParam ||
-        code[index] !== "." ||
-        code[start - 1] === "."
-      ) {
-        output += name;
-        continue;
-      }
-
-      const propStart = index + 1;
-      if (!isIdentifierStart(code[propStart] ?? "")) {
-        output += name;
-        continue;
-      }
-
-      let propEnd = propStart + 1;
-      while (propEnd < code.length && isIdentifierPart(code[propEnd] ?? "")) {
-        propEnd += 1;
-      }
-
-      const value = values.get(code.slice(propStart, propEnd));
-      if (value === undefined) {
-        output += code.slice(start, propEnd);
-      } else {
-        output += `(${value})`;
-      }
-      index = propEnd;
-      continue;
-    }
-
-    output += char;
-    index += 1;
-  }
-
-  return output;
-}
-
-function rewriteInlineComponentPropsTemplate(
-  code: string,
-  start: number,
-  propsParam: string,
-  values: ReadonlyMap<string, string>,
-): { code: string; end: number } {
-  let output = "`";
-  let index = start + 1;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-
-    if (char === "\\") {
-      output += code.slice(index, Math.min(index + 2, code.length));
-      index += 2;
-      continue;
-    }
-
-    if (char === "`") {
-      output += "`";
-      return { code: output, end: index + 1 };
-    }
-
-    if (char === "$" && code[index + 1] === "{") {
-      const expression = readTemplateExpression(code, index + 2);
-      output += "${";
-      output += rewriteInlineComponentPropsCode(expression.code, propsParam, values);
-      output += "}";
-      index = expression.end;
-      continue;
-    }
-
-    output += char;
-    index += 1;
-  }
-
-  return { code: output, end: index };
-}
-
-function readTemplateExpression(code: string, start: number): { code: string; end: number } {
-  let depth = 1;
-  let index = start;
-
-  while (index < code.length) {
-    const char = code[index] ?? "";
-
-    if (char === '"' || char === "'" || char === "`") {
-      const quoted = readQuotedJavaScript(code, index, char);
-      index += quoted.length;
-      continue;
-    }
-
-    if (char === "/" && code[index + 1] === "/") {
-      const end = code.indexOf("\n", index + 2);
-      index = end === -1 ? code.length : end;
-      continue;
-    }
-
-    if (char === "/" && code[index + 1] === "*") {
-      const end = code.indexOf("*/", index + 2);
-      index = end === -1 ? code.length : end + 2;
-      continue;
-    }
-
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return { code: code.slice(start, index), end: index + 1 };
-      }
-    }
-
-    index += 1;
-  }
-
-  return { code: code.slice(start), end: index };
-}
-
-function readQuotedJavaScript(code: string, start: number, quote: string): string {
-  let index = start + 1;
-  while (index < code.length) {
-    const char = code[index] ?? "";
-    if (char === "\\") {
-      index += 2;
-      continue;
-    }
-    index += 1;
-    if (char === quote) {
-      break;
-    }
-  }
-  return code.slice(start, index);
-}
-
-function isIdentifierStart(char: string): boolean {
-  return /^[A-Za-z_$]$/.test(char);
-}
-
-function isIdentifierPart(char: string): boolean {
-  return /^[A-Za-z_$0-9]$/.test(char);
+  return undefined;
 }
 
 function lowerCreateElementChild(
@@ -1265,8 +884,12 @@ export function hasLowerableCompatCreateElementReturn(
   code: string,
   functionLike: Record<string, unknown>,
   names: ReadonlySet<string>,
+  localFunctionLikes?: ReadonlyMap<string, Record<string, unknown>>,
 ): boolean {
-  return analyzeCompatCreateElementFunctionRoot(code, functionLike, names) !== undefined;
+  return (
+    analyzeCompatCreateElementFunctionRoot(code, functionLike, names, localFunctionLikes) !==
+    undefined
+  );
 }
 
 export function collectFunctionShadowedNames(

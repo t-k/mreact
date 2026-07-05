@@ -45,6 +45,10 @@
     "./compiler-contract": {
       "types": "./dist/compiler-contract.d.ts",
       "default": "./dist/compiler-contract.js"
+    },
+    "./dom-prop-names": {
+      "types": "./dist/dom-prop-names.d.ts",
+      "default": "./dist/dom-prop-names.js"
     }
   },
   "publishConfig": {

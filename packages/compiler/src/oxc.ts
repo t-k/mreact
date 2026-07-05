@@ -580,11 +580,12 @@ function readCompatCreateElementFunctionLike(
   code: string,
   expression: Record<string, unknown>,
   names: ReadonlySet<string>,
+  localFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
 ): Record<string, unknown> | undefined {
   const functionLike = unwrapOxcComponentFunctionLikeInitializer(expression);
 
   return functionLike !== undefined &&
-    hasLowerableCompatCreateElementReturn(code, functionLike, names)
+    hasLowerableCompatCreateElementReturn(code, functionLike, names, localFunctionLikes)
     ? functionLike
     : undefined;
 }
@@ -593,6 +594,7 @@ function readCompatCreateElementPlainComponent(
   code: string,
   statement: unknown,
   names: ReadonlySet<string>,
+  localFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
 ): CompatCreateElementComponent | undefined {
   if (names.size === 0) {
     return undefined;
@@ -602,7 +604,7 @@ function readCompatCreateElementPlainComponent(
 
   if (
     object.type === "FunctionDeclaration" &&
-    hasLowerableCompatCreateElementReturn(code, object, names)
+    hasLowerableCompatCreateElementReturn(code, object, names, localFunctionLikes)
   ) {
     const id = readObject(object.id);
     return typeof id.name === "string" ? { name: id.name, initializer: object } : undefined;
@@ -624,6 +626,7 @@ function readCompatCreateElementPlainComponent(
       code,
       readObject(declaratorObject.init),
       names,
+      localFunctionLikes,
     );
 
     if (initializer !== undefined) {
@@ -888,8 +891,12 @@ function isCompatCreateElementComponentStatement(
     const functionLike = unwrapOxcComponentFunctionLikeInitializer(readObject(object.declaration));
 
     return (
-      readCompatCreateElementFunctionLike(code, readObject(object.declaration), names) !==
-        undefined ||
+      readCompatCreateElementFunctionLike(
+        code,
+        readObject(object.declaration),
+        names,
+        localFunctionLikes,
+      ) !== undefined ||
       (functionLike !== undefined &&
         hasCompatRenderToStringWrapperReturn(code, functionLike, renderToStringNames))
     );
@@ -900,15 +907,23 @@ function isCompatCreateElementComponentStatement(
 
     if (declaration.type === "FunctionDeclaration") {
       return (
-        hasLowerableCompatCreateElementReturn(code, declaration, names) ||
+        hasLowerableCompatCreateElementReturn(code, declaration, names, localFunctionLikes) ||
         hasCompatRenderToStringWrapperReturn(code, declaration, renderToStringNames)
       );
     }
 
-    return readCompatCreateElementPlainComponent(code, declaration, names) !== undefined;
+    return (
+      readCompatCreateElementPlainComponent(code, declaration, names, localFunctionLikes) !==
+      undefined
+    );
   }
 
-  const plainComponent = readCompatCreateElementPlainComponent(code, statement, names);
+  const plainComponent = readCompatCreateElementPlainComponent(
+    code,
+    statement,
+    names,
+    localFunctionLikes,
+  );
 
   if (serverOutput === "stream") {
     return (
@@ -959,7 +974,12 @@ function analyzeOxcComponent(
     if (
       declaration === undefined ||
       (!hasOxcFunctionLikeComponentReturn(declaration) &&
-        !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames) &&
+        !hasLowerableCompatCreateElementReturn(
+          code,
+          declaration,
+          compatCreateElementNames,
+          compatCreateElementLocalFunctionLikes,
+        ) &&
         !hasCompatRenderToStringWrapperReturn(code, declaration, compatRenderToStringNames))
     ) {
       return [];
@@ -998,7 +1018,12 @@ function analyzeOxcComponent(
       readOxcPlainComponent(statement) ??
       (serverOutput === "stream"
         ? undefined
-        : readCompatCreateElementPlainComponent(code, statement, compatCreateElementNames));
+        : readCompatCreateElementPlainComponent(
+            code,
+            statement,
+            compatCreateElementNames,
+            compatCreateElementLocalFunctionLikes,
+          ));
 
     if (plainComponent === undefined) {
       return [];
@@ -1041,7 +1066,12 @@ function analyzeOxcComponent(
   if (declaration.type === "VariableDeclaration") {
     const variableComponent =
       readOxcVariableComponentDeclaration(declaration) ??
-      readCompatCreateElementPlainComponent(code, declaration, compatCreateElementNames);
+      readCompatCreateElementPlainComponent(
+        code,
+        declaration,
+        compatCreateElementNames,
+        compatCreateElementLocalFunctionLikes,
+      );
 
     if (variableComponent === undefined) {
       return [];
@@ -1077,7 +1107,12 @@ function analyzeOxcComponent(
     (!compatReactNodeReturn &&
       !hasComponentReturn(declaration.body) &&
       !hasLocalJsxHelperCallReturn(declaration.body, localJsxReturnFunctionNames) &&
-      !hasLowerableCompatCreateElementReturn(code, declaration, compatCreateElementNames) &&
+      !hasLowerableCompatCreateElementReturn(
+        code,
+        declaration,
+        compatCreateElementNames,
+        compatCreateElementLocalFunctionLikes,
+      ) &&
       !hasCompatRenderToStringWrapperReturn(code, declaration, compatRenderToStringNames))
   ) {
     return [];
