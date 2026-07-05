@@ -270,6 +270,35 @@ export default function Page() {
     expect(output.code).toContain("createElement(tag");
   });
 
+  test("compiles block-body map renderers", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+const rows = [{ id: "a", label: "Ada" }, { id: "b", label: "Babbage" }];
+export function App() {
+  return createElement("ul", null, rows.map((row, i) => {
+    const label = String(i) + ":" + row.label;
+    return createElement("li", { key: row.id, "data-id": row.id }, label);
+  }));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createElement(");
+    expect(output.code).toContain("const label = String(i) + \":\" + row.label;");
+
+    const rows = [{ id: "a", label: "Ada" }, { id: "b", label: "Babbage" }];
+    const interpreted = renderToString(() =>
+      createElement(
+        "ul",
+        null,
+        rows.map((row, i) => {
+          const label = String(i) + ":" + row.label;
+          return createElement("li", { key: row.id, "data-id": row.id }, label);
+        }),
+      ),
+    );
+    expect(runCompiledWithCompatHelpers(output.code)).toBe(interpreted);
+  });
+
   test("does not lower shadowed createElement bindings", () => {
     const source = `import { createElement } from "@reckona/mreact-compat";
 export default function App() {
@@ -404,7 +433,7 @@ export default function Page() {
     await expect(runServerStreamComponent(streamOutput.code, "default")).resolves.toBe(interpreted);
   });
 
-  test("keeps renderToString wrappers for non-lowerable local views", async () => {
+  test("lowers renderToString wrappers with same-module host-only component calls", async () => {
     const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
 function Row(props) {
   return createElement("span", null, props.label);
@@ -418,7 +447,9 @@ export default function Page() {
     const output = compile(source, "stream");
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("renderToString(View)");
+    expect(output.code).not.toContain("renderToString(View)");
+    expect(output.code).not.toContain("_renderCompatChild(createElement(Row");
+    expect(output.code).toContain('$sink.append("<main><span>");');
     await expect(runServerStreamComponent(output.code, "default")).resolves.toBe(
       "<main><span>x</span></main>",
     );

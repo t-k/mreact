@@ -39,8 +39,16 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
     staticPropBlockComponentNames,
   );
   const componentImportSource = dev ? JSX_DEV_RUNTIME_SOURCE : JSX_RUNTIME_SOURCE;
-  const componentSpecifiers = collectComponentImportSpecifiers(ir, dev);
-  const reactiveDomSpecifiers = collectReactiveDomImportSpecifiers(ir, dev);
+  const componentSpecifiers = collectComponentImportSpecifiers(
+    ir,
+    dev,
+    staticPropBlockComponentNames,
+  );
+  const reactiveDomSpecifiers = collectReactiveDomImportSpecifiers(
+    ir,
+    dev,
+    staticPropBlockComponentNames,
+  );
   const helperNames = allocateHelperNames(ir, componentSpecifiers, reactiveDomSpecifiers);
   const importGroups = createImportGroups(
     componentSpecifiers,
@@ -54,7 +62,7 @@ export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitC
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(normalizedModuleStatements.statements);
   const components = ir.components
-    .map((component) => emitComponent(component, helperNames, dev))
+    .map((component) => emitComponent(component, helperNames, dev, staticPropBlockComponentNames))
     .join("\n\n");
 
   return {
@@ -71,7 +79,11 @@ function emitModuleStatements(statements: readonly string[]): string {
   return statements.join("\n");
 }
 
-function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] {
+function collectComponentImportSpecifiers(
+  ir: ModuleIr,
+  dev: boolean,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+): string[] {
   const specifiers = new Set<string>();
 
   for (const component of ir.components) {
@@ -86,7 +98,7 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
       continue;
     }
 
-    if (!dev && getPropReactiveDomBlock(component) !== undefined) {
+    if (!dev && getPropReactiveDomBlock(component, staticPropBlockComponentNames) !== undefined) {
       specifiers.add("createReactiveDomBlock");
       continue;
     }
@@ -113,7 +125,11 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
   return Array.from(specifiers).sort();
 }
 
-function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[] {
+function collectReactiveDomImportSpecifiers(
+  ir: ModuleIr,
+  dev: boolean,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+): string[] {
   const specifiers = new Set<string>();
 
   if (dev) {
@@ -132,12 +148,24 @@ function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[
       continue;
     }
 
-    if (getPropReactiveDomBlock(component) !== undefined) {
+    if (getPropReactiveDomBlock(component, staticPropBlockComponentNames) !== undefined) {
       if (propBlockHasEvent(component.root)) {
         specifiers.add("bindEvent");
       }
       if (propBlockHasBindPropBinding(component.root)) {
         specifiers.add("bindProp");
+      }
+      if (propBlockHasSpreadBinding(component.root)) {
+        specifiers.add("bindSpreadProps");
+      }
+      if (propBlockHasDynamicInsertion(component.root)) {
+        specifiers.add("insertDynamic");
+      }
+      if (propBlockHasListBinding(component.root)) {
+        specifiers.add("bindList");
+      }
+      if (propBlockHasNestedListRenderValue(component.root)) {
+        specifiers.add("createList");
       }
       if (propBlockHasEffectBinding(component.root)) {
         specifiers.add("effect");
@@ -153,11 +181,15 @@ interface CompatHelperNames {
   REACTIVE_STATE_BINDING_META?: string;
   REACTIVE_TEXT_BINDING_META?: string;
   bindEvent?: string;
+  bindList?: string;
   bindText?: string;
   bindProp?: string;
+  bindSpreadProps?: string;
+  createList?: string;
   effect?: string;
   createReactiveDomBlock?: string;
   createTemplate?: string;
+  insertDynamic?: string;
   jsx?: string;
   jsxDEV?: string;
   jsxs?: string;
@@ -189,6 +221,11 @@ function allocateHelperNames(
       continue;
     }
 
+    if (specifier === "bindList") {
+      helperNames.bindList = allocator("_bindList");
+      continue;
+    }
+
     if (specifier === "bindText") {
       helperNames.bindText = allocator("_bindText");
       continue;
@@ -196,6 +233,16 @@ function allocateHelperNames(
 
     if (specifier === "bindProp") {
       helperNames.bindProp = allocator("_bindProp");
+      continue;
+    }
+
+    if (specifier === "bindSpreadProps") {
+      helperNames.bindSpreadProps = allocator("_bindSpreadProps");
+      continue;
+    }
+
+    if (specifier === "createList") {
+      helperNames.createList = allocator("_createList");
       continue;
     }
 
@@ -226,6 +273,11 @@ function allocateHelperNames(
 
     if (specifier === "createReactiveDomBlock") {
       helperNames.createReactiveDomBlock = allocator("_createReactiveDomBlock");
+      continue;
+    }
+
+    if (specifier === "insertDynamic") {
+      helperNames.insertDynamic = allocator("_insertDynamic");
       continue;
     }
 
@@ -296,9 +348,15 @@ function collectStaticPropBlockComponentNames(ir: ModuleIr, dev: boolean): Reado
     return names;
   }
 
-  for (const component of ir.components) {
-    if (getPropReactiveDomBlock(component) !== undefined) {
-      names.add(component.name);
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const component of ir.components) {
+      if (!names.has(component.name) && getPropReactiveDomBlock(component, names) !== undefined) {
+        names.add(component.name);
+        changed = true;
+      }
     }
   }
 
@@ -469,7 +527,16 @@ function createImportGroups(
   for (const specifier of reactiveDomSpecifiers) {
     const localName =
       helperNames[
-        specifier as "bindEvent" | "bindText" | "bindProp" | "effect" | "createTemplate"
+        specifier as
+          | "bindEvent"
+          | "bindList"
+          | "bindText"
+          | "bindProp"
+          | "bindSpreadProps"
+          | "createList"
+          | "effect"
+          | "createTemplate"
+          | "insertDynamic"
       ] ?? `_${specifier}`;
     addImportSpecifier(groups, REACTIVE_DOM_SOURCE, specifier, localName);
   }
@@ -546,13 +613,16 @@ function emitComponent(
   component: ComponentIr,
   helperNames: CompatHelperNames,
   dev: boolean,
+  staticPropBlockComponentNames: ReadonlySet<string>,
 ): string {
   const directTextBindings = collectDirectTextBindings(component, helperNames);
   const reactiveDomBlock = dev
     ? undefined
     : getReactiveDomBlock(component.root, directTextBindings);
   const propReactiveDomBlock =
-    !dev && reactiveDomBlock === undefined ? getPropReactiveDomBlock(component) : undefined;
+    !dev && reactiveDomBlock === undefined
+      ? getPropReactiveDomBlock(component, staticPropBlockComponentNames)
+      : undefined;
   const body = component.bodyStatements.map(
     (statement) =>
       `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames, reactiveDomBlock !== undefined)}`,
@@ -1099,7 +1169,10 @@ const PROP_BLOCK_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 // props parameter or a narrow plain object destructuring parameter, no body
 // statements (no hooks), and a host-only element tree (elements + static/dynamic
 // attrs + events + text expressions) with at least one dynamic part.
-function getPropReactiveDomBlock(component: ComponentIr): PropReactiveDomBlock | undefined {
+function getPropReactiveDomBlock(
+  component: ComponentIr,
+  staticPropBlockComponentNames: ReadonlySet<string> = new Set(),
+): PropReactiveDomBlock | undefined {
   if (component.parameters.length !== 1) {
     return undefined;
   }
@@ -1124,7 +1197,10 @@ function getPropReactiveDomBlock(component: ComponentIr): PropReactiveDomBlock |
     return undefined;
   }
 
-  if (!isHostOnlyPropBlockNode(root) || !propBlockHasDynamicPart(root)) {
+  if (
+    !isHostOnlyPropBlockNode(root, staticPropBlockComponentNames) ||
+    !propBlockHasDynamicPart(root)
+  ) {
     return undefined;
   }
 
@@ -1139,7 +1215,7 @@ function getPropReactiveDomBlock(component: ComponentIr): PropReactiveDomBlock |
 
 // Conventional node-valued slot props (mirrors oxc-render-values.ts): a text
 // expression referencing one of these may hold React nodes, not primitive text,
-// so it is not safe to bind with bindText. Conservatively bail on any of them.
+// so it is inserted through insertDynamic instead of being bound as text.
 const PROP_BLOCK_NODE_VALUED = /\b(children|fallback|header|sidebar|element)\b/;
 const PROP_BLOCK_UNSUPPORTED_DYNAMIC_ATTRS = new Set([
   "dangerouslySetInnerHTML",
@@ -1149,22 +1225,58 @@ const PROP_BLOCK_UNSUPPORTED_DYNAMIC_ATTRS = new Set([
 const PROP_BLOCK_FORM_VALUE_TAGS = new Set(["input", "select", "textarea"]);
 const PROP_BLOCK_FORM_VALUE_ATTRS = new Set(["checked", "defaultChecked", "defaultValue", "value"]);
 
-function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
+function isHostOnlyPropBlockNode(
+  node: JsxNodeIr,
+  staticPropBlockComponentNames: ReadonlySet<string>,
+): boolean {
   if (node.kind === "text") {
     return true;
   }
 
   if (node.kind === "expr") {
-    return !PROP_BLOCK_NODE_VALUED.test(node.code);
+    return true;
   }
 
-  if (node.kind !== "element" || node.keyCode !== undefined) {
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.every((child) =>
+        isHostOnlyPropBlockNode(child, staticPropBlockComponentNames),
+      ) &&
+      node.whenFalse.every((child) =>
+        isHostOnlyPropBlockNode(child, staticPropBlockComponentNames),
+      )
+    );
+  }
+
+  if (node.kind === "list") {
+    return node.children.every((child) =>
+      isHostOnlyPropBlockNode(child, staticPropBlockComponentNames),
+    );
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.every((child) =>
+      isHostOnlyPropBlockNode(child, staticPropBlockComponentNames),
+    );
+  }
+
+  if (node.kind === "component") {
+    return (
+      staticPropBlockComponentNames.has(node.name) &&
+      node.props.every((prop) => prop.kind !== "render-prop") &&
+      node.children.every((child) =>
+        isHostOnlyPropBlockNode(child, staticPropBlockComponentNames),
+      )
+    );
+  }
+
+  if (node.kind !== "element") {
     return false;
   }
 
   for (const attr of node.attributes) {
     if (attr.kind === "spread-attr") {
-      return false;
+      continue;
     }
 
     if (
@@ -1175,7 +1287,9 @@ function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
     }
   }
 
-  return node.children.every(isHostOnlyPropBlockNode);
+  return node.children.every((child) =>
+    isHostOnlyPropBlockNode(child, staticPropBlockComponentNames),
+  );
 }
 
 function isUnsupportedPropBlockDynamicAttr(tagName: string, attrName: string): boolean {
@@ -1191,11 +1305,27 @@ function propBlockHasDynamicPart(node: JsxNodeIr): boolean {
     return true;
   }
 
+  if (node.kind === "conditional" || node.kind === "list") {
+    return true;
+  }
+
+  if (node.kind === "component") {
+    return true;
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(propBlockHasDynamicPart);
+  }
+
   if (node.kind !== "element") {
     return false;
   }
 
-  if (node.attributes.some((attr) => attr.kind === "dynamic-attr" || attr.kind === "event")) {
+  if (
+    node.attributes.some(
+      (attr) => attr.kind === "dynamic-attr" || attr.kind === "event" || attr.kind === "spread-attr",
+    )
+  ) {
     return true;
   }
 
@@ -1203,6 +1333,17 @@ function propBlockHasDynamicPart(node: JsxNodeIr): boolean {
 }
 
 function propBlockHasEvent(node: JsxNodeIr): boolean {
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.some(propBlockHasEvent) ||
+      node.whenFalse.some(propBlockHasEvent)
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasEvent);
+  }
+
   if (node.kind !== "element") {
     return false;
   }
@@ -1215,8 +1356,19 @@ function propBlockHasEvent(node: JsxNodeIr): boolean {
 }
 
 function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
-  if (node.kind === "expr") {
+  if (node.kind === "expr" && !isPropBlockNodeValuedExpression(node.code)) {
     return true;
+  }
+
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.some(propBlockHasEffectBinding) ||
+      node.whenFalse.some(propBlockHasEffectBinding)
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasEffectBinding);
   }
 
   if (node.kind !== "element") {
@@ -1236,6 +1388,17 @@ function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
 }
 
 function propBlockHasBindPropBinding(node: JsxNodeIr): boolean {
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.some(propBlockHasBindPropBinding) ||
+      node.whenFalse.some(propBlockHasBindPropBinding)
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasBindPropBinding);
+  }
+
   if (node.kind !== "element") {
     return false;
   }
@@ -1252,12 +1415,137 @@ function propBlockHasBindPropBinding(node: JsxNodeIr): boolean {
   return node.children.some(propBlockHasBindPropBinding);
 }
 
-interface PropBlockBinding {
-  kind: "text" | "className" | "htmlFor" | "prop" | "event";
+function propBlockHasSpreadBinding(node: JsxNodeIr): boolean {
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.some(propBlockHasSpreadBinding) ||
+      node.whenFalse.some(propBlockHasSpreadBinding)
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasSpreadBinding);
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  return (
+    node.attributes.some((attr) => attr.kind === "spread-attr") ||
+    node.children.some(propBlockHasSpreadBinding)
+  );
+}
+
+function propBlockHasDynamicInsertion(node: JsxNodeIr): boolean {
+  if (node.kind === "expr") {
+    return isPropBlockNodeValuedExpression(node.code);
+  }
+
+  if (node.kind === "conditional" || node.kind === "list") {
+    return true;
+  }
+
+  if (node.kind === "component") {
+    return true;
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(propBlockHasDynamicInsertion);
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  return node.children.some(propBlockHasDynamicInsertion);
+}
+
+function propBlockHasListBinding(node: JsxNodeIr): boolean {
+  if (node.kind === "list") {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.some(propBlockHasListBinding) ||
+      node.whenFalse.some(propBlockHasListBinding)
+    );
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(propBlockHasListBinding);
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  return node.children.some(propBlockHasListBinding);
+}
+
+function propBlockHasNestedListRenderValue(node: JsxNodeIr): boolean {
+  if (node.kind === "conditional") {
+    return (
+      node.whenTrue.some(propBlockBranchHasListRenderValue) ||
+      node.whenFalse.some(propBlockBranchHasListRenderValue)
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasNestedListRenderValue);
+  }
+
+  if (node.kind === "component") {
+    return node.children.some(propBlockHasNestedListRenderValue);
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  return node.children.some(propBlockHasNestedListRenderValue);
+}
+
+function propBlockBranchHasListRenderValue(node: JsxNodeIr): boolean {
+  return node.kind === "list" || propBlockHasNestedListRenderValue(node);
+}
+
+function isPropBlockNodeValuedExpression(code: string): boolean {
+  return PROP_BLOCK_NODE_VALUED.test(code);
+}
+
+type PropBlockValueBinding = {
+  kind: "text" | "className" | "htmlFor" | "prop" | "spread" | "dynamic";
   propName?: string | undefined;
-  eventName?: string | undefined;
   target: string;
+  marker?: string | undefined;
   code: string;
+};
+
+type PropBlockBinding =
+  | PropBlockValueBinding
+  | {
+      kind: "event";
+      eventName: string;
+      target: string;
+      code: string;
+    }
+  | {
+      kind: "list";
+      target: string;
+      marker: string;
+      node: Extract<JsxNodeIr, { kind: "list" }>;
+    };
+
+interface PropBlockEmitHelpers {
+  bindEvent: string;
+  bindList: string;
+  bindProp: string;
+  bindSpreadProps: string;
+  createList: string;
+  effectName: string;
+  insertDynamic: string;
 }
 
 function emitPropReactiveDomBlockComponent(
@@ -1268,9 +1556,15 @@ function emitPropReactiveDomBlockComponent(
 ): string {
   const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
   const createBlock = helperNames.createReactiveDomBlock ?? "_createReactiveDomBlock";
-  const effectName = helperNames.effect ?? "_effect";
-  const bindEvent = helperNames.bindEvent ?? "_bindEvent";
-  const bindProp = helperNames.bindProp ?? "_bindProp";
+  const propBlockHelpers: PropBlockEmitHelpers = {
+    bindEvent: helperNames.bindEvent ?? "_bindEvent",
+    bindList: helperNames.bindList ?? "_bindList",
+    bindProp: helperNames.bindProp ?? "_bindProp",
+    bindSpreadProps: helperNames.bindSpreadProps ?? "_bindSpreadProps",
+    createList: helperNames.createList ?? "_createList",
+    effectName: helperNames.effect ?? "_effect",
+    insertDynamic: helperNames.insertDynamic ?? "_insertDynamic",
+  };
   const sourcePropsName = block.propAliases === undefined ? block.propsParam : allocator("_props");
 
   const build: string[] = [];
@@ -1283,84 +1577,18 @@ function emitPropReactiveDomBlockComponent(
     allocator,
     block.propsParam,
     block.propAliases,
+    propBlockHelpers,
+  );
+  const disposeLinesResult = emitPropBlockBindingLines(
+    bindings,
+    allocator,
+    propBlockHelpers,
+    block.propsParam,
+    block.propAliases,
   );
   const disposeName = allocator("_dispose");
-  const eventDisposeNames: string[] = [];
-  const propDisposeNames: string[] = [];
-  const eventBindLines = bindings
-    .filter((binding) => binding.kind === "event")
-    .map((binding) => {
-      const eventName = allocator("event");
-      const handlerName = allocator("_h");
-      const eventDisposeName = allocator("_disposeEvent");
-      eventDisposeNames.push(eventDisposeName);
-      return [
-        `const ${eventDisposeName} = ${bindEvent}(${binding.target}, ${JSON.stringify(binding.eventName ?? "")}, (${eventName}) => {`,
-        ...emitPropBlockEventHandlerLines(binding.code, handlerName, eventName).map(
-          (line) => `  ${line}`,
-        ),
-        `});`,
-      ].join("\n");
-    });
-  const propBindLines = bindings
-    .filter((binding) => binding.kind === "prop")
-    .map((binding) => {
-      const propDisposeName = allocator("_disposeProp");
-      propDisposeNames.push(propDisposeName);
-      return [
-        `const ${propDisposeName} = ${bindProp}(`,
-        `  ${binding.target},`,
-        `  ${JSON.stringify(binding.propName ?? "")},`,
-        `  () => (${binding.code}),`,
-        `);`,
-      ].join("\n");
-    });
-
-  // Keep text/class/htmlFor bindings grouped by dependency. General DOM
-  // attributes delegate to bindProp above so they reuse the shared safety policy.
-  const effectBodiesByKey = new Map<string, string[]>();
-  for (const binding of bindings) {
-    if (binding.kind === "event" || binding.kind === "prop") {
-      continue;
-    }
-
-    const rawName = allocator("_r");
-    const valueName = allocator("_v");
-    const property = binding.kind === "text" ? "data" : binding.kind;
-    const body = [
-      `      const ${rawName} = (${binding.code});`,
-      `      const ${valueName} = ${rawName} == null ? "" : String(${rawName});`,
-      `      if (${binding.target}.${property} !== ${valueName}) ${binding.target}.${property} = ${valueName};`,
-    ].join("\n");
-    const key = propBindingDependencyKey(binding.code, block.propsParam);
-    const effectBody = effectBodiesByKey.get(key);
-    if (effectBody === undefined) {
-      effectBodiesByKey.set(key, [body]);
-    } else {
-      effectBody.push(body);
-    }
-  }
-  const effectDisposeNames =
-    effectBodiesByKey.size === 0
-      ? []
-      : Array.from({ length: effectBodiesByKey.size }, () => allocator("_disposeEffect"));
-  const disposeTargets = [...effectDisposeNames, ...eventDisposeNames, ...propDisposeNames];
-
-  const disposeLines: string[] = [
-    ...eventBindLines.flatMap((line) => line.split("\n").map((part) => `    ${part}`)),
-    ...propBindLines.flatMap((line) => line.split("\n").map((part) => `    ${part}`)),
-  ];
-
-  let effectIndex = 0;
-  for (const effectBody of effectBodiesByKey.values()) {
-    const effectDisposeName = effectDisposeNames[effectIndex]!;
-    disposeLines.push(
-      `    const ${effectDisposeName} = ${effectName}(() => {`,
-      ...effectBody,
-      `    });`,
-    );
-    effectIndex += 1;
-  }
+  const disposeTargets = disposeLinesResult.disposeNames;
+  const disposeLines = disposeLinesResult.lines.map((line) => `    ${line}`);
 
   if (disposeTargets.length === 0) {
     disposeLines.push(`    const ${disposeName} = undefined;`);
@@ -1393,6 +1621,143 @@ function emitPropReactiveDomBlockComponent(
     // committed block instead of re-invoking the component (see host-reconciler).
     `${component.name}.__mreactStaticBlock = true;`,
   ].join("\n");
+}
+
+function emitPropBlockBindingLines(
+  bindings: readonly PropBlockBinding[],
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): { lines: string[]; disposeNames: string[] } {
+  const eventDisposeNames: string[] = [];
+  const propDisposeNames: string[] = [];
+  const spreadDisposeNames: string[] = [];
+  const dynamicDisposeNames: string[] = [];
+  const listDisposeNames: string[] = [];
+  const eventBindLines = bindings
+    .filter((binding): binding is Extract<PropBlockBinding, { kind: "event" }> => binding.kind === "event")
+    .map((binding) => {
+      const eventName = allocator("event");
+      const handlerName = allocator("_h");
+      const eventDisposeName = allocator("_disposeEvent");
+      eventDisposeNames.push(eventDisposeName);
+      return [
+        `const ${eventDisposeName} = ${helperNames.bindEvent}(${binding.target}, ${JSON.stringify(binding.eventName)}, (${eventName}) => {`,
+        ...emitPropBlockEventHandlerLines(binding.code, handlerName, eventName).map(
+          (line) => `  ${line}`,
+        ),
+        `});`,
+      ].join("\n");
+    });
+  const propBindLines = bindings
+    .filter(
+      (binding): binding is PropBlockValueBinding & { kind: "prop" } => binding.kind === "prop",
+    )
+    .map((binding) => {
+      const propDisposeName = allocator("_disposeProp");
+      propDisposeNames.push(propDisposeName);
+      return [
+        `const ${propDisposeName} = ${helperNames.bindProp}(`,
+        `  ${binding.target},`,
+        `  ${JSON.stringify(binding.propName ?? "")},`,
+        `  () => (${binding.code}),`,
+        `);`,
+      ].join("\n");
+    });
+  const spreadBindLines = bindings
+    .filter(
+      (binding): binding is PropBlockValueBinding & { kind: "spread" } =>
+        binding.kind === "spread",
+    )
+    .map((binding) => {
+      const spreadDisposeName = allocator("_disposeSpread");
+      spreadDisposeNames.push(spreadDisposeName);
+      return `const ${spreadDisposeName} = ${helperNames.bindSpreadProps}(${binding.target}, () => (${binding.code}));`;
+    });
+  const dynamicBindLines = bindings
+    .filter(
+      (binding): binding is PropBlockValueBinding & { kind: "dynamic" } =>
+        binding.kind === "dynamic",
+    )
+    .map((binding) => {
+      const dynamicDisposeName = allocator("_disposeDynamic");
+      dynamicDisposeNames.push(dynamicDisposeName);
+      return `const ${dynamicDisposeName} = ${helperNames.insertDynamic}(${binding.target}, ${binding.marker ?? "undefined"}, () => (${binding.code}));`;
+    });
+  const listBindLines = bindings
+    .filter((binding): binding is Extract<PropBlockBinding, { kind: "list" }> => binding.kind === "list")
+    .map((binding) => {
+      const listDisposeName = allocator("_disposeList");
+      const parameters = emitPropBlockListParameters(binding.node);
+      const options = emitPropBlockListOptions(binding.node, parameters);
+      listDisposeNames.push(listDisposeName);
+      return `const ${listDisposeName} = ${helperNames.bindList}(${binding.target}, ${binding.marker}, () => (${binding.node.itemsCode}), ${emitPropBlockListRenderer(binding.node, parameters, allocator, helperNames, propsParam, propAliases)}${options});`;
+    });
+
+  // Keep text/class/htmlFor bindings grouped by dependency. General DOM
+  // attributes delegate to bindProp above so they reuse the shared safety policy.
+  const effectBodiesByKey = new Map<string, string[]>();
+  for (const binding of bindings) {
+    if (
+      binding.kind === "event" ||
+      binding.kind === "prop" ||
+      binding.kind === "spread" ||
+      binding.kind === "dynamic" ||
+      binding.kind === "list"
+    ) {
+      continue;
+    }
+
+    const rawName = allocator("_r");
+    const valueName = allocator("_v");
+    const property = binding.kind === "text" ? "data" : binding.kind;
+    const body = [
+      `      const ${rawName} = (${binding.code});`,
+      `      const ${valueName} = ${rawName} == null ? "" : String(${rawName});`,
+      `      if (${binding.target}.${property} !== ${valueName}) ${binding.target}.${property} = ${valueName};`,
+    ].join("\n");
+    const key = propBindingDependencyKey(binding.code, propsParam);
+    const effectBody = effectBodiesByKey.get(key);
+    if (effectBody === undefined) {
+      effectBodiesByKey.set(key, [body]);
+    } else {
+      effectBody.push(body);
+    }
+  }
+  const effectDisposeNames =
+    effectBodiesByKey.size === 0
+      ? []
+      : Array.from({ length: effectBodiesByKey.size }, () => allocator("_disposeEffect"));
+  const disposeNames = [
+    ...eventDisposeNames,
+    ...propDisposeNames,
+    ...spreadDisposeNames,
+    ...dynamicDisposeNames,
+    ...listDisposeNames,
+    ...effectDisposeNames,
+  ];
+
+  const disposeLines: string[] = [
+    ...eventBindLines.flatMap((line) => line.split("\n")),
+    ...propBindLines.flatMap((line) => line.split("\n")),
+    ...spreadBindLines,
+    ...dynamicBindLines,
+    ...listBindLines.flatMap((line) => line.split("\n")),
+  ];
+
+  let effectIndex = 0;
+  for (const effectBody of effectBodiesByKey.values()) {
+    const effectDisposeName = effectDisposeNames[effectIndex]!;
+    disposeLines.push(
+      `const ${effectDisposeName} = ${helperNames.effectName}(() => {`,
+      ...effectBody,
+      `});`,
+    );
+    effectIndex += 1;
+  }
+
+  return { lines: disposeLines, disposeNames };
 }
 
 function emitPropBlockEventHandlerLines(
@@ -1445,6 +1810,7 @@ function emitPropBlockNode(
   allocator: (baseName: string) => string,
   propsParam: string,
   propAliases: readonly PropAliasIr[] | undefined,
+  helperNames: PropBlockEmitHelpers,
 ): string {
   const rewriteCode = (code: string): string =>
     propAliases === undefined
@@ -1461,6 +1827,21 @@ function emitPropBlockNode(
   }
 
   if (node.kind === "expr") {
+    if (isPropBlockNodeValuedExpression(node.code)) {
+      const name = allocator("_marker");
+      build.push(`const ${name} = document.createTextNode("");`);
+      bindings.push({
+        kind: "dynamic",
+        target: parentVar ?? "document",
+        marker: name,
+        code: rewriteCode(node.code),
+      });
+      if (parentVar !== undefined) {
+        build.push(`${parentVar}.appendChild(${name});`);
+      }
+      return name;
+    }
+
     const name = allocator("_text");
     build.push(`const ${name} = document.createTextNode("");`);
     bindings.push({ kind: "text", target: name, code: rewriteCode(node.code) });
@@ -1468,6 +1849,80 @@ function emitPropBlockNode(
       build.push(`${parentVar}.appendChild(${name});`);
     }
     return name;
+  }
+
+  if (node.kind === "conditional") {
+    const name = allocator("_marker");
+    build.push(`const ${name} = document.createTextNode("");`);
+    bindings.push({
+      kind: "dynamic",
+      target: parentVar ?? "document",
+      marker: name,
+      code: emitPropBlockConditionalRenderValueExpression(
+        node,
+        allocator,
+        propsParam,
+        propAliases,
+        helperNames,
+      ),
+    });
+    if (parentVar !== undefined) {
+      build.push(`${parentVar}.appendChild(${name});`);
+    }
+    return name;
+  }
+
+  if (node.kind === "list") {
+    const name = allocator("_marker");
+    build.push(`const ${name} = document.createTextNode("");`);
+    bindings.push({
+      kind: "list",
+      target: parentVar ?? "document",
+      marker: name,
+      node,
+    });
+    if (parentVar !== undefined) {
+      build.push(`${parentVar}.appendChild(${name});`);
+    }
+    return name;
+  }
+
+  if (node.kind === "component") {
+    const name = allocator("_marker");
+    build.push(`const ${name} = document.createTextNode("");`);
+    bindings.push({
+      kind: "dynamic",
+      target: parentVar ?? "document",
+      marker: name,
+      code: emitPropBlockComponentRenderValueExpression(
+        node,
+        allocator,
+        helperNames,
+        propsParam,
+        propAliases,
+      ),
+    });
+    if (parentVar !== undefined) {
+      build.push(`${parentVar}.appendChild(${name});`);
+    }
+    return name;
+  }
+
+  if (node.kind === "fragment") {
+    for (const child of node.children) {
+      emitPropBlockNode(
+        child,
+        parentVar,
+        build,
+        bindings,
+        allocator,
+        propsParam,
+        propAliases,
+        helperNames,
+      );
+    }
+
+    return parentVar ?? "document.createDocumentFragment()";
   }
 
   const element = node as JsxElementIr;
@@ -1500,6 +1955,12 @@ function emitPropBlockNode(
           code: rewriteCode(attr.code),
         });
       }
+    } else if (attr.kind === "spread-attr") {
+      bindings.push({
+        kind: "spread",
+        target: name,
+        code: rewriteCode(attr.code),
+      });
     } else if (attr.kind === "event") {
       bindings.push({
         kind: "event",
@@ -1511,7 +1972,16 @@ function emitPropBlockNode(
   }
 
   for (const child of element.children) {
-    emitPropBlockNode(child, name, build, bindings, allocator, propsParam, propAliases);
+    emitPropBlockNode(
+      child,
+      name,
+      build,
+      bindings,
+      allocator,
+      propsParam,
+      propAliases,
+      helperNames,
+    );
   }
 
   if (parentVar !== undefined) {
@@ -1519,6 +1989,350 @@ function emitPropBlockNode(
   }
 
   return name;
+}
+
+function emitPropBlockRenderValueExpression(
+  children: readonly JsxNodeIr[],
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): string {
+  if (children.length === 0) {
+    return "null";
+  }
+
+  if (children.length === 1) {
+    return emitPropBlockNodeRenderValueExpression(
+      children[0] as JsxNodeIr,
+      allocator,
+      helperNames,
+      propsParam,
+      propAliases,
+    );
+  }
+
+  return `[${children
+    .map((child) =>
+      emitPropBlockNodeRenderValueExpression(
+        child,
+        allocator,
+        helperNames,
+        propsParam,
+        propAliases,
+      ),
+    )
+    .join(", ")}]`;
+}
+
+function emitPropBlockNodeRenderValueExpression(
+  node: JsxNodeIr,
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): string {
+  const rewriteCode = (code: string): string =>
+    propAliases === undefined
+      ? code
+      : (rewritePropBlockAliasCode(code, propsParam, propAliases) ?? code);
+
+  if (node.kind === "text") {
+    return JSON.stringify(node.value);
+  }
+
+  if (node.kind === "expr") {
+    return `(${rewriteCode(node.code)})`;
+  }
+
+  if (node.kind === "conditional") {
+    return emitPropBlockConditionalRenderValueExpression(
+      node,
+      allocator,
+      propsParam,
+      propAliases,
+      helperNames,
+    );
+  }
+
+  if (node.kind === "list") {
+    const parameters = emitPropBlockListParameters(node);
+    const options = emitPropBlockListOptions(node, parameters);
+    return `${helperNames.createList}(() => (${node.itemsCode}), ${emitPropBlockListRenderer(node, parameters, allocator, helperNames, propsParam, propAliases)}${options})`;
+  }
+
+  if (node.kind === "fragment") {
+    return emitPropBlockRenderValueExpression(
+      node.children,
+      allocator,
+      helperNames,
+      propsParam,
+      propAliases,
+    );
+  }
+
+  if (node.kind === "component") {
+    return emitPropBlockComponentRenderValueExpression(
+      node,
+      allocator,
+      helperNames,
+      propsParam,
+      propAliases,
+    );
+  }
+
+  if (node.kind !== "element") {
+    return "null";
+  }
+
+  const build: string[] = [];
+  const bindings: PropBlockBinding[] = [];
+  const rootVar = emitPropBlockNode(
+    node,
+    undefined,
+    build,
+    bindings,
+    allocator,
+    propsParam,
+    propAliases,
+    helperNames,
+  );
+  const bindingLines = emitPropBlockBindingLines(
+    bindings,
+    allocator,
+    helperNames,
+    propsParam,
+    propAliases,
+  ).lines;
+
+  return [
+    "(() => {",
+    ...build.map((line) => `  ${line}`),
+    ...bindingLines.map((line) => `  ${line}`),
+    `  return ${rootVar};`,
+    "})()",
+  ].join("\n");
+}
+
+function emitPropBlockConditionalRenderValueExpression(
+  node: Extract<JsxNodeIr, { kind: "conditional" }>,
+  allocator: (baseName: string) => string,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+  helperNames: PropBlockEmitHelpers,
+): string {
+  const rewriteCode = (code: string): string =>
+    propAliases === undefined
+      ? code
+      : (rewritePropBlockAliasCode(code, propsParam, propAliases) ?? code);
+  const whenTrue = emitPropBlockRenderValueExpression(
+    node.whenTrue,
+    allocator,
+    helperNames,
+    propsParam,
+    propAliases,
+  );
+  const whenFalse = emitPropBlockRenderValueExpression(
+    node.whenFalse,
+    allocator,
+    helperNames,
+    propsParam,
+    propAliases,
+  );
+
+  if (node.conditionValueName === undefined) {
+    return `((${rewriteCode(node.conditionCode)}) ? ${whenTrue} : ${whenFalse})`;
+  }
+
+  return `(() => { const ${node.conditionValueName} = (${rewriteCode(node.conditionCode)}); return ${node.conditionValueName} ? ${whenTrue} : ${whenFalse}; })()`;
+}
+
+function emitPropBlockListRenderer(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): string {
+  const valueExpression = emitPropBlockRenderValueExpression(
+    node.children,
+    allocator,
+    helperNames,
+    propsParam,
+    propAliases,
+  );
+
+  if (node.bodyStatements === undefined || node.bodyStatements.length === 0) {
+    return `(${parameters}) => ${valueExpression}`;
+  }
+
+  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+}
+
+function emitPropBlockComponentRenderValueExpression(
+  node: Extract<JsxNodeIr, { kind: "component" }>,
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): string {
+  const props = emitPropBlockComponentProps(
+    node.props,
+    node.children,
+    allocator,
+    helperNames,
+    propsParam,
+    propAliases,
+  );
+  return `${node.name}(${props})`;
+}
+
+function emitPropBlockComponentProps(
+  props: readonly ComponentPropIr[],
+  children: readonly JsxNodeIr[],
+  allocator: (baseName: string) => string,
+  helperNames: PropBlockEmitHelpers,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): string {
+  const rewriteCode = (code: string): string =>
+    propAliases === undefined
+      ? code
+      : (rewritePropBlockAliasCode(code, propsParam, propAliases) ?? code);
+  const entries = props
+    .map((prop) => {
+      if (prop.kind === "spread-prop") {
+        return `...(${rewriteCode(prop.code)})`;
+      }
+
+      if (prop.kind === "render-prop") {
+        return "";
+      }
+
+      return `${emitPropName(prop.name)}: (${rewriteCode(prop.code)})`;
+    })
+    .filter(Boolean);
+
+  if (children.length > 0) {
+    entries.push(
+      `children: ${emitPropBlockRenderValueExpression(
+        children,
+        allocator,
+        helperNames,
+        propsParam,
+        propAliases,
+      )}`,
+    );
+  }
+
+  return `{ ${entries.join(", ")} }`;
+}
+
+function emitPropBlockListOptions(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  parameters: string,
+): string {
+  const optionEntries: string[] = [];
+
+  if (node.keyCode !== undefined) {
+    optionEntries.push(`key: (${parameters}) => (${node.keyCode})`);
+  }
+
+  if (node.keyCode !== undefined && listReadsNestedItemObject(node, node.itemName)) {
+    optionEntries.push("nestedObjectFallback: true");
+  }
+
+  return optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
+}
+
+function emitPropBlockListParameters(node: Extract<JsxNodeIr, { kind: "list" }>): string {
+  return [node.itemName, node.indexName, node.arrayName]
+    .filter((name): name is string => name !== undefined)
+    .join(", ");
+}
+
+function listReadsNestedItemObject(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  itemName: string,
+): boolean {
+  return node.children.some((child) => nodeReadsNestedItemObject(child, itemName));
+}
+
+function nodeReadsNestedItemObject(node: JsxNodeIr, itemName: string): boolean {
+  switch (node.kind) {
+    case "element":
+      return (
+        codeReadsNestedItemObject(node.keyCode, itemName) ||
+        node.attributes.some((attribute) => {
+          if (attribute.kind === "spread-attr") {
+            return codeReadsNestedItemObject(attribute.code, itemName);
+          }
+
+          if (attribute.kind === "dynamic-attr" || attribute.kind === "event") {
+            return codeReadsNestedItemObject(attribute.code, itemName);
+          }
+
+          return false;
+        }) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "fragment":
+      return (
+        node.bodyStatements?.some((statement) => codeReadsNestedItemObject(statement, itemName)) ===
+          true || node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "conditional":
+      return (
+        codeReadsNestedItemObject(node.conditionCode, itemName) ||
+        node.whenTrue.some((child) => nodeReadsNestedItemObject(child, itemName)) ||
+        node.whenFalse.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "list":
+      return (
+        codeReadsNestedItemObject(node.itemsCode, itemName) ||
+        codeReadsNestedItemObject(node.keyCode, itemName) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "expr":
+      return codeReadsNestedItemObject(node.code, itemName);
+    case "component":
+      return (
+        codeReadsNestedItemObject(node.keyCode, itemName) ||
+        node.props.some((prop) => {
+          if (prop.kind === "spread-prop") {
+            return codeReadsNestedItemObject(prop.code, itemName);
+          }
+
+          if (prop.kind === "render-prop") {
+            return prop.children.some((child) => nodeReadsNestedItemObject(child, itemName));
+          }
+
+          return codeReadsNestedItemObject(prop.code, itemName);
+        }) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
+      );
+    case "async-boundary":
+      return (
+        codeReadsNestedItemObject(node.valueCode, itemName) ||
+        node.children.some((child) => nodeReadsNestedItemObject(child, itemName)) ||
+        (node.placeholderChildren?.some((child) =>
+          nodeReadsNestedItemObject(child, itemName),
+        ) ?? false) ||
+        (node.catchChildren?.some((child) => nodeReadsNestedItemObject(child, itemName)) ?? false)
+      );
+    case "text":
+      return false;
+  }
+}
+
+function codeReadsNestedItemObject(code: string | undefined, itemName: string): boolean {
+  if (code === undefined || code.length === 0) {
+    return false;
+  }
+
+  const escapedItemName = itemName.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+  return new RegExp(`\\b${escapedItemName}(?:\\.[A-Za-z_$][\\w$]*){2,}`).test(code);
 }
 
 function canRewritePropBlockAliasNode(
@@ -1534,13 +2348,59 @@ function canRewritePropBlockAliasNode(
     return rewritePropBlockAliasCode(node.code, propsParam, propAliases) !== undefined;
   }
 
+  if (node.kind === "conditional") {
+    return (
+      rewritePropBlockAliasCode(node.conditionCode, propsParam, propAliases) !== undefined &&
+      node.whenTrue.every((child) =>
+        canRewritePropBlockAliasNode(child, propsParam, propAliases),
+      ) &&
+      node.whenFalse.every((child) =>
+        canRewritePropBlockAliasNode(child, propsParam, propAliases),
+      )
+    );
+  }
+
+  if (node.kind === "list") {
+    return (
+      rewritePropBlockAliasCode(node.itemsCode, propsParam, propAliases) !== undefined &&
+      (node.keyCode === undefined ||
+        rewritePropBlockAliasCode(node.keyCode, propsParam, propAliases) !== undefined) &&
+      (node.bodyStatements === undefined ||
+        node.bodyStatements.every(
+          (statement) => rewritePropBlockAliasCode(statement, propsParam, propAliases) !== undefined,
+        )) &&
+      node.children.every((child) => canRewritePropBlockAliasNode(child, propsParam, propAliases))
+    );
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.every((child) =>
+      canRewritePropBlockAliasNode(child, propsParam, propAliases),
+    );
+  }
+
+  if (node.kind === "component") {
+    return (
+      node.props.every((prop) => {
+        if (prop.kind === "render-prop") {
+          return false;
+        }
+
+        return rewritePropBlockAliasCode(prop.code, propsParam, propAliases) !== undefined;
+      }) &&
+      node.children.every((child) =>
+        canRewritePropBlockAliasNode(child, propsParam, propAliases),
+      )
+    );
+  }
+
   if (node.kind !== "element") {
     return false;
   }
 
   for (const attr of node.attributes) {
     if (
-      (attr.kind === "dynamic-attr" || attr.kind === "event") &&
+      (attr.kind === "dynamic-attr" || attr.kind === "event" || attr.kind === "spread-attr") &&
       rewritePropBlockAliasCode(attr.code, propsParam, propAliases) === undefined
     ) {
       return false;

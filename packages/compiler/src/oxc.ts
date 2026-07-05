@@ -704,8 +704,12 @@ function collectCompatRenderToStringLowerableTargets(
     if (
       targetName !== undefined &&
       targetFunctionLike !== undefined &&
-      analyzeCompatCreateElementFunctionRoot(code, targetFunctionLike, createElementNames) !==
-        undefined
+      analyzeCompatCreateElementFunctionRoot(
+        code,
+        targetFunctionLike,
+        createElementNames,
+        localFunctionLikes,
+      ) !== undefined
     ) {
       targets.add(targetName);
     }
@@ -845,9 +849,14 @@ function analyzeCompatRenderToStringWrapperRoot(
 
   const targetFunctionLike = localFunctionLikes.get(targetName);
   const lowered =
-    targetFunctionLike === undefined
+      targetFunctionLike === undefined
       ? undefined
-      : analyzeCompatCreateElementFunctionRoot(code, targetFunctionLike, createElementNames);
+      : analyzeCompatCreateElementFunctionRoot(
+          code,
+          targetFunctionLike,
+          createElementNames,
+          localFunctionLikes,
+        );
 
   if (lowered !== undefined) {
     return lowered;
@@ -1231,6 +1240,7 @@ function analyzeOxcFunctionLikeComponent(
       : analyzeCompatCreateElementRoot(code, returnExpression, {
           names: compatCreateElementNames,
           shadowed: collectFunctionShadowedNames(functionLike, compatCreateElementNames),
+          localFunctionLikes: compatCreateElementLocalFunctionLikes,
         })) ??
     analyzeCompatRenderToStringWrapperRoot(
       code,

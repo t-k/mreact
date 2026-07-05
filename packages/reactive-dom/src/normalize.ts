@@ -1,8 +1,10 @@
 import { applyDomProp } from "./dom-prop-application.js";
+import { registerDispose } from "./scope.js";
 import type { RenderValue } from "./types.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 const REACT_COMPAT_FRAGMENT_TYPE = Symbol.for("react.fragment");
+const REACTIVE_DOM_BLOCK_TYPE = Symbol.for("modular.react.reactive_dom_block");
 const maxRenderValueDepth = 256;
 
 export function normalizeRenderValue(value: RenderValue, depth = 0): Node[] {
@@ -70,6 +72,25 @@ function normalizeCompatElement(element: CompatElement, depth: number): Node[] {
 
   if (element.type === REACT_COMPAT_FRAGMENT_TYPE) {
     return normalizeRenderValue(props.children as RenderValue, depth + 1);
+  }
+
+  if (element.type === REACTIVE_DOM_BLOCK_TYPE) {
+    const render = props.render;
+
+    if (typeof render !== "function") {
+      return [];
+    }
+
+    const result = (render as (props: Record<string, unknown>) => {
+      node?: ChildNode | undefined;
+      dispose?: (() => void) | undefined;
+    })(props.blockProps as Record<string, unknown>);
+
+    if (result.dispose !== undefined) {
+      registerDispose(result.dispose);
+    }
+
+    return result.node === undefined ? [] : [result.node];
   }
 
   if (typeof element.type === "function") {

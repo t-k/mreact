@@ -272,6 +272,242 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(rect?.getAttribute("width")).toBe("48");
   });
 
+  test("lowers structural conditional and keyed list children inside prop blocks", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Rows(props) {
+          return (
+            <ul id="rows">
+              {props.showHeader ? <li id="header">{props.header}</li> : null}
+              {props.rows.map((row) => <li key={row.id} data-id={row.id}>{row.label}</li>)}
+            </ul>
+          );
+        }
+
+        function Controller() {
+          const [mode, setMode] = useState("a");
+          const rows = mode === "a"
+            ? [{ id: "a", label: "Ada" }, { id: "b", label: "Babbage" }]
+            : [{ id: "b", label: "Byron" }, { id: "c", label: "Curie" }];
+          return (
+            <div>
+              <button id="switch" onClick={() => setMode("b")}>switch</button>
+              <Rows showHeader={mode === "a"} header={mode} rows={rows} />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("insertDynamic");
+    expect(output.code).toContain("bindList");
+
+    const container = await runCompatComponent(output.code);
+    expect(Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent)).toEqual([
+      "a",
+      "Ada",
+      "Babbage",
+    ]);
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(container.querySelector("#header")).toBeNull();
+    expect(Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent)).toEqual([
+      "Byron",
+      "Curie",
+    ]);
+  });
+
+  test("lowers node-valued children props through dynamic insertion", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Panel(props) {
+          return <section id="panel" className={props.kind}>{props.children}</section>;
+        }
+
+        function Controller() {
+          const [kind, setKind] = useState("a");
+          return (
+            <div>
+              <button id="switch" onClick={() => setKind("b")}>switch</button>
+              <Panel kind={kind}>
+                {kind === "a" ? <strong>Ada</strong> : <em>Byron</em>}
+              </Panel>
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("insertDynamic");
+    expect(output.code).toContain("(props.children)");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.querySelector("#panel")?.className).toBe("a");
+    expect(container.querySelector("#panel")?.innerHTML).toBe("<strong>Ada</strong>");
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(container.querySelector("#panel")?.className).toBe("b");
+    expect(container.querySelector("#panel")?.innerHTML).toBe("<em>Byron</em>");
+  });
+
+  test("lowers same-module static prop block children through dynamic insertion", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        function Label(props) {
+          return <strong>{props.text}</strong>;
+        }
+
+        export function Panel(props) {
+          return <section id="panel"><Label text={props.label} /></section>;
+        }
+
+        function Controller() {
+          const [label, setLabel] = useState("Ada");
+          return (
+            <div>
+              <button id="switch" onClick={() => setLabel("Byron")}>switch</button>
+              <Panel label={label} />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("insertDynamic");
+    expect(output.code).toContain("Label({ text: (props.label) })");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.querySelector("#panel")?.innerHTML).toBe("<strong>Ada</strong>");
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(container.querySelector("#panel")?.innerHTML).toBe("<strong>Byron</strong>");
+  });
+
+  test("lowers safe spread attributes through bindSpreadProps", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Action(props) {
+          return <button id="target" {...props.buttonProps}>{props.label}</button>;
+        }
+
+        function Controller() {
+          const [on, setOn] = useState(false);
+          return (
+            <div>
+              <button id="switch" onClick={() => setOn(true)}>switch</button>
+              <Action
+                label={on ? "Saved" : "Save"}
+                buttonProps={{
+                  "aria-label": on ? "Saved" : "Save",
+                  disabled: on,
+                  "data-state": on ? "done" : "idle",
+                }}
+              />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("bindSpreadProps");
+
+    const container = await runCompatComponent(output.code);
+    const target = container.querySelector<HTMLButtonElement>("#target");
+    expect(target?.getAttribute("aria-label")).toBe("Save");
+    expect(target?.getAttribute("data-state")).toBe("idle");
+    expect(target?.disabled).toBe(false);
+    expect(target?.textContent).toBe("Save");
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(target?.getAttribute("aria-label")).toBe("Saved");
+    expect(target?.getAttribute("data-state")).toBe("done");
+    expect(target?.disabled).toBe(true);
+    expect(target?.textContent).toBe("Saved");
+  });
+
+  test("lowered spread attributes keep bindSpreadProps safety policy", async () => {
+    const output = transform({
+      code: `export function Box(props) {
+          return <a id="target" {...props.linkProps}>safe</a>;
+        }
+
+        export function App() {
+          return (
+            <Box
+              linkProps={{
+                href: "javascript:alert(1)",
+                onClick: "alert(2)",
+                onclick: "alert(3)",
+                dangerouslySetInnerHTML: { __html: "<span>bad</span>" },
+                title: "safe",
+              }}
+            />
+          );
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("bindSpreadProps");
+
+    const container = await runCompatComponent(output.code);
+    const link = container.querySelector("#target");
+
+    expect(link?.getAttribute("href")).toBeNull();
+    expect(link?.hasAttribute("onClick")).toBe(false);
+    expect(link?.hasAttribute("onclick")).toBe(false);
+    expect(link?.innerHTML).toBe("safe");
+    expect(link?.getAttribute("title")).toBe("safe");
+  });
+
   test("does not lower ref-bearing host trees to prop reactive blocks", () => {
     const rootRef = transform({
       code: `export function Icon(props) {

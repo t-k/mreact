@@ -102,6 +102,32 @@ describe("bindSpreadProps", () => {
     dispose();
   });
 
+  test("ignores dangerous spread-only props", async () => {
+    const props = cell<Record<string, unknown>>({
+      dangerouslySetInnerHTML: { __html: "<span>bad</span>" },
+      onClick: "alert(1)",
+      onclick: "alert(2)",
+      onmouseover: () => {
+        throw new Error("must not be attached");
+      },
+      suppressHydrationWarning: true,
+      title: "safe",
+    });
+    const element = document.createElement("div");
+    const dispose = bindSpreadProps(element, () => props.get());
+
+    await flushEffects();
+
+    expect(element.innerHTML).toBe("");
+    expect(element.hasAttribute("onClick")).toBe(false);
+    expect(element.hasAttribute("onclick")).toBe(false);
+    expect(element.hasAttribute("onmouseover")).toBe(false);
+    expect(element.hasAttribute("suppressHydrationWarning")).toBe(false);
+    expect(element.getAttribute("title")).toBe("safe");
+
+    dispose();
+  });
+
   test("does not rewrite unchanged spread props on reactive re-runs", async () => {
     const trigger = cell(0);
     const props = cell<Record<string, unknown>>({

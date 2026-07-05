@@ -84,5 +84,16 @@ function clearSpreadProps(element: Element, previousProps: Map<string, unknown>)
 }
 
 function shouldSkipSpreadProp(name: string): boolean {
-  return name === "children" || name === "key" || name === "ref";
+  return (
+    name === "children" ||
+    name === "dangerouslySetInnerHTML" ||
+    name === "key" ||
+    name === "ref" ||
+    name === "suppressHydrationWarning" ||
+    isEventLikeSpreadProp(name)
+  );
+}
+
+function isEventLikeSpreadProp(name: string): boolean {
+  return name.length > 2 && name[0]?.toLowerCase() === "o" && name[1]?.toLowerCase() === "n";
 }
