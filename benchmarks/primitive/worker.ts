@@ -42,6 +42,7 @@ if (runCase === undefined) {
     runCase,
     {
       measuredRuns,
+      sampleBatchSize: benchmarkCase.sampleBatchSize,
       warmupRuns,
     },
   );

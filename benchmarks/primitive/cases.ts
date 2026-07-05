@@ -13,6 +13,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     description: "Replaces an existing 1,000-row keyed list with a fresh 1,000-row dataset.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 20,
     unit: "ms",
   },
   {
@@ -44,6 +45,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     description: "Removes one keyed row from the middle of an existing 1,000-row list.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 20,
     unit: "ms",
   },
   {
@@ -58,6 +60,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     description: "Reverses 1,000 keyed rows and verifies that DOM node identity is preserved.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 50,
     unit: "ms",
   },
   {
@@ -66,6 +69,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
       "Creates 1,000 button event targets and measures initial interactive wiring cost without dispatching events.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 50,
     unit: "ms",
   },
   {
@@ -74,6 +78,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
       "Updates 1,000 fine-grained source values when each source has one live non-DOM subscriber, separating direct source write overhead from aggregate computed fan-in and framework-level array update work.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 50,
     unit: "ms",
   },
   {
@@ -81,6 +86,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     description: "Updates one reactive text value that is bound to 1,000 text nodes.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 20,
     unit: "ms",
   },
   {
@@ -89,6 +95,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
       "Updates one source value that fans out through a derived value into 1,000 displayed text nodes.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 20,
     unit: "ms",
   },
   {
@@ -97,6 +104,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
       "Updates 1,000 fine-grained source values feeding one aggregate and validates one derived aggregate text output. Only frameworks exposing comparable per-item source primitives implement this ranked case.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 50,
     unit: "ms",
   },
   {
@@ -105,6 +113,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
       "Updates one array-valued source/prop feeding one aggregate over 1,000 values and validates one derived aggregate text output. This is ranked separately from the fine-grained source-write variant.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 50,
     unit: "ms",
   },
   {
@@ -113,6 +122,7 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
       "Updates 1,000 fine-grained source values without subscribers, derived values, DOM writes, or framework-level re-render work, then validates the final source values. Frameworks without an equivalent source primitive report this case as unsupported.",
     count: 1_000,
     metric: "duration",
+    sampleBatchSize: 50,
     unit: "ms",
   },
   {

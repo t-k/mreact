@@ -267,6 +267,11 @@ describe("primitive adapters", () => {
       )
         ?.description,
     ).toContain("ranked separately from the fine-grained source-write variant");
+    expect(
+      primitiveCases
+        .filter((benchmarkCase) => benchmarkCase.name.startsWith("computed fan-in 1k"))
+        .map((benchmarkCase) => benchmarkCase.sampleBatchSize),
+    ).toEqual([50, 50]);
   });
 
   it("runs every primitive case for every adapter", async () => {
@@ -395,6 +400,27 @@ describe("primitive adapters", () => {
       "run 29",
       "run 30",
     ]);
+  });
+
+  it("averages batched primitive case samples and records batch metadata", async () => {
+    let calls = 0;
+
+    const result = await collectPrimitiveCaseSamples(
+      () => ({ ...createBenchmarkDom(), count: 10 }),
+      async () => {
+        calls += 1;
+        return { samples: [calls] };
+      },
+      {
+        measuredRuns: 2,
+        sampleBatchSize: 3,
+        warmupRuns: 1,
+      },
+    );
+
+    expect(calls).toBe(9);
+    expect(result.samples).toEqual([5, 8]);
+    expect(result.notes).toEqual(["sampleBatchSize=3"]);
   });
 
   it("runs a primitive adapter case in an isolated worker process", async () => {

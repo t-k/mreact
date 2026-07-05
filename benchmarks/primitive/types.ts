@@ -60,5 +60,6 @@ export interface PrimitiveCaseDefinition {
   description: string;
   count: number;
   metric: BenchmarkRow["metric"];
+  sampleBatchSize?: number;
   unit: BenchmarkRow["unit"];
 }
