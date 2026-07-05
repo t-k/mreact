@@ -107,9 +107,6 @@ describe("bindSpreadProps", () => {
       dangerouslySetInnerHTML: { __html: "<span>bad</span>" },
       onClick: "alert(1)",
       onclick: "alert(2)",
-      onmouseover: () => {
-        throw new Error("must not be attached");
-      },
       suppressHydrationWarning: true,
       title: "safe",
     });
@@ -121,9 +118,61 @@ describe("bindSpreadProps", () => {
     expect(element.innerHTML).toBe("");
     expect(element.hasAttribute("onClick")).toBe(false);
     expect(element.hasAttribute("onclick")).toBe(false);
-    expect(element.hasAttribute("onmouseover")).toBe(false);
     expect(element.hasAttribute("suppressHydrationWarning")).toBe(false);
     expect(element.getAttribute("title")).toBe("safe");
+
+    dispose();
+  });
+
+  test("binds function event handlers from spread props while dropping string event attributes", async () => {
+    const calls: string[] = [];
+    const props = cell<Record<string, unknown>>({
+      onClick: () => calls.push("first"),
+      onclick: "alert(1)",
+    });
+    const element = document.createElement("button");
+    const dispose = bindSpreadProps(element, () => props.get());
+
+    await flushEffects();
+
+    element.click();
+    expect(calls).toEqual(["first"]);
+    expect(element.hasAttribute("onclick")).toBe(false);
+
+    props.set({
+      onClick: () => calls.push("second"),
+      onmouseover: "alert(2)",
+    });
+    await flushEffects();
+
+    element.click();
+    expect(calls).toEqual(["first", "second"]);
+    expect(element.hasAttribute("onmouseover")).toBe(false);
+
+    dispose();
+
+    element.click();
+    expect(calls).toEqual(["first", "second"]);
+  });
+
+  test("skips form value props from spread bindings", async () => {
+    const props = cell<Record<string, unknown>>({
+      value: "Ada",
+      checked: true,
+      defaultValue: "initial",
+      defaultChecked: true,
+      title: "safe",
+    });
+    const input = document.createElement("input");
+    const dispose = bindSpreadProps(input, () => props.get());
+
+    await flushEffects();
+
+    expect(input.value).toBe("");
+    expect(input.checked).toBe(false);
+    expect(input.defaultValue).toBe("");
+    expect(input.defaultChecked).toBe(false);
+    expect(input.getAttribute("title")).toBe("safe");
 
     dispose();
   });
