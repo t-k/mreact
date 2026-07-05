@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.0.186 - 2026-07-05
+
+### Added
+
+- Added shared DOM prop-name classification helpers for compiler and runtime integrations through `@reckona/mreact-shared`.
+
+### Changed
+
+- Expanded React-compatible compiler lowering for proven-safe prop reactive DOM blocks, including static same-module component composition, nested render values, structural conditionals, keyed lists, dynamic spread props, and server `createElement()` component inlining.
+- Improved App Router stream loading shell behavior so loading fallback rendering waits for route loader startup instead of flushing before loader execution begins.
+
+### Fixed
+
+- Fixed React-compatible production lowering regressions around component-children helper imports, destructured prop alias rewrites, inline component prop substitution, nested binding disposal, spread event handlers, spread form props, hydration node consumption, and server map body purity.
+- Fixed React-compatible DOM spread prop handling so function-valued event handlers remain interactive while string event attributes and unsafe form-control drift are still filtered.
+
 ## 0.0.185 - 2026-07-04
 
 ### Changed
