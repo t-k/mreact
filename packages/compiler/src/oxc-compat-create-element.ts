@@ -729,10 +729,17 @@ function rewriteInlineComponentPropsCode(
   while (index < code.length) {
     const char = code[index] ?? "";
 
-    if (char === '"' || char === "'" || char === "`") {
+    if (char === '"' || char === "'") {
       const quoted = readQuotedJavaScript(code, index, char);
       output += quoted;
       index += quoted.length;
+      continue;
+    }
+
+    if (char === "`") {
+      const template = rewriteInlineComponentPropsTemplate(code, index, propsParam, values);
+      output += template.code;
+      index = template.end;
       continue;
     }
 
@@ -760,7 +767,11 @@ function rewriteInlineComponentPropsCode(
       }
 
       const name = code.slice(start, index);
-      if (name !== propsParam || code[index] !== ".") {
+      if (
+        name !== propsParam ||
+        code[index] !== "." ||
+        code[start - 1] === "."
+      ) {
         output += name;
         continue;
       }
@@ -791,6 +802,85 @@ function rewriteInlineComponentPropsCode(
   }
 
   return output;
+}
+
+function rewriteInlineComponentPropsTemplate(
+  code: string,
+  start: number,
+  propsParam: string,
+  values: ReadonlyMap<string, string>,
+): { code: string; end: number } {
+  let output = "`";
+  let index = start + 1;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === "\\") {
+      output += code.slice(index, Math.min(index + 2, code.length));
+      index += 2;
+      continue;
+    }
+
+    if (char === "`") {
+      output += "`";
+      return { code: output, end: index + 1 };
+    }
+
+    if (char === "$" && code[index + 1] === "{") {
+      const expression = readTemplateExpression(code, index + 2);
+      output += "${";
+      output += rewriteInlineComponentPropsCode(expression.code, propsParam, values);
+      output += "}";
+      index = expression.end;
+      continue;
+    }
+
+    output += char;
+    index += 1;
+  }
+
+  return { code: output, end: index };
+}
+
+function readTemplateExpression(code: string, start: number): { code: string; end: number } {
+  let depth = 1;
+  let index = start;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === '"' || char === "'" || char === "`") {
+      const quoted = readQuotedJavaScript(code, index, char);
+      index += quoted.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "/") {
+      const end = code.indexOf("\n", index + 2);
+      index = end === -1 ? code.length : end;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "*") {
+      const end = code.indexOf("*/", index + 2);
+      index = end === -1 ? code.length : end + 2;
+      continue;
+    }
+
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return { code: code.slice(start, index), end: index + 1 };
+      }
+    }
+
+    index += 1;
+  }
+
+  return { code: code.slice(start), end: index };
 }
 
 function readQuotedJavaScript(code: string, start: number, quote: string): string {

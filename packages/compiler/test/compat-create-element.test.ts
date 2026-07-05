@@ -502,4 +502,60 @@ export default function Page() {
     });
     expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
   });
+
+  test("does not rewrite inline component prop names used as nested object properties", () => {
+    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
+const other = { props: { a: "other" } };
+function View(props) {
+  return createElement("main", null, createElement("span", null, other.props.a), createElement("em", null, props.a));
+}
+function PageView() {
+  return createElement(View, { a: "passed" });
+}
+export default function Page() {
+  return renderToString(PageView);
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("other.(\"passed\")");
+
+    const interpreted = renderToString(function PageView() {
+      const other = { props: { a: "other" } };
+      return createElement(
+        function View(props: { a: string }) {
+          return createElement("main", null, createElement("span", null, other.props.a), createElement("em", null, props.a));
+        },
+        { a: "passed" },
+      );
+    });
+    expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
+  });
+
+  test("rewrites inline component prop reads inside template literal expressions", () => {
+    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
+function View(props) {
+  return createElement("main", null, createElement("span", null, \`value:\${props.a}\`));
+}
+function PageView() {
+  return createElement(View, { a: "passed" });
+}
+export default function Page() {
+  return renderToString(PageView);
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('`value:${("passed")}`');
+
+    const interpreted = renderToString(function PageView() {
+      return createElement(
+        function View(props: { a: string }) {
+          return createElement("main", null, createElement("span", null, `value:${props.a}`));
+        },
+        { a: "passed" },
+      );
+    });
+    expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
+  });
 });
