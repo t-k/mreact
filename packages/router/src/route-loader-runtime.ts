@@ -21,6 +21,7 @@ export async function loadRouteDataFromModule(options: {
   context: RouteDataContext;
   hasLoader: boolean;
   loadModule(): Promise<RouteLoaderModule>;
+  onLoaderReady?: (() => void) | undefined;
   timing?: RouteLoaderRuntimeTiming | undefined;
 }): Promise<unknown> {
   if (!options.hasLoader) {
@@ -36,10 +37,12 @@ export async function loadRouteDataFromModule(options: {
   }
 
   if (module.loader === undefined) {
+    options.onLoaderReady?.();
     return undefined;
   }
 
   const executionStartedAt = options.timing?.start();
+  options.onLoaderReady?.();
   try {
     return await module.loader(options.context);
   } catch (error) {

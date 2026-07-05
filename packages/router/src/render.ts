@@ -715,6 +715,34 @@ async function readSettledPromiseAtNextTask<T>(
   ]);
 }
 
+function createDeferredSignal(): {
+  promise: Promise<void>;
+  resolve(): void;
+} {
+  let resolve: (() => void) | undefined;
+  const promise = new Promise<void>((innerResolve) => {
+    resolve = innerResolve;
+  });
+
+  return {
+    promise,
+    resolve() {
+      resolve?.();
+    },
+  };
+}
+
+async function waitForLoaderReadyOrSettled(
+  dataPromise: Promise<unknown>,
+  loaderReady: Promise<void> | undefined,
+): Promise<void> {
+  if (loaderReady === undefined) {
+    return;
+  }
+
+  await Promise.race([loaderReady, dataPromise.then(() => undefined, () => undefined)]);
+}
+
 function addRenderTimingPhaseDuration(
   timing: RenderTiming | undefined,
   startedAt: number | undefined,
@@ -1087,6 +1115,7 @@ async function renderAppRequestInternal(
     const clientInference = routeAnalysis.clientInference;
     const clientRoute = clientInference.client;
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
+    const loaderReady = routeAnalysis.hasLoader ? createDeferredSignal() : undefined;
     const dataPromise = routeAnalysis.hasLoader
       ? loadRouteDataWithInstrumentation({
           appDir: options.appDir,
@@ -1109,6 +1138,7 @@ async function renderAppRequestInternal(
           define: options.define,
           vitePlugins: options.vitePlugins,
           timing,
+          onLoaderReady: loaderReady?.resolve,
         })
       : undefined;
     finishRenderTimingPhase(timing, phaseStartedAt, "loaderStartMs");
@@ -1316,6 +1346,8 @@ async function renderAppRequestInternal(
               return settledData.value;
             }
             streamDataPromise = Promise.resolve(settledData.value);
+          } else {
+            await waitForLoaderReadyOrSettled(streamDataPromise, loaderReady?.promise);
           }
         } finally {
           finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
@@ -4466,6 +4498,7 @@ async function loadRouteData(options: {
   devServerModuleCacheVersion?: string | undefined;
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
+  onLoaderReady?: (() => void) | undefined;
   serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
   serverModuleCacheVersion?: string | undefined;
   timing?: RenderTiming | undefined;
@@ -4475,6 +4508,7 @@ async function loadRouteData(options: {
     context: options.context,
     hasLoader: hasLoaderExport(options.code),
     loadModule: () => loadRouteLoaderModule(options),
+    onLoaderReady: options.onLoaderReady,
     timing: {
       finish(startedAt, phase) {
         finishRenderTimingPhase(options.timing, startedAt, phase);
@@ -4495,6 +4529,7 @@ async function loadRouteDataWithInstrumentation(options: {
   filename: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
+  onLoaderReady?: (() => void) | undefined;
   request: Request;
   routeId: string;
   routePath: string;
