@@ -29,7 +29,8 @@ import {
   compilerModuleContextForSource,
   collectClientRouteReferences,
   createClientRouteInferenceCache,
-  detectClientNavigationHint,
+  detectAnchorElementUsage,
+  detectClientNavigationOverride,
   formatClientRouteInferenceDiagnostic,
   inferClientRouteModule,
   navigationRuntimeLinkDisabledDiagnostic,
@@ -6053,7 +6054,13 @@ async function writeClientRouteBundles(options: {
           clientBoundaryImports: references.clientBoundaryImports,
           clientReferenceImports: references.clientReferenceImports,
           clientReferenceManifest: references.clientReferenceManifest,
-          clientNavigation: detectClientNavigationHint(source),
+          clientNavigation:
+            detectClientNavigationOverride(source) ??
+            (navigation || detectAnchorElementUsage(clientSource, route.file)),
+          routeMayUseOutOfOrderFragments:
+            options.sourceAnalysis.byRouteFile.get(
+              relative(options.projectRoot, route.file).split(sep).join("/"),
+            )?.streamRoute === true,
           cacheDir: options.cacheDir,
           dropConsoleFunctions: options.clientConsolePureFunctions,
           filename: route.file,

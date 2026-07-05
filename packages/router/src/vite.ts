@@ -25,6 +25,7 @@ import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   collectClientRouteReferences,
   createClientRouteInferenceCache,
+  detectAnchorElementUsage,
   formatClientRouteInferenceDiagnostic,
   isClientRouteSource,
   navigationRuntimeLinkDisabledDiagnostic,
@@ -149,6 +150,10 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
       packageFile("reactive-core", "@reckona/mreact-reactive-core", "internal"),
     ],
     ["@reckona/mreact-reactive-dom", reactiveDomPath],
+    [
+      "@reckona/mreact-reactive-dom/internal",
+      packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "internal"),
+    ],
     ["@reckona/mreact-compat", reactCompatPath],
     [
       "@reckona/mreact-compat/event-priority",
@@ -699,12 +704,21 @@ export async function renderAppRouterClientAsset(
   let bundle: string;
 
   try {
+    const navigation = await resolveNavigationRuntime({
+      appDir,
+      code,
+      filename: route.file,
+      references,
+      vitePlugins: options.vitePlugins,
+    });
     bundle = await buildClientRouteBundle({
       code: clientSource,
       clientBoundaryImports: references.clientBoundaryImports,
       clientReferenceImports: references.clientReferenceImports,
       clientReferenceManifest: references.clientReferenceManifest,
+      clientNavigation: navigation || detectAnchorElementUsage(clientSource, route.file),
       filename: route.file,
+      routeMayUseOutOfOrderFragments: true,
       routePath: route.path,
       vitePlugins: options.vitePlugins,
     });
@@ -749,12 +763,21 @@ async function renderAppRouterClientRouteDevModule(
     );
   }
 
+  const navigation = await resolveNavigationRuntime({
+    appDir,
+    code,
+    filename: route.file,
+    references,
+    vitePlugins: options.vitePlugins,
+  });
   const entry = await buildClientRouteEntrySource({
     code: clientSource,
     clientBoundaryImports: references.clientBoundaryImports,
     clientReferenceImports: references.clientReferenceImports,
     clientReferenceManifest: references.clientReferenceManifest,
+    clientNavigation: navigation || detectAnchorElementUsage(clientSource, route.file),
     filename: route.file,
+    routeMayUseOutOfOrderFragments: true,
     routePath: route.path,
     vitePlugins: options.vitePlugins,
   });

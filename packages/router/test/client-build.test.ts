@@ -296,6 +296,111 @@ export default function Page() {
     expect(output.code).toMatch(/import\(\s*\/\* @vite-ignore \*\/\s*script\s*\)/);
   });
 
+  test("does not idle-load the deferred navigation runtime when the DOM has no same-origin anchors", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-deferred-nav-no-anchor-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export default function Page() {
+  return <main>Home</main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main>Home</main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-navigation-runtime">{"script":"/_mreact/client/assets/navigation.js"}</script>',
+    ].join("");
+    let idleCallbacks = 0;
+    const previousRequestIdleCallback = (globalThis as { requestIdleCallback?: unknown })
+      .requestIdleCallback;
+    (
+      globalThis as { requestIdleCallback?: (callback: IdleRequestCallback) => number }
+    ).requestIdleCallback = () => {
+      idleCallbacks += 1;
+      return idleCallbacks;
+    };
+
+    try {
+      const output = await buildClientRouteOutput({
+        code,
+        filename: file,
+        minify: true,
+        routePath: "/",
+      });
+      await import(
+        `data:text/javascript;charset=utf-8,${encodeURIComponent(output.code)}#deferred-nav-no-anchor`
+      );
+
+      expect(idleCallbacks).toBe(0);
+    } finally {
+      if (previousRequestIdleCallback === undefined) {
+        delete (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback;
+      } else {
+        (globalThis as { requestIdleCallback?: unknown }).requestIdleCallback =
+          previousRequestIdleCallback;
+      }
+    }
+  });
+
+  test("omits the hydration-time OOB fragment walk for routes that cannot stream fragments", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-oob-fragments-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export const clientNavigation = false;
+
+export default function Page() {
+  return <main>Home</main>;
+}`;
+    await writeFile(file, code);
+
+    const entry = await buildClientRouteEntrySource({
+      code,
+      clientNavigation: false,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(entry.code).not.toContain("__mreactApplyOutOfOrderFragments(document);");
+  });
+
+  test("keeps the hydration-time OOB fragment walk for routes that can stream fragments", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-oob-fragments-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export const clientNavigation = false;
+
+export default function Page() {
+  return <main>Home</main>;
+}`;
+    await writeFile(file, code);
+
+    const entry = await buildClientRouteEntrySource({
+      code,
+      clientNavigation: false,
+      filename: file,
+      routeMayUseOutOfOrderFragments: true,
+      routePath: "/",
+    });
+
+    expect(entry.code).toContain("__mreactApplyOutOfOrderFragments(document);");
+  });
+
+  test("route hydration reuses reactive-dom delegated event state instead of a router-local registry", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-event-registry-reuse-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export const clientNavigation = false;
+
+export default function Page() {
+  return <button type="button" onClick={() => document.body.setAttribute("data-clicked", "yes")}>Click</button>;
+}`;
+    await writeFile(file, code);
+
+    const entry = await buildClientRouteEntrySource({
+      code,
+      clientNavigation: false,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(entry.code).not.toContain("__mreactDelegatedEventState");
+  });
+
   test("keeps route cell state runtime when the client route calls cell", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cell-state-"));
     const file = join(appDir, "page.mreact.tsx");

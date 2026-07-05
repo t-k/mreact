@@ -28,7 +28,16 @@ type DeferredDelegatedEventPromotion = () => void;
 const delegatedEventTypes =
   " change click input keydown keyup pointerdown pointermove pointerup submit ";
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
-const delegatedRoots = new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
+const delegatedRootsGlobalKey = Symbol.for("mreact.reactiveDom.delegatedRoots");
+const delegatedRootsGlobal = globalThis as typeof globalThis & Record<symbol, unknown>;
+const delegatedRoots =
+  delegatedRootsGlobal[delegatedRootsGlobalKey] instanceof WeakMap
+    ? (delegatedRootsGlobal[delegatedRootsGlobalKey] as WeakMap<
+        EventTarget,
+        Map<string, DelegatedRoot>
+      >)
+    : new WeakMap<EventTarget, Map<string, DelegatedRoot>>();
+delegatedRootsGlobal[delegatedRootsGlobalKey] = delegatedRoots;
 const pendingDisconnectedPromotions = new Set<() => void>();
 let currentDeferredDelegatedEventPromotions: DeferredDelegatedEventPromotion[] | null | undefined;
 let currentDelegatedRootReleaseBatch: Map<EventTarget, Record<string, number>> | undefined;
@@ -106,7 +115,7 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
   options?: BindEventOptions,
 ): Dispose {
   const listener = handler as EventListener;
-  const useDelegation = options?.direct !== true && delegatedEventTypes.includes(` ${type} `);
+  const useDelegation = options?.direct !== true && isDelegatedEventType(type);
   const eventElement = eventBindingMetadataDepth > 0 ? (element as EventElement) : undefined;
   const binding =
     eventElement === undefined ? undefined : { delegated: useDelegation, listener, type };
@@ -162,6 +171,24 @@ export function bindEvent<K extends keyof HTMLElementEventMap>(
     delete eventElement.__mreactEventBindings;
     delete eventElement.__mreactHasEvents;
   });
+}
+
+export function bindCapturedEvent(
+  element: HTMLElement,
+  type: string,
+  listener: EventListener,
+  delegated: boolean,
+): Dispose {
+  if (delegated && isDelegatedEventType(type)) {
+    return addDelegatedEventListener(element, type, listener);
+  }
+
+  element.addEventListener(type, listener);
+  return () => element.removeEventListener(type, listener);
+}
+
+function isDelegatedEventType(type: string): boolean {
+  return delegatedEventTypes.includes(` ${type} `);
 }
 
 function addDelegatedEventListener(

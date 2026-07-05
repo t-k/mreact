@@ -80,6 +80,7 @@ export interface BuildClientRouteOutputOptions {
   vitePlugins?: readonly PluginOption[] | undefined;
   clientNavigation?: boolean | undefined;
   forceInlineNavigationRuntime?: boolean | undefined;
+  routeMayUseOutOfOrderFragments?: boolean | undefined;
 }
 
 export interface BuildClientRouteBatchOutput {
@@ -2067,7 +2068,9 @@ export async function buildClientRouteBundle(options: {
   clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
+  clientNavigation?: boolean | undefined;
   filename: string;
+  routeMayUseOutOfOrderFragments?: boolean | undefined;
   routePath: string;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
@@ -2241,6 +2244,12 @@ export async function buildClientRouteEntrySource(
     options.filename,
   );
   const routeHasEventBindings = (compiled.metadata.eventHydrationManifest?.events.length ?? 0) > 0;
+  const routeCapturesEventBindings = compiled.code.includes("__mreactEventBindings");
+  const routeMayCaptureEventBindings =
+    routeHasEventBindings ||
+    routeCapturesEventBindings ||
+    /\bon[A-Z][\w$]*\s*=/.test(options.code) ||
+    routeSourceAnalysis.staticImports.length > 0;
   const routeRequiresFullHydration =
     routeExplicitlyRequiresHydration ||
     routeUsesCells ||
@@ -2261,8 +2270,13 @@ export async function buildClientRouteEntrySource(
   const routeCleanupScopeImport = routeUsesCleanupScope
     ? `import { withCleanupScope as __mreactWithCleanupScope } from "@reckona/mreact-reactive-core/internal";\n`
     : "";
+  const routeUsesEventBindingSync =
+    !routeUsesOnlyClientReferenceBoundaries && routeMayCaptureEventBindings;
+  const routeCapturedEventImport = routeUsesEventBindingSync
+    ? `import { bindCapturedEvent as __mreactBindCapturedEvent } from "@reckona/mreact-reactive-dom/internal";\n`
+    : "";
   const routeReactiveDomMetadataImport = !routeUsesOnlyClientReferenceBoundaries
-    ? `import { withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
+    ? `${routeCapturedEventImport}import { withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
     : "";
   const navigationStateDeclaration = inlineClientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -2420,10 +2434,16 @@ function __mreactInstallNavigation() {
     }
   };
 
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(load);
-  } else {
-    setTimeout(load, 0);
+  const hasSameOriginAnchor = Array.from(document.querySelectorAll("a[href]")).some((anchor) =>
+    anchor instanceof HTMLAnchorElement && anchor.origin === location.origin,
+  );
+
+  if (hasSameOriginAnchor) {
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(load);
+    } else {
+      setTimeout(load, 0);
+    }
   }
 
   addEventListener("popstate", load);
@@ -2617,6 +2637,51 @@ function __mreactResolveRouteNode(value) {
   const routeHydrationNodeExpression = !routeUsesOnlyClientReferenceBoundaries
     ? `__mreactWithPropBindingMetadata(() => __mreactWithEventBindingMetadata(() => __mreactEvaluateHydrationNode(() => ${routeNodeExpression})))`
     : `__mreactEvaluateHydrationNode(() => ${routeNodeExpression})`;
+  const routeEventBindingSyncFunction = routeUsesEventBindingSync
+    ? `function __mreactSyncEventBindings(current, next) {
+  const previousDisposers = current.__mreactEventDisposers;
+
+  if (Array.isArray(previousDisposers)) {
+    for (const dispose of previousDisposers) {
+      dispose();
+    }
+  }
+
+  const rawBindings = next.__mreactEventBindings;
+  const bindings =
+    rawBindings === undefined ? [] : Array.isArray(rawBindings) ? rawBindings : [rawBindings];
+
+  if (bindings.length === 0) {
+    current.__mreactEventDisposers = [];
+    current.__mreactHasEvents = false;
+    return;
+  }
+
+  const disposers = [];
+
+  for (const binding of bindings) {
+    disposers.push(
+      __mreactBindCapturedEvent(current, binding.type, binding.listener, binding.delegated === true),
+    );
+  }
+
+  current.__mreactEventDisposers = disposers;
+  current.__mreactHasEvents = true;
+}
+`
+    : `function __mreactSyncEventBindings(current) {
+  const previousDisposers = current.__mreactEventDisposers;
+
+  if (Array.isArray(previousDisposers)) {
+    for (const dispose of previousDisposers) {
+      dispose();
+    }
+  }
+
+  current.__mreactEventDisposers = [];
+  current.__mreactHasEvents = false;
+}
+`;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
     : `${routeCellHydrationIndent}if (!__mreactHasNonSerializableClientBoundaries(__mreactMarker) && __mreactHydrateClientBoundaries(document, __mreactClientReferences, __mreactClientReferenceComponents)) {
@@ -2625,6 +2690,10 @@ ${routeCellHydrationIndent}  __mreactMarkRouteHydrated();
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
 `;
+  const routeOutOfOrderFragmentHydration =
+    options.routeMayUseOutOfOrderFragments === true
+      ? "  __mreactApplyOutOfOrderFragments(document);\n"
+      : "";
   const routeComponentGuard = `${routeCellHydrationIndent}if (__mreactComponent === undefined) {
 ${routeCellHydrationIndent}  return;
 ${routeCellHydrationIndent}}
@@ -2647,8 +2716,7 @@ ${clientReferenceRegistry}
 ${routeNodeResolver}
 
 export function __mreactHydrateRoute() {
-  __mreactApplyOutOfOrderFragments(document);
-  const __mreactMarker = document.querySelector(\`[\${__mreactRouteMarkerAttribute}="\${__mreactRouteId}"]\`);
+${routeOutOfOrderFragmentHydration}  const __mreactMarker = document.querySelector(\`[\${__mreactRouteMarkerAttribute}="\${__mreactRouteId}"]\`);
   const __mreactPropsElement = document.getElementById(\`\${__mreactPropsScriptPrefix}\${__mreactRouteId}\`);
   const __mreactClientReferencesElement = document.getElementById(\`\${__mreactClientReferencesScriptPrefix}\${__mreactRouteId}\`);
   const __mreactPropsText = __mreactPropsElement?.textContent;
@@ -4347,184 +4415,7 @@ function __mreactShouldReplaceNode(current, next) {
     current.tagName !== next.tagName;
 }
 
-function __mreactSyncEventBindings(current, next) {
-  const previousDisposers = current.__mreactEventDisposers;
-
-  if (Array.isArray(previousDisposers)) {
-    for (const dispose of previousDisposers) {
-      dispose();
-    }
-  }
-
-  const rawBindings = next.__mreactEventBindings;
-  const bindings =
-    rawBindings === undefined ? [] : Array.isArray(rawBindings) ? rawBindings : [rawBindings];
-
-  if (bindings.length === 0) {
-    current.__mreactEventDisposers = [];
-    current.__mreactHasEvents = false;
-    return;
-  }
-
-  const disposers = [];
-
-  for (const binding of bindings) {
-    if (binding.delegated === true && __mreactIsDelegatedEventType(binding.type)) {
-      disposers.push(__mreactAddDelegatedEventListener(current, binding.type, binding.listener));
-    } else {
-      current.addEventListener(binding.type, binding.listener);
-      disposers.push(() => current.removeEventListener(binding.type, binding.listener));
-    }
-  }
-
-  current.__mreactEventDisposers = disposers;
-  current.__mreactHasEvents = true;
-}
-
-function __mreactIsDelegatedEventType(type) {
-  return type === "change" ||
-    type === "click" ||
-    type === "input" ||
-    type === "keydown" ||
-    type === "keyup" ||
-    type === "pointerdown" ||
-    type === "pointermove" ||
-    type === "pointerup" ||
-    type === "submit";
-}
-
-function __mreactDelegatedEventState() {
-  globalThis.__mreactDelegatedEventState ??= {
-    elements: new WeakMap(),
-    roots: new WeakMap(),
-  };
-  return globalThis.__mreactDelegatedEventState;
-}
-
-function __mreactAddDelegatedEventListener(element, type, listener) {
-  const root = element.ownerDocument;
-  const state = __mreactDelegatedEventState();
-  let listenersByType = state.elements.get(element);
-
-  if (listenersByType === undefined) {
-    listenersByType = new Map();
-    state.elements.set(element, listenersByType);
-  }
-
-  let listeners = listenersByType.get(type);
-
-  if (listeners === undefined) {
-    listeners = [];
-    listenersByType.set(type, listeners);
-  }
-
-  listeners.push(listener);
-  __mreactRetainDelegatedEventRoot(root, type);
-
-  return () => {
-    const state = __mreactDelegatedEventState();
-    const currentListeners = state.elements.get(element)?.get(type);
-    const index = currentListeners?.indexOf(listener) ?? -1;
-
-    if (index !== -1) {
-      currentListeners?.splice(index, 1);
-    }
-
-    if (currentListeners?.length === 0) {
-      state.elements.get(element)?.delete(type);
-    }
-
-    __mreactReleaseDelegatedEventRoot(root, type);
-  };
-}
-
-function __mreactRetainDelegatedEventRoot(root, type) {
-  const state = __mreactDelegatedEventState();
-  let rootsByType = state.roots.get(root);
-
-  if (rootsByType === undefined) {
-    rootsByType = new Map();
-    state.roots.set(root, rootsByType);
-  }
-
-  const current = rootsByType.get(type);
-
-  if (current !== undefined) {
-    current.count += 1;
-    return;
-  }
-
-  const listener = (event) => __mreactDispatchDelegatedEvent(root, type, event);
-  rootsByType.set(type, { count: 1, listener });
-  root.addEventListener(type, listener);
-}
-
-function __mreactReleaseDelegatedEventRoot(root, type) {
-  const rootsByType = __mreactDelegatedEventState().roots.get(root);
-  const current = rootsByType?.get(type);
-
-  if (rootsByType === undefined || current === undefined) {
-    return;
-  }
-
-  current.count -= 1;
-
-  if (current.count > 0) {
-    return;
-  }
-
-  root.removeEventListener(type, current.listener);
-  rootsByType.delete(type);
-}
-
-function __mreactDispatchDelegatedEvent(root, type, event) {
-  const state = __mreactDelegatedEventState();
-
-  for (const target of event.composedPath()) {
-    if (target === root) {
-      break;
-    }
-
-    if (!(target instanceof HTMLElement)) {
-      continue;
-    }
-
-    const listeners = state.elements.get(target)?.get(type);
-
-    if (listeners === undefined || listeners.length === 0) {
-      continue;
-    }
-
-    const activeListeners = listeners.slice();
-
-    for (const listener of activeListeners) {
-      __mreactCallWithCurrentTarget(listener, event, target);
-    }
-
-    if (event.cancelBubble) {
-      break;
-    }
-  }
-}
-
-function __mreactCallWithCurrentTarget(listener, event, currentTarget) {
-  const descriptor = Object.getOwnPropertyDescriptor(event, "currentTarget");
-
-  Object.defineProperty(event, "currentTarget", {
-    configurable: true,
-    value: currentTarget,
-  });
-
-  try {
-    listener.call(currentTarget, event);
-  } finally {
-    if (descriptor === undefined) {
-      delete event.currentTarget;
-    } else {
-      Object.defineProperty(event, "currentTarget", descriptor);
-    }
-  }
-}
+${routeEventBindingSyncFunction}
 
 function __mreactSyncAttributes(current, next) {
   for (const attribute of Array.from(current.attributes)) {
@@ -4654,6 +4545,10 @@ function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
     ],
     ["@reckona/mreact-compat", reactCompatPath],
     [
+      "@reckona/mreact-reactive-dom/internal",
+      packageFile("reactive-dom", "@reckona/mreact-reactive-dom", "internal"),
+    ],
+    [
       "@reckona/mreact-compat/event-priority",
       packageFile("react-compat", "@reckona/mreact-compat", "event-priority"),
     ],
@@ -4733,9 +4628,12 @@ export function cell(initial) {
       }));
       buildApi.onLoad({ filter: /^devtools$/, namespace: "mreact-devtools-stub" }, () => ({
         contents: `export function emitReactiveDevtoolsEvent() {}
+export function emitReactiveEffectRunDevtoolsEvent() {}
 export function hasReactiveDevtoolsEmitter() { return false; }
 export function currentDevtoolsEmitter() { return undefined; }
-export function currentReactiveDevtools() { return undefined; }`,
+export function currentReactiveDevtools() { return undefined; }
+export function invalidateReactiveDevtoolsCache() {}
+export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
         loader: "ts",
       }));
       buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
@@ -4813,7 +4711,56 @@ function importerInRuntimePackage(
  * not mistaken for a real export.
  */
 export function detectClientNavigationHint(source: string): boolean {
-  return readTopLevelBooleanExport({ code: source, name: "clientNavigation" }) ?? true;
+  return detectClientNavigationOverride(source) ?? true;
+}
+
+export function detectClientNavigationOverride(source: string): boolean | undefined {
+  return readTopLevelBooleanExport({ code: source, name: "clientNavigation" });
+}
+
+export function detectAnchorElementUsage(source: string, filename?: string | undefined): boolean {
+  const context = createCompilerModuleContext({ code: source, filename });
+  return containsAnchorElementWithHref(context.program);
+}
+
+function containsAnchorElementWithHref(value: unknown): boolean {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => containsAnchorElementWithHref(entry));
+  }
+
+  const node = value as {
+    attributes?: unknown;
+    name?: { name?: unknown } | undefined;
+    openingElement?:
+      | {
+          attributes?: unknown;
+          name?: { name?: unknown } | undefined;
+        }
+      | undefined;
+    type?: unknown;
+  };
+
+  if (node.type === "JSXElement" && node.openingElement !== undefined) {
+    const opening = node.openingElement;
+    const tagName = opening?.name?.name;
+
+    if (
+      tagName === "a" &&
+      Array.isArray(opening.attributes) &&
+      opening.attributes.some((attribute) => {
+        const jsxAttribute = attribute as { name?: { name?: unknown }; type?: unknown };
+        return jsxAttribute.type === "JSXAttribute" && jsxAttribute.name?.name === "href";
+      })
+    ) {
+      return true;
+    }
+  }
+
+  return Object.values(value).some((entry) => containsAnchorElementWithHref(entry));
 }
 
 // `Link` ships from the dedicated `/link` subpath and is also re-exported from

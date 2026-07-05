@@ -5748,6 +5748,29 @@ export default function Page() {
     expect(html).toContain(`"/_mreact/client/${home?.navigationScript}"`);
   });
 
+  test("omits navigation runtime for interactive routes with no Link and no explicit clientNavigation flag", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-client-navigation-linkless-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() {
+  return <main><button type="button" onClick={() => document.body.setAttribute("data-clicked", "yes")}>Click</button></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ navigation?: boolean; navigationScript?: string; path: string }> };
+    const home = clientManifest.routes.find((route) => route.path === "/");
+
+    expect(home).toMatchObject({ path: "/", client: true });
+    expect(home?.navigation).toBeUndefined();
+    expect(home?.navigationScript).toBeUndefined();
+  });
+
   test("prerendered static routes include navigation runtime for Link prefetch", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-navigation-prerender-"));
     const appDir = join(rootDir, "app");
