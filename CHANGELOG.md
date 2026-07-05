@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.0.187 - 2026-07-05
+
+### Added
+
+- Added the `@reckona/mreact-reactive-dom/compat-normalize` subpath for installing React-compatible JSX render value normalization without pulling the compatibility normalizer into native DOM-only bundles.
+
+### Changed
+
+- Improved React-compatible compiler lowering for keyed root lists and reduced `@reckona/mreact-reactive-core` dependency tracking overhead for hot reactive update paths.
+- Improved App Router client navigation and hydration defaults so server routes that render `Link` get the navigation runtime consistently while hydration avoids duplicate delegated event systems and unnecessary out-of-band fragment work.
+
+### Fixed
+
+- Fixed React-compatible development middleware rebundling so route-local middleware updates do not strand stale keyed memo row reconciliation behavior.
+- Fixed React-compatible route hydration when JSX render values pass through layout children across multiple reactive DOM module copies.
+- Fixed native DOM bundle isolation so React-compatible prop normalization helpers stay out of non-compat reactive DOM bundles.
+
 ## 0.0.186 - 2026-07-05
 
 ### Added

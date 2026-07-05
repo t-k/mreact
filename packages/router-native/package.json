@@ -1,6 +1,6 @@
 {
   "name": "@reckona/mreact-router-native",
-  "version": "0.0.186",
+  "version": "0.0.187",
   "description": "Native addon loader for mreact router runtime hot paths.",
   "keywords": [
     "addon",
