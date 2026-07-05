@@ -50,7 +50,8 @@ export type PrimitiveCaseName =
   | "source write with subscriber 1k"
   | "text binding update 1k"
   | "computed fan-out 1k"
-  | "computed fan-in 1k"
+  | "computed fan-in 1k (fine-grained writes)"
+  | "computed fan-in 1k (single array write)"
   | "source write 1k"
   | "repeated create update clear memory";
 

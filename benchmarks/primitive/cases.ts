@@ -92,9 +92,17 @@ export const primitiveCases: PrimitiveCaseDefinition[] = [
     unit: "ms",
   },
   {
-    name: "computed fan-in 1k",
+    name: "computed fan-in 1k (fine-grained writes)",
     description:
-      "Updates the inputs feeding one aggregate and validates one derived aggregate text output. Caveat: this is not a direct cross-framework source-write comparison because mreact, Solid, and Solid v2 update 1,000 fine-grained sources, while React, Marko, and Qwik update one array/props payload.",
+      "Updates 1,000 fine-grained source values feeding one aggregate and validates one derived aggregate text output. Only frameworks exposing comparable per-item source primitives implement this ranked case.",
+    count: 1_000,
+    metric: "duration",
+    unit: "ms",
+  },
+  {
+    name: "computed fan-in 1k (single array write)",
+    description:
+      "Updates one array-valued source/prop feeding one aggregate over 1,000 values and validates one derived aggregate text output. This is ranked separately from the fine-grained source-write variant.",
     count: 1_000,
     metric: "duration",
     unit: "ms",

@@ -51,7 +51,7 @@ export const solidAdapter: PrimitiveAdapter = {
     "source write with subscriber 1k": runSourceWriteWithSubscriber,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
-    "computed fan-in 1k": runComputedFanIn,
+    "computed fan-in 1k (fine-grained writes)": runComputedFanIn,
     "source write 1k": runSourceWrite,
     "repeated create update clear memory": runRepeatedMemory,
   },

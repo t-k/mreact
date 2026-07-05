@@ -37,7 +37,7 @@ export const reactAdapter: PrimitiveAdapter = {
     "create 1k event targets": runCreateEventTargets,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
-    "computed fan-in 1k": runComputedFanIn,
+    "computed fan-in 1k (single array write)": runComputedFanIn,
     "repeated create update clear memory": runRepeatedMemory,
   },
 };

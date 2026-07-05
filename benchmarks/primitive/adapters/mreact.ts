@@ -43,7 +43,8 @@ export const mreactAdapter: PrimitiveAdapter = {
     "source write with subscriber 1k": runSourceWriteWithSubscriber,
     "text binding update 1k": runTextBindingUpdate,
     "computed fan-out 1k": runComputedFanOut,
-    "computed fan-in 1k": runComputedFanIn,
+    "computed fan-in 1k (fine-grained writes)": runComputedFanIn,
+    "computed fan-in 1k (single array write)": runComputedFanInSingleArray,
     "source write 1k": runSourceWrite,
     "repeated create update clear memory": runRepeatedMemory,
   },
@@ -443,6 +444,35 @@ async function runComputedFanIn({
         value.set(1);
       }
     });
+    await flushEffects();
+    const duration = performance.now() - start;
+
+    validateTextNodes([text], String(count));
+
+    return { samples: [duration] };
+  } finally {
+    dispose();
+  }
+}
+
+async function runComputedFanInSingleArray({
+  count,
+  document,
+}: PrimitiveRunContext): Promise<PrimitiveCaseResult> {
+  const host = document.createElement("div");
+  const values = cell(Array.from({ length: count }, () => 0));
+  const total = computed(() => values.get().reduce((sum, value) => sum + value, 0));
+  const text = document.createTextNode("");
+
+  host.append(text);
+  const dispose = bindText(text, () => total.get());
+
+  try {
+    validateTextNodes([text], "0");
+
+    const updatedValues = Array.from({ length: count }, () => 1);
+    const start = performance.now();
+    values.set(updatedValues);
     await flushEffects();
     const duration = performance.now() - start;
 

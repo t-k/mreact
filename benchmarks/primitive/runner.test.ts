@@ -247,7 +247,8 @@ describe("primitive adapters", () => {
       "source write with subscriber 1k",
       "text binding update 1k",
       "computed fan-out 1k",
-      "computed fan-in 1k",
+      "computed fan-in 1k (fine-grained writes)",
+      "computed fan-in 1k (single array write)",
       "source write 1k",
       "repeated create update clear memory",
     ]);
@@ -255,9 +256,17 @@ describe("primitive adapters", () => {
       true,
     );
     expect(
-      primitiveCases.find((benchmarkCase) => benchmarkCase.name === "computed fan-in 1k")
+      primitiveCases.find(
+        (benchmarkCase) => benchmarkCase.name === "computed fan-in 1k (fine-grained writes)",
+      )
         ?.description,
-    ).toContain("not a direct cross-framework source-write comparison");
+    ).toContain("Only frameworks exposing comparable per-item source primitives");
+    expect(
+      primitiveCases.find(
+        (benchmarkCase) => benchmarkCase.name === "computed fan-in 1k (single array write)",
+      )
+        ?.description,
+    ).toContain("ranked separately from the fine-grained source-write variant");
   });
 
   it("runs every primitive case for every adapter", async () => {
@@ -277,8 +286,16 @@ describe("primitive adapters", () => {
         if (runCase === undefined) {
           if (
             (caseName === "source write 1k" ||
-              caseName === "source write with subscriber 1k") &&
+              caseName === "source write with subscriber 1k" ||
+              caseName === "computed fan-in 1k (fine-grained writes)") &&
             !fineGrainedSourceAdapters.has(adapter.name)
+          ) {
+            continue;
+          }
+
+          if (
+            caseName === "computed fan-in 1k (single array write)" &&
+            (adapter.name === "solid" || adapter.name === "solid-v2")
           ) {
             continue;
           }
