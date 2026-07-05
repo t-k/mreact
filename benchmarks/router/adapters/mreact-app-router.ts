@@ -4,7 +4,7 @@
 // http.Server に乗せる) と round-trip overhead が揃い fair comparison になる。
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -1555,23 +1555,41 @@ export function Counter() {
     }
 
     await buildApp({ appDir, outDir });
-    return measureDirectoryJavaScriptGzipBytes(join(outDir, "client"));
+    return measureClientManifestJavaScriptGzipBytes(outDir);
   } finally {
     await rm(fixtureDir, { force: true, recursive: true });
   }
 }
 
-async function measureDirectoryJavaScriptGzipBytes(directory: string): Promise<number> {
-  let total = 0;
-  const entries = await readdir(directory, { withFileTypes: true });
+async function measureClientManifestJavaScriptGzipBytes(outDir: string): Promise<number> {
+  const manifestRaw = await readFile(join(outDir, "client", "manifest.json"), "utf8");
+  const manifest = JSON.parse(manifestRaw) as {
+    assets?: string[];
+    routes: Array<{ client: boolean; imports?: string[]; script?: string }>;
+  };
+  const scripts = new Set<string>();
 
-  for (const entry of entries) {
-    const entryPath = join(directory, entry.name);
-    if (entry.isDirectory()) {
-      total += await measureDirectoryJavaScriptGzipBytes(entryPath);
-    } else if (entry.isFile() && entry.name.endsWith(".js")) {
-      total += gzipSync(await readFile(entryPath)).length;
+  for (const asset of manifest.assets ?? []) {
+    if (asset.endsWith(".js")) {
+      scripts.add(asset);
     }
+  }
+
+  for (const route of manifest.routes) {
+    if (route.client !== true || route.script === undefined) {
+      continue;
+    }
+    scripts.add(route.script);
+    for (const imported of route.imports ?? []) {
+      if (imported.endsWith(".js")) {
+        scripts.add(imported);
+      }
+    }
+  }
+
+  let total = 0;
+  for (const script of scripts) {
+    total += gzipSync(await readFile(join(outDir, "client", script))).length;
   }
 
   return total;

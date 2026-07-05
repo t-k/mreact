@@ -238,6 +238,60 @@ export default function Page() {
     }
   });
 
+  test("writes every hashed script referenced by a multi-route client manifest", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-shared-manifest-"));
+    const outDir = join(appDir, ".mreact");
+    const previousNodeEnv = process.env.NODE_ENV;
+    const routeCode = `import { cell } from "@reckona/mreact-reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button>;
+}`;
+
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+    );
+    for (const routeName of ["page", "about/page", "settings/page"]) {
+      const routeDir = join(appDir, ...routeName.split("/").slice(0, -1));
+      if (routeDir !== appDir) {
+        await mkdir(routeDir, { recursive: true });
+      }
+      await writeFile(join(appDir, `${routeName}.tsx`), routeCode);
+    }
+
+    process.env.NODE_ENV = "production";
+    try {
+      await buildApp({ appDir, outDir });
+    } finally {
+      if (previousNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
+      } else {
+        process.env.NODE_ENV = previousNodeEnv;
+      }
+    }
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as {
+      assets?: string[];
+      routes: Array<{ client: boolean; imports?: string[]; script?: string }>;
+    };
+    const referencedScripts = new Set([
+      ...manifest.routes.flatMap((route) =>
+        route.client && route.script !== undefined
+          ? [route.script, ...(route.imports ?? [])]
+          : [],
+      ),
+      ...(manifest.assets ?? []).filter((asset) => asset.endsWith(".js")),
+    ]);
+
+    for (const script of referencedScripts) {
+      await expect(readFile(join(outDir, "client", script))).resolves.toBeDefined();
+    }
+  });
+
   test("omits route cell state runtime when the client route does not call cell", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-cell-state-"));
     const file = join(appDir, "page.mreact.tsx");

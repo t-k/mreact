@@ -78,4 +78,16 @@ describe("mreact app-router benchmark fixtures", () => {
     expect(routeScaleSource).toContain('reactCompat ? "compat" : "native"');
     expect(routeScaleSource).not.toContain("_reactCompat");
   });
+
+  it("measures shared-route client bytes from the build manifest", async () => {
+    const source = await readFile(adapterPath, "utf8");
+    const sharedRoutesSource = source.slice(
+      source.indexOf("async function measureSharedInteractiveRoutesBundle("),
+      source.indexOf("async function measureClientManifestJavaScriptGzipBytes("),
+    );
+
+    expect(source).toContain("async function measureClientManifestJavaScriptGzipBytes(");
+    expect(sharedRoutesSource).toContain("measureClientManifestJavaScriptGzipBytes(outDir)");
+    expect(sharedRoutesSource).not.toContain("measureDirectoryJavaScriptGzipBytes(");
+  });
 });
