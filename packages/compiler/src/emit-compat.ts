@@ -6,6 +6,7 @@ import type {
   JsxFragmentIr,
   JsxNodeIr,
   ModuleIr,
+  PropAliasIr,
 } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
@@ -23,10 +24,7 @@ const JSX_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-runtime";
 const JSX_DEV_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-dev-runtime";
 const REACTIVE_DOM_SOURCE = "@reckona/mreact-reactive-dom";
 
-export function emitCompat(
-  ir: ModuleIr,
-  options: EmitCompatOptions = {},
-): EmitCompatResult {
+export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitCompatResult {
   if (ir.components.length === 0 && ir.moduleStatements.length === 0) {
     return {
       code: "",
@@ -78,7 +76,9 @@ function collectComponentImportSpecifiers(ir: ModuleIr, dev: boolean): string[] 
 
   for (const component of ir.components) {
     const directTextBindings = collectDirectTextBindings(component);
-    const reactiveDomBlock = dev ? undefined : getReactiveDomBlock(component.root, directTextBindings);
+    const reactiveDomBlock = dev
+      ? undefined
+      : getReactiveDomBlock(component.root, directTextBindings);
 
     if (reactiveDomBlock !== undefined) {
       specifiers.add("REACTIVE_STATE_BINDING_META");
@@ -121,7 +121,10 @@ function collectReactiveDomImportSpecifiers(ir: ModuleIr, dev: boolean): string[
   }
 
   for (const component of ir.components) {
-    const reactiveDomBlock = getReactiveDomBlock(component.root, collectDirectTextBindings(component));
+    const reactiveDomBlock = getReactiveDomBlock(
+      component.root,
+      collectDirectTextBindings(component),
+    );
 
     if (reactiveDomBlock !== undefined) {
       specifiers.add("bindText");
@@ -287,10 +290,7 @@ function normalizeCompatModuleStatements(
   };
 }
 
-function collectStaticPropBlockComponentNames(
-  ir: ModuleIr,
-  dev: boolean,
-): ReadonlySet<string> {
+function collectStaticPropBlockComponentNames(ir: ModuleIr, dev: boolean): ReadonlySet<string> {
   const names = new Set<string>();
   if (dev) {
     return names;
@@ -403,9 +403,7 @@ function stripCompatRuntimeImports(
     .join("\n");
 }
 
-function parseCompatRuntimeImportLine(
-  line: string,
-): CompatRuntimeImportSpecifier[] | undefined {
+function parseCompatRuntimeImportLine(line: string): CompatRuntimeImportSpecifier[] | undefined {
   const match = line.match(
     /^\s*import\s+\{\s*(?<specifiers>[^}]*)\s*\}\s+from\s+["@'](?<source>@reckona\/mreact-compat\/jsx(?:-dev)?-runtime)(?:\.js)?["@'];?\s*$/,
   );
@@ -433,14 +431,18 @@ function parseCompatRuntimeImportLine(
         return [];
       }
 
-      return [{
-        importedName,
-        localName,
-        source,
-      }];
+      return [
+        {
+          importedName,
+          localName,
+          source,
+        },
+      ];
     }
 
-    return /^(Fragment|REACTIVE_STATE_BINDING_META|REACTIVE_TEXT_BINDING_META|createReactiveDomBlock|jsx|jsxDEV|jsxs)$/.test(specifier)
+    return /^(Fragment|REACTIVE_STATE_BINDING_META|REACTIVE_TEXT_BINDING_META|createReactiveDomBlock|jsx|jsxDEV|jsxs)$/.test(
+      specifier,
+    )
       ? [{ importedName: specifier, localName: specifier, source }]
       : [];
   });
@@ -466,7 +468,9 @@ function createImportGroups(
 
   for (const specifier of reactiveDomSpecifiers) {
     const localName =
-      helperNames[specifier as "bindEvent" | "bindText" | "bindProp" | "effect" | "createTemplate"] ?? `_${specifier}`;
+      helperNames[
+        specifier as "bindEvent" | "bindText" | "bindProp" | "effect" | "createTemplate"
+      ] ?? `_${specifier}`;
     addImportSpecifier(groups, REACTIVE_DOM_SOURCE, specifier, localName);
   }
 
@@ -531,8 +535,9 @@ function collectImports(groups: readonly CompatImportGroup[]): RuntimeImport[] {
 
 function emitImportLines(groups: readonly CompatImportGroup[]): string {
   return groups
-    .map((group) =>
-      `import { ${Array.from(group.specifiers.values()).join(", ")} } from "${group.source}";`
+    .map(
+      (group) =>
+        `import { ${Array.from(group.specifiers.values()).join(", ")} } from "${group.source}";`,
     )
     .join("\n");
 }
@@ -543,11 +548,14 @@ function emitComponent(
   dev: boolean,
 ): string {
   const directTextBindings = collectDirectTextBindings(component, helperNames);
-  const reactiveDomBlock = dev ? undefined : getReactiveDomBlock(component.root, directTextBindings);
+  const reactiveDomBlock = dev
+    ? undefined
+    : getReactiveDomBlock(component.root, directTextBindings);
   const propReactiveDomBlock =
     !dev && reactiveDomBlock === undefined ? getPropReactiveDomBlock(component) : undefined;
-  const body = component.bodyStatements.map((statement) =>
-    `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames, reactiveDomBlock !== undefined)}`
+  const body = component.bodyStatements.map(
+    (statement) =>
+      `  ${rewriteDirectTextBindingStatement(statement, directTextBindings, helperNames, reactiveDomBlock !== undefined)}`,
   );
   const parameters = component.parameters.join(", ");
   const functionKeyword = `${component.exportDefault === true ? "export default " : component.exported === false ? "" : "export "}${
@@ -555,11 +563,18 @@ function emitComponent(
   }function`;
 
   if (propReactiveDomBlock !== undefined) {
-    return emitPropReactiveDomBlockComponent(component, propReactiveDomBlock, helperNames, functionKeyword);
+    return emitPropReactiveDomBlockComponent(
+      component,
+      propReactiveDomBlock,
+      helperNames,
+      functionKeyword,
+    );
   }
 
   if (reactiveDomBlock !== undefined) {
-    const allocator = createNameAllocator(collectReservedComponentLocalNames(component, helperNames));
+    const allocator = createNameAllocator(
+      collectReservedComponentLocalNames(component, helperNames),
+    );
     const templateName = allocator(`_tmpl_${component.name}`);
     const templateHtml = JSON.stringify(renderStaticReactiveDomBlockHtml(reactiveDomBlock.element));
 
@@ -613,11 +628,22 @@ function emitJsxNode(
   }
 
   if (node.kind === "component") {
-    const keyArgument =
-      node.keyCode === undefined ? undefined : `(${node.keyCode})`;
-    const props = emitComponentProps(node.props, node.children, helperNames, dev, directTextBindings);
+    const keyArgument = node.keyCode === undefined ? undefined : `(${node.keyCode})`;
+    const props = emitComponentProps(
+      node.props,
+      node.children,
+      helperNames,
+      dev,
+      directTextBindings,
+    );
     return dev
-      ? emitJsxDevCall(helperNames.jsxDEV ?? "_jsxDEV", node.name, props, keyArgument, node.children.length > 1)
+      ? emitJsxDevCall(
+          helperNames.jsxDEV ?? "_jsxDEV",
+          node.name,
+          props,
+          keyArgument,
+          node.children.length > 1,
+        )
       : `${helperNames.jsx ?? "_jsx"}(${node.name}, ${props}${keyArgument === undefined ? "" : `, ${keyArgument}`})`;
   }
 
@@ -676,9 +702,7 @@ function emitJsxCall(
 ): string {
   if (dev) {
     const keyArgument =
-      node.kind === "element" && node.keyCode !== undefined
-        ? `(${node.keyCode})`
-        : undefined;
+      node.kind === "element" && node.keyCode !== undefined ? `(${node.keyCode})` : undefined;
     return emitJsxDevCall(
       helperNames.jsxDEV ?? "_jsxDEV",
       typeExpression,
@@ -689,13 +713,9 @@ function emitJsxCall(
   }
 
   const callee =
-    node.children.length > 1
-      ? (helperNames.jsxs ?? "_jsxs")
-      : (helperNames.jsx ?? "_jsx");
+    node.children.length > 1 ? (helperNames.jsxs ?? "_jsxs") : (helperNames.jsx ?? "_jsx");
   const keyArgument =
-    node.kind === "element" && node.keyCode !== undefined
-      ? `, (${node.keyCode})`
-      : "";
+    node.kind === "element" && node.keyCode !== undefined ? `, (${node.keyCode})` : "";
 
   return `${callee}(${typeExpression}, ${emitProps(node, helperNames, dev, directTextBindings)}${keyArgument})`;
 }
@@ -716,12 +736,12 @@ function emitProps(
   dev: boolean,
   directTextBindings: readonly DirectTextBinding[] = [],
 ): string {
-  const entries =
-    node.kind === "element" ? node.attributes.map(emitAttribute) : [];
+  const entries = node.kind === "element" ? node.attributes.map(emitAttribute) : [];
   const children = emitChildren(node.children, helperNames, dev, directTextBindings);
-  const directTextBinding = node.kind === "element"
-    ? findDirectTextBindingForChildren(node.children, directTextBindings)
-    : undefined;
+  const directTextBinding =
+    node.kind === "element"
+      ? findDirectTextBindingForChildren(node.children, directTextBindings)
+      : undefined;
 
   if (children !== undefined) {
     entries.push(`children: ${children}`);
@@ -795,7 +815,9 @@ function emitComponentProps(
     .filter(Boolean);
 
   if (children.length > 0) {
-    entries.push(`children: ${emitChildren(children, helperNames, dev, directTextBindings) ?? "null"}`);
+    entries.push(
+      `children: ${emitChildren(children, helperNames, dev, directTextBindings) ?? "null"}`,
+    );
   }
 
   return `{ ${entries.join(", ")} }`;
@@ -842,10 +864,7 @@ function collectReservedComponentLocalNames(
   ];
 }
 
-function directTextBindingIsSafe(
-  component: ComponentIr,
-  candidate: DirectTextBinding,
-): boolean {
+function directTextBindingIsSafe(component: ComponentIr, candidate: DirectTextBinding): boolean {
   let directTextUses = 0;
   let unsafe = false;
 
@@ -900,11 +919,9 @@ function nodeHasStructuralIdentifierUse(node: JsxNodeIr, stateName: string): boo
   }
 
   if (node.kind === "list") {
-    return [
-      node.itemsCode,
-      node.keyCode,
-      ...(node.bodyStatements ?? []),
-    ].some((code) => code !== undefined && containsIdentifier(code, stateName));
+    return [node.itemsCode, node.keyCode, ...(node.bodyStatements ?? [])].some(
+      (code) => code !== undefined && containsIdentifier(code, stateName),
+    );
   }
 
   if (node.kind === "component") {
@@ -925,15 +942,15 @@ function nodeHasStructuralIdentifierUse(node: JsxNodeIr, stateName: string): boo
   }
 
   if (node.kind === "async-boundary") {
-    return [
-      node.valueCode,
-      node.placeholderTagCode,
-      node.catchName,
-    ].some((code) => code !== undefined && containsIdentifier(code, stateName));
+    return [node.valueCode, node.placeholderTagCode, node.catchName].some(
+      (code) => code !== undefined && containsIdentifier(code, stateName),
+    );
   }
 
   if (node.kind === "fragment") {
-    return (node.bodyStatements ?? []).some((statement) => containsIdentifier(statement, stateName));
+    return (node.bodyStatements ?? []).some((statement) =>
+      containsIdentifier(statement, stateName),
+    );
   }
 
   return false;
@@ -945,10 +962,7 @@ function isDirectTextBindingDeclaration(statement: string, stateName: string): b
   ).test(statement);
 }
 
-function hasDirectTextBindingHost(
-  node: JsxNodeIr,
-  candidate: DirectTextBinding,
-): boolean {
+function hasDirectTextBindingHost(node: JsxNodeIr, candidate: DirectTextBinding): boolean {
   let found = false;
 
   visit(node, (current) => {
@@ -979,8 +993,8 @@ function rewriteDirectTextBindingStatement(
     }
 
     const metadataName = useStateBinding
-      ? helperNames.REACTIVE_STATE_BINDING_META ?? "_REACTIVE_STATE_BINDING_META"
-      : helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META";
+      ? (helperNames.REACTIVE_STATE_BINDING_META ?? "_REACTIVE_STATE_BINDING_META")
+      : (helperNames.REACTIVE_TEXT_BINDING_META ?? "_REACTIVE_TEXT_BINDING_META");
     const bindingName = useStateBinding ? binding.stateBindingName : binding.textBindingName;
     return [
       `const ${binding.tupleName} = ${match.groups.initializer};`,
@@ -1047,7 +1061,9 @@ function emitReactiveDomBlockReturn(
 
 function renderStaticReactiveDomBlockHtml(element: JsxElementIr): string {
   const attrs = element.attributes
-    .filter((attr): attr is Extract<AttributeIr, { kind: "static-attr" }> => attr.kind === "static-attr")
+    .filter(
+      (attr): attr is Extract<AttributeIr, { kind: "static-attr" }> => attr.kind === "static-attr",
+    )
     .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
     .join("");
 
@@ -1074,24 +1090,27 @@ function findDirectTextBindingForChildren(
 interface PropReactiveDomBlock {
   root: JsxElementIr;
   propsParam: string;
+  propAliases?: PropAliasIr[];
 }
 
 const PROP_BLOCK_IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
 // Detects a component lowerable to a PROP-bridged reactive DOM block: a single
-// (non-destructured) props parameter, no body statements (no hooks), and a
-// host-only element tree (elements + static/dynamic attrs + events + text
-// expressions) with at least one dynamic part. Prop expressions are emitted
-// verbatim because the block closure parameter shadows the props parameter, so
-// e.g. `props.row.id` reads the reactive proxy with no rewriting needed.
+// props parameter or a narrow plain object destructuring parameter, no body
+// statements (no hooks), and a host-only element tree (elements + static/dynamic
+// attrs + events + text expressions) with at least one dynamic part.
 function getPropReactiveDomBlock(component: ComponentIr): PropReactiveDomBlock | undefined {
   if (component.parameters.length !== 1) {
     return undefined;
   }
 
   const propsParam = component.parameters[0];
+  const propAliases = component.parameterPropAliases;
 
-  if (propsParam === undefined || !PROP_BLOCK_IDENTIFIER.test(propsParam)) {
+  if (
+    propsParam === undefined ||
+    (!PROP_BLOCK_IDENTIFIER.test(propsParam) && propAliases === undefined)
+  ) {
     return undefined;
   }
 
@@ -1109,13 +1128,26 @@ function getPropReactiveDomBlock(component: ComponentIr): PropReactiveDomBlock |
     return undefined;
   }
 
-  return { root, propsParam };
+  if (propAliases !== undefined && !canRewritePropBlockAliasNode(root, "props", propAliases)) {
+    return undefined;
+  }
+
+  return propAliases === undefined
+    ? { root, propsParam }
+    : { root, propsParam: "props", propAliases };
 }
 
 // Conventional node-valued slot props (mirrors oxc-render-values.ts): a text
 // expression referencing one of these may hold React nodes, not primitive text,
 // so it is not safe to bind with bindText. Conservatively bail on any of them.
 const PROP_BLOCK_NODE_VALUED = /\b(children|fallback|header|sidebar|element)\b/;
+const PROP_BLOCK_UNSUPPORTED_DYNAMIC_ATTRS = new Set([
+  "dangerouslySetInnerHTML",
+  "ref",
+  "suppressHydrationWarning",
+]);
+const PROP_BLOCK_FORM_VALUE_TAGS = new Set(["input", "select", "textarea"]);
+const PROP_BLOCK_FORM_VALUE_ATTRS = new Set(["checked", "defaultChecked", "defaultValue", "value"]);
 
 function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
   if (node.kind === "text") {
@@ -1134,9 +1166,24 @@ function isHostOnlyPropBlockNode(node: JsxNodeIr): boolean {
     if (attr.kind === "spread-attr") {
       return false;
     }
+
+    if (
+      attr.kind === "dynamic-attr" &&
+      isUnsupportedPropBlockDynamicAttr(node.tagName, attr.name)
+    ) {
+      return false;
+    }
   }
 
   return node.children.every(isHostOnlyPropBlockNode);
+}
+
+function isUnsupportedPropBlockDynamicAttr(tagName: string, attrName: string): boolean {
+  if (PROP_BLOCK_UNSUPPORTED_DYNAMIC_ATTRS.has(attrName)) {
+    return true;
+  }
+
+  return PROP_BLOCK_FORM_VALUE_TAGS.has(tagName) && PROP_BLOCK_FORM_VALUE_ATTRS.has(attrName);
 }
 
 function propBlockHasDynamicPart(node: JsxNodeIr): boolean {
@@ -1178,7 +1225,8 @@ function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
 
   if (
     node.attributes.some(
-      (attr) => attr.kind === "dynamic-attr" && (attr.name === "className" || attr.name === "htmlFor"),
+      (attr) =>
+        attr.kind === "dynamic-attr" && (attr.name === "className" || attr.name === "htmlFor"),
     )
   ) {
     return true;
@@ -1194,7 +1242,8 @@ function propBlockHasBindPropBinding(node: JsxNodeIr): boolean {
 
   if (
     node.attributes.some(
-      (attr) => attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor",
+      (attr) =>
+        attr.kind === "dynamic-attr" && attr.name !== "className" && attr.name !== "htmlFor",
     )
   ) {
     return true;
@@ -1222,10 +1271,19 @@ function emitPropReactiveDomBlockComponent(
   const effectName = helperNames.effect ?? "_effect";
   const bindEvent = helperNames.bindEvent ?? "_bindEvent";
   const bindProp = helperNames.bindProp ?? "_bindProp";
+  const sourcePropsName = block.propAliases === undefined ? block.propsParam : allocator("_props");
 
   const build: string[] = [];
   const bindings: PropBlockBinding[] = [];
-  const rootVar = emitPropBlockNode(block.root, undefined, build, bindings, allocator);
+  const rootVar = emitPropBlockNode(
+    block.root,
+    undefined,
+    build,
+    bindings,
+    allocator,
+    block.propsParam,
+    block.propAliases,
+  );
   const disposeName = allocator("_dispose");
   const eventDisposeNames: string[] = [];
   const propDisposeNames: string[] = [];
@@ -1238,7 +1296,9 @@ function emitPropReactiveDomBlockComponent(
       eventDisposeNames.push(eventDisposeName);
       return [
         `const ${eventDisposeName} = ${bindEvent}(${binding.target}, ${JSON.stringify(binding.eventName ?? "")}, (${eventName}) => {`,
-        ...emitPropBlockEventHandlerLines(binding.code, handlerName, eventName).map((line) => `  ${line}`),
+        ...emitPropBlockEventHandlerLines(binding.code, handlerName, eventName).map(
+          (line) => `  ${line}`,
+        ),
         `});`,
       ].join("\n");
     });
@@ -1284,11 +1344,7 @@ function emitPropReactiveDomBlockComponent(
     effectBodiesByKey.size === 0
       ? []
       : Array.from({ length: effectBodiesByKey.size }, () => allocator("_disposeEffect"));
-  const disposeTargets = [
-    ...effectDisposeNames,
-    ...eventDisposeNames,
-    ...propDisposeNames,
-  ];
+  const disposeTargets = [...effectDisposeNames, ...eventDisposeNames, ...propDisposeNames];
 
   const disposeLines: string[] = [
     ...eventBindLines.flatMap((line) => line.split("\n").map((part) => `    ${part}`)),
@@ -1319,14 +1375,18 @@ function emitPropReactiveDomBlockComponent(
   }
 
   return [
-    `${functionKeyword} ${component.name}(${block.propsParam}) {`,
-    // The closure parameter intentionally shadows the props parameter: it is the
-    // reactive props proxy, so the verbatim prop expressions below stay reactive.
+    `${functionKeyword} ${component.name}(${component.parameters.join(", ")}) {`,
+    ...(block.propAliases === undefined
+      ? []
+      : [`  const ${sourcePropsName} = ${emitPropAliasesObject(block.propAliases)};`]),
+    // The closure parameter is the reactive props proxy read by binding
+    // expressions. Identifier props already use this name; destructured props
+    // are rewritten to read through it.
     `  return ${createBlock}((${block.propsParam}) => {`,
     ...build.map((line) => `    ${line}`),
     ...disposeLines,
     `    return { node: ${rootVar}, dispose: ${disposeName} };`,
-    `  }, ${block.propsParam});`,
+    `  }, ${sourcePropsName});`,
     `}`,
     // The component is pure and returns its props verbatim as a static reactive
     // block: mark it so a memo wrapping it can re-render by cell-updating the
@@ -1383,7 +1443,14 @@ function emitPropBlockNode(
   build: string[],
   bindings: PropBlockBinding[],
   allocator: (baseName: string) => string,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
 ): string {
+  const rewriteCode = (code: string): string =>
+    propAliases === undefined
+      ? code
+      : (rewritePropBlockAliasCode(code, propsParam, propAliases) ?? code);
+
   if (node.kind === "text") {
     const name = allocator("_text");
     build.push(`const ${name} = document.createTextNode(${JSON.stringify(node.value)});`);
@@ -1396,7 +1463,7 @@ function emitPropBlockNode(
   if (node.kind === "expr") {
     const name = allocator("_text");
     build.push(`const ${name} = document.createTextNode("");`);
-    bindings.push({ kind: "text", target: name, code: node.code });
+    bindings.push({ kind: "text", target: name, code: rewriteCode(node.code) });
     if (parentVar !== undefined) {
       build.push(`${parentVar}.appendChild(${name});`);
     }
@@ -1414,21 +1481,23 @@ function emitPropBlockNode(
       } else if (attr.name === "htmlFor") {
         build.push(`${name}.htmlFor = ${JSON.stringify(attr.value)};`);
       } else {
-        build.push(`${name}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`);
+        build.push(
+          `${name}.setAttribute(${JSON.stringify(attr.name)}, ${JSON.stringify(attr.value)});`,
+        );
       }
     } else if (attr.kind === "dynamic-attr") {
       if (attr.name === "className" || attr.name === "htmlFor") {
         bindings.push({
           kind: attr.name,
           target: name,
-          code: attr.code,
+          code: rewriteCode(attr.code),
         });
       } else {
         bindings.push({
           kind: "prop",
           propName: attr.name,
           target: name,
-          code: attr.code,
+          code: rewriteCode(attr.code),
         });
       }
     } else if (attr.kind === "event") {
@@ -1436,13 +1505,13 @@ function emitPropBlockNode(
         kind: "event",
         eventName: attr.eventName,
         target: name,
-        code: attr.code,
+        code: rewriteCode(attr.code),
       });
     }
   }
 
   for (const child of element.children) {
-    emitPropBlockNode(child, name, build, bindings, allocator);
+    emitPropBlockNode(child, name, build, bindings, allocator, propsParam, propAliases);
   }
 
   if (parentVar !== undefined) {
@@ -1450,6 +1519,175 @@ function emitPropBlockNode(
   }
 
   return name;
+}
+
+function canRewritePropBlockAliasNode(
+  node: JsxNodeIr,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[],
+): boolean {
+  if (node.kind === "text") {
+    return true;
+  }
+
+  if (node.kind === "expr") {
+    return rewritePropBlockAliasCode(node.code, propsParam, propAliases) !== undefined;
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  for (const attr of node.attributes) {
+    if (
+      (attr.kind === "dynamic-attr" || attr.kind === "event") &&
+      rewritePropBlockAliasCode(attr.code, propsParam, propAliases) === undefined
+    ) {
+      return false;
+    }
+  }
+
+  return node.children.every((child) =>
+    canRewritePropBlockAliasNode(child, propsParam, propAliases),
+  );
+}
+
+function emitPropAliasesObject(propAliases: readonly PropAliasIr[]): string {
+  return `{ ${propAliases
+    .map((alias) =>
+      alias.propName === alias.localName
+        ? alias.localName
+        : `${alias.propName}: ${alias.localName}`,
+    )
+    .join(", ")} }`;
+}
+
+function rewritePropBlockAliasCode(
+  code: string,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[],
+): string | undefined {
+  const aliasByLocal = new Map(propAliases.map((alias) => [alias.localName, alias.propName]));
+  let output = "";
+  let index = 0;
+
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === '"' || char === "'") {
+      const quoted = readQuotedJavaScript(code, index, char);
+      output += quoted;
+      index += quoted.length;
+      continue;
+    }
+
+    if (char === "`") {
+      const template = readQuotedJavaScript(code, index, char);
+      if (propAliases.some((alias) => containsIdentifier(template, alias.localName))) {
+        return undefined;
+      }
+      output += template;
+      index += template.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "/") {
+      const end = code.indexOf("\n", index + 2);
+      const comment = end === -1 ? code.slice(index) : code.slice(index, end);
+      output += comment;
+      index += comment.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "*") {
+      const end = code.indexOf("*/", index + 2);
+      if (end === -1) {
+        return undefined;
+      }
+      const comment = code.slice(index, end + 2);
+      output += comment;
+      index += comment.length;
+      continue;
+    }
+
+    if (isIdentifierStart(char)) {
+      const start = index;
+      index += 1;
+      while (index < code.length && isIdentifierPart(code[index] ?? "")) {
+        index += 1;
+      }
+
+      const name = code.slice(start, index);
+      const propName = aliasByLocal.get(name);
+      if (propName === undefined) {
+        output += name;
+        continue;
+      }
+
+      const previous = previousNonWhitespace(code, start);
+      const next = nextNonWhitespace(code, index);
+      if (previous === "." || next === ":") {
+        output += name;
+        continue;
+      }
+
+      if ((previous === "{" || previous === ",") && (next === "}" || next === ",")) {
+        return undefined;
+      }
+
+      output += `${propsParam}.${propName}`;
+      continue;
+    }
+
+    output += char;
+    index += 1;
+  }
+
+  return output;
+}
+
+function readQuotedJavaScript(code: string, start: number, quote: string): string {
+  let index = start + 1;
+  while (index < code.length) {
+    const char = code[index] ?? "";
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    index += 1;
+    if (char === quote) {
+      break;
+    }
+  }
+  return code.slice(start, index);
+}
+
+function previousNonWhitespace(code: string, start: number): string | undefined {
+  for (let index = start - 1; index >= 0; index -= 1) {
+    const char = code[index] ?? "";
+    if (!/\s/.test(char)) {
+      return char;
+    }
+  }
+  return undefined;
+}
+
+function nextNonWhitespace(code: string, start: number): string | undefined {
+  for (let index = start; index < code.length; index += 1) {
+    const char = code[index] ?? "";
+    if (!/\s/.test(char)) {
+      return char;
+    }
+  }
+  return undefined;
+}
+
+function isIdentifierStart(char: string): boolean {
+  return /^[A-Za-z_$]$/.test(char);
+}
+
+function isIdentifierPart(char: string): boolean {
+  return /^[A-Za-z_$0-9]$/.test(char);
 }
 
 function containsIdentifier(code: string, name: string): boolean {
@@ -1466,9 +1704,7 @@ function emitPropName(name: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(name) ? name : JSON.stringify(name);
 }
 
-function createNameAllocator(
-  reservedNames: readonly string[],
-): (baseName: string) => string {
+function createNameAllocator(reservedNames: readonly string[]): (baseName: string) => string {
   const usedNames = new Set(reservedNames);
 
   return (baseName: string): string => {

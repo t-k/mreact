@@ -45,11 +45,9 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toMatch(/\.className !== /);
     // Event handlers are bound once and evaluate the reactive props proxy when
     // the event fires.
-    expect(output.code).toContain('bindEvent');
+    expect(output.code).toContain("bindEvent");
     expect(output.code).toContain('"click"');
-    expect(output.code).toMatch(
-      /const _disposeEvent = _bindEvent\(_a, "click", \(event\) => \{/,
-    );
+    expect(output.code).toMatch(/const _disposeEvent = _bindEvent\(_a, "click", \(event\) => \{/);
     expect(output.code).toContain("return (selectRow(props.row.id));");
     expect(output.code).not.toContain("const _h = (() => selectRow(props.row.id));");
     expect(output.code).not.toContain("addEventListener");
@@ -58,7 +56,7 @@ describe("react-compat prop reactive DOM block lowering", () => {
     );
   });
 
-  test("does not lower components with hooks (non-empty body) or destructured props", () => {
+  test("does not lower components with hooks (non-empty body)", () => {
     const withHook = transform({
       code: `import { useState } from "@reckona/mreact-compat";
         export function Row(props) {
@@ -73,8 +71,10 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(withHook.diagnostics).toEqual([]);
     // Falls back to the normal jsx path, not a reactive block.
     expect(withHook.code).not.toContain("document.createElement");
+  });
 
-    const destructured = transform({
+  test("lowers plain destructured props to prop reactive blocks", () => {
+    const output = transform({
       code: `export function Row({ row, selected }) {
           return <tr className={selected ? "danger" : ""}>{row.label}</tr>;
         }`,
@@ -83,8 +83,51 @@ describe("react-compat prop reactive DOM block lowering", () => {
       dev: false,
       mode: "compat",
     });
-    expect(destructured.diagnostics).toEqual([]);
-    expect(destructured.code).not.toContain("createReactiveDomBlock");
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toMatch(/const _props = \{ row, selected \};/);
+    expect(output.code).toContain('(props.selected ? "danger" : "")');
+    expect(output.code).toContain("(props.row.label)");
+  });
+
+  test("does not lower destructured props with defaults, rest, or computed keys", () => {
+    const withDefault = transform({
+      code: `export function Row({ row = { label: "" } }) {
+          return <tr>{row.label}</tr>;
+        }`,
+      filename: "Row.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(withDefault.diagnostics).toEqual([]);
+    expect(withDefault.code).not.toContain("createReactiveDomBlock");
+
+    const withRest = transform({
+      code: `export function Row({ row, ...rest }) {
+          return <tr>{row.label}{rest.kind}</tr>;
+        }`,
+      filename: "Row.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(withRest.diagnostics).toEqual([]);
+    expect(withRest.code).not.toContain("createReactiveDomBlock");
+
+    const withComputed = transform({
+      code: `const key = "row";
+        export function Row({ [key]: row }) {
+          return <tr>{row.label}</tr>;
+        }`,
+      filename: "Row.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(withComputed.diagnostics).toEqual([]);
+    expect(withComputed.code).not.toContain("createReactiveDomBlock");
   });
 
   test("compiled prop block renders correctly end to end", async () => {
@@ -143,7 +186,9 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"aria-label",\s+\(\) => \(props\.label\),/);
     expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"data-state",\s+\(\) => \(props\.state\),/);
     expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"href",\s+\(\) => \(props\.href\),/);
-    expect(output.code).toMatch(/_bindProp\(\s+_a,\s+"style",\s+\(\) => \(\{ color: props\.color \}\),/);
+    expect(output.code).toMatch(
+      /_bindProp\(\s+_a,\s+"style",\s+\(\) => \(\{ color: props\.color \}\),/,
+    );
     expect(output.code).toMatch(/_bindProp\(\s+_svg,\s+"viewBox",\s+\(\) => \(props\.viewBox\),/);
     expect(output.code).toMatch(/_bindProp\(\s+_rect,\s+"width",\s+\(\) => \(props\.width\),/);
   });
@@ -225,6 +270,85 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(link?.hasAttribute("href")).toBe(false);
     expect(svg?.getAttribute("viewBox")).toBe("0 0 48 48");
     expect(rect?.getAttribute("width")).toBe("48");
+  });
+
+  test("does not lower ref-bearing host trees to prop reactive blocks", () => {
+    const rootRef = transform({
+      code: `export function Icon(props) {
+          return <span ref={props.r} className={props.c}>x</span>;
+        }`,
+      filename: "Icon.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(rootRef.diagnostics).toEqual([]);
+    expect(rootRef.code).not.toContain("createReactiveDomBlock");
+    expect(rootRef.code).not.toMatch(/bindProp\([^,]+,\s+"ref"/);
+
+    const nestedRef = transform({
+      code: `export function Icon(props) {
+          return <span className={props.c}><i ref={props.r}>x</i></span>;
+        }`,
+      filename: "Icon.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(nestedRef.diagnostics).toEqual([]);
+    expect(nestedRef.code).not.toContain("createReactiveDomBlock");
+    expect(nestedRef.code).not.toMatch(/bindProp\([^,]+,\s+"ref"/);
+  });
+
+  test("does not lower form value sensitive props through bindProp", () => {
+    const output = transform({
+      code: `export function FormFields(props) {
+          return (
+            <form className={props.className}>
+              <input value={props.value} checked={props.checked} />
+              <input defaultValue={props.defaultValue} defaultChecked={props.defaultChecked} />
+              <textarea defaultValue={props.bio} />
+              <select defaultValue={props.role}>
+                <option value="admin">admin</option>
+              </select>
+            </form>
+          );
+        }`,
+      filename: "FormFields.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createReactiveDomBlock");
+    expect(output.code).not.toMatch(
+      /bindProp\([^,]+,\s+"(?:value|checked|defaultValue|defaultChecked)"/,
+    );
+  });
+
+  test("does not lower dangerous hydration-sensitive props through bindProp", () => {
+    const output = transform({
+      code: `export function HtmlSlot(props) {
+          return (
+            <section
+              className={props.className}
+              dangerouslySetInnerHTML={{ __html: props.html }}
+              suppressHydrationWarning={props.suppress}
+            />
+          );
+        }`,
+      filename: "HtmlSlot.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createReactiveDomBlock");
+    expect(output.code).not.toMatch(
+      /bindProp\([^,]+,\s+"(?:dangerouslySetInnerHTML|suppressHydrationWarning)"/,
+    );
   });
 
   test("annotates pure strict-equality memo comparators for prop reactive blocks", () => {

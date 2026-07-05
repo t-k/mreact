@@ -16,9 +16,16 @@ export interface ComponentIr {
   exportDefault?: boolean;
   async?: boolean;
   parameters: string[];
+  parameterPropAliases?: PropAliasIr[];
   bodyStatements: string[];
   bindingNames: string[];
   root: JsxNodeIr;
+}
+
+/** Represents a plain object destructuring alias from a component parameter. */
+export interface PropAliasIr {
+  propName: string;
+  localName: string;
 }
 
 /** Represents any JSX node shape supported by the compiler intermediate representation. */

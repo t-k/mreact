@@ -5,7 +5,7 @@ import {
   createCompilerModuleContextWithOxc,
   type CompilerModuleContext,
 } from "./compiler-module-context.js";
-import type { ClientReferenceIr, ComponentIr, ModuleIr } from "./ir.js";
+import type { ClientReferenceIr, ComponentIr, ModuleIr, PropAliasIr } from "./ir.js";
 import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import {
   arraysEqual,
@@ -217,8 +217,7 @@ function oxcParseErrorDiagnostic(code: string, error: unknown): Diagnostic {
   const labelMessage = typeof firstLabel.message === "string" ? firstLabel.message : undefined;
   const message = typeof object.message === "string" ? object.message : "Oxc parse error";
   const helpMessage = typeof object.helpMessage === "string" ? object.helpMessage : undefined;
-  const codeframe =
-    typeof object.codeframe === "string" ? object.codeframe.trimEnd() : undefined;
+  const codeframe = typeof object.codeframe === "string" ? object.codeframe.trimEnd() : undefined;
   const loc =
     typeof firstLabel.start === "number"
       ? getOxcLocationFromOffset(code, firstLabel.start)
@@ -1177,6 +1176,7 @@ function analyzeOxcFunctionLikeComponent(
   const parameters = readArray(functionLike.params).map((param) =>
     readOxcParameterName(code, param),
   );
+  const parameterPropAliases = readPlainObjectParameterPropAliases(functionLike.params);
   const htmlParameterNames = new Set(
     [...(localJsxHelperHtmlParameters.get(name) ?? [])]
       .map((index) => parameters[index])
@@ -1308,10 +1308,45 @@ function analyzeOxcFunctionLikeComponent(
     ...(exportDefault ? { exportDefault: true } : {}),
     ...(functionLike.async === true ? { async: true } : {}),
     parameters,
+    ...(parameterPropAliases === undefined ? {} : { parameterPropAliases }),
     bodyStatements,
-    bindingNames: [...parameters, ...body.flatMap(collectBindingNames)],
+    bindingNames: [
+      ...parameters,
+      ...(parameterPropAliases?.map((alias) => alias.localName) ?? []),
+      ...body.flatMap(collectBindingNames),
+    ],
     root,
   };
+}
+
+function readPlainObjectParameterPropAliases(params: unknown): PropAliasIr[] | undefined {
+  const [firstParam, ...restParams] = readArray(params).map(readObject);
+
+  if (firstParam === undefined || restParams.length > 0 || firstParam.type !== "ObjectPattern") {
+    return undefined;
+  }
+
+  const aliases: PropAliasIr[] = [];
+  for (const property of readArray(firstParam.properties)) {
+    const object = readObject(property);
+
+    if (object.type !== "Property" || object.computed === true) {
+      return undefined;
+    }
+
+    const key = readObject(object.key);
+    const value = readObject(object.value);
+    const propName = typeof key.name === "string" ? key.name : undefined;
+    const localName = typeof value.name === "string" ? value.name : undefined;
+
+    if (propName === undefined || localName === undefined) {
+      return undefined;
+    }
+
+    aliases.push({ propName, localName });
+  }
+
+  return aliases.length === 0 ? undefined : aliases;
 }
 
 interface OxcEarlyIfRootReturn {
