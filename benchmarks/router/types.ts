@@ -48,8 +48,11 @@ export type AppFrameworkCaseName =
   | "app second interaction latency"
   | "app server cold start"
   | "app client bundle gzip bytes (server-only page)"
+  | "app client bundle gzip bytes before interaction (interactive page)"
+  | "app client bundle gzip bytes after idle settle (interactive page)"
   | "app client bundle gzip bytes (interactive page)"
   | "app client bundle gzip bytes (interactive page, minimal opt-out)"
+  | "app client bundle gzip bytes (interactive page, 3 shared routes)"
   | "app build output gzip bytes";
 
 export interface AppFrameworkAdapter {
@@ -83,6 +86,9 @@ export interface AppFrameworkAdapter {
   // internal prerender bug, so the adapter falls back to the framework floor
   // (≒ server-only number).
   measureInteractiveClientBundleBytes?: () => Promise<number>;
+  measureInteractiveClientBundleBeforeInteractionBytes?: () => Promise<number>;
+  measureInteractiveClientBundleAfterIdleBytes?: () => Promise<number>;
+  measureInteractiveClientBundleSharedRoutesBytes?: () => Promise<number>;
   // Hits the framework's "two independent async boundaries" fixture. Two
   // 50 ms async resolves rendered as siblings. A framework that resolves
   // them in parallel finishes in ~50 ms TTLB; one that resolves

@@ -4,7 +4,7 @@
 // http.Server に乗せる) と round-trip overhead が揃い fair comparison になる。
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { gzipSync } from "node:zlib";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
@@ -28,6 +28,7 @@ import {
   measureHydrationIslands,
   measureInitialPageLoadBeforeInteraction,
   measureLoaderClientNavigation,
+  measureRouteJavaScriptGzipBytePhases,
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
@@ -128,10 +129,7 @@ async function ensureFixture(
 }`,
   );
 
-  await writeFile(
-    join(appDir, "page.tsx"),
-    spanPageSource(arrayLiteral),
-  );
+  await writeFile(join(appDir, "page.tsx"), spanPageSource(arrayLiteral));
 
   await writeFile(
     join(appDir, "stream-page", "page.tsx"),
@@ -488,6 +486,16 @@ function createMreactAppRouterAdapter(options: {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
       return measureRouteJavaScriptGzipBytes(url, { assertInteractive: true });
     },
+    async measureInteractiveClientBundleBeforeInteractionBytes(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
+      return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
+        .beforeInteractionBytes;
+    },
+    async measureInteractiveClientBundleAfterIdleBytes(): Promise<number> {
+      const url = await ensureBrowserFixture(logEnabled, reactCompat);
+      return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
+        .afterIdleBytes;
+    },
     async measureInteractiveClientBundleMinimalBytes(): Promise<number> {
       if (reactCompat) {
         return measureReactCompatInteractiveBundle({ clientNavigation: false });
@@ -498,6 +506,9 @@ function createMreactAppRouterAdapter(options: {
       // SPA navigation / link prefetch — equivalent posture to Marko Run's
       // default (no navigation runtime).
       return measureInteractiveBundle({ clientNavigation: false });
+    },
+    async measureInteractiveClientBundleSharedRoutesBytes(): Promise<number> {
+      return measureSharedInteractiveRoutesBundle({ reactCompat });
     },
     async measureClientNavigationMs(): Promise<number> {
       const url = await ensureBrowserFixture(logEnabled, reactCompat);
@@ -534,7 +545,7 @@ function createMreactAppRouterAdapter(options: {
       return (await measureConcurrentLoad(logEnabled, reactCompat)).p99Ms;
     },
     async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-      return (await measureConcurrentLoad(logEnabled, reactCompat)).rssDeltaBytes;
+      return await measureConcurrentLoadRssInChild(logEnabled, reactCompat);
     },
     async measureHydration100IslandsMs(): Promise<number> {
       const url = await createHydrationFixture(logEnabled, reactCompat, 100);
@@ -605,7 +616,6 @@ async function measureConcurrentLoad(
   const totalRequests = 200;
   const concurrency = 100;
   const latencies: number[] = [];
-  const beforeRss = process.memoryUsage().rss;
   const startedAt = performance.now();
   let nextIndex = 0;
 
@@ -632,11 +642,10 @@ async function measureConcurrentLoad(
   );
 
   const elapsedMs = performance.now() - startedAt;
-  const afterRss = process.memoryUsage().rss;
 
   return {
     p99Ms: percentile(latencies, 0.99),
-    rssDeltaBytes: afterRss - beforeRss,
+    rssDeltaBytes: Number.NaN,
     throughputOps: totalRequests / (elapsedMs / 1000),
   };
 }
@@ -695,6 +704,160 @@ export default function Page() {
   });
 
   return trackOneShotServer(fixtureDir, server);
+}
+
+async function measureConcurrentLoadRssInChild(
+  logEnabled: boolean,
+  reactCompat: boolean,
+): Promise<number> {
+  const samples = await Promise.all(
+    Array.from({ length: 3 }, () => measureConcurrentLoadRssSampleInChild(logEnabled, reactCompat)),
+  );
+  return percentile(samples, 0.5);
+}
+
+async function measureConcurrentLoadRssSampleInChild(
+  logEnabled: boolean,
+  _reactCompat: boolean,
+): Promise<number> {
+  const items = Array.from({ length: NODE_COUNT_DEFAULT }, (_, index) => index);
+  const arrayLiteral = `[${items.join(",")}]`;
+  const staticPageSource = `import { cacheControl } from "@reckona/mreact-router";
+const items = ${arrayLiteral};
+export default function Page() {
+  cacheControl({ maxAge: 60 });
+  return <main>{items.map((index) => <span key={index}>{index}</span>)}</main>;
+}`;
+  const script = `
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildApp, createMemoryRouteCache, startServer } from ${JSON.stringify(join(process.cwd(), "packages/router/dist/index.js"))};
+
+async function forceGcFence() {
+  for (let index = 0; index < 3; index += 1) {
+    globalThis.gc?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-concurrent-rss-"));
+const appDir = join(rootDir, "app");
+const outDir = join(rootDir, ".mreact");
+
+try {
+  await mkdir(join(appDir, "static-page"), { recursive: true });
+  await writeFile(join(appDir, "layout.tsx"), "export default function Layout() {\\n  return <html lang=\\"en\\"><body><Slot /></body></html>;\\n}\\n");
+  await writeFile(join(appDir, "page.tsx"), ${JSON.stringify(spanPageSource(arrayLiteral))});
+  await writeFile(join(appDir, "static-page", "page.tsx"), ${JSON.stringify(staticPageSource)});
+  await buildApp({ appDir, outDir });
+  const logger = process.env.MREACT_BENCH_LOG_ENABLED === "1" ? { info() {}, error() {} } : undefined;
+  const server = await startServer({
+    logger,
+    outDir,
+    port: 0,
+    routeCache: createMemoryRouteCache(),
+  });
+  try {
+    await forceGcFence();
+    const beforeRss = process.memoryUsage().rss;
+    const totalRequests = 200;
+    const concurrency = 100;
+    let nextIndex = 0;
+    await Promise.all(
+      Array.from({ length: concurrency }, async () => {
+        for (;;) {
+          const index = nextIndex;
+          nextIndex += 1;
+          if (index >= totalRequests) {
+            return;
+          }
+          const response = await fetch(\`\${server.url}/static-page\`);
+          const html = await response.text();
+          if (!html.includes("<span>999</span>")) {
+            throw new Error("concurrent load RSS response did not include the last node");
+          }
+        }
+      }),
+    );
+    await forceGcFence();
+    console.log(JSON.stringify({ rssDeltaBytes: process.memoryUsage().rss - beforeRss }));
+  } finally {
+    await server.close();
+  }
+} finally {
+  await rm(rootDir, { force: true, recursive: true });
+}
+`;
+
+  const child = spawn(process.execPath, ["--expose-gc", "--input-type=module", "-e", script], {
+    env: {
+      ...process.env,
+      ...(logEnabled ? { MREACT_BENCH_LOG_ENABLED: "1" } : {}),
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  return waitForConcurrentLoadRss(child);
+}
+
+async function waitForConcurrentLoadRss(child: ChildProcessWithoutNullStreams): Promise<number> {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    const timeout = setTimeout(() => {
+      cleanup();
+      child.kill("SIGTERM");
+      reject(new Error(`mreact concurrent-load RSS child timed out\n${stderr}`));
+    }, 60_000);
+
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      child.stdout.off("data", onStdout);
+      child.stderr.off("data", onStderr);
+      child.off("exit", onExit);
+      child.off("error", onError);
+    };
+    const onStdout = (chunk: Buffer): void => {
+      stdout += chunk.toString("utf8");
+      for (const line of stdout.split(/\r?\n/)) {
+        if (!line.trim().startsWith("{")) {
+          continue;
+        }
+
+        try {
+          const parsed = JSON.parse(line) as { rssDeltaBytes?: unknown };
+          if (typeof parsed.rssDeltaBytes === "number") {
+            cleanup();
+            resolve(parsed.rssDeltaBytes);
+          }
+        } catch {
+          // Keep waiting for a complete JSON line.
+        }
+      }
+    };
+    const onStderr = (chunk: Buffer): void => {
+      stderr += chunk.toString("utf8");
+    };
+    const onExit = (code: number | null): void => {
+      cleanup();
+      reject(
+        new Error(`mreact concurrent-load RSS child exited before reporting: ${code}\n${stderr}`),
+      );
+    };
+    const onError = (error: Error): void => {
+      cleanup();
+      reject(error);
+    };
+
+    child.stdout.on("data", onStdout);
+    child.stderr.on("data", onStderr);
+    child.on("exit", onExit);
+    child.on("error", onError);
+  }).finally(async () => {
+    child.kill("SIGTERM");
+    await waitForChildExit(child);
+  });
 }
 
 async function measureDevServerColdStart(reactCompat: boolean): Promise<number> {
@@ -1137,9 +1300,7 @@ async function measureCloudflareWorkerLatency(reactCompat: boolean): Promise<num
 }
 
 async function measureCloudflareModuleFallback(workerCode: string): Promise<number> {
-  const module = (await import(
-    `data:text/javascript,${encodeURIComponent(workerCode)}`
-  )) as {
+  const module = (await import(`data:text/javascript,${encodeURIComponent(workerCode)}`)) as {
     default?: {
       fetch?: (
         request: Request,
@@ -1155,10 +1316,14 @@ async function measureCloudflareModuleFallback(workerCode: string): Promise<numb
   }
 
   const startedAt = performance.now();
-  const response = await fetchHandler(new Request("http://local.test/"), {}, {
-    passThroughOnException() {},
-    waitUntil() {},
-  });
+  const response = await fetchHandler(
+    new Request("http://local.test/"),
+    {},
+    {
+      passThroughOnException() {},
+      waitUntil() {},
+    },
+  );
   const html = await response.text();
   const duration = performance.now() - startedAt;
 
@@ -1332,6 +1497,84 @@ export function Counter() {
   } finally {
     await rm(fixtureDir, { force: true, recursive: true });
   }
+}
+
+async function measureSharedInteractiveRoutesBundle(options: {
+  reactCompat: boolean;
+}): Promise<number> {
+  const fixtureDir = await mkdtemp(join(tmpdir(), "mreact-app-bench-shared-client-"));
+  const appDir = join(fixtureDir, "app");
+  const outDir = join(fixtureDir, ".mreact");
+
+  try {
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+    );
+
+    const routeNames = ["page", "about/page", "settings/page"];
+    for (const routeName of routeNames) {
+      const routeDir = join(appDir, ...routeName.split("/").slice(0, -1));
+      if (routeDir !== appDir) {
+        await mkdir(routeDir, { recursive: true });
+      }
+      const filename = join(appDir, `${routeName}.tsx`);
+      if (options.reactCompat) {
+        const counterImport = routeName === "page" ? "./Counter.compat" : "../Counter.compat";
+        await writeFile(
+          filename,
+          `import { Counter } from "${counterImport}";
+export default function Page() {
+  return <main><Counter /></main>;
+}`,
+        );
+      } else {
+        await writeFile(
+          filename,
+          `import { cell } from "@reckona/mreact-reactive-core";
+export default function Page() {
+  const count = cell(0);
+  return <main><button type="button" onClick={() => count.set(value => value + 1)}>{count.get()}</button></main>;
+}`,
+        );
+      }
+    }
+
+    if (options.reactCompat) {
+      await writeFile(
+        join(appDir, "Counter.compat.tsx"),
+        `import { useState } from "@reckona/mreact-compat/hooks";
+export function Counter() {
+  const [count, setCount] = useState(0);
+  return <button type="button" onClick={() => setCount((value) => value + 1)}>{count}</button>;
+}`,
+      );
+    }
+
+    await buildApp({ appDir, outDir });
+    return measureDirectoryJavaScriptGzipBytes(join(outDir, "client"));
+  } finally {
+    await rm(fixtureDir, { force: true, recursive: true });
+  }
+}
+
+async function measureDirectoryJavaScriptGzipBytes(directory: string): Promise<number> {
+  let total = 0;
+  const entries = await readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      total += await measureDirectoryJavaScriptGzipBytes(entryPath);
+    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+      total += gzipSync(await readFile(entryPath)).length;
+    }
+  }
+
+  return total;
 }
 
 async function sumClientBundleGzipBytes(outDir: string): Promise<number> {

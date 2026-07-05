@@ -190,12 +190,15 @@ export async function measureLoaderClientNavigation(url: string): Promise<number
     }, documentToken);
     const start = await page.evaluate(() => performance.now());
     await page.getByRole("link", { name: "Details" }).click();
-    await page.getByText("loader:loaded-target").waitFor({
-      state: "visible",
-      timeout: DEFAULT_TIMEOUT_MS,
-    }).catch((error: unknown) => {
-      throw appendDiagnostics(error, diagnostics);
-    });
+    await page
+      .getByText("loader:loaded-target")
+      .waitFor({
+        state: "visible",
+        timeout: DEFAULT_TIMEOUT_MS,
+      })
+      .catch((error: unknown) => {
+        throw appendDiagnostics(error, diagnostics);
+      });
     const end = await page.evaluate(() => performance.now());
     const retainedToken = await page.evaluate(
       () => (globalThis as { __mreactBenchDocumentToken?: string }).__mreactBenchDocumentToken,
@@ -302,30 +305,53 @@ export async function measureRouteJavaScriptGzipBytes(
   url: string,
   options: { assertInteractive?: boolean } = {},
 ): Promise<number> {
+  return (await measureRouteJavaScriptGzipBytePhases(url, options)).afterIdleBytes;
+}
+
+export interface RouteJavaScriptGzipBytePhases {
+  afterIdleBytes: number;
+  beforeInteractionBytes: number;
+}
+
+export async function measureRouteJavaScriptGzipBytePhases(
+  url: string,
+  options: { assertInteractive?: boolean } = {},
+): Promise<RouteJavaScriptGzipBytePhases> {
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage();
     const diagnostics = collectDiagnostics(page);
-    const jsResponses: Promise<number>[] = [];
+    const jsResponses: Array<{ bytes: number; completed: boolean; promise: Promise<number> }> = [];
 
     page.on("response", (response) => {
       const request = response.request();
 
-      if (request.resourceType() !== "script" && !new URL(response.url()).pathname.endsWith(".js")) {
+      if (
+        request.resourceType() !== "script" &&
+        !new URL(response.url()).pathname.endsWith(".js")
+      ) {
         return;
       }
 
-      jsResponses.push(
-        response
+      const record = {
+        bytes: 0,
+        completed: false,
+        promise: response
           .body()
           .then((body) => gzipSync(body).length)
           .catch(() => 0),
-      );
+      };
+      record.promise = record.promise.then((bytes) => {
+        record.bytes = bytes;
+        record.completed = true;
+        return bytes;
+      });
+      jsResponses.push(record);
     });
 
     await page.goto(url, { waitUntil: "domcontentloaded" });
-    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
 
+    let beforeInteractionBytes: number | undefined;
     if (options.assertInteractive === true) {
       await page
         .getByRole("button", { name: /count: 0/ })
@@ -336,6 +362,8 @@ export async function measureRouteJavaScriptGzipBytes(
         .catch((error: unknown) => {
           throw appendDiagnostics(error, diagnostics);
         });
+      await Promise.resolve();
+      beforeInteractionBytes = sumCompletedScriptBytes(jsResponses);
       await page.getByRole("button", { name: /count: 0/ }).click();
       await page
         .getByRole("button", { name: /count: 1/ })
@@ -348,11 +376,23 @@ export async function measureRouteJavaScriptGzipBytes(
         });
     }
 
-    const bytes = await Promise.all(jsResponses);
-    return bytes.reduce((sum, value) => sum + value, 0);
+    await page.waitForLoadState("networkidle", { timeout: DEFAULT_TIMEOUT_MS }).catch(() => {});
+
+    const bytes = await Promise.all(jsResponses.map((record) => record.promise));
+    const afterIdleBytes = bytes.reduce((sum, value) => sum + value, 0);
+    return {
+      afterIdleBytes,
+      beforeInteractionBytes: beforeInteractionBytes ?? afterIdleBytes,
+    };
   } finally {
     await browser.close();
   }
+}
+
+function sumCompletedScriptBytes(
+  records: ReadonlyArray<{ bytes: number; completed: boolean }>,
+): number {
+  return records.reduce((sum, record) => sum + (record.completed ? record.bytes : 0), 0);
 }
 
 function collectDiagnostics(page: Page): string[] {

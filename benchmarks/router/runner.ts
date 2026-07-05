@@ -184,8 +184,7 @@ const valueRouterBenchmarkCases: ValueRouterBenchmarkCase[] = [
   },
   {
     name: "app 1000 route RSS delta",
-    description:
-      "Reports process RSS growth while building and serving a 1,000-route app.",
+    description: "Reports process RSS growth while building and serving a 1,000-route app.",
     metric: "memory",
     measuredSamples: 1,
     unit: "bytes",
@@ -357,9 +356,27 @@ const sizeRouterBenchmarkCases: SizeRouterBenchmarkCase[] = [
     invoke: (adapter) => adapter.measureServerOnlyClientBundleBytes?.(),
   },
   {
+    name: "app client bundle gzip bytes before interaction (interactive page)",
+    description:
+      "Measures gzip-compressed client JavaScript completed before the minimal interactive route responds to its first click.",
+    metric: "size",
+    unit: "gzip bytes",
+    invoke: (adapter) => adapter.measureInteractiveClientBundleBeforeInteractionBytes?.(),
+  },
+  {
+    name: "app client bundle gzip bytes after idle settle (interactive page)",
+    description:
+      "Measures gzip-compressed client JavaScript fetched by the minimal interactive route after the browser reaches networkidle.",
+    metric: "size",
+    unit: "gzip bytes",
+    invoke: (adapter) =>
+      adapter.measureInteractiveClientBundleAfterIdleBytes?.() ??
+      adapter.measureInteractiveClientBundleBytes?.(),
+  },
+  {
     name: "app client bundle gzip bytes (interactive page)",
     description:
-      "Measures gzip-compressed client JavaScript shipped for a minimal button-and-state interactive route.",
+      "Compatibility alias for gzip-compressed client JavaScript fetched by the minimal button-and-state interactive route after idle settle.",
     metric: "size",
     unit: "gzip bytes",
     invoke: (adapter) => adapter.measureInteractiveClientBundleBytes?.(),
@@ -373,6 +390,14 @@ const sizeRouterBenchmarkCases: SizeRouterBenchmarkCase[] = [
     invoke: (adapter) =>
       adapter.measureInteractiveClientBundleMinimalBytes?.() ??
       adapter.measureInteractiveClientBundleBytes?.(),
+  },
+  {
+    name: "app client bundle gzip bytes (interactive page, 3 shared routes)",
+    description:
+      "Measures a three-route interactive app that shares client route runtime chunks, making per-route glue dedup visible.",
+    metric: "size",
+    unit: "gzip bytes",
+    invoke: (adapter) => adapter.measureInteractiveClientBundleSharedRoutesBytes?.(),
   },
   {
     name: "app build output gzip bytes",

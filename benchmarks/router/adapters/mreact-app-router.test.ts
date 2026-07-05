@@ -2,10 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const adapterPath = join(
-  process.cwd(),
-  "benchmarks/router/adapters/mreact-app-router.ts",
-);
+const adapterPath = join(process.cwd(), "benchmarks/router/adapters/mreact-app-router.ts");
 
 describe("mreact app-router benchmark fixtures", () => {
   it("keeps react-compat server-side fixtures on the native page path", async () => {
@@ -37,6 +34,22 @@ describe("mreact app-router benchmark fixtures", () => {
     expect(source).toContain("waitForRouteScaleRss");
     expect(source).toContain('spawn(process.execPath, ["--input-type=module", "-e", script]');
     expect(source).not.toContain("Math.max(0, process.memoryUsage().rss - beforeRss),");
+  });
+
+  it("measures concurrent-load RSS in an isolated child process", async () => {
+    const source = await readFile(adapterPath, "utf8");
+    const concurrentLoadSource = source.slice(
+      source.indexOf("async function measureConcurrentLoad("),
+      source.indexOf("async function createHydrationFixture("),
+    );
+
+    expect(source).toContain("measureConcurrentLoadRssInChild");
+    expect(source).toContain("waitForConcurrentLoadRss");
+    expect(source).toContain(
+      'spawn(process.execPath, ["--expose-gc", "--input-type=module", "-e", script]',
+    );
+    expect(concurrentLoadSource).not.toContain("process.memoryUsage()");
+    expect(source).toContain("await measureConcurrentLoadRssInChild(logEnabled, reactCompat)");
   });
 
   it("does not clamp RSS deltas to zero", async () => {

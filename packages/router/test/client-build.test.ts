@@ -18,6 +18,42 @@ import { renderAppRouterClientAsset } from "../src/vite.js";
 
 const nativeFetch = globalThis.fetch;
 
+async function sumClientJavaScriptGzipBytes(directory: string): Promise<number> {
+  let total = 0;
+  const entries = await readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      total += await sumClientJavaScriptGzipBytes(entryPath);
+    } else if (entry.isFile() && entry.name.endsWith(".js")) {
+      total += gzipSync(await readFile(entryPath)).length;
+    }
+  }
+
+  return total;
+}
+
+async function sumNavigationJavaScriptGzipBytes(directory: string): Promise<number> {
+  let total = 0;
+  const entries = await readdir(directory, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      total += await sumNavigationJavaScriptGzipBytes(entryPath);
+    } else if (
+      entry.isFile() &&
+      entry.name.startsWith("navigation.") &&
+      entry.name.endsWith(".js")
+    ) {
+      total += gzipSync(await readFile(entryPath)).length;
+    }
+  }
+
+  return total;
+}
+
 describe("mreact app client build and hydration markers", () => {
   beforeEach(() => {
     history.replaceState(null, "", "/");
@@ -107,6 +143,7 @@ export default function Page() {
   test("interactive client bundles stay within absolute gzip budgets", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-size-budget-"));
     const file = join(appDir, "page.mreact.tsx");
+    const outDir = join(appDir, ".mreact");
     const interactiveCode = `import { cell } from "@reckona/mreact-reactive-core";
 export default function Page() {
   const count = cell(0);
@@ -134,10 +171,25 @@ export default function Page() {
       routePath: "/",
       clientNavigation: false,
     });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html lang="en"><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(join(appDir, "page.tsx"), interactiveCode);
+    await buildApp({ appDir, outDir });
+    const defaultPayloadGzipBytes = await sumClientJavaScriptGzipBytes(join(outDir, "client"));
+    const navigationGzipBytes = await sumNavigationJavaScriptGzipBytes(join(outDir, "client"));
 
     expect(gzipSync(withNav.code).length, "default interactive gzip bytes").toBeLessThanOrEqual(
       12_200,
     );
+    expect(
+      defaultPayloadGzipBytes,
+      "default interactive route + navigation chunk gzip bytes",
+    ).toBeLessThanOrEqual(16_200);
+    expect(navigationGzipBytes, "navigation chunk gzip bytes").toBeLessThanOrEqual(8_500);
     expect(
       gzipSync(withoutNav.code).length,
       "minimal opt-out interactive gzip bytes",
@@ -156,7 +208,10 @@ export default function Page() {
 }`;
     const routes = await Promise.all(
       ["/", "/about", "/settings"].map(async (routePath) => {
-        const filename = join(appDir, `${routePath === "/" ? "index" : routePath.slice(1)}.mreact.tsx`);
+        const filename = join(
+          appDir,
+          `${routePath === "/" ? "index" : routePath.slice(1)}.mreact.tsx`,
+        );
         await writeFile(filename, routeCode);
         return {
           code: routeCode,
@@ -221,9 +276,7 @@ export default function Page() {
     });
 
     expect(output.code).toContain("function withEventBindingMetadata");
-    expect(output.code).toContain(
-      "withEventBindingMetadata(() => __mreactEvaluateHydrationNode",
-    );
+    expect(output.code).toContain("withEventBindingMetadata(() => __mreactEvaluateHydrationNode");
   });
 
   test("annotates runtime route script imports so Vite does not warn", async () => {
@@ -6763,8 +6816,9 @@ export default function Page() {
 }`;
     await writeFile(file, code);
     const runtimeCalls: Array<{ options: unknown; url: string }> = [];
-    (globalThis as { __mreactDeferredNavigationCalls?: typeof runtimeCalls }).__mreactDeferredNavigationCalls =
-      runtimeCalls;
+    (
+      globalThis as { __mreactDeferredNavigationCalls?: typeof runtimeCalls }
+    ).__mreactDeferredNavigationCalls = runtimeCalls;
     const runtimeUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(`
 export async function __mreactNavigate(url, options) {
   globalThis.__mreactDeferredNavigationCalls.push({ url, options });

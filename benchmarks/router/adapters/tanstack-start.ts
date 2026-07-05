@@ -17,10 +17,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
-import {
-  type ConcurrentRequestProbeResult,
-  measureConcurrentRequests,
-} from "../http-probes.js";
+import { type ConcurrentRequestProbeResult, measureConcurrentRequests } from "../http-probes.js";
 import {
   measureBackForwardRestore,
   measureClientNavigation,
@@ -28,6 +25,7 @@ import {
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
   measureLoaderClientNavigation,
+  measureRouteJavaScriptGzipBytePhases,
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
@@ -722,6 +720,16 @@ export const tanstackStartAdapter: AppFrameworkAdapter = {
   async measureServerOnlyClientBundleBytes(): Promise<number> {
     const url = await ensureFixture(1000);
     return measureRouteJavaScriptGzipBytes(url);
+  },
+  async measureInteractiveClientBundleBeforeInteractionBytes(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
+      .beforeInteractionBytes;
+  },
+  async measureInteractiveClientBundleAfterIdleBytes(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
+      .afterIdleBytes;
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
     const url = await ensureBrowserFixture();

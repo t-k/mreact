@@ -9,12 +9,12 @@ import { render as renderSvelte } from "svelte/server";
 import { createSSRApp, h } from "vue";
 import { renderToString as renderVueToString } from "@vue/server-renderer";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
-import { measureRouteJavaScriptGzipBytes } from "../browser-probes.js";
-import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
 import {
-  measureConcurrentRequests,
-  type ConcurrentRequestProbeResult,
-} from "../http-probes.js";
+  measureRouteJavaScriptGzipBytePhases,
+  measureRouteJavaScriptGzipBytes,
+} from "../browser-probes.js";
+import { buildDynamicAttrCells } from "../dynamic-attr-cells.js";
+import { measureConcurrentRequests, type ConcurrentRequestProbeResult } from "../http-probes.js";
 import type { AppFrameworkAdapter, AppFrameworkName } from "../types.js";
 
 type RendererKind = "html" | "svelte" | "vue";
@@ -148,6 +148,22 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
       const url = await ensureFixture(1000);
       return measureRouteJavaScriptGzipBytes(`${url}/server-only-bundle`);
     },
+    async measureInteractiveClientBundleBeforeInteractionBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return (
+        await measureRouteJavaScriptGzipBytePhases(`${url}/interactive-bundle`, {
+          assertInteractive: true,
+        })
+      ).beforeInteractionBytes;
+    },
+    async measureInteractiveClientBundleAfterIdleBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return (
+        await measureRouteJavaScriptGzipBytePhases(`${url}/interactive-bundle`, {
+          assertInteractive: true,
+        })
+      ).afterIdleBytes;
+    },
     async measureInteractiveClientBundleBytes(): Promise<number> {
       const url = await ensureFixture(1000);
       return measureRouteJavaScriptGzipBytes(`${url}/interactive-bundle`, {
@@ -280,7 +296,12 @@ async function renderNodePage(
 
   if (renderer === "vue") {
     const app = createSSRApp({
-      render: () => h("main", null, items.map((index) => h("span", null, String(index)))),
+      render: () =>
+        h(
+          "main",
+          null,
+          items.map((index) => h("span", null, String(index))),
+        ),
     });
     return renderVueToString(app);
   }

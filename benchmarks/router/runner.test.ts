@@ -58,8 +58,11 @@ describe("router benchmark configuration", () => {
       "app server cold start",
       "app SSR HTML gzip bytes 1000 nodes",
       "app client bundle gzip bytes (server-only page)",
+      "app client bundle gzip bytes before interaction (interactive page)",
+      "app client bundle gzip bytes after idle settle (interactive page)",
       "app client bundle gzip bytes (interactive page)",
       "app client bundle gzip bytes (interactive page, minimal opt-out)",
+      "app client bundle gzip bytes (interactive page, 3 shared routes)",
       "app build output gzip bytes",
     ]);
   });
@@ -276,13 +279,17 @@ describe("router benchmark configuration", () => {
       .filter((adapter) => adapter.measureBuildOutputGzipBytes !== undefined)
       .map((adapter) => adapter.name);
 
-    expect(adaptersWithBuildOutputProbes).toEqual(routerBenchmarkAdapters.map((adapter) => adapter.name));
+    expect(adaptersWithBuildOutputProbes).toEqual(
+      routerBenchmarkAdapters.map((adapter) => adapter.name),
+    );
   });
 
   it("exposes client bundle probes for production app framework adapters", () => {
     const productionAppAdapterNames = ["nuxt", "svelte-kit", "analog"];
     const requiredMethods = [
       "measureServerOnlyClientBundleBytes",
+      "measureInteractiveClientBundleBeforeInteractionBytes",
+      "measureInteractiveClientBundleAfterIdleBytes",
       "measureInteractiveClientBundleBytes",
       "measureInteractiveClientBundleMinimalBytes",
     ] as const;
@@ -296,6 +303,35 @@ describe("router benchmark configuration", () => {
           .filter((adapter) => adapter[method] !== undefined)
           .map((adapter) => adapter.name),
       ).toEqual(productionAppAdapterNames);
+    }
+  });
+
+  it("exposes split interactive bundle probes for adapters that use browser bundle probes", () => {
+    const expectedAdapters = [
+      "marko-run",
+      "nuxt",
+      "svelte-kit",
+      "analog",
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "tanstack-start-solid",
+      "next-app-router",
+      "mreact-app-router",
+      "mreact-app-router+mreact react-compat",
+      "mreact-app-router+log enabled",
+    ];
+
+    for (const method of [
+      "measureInteractiveClientBundleBeforeInteractionBytes",
+      "measureInteractiveClientBundleAfterIdleBytes",
+    ] as const) {
+      expect(
+        routerBenchmarkAdapters
+          .filter((adapter) => adapter[method] !== undefined)
+          .map((adapter) => adapter.name),
+      ).toEqual(expectedAdapters);
     }
   });
 
@@ -469,18 +505,18 @@ describe("router benchmark configuration", () => {
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
 
-    expect(rows.find((row) => row.caseName === "app streaming first byte 1000 nodes")).toMatchObject(
-      {
-        status: "unsupported",
-        value: 0,
-      },
-    );
-    expect(rows.find((row) => row.caseName === "app streaming first chunk 1000 nodes")).toMatchObject(
-      {
-        status: "unsupported",
-        value: 0,
-      },
-    );
+    expect(
+      rows.find((row) => row.caseName === "app streaming first byte 1000 nodes"),
+    ).toMatchObject({
+      status: "unsupported",
+      value: 0,
+    });
+    expect(
+      rows.find((row) => row.caseName === "app streaming first chunk 1000 nodes"),
+    ).toMatchObject({
+      status: "unsupported",
+      value: 0,
+    });
     expect(rows.find((row) => row.caseName === "app streaming full body 1000 nodes")).toMatchObject(
       {
         status: "unsupported",
@@ -536,7 +572,13 @@ describe("router benchmark configuration", () => {
       "mreact-app-router",
       "next-app-router",
     ]);
-    expect(rows.find((row) => row.framework === "mreact-app-router" && row.caseName === "app first interaction after networkidle")).toMatchObject({
+    expect(
+      rows.find(
+        (row) =>
+          row.framework === "mreact-app-router" &&
+          row.caseName === "app first interaction after networkidle",
+      ),
+    ).toMatchObject({
       status: "completed",
       value: 10,
       samplesMs: [10, 10, 10, 10, 10, 10, 10],
@@ -561,9 +603,7 @@ describe("router benchmark configuration", () => {
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
 
-    expect(
-      rows.find((row) => row.caseName === "app nested layouts depth 5"),
-    ).toMatchObject({
+    expect(rows.find((row) => row.caseName === "app nested layouts depth 5")).toMatchObject({
       status: "completed",
       value: 5,
       meanMs: 5,
@@ -589,9 +629,7 @@ describe("router benchmark configuration", () => {
       { benchTimeMs: 1, warmupTimeMs: 1 },
     );
 
-    expect(
-      rows.find((row) => row.caseName === "app 1000 route build time"),
-    ).toMatchObject({
+    expect(rows.find((row) => row.caseName === "app 1000 route build time")).toMatchObject({
       status: "completed",
       value: 5,
       meanMs: 5,

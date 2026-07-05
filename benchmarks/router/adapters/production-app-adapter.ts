@@ -12,13 +12,11 @@ import {
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
   measureInitialPageLoadBeforeInteraction,
+  measureRouteJavaScriptGzipBytePhases,
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
-import {
-  measureConcurrentRequests,
-  type ConcurrentRequestProbeResult,
-} from "../http-probes.js";
+import { measureConcurrentRequests, type ConcurrentRequestProbeResult } from "../http-probes.js";
 import type { AppFrameworkAdapter, AppFrameworkName } from "../types.js";
 
 interface ServerHandle {
@@ -76,7 +74,9 @@ export function createProductionAppAdapter(
     const response = await fetch(`${url}${path}`);
     const html = await response.text();
     if (!response.ok) {
-      throw new Error(`${options.name} ${path} returned ${response.status}: ${html.slice(0, 2000)}`);
+      throw new Error(
+        `${options.name} ${path} returned ${response.status}: ${html.slice(0, 2000)}`,
+      );
     }
     return html;
   }
@@ -152,6 +152,22 @@ export function createProductionAppAdapter(
     async measureServerOnlyClientBundleBytes(): Promise<number> {
       const url = await ensureFixture(1000);
       return measureRouteJavaScriptGzipBytes(`${url}/server-only-bundle`);
+    },
+    async measureInteractiveClientBundleBeforeInteractionBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return (
+        await measureRouteJavaScriptGzipBytePhases(`${url}/interactive-bundle`, {
+          assertInteractive: true,
+        })
+      ).beforeInteractionBytes;
+    },
+    async measureInteractiveClientBundleAfterIdleBytes(): Promise<number> {
+      const url = await ensureFixture(1000);
+      return (
+        await measureRouteJavaScriptGzipBytePhases(`${url}/interactive-bundle`, {
+          assertInteractive: true,
+        })
+      ).afterIdleBytes;
     },
     async measureInteractiveClientBundleBytes(): Promise<number> {
       const url = await ensureFixture(1000);
@@ -288,7 +304,10 @@ export async function startCommandServer(
     stderr += chunk.toString("utf8");
   });
 
-  const ready = await waitForServer(`${url}${options.healthPath ?? "/"}`, options.timeoutMs ?? 30_000);
+  const ready = await waitForServer(
+    `${url}${options.healthPath ?? "/"}`,
+    options.timeoutMs ?? 30_000,
+  );
   if (!ready) {
     await closeChildProcess(child);
     throw new Error(`${command} ${resolvedArgs.join(" ")} did not start: ${stderr.slice(-4000)}`);
@@ -349,7 +368,9 @@ function killChildProcessGroup(child: ChildProcess, signal: NodeJS.Signals): voi
 function readPackageVersion(packageName: string): string {
   try {
     const packageJsonPath = requireFromHere.resolve(`${packageName}/package.json`);
-    const packageJson = JSON.parse(requireFromHere("node:fs").readFileSync(packageJsonPath, "utf8")) as {
+    const packageJson = JSON.parse(
+      requireFromHere("node:fs").readFileSync(packageJsonPath, "utf8"),
+    ) as {
       version?: string;
     };
     return packageJson.version ?? "unknown";

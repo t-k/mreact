@@ -17,11 +17,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
+import { type ConcurrentRequestProbeResult, measureConcurrentRequests } from "../http-probes.js";
 import {
-  type ConcurrentRequestProbeResult,
-  measureConcurrentRequests,
-} from "../http-probes.js";
-import { measureRouteJavaScriptGzipBytes } from "../browser-probes.js";
+  measureRouteJavaScriptGzipBytePhases,
+  measureRouteJavaScriptGzipBytes,
+} from "../browser-probes.js";
 
 const TANSTACK_SOLID_START_VERSION = "2.0.0-beta.18";
 const TANSTACK_SOLID_ROUTER_VERSION = "2.0.0-beta.17";
@@ -739,6 +739,16 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
   async measureServerOnlyClientBundleBytes(): Promise<number> {
     const url = await ensureFixture(1000);
     return measureRouteJavaScriptGzipBytes(url);
+  },
+  async measureInteractiveClientBundleBeforeInteractionBytes(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
+      .beforeInteractionBytes;
+  },
+  async measureInteractiveClientBundleAfterIdleBytes(): Promise<number> {
+    const url = await ensureBrowserFixture();
+    return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
+      .afterIdleBytes;
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
     const url = await ensureBrowserFixture();
