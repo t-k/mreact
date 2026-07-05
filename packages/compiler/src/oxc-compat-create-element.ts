@@ -1049,6 +1049,14 @@ function lowerCreateElementListCall(
       return undefined;
     }
 
+    if (
+      statements
+        .slice(0, returnStatementIndex)
+        .some((statement) => !isSafeCreateElementListBodyStatement(statement))
+    ) {
+      return undefined;
+    }
+
     const returnStatement = readObject(statements[returnStatementIndex]);
     renderExpression = unwrapOxcParentheses(readObject(returnStatement.argument));
     bodyStatements = statements
@@ -1072,6 +1080,92 @@ function lowerCreateElementListCall(
     ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children: [rendered],
   };
+}
+
+function isSafeCreateElementListBodyStatement(statement: unknown): boolean {
+  const object = readObject(statement);
+  if (object.type !== "VariableDeclaration" || object.kind !== "const") {
+    return false;
+  }
+
+  const declarations = readArray(object.declarations);
+  if (declarations.length !== 1) {
+    return false;
+  }
+
+  const declaration = readObject(declarations[0]);
+  const id = readObject(declaration.id);
+  if (id.type !== "Identifier" || declaration.init === null || declaration.init === undefined) {
+    return false;
+  }
+
+  return isSideEffectFreeCreateElementListExpression(
+    unwrapOxcParentheses(readObject(declaration.init)),
+  );
+}
+
+function isSideEffectFreeCreateElementListExpression(expression: Record<string, unknown>): boolean {
+  switch (expression.type) {
+    case "Identifier":
+    case "Literal":
+    case "MetaProperty":
+    case "ThisExpression":
+      return true;
+    case "TemplateLiteral":
+      return readArray(expression.expressions).every((part) =>
+        isSideEffectFreeCreateElementListExpression(unwrapOxcParentheses(readObject(part))),
+      );
+    case "MemberExpression":
+      return (
+        expression.computed !== true &&
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(expression.object)),
+        )
+      );
+    case "UnaryExpression":
+      return isSideEffectFreeCreateElementListExpression(
+        unwrapOxcParentheses(readObject(expression.argument)),
+      );
+    case "BinaryExpression":
+    case "LogicalExpression":
+      return (
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(expression.left)),
+        ) &&
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(expression.right)),
+        )
+      );
+    case "ConditionalExpression":
+      return (
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(expression.test)),
+        ) &&
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(expression.consequent)),
+        ) &&
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(expression.alternate)),
+        )
+      );
+    case "CallExpression": {
+      if (expression.optional === true) {
+        return false;
+      }
+
+      const callee = unwrapOxcParentheses(readObject(expression.callee));
+      return (
+        callee.type === "Identifier" &&
+        callee.name === "String" &&
+        readArray(expression.arguments).length === 1 &&
+        isSideEffectFreeCreateElementListExpression(
+          unwrapOxcParentheses(readObject(readArray(expression.arguments)[0])),
+        )
+      );
+    }
+    default:
+      return false;
+  }
 }
 
 // Detection-side predicate: a direct `return createElement(...)` (or arrow

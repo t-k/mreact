@@ -794,7 +794,7 @@ function isStaticReactiveBlockComponent(type: unknown): boolean {
   );
 }
 
-function consumeReactiveDomBlockHydrationNode(previousNodes: readonly ChildNode[] | undefined): number {
+function consumeReactiveDomBlockHydrationNode(previousNodes: readonly Node[] | undefined): number {
   return previousNodes === undefined || previousNodes.length === 0 ? 0 : 1;
 }
 
