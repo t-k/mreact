@@ -1,8 +1,10 @@
+import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { normalizeRenderValue } from "./normalize.js";
 import {
   createScope,
   disposeScope,
   hasScopeDisposers,
+  registerDispose,
   withScope,
   type DomScope,
 } from "./scope.js";
@@ -19,7 +21,11 @@ export function createScopedRenderNodes(render: () => RenderValue): ScopedRender
   const scope = createScope();
 
   try {
-    const nodes = withScope(scope, () => normalizeRenderValue(render()));
+    const nodes = withScope(scope, () =>
+      withCleanupScope((dispose) => {
+        registerDispose(dispose);
+      }, () => normalizeRenderValue(render())),
+    );
 
     return {
       nodes,
@@ -37,7 +43,11 @@ export function createScopedRenderNode<TNode extends ChildNode>(
   const scope = createScope();
 
   try {
-    const node = withScope(scope, render);
+    const node = withScope(scope, () =>
+      withCleanupScope((dispose) => {
+        registerDispose(dispose);
+      }, render),
+    );
 
     return {
       dispose: hasScopeDisposers(scope) ? () => disposeScope(scope) : noopDispose,
@@ -55,7 +65,11 @@ export function createScopedRenderNodeScope<TNode extends ChildNode>(
   const scope = createScope();
 
   try {
-    const node = withScope(scope, render);
+    const node = withScope(scope, () =>
+      withCleanupScope((dispose) => {
+        registerDispose(dispose);
+      }, render),
+    );
     const result: { node: TNode; scope?: DomScope | undefined } = { node };
 
     if (hasScopeDisposers(scope)) {

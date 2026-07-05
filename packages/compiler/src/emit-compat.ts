@@ -1344,6 +1344,10 @@ function propBlockHasEvent(node: JsxNodeIr): boolean {
     return node.children.some(propBlockHasEvent);
   }
 
+  if (node.kind === "component") {
+    return node.children.some(propBlockHasEvent);
+  }
+
   if (node.kind !== "element") {
     return false;
   }
@@ -1368,6 +1372,10 @@ function propBlockHasEffectBinding(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasEffectBinding);
+  }
+
+  if (node.kind === "component") {
     return node.children.some(propBlockHasEffectBinding);
   }
 
@@ -1399,6 +1407,10 @@ function propBlockHasBindPropBinding(node: JsxNodeIr): boolean {
     return node.children.some(propBlockHasBindPropBinding);
   }
 
+  if (node.kind === "component") {
+    return node.children.some(propBlockHasBindPropBinding);
+  }
+
   if (node.kind !== "element") {
     return false;
   }
@@ -1424,6 +1436,10 @@ function propBlockHasSpreadBinding(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "list" || node.kind === "fragment") {
+    return node.children.some(propBlockHasSpreadBinding);
+  }
+
+  if (node.kind === "component") {
     return node.children.some(propBlockHasSpreadBinding);
   }
 
@@ -1473,7 +1489,7 @@ function propBlockHasListBinding(node: JsxNodeIr): boolean {
     );
   }
 
-  if (node.kind === "fragment") {
+  if (node.kind === "fragment" || node.kind === "component") {
     return node.children.some(propBlockHasListBinding);
   }
 
@@ -1497,7 +1513,7 @@ function propBlockHasNestedListRenderValue(node: JsxNodeIr): boolean {
   }
 
   if (node.kind === "component") {
-    return node.children.some(propBlockHasNestedListRenderValue);
+    return node.children.some(propBlockBranchHasListRenderValue);
   }
 
   if (node.kind !== "element") {
@@ -1690,9 +1706,10 @@ function emitPropBlockBindingLines(
     .map((binding) => {
       const listDisposeName = allocator("_disposeList");
       const parameters = emitPropBlockListParameters(binding.node);
-      const options = emitPropBlockListOptions(binding.node, parameters);
+      const itemsCode = rewritePropBlockCode(binding.node.itemsCode, propsParam, propAliases);
+      const options = emitPropBlockListOptions(binding.node, parameters, propsParam, propAliases);
       listDisposeNames.push(listDisposeName);
-      return `const ${listDisposeName} = ${helperNames.bindList}(${binding.target}, ${binding.marker}, () => (${binding.node.itemsCode}), ${emitPropBlockListRenderer(binding.node, parameters, allocator, helperNames, propsParam, propAliases)}${options});`;
+      return `const ${listDisposeName} = ${helperNames.bindList}(${binding.target}, ${binding.marker}, () => (${itemsCode}), ${emitPropBlockListRenderer(binding.node, parameters, allocator, helperNames, propsParam, propAliases)}${options});`;
     });
 
   // Keep text/class/htmlFor bindings grouped by dependency. General DOM
@@ -2057,8 +2074,8 @@ function emitPropBlockNodeRenderValueExpression(
 
   if (node.kind === "list") {
     const parameters = emitPropBlockListParameters(node);
-    const options = emitPropBlockListOptions(node, parameters);
-    return `${helperNames.createList}(() => (${node.itemsCode}), ${emitPropBlockListRenderer(node, parameters, allocator, helperNames, propsParam, propAliases)}${options})`;
+    const options = emitPropBlockListOptions(node, parameters, propsParam, propAliases);
+    return `${helperNames.createList}(() => (${rewriteCode(node.itemsCode)}), ${emitPropBlockListRenderer(node, parameters, allocator, helperNames, propsParam, propAliases)}${options})`;
   }
 
   if (node.kind === "fragment") {
@@ -2167,7 +2184,7 @@ function emitPropBlockListRenderer(
     return `(${parameters}) => ${valueExpression}`;
   }
 
-  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
+  return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${rewritePropBlockCode(statement, propsParam, propAliases)}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
 function emitPropBlockComponentRenderValueExpression(
@@ -2232,11 +2249,15 @@ function emitPropBlockComponentProps(
 function emitPropBlockListOptions(
   node: Extract<JsxNodeIr, { kind: "list" }>,
   parameters: string,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
 ): string {
   const optionEntries: string[] = [];
 
   if (node.keyCode !== undefined) {
-    optionEntries.push(`key: (${parameters}) => (${node.keyCode})`);
+    optionEntries.push(
+      `key: (${parameters}) => (${rewritePropBlockCode(node.keyCode, propsParam, propAliases)})`,
+    );
   }
 
   if (node.keyCode !== undefined && listReadsNestedItemObject(node, node.itemName)) {
@@ -2250,6 +2271,16 @@ function emitPropBlockListParameters(node: Extract<JsxNodeIr, { kind: "list" }>)
   return [node.itemName, node.indexName, node.arrayName]
     .filter((name): name is string => name !== undefined)
     .join(", ");
+}
+
+function rewritePropBlockCode(
+  code: string,
+  propsParam: string,
+  propAliases: readonly PropAliasIr[] | undefined,
+): string {
+  return propAliases === undefined
+    ? code
+    : (rewritePropBlockAliasCode(code, propsParam, propAliases) ?? code);
 }
 
 function listReadsNestedItemObject(
@@ -2361,6 +2392,10 @@ function canRewritePropBlockAliasNode(
   }
 
   if (node.kind === "list") {
+    if (propBlockListShadowsAlias(node, propAliases)) {
+      return false;
+    }
+
     return (
       rewritePropBlockAliasCode(node.itemsCode, propsParam, propAliases) !== undefined &&
       (node.keyCode === undefined ||
@@ -2487,6 +2522,9 @@ function rewritePropBlockAliasCode(
       const previous = previousNonWhitespace(code, start);
       const next = nextNonWhitespace(code, index);
       if (previous === "." || next === ":") {
+        if (next === ":" && previous !== "{" && previous !== ",") {
+          return undefined;
+        }
         output += name;
         continue;
       }
@@ -2504,6 +2542,19 @@ function rewritePropBlockAliasCode(
   }
 
   return output;
+}
+
+function propBlockListShadowsAlias(
+  node: Extract<JsxNodeIr, { kind: "list" }>,
+  propAliases: readonly PropAliasIr[],
+): boolean {
+  const aliasNames = new Set(propAliases.map((alias) => alias.localName));
+
+  return (
+    aliasNames.has(node.itemName) ||
+    (node.indexName !== undefined && aliasNames.has(node.indexName)) ||
+    (node.arrayName !== undefined && aliasNames.has(node.arrayName))
+  );
 }
 
 function readQuotedJavaScript(code: string, start: number, quote: string): string {

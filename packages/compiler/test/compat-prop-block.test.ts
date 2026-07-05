@@ -416,6 +416,244 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(container.querySelector("#panel")?.innerHTML).toBe("<strong>Byron</strong>");
   });
 
+  test("imports helpers required by lowered component children render values", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Wrapper(props) {
+          return <section id="wrapper">{props.children}</section>;
+        }
+
+        export function EventCard(props) {
+          return (
+            <article>
+              <Wrapper>
+                <button id="add" onClick={props.onAdd}>add</button>
+              </Wrapper>
+            </article>
+          );
+        }
+
+        export function ListCard(props) {
+          return (
+            <article>
+              <Wrapper>
+                {props.items.map((item) => <span key={item}>{item}</span>)}
+              </Wrapper>
+            </article>
+          );
+        }
+
+        function Controller() {
+          const [items, setItems] = useState(["Ada"]);
+          return (
+            <div>
+              <EventCard onAdd={() => setItems(["Ada", "Byron"])} />
+              <ListCard items={items} />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("bindEvent");
+    expect(output.code).toContain("createList");
+
+    const container = await runCompatComponent(output.code);
+    expect(Array.from(container.querySelectorAll("span")).map((node) => node.textContent)).toEqual([
+      "Ada",
+    ]);
+
+    container.querySelector<HTMLButtonElement>("#add")?.click();
+
+    expect(Array.from(container.querySelectorAll("span")).map((node) => node.textContent)).toEqual([
+      "Ada",
+      "Byron",
+    ]);
+  });
+
+  test("updates destructured prop lists through the reactive prop proxy", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Rows({ items, prefix }) {
+          return <ul>{items.map((item) => <li key={item.id}>{prefix}:{item.label}</li>)}</ul>;
+        }
+
+        function Controller() {
+          const [mode, setMode] = useState("a");
+          const items = mode === "a"
+            ? [{ id: "a", label: "Ada" }]
+            : [{ id: "b", label: "Byron" }];
+          return (
+            <div>
+              <button id="switch" onClick={() => setMode("b")}>switch</button>
+              <Rows items={items} prefix={mode} />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.querySelector("li")?.textContent).toBe("a:Ada");
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(container.querySelector("li")?.textContent).toBe("b:Byron");
+  });
+
+  test("updates destructured ternary branches through the reactive prop proxy", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Status({ active, on, off }) {
+          return <span id="status">{active ? on : off}</span>;
+        }
+
+        function Controller() {
+          const [active, setActive] = useState(false);
+          return (
+            <div>
+              <button id="switch" onClick={() => setActive(true)}>switch</button>
+              <Status active={active} on={active ? "enabled" : "stale"} off="disabled" />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+
+    const container = await runCompatComponent(output.code);
+    expect(container.querySelector("#status")?.textContent).toBe("disabled");
+
+    container.querySelector<HTMLButtonElement>("#switch")?.click();
+
+    expect(container.querySelector("#status")?.textContent).toBe("enabled");
+  });
+
+  test("does not rewrite shadowed list renderer parameters to destructured props", async () => {
+    const output = transform({
+      code: `export function Rows({ items, label }) {
+          return <ul>{items.map((label) => <li key={label}>{label}</li>)}</ul>;
+        }
+
+        export function App() {
+          return <Rows items={["Ada", "Byron"]} label="wrong" />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createReactiveDomBlock");
+
+    const container = await runCompatComponent(output.code);
+    expect(Array.from(container.querySelectorAll("li")).map((node) => node.textContent)).toEqual([
+      "Ada",
+      "Byron",
+    ]);
+  });
+
+  test("disposes nested render value effects when list items are removed", async () => {
+    const output = transform({
+      code: `import { useState } from "@reckona/mreact-compat";
+
+        export function Rows(props) {
+          return (
+            <ul>
+              {props.items.map((item) => (
+                <li key={item.id} className={globalThis.__recordNestedEffect(item.id, props.suffix)}>
+                  {item.label}
+                </li>
+              ))}
+            </ul>
+          );
+        }
+
+        function Controller() {
+          const [mode, setMode] = useState("a");
+          const items = mode === "a"
+            ? [{ id: "a", label: "Ada" }, { id: "b", label: "Byron" }]
+            : [{ id: "b", label: "Byron" }];
+          return (
+            <div>
+              <button id="remove" onClick={() => setMode("b")}>remove</button>
+              <button id="tick" onClick={() => setMode("c")}>tick</button>
+              <Rows items={items} suffix={mode} />
+            </div>
+          );
+        }
+
+        export function App() {
+          return <Controller />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    expect(output.diagnostics).toEqual([]);
+
+    const calls: string[] = [];
+    const previous = (globalThis as unknown as {
+      __recordNestedEffect?: (id: string, suffix: string) => string;
+    }).__recordNestedEffect;
+    (globalThis as unknown as {
+      __recordNestedEffect?: (id: string, suffix: string) => string;
+    }).__recordNestedEffect = (id, suffix) => {
+      calls.push(`${id}:${suffix}`);
+      return `${id}-${suffix}`;
+    };
+
+    try {
+      const container = await runCompatComponent(output.code);
+      calls.length = 0;
+
+      container.querySelector<HTMLButtonElement>("#remove")?.click();
+      calls.length = 0;
+
+      container.querySelector<HTMLButtonElement>("#tick")?.click();
+
+      expect(calls).not.toContain("a:c");
+      expect(calls).toContain("b:c");
+    } finally {
+      (globalThis as unknown as {
+        __recordNestedEffect?: (id: string, suffix: string) => string;
+      }).__recordNestedEffect = previous;
+    }
+  });
+
   test("lowers safe spread attributes through bindSpreadProps", async () => {
     const output = transform({
       code: `import { useState } from "@reckona/mreact-compat";
@@ -506,6 +744,55 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(link?.hasAttribute("onclick")).toBe(false);
     expect(link?.innerHTML).toBe("safe");
     expect(link?.getAttribute("title")).toBe("safe");
+  });
+
+  test("lowered spread attributes bind function event handlers and skip form value props", async () => {
+    const output = transform({
+      code: `export function Action(props) {
+          return <input id="target" type="checkbox" {...props.inputProps} />;
+        }
+
+        export function App() {
+          return (
+            <Action
+              inputProps={{
+                onClick: () => globalThis.__spreadCalls.push("click"),
+                onclick: "alert(1)",
+                value: "Ada",
+                checked: true,
+                title: "safe",
+              }}
+            />
+          );
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createReactiveDomBlock");
+    expect(output.code).toContain("bindSpreadProps");
+
+    const calls: string[] = [];
+    const previous = (globalThis as unknown as { __spreadCalls?: string[] }).__spreadCalls;
+    (globalThis as unknown as { __spreadCalls?: string[] }).__spreadCalls = calls;
+
+    try {
+      const container = await runCompatComponent(output.code);
+      const input = container.querySelector<HTMLInputElement>("#target");
+
+      expect(input?.checked).toBe(false);
+      input?.click();
+
+      expect(calls).toEqual(["click"]);
+      expect(input?.hasAttribute("onclick")).toBe(false);
+      expect(input?.value).toBe("on");
+      expect(input?.getAttribute("title")).toBe("safe");
+    } finally {
+      (globalThis as unknown as { __spreadCalls?: string[] }).__spreadCalls = previous;
+    }
   });
 
   test("does not lower ref-bearing host trees to prop reactive blocks", () => {

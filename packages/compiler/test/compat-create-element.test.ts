@@ -454,4 +454,35 @@ export default function Page() {
       "<main><span>x</span></main>",
     );
   });
+
+  test("does not recursively rewrite inserted inline component prop values", () => {
+    const source = `import { createElement, renderToString } from "@reckona/mreact-compat";
+const props = { b: "y" };
+function View(props) {
+  const propsAlias = { b: "local" };
+  return createElement("main", null, createElement("span", null, props.a), createElement("em", null, "props.a"));
+}
+function PageView() {
+  return createElement(View, { a: props.b, b: "x" });
+}
+export default function Page() {
+  return renderToString(PageView);
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("renderToString(PageView)");
+
+    const interpreted = renderToString(function PageView() {
+      const props = { b: "y" };
+      return createElement(
+        function View(props: { a: string; b: string }) {
+          const propsAlias = { b: "local" };
+          return createElement("main", null, createElement("span", null, props.a), createElement("em", null, "props.a"));
+        },
+        { a: props.b, b: "x" },
+      );
+    });
+    expect(runCompiledWithCompatHelpers(output.code, "default")).toBe(interpreted);
+  });
 });

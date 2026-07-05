@@ -723,18 +723,98 @@ function rewriteInlineComponentPropsCode(
   propsParam: string,
   values: ReadonlyMap<string, string>,
 ): string {
-  let next = code;
+  let output = "";
+  let index = 0;
 
-  for (const [name, value] of values) {
-    const escapedParam = propsParam.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    next = next.replace(
-      new RegExp(`\\b${escapedParam}\\.${escapedName}\\b`, "g"),
-      `(${value})`,
-    );
+  while (index < code.length) {
+    const char = code[index] ?? "";
+
+    if (char === '"' || char === "'" || char === "`") {
+      const quoted = readQuotedJavaScript(code, index, char);
+      output += quoted;
+      index += quoted.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "/") {
+      const end = code.indexOf("\n", index + 2);
+      const comment = end === -1 ? code.slice(index) : code.slice(index, end);
+      output += comment;
+      index += comment.length;
+      continue;
+    }
+
+    if (char === "/" && code[index + 1] === "*") {
+      const end = code.indexOf("*/", index + 2);
+      const comment = end === -1 ? code.slice(index) : code.slice(index, end + 2);
+      output += comment;
+      index += comment.length;
+      continue;
+    }
+
+    if (isIdentifierStart(char)) {
+      const start = index;
+      index += 1;
+      while (index < code.length && isIdentifierPart(code[index] ?? "")) {
+        index += 1;
+      }
+
+      const name = code.slice(start, index);
+      if (name !== propsParam || code[index] !== ".") {
+        output += name;
+        continue;
+      }
+
+      const propStart = index + 1;
+      if (!isIdentifierStart(code[propStart] ?? "")) {
+        output += name;
+        continue;
+      }
+
+      let propEnd = propStart + 1;
+      while (propEnd < code.length && isIdentifierPart(code[propEnd] ?? "")) {
+        propEnd += 1;
+      }
+
+      const value = values.get(code.slice(propStart, propEnd));
+      if (value === undefined) {
+        output += code.slice(start, propEnd);
+      } else {
+        output += `(${value})`;
+      }
+      index = propEnd;
+      continue;
+    }
+
+    output += char;
+    index += 1;
   }
 
-  return next;
+  return output;
+}
+
+function readQuotedJavaScript(code: string, start: number, quote: string): string {
+  let index = start + 1;
+  while (index < code.length) {
+    const char = code[index] ?? "";
+    if (char === "\\") {
+      index += 2;
+      continue;
+    }
+    index += 1;
+    if (char === quote) {
+      break;
+    }
+  }
+  return code.slice(start, index);
+}
+
+function isIdentifierStart(char: string): boolean {
+  return /^[A-Za-z_$]$/.test(char);
+}
+
+function isIdentifierPart(char: string): boolean {
+  return /^[A-Za-z_$0-9]$/.test(char);
 }
 
 function lowerCreateElementChild(
