@@ -111,6 +111,12 @@ export function isDangerousHtmlOptIn(value: unknown): value is {
 };
 
 // @public
+export function isEventLikePropName(name: string): boolean;
+
+// @public
+export function isReactEventHandlerPropName(name: string): boolean;
+
+// @public
 export function isSrcsetAttribute(name: string): boolean;
 
 // @public
