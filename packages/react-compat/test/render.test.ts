@@ -2046,6 +2046,30 @@ describe("react-compat render", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  test("hydrateRoot keeps siblings after a reactive DOM block aligned", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<span>block</span><em>after</em>";
+    const previousSibling = container.querySelector("em");
+
+    hydrateRoot(
+      container,
+      createElement(
+        Fragment,
+        null,
+        createReactiveDomBlock(() => {
+          const node = document.createElement("span");
+          node.textContent = "block";
+          return { node };
+        }),
+        createElement("em", null, "after"),
+      ),
+    );
+
+    expect(container.children).toHaveLength(2);
+    expect(container.querySelector("em")).toBe(previousSibling);
+    expect(container.innerHTML).toBe("<span>block</span><em>after</em>");
+  });
+
   test("hydrateRoot reuses matching DOM nodes and attaches event handlers", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>server</button>";

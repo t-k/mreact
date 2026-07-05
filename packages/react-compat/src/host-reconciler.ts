@@ -794,6 +794,10 @@ function isStaticReactiveBlockComponent(type: unknown): boolean {
   );
 }
 
+function consumeReactiveDomBlockHydrationNode(previousNodes: readonly ChildNode[] | undefined): number {
+  return previousNodes === undefined || previousNodes.length === 0 ? 0 : 1;
+}
+
 function areCompilerMemoComparePropsEqual(
   memoType: MemoType<Record<string, unknown>>,
   previousProps: Record<string, unknown>,
@@ -2049,7 +2053,7 @@ function createHostFiberImpl(
         setReactivePropCell(previousState.propCell, blockProps);
       }
       fiber.stateNode = previousState;
-      return { fiber, consumed: options.previousNodes?.length ?? 0 };
+      return { fiber, consumed: consumeReactiveDomBlockHydrationNode(options.previousNodes) };
     }
 
     const fiber = createFiber("reactive-dom-block", node.props, key);
@@ -2063,7 +2067,7 @@ function createHostFiberImpl(
     } else {
       fiber.stateNode = (render as () => ReactiveDomBlockResult)();
     }
-    return { fiber, consumed: options.previousNodes?.length ?? 0 };
+    return { fiber, consumed: consumeReactiveDomBlockHydrationNode(options.previousNodes) };
   }
 
   if (isReactCompatProvider(node.type)) {
