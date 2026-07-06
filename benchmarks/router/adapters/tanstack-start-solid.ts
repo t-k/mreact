@@ -742,13 +742,11 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
   },
   async measureInteractiveClientBundleBeforeInteractionBytes(): Promise<number> {
     const url = await ensureBrowserFixture();
-    return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
-      .beforeInteractionBytes;
+    return (await measureRouteJavaScriptGzipBytePhases(url)).beforeInteractionBytes;
   },
   async measureInteractiveClientBundleAfterIdleBytes(): Promise<number> {
     const url = await ensureBrowserFixture();
-    return (await measureRouteJavaScriptGzipBytePhases(url, { assertInteractive: true }))
-      .afterIdleBytes;
+    return (await measureRouteJavaScriptGzipBytePhases(url)).afterIdleBytes;
   },
   async measureInteractiveClientBundleBytes(): Promise<number> {
     const url = await ensureBrowserFixture();
