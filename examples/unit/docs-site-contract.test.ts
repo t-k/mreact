@@ -2,6 +2,7 @@ import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Window } from "happy-dom";
 import { describe, expect, test } from "vitest";
+import { rewriteHtmlBasePathsInDocument } from "../docs-site/scripts/html-base-path.js";
 
 const root = process.cwd();
 const docsSiteRoot = join(root, "examples", "docs-site");
@@ -318,7 +319,9 @@ describe("docs-site example contract", () => {
 
   test("supports a persisted light and dark theme toggle", async () => {
     const css = await readDocsSite("src/app/globals.css");
+    const layout = await readDocsSite("src/app/layout.tsx");
     const themeScript = await readDocsSite("public/docs-theme.js");
+    const inlineThemeScript = extractInlineThemeScript(layout);
 
     expect(css).toContain("color-scheme: light dark");
     expect(css).toContain('html[data-theme="light"]');
@@ -337,6 +340,29 @@ describe("docs-site example contract", () => {
     expect(themeScript).toContain("themeToggle.dataset.themeNext = nextTheme");
     expect(themeScript).not.toContain("textContent");
     expect(themeScript).not.toContain("innerHTML");
+    expect(() => new Function(inlineThemeScript)).not.toThrow();
+  });
+
+  test("rewrites GitHub Pages base paths inside generated navigation runtime JSON", () => {
+    const html = [
+      '<link rel="stylesheet" href="/_mreact/client/assets/routes/shared.css">',
+      '<script type="application/json" id="mreact-navigation-runtime">{"script":"/_mreact/client/assets/navigation.js"}</script>',
+      '<script type="application/json" id="mreact-route-prefetch-manifest">[{"path":"/","script":"/_mreact/client/assets/routes/index.js"}]</script>',
+      '<script type="application/json" id="example-data">{"script":"/should-not-change.js"}</script>',
+      '<script>const rootRelativeExample="/_mreact/client/should-not-change.js";</script>',
+      '<script src="/docs-theme.js" defer></script>',
+      '<a href="/getting-started">Getting Started</a>',
+    ].join("");
+
+    const rewritten = rewriteHtmlBasePathsInDocument(html, "/mreact");
+
+    expect(rewritten).toContain('href="/mreact/_mreact/client/assets/routes/shared.css"');
+    expect(rewritten).toContain('src="/mreact/docs-theme.js"');
+    expect(rewritten).toContain('href="/mreact/getting-started"');
+    expect(rewritten).toContain('"script":"/mreact/_mreact/client/assets/navigation.js"');
+    expect(rewritten).toContain('"script":"/mreact/_mreact/client/assets/routes/index.js"');
+    expect(rewritten).toContain('id="example-data">{"script":"/should-not-change.js"}</script>');
+    expect(rewritten).toContain('const rootRelativeExample="/_mreact/client/should-not-change.js";');
   });
 
   test("restores the sidebar position and marks the current page in the browser", async () => {
@@ -2236,4 +2262,30 @@ describe("docs-site example contract", () => {
 
 async function readDocsSite(relativePath: string): Promise<string> {
   return await readFile(join(docsSiteRoot, relativePath), "utf8");
+}
+
+function extractInlineThemeScript(layout: string): string {
+  const markerIndex = layout.indexOf("__html:");
+  const start = layout.indexOf("'", markerIndex);
+  if (markerIndex < 0 || start < 0) {
+    throw new Error("inline theme script not found");
+  }
+
+  let escaped = false;
+  for (let index = start + 1; index < layout.length; index += 1) {
+    const char = layout[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "'") {
+      return new Function(`return ${layout.slice(start, index + 1)};`)() as string;
+    }
+  }
+
+  throw new Error("inline theme script is unterminated");
 }

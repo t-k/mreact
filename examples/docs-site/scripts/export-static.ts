@@ -1,6 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { exportStaticApp } from "@reckona/mreact-router/adapters/static";
+import { rewriteHtmlBasePathsInDocument } from "./html-base-path.js";
 
 const outDir = join(process.cwd(), ".mreact");
 const exportDir = join(process.cwd(), "dist");
@@ -65,9 +66,7 @@ async function rewriteHtmlBasePaths(directory: string, base: string): Promise<vo
     }
 
     const html = await readFile(path, "utf8");
-    const rewritten = html
-      .replaceAll(/href="\/(?!\/)/g, `href="${base}/`)
-      .replaceAll(/src="\/(?!\/)/g, `src="${base}/`);
+    const rewritten = rewriteHtmlBasePathsInDocument(html, base);
     if (rewritten !== html) {
       await writeFile(path, rewritten);
     }

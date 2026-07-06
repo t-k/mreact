@@ -18,7 +18,7 @@ export default function RootLayout() {
         <script
           dangerouslySetInnerHTML={{
             __html:
-              'try{const theme=localStorage.getItem("mreact:docs:theme");if(theme==="light"||theme==="dark"){document.documentElement.dataset.theme=theme;const meta=document.querySelector(\'meta[name="color-scheme"]\');if(meta)meta.setAttribute("content",theme);}}catch{}}',
+              'try{const theme=localStorage.getItem("mreact:docs:theme");if(theme==="light"||theme==="dark"){document.documentElement.dataset.theme=theme;const meta=document.querySelector(\'meta[name="color-scheme"]\');if(meta)meta.setAttribute("content",theme);}}catch{}',
           }}
         ></script>
         <script src={sitePath("docs-sidebar.js")} defer></script>
