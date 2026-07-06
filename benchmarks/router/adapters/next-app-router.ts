@@ -578,9 +578,6 @@ export const nextAppRouterAdapter: AppFrameworkAdapter = {
   async measureConcurrentRequestP99Ms(): Promise<number> {
     return (await ensureConcurrentRequestResult()).p99Ms;
   },
-  async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).rssDeltaBytes;
-  },
   async measureClientNavigationMs(): Promise<number> {
     const url = await ensureBrowserFixture();
     return measureClientNavigation(url);

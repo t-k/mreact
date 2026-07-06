@@ -106,7 +106,7 @@ export interface AppFrameworkAdapter {
   measureBuildOutputGzipBytes?: () => Promise<number>;
   measureConcurrentRequestThroughputOps?: () => Promise<number>;
   measureConcurrentRequestP99Ms?: () => Promise<number>;
-  measureConcurrentRequestRssDeltaBytes?: () => Promise<number>;
+  measureConcurrentRequestRssDeltaBytes?: () => Promise<number | undefined>;
   measureHydration100IslandsMs?: () => Promise<number>;
   measureDevColdStartMs?: () => Promise<number>;
   measureDevFirstRequestLatencyMs?: () => Promise<number>;

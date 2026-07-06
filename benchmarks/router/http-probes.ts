@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 export interface ConcurrentRequestProbeResult {
   p99Ms: number;
   rssDeltaBytes: number;
@@ -46,6 +48,37 @@ export async function measureConcurrentRequests(
     rssDeltaBytes: process.memoryUsage().rss - beforeRss,
     throughputOps: totalRequests / (elapsedMs / 1000),
   };
+}
+
+export async function measureConcurrentRequestsWithServerRss(
+  url: string,
+  serverPid: number,
+  options: {
+    concurrency?: number;
+    path: string;
+    totalRequests?: number;
+    validate: (body: string) => void;
+  },
+): Promise<ConcurrentRequestProbeResult> {
+  const beforeRss = await readProcessRssBytes(serverPid);
+  const result = await measureConcurrentRequests(url, options);
+  const afterRss = await readProcessRssBytes(serverPid);
+
+  return {
+    ...result,
+    rssDeltaBytes: afterRss - beforeRss,
+  };
+}
+
+async function readProcessRssBytes(pid: number): Promise<number> {
+  const status = await readFile(`/proc/${pid}/status`, "utf8");
+  const match = /^VmRSS:\s+(\d+)\s+kB$/m.exec(status);
+
+  if (match === null) {
+    throw new Error(`process ${pid} RSS is not available`);
+  }
+
+  return Number(match[1]) * 1024;
 }
 
 function percentile(values: readonly number[], p: number): number {

@@ -224,7 +224,7 @@ describe("router benchmark report", () => {
     ).toBeLessThan(sectionIndex(markdown, "app render 1000 nodes"));
   });
 
-  it("annotates concurrent RSS delta rankings as process-model sensitive", () => {
+  it("annotates concurrent RSS delta rankings as child-process only", () => {
     const rows: RouterBenchmarkRow[] = [
       completedRow(
         "mreact-app-router",
@@ -245,8 +245,41 @@ describe("router benchmark report", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
     expect(markdown).toContain(
-      "RSS delta rows are process-model sensitive; compare same-process adapters only and treat negative samples as contamination indicators.",
+      "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported and excluded from this ranking.",
     );
+  });
+
+  it("excludes unsupported concurrent RSS delta rows from ranking", () => {
+    const rows: RouterBenchmarkRow[] = [
+      {
+        ...completedRow(
+          "marko-run",
+          "app concurrent RSS delta 100 connections",
+          "memory",
+          "bytes",
+          1024,
+        ),
+        status: "unsupported",
+        note: "marko-run does not expose server child process RSS",
+      },
+      completedRow(
+        "mreact-app-router",
+        "app concurrent RSS delta 100 connections",
+        "memory",
+        "bytes",
+        2048,
+      ),
+    ];
+
+    const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
+    const ranking = markdown.slice(
+      sectionIndex(markdown, "app concurrent RSS delta 100 connections"),
+      markdown.indexOf("## Results"),
+    );
+
+    expect(ranking).toContain("mreact-app-router");
+    expect(ranking).not.toContain("marko-run");
+    expect(markdown).toContain("| router | marko-run | test | app concurrent RSS delta 100 connections | unsupported |");
   });
 });
 

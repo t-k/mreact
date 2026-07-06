@@ -16,11 +16,16 @@ import {
   measureRouteJavaScriptGzipBytes,
   measureSecondInteractionLatency,
 } from "../browser-probes.js";
-import { measureConcurrentRequests, type ConcurrentRequestProbeResult } from "../http-probes.js";
+import {
+  measureConcurrentRequests,
+  measureConcurrentRequestsWithServerRss,
+  type ConcurrentRequestProbeResult,
+} from "../http-probes.js";
 import type { AppFrameworkAdapter, AppFrameworkName } from "../types.js";
 
 interface ServerHandle {
   close(): Promise<void>;
+  pid?: number;
   url: string;
 }
 
@@ -29,6 +34,7 @@ export interface ProductionAppAdapterOptions {
   buildOutputPaths?: (rootDir: string) => readonly string[];
   fixturePrefix: string;
   includeAsyncDataRoutes?: boolean;
+  measureServerChildRss?: boolean;
   name: AppFrameworkName;
   packageName: string;
   start: (rootDir: string) => Promise<ServerHandle>;
@@ -207,9 +213,6 @@ export function createProductionAppAdapter(
     async measureConcurrentRequestP99Ms(): Promise<number> {
       return (await ensureConcurrentRequestResult()).p99Ms;
     },
-    async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-      return (await ensureConcurrentRequestResult()).rssDeltaBytes;
-    },
     async measureBuildOutputGzipBytes(): Promise<number> {
       await ensureFixture(1000);
       if (rootDir === undefined) {
@@ -218,6 +221,23 @@ export function createProductionAppAdapter(
       return measureBuildOutputGzipBytes(options.buildOutputPaths?.(rootDir) ?? [rootDir]);
     },
   };
+
+  if (options.measureServerChildRss !== false) {
+    adapter.measureConcurrentRequestRssDeltaBytes = async (): Promise<number | undefined> => {
+      const url = await ensureFixture(1000);
+      if (server?.pid === undefined) {
+        return undefined;
+      }
+      return (
+        await measureConcurrentRequestsWithServerRss(url, server.pid, {
+          path: "/",
+          validate(html) {
+            validateNodeHtml("concurrent RSS response", html, 1000);
+          },
+        })
+      ).rssDeltaBytes;
+    };
+  }
 
   if (options.includeAsyncDataRoutes !== false) {
     adapter.renderToRealStream = async (nodeCount: number): Promise<string> => {
@@ -315,6 +335,7 @@ export async function startCommandServer(
 
   return {
     url,
+    pid: child.pid,
     close: () => closeChildProcess(child),
   };
 }

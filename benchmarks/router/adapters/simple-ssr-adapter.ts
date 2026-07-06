@@ -182,9 +182,6 @@ export function createSimpleSsrAdapter(options: SimpleSsrAdapterOptions): AppFra
     async measureConcurrentRequestP99Ms(): Promise<number> {
       return (await ensureConcurrentRequestResult()).p99Ms;
     },
-    async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-      return (await ensureConcurrentRequestResult()).rssDeltaBytes;
-    },
     async measureBuildOutputGzipBytes(): Promise<number> {
       await ensureFixture(1000);
 

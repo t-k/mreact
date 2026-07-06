@@ -203,7 +203,6 @@ describe("router benchmark configuration", () => {
     const requiredMethods = [
       "measureConcurrentRequestThroughputOps",
       "measureConcurrentRequestP99Ms",
-      "measureConcurrentRequestRssDeltaBytes",
       "measureSsrHtmlGzipBytes",
     ] as const;
 
@@ -214,6 +213,24 @@ describe("router benchmark configuration", () => {
           .map((adapter) => adapter.name),
       ).toEqual(expectedAdapters);
     }
+
+    expect(
+      routerBenchmarkAdapters
+        .filter((adapter) => adapter.measureConcurrentRequestRssDeltaBytes !== undefined)
+        .map((adapter) => adapter.name),
+    ).toEqual([
+      "marko-run",
+      "nuxt",
+      "analog",
+      "qwik-city",
+      "qwik-router-v2",
+      "solid-start",
+      "tanstack-start",
+      "tanstack-start-solid",
+      "mreact-app-router",
+      "mreact-app-router+mreact react-compat",
+      "mreact-app-router+log enabled",
+    ]);
   });
 
   it("exposes browser navigation restoration probes for SPA-capable router adapters", () => {

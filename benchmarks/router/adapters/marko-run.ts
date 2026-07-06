@@ -13,7 +13,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join, resolve as pathResolve } from "node:path";
 import type { AppFrameworkAdapter } from "../types.js";
 import { measureBuildOutputGzipBytes } from "../build-output-size.js";
-import { type ConcurrentRequestProbeResult, measureConcurrentRequests } from "../http-probes.js";
+import {
+  type ConcurrentRequestProbeResult,
+  measureConcurrentRequests,
+  measureConcurrentRequestsWithServerRss,
+} from "../http-probes.js";
 import {
   measureFirstInteractionAfterNetworkIdle,
   measureFirstInteractionFromDomContentLoaded,
@@ -34,7 +38,7 @@ const repoRoot = pathResolve(dirname(fileURLToPath(import.meta.url)), "../../.."
 const fixtureParent = pathResolve(repoRoot, "benchmarks/router/.tmp");
 
 let rootDir: string | undefined;
-let serverProcess: { close(): Promise<void>; url: string } | undefined;
+let serverProcess: { close(): Promise<void>; pid?: number; url: string } | undefined;
 let currentNodeCount = 0;
 let browserRootDir: string | undefined;
 let browserServerProcess: { close(): Promise<void>; url: string } | undefined;
@@ -272,6 +276,7 @@ export default defineConfig({
 
   serverProcess = {
     url,
+    pid: child.pid,
     close: async () => {
       child.kill();
       await new Promise<void>((resolve) => child.once("exit", () => resolve()));
@@ -499,8 +504,21 @@ export const markoRunAdapter: AppFrameworkAdapter = {
   async measureConcurrentRequestP99Ms(): Promise<number> {
     return (await ensureConcurrentRequestResult()).p99Ms;
   },
-  async measureConcurrentRequestRssDeltaBytes(): Promise<number> {
-    return (await ensureConcurrentRequestResult()).rssDeltaBytes;
+  async measureConcurrentRequestRssDeltaBytes(): Promise<number | undefined> {
+    const url = await ensureFixture(1000);
+    if (serverProcess?.pid === undefined) {
+      return undefined;
+    }
+    return (
+      await measureConcurrentRequestsWithServerRss(url, serverProcess.pid, {
+        path: "/",
+        validate(html) {
+          if (!html.includes(`<span>999</span>`)) {
+            throw new Error("marko-run concurrent RSS response did not include the last node");
+          }
+        },
+      })
+    ).rssDeltaBytes;
   },
   async measureInitialPageLoadBeforeInteractionMs(): Promise<number> {
     const url = await ensureBrowserFixture();

@@ -11,6 +11,7 @@ export const svelteKitAdapter = createProductionAppAdapter({
   name: "svelte-kit",
   packageName: "@sveltejs/kit",
   fixturePrefix: "svelte-kit-fixture-",
+  measureServerChildRss: false,
   async writeFixture(rootDir, nodeCount) {
     const items = Array.from({ length: nodeCount }, (_, index) => index);
     const arrayLiteral = JSON.stringify(items);
