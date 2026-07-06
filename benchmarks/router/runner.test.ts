@@ -408,6 +408,34 @@ describe("router benchmark configuration", () => {
     ).toEqual(["mreact-app-router", "next-app-router"]);
   });
 
+  it("excludes contaminated concurrent RSS delta rows from ranking", () => {
+    const rows: RouterBenchmarkRow[] = [
+      {
+        ...completedRow(
+          "analog",
+          "app concurrent RSS delta 100 connections",
+          "memory",
+          "bytes",
+          -163840,
+        ),
+        samplesMs: [-7122944, 14364672, -1318912, 5332992, -163840],
+      },
+      completedRow(
+        "mreact-app-router",
+        "app concurrent RSS delta 100 connections",
+        "memory",
+        "bytes",
+        29249536,
+      ),
+    ];
+
+    expect(
+      rankCompletedRows(rows, "app concurrent RSS delta 100 connections").map(
+        (row) => row.framework,
+      ),
+    ).toEqual(["mreact-app-router"]);
+  });
+
   it("ranks fixed-latency streaming cases by duration without throughput rounding", () => {
     const rows: RouterBenchmarkRow[] = [
       {

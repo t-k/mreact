@@ -21,4 +21,15 @@ describe("tanstack-start-solid benchmark fixture", () => {
     expect(beforeBytesSource).not.toContain("assertInteractive");
     expect(afterBytesSource).not.toContain("assertInteractive");
   });
+
+  it("uses the same relaxed last-node validation for concurrent RSS as concurrent latency", async () => {
+    const source = await readFile(adapterPath, "utf8");
+    const rssSource = source.slice(
+      source.indexOf("async measureConcurrentRequestRssDeltaBytes()"),
+      source.indexOf("};", source.indexOf("async measureConcurrentRequestRssDeltaBytes()")),
+    );
+
+    expect(rssSource).toContain("html.includes(`>999<`)");
+    expect(rssSource).not.toContain("html.includes(`<span>999</span>`)");
+  });
 });

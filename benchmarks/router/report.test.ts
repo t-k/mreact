@@ -245,7 +245,7 @@ describe("router benchmark report", () => {
     const markdown = formatRouterBenchmarkMarkdown(testEnvironment, rows);
 
     expect(markdown).toContain(
-      "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported and excluded from this ranking.",
+      "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported, and rows with negative RSS samples are treated as contaminated and excluded from this ranking.",
     );
   });
 

@@ -426,7 +426,7 @@ export function rankCompletedRows(
   caseName: RouterBenchmarkCaseName,
 ): RouterBenchmarkRow[] {
   const completedRows = rows.filter(
-    (row) => row.caseName === caseName && row.status === "completed",
+    (row) => row.caseName === caseName && row.status === "completed" && isRankableRow(row),
   );
   const metric = completedRows[0]?.metric;
 
@@ -442,6 +442,18 @@ export function rankCompletedRows(
 
     return metric === "throughput" ? left.meanMs - right.meanMs : 0;
   });
+}
+
+function isRankableRow(row: RouterBenchmarkRow): boolean {
+  if (row.caseName !== "app concurrent RSS delta 100 connections") {
+    return true;
+  }
+
+  if (row.value < 0) {
+    return false;
+  }
+
+  return row.samplesMs?.every((sample) => sample >= 0) ?? true;
 }
 
 export async function runRouterBenchmarks(

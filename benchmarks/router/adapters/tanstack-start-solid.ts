@@ -797,7 +797,7 @@ export const tanstackStartSolidAdapter: AppFrameworkAdapter = {
       await measureConcurrentRequestsWithServerRss(url, serverProcess.pid, {
         path: "/",
         validate(html) {
-          if (!html.includes(`<span>999</span>`)) {
+          if (!html.includes(`>999<`)) {
             throw new Error(
               "tanstack-start-solid concurrent RSS response did not include the last node",
             );

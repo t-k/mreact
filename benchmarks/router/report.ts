@@ -156,7 +156,7 @@ function isMreactVariantOnlyRanking(
 
 function rankingCaveat(caseName: RouterBenchmarkCaseName): string | undefined {
   if (caseName === "app concurrent RSS delta 100 connections") {
-    return "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported and excluded from this ranking.";
+    return "RSS delta rows only rank adapters that expose server child process RSS; adapters without measurable server child RSS are reported as unsupported, and rows with negative RSS samples are treated as contaminated and excluded from this ranking.";
   }
 
   return undefined;

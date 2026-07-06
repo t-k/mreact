@@ -688,7 +688,7 @@ export const solidStartAdapter: AppFrameworkAdapter = {
       await measureConcurrentRequestsWithServerRss(url, serverProcess.pid, {
         path: "/",
         validate(html) {
-          if (!html.includes(`<span>999</span>`)) {
+          if (!html.includes(`>999<`)) {
             throw new Error("solid-start concurrent RSS response did not include the last node");
           }
         },
