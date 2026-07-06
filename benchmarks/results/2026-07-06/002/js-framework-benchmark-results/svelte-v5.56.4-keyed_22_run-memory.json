@@ -1,0 +1,1 @@
+{"framework":"svelte-v5.56.4-keyed","keyed":true,"benchmark":"22_run-memory","type":"memory","values":{"DEFAULT":{"min":3.5017852783203125,"max":3.5017852783203125,"median":3.5017852783203125,"mean":3.5017852783203125,"stddev":null,"values":[3.5017852783203125]}}}
