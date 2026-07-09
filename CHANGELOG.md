@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.188 - 2026-07-09
+
+### Changed
+
+- Updated generated app and example TypeScript tooling to TypeScript 7 while keeping compiler API consumers on the TypeScript 6 compatibility package, so `tsc` can use the native TypeScript 7 compiler without breaking TypeDoc, API Extractor, JSX type checks, or App Router server action inference.
+
 ## 0.0.187 - 2026-07-05
 
 ### Added
