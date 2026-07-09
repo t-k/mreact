@@ -1277,6 +1277,33 @@ export function App() {
     );
   });
 
+  test("emitted server stream component passes JSX children to inferred client boundary SSR fallback", () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+
+      export function App() {
+        return (
+          <AppShell currentPath="/settings/email">
+            <div data-testid="settings-email-ready-state">Body</div>
+          </AppShell>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./AppShell"],
+      clientBoundaryFallbackImports: ["./AppShell"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      '_renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(AppShell({ currentPath: ("/settings/email"), children:',
+    );
+    expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
+    expect(output.code).toContain('"Body"');
+  });
+
   test("emitted server stream component escapes hostile client boundary props JSON", async () => {
     const payload = "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
     const output = transform({

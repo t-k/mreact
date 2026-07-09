@@ -543,7 +543,22 @@ function collectHtmlStatements(
           reactNodeRenderHelperName,
         );
         const fallbackHtml = shouldRenderClientBoundaryFallback(node)
-          ? emitComponentCallExpression(node.name, boundaryProps, asyncComponentNames)
+          ? emitComponentCallExpression(
+              node.name,
+              emitPropsObject(
+                node.props,
+                node.children,
+                escapeHelperName,
+                escapeBatchHelperName,
+                asyncComponentNames,
+                dynamicAttributes,
+                contextProviderHelperName,
+                contextConsumerHelperName,
+                reactNodeRenderHelperName,
+                node.name,
+              ),
+              asyncComponentNames,
+            )
           : emitHtmlExpressionFromChildren(
               node.children,
               escapeHelperName,
@@ -860,7 +875,22 @@ function collectHtmlParts(
           reactNodeRenderHelperName,
         );
         const fallbackHtml = shouldRenderClientBoundaryFallback(node)
-          ? emitComponentCallExpression(node.name, boundaryProps, asyncComponentNames)
+          ? emitComponentCallExpression(
+              node.name,
+              emitPropsObject(
+                node.props,
+                node.children,
+                escapeHelperName,
+                escapeBatchHelperName,
+                asyncComponentNames,
+                dynamicAttributes,
+                contextProviderHelperName,
+                contextConsumerHelperName,
+                reactNodeRenderHelperName,
+                node.name,
+              ),
+              asyncComponentNames,
+            )
           : emitHtmlExpressionFromChildren(
               node.children,
               escapeHelperName,

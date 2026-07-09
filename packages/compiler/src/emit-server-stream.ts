@@ -1443,7 +1443,14 @@ function collectHtmlParts(
       if (helperName !== undefined) {
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
         const fallbackHtml = shouldRenderClientBoundaryFallback(node)
-          ? `${node.name}(${boundaryProps})`
+          ? emitRenderableHtmlExpression(
+              `${node.name}(${emitPropsObject(
+                node.props,
+                node.children,
+                escapeHelperName,
+                node.name,
+              )})`,
+            )
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         return [
           {

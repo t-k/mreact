@@ -1502,6 +1502,32 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     );
   });
 
+  test("emitted server component passes JSX children to inferred client boundary SSR fallback", () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+
+      export function App() {
+        return (
+          <AppShell currentPath="/settings/email">
+            <div data-testid="settings-email-ready-state">Body</div>
+          </AppShell>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./AppShell"],
+      clientBoundaryFallbackImports: ["./AppShell"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      '_renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(AppShell({ currentPath: ("/settings/email"), children:',
+    );
+    expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
+    expect(output.code).toContain('"Body"');
+  });
+
   test("emitted server component leaves compat client references as client boundaries", () => {
     const output = transform({
       code: `import Chart from "./Chart.compat.tsx";
