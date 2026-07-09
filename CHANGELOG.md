@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.189 - 2026-07-09
+
+### Fixed
+
+- Fixed App Router SSR fallback output for inferred client boundary components so JSX children passed to imported shell components remain visible in the initial HTML while boundary props serialization stays compatible.
+
 ## 0.0.188 - 2026-07-09
 
 ### Changed
