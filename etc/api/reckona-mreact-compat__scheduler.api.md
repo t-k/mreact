@@ -84,8 +84,8 @@ export function unstable_wrapCallback<TArgs extends unknown[], TResult>(callback
 
 // Warnings were encountered during analysis:
 //
-// packages/react-compat/src/scheduler.ts:37:32 - (ae-forgotten-export) The symbol "startLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
-// packages/react-compat/src/scheduler.ts:37:32 - (ae-forgotten-export) The symbol "stopLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
+// packages/react-compat/src/scheduler.ts:38:3 - (ae-forgotten-export) The symbol "startLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
+// packages/react-compat/src/scheduler.ts:39:3 - (ae-forgotten-export) The symbol "stopLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
 
 // (No @packageDocumentation comment for this package)
 

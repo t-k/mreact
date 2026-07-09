@@ -81,7 +81,7 @@ const internalPackageVersions = {
   "@reckona/mreact-test-utils": "^0.0.187",
 } as const satisfies Record<string, string>;
 const currentMreactVersion = internalPackageVersions["@reckona/mreact"].replace(/^\^/, "");
-const typescriptVersion = "^6.0.3";
+const typescriptVersion = "^7.0.2";
 const tailwindVersion = "^4.3.0";
 const tailwindCliVersion = "^4.3.0";
 const concurrentlyVersion = "^9.2.0";

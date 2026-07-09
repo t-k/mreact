@@ -7,7 +7,7 @@ import {
   hasModuleDirective,
   type FormActionExpressionReference,
 } from "@reckona/mreact-compiler";
-import type * as Ts from "typescript";
+import type * as Ts from "@typescript/typescript6";
 
 let ts = undefined as unknown as typeof Ts;
 let typescriptLoaded = false;
@@ -893,7 +893,7 @@ async function loadTypeScript(): Promise<void> {
     return;
   }
 
-  ts = await import("typescript");
+  ts = await import("@typescript/typescript6");
   typescriptLoaded = true;
 }
 

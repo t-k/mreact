@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import * as ts from "typescript";
+import * as ts from "@typescript/typescript6";
 import { describe, expect, test } from "vitest";
 
 describe("react JSX runtime types", () => {

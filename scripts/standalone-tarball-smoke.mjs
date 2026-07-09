@@ -128,7 +128,7 @@ async function createStandaloneApp(tarballs) {
     dependencies: {
       "@reckona/mreact": tarballSpec(tarballs, "@reckona/mreact"),
       "@reckona/mreact-router": tarballSpec(tarballs, "@reckona/mreact-router"),
-      typescript: "6.0.3",
+      typescript: "7.0.2",
       vite: "8.0.11",
     },
     devDependencies: {},

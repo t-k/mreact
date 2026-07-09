@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import * as ts from "typescript";
+import * as ts from "@typescript/typescript6";
 import { describe, expect, test } from "vitest";
 
 const packageEntrypointTypeCheckTimeoutMs = 30_000;

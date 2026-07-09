@@ -23,7 +23,7 @@
     "@reckona/mreact-reactive-dom": "0.0.169"
   },
   "devDependencies": {
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.0.16"
   }
 }
