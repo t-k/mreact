@@ -6,6 +6,7 @@ import { buildApp } from "../src/build.js";
 import {
   createAwsLambdaRequestHandler,
   createPreloadedAwsLambdaRequestHandler,
+  createPreloadedAwsLambdaStreamingRequestHandler,
   createAwsLambdaStreamingRequestHandler,
   type AwsLambdaHttpEventV2,
 } from "../src/adapters/aws-lambda.js";
@@ -33,6 +34,32 @@ describe("mreact AWS Lambda adapter", () => {
       body: expect.stringContaining("payload format 2.0"),
       statusCode: 400,
     });
+  });
+
+  test("returns the payload format diagnostic from preloaded buffered and streaming handlers", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-preloaded-invalid-event-");
+    await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main>ok</main>; }");
+    await buildApp({ appDir, outDir });
+    const invalidEvent = {
+      rawPath: "/",
+      rawQueryString: "",
+      requestContext: { http: { method: "GET" } },
+      version: "1.0",
+    } as never;
+    const buffered = await createPreloadedAwsLambdaRequestHandler({ outDir });
+
+    await expect(buffered(invalidEvent)).resolves.toMatchObject({
+      body: expect.stringContaining("payload format 2.0"),
+      statusCode: 400,
+    });
+
+    installAwsLambdaStreamingMock();
+    const streaming = await createPreloadedAwsLambdaStreamingRequestHandler({ outDir });
+    const stream = createTestLambdaResponseStream();
+    await streaming(invalidEvent, stream, {});
+
+    expect(stream.metadata?.statusCode).toBe(400);
+    expect(stream.text()).toContain("payload format 2.0");
   });
 
   test("renders a built app from an API Gateway HTTP API v2 event", async () => {
