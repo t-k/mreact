@@ -86,6 +86,21 @@ describe("react-compat entrypoints", () => {
     expect(manifest.exports).toHaveProperty("./server");
   });
 
+  test("marks normalizer-installing entrypoints as side effectful", async () => {
+    const manifest = JSON.parse(
+      await readFile(join(process.cwd(), "packages", "react-compat", "package.json"), "utf8"),
+    ) as { sideEffects?: unknown };
+
+    expect(manifest.sideEffects).toEqual([
+      "./src/index.ts",
+      "./src/jsx-runtime.ts",
+      "./src/jsx-dev-runtime.ts",
+      "./dist/index.js",
+      "./dist/jsx-runtime.js",
+      "./dist/jsx-dev-runtime.js",
+    ]);
+  });
+
   test("exposes a hooks-only entrypoint for smaller client bundles", async () => {
     const hooks = await import("../src/hooks-entry.js");
 

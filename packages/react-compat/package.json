@@ -28,7 +28,14 @@
     "src/**/*"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./src/index.ts",
+    "./src/jsx-runtime.ts",
+    "./src/jsx-dev-runtime.ts",
+    "./dist/index.js",
+    "./dist/jsx-runtime.js",
+    "./dist/jsx-dev-runtime.js"
+  ],
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
