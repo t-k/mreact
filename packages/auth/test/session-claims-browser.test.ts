@@ -21,6 +21,16 @@ describe("browser session claims hand-off", () => {
     expect(getSessionClaims()).toEqual({ roles: ["admin"], userId: "ada" });
   });
 
+  it("refreshes cached claims when the auth hand-off script changes", () => {
+    __resetAuthForTesting();
+    document.body.innerHTML = `<script id="${__MREACT_AUTH_SESSION_SCRIPT_ID}" type="application/json">{"userId":"ada"}</script>`;
+    expect(getSessionClaims()).toEqual({ userId: "ada" });
+    document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)!.textContent = JSON.stringify({ userId: "bea" });
+    expect(getSessionClaims()).toEqual({ userId: "bea" });
+    document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)?.remove();
+    expect(getSessionClaims()).toBeUndefined();
+  });
+
   it("returns undefined when the injected claims are absent, malformed, or invalid", () => {
     __resetAuthForTesting();
     document.body.innerHTML = `<script id="${__MREACT_AUTH_SESSION_SCRIPT_ID}" type="application/json">{bad json</script>`;

@@ -336,9 +336,7 @@ export function getSessionClaims<TData extends AuthSessionClaims = AuthSessionCl
     return undefined;
   }
 
-  if (state.browserClaims === undefined) {
-    state.browserClaims = readClaimsFromDocument();
-  }
+  state.browserClaims = readClaimsFromDocument();
 
   return state.browserClaims as TData | undefined;
 }
@@ -429,6 +427,7 @@ function setSessionClaims(data: unknown): void {
     return;
   }
 
+  state.browserClaims = claims;
   state.currentClaims = claims;
 }
 

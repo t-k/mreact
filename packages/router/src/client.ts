@@ -3535,6 +3535,7 @@ function __mreactSyncRouteDataScripts(root, currentRouteId, nextRouteId) {
 
 function __mreactRouteDataScriptIds(...routeIds) {
   const ids = new Set();
+  ids.add("__mreact_auth_session");
 
   for (const routeId of routeIds) {
     if (typeof routeId !== "string" || routeId === "") {
