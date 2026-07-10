@@ -2042,8 +2042,8 @@ describe("docs-site example contract", () => {
     expect(benchmarkData).toContain('"title": "Primitive DOM benchmarks"');
     expect(benchmarkData).toContain('"title": "Primitive reactivity microbenchmarks"');
     expect(benchmarkData).toContain('"cardCount": 13');
-    expect(benchmarkData).toContain('"cardCount": 5');
-    expect(benchmarkData).toContain('"cardCount": 37');
+    expect(benchmarkData).toContain('"cardCount": 40');
+    expect(benchmarkData).toContain('"cardCount": 4');
     expect(benchmarkData).toContain('"cardCount": 3');
     expect(benchmarkData).toContain("benchmarkRankingSuites");
     expect(benchmarkData).toContain("create 1k event targets");
