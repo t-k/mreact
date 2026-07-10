@@ -176398,7 +176398,7 @@
 				},
 				{
 					"kind": "text",
-					"text": " record during migration, set "
+					"text": " record during migration, set the literal "
 				},
 				{
 					"kind": "code",
@@ -176406,7 +176406,7 @@
 				},
 				{
 					"kind": "text",
-					"text": "; this opt-in prevents domain state from being guessed as an envelope.\n- "
+					"text": "; this opt-in prevents domain state from being guessed as an envelope. When the choice comes from a runtime boolean, branch into separate current and legacy option objects so TypeScript can preserve the corresponding load contract.\n- "
 				},
 				{
 					"kind": "code",
