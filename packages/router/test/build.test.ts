@@ -5886,6 +5886,7 @@ export default function Page() { return <main>no link rendered</main>; }`,
     await expect(access(join(outDir, "server", "manifest.json"))).resolves.toBeUndefined();
     await expect(access(join(outDir, "client", "manifest.json"))).resolves.toBeUndefined();
     await expect(access(join(outDir, "cloudflare", "worker.mjs"))).rejects.toThrow();
+    await expect(access(join(outDir, "aws-lambda", "mreact-handler.mjs"))).rejects.toThrow();
   });
 
   test("navigationRuntime = false forces the runtime off even when Link is rendered", async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { resolveBuildTargets } from "../src/config.js";
 import {
   buildTargetsFromCliTarget,
   createCliRequestLogger,
@@ -143,6 +144,18 @@ describe("router CLI options", () => {
     expect(devHelp).toContain("HOST");
     expect(devHelp).toContain("--port <port>");
     expect(devHelp).toContain("PORT");
+  });
+
+  test("keeps root and build help aligned with resolved target defaults", () => {
+    const rootHelp = formatCliHelp();
+    const buildHelp = formatCliHelp("build");
+
+    expect(resolveBuildTargets(undefined)).toEqual(["node"]);
+    expect(rootHelp).toContain("Build Node artifacts by default.");
+    expect(buildHelp).toContain("Defaults to node.");
+    expect(rootHelp).toContain("build --target=cloudflare");
+    expect(rootHelp).toContain("build --target=aws-lambda");
+    expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
   });
 
   test("parses package artifact options", () => {
