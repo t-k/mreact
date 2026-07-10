@@ -20,6 +20,7 @@ try {
   await run("pnpm", ["--dir", appDir, "install", "--ignore-scripts=false"], {
     cwd: rootDir,
   });
+  await run("pnpm", ["--dir", appDir, "exec", "tsc", "--noEmit"], { cwd: rootDir });
   await smokeDevServer();
   await run("pnpm", ["--dir", appDir, "exec", "mreact-router", "build", "--target=node"], {
     cwd: rootDir,
@@ -128,6 +129,8 @@ async function createStandaloneApp(tarballs) {
     dependencies: {
       "@reckona/mreact": tarballSpec(tarballs, "@reckona/mreact"),
       "@reckona/mreact-router": tarballSpec(tarballs, "@reckona/mreact-router"),
+      "@reckona/mreact-store": tarballSpec(tarballs, "@reckona/mreact-store"),
+      "@types/node": "25.7.0",
       typescript: "7.0.2",
       vite: "8.0.16",
     },
@@ -150,11 +153,12 @@ async function createStandaloneApp(tarballs) {
         compilerOptions: {
           jsx: "react-jsx",
           jsxImportSource: "@reckona/mreact",
+          lib: ["ESNext", "DOM"],
           module: "ESNext",
           moduleResolution: "Bundler",
           strict: true,
           target: "ES2022",
-          types: ["@reckona/mreact-router/app-router-globals"],
+          types: ["node", "@reckona/mreact-router/app-router-globals"],
         },
       },
       null,
@@ -194,6 +198,34 @@ import type {
   RedirectOptions,
   RequestCookies,
 } from "@reckona/mreact-router/request";
+import type {
+  AppRouterCache as NodeAppRouterCache,
+  NodeRequestHandlerOptions,
+  RequestHostPolicy as NodeRequestHostPolicy,
+  ResponseSinkStrategy as NodeResponseSinkStrategy,
+  RouterRequestInstrumentationEvent as NodeRequestInstrumentationEvent,
+} from "@reckona/mreact-router/adapters/node";
+import type {
+  AppRouterLogger as EdgeAppRouterLogger,
+  EdgeRequestHandlerOptions,
+} from "@reckona/mreact-router/adapters/edge";
+import type {
+  AppRoute as CloudflareAppRoute,
+  BuiltServerManifest as CloudflareBuiltServerManifest,
+  CloudflareRequestHandlerOptions,
+  RouteMetadata as CloudflareRouteMetadata,
+} from "@reckona/mreact-router/adapters/cloudflare";
+import type {
+  AppRouterCache as LambdaAppRouterCache,
+  AwsLambdaRequestHandlerOptions,
+  RouterRequestInstrumentationEvent as LambdaRequestInstrumentationEvent,
+} from "@reckona/mreact-router/adapters/aws-lambda";
+import type { LinkSinkProps } from "@reckona/mreact-router/link";
+import {
+  persistedStoreState,
+  type LegacyStorePersistedState,
+  type StorePersistOptions,
+} from "@reckona/mreact-store";
 
 const cacheControl: CacheControlOptions = { sMaxAge: 60 };
 const cookie: CookieOptions = { httpOnly: true, path: "/" };
@@ -205,6 +237,41 @@ const preload = {} as AppRouterRenderPreload;
 const sink: ResponseSinkStrategy = "string";
 const render = {} as RenderBuiltAppRequestOptions;
 const server = {} as StartServerOptions;
+const nodeCache = {} as NodeAppRouterCache;
+const nodeHostPolicy: NodeRequestHostPolicy = "strict";
+const nodeSink: NodeResponseSinkStrategy = "buffer";
+const nodeInstrumentation = {} as NodeRequestInstrumentationEvent;
+const nodeOptions = {} as NodeRequestHandlerOptions;
+const edgeLogger = {} as EdgeAppRouterLogger;
+const edgeOptions = {} as EdgeRequestHandlerOptions;
+const cloudflareRoute = {} as CloudflareAppRoute;
+const cloudflareManifest = {} as CloudflareBuiltServerManifest;
+const cloudflareMetadata = {} as CloudflareRouteMetadata;
+const cloudflareOptions = {} as CloudflareRequestHandlerOptions;
+const lambdaCache = {} as LambdaAppRouterCache;
+const lambdaInstrumentation = {} as LambdaRequestInstrumentationEvent;
+const lambdaOptions = {} as AwsLambdaRequestHandlerOptions;
+const validSinkProps: LinkSinkProps = { href: "/typed", style: { color: "red" } };
+// @ts-expect-error HtmlSink Link props reject browser-only function values.
+const invalidSinkProps: LinkSinkProps = { href: "/typed", onClick() {} };
+type PersistedDomainState = { count: number };
+const rawPersist: StorePersistOptions<PersistedDomainState> = {
+  load: () => ({ count: 1 }),
+};
+const taggedPersist: StorePersistOptions<PersistedDomainState> = {
+  load: () => persistedStoreState({ count: 1 }, 1),
+};
+const legacyPersist: StorePersistOptions<PersistedDomainState> = {
+  acceptLegacyPersistedState: true,
+  load: (): LegacyStorePersistedState<PersistedDomainState> => ({
+    state: { count: 1 },
+    version: 1,
+  }),
+};
+// @ts-expect-error Untagged legacy envelopes require explicit opt-in.
+const invalidLegacyPersist: StorePersistOptions<PersistedDomainState> = {
+  load: () => ({ state: { count: 1 }, version: 1 }),
+};
 void cacheControl;
 void cookie;
 void memory;
@@ -215,6 +282,26 @@ void preload;
 void sink;
 void render;
 void server;
+void nodeCache;
+void nodeHostPolicy;
+void nodeSink;
+void nodeInstrumentation;
+void nodeOptions;
+void edgeLogger;
+void edgeOptions;
+void cloudflareRoute;
+void cloudflareManifest;
+void cloudflareMetadata;
+void cloudflareOptions;
+void lambdaCache;
+void lambdaInstrumentation;
+void lambdaOptions;
+void validSinkProps;
+void invalidSinkProps;
+void rawPersist;
+void taggedPersist;
+void legacyPersist;
+void invalidLegacyPersist;
 `,
   );
 }
