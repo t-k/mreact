@@ -5,7 +5,9 @@ import {
   __MREACT_AUTH_SESSION_SCRIPT_ID,
   __resetAuthForTesting,
   createMemorySessionStore,
+  getSession,
   getSessionClaims,
+  refreshSession,
   revokeCurrentSession,
 } from "../src/index.js";
 
@@ -31,6 +33,28 @@ describe("browser session claims hand-off", () => {
     expect(getSessionClaims()).toEqual({ userId: "bea" });
     document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)?.remove();
     expect(getSessionClaims()).toBeUndefined();
+  });
+
+  it("keeps refreshed browser claims authoritative over the initial document hand-off", async () => {
+    __resetAuthForTesting();
+    document.body.innerHTML = `<script id="${__MREACT_AUTH_SESSION_SCRIPT_ID}" type="application/json">{"roles":["admin"]}</script>`;
+    expect(getSessionClaims()).toEqual({ roles: ["admin"] });
+
+    const store = createMemorySessionStore<{ roles: string[]; userId: string }>();
+    await store.set({
+      createdAt: Date.now(),
+      data: { roles: ["member"], userId: "bea" },
+      expiresAt: Date.now() + 60_000,
+      id: "member-session",
+    });
+    const request = { headers: new Headers({ cookie: "session=member-session" }) } as Request;
+    expect(await getSession(request, store, { cookieName: "session" })).toMatchObject({
+      data: { roles: ["member"] },
+    });
+
+    await refreshSession(request, new Response(null), store, { cookieName: "session" });
+
+    expect(getSessionClaims()).toEqual({ roles: ["member"] });
   });
 
   it("clears the browser hand-off script when a session is revoked", async () => {

@@ -429,6 +429,8 @@ function setSessionClaims(data: unknown): void {
 
   if (claims === undefined) {
     document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)?.remove();
+  } else {
+    writeClaimsToDocument(claims);
   }
 
   state.browserClaims = claims;
@@ -468,6 +470,20 @@ function readClaimsFromDocument(): AuthSessionClaims | undefined {
   } catch {
     return undefined;
   }
+}
+
+function writeClaimsToDocument(claims: AuthSessionClaims): void {
+  const serialized = JSON.stringify(claims);
+  let node = document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID);
+
+  if (node === null) {
+    node = document.createElement("script");
+    node.id = __MREACT_AUTH_SESSION_SCRIPT_ID;
+    node.setAttribute("type", "application/json");
+    document.body.append(node);
+  }
+
+  node.textContent = serialized;
 }
 
 function defaultSerializeSessionClaims(data: unknown): AuthSessionClaims | undefined {
