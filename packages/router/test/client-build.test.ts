@@ -13,6 +13,7 @@ import {
   collectClientRouteReferences,
 } from "../src/client.js";
 import { renderAppRequest } from "../src/render.js";
+import { Link } from "../src/link.js";
 import { stripRouteClientOnlyExports } from "../src/route-source.js";
 import { renderAppRouterClientAsset } from "../src/vite.js";
 
@@ -7047,6 +7048,52 @@ export async function __mreactNavigate(url, options) {
         url: "http://localhost:3000/target",
       },
     ]);
+  });
+
+  test("runs a Link user handler and the actual router navigation runtime", async () => {
+    await importRouteRuntime("link-user-handler-navigation");
+    const requests: Array<{ navigation: string | null; url: string }> = [];
+    globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        navigation: headers.get("x-mreact-navigation"),
+        url: String(input),
+      });
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="target"><main>Target</main></div>',
+          '<script type="application/json" id="mreact-props-target">{}</script>',
+        ].join(""),
+      );
+    };
+    let userClicks = 0;
+    const anchor = Link({
+      children: "Target",
+      href: "/target",
+      onClick: () => {
+        userClicks += 1;
+      },
+      prefetch: "viewport",
+      scroll: "preserve",
+      transition: "auto",
+    }) as HTMLAnchorElement;
+    document.body.append(anchor);
+    expect(anchor.getAttribute("data-mreact-prefetch")).toBe("viewport");
+    expect(anchor.getAttribute("data-mreact-scroll")).toBe("preserve");
+    expect(anchor.getAttribute("data-mreact-transition")).toBe("auto");
+
+    const event = new MouseEvent("click", { bubbles: true, button: 0, cancelable: true });
+    anchor.dispatchEvent(event);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await flushRouterMicrotasks();
+
+    expect(userClicks).toBe(1);
+    expect(event.defaultPrevented).toBe(true);
+    expect(requests).toEqual([
+      { navigation: "1", url: "http://localhost:3000/target" },
+    ]);
+    expect(document.querySelector("[data-mreact-route-id='target']")?.textContent).toBe("Target");
   });
 });
 

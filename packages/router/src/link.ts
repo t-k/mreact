@@ -141,11 +141,31 @@ export function Link(
   maybeProps?: LinkProps<string> | LinkSinkProps,
 ): ReactCompatElement | string | HTMLAnchorElement | void {
   if (maybeProps !== undefined) {
+    reportUnsupportedSinkProps(maybeProps);
     (sinkOrProps as HtmlSink).append(renderLinkString(maybeProps));
     return;
   }
 
   return renderLink(sinkOrProps as LinkProps);
+}
+
+function reportUnsupportedSinkProps(props: LinkProps<string> | LinkSinkProps): void {
+  if (process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  const unsupported = Object.entries(props)
+    .filter(
+      ([name, value]) =>
+        name === "ref" || typeof value === "function" || typeof value === "symbol",
+    )
+    .map(([name]) => name);
+
+  if (unsupported.length > 0) {
+    console.warn(
+      `[MR_LINK_SINK_UNSUPPORTED_PROP] HtmlSink Link cannot serialize browser-only props: ${unsupported.join(", ")}. Render Link through JSX for event handlers and refs.`,
+    );
+  }
 }
 
 (Link as typeof Link & { trustedHtml(html: string): TrustedLinkHtml }).trustedHtml = (

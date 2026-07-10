@@ -64,4 +64,11 @@ describe("Link client rendering", () => {
     expect(anchor.getAttribute("data-mreact-prefetch")).toBe("viewport");
     expect(ref.current).toBe(anchor);
   });
+
+  test("omits false boolean attributes and maps DOM property aliases", () => {
+    const anchor = Link({ download: false, href: "/report", tabIndex: 2 }) as HTMLAnchorElement;
+
+    expect(anchor.hasAttribute("download")).toBe(false);
+    expect(anchor.getAttribute("tabindex")).toBe("2");
+  });
 });

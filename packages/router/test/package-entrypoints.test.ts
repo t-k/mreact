@@ -594,6 +594,8 @@ const prerendered = {} as BuiltPrerenderedRoute;
 const builtModule = {} as BuiltServerModuleArtifact;
 const cache = {} as ClientRouteInferenceCache;
 const link = {} as LinkSinkProps;
+// @ts-expect-error HtmlSink Link props cannot contain browser callbacks.
+const invalidLink: LinkSinkProps = { href: "/", onClick() {} };
 const memoryEntry = {} as MemoryPrerenderStoreEntry;
 const next = undefined as MiddlewareNext;
 const redirect = {} as RedirectOptions;
@@ -607,6 +609,7 @@ void prerendered;
 void builtModule;
 void cache;
 void link;
+void invalidLink;
 void memoryEntry;
 void next;
 void redirect;

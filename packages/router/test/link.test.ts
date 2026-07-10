@@ -1,5 +1,5 @@
-import { describe, expect, test } from "vitest";
-import { Link, linkProps } from "../src/link.js";
+import { describe, expect, test, vi } from "vitest";
+import { Link, linkProps, type LinkSinkProps } from "../src/link.js";
 
 describe("router Link", () => {
   test("maps prefetch, scroll, transition, and reload options to data attributes", () => {
@@ -121,5 +121,47 @@ describe("router Link", () => {
     });
 
     expect(html).toBe('<a href="/math">1 &lt; 2 &amp; 3</a>');
+  });
+
+  test("warns in development when HtmlSink props cannot be serialized", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    let html = "";
+
+    try {
+      Link(
+        { append(value) { html += value; } },
+        {
+          href: "/profile",
+          onClick() {},
+          ref: { current: null },
+        } as unknown as LinkSinkProps,
+      );
+
+      expect(html).toBe('<a href="/profile"></a>');
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("MR_LINK_SINK_UNSUPPORTED_PROP"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("onClick"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("ref"));
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("does not emit HtmlSink prop diagnostics in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      Link(
+        { append() {} },
+        { href: "/profile", onClick() {} } as unknown as LinkSinkProps,
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });
