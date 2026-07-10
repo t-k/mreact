@@ -13,6 +13,14 @@ export function createRequestStoreFactory<T extends object>(initial: () => T, op
 export function createStore<T extends object>(initial: T, options?: StoreOptions<T>): Store<T>;
 
 // @public
+export interface LegacyStorePersistedState<T extends object> {
+    // (undocumented)
+    state: T;
+    // (undocumented)
+    version: number;
+}
+
+// @public
 export function persistedStoreState<T extends object>(state: T, version: number): StorePersistedState<T>;
 
 // @public
@@ -47,6 +55,14 @@ export interface Store<T extends object> {
 }
 
 // @public
+export interface StoreCurrentPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+    // (undocumented)
+    acceptLegacyPersistedState?: false | undefined;
+    // (undocumented)
+    load?: (() => StorePersistedState<T> | T | undefined | Promise<StorePersistedState<T> | T | undefined>) | undefined;
+}
+
+// @public
 export type StoreEquality<T> = (left: T, right: T) => boolean;
 
 // @public
@@ -60,6 +76,14 @@ export interface StoreInstrumentationEvent<T extends object> {
     state: T;
     // (undocumented)
     type: "replace" | "set" | "transaction";
+}
+
+// @public
+export interface StoreLegacyPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+    // (undocumented)
+    acceptLegacyPersistedState: true;
+    // (undocumented)
+    load?: (() => LegacyStorePersistedState<T> | StorePersistedState<T> | T | undefined | Promise<LegacyStorePersistedState<T> | StorePersistedState<T> | T | undefined>) | undefined;
 }
 
 // @public
@@ -78,6 +102,14 @@ export type StorePatch<T extends object> = Partial<T>;
 
 // @public (undocumented)
 export type StorePersist<T extends object> = ((state: T) => void | Promise<void>) | StorePersistOptions<T>;
+
+// @public
+export interface StorePersistBaseOptions<T extends object> {
+    hydrationConflict?: StoreHydrationConflict<T> | undefined;
+    migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+    save?: ((state: T) => void | Promise<void>) | undefined;
+    version?: number | undefined;
+}
 
 // @public (undocumented)
 export interface StorePersistedState<T extends object> {
@@ -113,19 +145,8 @@ export type StorePersistenceFailurePhase = "load" | "migrate" | "save";
 // @public (undocumented)
 export type StorePersistenceStatus = "hydrating" | "ready" | "error";
 
-// @public (undocumented)
-export interface StorePersistOptions<T extends object> {
-    acceptLegacyPersistedState?: boolean | undefined;
-    hydrationConflict?: StoreHydrationConflict<T> | undefined;
-    // (undocumented)
-    load?: (() => StorePersistedState<T> | T | undefined | Promise<StorePersistedState<T> | T | undefined>) | undefined;
-    // (undocumented)
-    migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
-    // (undocumented)
-    save?: ((state: T) => void | Promise<void>) | undefined;
-    // (undocumented)
-    version?: number | undefined;
-}
+// @public
+export type StorePersistOptions<T extends object> = StoreCurrentPersistOptions<T> | StoreLegacyPersistOptions<T>;
 
 // @public
 export type StoreReplacer<T extends object> = T | ((previous: T) => T);

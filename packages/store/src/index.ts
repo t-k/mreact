@@ -58,11 +58,15 @@ export function persistedStoreState<T extends object>(state: T, version: number)
   return { __mreactStorePersistedState: true, state, version };
 }
 
-interface StorePersistBaseOptions<T extends object> {
+/** Configures persistence behavior shared by current and legacy record contracts. */
+export interface StorePersistBaseOptions<T extends object> {
   /** Chooses how a loaded value interacts with local commits made during hydration. */
   hydrationConflict?: StoreHydrationConflict<T> | undefined;
+  /** Migrates a loaded state from its saved version to the configured version. */
   migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+  /** Persists committed state changes in queue order. */
   save?: ((state: T) => void | Promise<void>) | undefined;
+  /** Declares the current persistence schema version. */
   version?: number | undefined;
 }
 
