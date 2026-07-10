@@ -354,7 +354,7 @@ describe("createStore", () => {
     await store.persistence.ready;
 
     expect(store.persistence.status.get()).toBe("error");
-    expect(store.persistence.error.get()).toBe(failure);
+    expect(store.persistence.error.get()).toEqual({ error: failure, phase: "load" });
   });
 
   it("runs persist migrations when the loaded version differs", async () => {
@@ -435,7 +435,64 @@ describe("createStore", () => {
 
     expect(saved).toEqual([2, 3]);
     expect(store.persistence.status.get()).toBe("error");
-    expect(store.persistence.error.get()).toBeInstanceOf(Error);
+    expect(store.persistence.error.get()).toMatchObject({ phase: "save" });
+  });
+
+  it("migrates an explicitly accepted legacy persisted record", async () => {
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          acceptLegacyPersistedState: true,
+          load: () => ({ state: { count: 1 }, version: 1 }),
+          migrate: (state, version) => ({ count: state.count + (version ?? 0) }),
+          version: 2,
+        },
+      },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual({ count: 2 });
+  });
+
+  it("uses an explicit replace hydration conflict policy", async () => {
+    let resolveLoad: ((state: { count: number }) => void) | undefined;
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          hydrationConflict: "replace",
+          load: () => new Promise<{ count: number }>((resolve) => {
+            resolveLoad = resolve;
+          }),
+        },
+      },
+    );
+
+    store.set({ count: 1 });
+    resolveLoad?.({ count: 2 });
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual({ count: 2 });
+  });
+
+  it("reports migration failures separately from load failures", async () => {
+    const failure = new Error("migration failed");
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load: () => persistedStoreState({ count: 1 }, 1),
+          migrate: async () => Promise.reject(failure),
+          version: 2,
+        },
+      },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.persistence.error.get()).toEqual({ error: failure, phase: "migrate" });
   });
 
   it("coalesces pending async persist callback saves to the latest state", async () => {

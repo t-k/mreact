@@ -32,8 +32,17 @@ export interface StorePersistedState<T extends object> {
 
 export type StorePersistenceStatus = "hydrating" | "ready" | "error";
 
+/** Identifies the persistence operation that failed. */
+export type StorePersistenceFailurePhase = "load" | "migrate" | "save";
+
+/** Describes an observable persistence failure. */
+export interface StorePersistenceFailure {
+  error: unknown;
+  phase: StorePersistenceFailurePhase;
+}
+
 export interface StorePersistence<T extends object> {
-  readonly error: ReadonlyCell<unknown | undefined>;
+  readonly error: ReadonlyCell<StorePersistenceFailure | undefined>;
   readonly ready: Promise<void>;
   readonly status: ReadonlyCell<StorePersistenceStatus>;
 }
@@ -44,6 +53,10 @@ export function persistedStoreState<T extends object>(state: T, version: number)
 }
 
 export interface StorePersistOptions<T extends object> {
+  /** Opts into reading the deprecated untagged `{ state, version }` record shape. */
+  acceptLegacyPersistedState?: boolean | undefined;
+  /** Chooses how a loaded value interacts with local commits made during hydration. */
+  hydrationConflict?: StoreHydrationConflict<T> | undefined;
   load?:
     | (() =>
         | StorePersistedState<T>
@@ -55,6 +68,13 @@ export interface StorePersistOptions<T extends object> {
   save?: ((state: T) => void | Promise<void>) | undefined;
   version?: number | undefined;
 }
+
+/** Controls how hydration resolves a loaded value after local state has changed. */
+export type StoreHydrationConflict<T extends object> =
+  | "merge"
+  | "preserve-local"
+  | "replace"
+  | ((loaded: T, current: T) => T);
 
 export type StorePersist<T extends object> =
   | ((state: T) => void | Promise<void>)
@@ -119,7 +139,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let persistSaveQueued = false;
   let persistSavePendingState: T | undefined;
   const persistenceStatus = cell<StorePersistenceStatus>("hydrating");
-  const persistenceError = cell<unknown | undefined>(undefined);
+  const persistenceError = cell<StorePersistenceFailure | undefined>(undefined);
 
   const persistenceReady = hydratePersistedState();
 
@@ -202,21 +222,36 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       const hydrationRevision = stateRevision;
       const loaded = await persist.load?.();
       if (loaded !== undefined) {
-        const persisted = normalizePersistedState(loaded);
-        const migrated =
+        const persisted = normalizePersistedState(loaded, persist.acceptLegacyPersistedState === true);
+        let migrated = persisted.state;
+
+        if (
           persist.migrate !== undefined &&
           persist.version !== undefined &&
           persisted.version !== persist.version
-            ? await persist.migrate(persisted.state, persisted.version)
-            : persisted.state;
-        if (stateRevision === hydrationRevision) {
-          commit(migrated, readUntracked(), "replace", { persist: false });
+        ) {
+          try {
+            migrated = await persist.migrate(persisted.state, persisted.version);
+          } catch (error) {
+            recordPersistenceFailure("migrate", error);
+            return;
+          }
+        }
+
+        const current = readUntracked();
+        const hydrated = resolveHydrationConflict(
+          persist.hydrationConflict,
+          migrated,
+          current,
+          stateRevision === hydrationRevision,
+        );
+        if (!Object.is(hydrated, current)) {
+          commit(hydrated, current, "replace", { persist: false });
         }
       }
       persistenceStatus.set("ready");
     } catch (error) {
-      persistenceError.set(error);
-      persistenceStatus.set("error");
+      recordPersistenceFailure("load", error);
     }
   }
 
@@ -238,10 +273,14 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
         await flushPersistSaveQueue();
       })
       .catch(async (error) => {
-        persistenceError.set(error);
-        persistenceStatus.set("error");
+        recordPersistenceFailure("save", error);
         await flushPersistSaveQueue();
       });
+  }
+
+  function recordPersistenceFailure(phase: StorePersistenceFailurePhase, error: unknown): void {
+    persistenceError.set({ error, phase });
+    persistenceStatus.set("error");
   }
 
   async function flushPersistSaveQueue(): Promise<void> {
@@ -482,8 +521,16 @@ function normalizePersistOptions<T extends object>(
 
 function normalizePersistedState<T extends object>(
   value: StorePersistedState<T> | T,
+  acceptLegacyPersistedState: boolean,
 ): NormalizedPersistedState<T> {
-  return isPersistedStateDescriptor(value) ? value : { state: value };
+  if (
+    isPersistedStateDescriptor(value) ||
+    (acceptLegacyPersistedState && isLegacyPersistedStateDescriptor(value))
+  ) {
+    return value as NormalizedPersistedState<T>;
+  }
+
+  return { state: value };
 }
 
 function isPersistedStateDescriptor<T extends object>(
@@ -497,6 +544,42 @@ function isPersistedStateDescriptor<T extends object>(
     "state" in value &&
     isObject((value as { state: unknown }).state)
   );
+}
+
+function isLegacyPersistedStateDescriptor<T extends object>(
+  value: StorePersistedState<T> | T,
+): boolean {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !isObject((value as { state?: unknown }).state) ||
+    typeof (value as { version?: unknown }).version !== "number"
+  ) {
+    return false;
+  }
+
+  return Object.keys(value).every((key) => key === "state" || key === "version");
+}
+
+function resolveHydrationConflict<T extends object>(
+  conflict: StoreHydrationConflict<T> | undefined,
+  loaded: T,
+  current: T,
+  hasNoLocalCommit: boolean,
+): T {
+  if (hasNoLocalCommit) {
+    return loaded;
+  }
+
+  if (conflict === "replace") {
+    return loaded;
+  }
+
+  if (conflict === "merge") {
+    return { ...loaded, ...current };
+  }
+
+  return typeof conflict === "function" ? conflict(loaded, current) : current;
 }
 
 function isDangerousObjectKey(key: PropertyKey): boolean {

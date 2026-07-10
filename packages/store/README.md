@@ -24,8 +24,8 @@ counter.set((state) => ({ count: state.count + 1 }));
 - `store.subscribe()` observes changes from outside the framework runtime.
 - `store.transaction()` batches multiple updates into one notification.
 - `createRequestStoreFactory()` creates request-isolated store instances.
-- The `persist` option connects store state to a storage adapter. Pass a callback for write-only persistence, or use `{ load, save, version, migrate }` when the store should hydrate and migrate saved state. Persisted envelopes are version-tagged so ordinary application values shaped like `{ state, version }` remain ordinary state.
-- `store.persistence.ready` resolves after initial hydration, while `store.persistence.status` and `store.persistence.error` expose hydration or later save failures without producing unhandled promise rejections. A local update made during hydration always wins over an older loaded value.
+- The `persist` option connects store state to a storage adapter. Pass a callback for write-only persistence, or use `{ load, save, version, migrate }` when the store should hydrate and migrate saved state. Persisted envelopes are version-tagged so ordinary application values shaped like `{ state, version }` remain ordinary state. To read a legacy untagged `{ state, version }` record during migration, set `acceptLegacyPersistedState: true`; this opt-in prevents domain state from being guessed as an envelope.
+- `store.persistence.ready` resolves after initial hydration, while `store.persistence.status` and `store.persistence.error` expose load, migrate, or later save failures without producing unhandled promise rejections. A local update made during hydration wins by default; choose `hydrationConflict: "replace"`, `"merge"`, or a resolver when persisted data should take precedence or be combined deliberately.
 
 ## Positioning
 
