@@ -39,6 +39,65 @@ import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
 
+/** Re-exports build manifest contracts used by Cloudflare handlers. */
+export type {
+  BuiltPrerenderedRoute,
+  BuiltRouteSourceAnalysisSummary,
+  BuiltServerActionExpressionReference,
+  BuiltServerActionReference,
+  BuiltServerManifest,
+  BuiltServerModuleArtifact,
+  BuiltServerModuleOutput,
+} from "../build.js";
+/** Re-exports client manifest contracts used by Cloudflare handlers. */
+export type { ClientRouteManifestEntry } from "../client.js";
+/** Re-exports route cache policy contracts used by route manifests. */
+export type { RouteCachePolicy } from "../cache.js";
+/** Re-exports logger contracts used by Cloudflare handlers. */
+export type {
+  AppRouterCspInlineNonceWarningLogEvent,
+  AppRouterLogger,
+  AppRouterLogError,
+  AppRouterLogEvent,
+  AppRouterRenderTimingLogEvent,
+  AppRouterRequestEndLogEvent,
+  AppRouterRequestErrorLogEvent,
+  AppRouterRequestStartLogEvent,
+  AppRouterRequestTimingLogEvent,
+  AppRouterRuntime,
+} from "../logger.js";
+/** Re-exports response hook contracts used by Cloudflare handlers. */
+export type { AppRouterResponseHook, AppRouterResponseHookContext } from "../render.js";
+/** Re-exports route contracts used by Cloudflare handlers. */
+export type {
+  AppAssetRoute,
+  AppMetadataRoute,
+  AppRoute,
+  CompiledRouteMatcherEntry,
+  CompiledRouteMatcherArtifact,
+  CompiledRouteMatcherSegment,
+  PageRoute,
+  ServerRoute,
+  RouteSegment,
+} from "../routes.js";
+/** Re-exports prerender store contracts used by Cloudflare handlers. */
+export type { AppRouterPrerenderStore } from "../serve.js";
+/** Re-exports metadata contracts used by Cloudflare route modules. */
+export type {
+  GenerateMetadataContext,
+  MetadataImage,
+  MetadataScalar,
+  MetadataThemeColor,
+  MetadataViewport,
+  RouteHeadDescriptor,
+  RouteMetadata,
+  RouteParams,
+  RouteSecurityHeaders,
+  RouteStrictTransportSecurity,
+} from "../types.js";
+/** Re-exports file convention contracts used by Cloudflare route manifests. */
+export type { AppFileConvention } from "../file-conventions.js";
+
 /**
  * Represents the Cloudflare Worker execution context used by router handlers.
  */

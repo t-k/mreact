@@ -9,6 +9,339 @@ import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import { QueryClient } from '@reckona/mreact-query';
 
 // @public
+export interface AppAssetRoute {
+    // (undocumented)
+    convention: AppFileConvention;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: "asset";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    segments: RouteSegment[];
+}
+
+// @public
+export type AppFileConvention = "apple-icon" | "icon" | "manifest" | "opengraph-image" | "robots" | "sitemap";
+
+// @public
+export interface AppMetadataRoute {
+    // (undocumented)
+    convention: AppFileConvention;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: "metadata";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    segments: RouteSegment[];
+}
+
+// @public
+export type AppRoute = AppAssetRoute | AppMetadataRoute | PageRoute | ServerRoute;
+
+// @public
+export interface AppRouterCspInlineNonceWarningLogEvent {
+    // (undocumented)
+    directive: "script-src" | "style-src";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    tag: "script" | "style";
+    // (undocumented)
+    type: "router:csp:inline-nonce-warning";
+}
+
+// @public
+export interface AppRouterLogError {
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
+
+// @public
+export interface AppRouterLogger {
+    // (undocumented)
+    debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    error?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    info?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    warn?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+}
+
+// @public
+export interface AppRouterPrerenderStore {
+    // (undocumented)
+    delete(path: string): void | Promise<void>;
+    // (undocumented)
+    get(path: string): BuiltPrerenderedRoute | undefined | Promise<BuiltPrerenderedRoute | undefined>;
+    // (undocumented)
+    set(path: string, entry: BuiltPrerenderedRoute): void | Promise<void>;
+    // (undocumented)
+    withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
+}
+
+// @public
+export interface AppRouterRenderTimingLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:render:timing";
+}
+
+// @public
+export interface AppRouterRequestEndLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:end";
+}
+
+// @public
+export interface AppRouterRequestErrorLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    error: AppRouterLogError;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:error";
+}
+
+// @public
+export interface AppRouterRequestStartLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:start";
+}
+
+// @public
+export interface AppRouterRequestTimingLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:timing";
+}
+
+// @public
+export type AppRouterResponseHook = (response: Response, context: AppRouterResponseHookContext) => Response | undefined | void | Promise<Response | undefined | void>;
+
+// @public
+export interface AppRouterResponseHookContext {
+    // (undocumented)
+    request: Request;
+}
+
+// @public
+export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
+
+// @public (undocumented)
+export interface BuiltPrerenderedRoute {
+    // (undocumented)
+    headers: Record<string, string>;
+    // (undocumented)
+    html: string;
+    // (undocumented)
+    status: number;
+}
+
+// @public (undocumented)
+export interface BuiltRouteSourceAnalysisSummary {
+    // (undocumented)
+    authIncludesClaims: boolean;
+    // (undocumented)
+    cachePolicy?: RouteCachePolicy | undefined;
+    // (undocumented)
+    clientBoundaryFallbackImports: readonly string[];
+    // (undocumented)
+    clientBoundaryImports: readonly string[];
+    // (undocumented)
+    clientRoute: boolean;
+    // (undocumented)
+    hasLoader: boolean;
+    // (undocumented)
+    routeCode: string;
+    // (undocumented)
+    routePath: string;
+    // (undocumented)
+    sourceHash: string;
+    // (undocumented)
+    streamRoute: boolean;
+    // (undocumented)
+    usesRuntimeCacheControl: boolean;
+}
+
+// @public (undocumented)
+export interface BuiltServerActionExpressionReference {
+    // (undocumented)
+    end: number;
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    expression: string;
+    // (undocumented)
+    expressionEnd: number;
+    // (undocumented)
+    expressionStart: number;
+    // (undocumented)
+    inferred: boolean;
+    // (undocumented)
+    moduleId: string;
+    // (undocumented)
+    sourceHash: string;
+    // (undocumented)
+    start: number;
+}
+
+// @public (undocumented)
+export interface BuiltServerActionReference {
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    inferred?: boolean;
+    // (undocumented)
+    moduleId: string;
+}
+
+// @public (undocumented)
+export interface BuiltServerManifest {
+    // (undocumented)
+    allowedSourceDirs?: readonly string[];
+    // (undocumented)
+    assetBaseUrl?: string;
+    // (undocumented)
+    files: Record<string, string>;
+    // (undocumented)
+    prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
+    // (undocumented)
+    publicAssetBaseUrl?: string;
+    // (undocumented)
+    routeMatcher?: CompiledRouteMatcherArtifact;
+    // (undocumented)
+    routes: AppRoute[];
+    // (undocumented)
+    routesDir?: string;
+    // (undocumented)
+    routeServerActionReferences?: Record<string, BuiltServerActionExpressionReference[]>;
+    // (undocumented)
+    serverActionManifest?: BuiltServerActionReference[];
+    // (undocumented)
+    serverModuleClosureFiles?: Record<string, string[]>;
+    // (undocumented)
+    serverModuleFiles?: Record<string, string>;
+    // (undocumented)
+    serverModuleRenderFiles?: Record<string, string>;
+    // (undocumented)
+    serverModuleRequestFiles?: Record<string, string>;
+    // (undocumented)
+    serverModules?: Record<string, BuiltServerModuleArtifact>;
+    // (undocumented)
+    version: 1;
+}
+
+// @public (undocumented)
+export interface BuiltServerModuleArtifact {
+    // (undocumented)
+    analysis?: BuiltRouteSourceAnalysisSummary;
+    // (undocumented)
+    loader?: BuiltServerModuleOutput;
+    // (undocumented)
+    request?: BuiltServerModuleOutput;
+    // (undocumented)
+    routeMetadata?: BuiltServerModuleOutput;
+    // (undocumented)
+    stream?: BuiltServerModuleOutput;
+    // (undocumented)
+    string?: BuiltServerModuleOutput;
+}
+
+// @public (undocumented)
+export interface BuiltServerModuleOutput {
+    // (undocumented)
+    bundleCode?: string;
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    metadata?: ModuleMetadata;
+    // (undocumented)
+    moduleFile?: string;
+    // (undocumented)
+    sourceHash: string;
+}
+
+// @public (undocumented)
+export interface ClientRouteManifestEntry {
+    // (undocumented)
+    bytes?: number;
+    // (undocumented)
+    client: boolean;
+    // (undocumented)
+    clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
+    // (undocumented)
+    css?: readonly string[];
+    // (undocumented)
+    devScript?: string;
+    // (undocumented)
+    imports?: readonly string[];
+    // (undocumented)
+    kind: AppRoute["kind"];
+    // (undocumented)
+    navigation?: boolean;
+    // (undocumented)
+    navigationScript?: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    routeId?: string;
+    // (undocumented)
+    script?: string;
+    // (undocumented)
+    sourceMap?: string;
+}
+
+// @public
 export interface CloudflareAssetBinding {
     // (undocumented)
     fetch(request: Request): Response | Promise<Response>;
@@ -30,8 +363,6 @@ export interface CloudflareBuiltRequestHandlerOptions<Env = unknown> extends Omi
 export interface CloudflareBuiltRouteRenderContext<Env = unknown> extends CloudflareRenderContext<Env> {
     // (undocumented)
     params: Record<string, readonly string[] | string>;
-    // Warning: (ae-forgotten-export) The symbol "AppRoute" needs to be exported by the entry point cloudflare.d.ts
-    //
     // (undocumented)
     route: AppRoute;
 }
@@ -58,8 +389,6 @@ export interface CloudflareClientManifest {
     assets?: readonly string[] | undefined;
     // (undocumented)
     publicAssets?: readonly string[] | undefined;
-    // Warning: (ae-forgotten-export) The symbol "ClientRouteManifestEntry" needs to be exported by the entry point cloudflare.d.ts
-    //
     // (undocumented)
     routes: ClientRouteManifestEntry[];
 }
@@ -108,8 +437,6 @@ export interface CloudflareRenderContext<Env = unknown> {
     context: CloudflareExecutionContext;
     // (undocumented)
     env: Env;
-    // Warning: (ae-forgotten-export) The symbol "BuiltServerManifest" needs to be exported by the entry point cloudflare.d.ts
-    //
     // (undocumented)
     serverManifest: BuiltServerManifest;
 }
@@ -126,14 +453,10 @@ export interface CloudflareRequestHandlerOptions<Env = unknown> {
     assets?: CloudflareAssetLoader<Env> | undefined;
     // (undocumented)
     clientManifest: CloudflareClientManifest;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point cloudflare.d.ts
-    //
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
     onError?: ((error: unknown, request: Request, env: Env, context: CloudflareExecutionContext) => Response | Promise<Response>) | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterResponseHook" needs to be exported by the entry point cloudflare.d.ts
-    //
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
@@ -150,9 +473,6 @@ export interface CloudflareRouteModule<Data = unknown, Env = unknown> {
     CloudflareRouteComponent?: CloudflareRouteModuleComponent<Data, Env> | undefined;
     // (undocumented)
     default?: CloudflareRouteModuleComponent<Data, Env> | undefined;
-    // Warning: (ae-forgotten-export) The symbol "GenerateMetadataContext" needs to be exported by the entry point cloudflare.d.ts
-    // Warning: (ae-forgotten-export) The symbol "RouteMetadata" needs to be exported by the entry point cloudflare.d.ts
-    //
     // (undocumented)
     generateMetadata?: ((context: GenerateMetadataContext<Data>) => RouteMetadata | PromiseLike<RouteMetadata | undefined> | undefined) | undefined;
     // (undocumented)
@@ -254,11 +574,45 @@ export interface CollectCloudflareRouteModulesOptions {
     manifest: BuiltServerManifest;
 }
 
+// @public (undocumented)
+export interface CompiledRouteMatcherArtifact {
+    // (undocumented)
+    routes: readonly CompiledRouteMatcherEntry[];
+    // (undocumented)
+    version: 1;
+}
+
+// @public (undocumented)
+export interface CompiledRouteMatcherEntry {
+    // (undocumented)
+    catchAllIndex: number;
+    // (undocumented)
+    exactLength?: number;
+    // (undocumented)
+    minimumLength: number;
+    // (undocumented)
+    routeIndex: number;
+    // (undocumented)
+    segments: readonly CompiledRouteMatcherSegment[];
+    // (undocumented)
+    suffixLength?: number;
+}
+
+// @public (undocumented)
+export type CompiledRouteMatcherSegment = {
+    kind: "static";
+    value: string;
+} | {
+    kind: "dynamic";
+    name: string;
+} | {
+    kind: "catch-all";
+    name: string;
+};
+
 // @public
 export function createCloudflareBuiltRequestHandler<Env = unknown>(options: CloudflareBuiltRequestHandlerOptions<Env>): CloudflareRequestHandler<Env>;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point cloudflare.d.ts
-//
 // @public
 export function createCloudflarePrerenderStore(options: CloudflarePrerenderStoreOptions): AppRouterPrerenderStore;
 
@@ -270,6 +624,174 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(options: Clou
 
 // @public
 export function createCloudflareStaticAssetLoader<Env = unknown>(options: CloudflareStaticAssetLoaderOptions<Env>): CloudflareAssetLoader<Env>;
+
+// @public
+export interface GenerateMetadataContext<TData = unknown, TParams extends RouteParams = RouteParams> {
+    // (undocumented)
+    data: TData;
+    // (undocumented)
+    params: TParams;
+    // (undocumented)
+    request: Request;
+}
+
+// @public
+export interface MetadataImage {
+    // (undocumented)
+    alt?: MetadataScalar;
+    // (undocumented)
+    height?: MetadataScalar;
+    // (undocumented)
+    type?: MetadataScalar;
+    // (undocumented)
+    url: MetadataScalar;
+    // (undocumented)
+    width?: MetadataScalar;
+}
+
+// @public
+export type MetadataScalar = boolean | number | string;
+
+// @public
+export interface MetadataThemeColor {
+    // (undocumented)
+    color?: MetadataScalar;
+    // (undocumented)
+    media?: MetadataScalar;
+}
+
+// @public
+export type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
+
+// @public
+export interface PageRoute {
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: "page";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    segments: RouteSegment[];
+}
+
+// @public
+export interface RouteCachePolicy {
+    // (undocumented)
+    cacheControl: string;
+    // (undocumented)
+    revalidateSeconds: number;
+}
+
+// @public
+export interface RouteHeadDescriptor {
+    // (undocumented)
+    attrs?: Record<string, boolean | number | string | undefined>;
+    // (undocumented)
+    content?: string;
+    // (undocumented)
+    nonce?: boolean | string;
+    // (undocumented)
+    tag: "base" | "link" | "meta" | "script" | "style";
+}
+
+// @public
+export interface RouteMetadata {
+    // (undocumented)
+    alternates?: {
+        canonical?: MetadataScalar;
+    };
+    // (undocumented)
+    csp?: {
+        disable?: boolean;
+        directives?: Record<string, readonly string[] | string>;
+        nonce?: string;
+        remove?: readonly string[];
+        replace?: Record<string, readonly string[] | string>;
+    };
+    // (undocumented)
+    description?: MetadataScalar;
+    // (undocumented)
+    head?: readonly RouteHeadDescriptor[];
+    // (undocumented)
+    icons?: {
+        apple?: MetadataScalar;
+        icon?: MetadataScalar;
+    };
+    // (undocumented)
+    lang?: MetadataScalar;
+    // (undocumented)
+    openGraph?: {
+        description?: MetadataScalar;
+        image?: MetadataImage | MetadataScalar;
+        images?: readonly (MetadataImage | MetadataScalar)[];
+        title?: MetadataScalar;
+    };
+    // (undocumented)
+    robots?: string | {
+        follow?: boolean;
+        index?: boolean;
+    };
+    // (undocumented)
+    security?: RouteSecurityHeaders;
+    // (undocumented)
+    themeColor?: MetadataScalar | MetadataThemeColor;
+    // (undocumented)
+    title?: MetadataScalar;
+    // (undocumented)
+    viewport?: MetadataScalar | MetadataViewport;
+}
+
+// @public
+export type RouteParams = Record<string, readonly string[] | string>;
+
+// @public
+export interface RouteSecurityHeaders {
+    // (undocumented)
+    contentTypeOptions?: "nosniff" | null | undefined;
+    // (undocumented)
+    frameOptions?: "DENY" | "SAMEORIGIN" | null | undefined;
+    // (undocumented)
+    hsts?: RouteStrictTransportSecurity | false | null | undefined;
+    // (undocumented)
+    permissionsPolicy?: Record<string, readonly string[] | null | undefined> | null | undefined;
+    // (undocumented)
+    referrerPolicy?: string | null | undefined;
+}
+
+// @public
+export type RouteSegment = {
+    kind: "static";
+    value: string;
+} | {
+    kind: "dynamic";
+    name: string;
+} | {
+    kind: "catch-all";
+    name: string;
+};
+
+// @public
+export interface RouteStrictTransportSecurity {
+    // (undocumented)
+    includeSubDomains?: boolean | undefined;
+    // (undocumented)
+    maxAge: number;
+    // (undocumented)
+    preload?: boolean | undefined;
+}
+
+// @public
+export interface ServerRoute {
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    kind: "server";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    segments: RouteSegment[];
+}
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  adapterApiForgottenExports,
   apiExtractorConfigForEntry,
   apiReportFileName,
   collectPackageApiEntries,
@@ -74,5 +75,26 @@ describe("API reference package discovery", () => {
     expect(config.messages.extractorMessageReporting["ae-missing-release-tag"].logLevel).toBe(
       "none",
     );
+  });
+
+  test("rejects forgotten exports in public router adapter reports", () => {
+    expect(
+      adapterApiForgottenExports(
+        "@reckona/mreact-router/adapters/aws-lambda",
+        '// Warning: (ae-forgotten-export) The symbol "AppRouterCache" needs to be exported',
+      ),
+    ).toEqual(["AppRouterCache"]);
+    expect(
+      adapterApiForgottenExports(
+        "@reckona/mreact-router",
+        '// Warning: (ae-forgotten-export) The symbol "LegacyType" needs to be exported',
+      ),
+    ).toEqual([]);
+    expect(
+      adapterApiForgottenExports(
+        "@reckona/mreact-router/adapters/node",
+        "// no forgotten exports",
+      ),
+    ).toEqual([]);
   });
 });

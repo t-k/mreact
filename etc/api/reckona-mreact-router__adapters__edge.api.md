@@ -5,6 +5,120 @@
 ```ts
 
 // @public
+export interface AppRouterCspInlineNonceWarningLogEvent {
+    // (undocumented)
+    directive: "script-src" | "style-src";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    tag: "script" | "style";
+    // (undocumented)
+    type: "router:csp:inline-nonce-warning";
+}
+
+// @public
+export interface AppRouterLogError {
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
+
+// @public
+export interface AppRouterLogger {
+    // (undocumented)
+    debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    error?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    info?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    warn?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+}
+
+// @public
+export interface AppRouterRenderTimingLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:render:timing";
+}
+
+// @public
+export interface AppRouterRequestEndLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:end";
+}
+
+// @public
+export interface AppRouterRequestErrorLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    error: AppRouterLogError;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:error";
+}
+
+// @public
+export interface AppRouterRequestStartLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:start";
+}
+
+// @public
+export interface AppRouterRequestTimingLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:timing";
+}
+
+// @public
+export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
+
+// @public
 export function createEdgeRequestHandler(options: EdgeRequestHandlerOptions): EdgeRequestHandler;
 
 // @public
@@ -12,8 +126,6 @@ export type EdgeRequestHandler = (request: Request) => Response | Promise<Respon
 
 // @public
 export interface EdgeRequestHandlerOptions {
-    // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point edge.d.ts
-    //
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)

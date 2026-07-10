@@ -9,6 +9,48 @@ import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
 
 // @public
+export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
+    // (undocumented)
+    inferred?: boolean | undefined;
+}
+
+// @public
+export interface AppRouterCache {
+    // (undocumented)
+    deleteByPath(path: string): void | Promise<void>;
+    // (undocumented)
+    get(key: string, now?: number): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
+    // (undocumented)
+    set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
+}
+
+// @public
+export interface AppRouterCacheEntry {
+    // (undocumented)
+    body: string;
+    // (undocumented)
+    cacheControl: string;
+    // (undocumented)
+    expiresAt: number;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    status: number;
+}
+
+// @public
+export interface AppRouterCspInlineNonceWarningLogEvent {
+    // (undocumented)
+    directive: "script-src" | "style-src";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    tag: "script" | "style";
+    // (undocumented)
+    type: "router:csp:inline-nonce-warning";
+}
+
+// @public
 export interface AppRouterImportPolicy {
     // (undocumented)
     allowedPackages?: readonly string[] | undefined;
@@ -16,6 +58,143 @@ export interface AppRouterImportPolicy {
     allowedSourceDirs?: readonly string[] | undefined;
     // (undocumented)
     projectRoot?: string | undefined;
+}
+
+// @public
+export interface AppRouterLogError {
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
+
+// @public
+export interface AppRouterLogger {
+    // (undocumented)
+    debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    error?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    info?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    warn?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+}
+
+// @public
+export interface AppRouterPrerenderStore {
+    // (undocumented)
+    delete(path: string): void | Promise<void>;
+    // (undocumented)
+    get(path: string): BuiltPrerenderedRoute | undefined | Promise<BuiltPrerenderedRoute | undefined>;
+    // (undocumented)
+    set(path: string, entry: BuiltPrerenderedRoute): void | Promise<void>;
+    // (undocumented)
+    withLock?<T>(path: string, task: () => Promise<T>): Promise<T>;
+}
+
+// @public
+export interface AppRouterRenderTimingLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:render:timing";
+}
+
+// @public
+export interface AppRouterRequestEndLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:end";
+}
+
+// @public
+export interface AppRouterRequestErrorLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    error: AppRouterLogError;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:error";
+}
+
+// @public
+export interface AppRouterRequestStartLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:start";
+}
+
+// @public
+export interface AppRouterRequestTimingLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:timing";
+}
+
+// @public
+export type AppRouterResponseHook = (response: Response, context: AppRouterResponseHookContext) => Response | undefined | void | Promise<Response | undefined | void>;
+
+// @public
+export interface AppRouterResponseHookContext {
+    // (undocumented)
+    request: Request;
+}
+
+// @public
+export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
+
+// @public
+export interface AppRouterServerActionOptions {
+    // (undocumented)
+    allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
+    // (undocumented)
+    authorize?: ServerActionHandlerOptions["authorize"] | undefined;
+    // (undocumented)
+    maxBodyBytes?: number | undefined;
+    // (undocumented)
+    maxFormFields?: number | undefined;
+    // (undocumented)
+    replayStore?: ServerActionReplayStore | undefined;
 }
 
 // @public
@@ -84,42 +263,28 @@ export interface AwsLambdaRequestHandlerOptions {
     }) | undefined;
     // (undocumented)
     hostname?: string | undefined;
-    // Warning: (ae-forgotten-export) The symbol "RequestHostPolicy" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     hostPolicy?: RequestHostPolicy | undefined;
     // (undocumented)
     importPolicy?: AwsLambdaImportPolicy | undefined;
     // (undocumented)
     instrumentation?: RouterInstrumentation | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     logger?: AppRouterLogger | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterResponseHook" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
     outDir: string;
     // (undocumented)
     preload?: AwsLambdaPreloadStrategy | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterPrerenderStore" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     prerenderStore?: AppRouterPrerenderStore | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterCache" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
     // (undocumented)
     runtimeDir?: string | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterServerActionOptions" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
-    // Warning: (ae-forgotten-export) The symbol "ResponseSinkStrategy" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy | undefined;
     // (undocumented)
@@ -153,6 +318,16 @@ export interface AwsLambdaStreamingResponseStream {
     write(chunk: string | Uint8Array): boolean;
 }
 
+// @public (undocumented)
+export interface BuiltPrerenderedRoute {
+    // (undocumented)
+    headers: Record<string, string>;
+    // (undocumented)
+    html: string;
+    // (undocumented)
+    status: number;
+}
+
 // @public
 export function createAwsLambdaRequestHandler(options: AwsLambdaRequestHandlerOptions): AwsLambdaRequestHandler;
 
@@ -166,31 +341,83 @@ export function createPreloadedAwsLambdaRequestHandler(options: AwsLambdaRequest
 export function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(options: AwsLambdaRequestHandlerOptions): Promise<AwsLambdaStreamingRequestHandler<TContext>>;
 
 // @public
+export type RequestHostPolicy = "strict" | "trusted-proxy";
+
+// @public
+export type ResponseSinkStrategy = "string" | "buffer";
+
+// @public
 export interface RouterInstrumentation {
-    // Warning: (ae-forgotten-export) The symbol "RouterRouteEndInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onLoaderEnd?: (event: RouterRouteEndInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterRouteInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onLoaderStart?: (event: RouterRouteInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterMiddlewareEndInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onMiddlewareEnd?: (event: RouterMiddlewareEndInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterMiddlewareInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onMiddlewareStart?: (event: RouterMiddlewareInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterRequestEndInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onRequestEnd?: (event: RouterRequestEndInstrumentationEvent) => void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "RouterRequestInstrumentationEvent" needs to be exported by the entry point aws-lambda.d.ts
-    //
     // (undocumented)
     onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
+}
+
+// @public
+export interface RouterMiddlewareEndInstrumentationEvent extends RouterMiddlewareInstrumentationEvent {
+    // (undocumented)
+    error?: unknown;
+}
+
+// @public
+export interface RouterMiddlewareInstrumentationEvent extends RouterRequestInstrumentationEvent {
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export interface RouterRequestEndInstrumentationEvent extends RouterRequestInstrumentationEvent {
+    // (undocumented)
+    status: number;
+}
+
+// @public
+export interface RouterRequestInstrumentationEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    request: Request;
+    // (undocumented)
+    trace?: RouterTraceContext;
+}
+
+// @public
+export interface RouterRouteEndInstrumentationEvent extends RouterRouteInstrumentationEvent {
+    // (undocumented)
+    error?: unknown;
+}
+
+// @public
+export interface RouterRouteInstrumentationEvent extends RouterRequestInstrumentationEvent {
+    // (undocumented)
+    routeId: string;
+    // (undocumented)
+    routePath: string;
+}
+
+// @public
+export interface RouterTraceContext {
+    // (undocumented)
+    parentSpanId: string;
+    // (undocumented)
+    sampled: boolean;
+    // (undocumented)
+    traceId: string;
+    // (undocumented)
+    traceparent: string;
+    // (undocumented)
+    tracestate?: string;
 }
 
 // @public

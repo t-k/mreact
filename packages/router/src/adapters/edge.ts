@@ -8,6 +8,20 @@ import {
   type AppRouterLogger,
 } from "../logger.js";
 
+/** Re-exports the logger contract used by edge handlers. */
+export type {
+  AppRouterCspInlineNonceWarningLogEvent,
+  AppRouterLogger,
+  AppRouterLogError,
+  AppRouterLogEvent,
+  AppRouterRenderTimingLogEvent,
+  AppRouterRequestEndLogEvent,
+  AppRouterRequestErrorLogEvent,
+  AppRouterRequestStartLogEvent,
+  AppRouterRequestTimingLogEvent,
+  AppRouterRuntime,
+} from "../logger.js";
+
 /**
  * Handles one standard Web `Request` in an edge runtime.
  */

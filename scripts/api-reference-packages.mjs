@@ -2,6 +2,18 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, posix, resolve } from "node:path";
 
 const skippedExportPattern = /(?:^|\/)internal(?:\/|$)/;
+const routerAdapterEntryPattern = /^@reckona\/mreact-router\/adapters\/(?:aws-lambda|cloudflare|edge|node)$/;
+const forgottenExportPattern = /ae-forgotten-export\).*?symbol "(?<symbol>[^"]+)"/g;
+
+export function adapterApiForgottenExports(displayName, report) {
+  if (!routerAdapterEntryPattern.test(displayName)) {
+    return [];
+  }
+
+  return [...report.matchAll(forgottenExportPattern)]
+    .map((match) => match.groups?.symbol)
+    .filter((symbol) => symbol !== undefined);
+}
 
 export async function collectWorkspaceApiEntries(rootDir) {
   const packagesDir = join(rootDir, "packages");

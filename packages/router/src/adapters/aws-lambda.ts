@@ -22,8 +22,41 @@ import {
 import type { AppRouterResponseHook } from "../render.js";
 import type { RouterInstrumentation } from "../trace.js";
 
-/** Re-exports router instrumentation hooks for AWS Lambda handlers. */
-export type { RouterInstrumentation } from "../trace.js";
+/** Re-exports cache contracts used by AWS Lambda handlers. */
+export type { AppRouterCache, AppRouterCacheEntry } from "../cache.js";
+/** Re-exports server action contracts used by AWS Lambda handlers. */
+export type {
+  AppRouterAllowedServerAction,
+  AppRouterServerActionOptions,
+} from "../actions.js";
+/** Re-exports logger contracts used by AWS Lambda handlers. */
+export type {
+  AppRouterCspInlineNonceWarningLogEvent,
+  AppRouterLogger,
+  AppRouterLogError,
+  AppRouterLogEvent,
+  AppRouterRenderTimingLogEvent,
+  AppRouterRequestEndLogEvent,
+  AppRouterRequestErrorLogEvent,
+  AppRouterRequestStartLogEvent,
+  AppRouterRequestTimingLogEvent,
+  AppRouterRuntime,
+} from "../logger.js";
+/** Re-exports response hook contracts used by AWS Lambda handlers. */
+export type { AppRouterResponseHook, AppRouterResponseHookContext } from "../render.js";
+/** Re-exports build contracts referenced by AWS Lambda handler options. */
+export type { BuiltPrerenderedRoute } from "../build.js";
+/** Re-exports router instrumentation hooks and events for AWS Lambda handlers. */
+export type {
+  RouterInstrumentation,
+  RouterMiddlewareEndInstrumentationEvent,
+  RouterMiddlewareInstrumentationEvent,
+  RouterRequestEndInstrumentationEvent,
+  RouterRequestInstrumentationEvent,
+  RouterRouteEndInstrumentationEvent,
+  RouterRouteInstrumentationEvent,
+  RouterTraceContext,
+} from "../trace.js";
 /** Re-exports app-router import policy controls for AWS Lambda handlers. */
 export type { AppRouterImportPolicy } from "../import-policy.js";
 import {
@@ -34,6 +67,13 @@ import {
   type AppRouterPrerenderStore,
   type RequestHostPolicy,
   type ResponseSinkStrategy,
+} from "../serve.js";
+
+/** Re-exports request and rendering contracts used by AWS Lambda handlers. */
+export type {
+  AppRouterPrerenderStore,
+  RequestHostPolicy,
+  ResponseSinkStrategy,
 } from "../serve.js";
 
 /**

@@ -4,6 +4,7 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Extractor, ExtractorConfig } from "@microsoft/api-extractor";
 import {
+  adapterApiForgottenExports,
   apiExtractorConfigForEntry,
   collectWorkspaceApiEntries,
 } from "./api-reference-packages.mjs";
@@ -48,11 +49,18 @@ for (const entry of entries) {
     if (!result.succeeded) {
       failures.push(`${entry.displayName}: API report is out of date`);
     }
+    if (await exists(finalReport)) {
+      recordForgottenAdapterExports(entry, await readFile(finalReport, "utf8"));
+    }
     continue;
   }
 
   if (await exists(tempReport)) {
     await writeFile(finalReport, normalizeApiReport(await readFile(tempReport, "utf8")));
+  }
+
+  if (await exists(finalReport)) {
+    recordForgottenAdapterExports(entry, await readFile(finalReport, "utf8"));
   }
 
   if (!result.succeeded && !(await exists(finalReport))) {
@@ -125,4 +133,14 @@ async function exists(path) {
 
 function normalizeApiReport(value) {
   return value.replace(/\r\n/g, "\n");
+}
+
+function recordForgottenAdapterExports(entry, report) {
+  const forgottenExports = adapterApiForgottenExports(entry.displayName, report);
+
+  if (forgottenExports.length > 0) {
+    failures.push(
+      `${entry.displayName}: public adapter types are not exported: ${forgottenExports.join(", ")}`,
+    );
+  }
 }
