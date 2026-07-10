@@ -130,6 +130,47 @@ const preferences = createStore<Preferences>(
 
 Await `preferences.persistence.ready` before depending on hydrated values. `persistence.status` is `"hydrating"`, `"ready"`, or `"error"`; `persistence.error` identifies whether loading, migration, or saving failed. By default, a local commit made during hydration wins over the loaded value. Set `hydrationConflict` to `"replace"`, `"merge"`, or a resolver only when that policy matches the application’s data model. Older untagged `{ state, version }` records require the explicit `acceptLegacyPersistedState: true` migration opt-in.
 
+### Hydration lifecycle and failures
+
+`persistence.ready` always settles after the initial load and optional migration have finished, including when either operation fails. It does not reject. Check `persistence.status.get()` and `persistence.error.get()` after awaiting it when startup logic must distinguish a usable hydrated value from a `load` or `migrate` failure. A later `save` failure also changes the status to `"error"` with phase `"save"`; the ordered save queue continues, so a subsequent state change can still reach storage.
+
+```ts
+await preferences.persistence.ready;
+
+const failure = preferences.persistence.error.get();
+if (failure !== undefined) {
+  reportPersistenceFailure(failure.phase, failure.error);
+}
+```
+
+Hydration is not a write barrier. Calls to `set()`, `replace()`, or `transaction()` take effect and queue their normal save immediately, even while `load()` is pending. The default `"preserve-local"` conflict policy prevents the eventual loaded value from overwriting such a commit. Use `"replace"` only when storage is authoritative, `"merge"` for a shallow loaded/current merge, or a resolver for a domain-specific policy.
+
+### Notifications, instrumentation, and devtools
+
+When hydration applies a loaded value, store subscribers receive one replacement notification and the optional `instrument` callback receives a `replace` event with the previous and hydrated states. The devtools hook receives the matching `store:replace` event. Hydration does not immediately call `save()` for that loaded replacement, which avoids writing an unchanged record back to storage during startup. A local commit made before or after hydration uses the ordinary notification, instrumentation, devtools, and save lifecycle.
+
+```ts
+const events: string[] = [];
+const preferences = createStore(initialPreferences, {
+  instrument(event) {
+    events.push(event.type);
+  },
+  persist: {
+    load: loadPreferences,
+    save: savePreferences,
+  },
+});
+
+const unsubscribe = preferences.subscribe((state, previous) => {
+  renderPreferenceChange(previous, state);
+});
+
+await preferences.persistence.ready;
+unsubscribe();
+```
+
+The persistence status and error cells are separate from store state subscriptions. Read or observe those cells when the UI needs a hydration or storage-health indicator; use `store.subscribe()` for application-state changes.
+
 ## Outside the framework runtime
 
 Use `store.subscribe()` for integration code that lives outside a component lifecycle, such as devtools, adapters, or imperative widgets. Dispose the subscription when the integration shuts down.
