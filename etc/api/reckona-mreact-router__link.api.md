@@ -36,7 +36,7 @@ export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath
 export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
 // @public (undocumented)
-export function Link(sink: HtmlSink, props: LinkProps<string>): void;
+export function Link(sink: HtmlSink, props: LinkSinkProps): void;
 
 // @public
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
@@ -74,6 +74,41 @@ export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
 // @public
 export type LinkScroll = "top" | "preserve";
+
+// @public
+export type LinkSerializableAttribute = boolean | number | string | null | undefined | Readonly<Record<string, boolean | number | string | null | undefined>>;
+
+// @public
+export interface LinkSinkProps extends LinkOptions<string> {
+    // (undocumented)
+    [ariaAttribute: `aria-${string}`]: LinkSerializableAttribute;
+    // (undocumented)
+    [dataAttribute: `data-${string}`]: LinkSerializableAttribute;
+    // (undocumented)
+    children?: LinkChild;
+    // (undocumented)
+    class?: string | undefined;
+    // (undocumented)
+    className?: string | undefined;
+    // (undocumented)
+    download?: string | boolean | undefined;
+    // (undocumented)
+    id?: string | undefined;
+    // (undocumented)
+    name?: string | undefined;
+    // (undocumented)
+    rel?: string | undefined;
+    // (undocumented)
+    role?: string | undefined;
+    // (undocumented)
+    style?: Readonly<Record<string, boolean | number | string | null | undefined>> | undefined;
+    // (undocumented)
+    tabIndex?: number | undefined;
+    // (undocumented)
+    target?: string | undefined;
+    // (undocumented)
+    title?: string | undefined;
+}
 
 // @public
 export type LinkTransition = "auto" | "none" | false;

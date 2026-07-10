@@ -13,6 +13,9 @@ export function createRequestStoreFactory<T extends object>(initial: () => T, op
 export function createStore<T extends object>(initial: T, options?: StoreOptions<T>): Store<T>;
 
 // @public
+export function persistedStoreState<T extends object>(state: T, version: number): StorePersistedState<T>;
+
+// @public
 export interface SelectedCell<T> extends ReadonlyCell<T> {
     // (undocumented)
     dispose(): void;
@@ -25,6 +28,8 @@ export function shallowEqual<T>(left: T, right: T): boolean;
 export interface Store<T extends object> {
     // (undocumented)
     get(): T;
+    // (undocumented)
+    readonly persistence: StorePersistence<T>;
     // (undocumented)
     replace(next: StoreReplacer<T>): void;
     // (undocumented)
@@ -43,6 +48,9 @@ export interface Store<T extends object> {
 
 // @public
 export type StoreEquality<T> = (left: T, right: T) => boolean;
+
+// @public
+export type StoreHydrationConflict<T extends object> = "merge" | "preserve-local" | "replace" | ((loaded: T, current: T) => T);
 
 // @public
 export interface StoreInstrumentationEvent<T extends object> {
@@ -74,13 +82,41 @@ export type StorePersist<T extends object> = ((state: T) => void | Promise<void>
 // @public (undocumented)
 export interface StorePersistedState<T extends object> {
     // (undocumented)
+    readonly __mreactStorePersistedState: true;
+    // (undocumented)
     state: T;
     // (undocumented)
     version: number;
 }
 
 // @public (undocumented)
+export interface StorePersistence<T extends object> {
+    // (undocumented)
+    readonly error: ReadonlyCell<StorePersistenceFailure | undefined>;
+    // (undocumented)
+    readonly ready: Promise<void>;
+    // (undocumented)
+    readonly status: ReadonlyCell<StorePersistenceStatus>;
+}
+
+// @public
+export interface StorePersistenceFailure {
+    // (undocumented)
+    error: unknown;
+    // (undocumented)
+    phase: StorePersistenceFailurePhase;
+}
+
+// @public
+export type StorePersistenceFailurePhase = "load" | "migrate" | "save";
+
+// @public (undocumented)
+export type StorePersistenceStatus = "hydrating" | "ready" | "error";
+
+// @public (undocumented)
 export interface StorePersistOptions<T extends object> {
+    acceptLegacyPersistedState?: boolean | undefined;
+    hydrationConflict?: StoreHydrationConflict<T> | undefined;
     // (undocumented)
     load?: (() => StorePersistedState<T> | T | undefined | Promise<StorePersistedState<T> | T | undefined>) | undefined;
     // (undocumented)

@@ -204,6 +204,14 @@ export interface AppRouterProductionOptions {
     dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
 }
 
+// @public (undocumented)
+export interface AppRouterRenderPreload {
+    // (undocumented)
+    promise: Promise<void>;
+    // (undocumented)
+    wait: "before-render";
+}
+
 // @public
 export interface AppRouterRenderTimingLogEvent {
     // (undocumented)
@@ -668,8 +676,10 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
 // @public
 export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
+// Warning: (ae-forgotten-export) The symbol "LinkSinkProps" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export function Link(sink: HtmlSink, props: LinkProps<string>): void;
+export function Link(sink: HtmlSink, props: LinkSinkProps): void;
 
 // @public
 export type LinkChild = ReactCompatNode | Node | TrustedLinkHtml | readonly LinkChild[];
@@ -1038,8 +1048,6 @@ export interface RenderAppRequestOptions {
     onRenderError?: ((error: unknown) => void) | undefined;
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterRenderPreload" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     preload?: AppRouterRenderPreload | undefined;
     // (undocumented)
@@ -1103,14 +1111,15 @@ export interface RenderBuiltAppRequestOptions {
     runtimeDir?: string | undefined;
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
-    // Warning: (ae-forgotten-export) The symbol "ResponseSinkStrategy" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy;
 }
 
 // @public
 export type RequestHostPolicy = "strict" | "trusted-proxy";
+
+// @public
+export type ResponseSinkStrategy = "string" | "buffer";
 
 // @public
 export function revalidatePath(path: string): void;

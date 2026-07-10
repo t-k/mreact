@@ -43,6 +43,26 @@ describe("router package entrypoints", () => {
     expect(code).not.toContain("createViteServer");
   });
 
+  test("exports every public type referenced by request helper signatures", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages", "router", "src", "request.ts"),
+      "utf8",
+    );
+
+    for (const name of [
+      "AppRouterCache",
+      "AppRouterCacheEntry",
+      "CacheControlOptions",
+      "CookieOptions",
+      "MemoryRouteCacheOptions",
+      "MiddlewareNext",
+      "RedirectOptions",
+      "RequestCookies",
+    ]) {
+      expect(source).toContain(name);
+    }
+  });
+
   test("exposes app-router global types for Slot layouts", async () => {
     const manifest = JSON.parse(
       await readFile(join(process.cwd(), "packages", "router", "package.json"), "utf8"),

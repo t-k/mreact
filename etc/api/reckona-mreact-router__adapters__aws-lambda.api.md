@@ -29,18 +29,18 @@ export interface AwsLambdaHttpEventV2 {
     // (undocumented)
     isBase64Encoded?: boolean | undefined;
     // (undocumented)
-    rawPath?: string | undefined;
+    rawPath: string;
     // (undocumented)
-    rawQueryString?: string | undefined;
+    rawQueryString: string;
     // (undocumented)
-    requestContext?: {
-        http?: {
-            method?: string | undefined;
+    requestContext: {
+        http: {
+            method: string;
             protocol?: string | undefined;
-        } | undefined;
-    } | undefined;
+        };
+    };
     // (undocumented)
-    version?: "2.0" | string | undefined;
+    version: "2.0";
 }
 
 // @public
