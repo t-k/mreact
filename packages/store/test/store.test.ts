@@ -358,6 +358,7 @@ describe("createStore", () => {
   });
 
   it("runs persist migrations when the loaded version differs", async () => {
+    const migrations: Array<[{ count: number }, number | undefined]> = [];
     const store = createStore(
       { count: 0 },
       {
@@ -366,6 +367,7 @@ describe("createStore", () => {
             return persistedStoreState({ count: 1 }, 1);
           },
           migrate(state, version) {
+            migrations.push([state, version]);
             return { count: state.count + (version ?? 0) };
           },
           save() {},
@@ -377,6 +379,7 @@ describe("createStore", () => {
     await flushMicrotasks();
 
     expect(store.get()).toEqual({ count: 2 });
+    expect(migrations).toEqual([[{ count: 1 }, 1]]);
   });
 
   it("coalesces pending async persist descriptor saves to the latest state", async () => {
@@ -512,13 +515,17 @@ describe("createStore", () => {
   });
 
   it("migrates an explicitly accepted legacy persisted record", async () => {
+    const migrations: Array<[{ count: number }, number | undefined]> = [];
     const store = createStore(
       { count: 0 },
       {
         persist: {
           acceptLegacyPersistedState: true,
           load: () => ({ state: { count: 1 }, version: 1 }),
-          migrate: (state, version) => ({ count: state.count + (version ?? 0) }),
+          migrate: (state, version) => {
+            migrations.push([state, version]);
+            return { count: state.count + (version ?? 0) };
+          },
           version: 2,
         },
       },
@@ -527,6 +534,7 @@ describe("createStore", () => {
     await store.persistence.ready;
 
     expect(store.get()).toEqual({ count: 2 });
+    expect(migrations).toEqual([[{ count: 1 }, 1]]);
   });
 
   it("uses an explicit replace hydration conflict policy", async () => {
@@ -609,6 +617,30 @@ describe("createStore", () => {
     expect(tagged.get()).toEqual({ value: "tagged" });
   });
 
+  it.each([
+    {
+      initial: { state: "initial", version: 0 },
+      loaded: { state: "loaded", version: 1 },
+      name: "primitive nested state",
+    },
+    {
+      initial: { state: { value: "initial" } },
+      loaded: { state: { value: "loaded" } },
+      name: "missing version",
+    },
+    {
+      initial: { state: { value: "initial" }, version: 0, workspace: "initial" },
+      loaded: { state: { value: "loaded" }, version: 1, workspace: "alpha" },
+      name: "extra domain keys",
+    },
+  ])("keeps $name as raw persisted domain state", async ({ initial, loaded }) => {
+    const store = createStore(initial, { persist: { load: () => loaded } });
+
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual(loaded);
+  });
+
   it("preserves tagged-looking raw domain state when it has additional fields", async () => {
     const store = createStore(
       {
@@ -682,6 +714,20 @@ describe("createStore", () => {
     await flushMicrotasks();
 
     expect(saved).toEqual([1, 3]);
+  });
+
+  it("keeps write-only persistence callback shorthand ready while exposing save failures", async () => {
+    const failure = new Error("callback save failed");
+    const store = createStore({ count: 0 }, { persist: async () => Promise.reject(failure) });
+
+    expect(store.persistence.status.get()).toBe("hydrating");
+    await store.persistence.ready;
+    expect(store.persistence.status.get()).toBe("ready");
+    store.set({ count: 1 });
+    await flushMicrotasks();
+
+    expect(store.persistence.status.get()).toBe("error");
+    expect(store.persistence.error.get()).toEqual({ error: failure, phase: "save" });
   });
 });
 

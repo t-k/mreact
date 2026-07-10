@@ -174,6 +174,34 @@ describe("query refetch interval", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  test("does not evaluate result-dependent cadence after cleanup-scope disposal", async () => {
+    vi.useFakeTimers();
+    let release!: (value: number) => void;
+    const pending = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const cadence = vi.fn(() => 100);
+    const disposers: Array<() => void> = [];
+    withCleanupScope((dispose) => disposers.push(dispose), () => {
+      createQuery(createQueryClient(), {
+        autoFetch: false,
+        queryFn: () => pending,
+        queryKey: ["scope-disposed-cadence"],
+        refetchInterval: cadence,
+      });
+    });
+
+    expect(cadence).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(100);
+    disposers[0]?.();
+    release(1);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(cadence).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test("deduplicates interval, focus, reconnect, and invalidation triggers", async () => {
     vi.useFakeTimers();
     let calls = 0;
@@ -224,6 +252,42 @@ describe("query refetch interval", () => {
 
     expect(calls).toBe(1);
     expect(observer.result.get().pages).toEqual([1]);
+    observer.dispose();
+  });
+
+  test("deduplicates interval, focus, reconnect, and invalidation for infinite queries", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    let release!: (value: number) => void;
+    const pending = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const client = createQueryClient();
+    const observer = createInfiniteQuery(client, {
+      autoFetch: false,
+      getNextPageParam: () => undefined,
+      initialPageParam: 0,
+      queryFn: () => {
+        calls += 1;
+        return pending;
+      },
+      queryKey: ["infinite-trigger-race"],
+      refetchInterval: 100,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    client.invalidateQueries({ queryKey: ["infinite-trigger-race"] });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+
+    release(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toBe(1);
     observer.dispose();
   });
 

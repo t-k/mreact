@@ -65,21 +65,64 @@ describe("query cleanup scope ownership", () => {
     expect(observer.result.get().data).toBeUndefined();
   });
 
-  test("cancels browser revalidation queued before manual disposal", async () => {
-    let calls = 0;
-    const observer = createQuery(createQueryClient(), {
-      autoFetch: false,
-      queryFn: async () => ++calls,
-      queryKey: ["queued-focus-dispose"],
-      refetchOnWindowFocus: true,
-    });
+  test.each(["manual", "scope"] as const)(
+    "cancels browser revalidation queued before %s disposal",
+    async (disposal) => {
+      let calls = 0;
+      const disposers: Array<() => void> = [];
+      const create = () =>
+        createQuery(createQueryClient(), {
+          autoFetch: false,
+          queryFn: async () => ++calls,
+          queryKey: ["queued-focus-dispose", disposal],
+          refetchOnWindowFocus: true,
+        });
+      const observer =
+        disposal === "scope"
+          ? withCleanupScope((dispose) => disposers.push(dispose), create)
+          : create();
 
-    window.dispatchEvent(new Event("focus"));
-    observer.dispose();
-    await Promise.resolve();
+      window.dispatchEvent(new Event("focus"));
+      if (disposal === "scope") disposers[0]?.();
+      else observer.dispose();
+      await Promise.resolve();
 
-    expect(calls).toBe(0);
-  });
+      expect(calls).toBe(0);
+    },
+  );
+
+  test.each(["manual-first", "scope-first"] as const)(
+    "disposes an infinite observer idempotently when order is %s",
+    (order) => {
+      const client = createQueryClient();
+      const disposers: Array<() => void> = [];
+      const observer = withCleanupScope(
+        (dispose) => disposers.push(dispose),
+        () =>
+          createInfiniteQuery(client, {
+            autoFetch: false,
+            getNextPageParam: () => undefined,
+            initialPageParam: 0,
+            queryFn: async () => 1,
+            queryKey: ["infinite-disposal-order", order],
+          }),
+      );
+
+      if (order === "manual-first") {
+        observer.dispose();
+        disposers[0]?.();
+      } else {
+        disposers[0]?.();
+        observer.dispose();
+      }
+      client.setQueryData(["infinite-disposal-order", order], {
+        pageParams: [0],
+        pages: [2],
+      });
+
+      expect(observer.result.get().pages).toEqual([]);
+    },
+  );
 
   test.each(["manual-first", "scope-first"] as const)(
     "starts gcTime once when disposal order is %s",
