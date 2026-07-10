@@ -44,15 +44,15 @@ export interface AwsLambdaHttpEventV2 {
   cookies?: string[] | undefined;
   headers?: Record<string, string | undefined> | undefined;
   isBase64Encoded?: boolean | undefined;
-  rawPath?: string | undefined;
-  rawQueryString?: string | undefined;
-  requestContext?: {
-    http?: {
-      method?: string | undefined;
+  rawPath: string;
+  rawQueryString: string;
+  requestContext: {
+    http: {
+      method: string;
       protocol?: string | undefined;
-    } | undefined;
-  } | undefined;
-  version?: "2.0" | string | undefined;
+    };
+  };
+  version: "2.0";
 }
 
 /**
@@ -165,20 +165,29 @@ export function createAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaRequestHandler {
   warnIfImplicitHostTrust(options);
-  const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-  const runtimePreloadPromise = startAwsLambdaRuntimePreload(
-    options,
-    runtimeDirPromise,
-    "middleware",
-  );
-  void runtimePreloadPromise?.catch(() => {});
+  let handler: AwsLambdaRequestHandler | undefined;
 
-  return createAwsLambdaRequestHandlerFromRuntime(
-    options,
-    runtimeDirPromise,
-    runtimePreloadPromise,
-    "middleware",
-  );
+  return async (event) => {
+    try {
+      validateAwsLambdaHttpEventV2(event);
+    } catch {
+      return { body: "Bad Request", isBase64Encoded: false, statusCode: 400 };
+    }
+
+    handler ??= (() => {
+      const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
+      const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise, "middleware");
+      void runtimePreloadPromise?.catch(() => {});
+      return createAwsLambdaRequestHandlerFromRuntime(
+        options,
+        runtimeDirPromise,
+        runtimePreloadPromise,
+        "middleware",
+      );
+    })();
+
+    return await handler(event);
+  };
 }
 
 /**
@@ -298,21 +307,38 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
 ): AwsLambdaStreamingRequestHandler<TContext> {
   warnIfImplicitHostTrust(options);
   const runtime = awsLambdaRuntime();
-  const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-  const runtimePreloadPromise = startAwsLambdaRuntimePreload(
-    options,
-    runtimeDirPromise,
-    "middleware",
-  );
-  void runtimePreloadPromise?.catch(() => {});
+  let handler: AwsLambdaStreamingRequestHandler<TContext> | undefined;
 
-  return createAwsLambdaStreamingRequestHandlerFromRuntime(
-    options,
-    runtime,
-    runtimeDirPromise,
-    runtimePreloadPromise,
-    "middleware",
-  );
+  return runtime.streamifyResponse(async (event, responseStream, context) => {
+    try {
+      validateAwsLambdaHttpEventV2(event);
+    } catch {
+      await streamResponseToLambda(
+        new Response("Bad Request", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+          status: 400,
+        }),
+        responseStream,
+        runtime,
+      );
+      return;
+    }
+
+    handler ??= (() => {
+      const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
+      const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise, "middleware");
+      void runtimePreloadPromise?.catch(() => {});
+      return createAwsLambdaStreamingRequestHandlerFromRuntime(
+        options,
+        runtime,
+        runtimeDirPromise,
+        runtimePreloadPromise,
+        "middleware",
+      );
+    })();
+
+    await handler(event, responseStream, context);
+  });
 }
 
 /**
@@ -647,6 +673,7 @@ function eventToRequest(
   event: AwsLambdaHttpEventV2,
   options: AwsLambdaRequestHandlerOptions,
 ): Request {
+  validateAwsLambdaHttpEventV2(event);
   const headers = eventHeaders(event);
   const rawHost = lambdaRequestHost(headers, options);
   const host = resolveRequestHost({
@@ -656,12 +683,9 @@ function eventToRequest(
     rawHost: rawHost ?? undefined,
   });
   const protocol = lambdaRequestProtocol(event, headers, options);
-  const rawPath = event.rawPath === undefined || event.rawPath === "" ? "/" : event.rawPath;
-  const rawQueryString =
-    event.rawQueryString === undefined || event.rawQueryString === ""
-      ? ""
-      : `?${event.rawQueryString}`;
-  const method = event.requestContext?.http?.method ?? "GET";
+  const rawPath = event.rawPath;
+  const rawQueryString = event.rawQueryString === "" ? "" : `?${event.rawQueryString}`;
+  const method = event.requestContext.http.method;
   const init: RequestInit = {
     headers,
     method,
@@ -673,6 +697,29 @@ function eventToRequest(
   }
 
   return new Request(`${protocol}://${host}${rawPath}${rawQueryString}`, init);
+}
+
+function validateAwsLambdaHttpEventV2(event: AwsLambdaHttpEventV2): void {
+  const candidate = event as unknown;
+
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    (candidate as { version?: unknown }).version !== "2.0" ||
+    typeof (candidate as { rawPath?: unknown }).rawPath !== "string" ||
+    !(candidate as { rawPath: string }).rawPath.startsWith("/") ||
+    typeof (candidate as { rawQueryString?: unknown }).rawQueryString !== "string" ||
+    typeof (candidate as { requestContext?: unknown }).requestContext !== "object" ||
+    (candidate as { requestContext?: unknown }).requestContext === null ||
+    typeof ((candidate as { requestContext: { http?: unknown } }).requestContext.http) !== "object" ||
+    (candidate as { requestContext: { http?: unknown } }).requestContext.http === null ||
+    typeof ((candidate as { requestContext: { http: { method?: unknown } } }).requestContext.http.method) !== "string" ||
+    (candidate as { requestContext: { http: { method: string } } }).requestContext.http.method === ""
+  ) {
+    throw new Error(
+      'Expected an AWS Lambda HTTP API v2 event with version "2.0", rawPath, and requestContext.http.method.',
+    );
+  }
 }
 
 function lambdaRequestHost(

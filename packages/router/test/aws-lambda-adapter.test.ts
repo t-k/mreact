@@ -18,6 +18,20 @@ afterEach(() => {
 });
 
 describe("mreact AWS Lambda adapter", () => {
+  test("rejects malformed HTTP API v2 events before request routing", async () => {
+    const { outDir } = await createBuiltApp("mreact-lambda-invalid-event-");
+    const handler = createAwsLambdaRequestHandler({ outDir });
+
+    await expect(
+      handler({
+        rawPath: "/",
+        rawQueryString: "",
+        requestContext: { http: { method: "GET" } },
+        version: "1.0",
+      } as never),
+    ).resolves.toMatchObject({ body: "Bad Request", statusCode: 400 });
+  });
+
   test("renders a built app from an API Gateway HTTP API v2 event", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-render-");
     await writeFile(
