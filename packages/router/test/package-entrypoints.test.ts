@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as ts from "@typescript/typescript6";
@@ -41,6 +42,63 @@ describe("router package entrypoints", () => {
     expect(code).not.toContain("createDevServer");
     expect(code).not.toContain("buildApp");
     expect(code).not.toContain("createViteServer");
+  });
+
+  test("evaluates only request-plane modules through the public request specifier", () => {
+    const directory = mkdtempSync(
+      join(process.cwd(), "node_modules", ".tmp-mreact-request-module-graph-"),
+    );
+    const bootstrap = join(directory, "bootstrap.mjs");
+    const loader = join(directory, "loader.mjs");
+    const runner = join(directory, "runner.mjs");
+    const log = join(directory, "evaluated.jsonl");
+    writeFileSync(
+      bootstrap,
+      `import { register } from "node:module";
+register(new URL("./loader.mjs", import.meta.url), { data: { log: ${JSON.stringify(log)} } });
+`,
+    );
+    writeFileSync(
+      loader,
+      `import { appendFile } from "node:fs/promises";
+let log;
+export function initialize(data) { log = data.log; }
+export async function load(url, context, nextLoad) {
+  if (url.startsWith("file:")) await appendFile(log, JSON.stringify(url) + "\\n");
+  return nextLoad(url, context);
+}
+`,
+    );
+    writeFileSync(runner, 'await import("@reckona/mreact-router/request");\n');
+
+    try {
+      execFileSync(process.execPath, ["--import", bootstrap, runner], {
+        cwd: process.cwd(),
+        env: { ...process.env, NODE_ENV: "production" },
+        stdio: "pipe",
+      });
+      const evaluated = readFileSync(log, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as string);
+      const routerModules = evaluated
+        .filter((url) => url.includes("/packages/router/dist/"))
+        .map((url) => url.slice(url.indexOf("/packages/router/dist/") + "/packages/router/dist/".length))
+        .sort();
+
+      expect(routerModules).toEqual([
+        "cache.js",
+        "cookies.js",
+        "deferred.js",
+        "navigation.js",
+        "request.js",
+      ]);
+      expect(evaluated.join("\n")).not.toMatch(
+        /mreact-compiler|\/vite\/|\/build\.js|\/dev-server\.js|\/module-runner\.js|\/bundle-pipeline\.js|\/render\.js|\/serve\.js|\/client\.js/,
+      );
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 
   test("exports every public type referenced by request helper signatures", async () => {
