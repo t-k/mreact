@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.0.190 - 2026-07-10
+
+### Added
+
+- Added lifecycle-safe `refetchInterval` and `refetchIntervalInBackground` polling options to `@reckona/mreact-query`, with non-overlapping fetches, hidden-document pausing, and automatic observer cleanup.
+- Added explicit tagged persistence records, hydration conflict policies, and `ready`, `status`, and `error` lifecycle signals to `@reckona/mreact-store`.
+- Added the lightweight `@reckona/mreact-router/request` entrypoint for request and control-plane helpers without router build or Vite dependencies.
+
+### Changed
+
+- Expanded published TypeScript contracts across React compatibility, compiler, forms, query, reactive DOM, router, server, and Store entrypoints so public declaration graphs no longer depend on unexported named types.
+- Changed preloaded AWS Lambda handlers to validate events before starting runtime work. Deployments that intentionally warm route runtime during initialization can now call `warmAwsLambdaRuntime()` explicitly.
+
+### Fixed
+
+- Fixed browser and server `Link` prop handling so supported DOM properties are preserved while string event attributes and other executable attribute names are rejected consistently.
+- Fixed query invalidation ordering, polling disposal, request-scope cleanup, and page-state behavior so invalidations received during an active fetch schedule the required follow-up work without leaking lifecycle state.
+- Fixed Store persistence hydration races, ambiguous legacy envelopes, migration and save failure reporting, notification ordering, and local-update conflict handling.
+- Fixed browser auth claim refresh so changing accounts cannot retain claims from the previous session script.
+- Fixed React-compatible render normalizer retention in optimized and packed consumer bundles while keeping native-only bundles isolated from compatibility code.
+- Fixed App Router clean-install CLI linking, packed public type consumption, request-entrypoint dependency isolation, Lambda event rejection, and page route cache context isolation.
+- Updated Vite, Conform, and esbuild requirements to patched versions that remove the addressed production dependency advisories.
+
 ## 0.0.189 - 2026-07-09
 
 ### Fixed

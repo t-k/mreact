@@ -48,6 +48,19 @@ export async function GET(
 
 Route params are decoded before they reach the handler. Catch-all segments use the same route param shape described in [Routing](/guides/routing/).
 
+## Keep request-only integrations lean
+
+Custom server adapters and request-control modules can import response, cookie, cache, deferred-data, and form helpers from `@reckona/mreact-router/request`. This entrypoint excludes router build and Vite modules, which keeps request-only startup paths focused on the code needed to process traffic. Application route files can continue importing from `@reckona/mreact-router`; use the request subpath when a low-level integration intentionally needs the smaller dependency boundary.
+
+```ts
+import {
+  json,
+  parseForm,
+  redirect303,
+  type RedirectOptions,
+} from "@reckona/mreact-router/request";
+```
+
 ## Return JSON
 
 Use `Response.json()` for ordinary JSON responses. Return expected failures with explicit status codes and stable response shapes.
