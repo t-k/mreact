@@ -70,7 +70,7 @@ jobs:
             run: node scripts/generate-api-reports.mjs --check
 
           - name: API reference
-            run: pnpm exec typedoc --options typedoc.json --emit none
+            run: pnpm docs:api:check
 
           - name: Test router build
             run: pnpm exec vitest run packages/router/test/build.test.ts --passWithNoTests --maxWorkers=1 --maxConcurrency=1

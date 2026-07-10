@@ -30,7 +30,7 @@ describe("GitHub workflows", () => {
       "          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check",
     );
     expect(workflow).toContain(
-      "          - name: API reference\n            run: pnpm exec typedoc --options typedoc.json --emit none",
+      "          - name: API reference\n            run: pnpm docs:api:check",
     );
     expect(workflow).toContain("          - name: Test router build");
   });
@@ -54,7 +54,7 @@ describe("GitHub workflows", () => {
       "          - name: API reports\n            run: node scripts/generate-api-reports.mjs --check",
     );
     expect(workflow).toContain(
-      "          - name: API reference\n            run: pnpm exec typedoc --options typedoc.json --emit none",
+      "          - name: API reference\n            run: pnpm docs:api:check",
     );
     expect(workflow).toContain("- parallel:\n          - name: Download Linux native artifact");
     expect(workflow).toContain("          - name: Download macOS native artifact");
