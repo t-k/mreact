@@ -1,0 +1,1 @@
+{"framework":"marko-v6.2.5-keyed","keyed":true,"benchmark":"21_ready-memory","type":"memory","values":{"DEFAULT":{"min":1.069870948791504,"max":1.069870948791504,"median":1.069870948791504,"mean":1.069870948791504,"stddev":null,"values":[1.069870948791504]}}}
