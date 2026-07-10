@@ -168,4 +168,27 @@ describe("router Link", () => {
       vi.unstubAllEnvs();
     }
   });
+
+  test.each(["x onmouseover", "x=onmouseover", "x`onmouseover", "x\u0000onmouseover", 'x"onmouseover'])(
+    "drops malformed attribute name %j before SSR or HtmlSink serialization",
+    (name) => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const serverHtml = Link({ href: "/safe", [name]: "alert(1)" });
+        let sinkHtml = "";
+        Link(
+          { append(value) { sinkHtml += value; } },
+          { href: "/safe", [name]: "alert(1)" } as unknown as LinkSinkProps,
+        );
+
+        expect(serverHtml).toBe('<a href="/safe"></a>');
+        expect(sinkHtml).toBe('<a href="/safe"></a>');
+        expect(serverHtml).not.toContain("onmouseover=");
+        expect(sinkHtml).not.toContain("onmouseover=");
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(name));
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
 });

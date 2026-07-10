@@ -5,7 +5,12 @@ import {
 } from "@reckona/mreact-reactive-core/runtime-state";
 import { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions } from "./cross-tab.js";
 import { hydrateQueryDataSymbol, type HydratableQueryClient } from "./hydration-internal.js";
-import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./query-lifecycle.js";
+import {
+  createQueryLifecycle,
+  hashQueryKey,
+  queryInvalidationRevision,
+  resultFromQueryEntry,
+} from "./query-lifecycle.js";
 
 export { hashQueryKey } from "./query-lifecycle.js";
 export { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions };
@@ -342,13 +347,20 @@ export function createQuery<TData>(
     }
     return result.get();
   };
+  const autoFetch = options.autoFetch ?? typeof document !== "undefined";
+  let observedInvalidationRevision = queryInvalidationRevision(
+    client.getQueryEntry(options.queryKey),
+  );
   const unsubscribe = client.subscribe<TData>(
     options.queryKey,
     (entry) => {
+      const invalidationRevision = queryInvalidationRevision(entry);
+      const invalidated = invalidationRevision !== observedInvalidationRevision;
+      observedInvalidationRevision = invalidationRevision;
       if (entry.queryHash === queryHash) {
         updateResult(resultFromQueryEntry(entry));
         if (
-          entry.stale &&
+          invalidated &&
           !entry.isFetching &&
           autoFetch &&
           options.refetchOnInvalidate !== false
@@ -362,8 +374,6 @@ export function createQuery<TData>(
     },
     { exact: true, gcTime: options.gcTime },
   );
-  const autoFetch = options.autoFetch ?? typeof document !== "undefined";
-
   if (autoFetch) {
     void client.fetchQuery(options).catch(() => {
       // The observer receives the error state through the query cache. Avoid an
@@ -438,13 +448,17 @@ export function createInfiniteQuery<TPage, TPageParam>(
     return next;
   };
   const autoFetch = options.autoFetch ?? typeof document !== "undefined";
+  let observedInvalidationRevision = queryInvalidationRevision(readEntry());
   let refetchInvalidated: () => void = () => {};
   const unsubscribe = client.subscribe<InfiniteQueryData<TPage, TPageParam>>(
     options.queryKey,
     (entry) => {
+      const invalidationRevision = queryInvalidationRevision(entry);
+      const invalidated = invalidationRevision !== observedInvalidationRevision;
+      observedInvalidationRevision = invalidationRevision;
       updateResult();
       if (
-        entry.stale &&
+        invalidated &&
         !entry.isFetching &&
         autoFetch &&
         options.refetchOnInvalidate !== false
@@ -486,7 +500,6 @@ export function createInfiniteQuery<TPage, TPageParam>(
       updateResult();
     });
   };
-
   if (autoFetch && client.getQueryData(options.queryKey) === undefined) {
     void client.fetchQuery(firstPageOptions()).catch(() => {
       updateResult();

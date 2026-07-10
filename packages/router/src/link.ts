@@ -13,6 +13,7 @@ export type {
 } from "./typed-routes.js";
 
 const TRUSTED_LINK_HTML = Symbol.for("modular.react.router.trusted_link_html");
+const VALID_LINK_ATTRIBUTE_NAME = /^[A-Za-z_][\w.\-:]*$/;
 
 /**
  * Selects when the app router should prefetch a linked route.
@@ -176,7 +177,8 @@ function reportUnsupportedSinkProps(props: LinkProps<string> | LinkSinkProps): v
         typeof value === "function" ||
         typeof value === "symbol" ||
         (name === "children" && !isSerializableSinkChild(value)) ||
-        (name !== "children" && name !== "style" && typeof value === "object" && value !== null),
+        (name !== "children" && name !== "style" && typeof value === "object" && value !== null) ||
+        (name !== "children" && !isSafeLinkAttributeName(attributeName(name))),
     )
     .map(([name]) => name);
 
@@ -258,6 +260,9 @@ function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement 
     }
 
     const attrName = attributeName(name);
+    if (!isSafeLinkAttributeName(attrName)) {
+      continue;
+    }
     const safeValue = safeUrlAttributeValue(attrName, String(value));
 
     if (safeValue === undefined) {
@@ -307,6 +312,9 @@ function renderAnchorAttributes(props: Record<string, unknown>): string {
     }
 
     const attrName = attributeName(name);
+    if (!isSafeLinkAttributeName(attrName)) {
+      continue;
+    }
     if (name === "style" && typeof value === "object" && value !== null) {
       const style = Object.entries(value as Record<string, unknown>)
         .flatMap(([property, styleValue]) => {
@@ -349,6 +357,10 @@ function shouldSetAttribute(name: string, value: unknown): boolean {
 
 function attributeName(name: string): string {
   return name === "className" ? "class" : name;
+}
+
+function isSafeLinkAttributeName(name: string): boolean {
+  return VALID_LINK_ATTRIBUTE_NAME.test(name);
 }
 
 function linkStylePropertyName(property: string): string | undefined {

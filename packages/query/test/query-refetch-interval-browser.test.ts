@@ -303,6 +303,62 @@ describe("query refetch interval", () => {
     observer.dispose();
   });
 
+  test("runs at most one ordinary refetch for each explicit invalidation after errors", async () => {
+    let calls = 0;
+    const client = createQueryClient();
+    client.setQueryData(["failed-invalidation"], 0);
+    const observer = createQuery(client, {
+      autoFetch: true,
+      queryFn: async () => {
+        calls += 1;
+        if (calls < 3) throw new Error("query failed");
+        return calls;
+      },
+      queryKey: ["failed-invalidation"],
+      retry: 0,
+      staleTime: 60_000,
+    });
+
+    client.invalidateQueries({ queryKey: ["failed-invalidation"] });
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    expect(calls).toBe(1);
+    expect(observer.result.get().status).toBe("error");
+
+    client.invalidateQueries({ queryKey: ["failed-invalidation"] });
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    expect(calls).toBe(2);
+    observer.dispose();
+  });
+
+  test("runs at most one infinite refetch for each explicit invalidation after errors", async () => {
+    let calls = 0;
+    const client = createQueryClient();
+    client.setQueryData(["failed-infinite-invalidation"], { pageParams: [0], pages: [0] });
+    const observer = createInfiniteQuery(client, {
+      autoFetch: true,
+      getNextPageParam: () => undefined,
+      initialPageParam: 0,
+      queryFn: async () => {
+        calls += 1;
+        if (calls < 3) throw new Error("infinite query failed");
+        return calls;
+      },
+      queryKey: ["failed-infinite-invalidation"],
+      retry: 0,
+      staleTime: 60_000,
+    });
+
+    client.invalidateQueries({ queryKey: ["failed-infinite-invalidation"] });
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    expect(calls).toBe(1);
+    expect(observer.result.get().status).toBe("error");
+
+    client.invalidateQueries({ queryKey: ["failed-infinite-invalidation"] });
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    expect(calls).toBe(2);
+    observer.dispose();
+  });
+
   test("stops interval polling when its cleanup scope is disposed", async () => {
     vi.useFakeTimers();
     let calls = 0;

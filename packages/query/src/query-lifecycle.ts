@@ -15,11 +15,14 @@ import type {
   QuerySubscriptionOptions,
 } from "./index.js";
 
+const queryInvalidationRevisionKey = Symbol("mreact.query.invalidationRevision");
+
 interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
   abortController?: AbortController | undefined;
   canceled?: boolean | undefined;
   promise?: Promise<TData> | undefined;
   queryKeySegments: readonly string[];
+  invalidationRevision: number;
   version: number;
 }
 
@@ -57,6 +60,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       error: undefined,
       errorReason: undefined,
       isFetching: false,
+      invalidationRevision: 0,
       queryHash,
       queryKey,
       queryKeySegments: hashQueryKeySegments(queryKey),
@@ -321,6 +325,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
           queryKeyStartsWith(entry.queryKeySegments, prefixSegments)
         ) {
           entry.stale = true;
+          entry.invalidationRevision += 1;
           scheduleInvalidationNotify(entry);
         }
       }
@@ -516,8 +521,14 @@ export function resultFromQueryEntry<TData>(
   };
 }
 
+export function queryInvalidationRevision(entry: QueryEntry | undefined): number {
+  return (
+    entry as (QueryEntry & { [queryInvalidationRevisionKey]?: number | undefined }) | undefined
+  )?.[queryInvalidationRevisionKey] ?? 0;
+}
+
 function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TData> {
-  return {
+  const publicEntry: QueryEntry<TData> = {
     data: entry.data,
     error: entry.error,
     errorReason: entry.errorReason,
@@ -528,6 +539,12 @@ function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TDat
     status: entry.status,
     updatedAt: entry.updatedAt,
   };
+  Object.defineProperty(publicEntry, queryInvalidationRevisionKey, {
+    configurable: false,
+    enumerable: false,
+    value: entry.invalidationRevision,
+  });
+  return publicEntry;
 }
 
 function isFresh(entry: InternalQueryEntry, staleTime: number | undefined): boolean {
