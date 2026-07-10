@@ -43,6 +43,6 @@
     "@reckona/mreact-compiler": "workspace:*"
   },
   "peerDependencies": {
-    "vite": ">=8.0.16 <9"
+    "vite": ">=8.1.4 <9"
   }
 }

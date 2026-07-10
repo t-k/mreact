@@ -118,10 +118,11 @@
     "@reckona/mreact-reactive-dom": "workspace:*",
     "@reckona/mreact-server": "workspace:*",
     "@reckona/mreact-shared": "workspace:*",
-    "@typescript/typescript6": "^6.0.2"
+    "@typescript/typescript6": "^6.0.2",
+    "esbuild": ">=0.28.1 <0.29"
   },
   "peerDependencies": {
-    "vite": ">=8.0.16 <9"
+    "vite": ">=8.1.4 <9"
   },
   "optionalDependencies": {
     "@reckona/mreact-router-native": "workspace:*"
