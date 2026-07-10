@@ -1,6 +1,12 @@
-import { describe, expect, test } from "vitest";
+// @vitest-environment happy-dom
+
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { createInfiniteQuery, createQuery, createQueryClient } from "../src/index.js";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("query cleanup scope ownership", () => {
   test("disposes a query observer when its cleanup scope ends", () => {
@@ -57,5 +63,69 @@ describe("query cleanup scope ownership", () => {
     client.setQueryData(["manual-dispose"], 2);
 
     expect(observer.result.get().data).toBeUndefined();
+  });
+
+  test("cancels browser revalidation queued before manual disposal", async () => {
+    let calls = 0;
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: async () => ++calls,
+      queryKey: ["queued-focus-dispose"],
+      refetchOnWindowFocus: true,
+    });
+
+    window.dispatchEvent(new Event("focus"));
+    observer.dispose();
+    await Promise.resolve();
+
+    expect(calls).toBe(0);
+  });
+
+  test.each(["manual-first", "scope-first"] as const)(
+    "starts gcTime once when disposal order is %s",
+    async (order) => {
+      vi.useFakeTimers();
+      const client = createQueryClient();
+      const disposers: Array<() => void> = [];
+      const observer = withCleanupScope(
+        (dispose) => disposers.push(dispose),
+        () =>
+          createQuery(client, {
+            autoFetch: false,
+            gcTime: 100,
+            queryFn: async () => 1,
+            queryKey: ["gc-disposal-order", order],
+          }),
+      );
+      client.setQueryData(["gc-disposal-order", order], 1);
+
+      if (order === "manual-first") {
+        observer.dispose();
+        disposers[0]?.();
+      } else {
+        disposers[0]?.();
+        observer.dispose();
+      }
+
+      await vi.advanceTimersByTimeAsync(99);
+      expect(client.getQueryData(["gc-disposal-order", order])).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(client.getQueryData(["gc-disposal-order", order])).toBeUndefined();
+    },
+  );
+
+  test("keeps an outside-scope observer live until manual disposal", () => {
+    const client = createQueryClient();
+    const observer = createQuery(client, {
+      autoFetch: false,
+      queryFn: async () => 1,
+      queryKey: ["outside-scope-live"],
+    });
+
+    client.setQueryData(["outside-scope-live"], 1);
+    expect(observer.result.get().data).toBe(1);
+    observer.dispose();
+    client.setQueryData(["outside-scope-live"], 2);
+    expect(observer.result.get().data).toBe(1);
   });
 });

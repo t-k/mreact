@@ -30,6 +30,12 @@ export interface StorePersistedState<T extends object> {
   version: number;
 }
 
+/** Represents the deprecated untagged persistence envelope accepted only with explicit opt-in. */
+export interface LegacyStorePersistedState<T extends object> {
+  state: T;
+  version: number;
+}
+
 export type StorePersistenceStatus = "hydrating" | "ready" | "error";
 
 /** Identifies the persistence operation that failed. */
@@ -52,11 +58,17 @@ export function persistedStoreState<T extends object>(state: T, version: number)
   return { __mreactStorePersistedState: true, state, version };
 }
 
-export interface StorePersistOptions<T extends object> {
-  /** Opts into reading the deprecated untagged `{ state, version }` record shape. */
-  acceptLegacyPersistedState?: boolean | undefined;
+interface StorePersistBaseOptions<T extends object> {
   /** Chooses how a loaded value interacts with local commits made during hydration. */
   hydrationConflict?: StoreHydrationConflict<T> | undefined;
+  migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
+  save?: ((state: T) => void | Promise<void>) | undefined;
+  version?: number | undefined;
+}
+
+/** Configures raw or tagged persistence records without legacy envelope inference. */
+export interface StoreCurrentPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+  acceptLegacyPersistedState?: false | undefined;
   load?:
     | (() =>
         | StorePersistedState<T>
@@ -64,10 +76,25 @@ export interface StorePersistOptions<T extends object> {
         | undefined
         | Promise<StorePersistedState<T> | T | undefined>)
     | undefined;
-  migrate?: ((state: T, version: number | undefined) => T | Promise<T>) | undefined;
-  save?: ((state: T) => void | Promise<void>) | undefined;
-  version?: number | undefined;
 }
+
+/** Configures persistence with explicit support for deprecated untagged envelopes. */
+export interface StoreLegacyPersistOptions<T extends object> extends StorePersistBaseOptions<T> {
+  acceptLegacyPersistedState: true;
+  load?:
+    | (() =>
+        | LegacyStorePersistedState<T>
+        | StorePersistedState<T>
+        | T
+        | undefined
+        | Promise<LegacyStorePersistedState<T> | StorePersistedState<T> | T | undefined>)
+    | undefined;
+}
+
+/** Configures store persistence with an explicit current or legacy record contract. */
+export type StorePersistOptions<T extends object> =
+  | StoreCurrentPersistOptions<T>
+  | StoreLegacyPersistOptions<T>;
 
 /** Controls how hydration resolves a loaded value after local state has changed. */
 export type StoreHydrationConflict<T extends object> =
@@ -249,7 +276,9 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
           commit(hydrated, current, "replace", { persist: false });
         }
       }
-      persistenceStatus.set("ready");
+      if (persistenceError.get() === undefined) {
+        persistenceStatus.set("ready");
+      }
     } catch (error) {
       recordPersistenceFailure("load", error);
     }
@@ -265,17 +294,9 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
       return;
     }
     persistSaveQueued = true;
-    const first = next;
     persistSaveQueue = persistSaveQueue
       .catch(() => undefined)
-      .then(async () => {
-        await persist.save?.(first);
-        await flushPersistSaveQueue();
-      })
-      .catch(async (error) => {
-        recordPersistenceFailure("save", error);
-        await flushPersistSaveQueue();
-      });
+      .then(() => flushPersistSaveQueue(next));
   }
 
   function recordPersistenceFailure(phase: StorePersistenceFailurePhase, error: unknown): void {
@@ -283,19 +304,21 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
     persistenceStatus.set("error");
   }
 
-  async function flushPersistSaveQueue(): Promise<void> {
-    try {
-      while (persistSavePendingState !== undefined) {
-        const next = persistSavePendingState;
-        persistSavePendingState = undefined;
+  async function flushPersistSaveQueue(first: T): Promise<void> {
+    let next: T | undefined = first;
+
+    while (next !== undefined) {
+      try {
         await persist.save?.(next);
+      } catch (error) {
+        recordPersistenceFailure("save", error);
       }
-    } finally {
-      persistSaveQueued = false;
-      if (persistSavePendingState !== undefined) {
-        queuePersistSave(persistSavePendingState);
-      }
+
+      next = persistSavePendingState;
+      persistSavePendingState = undefined;
     }
+
+    persistSaveQueued = false;
   }
 
   function subscribeListener(listener: StoreListener<T>): () => void {
@@ -520,7 +543,7 @@ function normalizePersistOptions<T extends object>(
 }
 
 function normalizePersistedState<T extends object>(
-  value: StorePersistedState<T> | T,
+  value: LegacyStorePersistedState<T> | StorePersistedState<T> | T,
   acceptLegacyPersistedState: boolean,
 ): NormalizedPersistedState<T> {
   if (
@@ -530,24 +553,26 @@ function normalizePersistedState<T extends object>(
     return value as NormalizedPersistedState<T>;
   }
 
-  return { state: value };
+  return { state: value as T };
 }
 
 function isPersistedStateDescriptor<T extends object>(
-  value: StorePersistedState<T> | T,
+  value: LegacyStorePersistedState<T> | StorePersistedState<T> | T,
 ): value is StorePersistedState<T> {
   return (
     typeof value === "object" &&
     value !== null &&
     (value as { __mreactStorePersistedState?: unknown }).__mreactStorePersistedState === true &&
-    "version" in value &&
-    "state" in value &&
-    isObject((value as { state: unknown }).state)
+    typeof (value as { version?: unknown }).version === "number" &&
+    isObject((value as { state: unknown }).state) &&
+    Object.keys(value).every(
+      (key) => key === "__mreactStorePersistedState" || key === "state" || key === "version",
+    )
   );
 }
 
 function isLegacyPersistedStateDescriptor<T extends object>(
-  value: StorePersistedState<T> | T,
+  value: LegacyStorePersistedState<T> | StorePersistedState<T> | T,
 ): boolean {
   if (
     typeof value !== "object" ||

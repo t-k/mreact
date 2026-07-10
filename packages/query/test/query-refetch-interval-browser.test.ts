@@ -43,6 +43,27 @@ describe("query refetch interval", () => {
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   });
 
+  test("resumes from hidden state on the next cadence without replaying missed ticks", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: async () => ++calls,
+      queryKey: ["hidden-resume"],
+      refetchInterval: 100,
+    });
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls).toBe(0);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await vi.advanceTimersByTimeAsync(99);
+    expect(calls).toBe(0);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toBe(1);
+    observer.dispose();
+  });
+
   test("can continue interval polling while the document is hidden", async () => {
     vi.useFakeTimers();
     let calls = 0;
@@ -78,6 +99,30 @@ describe("query refetch interval", () => {
     observer.dispose();
   });
 
+  test("uses each result-dependent cadence without retaining the previous delay", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: async () => ++calls,
+      queryKey: ["variable-cadence"],
+      refetchInterval: (result) => {
+        if (result.status === "pending") return 50;
+        return result.data === 1 ? 200 : false;
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(199);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(calls).toBe(2);
+    observer.dispose();
+  });
+
   test("does not overlap an in-flight interval request", async () => {
     vi.useFakeTimers();
     let calls = 0;
@@ -101,6 +146,65 @@ describe("query refetch interval", () => {
     release(1);
     await vi.advanceTimersByTimeAsync(100);
     expect(calls).toBe(2);
+    observer.dispose();
+  });
+
+  test("does not evaluate result-dependent cadence after disposal", async () => {
+    vi.useFakeTimers();
+    let release!: (value: number) => void;
+    const pending = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const cadence = vi.fn(() => 100);
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: () => pending,
+      queryKey: ["disposed-cadence"],
+      refetchInterval: cadence,
+    });
+
+    expect(cadence).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(100);
+    observer.dispose();
+    release(1);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(cadence).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("deduplicates interval, focus, reconnect, and invalidation triggers", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    let release!: (value: number) => void;
+    const pending = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const client = createQueryClient();
+    const observer = createQuery(client, {
+      autoFetch: false,
+      queryFn: () => {
+        calls += 1;
+        return pending;
+      },
+      queryKey: ["trigger-race"],
+      refetchInterval: 100,
+      refetchOnReconnect: true,
+      refetchOnWindowFocus: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    client.invalidateQueries({ queryKey: ["trigger-race"] });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+
+    release(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toBe(1);
     observer.dispose();
   });
 

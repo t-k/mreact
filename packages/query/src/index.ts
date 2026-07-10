@@ -773,15 +773,19 @@ function registerBrowserRevalidation(
     return () => {};
   }
 
+  let disposed = false;
   let scheduled = false;
   const requestRefetch = () => {
-    if (scheduled) {
+    if (disposed || scheduled) {
       return;
     }
 
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
+      if (disposed) {
+        return;
+      }
       void refetch().catch(() => {
         // Query state receives the error through the cache; event handlers must
         // remain fire-and-forget to avoid noisy browser rejections.
@@ -811,6 +815,7 @@ function registerBrowserRevalidation(
   }
 
   return () => {
+    disposed = true;
     for (const cleanup of cleanups) {
       cleanup();
     }
@@ -830,8 +835,11 @@ function registerRefetchInterval<TResult>(
   let disposed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const schedule = () => {
+    if (disposed) {
+      return;
+    }
     const delay = typeof interval === "function" ? interval(result()) : interval;
-    if (disposed || delay === false || !Number.isFinite(delay) || delay < 0) {
+    if (delay === false || !Number.isFinite(delay) || delay < 0) {
       return;
     }
     timer = setTimeout(() => {

@@ -438,6 +438,79 @@ describe("createStore", () => {
     expect(store.persistence.error.get()).toMatchObject({ phase: "save" });
   });
 
+  it("does not overwrite an observed save failure when hydration later completes", async () => {
+    let resolveLoad: ((state: { count: number }) => void) | undefined;
+    const failure = new Error("save failed during hydration");
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load: () => new Promise<{ count: number }>((resolve) => {
+            resolveLoad = resolve;
+          }),
+          save: async () => Promise.reject(failure),
+        },
+      },
+    );
+
+    store.set({ count: 1 });
+    await flushMicrotasks();
+    expect(store.persistence.status.get()).toBe("error");
+    expect(store.persistence.error.get()).toEqual({ error: failure, phase: "save" });
+
+    resolveLoad?.({ count: 2 });
+    await store.persistence.ready;
+
+    expect(store.persistence.status.get()).toBe("error");
+    expect(store.persistence.error.get()).toEqual({ error: failure, phase: "save" });
+  });
+
+  it("continues after a queued save rejection without persisting the next state twice", async () => {
+    let releaseFirst: (() => void) | undefined;
+    let rejectThird: ((error: Error) => void) | undefined;
+    const attempts: number[] = [];
+    const saved: number[] = [];
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          async save(state) {
+            attempts.push(state.count);
+            if (state.count === 1) {
+              await new Promise<void>((resolve) => {
+                releaseFirst = resolve;
+              });
+            }
+            if (state.count === 3) {
+              await new Promise<void>((_resolve, reject) => {
+                rejectThird = reject;
+              });
+            }
+            saved.push(state.count);
+          },
+        },
+      },
+    );
+
+    store.set({ count: 1 });
+    store.set({ count: 2 });
+    store.set({ count: 3 });
+    await flushMicrotasks();
+    releaseFirst?.();
+    await flushMicrotasks();
+    expect(attempts).toEqual([1, 3]);
+
+    store.set({ count: 4 });
+    rejectThird?.(new Error("queued save failed"));
+    await flushMicrotasks();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await flushMicrotasks();
+
+    expect(attempts).toEqual([1, 3, 4]);
+    expect(saved).toEqual([1, 4]);
+    expect(store.persistence.error.get()).toMatchObject({ phase: "save" });
+  });
+
   it("migrates an explicitly accepted legacy persisted record", async () => {
     const store = createStore(
       { count: 0 },
@@ -534,6 +607,36 @@ describe("createStore", () => {
     expect(primitive.get()).toEqual({ value: "loaded" });
     expect(untagged.get()).toEqual({ state: { value: "loaded" }, version: 2 });
     expect(tagged.get()).toEqual({ value: "tagged" });
+  });
+
+  it("preserves tagged-looking raw domain state when it has additional fields", async () => {
+    const store = createStore(
+      {
+        __mreactStorePersistedState: true as const,
+        state: { status: "new" },
+        version: 0,
+        workspace: "initial",
+      },
+      {
+        persist: {
+          load: () => ({
+            __mreactStorePersistedState: true as const,
+            state: { status: "open" },
+            version: 1,
+            workspace: "alpha",
+          }),
+        },
+      },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.get()).toEqual({
+      __mreactStorePersistedState: true,
+      state: { status: "open" },
+      version: 1,
+      workspace: "alpha",
+    });
   });
 
   it("reports migration failures separately from load failures", async () => {
