@@ -22,9 +22,10 @@
     "directory": "packages/router"
   },
   "bin": {
-    "mreact-router": "./dist/cli.js"
+    "mreact-router": "./bin/mreact-router.js"
   },
   "files": [
+    "bin/**/*.js",
     "dist/**/*.js",
     "dist/**/*.js.map",
     "dist/**/*.d.ts",
