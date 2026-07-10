@@ -150,7 +150,13 @@ export function Link(
 }
 
 function reportUnsupportedSinkProps(props: LinkProps<string> | LinkSinkProps): void {
-  if (process.env.NODE_ENV === "production") {
+  const nodeEnv = (
+    globalThis as typeof globalThis & {
+      process?: { env?: { NODE_ENV?: string | undefined } | undefined } | undefined;
+    }
+  ).process?.env?.NODE_ENV;
+
+  if (nodeEnv === "production") {
     return;
   }
 
