@@ -30,6 +30,14 @@ export interface StorePersistedState<T extends object> {
   version: number;
 }
 
+export type StorePersistenceStatus = "hydrating" | "ready" | "error";
+
+export interface StorePersistence<T extends object> {
+  readonly error: ReadonlyCell<unknown | undefined>;
+  readonly ready: Promise<void>;
+  readonly status: ReadonlyCell<StorePersistenceStatus>;
+}
+
 /** Creates an unambiguous versioned persistence record for Store.load(). */
 export function persistedStoreState<T extends object>(state: T, version: number): StorePersistedState<T> {
   return { __mreactStorePersistedState: true, state, version };
@@ -76,6 +84,7 @@ export interface SelectedCell<T> extends ReadonlyCell<T> {
 
 /** Provides reactive state access, updates, transactions, selectors, and subscriptions. */
 export interface Store<T extends object> {
+  readonly persistence: StorePersistence<T>;
   readonly state: ReadonlyCell<T>;
   get(): T;
   set(next: StoreSetter<T>): void;
@@ -101,6 +110,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let notificationDepth = 0;
   let removedListenerEntryCount = 0;
   let transactionDepth = 0;
+  let stateRevision = 0;
   let transactionPrevious: T | undefined;
   let transactionChanged = false;
   let transactionType: StoreInstrumentationEvent<T>["type"] | undefined;
@@ -108,8 +118,10 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   let persistSaveQueue: Promise<void> = Promise.resolve();
   let persistSaveQueued = false;
   let persistSavePendingState: T | undefined;
+  const persistenceStatus = cell<StorePersistenceStatus>("hydrating");
+  const persistenceError = cell<unknown | undefined>(undefined);
 
-  void hydratePersistedState();
+  const persistenceReady = hydratePersistedState();
 
   function readUntracked(): T {
     return untrack(() => state.get());
@@ -130,6 +142,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
     }
 
     state.set(next);
+    stateRevision += 1;
 
     if (transactionDepth > 0) {
       transactionChanged = true;
@@ -185,19 +198,26 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   }
 
   async function hydratePersistedState(): Promise<void> {
-    const loaded = await persist.load?.();
-    if (loaded === undefined) {
-      return;
+    try {
+      const hydrationRevision = stateRevision;
+      const loaded = await persist.load?.();
+      if (loaded !== undefined) {
+        const persisted = normalizePersistedState(loaded);
+        const migrated =
+          persist.migrate !== undefined &&
+          persist.version !== undefined &&
+          persisted.version !== persist.version
+            ? await persist.migrate(persisted.state, persisted.version)
+            : persisted.state;
+        if (stateRevision === hydrationRevision) {
+          commit(migrated, readUntracked(), "replace", { persist: false });
+        }
+      }
+      persistenceStatus.set("ready");
+    } catch (error) {
+      persistenceError.set(error);
+      persistenceStatus.set("error");
     }
-
-    const persisted = normalizePersistedState(loaded);
-    const migrated =
-      persist.migrate !== undefined &&
-      persist.version !== undefined &&
-      persisted.version !== persist.version
-        ? await persist.migrate(persisted.state, persisted.version)
-        : persisted.state;
-    commit(migrated, readUntracked(), "replace", { persist: false });
   }
 
   function queuePersistSave(next: T): void {
@@ -327,6 +347,7 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
   }
 
   return {
+    persistence: { error: persistenceError, ready: persistenceReady, status: persistenceStatus },
     state,
     get: () => state.get(),
     set,

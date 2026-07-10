@@ -322,6 +322,41 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ state: { status: "open" }, version: 1, workspace: "alpha" });
   });
 
+  it("does not overwrite a local commit made while persistence hydration is pending", async () => {
+    let resolveLoad: ((state: { count: number }) => void) | undefined;
+    const store = createStore(
+      { count: 0 },
+      {
+        persist: {
+          load() {
+            return new Promise<{ count: number }>((resolve) => {
+              resolveLoad = resolve;
+            });
+          },
+        },
+      },
+    );
+
+    store.set({ count: 1 });
+    resolveLoad?.({ count: 2 });
+    await flushMicrotasks();
+
+    expect(store.get()).toEqual({ count: 1 });
+  });
+
+  it("exposes persistence load failures without an unhandled rejection", async () => {
+    const failure = new Error("load failed");
+    const store = createStore(
+      { count: 0 },
+      { persist: { load: async () => Promise.reject(failure) } },
+    );
+
+    await store.persistence.ready;
+
+    expect(store.persistence.status.get()).toBe("error");
+    expect(store.persistence.error.get()).toBe(failure);
+  });
+
   it("runs persist migrations when the loaded version differs", async () => {
     const store = createStore(
       { count: 0 },
