@@ -39,6 +39,7 @@ hydrate(getQueryClient(), state);
 - `createQuery()` creates a reactive query observer. It auto-fetches empty queries in browsers by default and remains observe-only during server render. Hydrated entries render immediately, then revalidate on mount unless their server `updatedAt` timestamp is still covered by `staleTime`; pass `autoFetch: false` to require loader-prefetched data only.
 - `createQuery()` accepts `gcTime` to evict an idle cache entry after the last observer disposes. It is disabled by default; pass a non-negative millisecond value when short-lived browser views should release data after unmount.
 - `createQuery()` can opt into browser revalidation with `refetchOnWindowFocus`, `refetchOnReconnect`, and `refetchOnInvalidate`. These hooks are disabled by default and refetch through the same cache entry and abort signal path as manual `refetch()`.
+- `createQuery()` and `createInfiniteQuery()` accept `refetchInterval` in milliseconds for browser polling. Each interval is scheduled after the preceding fetch settles, pauses while the document is hidden, and is cleared automatically when the observer disposes.
 - `createInfiniteQuery()` stores cursor pages under one query key, exposes `pages`, `pageParams`, `hasNextPage`, and `fetchNextPage()`, and dedupes concurrent requests for the same next page.
 - `createMutation()` handles mutations and invalidation.
 - `queryClient.setQueryData(queryKey, updater)` can derive a new cached value from the previous value without fetching.

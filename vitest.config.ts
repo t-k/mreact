@@ -151,6 +151,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Running hundreds of integration-heavy test files at the host CPU count makes
+    // module imports contend for the event loop and causes nondeterministic timeouts.
+    maxWorkers: 4,
     include: [
       "packages/*/test/**/*.test.ts",
       "scripts/**/*.test.ts",

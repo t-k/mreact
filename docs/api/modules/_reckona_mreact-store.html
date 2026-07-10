@@ -13,7 +13,8 @@ actions, transactions, and persistence as small composable pieces.</p>
 <li><code>store.subscribe()</code> observes changes from outside the framework runtime.</li>
 <li><code>store.transaction()</code> batches multiple updates into one notification.</li>
 <li><code>createRequestStoreFactory()</code> creates request-isolated store instances.</li>
-<li>The <code>persist</code> option connects store state to a storage adapter. Pass a callback for write-only persistence, or use <code>{ load, save, version, migrate }</code> when the store should hydrate and migrate saved state.</li>
+<li>The <code>persist</code> option connects store state to a storage adapter. Pass a callback for write-only persistence, or use <code>{ load, save, version, migrate }</code> when the store should hydrate and migrate saved state. Persisted envelopes are version-tagged so ordinary application values shaped like <code>{ state, version }</code> remain ordinary state.</li>
+<li><code>store.persistence.ready</code> resolves after initial hydration, while <code>store.persistence.status</code> and <code>store.persistence.error</code> expose hydration or later save failures without producing unhandled promise rejections. A local update made during hydration always wins over an older loaded value.</li>
 </ul>
 <h2 id="positioning" class="tsd-anchor-link">Positioning<a href="#positioning" aria-label="Permalink" class="tsd-anchor-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="../assets/icons.svg#icon-anchor"></use></svg></a></h2>
 <p>Use <code>@reckona/mreact-query</code> for server state, <code>@reckona/mreact-forms</code> for form

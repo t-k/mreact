@@ -1,6 +1,8 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
-import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
-import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
+import {
+  getGlobalRuntimeState,
+  registerCleanup,
+} from "@reckona/mreact-reactive-core/runtime-state";
 import { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions } from "./cross-tab.js";
 import { hydrateQueryDataSymbol, type HydratableQueryClient } from "./hydration-internal.js";
 import { createQueryLifecycle, hashQueryKey, resultFromQueryEntry } from "./query-lifecycle.js";
