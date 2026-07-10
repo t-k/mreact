@@ -1,4 +1,5 @@
 import { cell, type ReadonlyCell } from "@reckona/mreact-reactive-core";
+import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { getGlobalRuntimeState } from "@reckona/mreact-reactive-core/runtime-state";
 import { syncQueryClientAcrossTabs, type CrossTabQuerySyncOptions } from "./cross-tab.js";
 import { hydrateQueryDataSymbol, type HydratableQueryClient } from "./hydration-internal.js";
@@ -368,12 +369,19 @@ export function createQuery<TData>(
   };
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
 
-  return {
-    result,
-    dispose() {
+  let disposed = false;
+  const dispose = () => {
+    if (!disposed) {
+      disposed = true;
       unsubscribe();
       unsubscribeBrowserRevalidation();
-    },
+    }
+  };
+  registerCleanup(dispose);
+
+  return {
+    result,
+    dispose,
     refetch,
   };
 }
@@ -453,12 +461,19 @@ export function createInfiniteQuery<TPage, TPageParam>(
 
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
 
-  return {
-    result,
-    dispose() {
+  let disposed = false;
+  const dispose = () => {
+    if (!disposed) {
+      disposed = true;
       unsubscribe();
       unsubscribeBrowserRevalidation();
-    },
+    }
+  };
+  registerCleanup(dispose);
+
+  return {
+    result,
+    dispose,
     async fetchNextPage() {
       if (nextPagePromise !== undefined) {
         return nextPagePromise;
