@@ -228,6 +228,7 @@ export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";
 export type {
+  AppRouterRenderPreload,
   AppRouterResponseHook,
   AppRouterResponseHookContext,
   RenderAppRequestOptions,
@@ -260,6 +261,7 @@ export type {
   BuiltAppRuntimePreloadStrategy,
   RenderBuiltAppRequestOptions,
   RequestHostPolicy,
+  ResponseSinkStrategy,
   StartServerOptions,
 } from "./serve.js";
 export { matchRoute, scanAppRoutes } from "./routes.js";

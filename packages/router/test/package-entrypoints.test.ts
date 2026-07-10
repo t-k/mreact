@@ -508,7 +508,12 @@ routeHandlerContext.params.id.toUpperCase();
     writeFileSync(
       filename,
       `
-import type { PreparedFormActionReference, RenderAppRequestOptions } from "@reckona/mreact-router";
+import type {
+  AppRouterRenderPreload,
+  PreparedFormActionReference,
+  RenderAppRequestOptions,
+  ResponseSinkStrategy,
+} from "@reckona/mreact-router";
 
 const reference: PreparedFormActionReference = {
   end: 36,
@@ -524,6 +529,10 @@ const reference: PreparedFormActionReference = {
 
 const options = {} as RenderAppRequestOptions;
 options.serverActionReferencesByFile = new Map([["page.tsx", [reference]]]);
+const preload = {} as AppRouterRenderPreload;
+const sink: ResponseSinkStrategy = "string";
+void preload;
+void sink;
 `,
     );
 
