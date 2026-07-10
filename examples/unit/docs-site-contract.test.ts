@@ -607,8 +607,8 @@ describe("docs-site example contract", () => {
     expect(query).toContain("includeQuery: (queryKey) => queryKey[0] === \"dashboard\"");
     expect(query).toContain("non-default name scoped to the current authenticated user");
     expect(query).toContain("keyless invalidations and removals stay local");
-    expect(query).toContain("window.setInterval");
-    expect(query).toContain("observer.refetch()");
+    expect(query).toContain("refetchInterval: 60_000");
+    expect(query).toContain("refetchIntervalInBackground: true");
     expect(query).toContain("SWR-style");
     expect(query).toContain("cancelQueries");
     expect(query).toContain("optimistic");
