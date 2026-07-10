@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { readFile, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
@@ -124,6 +124,55 @@ describe("react-compat production bundle", () => {
     }
   });
 
+  test("executes a minified compat bundle built from packed tarballs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-compat-packed-bundle-"));
+    const packDir = join(root, "tarballs");
+    const entry = join(root, "entry.ts");
+
+    try {
+      await writePackedConsumerPackage(root, packDir);
+      await writeFile(
+        entry,
+        `import { createElement, render } from "@reckona/mreact-compat";
+export function mount(container) {
+  render(createElement("main", null, "packed compat"), container);
+}`,
+      );
+      execFileSync(
+        "corepack",
+        ["pnpm", "--dir", root, "install", "--ignore-scripts=false"],
+        { encoding: "utf8" },
+      );
+      const result = await viteBuild({
+        build: {
+          lib: { entry, formats: ["es"] },
+          minify: "esbuild",
+          rollupOptions: { treeshake: true },
+          write: false,
+        },
+        configFile: false,
+        logLevel: "silent",
+        root,
+      });
+      const chunk = (Array.isArray(result) ? result : [result])
+        .flatMap((output) => output.output)
+        .find((output): output is Rollup.OutputChunk => output.type === "chunk");
+      if (chunk === undefined) {
+        throw new Error("expected Vite to emit a packed compat bundle chunk");
+      }
+      const bundled = await import(
+        `data:text/javascript;base64,${Buffer.from(chunk.code).toString("base64")}`,
+      );
+      const container = document.createElement("div");
+
+      (bundled as { mount(container: Element): void }).mount(container);
+
+      expect(container.innerHTML).toBe("<main>packed compat</main>");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }, 60_000);
+
   test("executes a bundled compat entrypoint with normalized DOM output", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-compat-normalizer-execution-"));
     const entry = join(root, "entry.ts");
@@ -173,3 +222,49 @@ export function mount(container: Element) {
     }
   });
 });
+
+async function writePackedConsumerPackage(root: string, packDir: string): Promise<void> {
+  await rm(packDir, { force: true, recursive: true });
+  await writeFile(
+    join(root, "package.json"),
+    JSON.stringify(
+      {
+        name: "mreact-compat-packed-bundle-probe",
+        private: true,
+        type: "module",
+        dependencies: {
+          "@reckona/mreact-compat": "file:./tarballs/reckona-mreact-compat.tgz",
+          "@reckona/mreact-reactive-core": "file:./tarballs/reckona-mreact-reactive-core.tgz",
+          "@reckona/mreact-reactive-dom": "file:./tarballs/reckona-mreact-reactive-dom.tgz",
+          "@reckona/mreact-shared": "file:./tarballs/reckona-mreact-shared.tgz",
+          vite: "8.0.16",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+
+  for (const packageName of ["reactive-core", "reactive-dom", "shared", "react-compat"]) {
+    const packageDir = join(process.cwd(), "packages", packageName);
+    execFileSync(
+      "corepack",
+      ["pnpm", "--dir", packageDir, "pack", "--pack-destination", packDir],
+      { encoding: "utf8" },
+    );
+  }
+
+  const tarballs = await readdir(packDir);
+  for (const [packageName, tarballPrefix] of [
+    ["react-compat", "mreact-compat"],
+    ["reactive-core", "mreact-reactive-core"],
+    ["reactive-dom", "mreact-reactive-dom"],
+    ["shared", "mreact-shared"],
+  ] as const) {
+    const tarball = tarballs.find((entry) => entry.includes(tarballPrefix));
+    if (tarball === undefined) {
+      throw new Error(`expected packed tarball for ${packageName}`);
+    }
+    await writeFile(join(packDir, `reckona-${tarballPrefix}.tgz`), await readFile(join(packDir, tarball)));
+  }
+}
