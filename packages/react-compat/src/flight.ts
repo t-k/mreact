@@ -1,4 +1,4 @@
-import type { ElementType, ReactCompatNode } from "./element.js";
+import type { ReactCompatNode } from "./element.js";
 import { hydrateRoot, type HydrateRootOptions, type Root } from "./render.js";
 import {
   getReactFlightProtocolCoverage,
