@@ -295,6 +295,14 @@ async function writePackedConsumerPackage(root: string, packDir: string): Promis
           "happy-dom": "20.10.2",
           vite: "8.0.16",
         },
+        pnpm: {
+          overrides: {
+            "@reckona/mreact-compat": "file:./tarballs/reckona-mreact-compat.tgz",
+            "@reckona/mreact-reactive-core": "file:./tarballs/reckona-mreact-reactive-core.tgz",
+            "@reckona/mreact-reactive-dom": "file:./tarballs/reckona-mreact-reactive-dom.tgz",
+            "@reckona/mreact-shared": "file:./tarballs/reckona-mreact-shared.tgz",
+          },
+        },
       },
       null,
       2,
