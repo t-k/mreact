@@ -91,13 +91,15 @@ const preferences = createStore(
 );
 ```
 
-Use the descriptor form when the store should hydrate from storage, migrate older versions, or serialize asynchronous writes in commit order. `load()` runs after store creation, and a hydrated state does not immediately save itself back to storage. When the saved version differs from the configured `version`, `migrate(state, savedVersion)` can normalize the loaded state before it replaces the current value.
+Use the descriptor form when the store should hydrate from storage, migrate older versions, or serialize asynchronous writes in commit order. `load()` runs after store creation, and a hydrated state does not immediately save itself back to storage. Persisted records must use `persistedStoreState(state, version)` so ordinary application state with `state` or `version` fields remains unambiguous. When the saved version differs from the configured `version`, `migrate(state, savedVersion)` can normalize the loaded state before it replaces the current value.
 
 ```ts
 interface Preferences {
   density: "compact" | "comfortable";
   theme: "dark" | "light" | "system";
 }
+
+import { createStore, persistedStoreState } from "@reckona/mreact-store";
 
 const preferences = createStore<Preferences>(
   { density: "comfortable", theme: "system" },
@@ -107,7 +109,7 @@ const preferences = createStore<Preferences>(
         const text = localStorage.getItem("preferences");
         return text === null
           ? undefined
-          : JSON.parse(text) as { state: Preferences; version: number };
+          : JSON.parse(text) as ReturnType<typeof persistedStoreState<Preferences>>;
       },
       migrate(state, savedVersion) {
         return savedVersion === 1
@@ -117,7 +119,7 @@ const preferences = createStore<Preferences>(
       save(state) {
         localStorage.setItem(
           "preferences",
-          JSON.stringify({ state, version: 2 }),
+          JSON.stringify(persistedStoreState(state, 2)),
         );
       },
       version: 2,
@@ -125,6 +127,8 @@ const preferences = createStore<Preferences>(
   },
 );
 ```
+
+Await `preferences.persistence.ready` before depending on hydrated values. `persistence.status` is `"hydrating"`, `"ready"`, or `"error"`; `persistence.error` identifies whether loading, migration, or saving failed. By default, a local commit made during hydration wins over the loaded value. Set `hydrationConflict` to `"replace"`, `"merge"`, or a resolver only when that policy matches the application’s data model. Older untagged `{ state, version }` records require the explicit `acceptLegacyPersistedState: true` migration opt-in.
 
 ## Outside the framework runtime
 

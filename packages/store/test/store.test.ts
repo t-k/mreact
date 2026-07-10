@@ -477,6 +477,65 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ count: 2 });
   });
 
+  it("merges or custom-resolves persisted state after a local hydration commit", async () => {
+    let resolveMergedLoad: ((state: { count: number; loadedOnly?: string; server: string }) => void) | undefined;
+    const merged = createStore<{ count: number; local: string; loadedOnly?: string; server: string }>(
+      { count: 0, local: "initial", server: "none" },
+      {
+        persist: {
+          hydrationConflict: "merge",
+          load: () => new Promise<{ count: number; loadedOnly?: string; server: string }>((resolve) => {
+            resolveMergedLoad = resolve;
+          }),
+        },
+      },
+    );
+    merged.set({ local: "new" });
+    resolveMergedLoad?.({ count: 2, loadedOnly: "loaded", server: "loaded" });
+    await merged.persistence.ready;
+
+    expect(merged.get()).toEqual({ count: 0, local: "new", loadedOnly: "loaded", server: "none" });
+
+    let resolveCustomLoad: ((state: { count: number }) => void) | undefined;
+    const custom = createStore(
+      { count: 0 },
+      {
+        persist: {
+          hydrationConflict: (loaded, current) => ({ count: loaded.count + current.count }),
+          load: () => new Promise<{ count: number }>((resolve) => {
+            resolveCustomLoad = resolve;
+          }),
+        },
+      },
+    );
+    custom.set({ count: 3 });
+    resolveCustomLoad?.({ count: 2 });
+    await custom.persistence.ready;
+
+    expect(custom.get()).toEqual({ count: 5 });
+  });
+
+  it("treats only tagged envelopes as persistence metadata without legacy opt-in", async () => {
+    const primitive = createStore(
+      { value: "initial" },
+      { persist: { load: () => ({ value: "loaded" }) } },
+    );
+    const untagged = createStore(
+      { state: { value: "initial" }, version: 0 },
+      { persist: { load: () => ({ state: { value: "loaded" }, version: 2 }) } },
+    );
+    const tagged = createStore(
+      { value: "initial" },
+      { persist: { load: () => persistedStoreState({ value: "tagged" }, 2) } },
+    );
+
+    await Promise.all([primitive.persistence.ready, untagged.persistence.ready, tagged.persistence.ready]);
+
+    expect(primitive.get()).toEqual({ value: "loaded" });
+    expect(untagged.get()).toEqual({ state: { value: "loaded" }, version: 2 });
+    expect(tagged.get()).toEqual({ value: "tagged" });
+  });
+
   it("reports migration failures separately from load failures", async () => {
     const failure = new Error("migration failed");
     const store = createStore(
