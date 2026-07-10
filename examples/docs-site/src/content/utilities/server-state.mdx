@@ -103,7 +103,6 @@ export async function loader(context: LoaderContext): Promise<DashboardSummary> 
   return context.queryClient.fetchQuery({
     queryKey: DASHBOARD_SUMMARY_KEY,
     staleTime: DASHBOARD_SUMMARY_STALE_TIME_MS,
-    refetchInterval: 60_000,
     queryFn: () => fetchDashboardSummary(),
   });
 }
@@ -132,6 +131,7 @@ export function DashboardLiveSummary(props: { initialSummary: DashboardSummary }
   const observer = createQuery<DashboardSummary>(getQueryClient(), {
     queryKey: DASHBOARD_SUMMARY_KEY,
     staleTime: DASHBOARD_SUMMARY_STALE_TIME_MS,
+    refetchInterval: 60_000,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
     queryFn: ({ signal }) => fetch("/api/dashboard/summary", { signal }).then((res) => res.json()),

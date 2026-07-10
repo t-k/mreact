@@ -82,7 +82,19 @@ export type LinkSerializableAttribute =
 /** Configures an HtmlSink Link without browser-only event handlers or refs. */
 export interface LinkSinkProps extends LinkOptions<string> {
   children?: LinkChild;
-  [attribute: string]: LinkChild | LinkSerializableAttribute;
+  class?: string | undefined;
+  className?: string | undefined;
+  download?: string | boolean | undefined;
+  id?: string | undefined;
+  name?: string | undefined;
+  rel?: string | undefined;
+  role?: string | undefined;
+  style?: Readonly<Record<string, boolean | number | string | null | undefined>> | undefined;
+  tabIndex?: number | undefined;
+  target?: string | undefined;
+  title?: string | undefined;
+  [ariaAttribute: `aria-${string}`]: LinkSerializableAttribute;
+  [dataAttribute: `data-${string}`]: LinkSerializableAttribute;
 }
 
 /**
@@ -126,7 +138,7 @@ export function Link<const Href extends LinkHref>(
 export function Link(sink: HtmlSink, props: LinkSinkProps): void;
 export function Link(
   sinkOrProps: HtmlSink | LinkProps<string>,
-  maybeProps?: LinkProps<string>,
+  maybeProps?: LinkProps<string> | LinkSinkProps,
 ): ReactCompatElement | string | HTMLAnchorElement | void {
   if (maybeProps !== undefined) {
     (sinkOrProps as HtmlSink).append(renderLinkString(maybeProps));
@@ -156,7 +168,7 @@ function renderLink(props: LinkProps<string>): string | HTMLAnchorElement {
   return renderAnchorString(propsWithLinkAttrs);
 }
 
-function renderLinkString(props: LinkProps<string>): string {
+function renderLinkString(props: LinkProps<string> | LinkSinkProps): string {
   const { href, prefetch, reload, scroll, transition, ...rest } = props;
 
   return renderAnchorString({
