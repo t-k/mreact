@@ -2,17 +2,23 @@ import { readdir, readFile } from "node:fs/promises";
 import { join, posix, resolve } from "node:path";
 
 const skippedExportPattern = /(?:^|\/)internal(?:\/|$)/;
-const routerAdapterEntryPattern = /^@reckona\/mreact-router\/adapters\/(?:aws-lambda|cloudflare|edge|node)$/;
 const forgottenExportPattern = /ae-forgotten-export\).*?symbol "(?<symbol>[^"]+)"/g;
 
-export function adapterApiForgottenExports(displayName, report) {
-  if (!routerAdapterEntryPattern.test(displayName)) {
-    return [];
-  }
+export function apiForgottenExports(displayName, report, allowlist = []) {
+  const allowedSymbols = new Set(
+    allowlist
+      .filter((entry) => entry.entrypoint === displayName)
+      .map((entry) => entry.symbol),
+  );
 
-  return [...report.matchAll(forgottenExportPattern)]
-    .map((match) => match.groups?.symbol)
-    .filter((symbol) => symbol !== undefined);
+  return forgottenExportSymbols(report).filter((symbol) => !allowedSymbols.has(symbol));
+}
+
+export function staleApiForgottenExportAllowlistEntries(displayName, report, allowlist = []) {
+  const reportedSymbols = new Set(forgottenExportSymbols(report));
+  return allowlist.filter(
+    (entry) => entry.entrypoint === displayName && !reportedSymbols.has(entry.symbol),
+  );
 }
 
 export async function collectWorkspaceApiEntries(rootDir) {
@@ -171,4 +177,14 @@ async function readPackageManifest(path) {
 
     throw error;
   }
+}
+
+function forgottenExportSymbols(report) {
+  return [
+    ...new Set(
+      [...report.matchAll(forgottenExportPattern)]
+        .map((match) => match.groups?.symbol)
+        .filter((symbol) => symbol !== undefined),
+    ),
+  ];
 }

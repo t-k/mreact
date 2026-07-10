@@ -14,6 +14,22 @@ import type {
   ReactCompatNode,
 } from "./element.js";
 
+export type {
+  ElementType,
+  ForwardRefType,
+  LazyType,
+  MemoType,
+  ReactiveDomBlockResult,
+  ReactiveDomBlockProps,
+  ReactiveDomBlockRender,
+  ReactCompatContextProviderShorthand,
+  ReactCompatElement,
+  ReactCompatNode,
+  ReactCompatPortal,
+  ReactCompatProviderType,
+  ReactCompatRenderableElement,
+} from "./element.js";
+
 installCompatRenderValueNormalizer();
 
 /** Fragment marker used by the automatic JSX runtime. */

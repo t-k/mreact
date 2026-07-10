@@ -25,5 +25,6 @@ export {
 export type {
   EventHydrationManifest,
   EventHydrationManifestEntry,
+  HydrationEventReplayOptions,
 } from "./event-replay.js";
 export type { HydrationRecoverableErrorInfo } from "./hydration.js";

@@ -20,6 +20,7 @@ export {
   createPortal,
   createRef,
   forwardRef,
+  isReactCompatElement,
   isValidElement,
   lazy,
   memo,
@@ -28,10 +29,18 @@ export {
 export type {
   ErrorBoundaryOptions,
   ElementType,
+  ForwardRefType,
+  LazyType,
+  MemoType,
+  ReactCompatPortal,
+  ReactCompatProviderType,
+  ReactCompatContextProviderShorthand,
   ReactCompatElement,
   ReactCompatNode,
   ReactCompatRenderableElement,
+  ReactReservedProps,
 } from "./element.js";
+export type { ComponentConstructor, PureComponentConstructor } from "./class-component.js";
 /** DOM and form event types exported by the JSX runtime. */
 export type {
   FormEvent,
@@ -45,6 +54,13 @@ export {
   renderContextConsumerToString,
   renderContextProviderToString,
   useContext,
+} from "./context.js";
+export type {
+  ReactCompatConsumer,
+  ReactCompatContext,
+  ReactCompatExternalContext,
+  ReactCompatContextLike,
+  ReactCompatProvider,
 } from "./context.js";
 export {
   applyStreamingHydrationFragments,
@@ -63,6 +79,7 @@ export type {
   EventHydrationManifest,
   EventHydrationManifestEntry,
   HydrateRootOptions,
+  HydrationEventReplayOptions,
   HydrationRecoverableErrorInfo,
   Root,
   RootOptions,
@@ -99,6 +116,6 @@ export {
   version,
 } from "./hooks.js";
 export { renderChildToString, renderToString } from "./server-render.js";
-export type { StartTransition, TransitionScope } from "./hooks.js";
+export type { EffectCallback, RootRuntimeOptions, StartTransition, TransitionScope } from "./hooks.js";
 /** Default React-compatible namespace export. */
 export { default } from "./react-default.js";

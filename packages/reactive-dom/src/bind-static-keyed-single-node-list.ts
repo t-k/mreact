@@ -32,7 +32,7 @@ export interface BindStaticKeyedSingleNodeListSelectedClassOptions<
 }
 
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
-type SingleNodeRenderer<T, TNode extends ChildNode> = (
+export type SingleNodeRenderer<T, TNode extends ChildNode> = (
   item: T,
   index: number,
   items: readonly T[],

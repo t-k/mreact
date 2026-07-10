@@ -566,7 +566,8 @@ function canHaveDefaultProps(type: unknown): boolean {
   return typeof type === "function" || (typeof type === "object" && type !== null);
 }
 
-interface ReactReservedProps {
+/** Reserved element configuration fields consumed outside component props. */
+export interface ReactReservedProps {
   key?: unknown;
   ref?: unknown;
   __self?: unknown;

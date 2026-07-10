@@ -69,7 +69,8 @@ interface ComponentInstance {
   devToolsHookSuppressionDepth: number;
 }
 
-type EffectCallback = () => void | (() => void);
+/** Effect callback that may return a cleanup function. */
+export type EffectCallback = () => void | (() => void);
 type ProfilerPhase = "mount" | "update" | "nested-update";
 type ProfilerOnRender = (
   id: string,

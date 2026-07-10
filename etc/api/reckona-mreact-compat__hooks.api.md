@@ -5,6 +5,9 @@
 ```ts
 
 // @public
+export type EffectCallback = () => void | (() => void);
+
+// @public
 export type StartTransition = (scope: TransitionScope) => void;
 
 // @public
@@ -31,8 +34,6 @@ export function useDebugValue(_value: unknown, _format?: (value: unknown) => unk
 // @public
 export function useDeferredValue<T>(value: T, initialValue?: T): T;
 
-// Warning: (ae-forgotten-export) The symbol "EffectCallback" needs to be exported by the entry point hooks-entry.d.ts
-//
 // @public
 export function useEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 

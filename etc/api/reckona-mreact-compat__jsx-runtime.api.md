@@ -4,12 +4,13 @@
 
 ```ts
 
-// Warning: (ae-forgotten-export) The symbol "ReactiveDomBlockRender" needs to be exported by the entry point jsx-runtime.d.ts
-// Warning: (ae-forgotten-export) The symbol "ReactCompatElement" needs to be exported by the entry point jsx-runtime.d.ts
-// Warning: (ae-forgotten-export) The symbol "ReactiveDomBlockProps" needs to be exported by the entry point jsx-runtime.d.ts
-//
 // @public (undocumented)
 export function createReactiveDomBlock<P extends object = Record<string, unknown>>(render: ReactiveDomBlockRender<P>, blockProps?: P): ReactCompatElement<ReactiveDomBlockProps>;
+
+// @public
+export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
+    render(): ReactCompatNode;
+});
 
 // @public
 export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<TCurrentTarget, SubmitEvent>;
@@ -18,10 +19,16 @@ export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<T
 export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<TCurrentTarget, SubmitEvent>;
 
 // @public
+export interface ForwardRefType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof FORWARD_REF_TYPE;
+    // (undocumented)
+    render: (props: P, ref: unknown) => ReactCompatNode;
+}
+
+// @public
 export const Fragment: unique symbol;
 
-// Warning: (ae-forgotten-export) The symbol "ElementType" needs to be exported by the entry point jsx-runtime.d.ts
-//
 // @public
 export function jsx<P extends object>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
@@ -117,14 +124,119 @@ export function jsxs<P extends object>(type: ElementType<P>, props: (P & {
 }) | null, key?: unknown): ReactCompatElement<P>;
 
 // @public
+export interface LazyType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof LAZY_TYPE;
+    // (undocumented)
+    error?: unknown;
+    // (undocumented)
+    load: () => Promise<{
+        default: ElementType<P>;
+    }>;
+    // (undocumented)
+    promise?: Promise<void>;
+    // (undocumented)
+    resolved?: ElementType<P>;
+    // (undocumented)
+    status: "uninitialized" | "pending" | "resolved" | "rejected";
+}
+
+// @public
+export interface MemoType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof MEMO_TYPE;
+    // (undocumented)
+    __mreactMemoCompareProps?: readonly string[];
+    // (undocumented)
+    compare?: (previous: P, next: P) => boolean;
+    // (undocumented)
+    type: ElementType<P>;
+}
+
+// @public (undocumented)
+export interface ReactCompatContextProviderShorthand {
+    // (undocumented)
+    Consumer: unknown;
+    // (undocumented)
+    Provider: ReactCompatProviderType;
+}
+
+// @public
+export interface ReactCompatElement<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
+    // (undocumented)
+    key: string | null;
+    // (undocumented)
+    props: P & {
+        children?: ReactCompatNode;
+    };
+    // (undocumented)
+    ref: unknown;
+    // (undocumented)
+    type: ElementType<P>;
+}
+
+// @public
+export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+
+// @public
+export interface ReactCompatPortal {
+    // (undocumented)
+    $$typeof: typeof PORTAL_TYPE;
+    // (undocumented)
+    children: ReactCompatNode;
+    // (undocumented)
+    container: Element;
+    // (undocumented)
+    key: string | null;
+}
+
+// @public (undocumented)
+export interface ReactCompatProviderType {
+    // (undocumented)
+    $$typeof: symbol;
+    // (undocumented)
+    context: unknown;
+}
+
+// @public
+export interface ReactCompatRenderableElement {
+    $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
+    key: string | null;
+    props: {
+        children?: ReactCompatNode;
+    };
+    ref: unknown;
+    type: unknown;
+}
+
+// @public
 export const REACTIVE_STATE_BINDING_META: unique symbol;
 
 // @public
 export const REACTIVE_TEXT_BINDING_META: unique symbol;
 
-// Warnings were encountered during analysis:
-//
-// packages/react-compat/src/jsx-runtime.ts:119:17 - (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point jsx-runtime.d.ts
+// @public (undocumented)
+export interface ReactiveDomBlockProps {
+    // (undocumented)
+    blockProps?: Record<string, unknown> | undefined;
+    // (undocumented)
+    render: ReactiveDomBlockRender;
+}
+
+// @public (undocumented)
+export type ReactiveDomBlockRender<P = unknown> = (props: P) => ReactiveDomBlockResult;
+
+// @public (undocumented)
+export interface ReactiveDomBlockResult {
+    // (undocumented)
+    afterCommit?: (() => void) | undefined;
+    // (undocumented)
+    dispose?: (() => void) | undefined;
+    // (undocumented)
+    node: ChildNode;
+}
 
 // (No @packageDocumentation comment for this package)
 

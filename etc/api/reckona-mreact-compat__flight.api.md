@@ -11,16 +11,17 @@ export function createFetchServerReferenceCaller(endpoint: string, options?: Fet
 export interface DecodeFlightOptions {
     // (undocumented)
     callServerReference?(reference: FlightServerReference, args: unknown[]): unknown | Promise<unknown>;
-    // Warning: (ae-forgotten-export) The symbol "ElementType" needs to be exported by the entry point flight.d.ts
-    //
     // (undocumented)
     loadClientReference(reference: FlightClientReference): ElementType<Record<string, unknown>>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatNode" needs to be exported by the entry point flight.d.ts
-//
 // @public
 export function decodeFlightResponse(response: FlightResponse, options: DecodeFlightOptions): ReactCompatNode;
+
+// @public
+export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
+    render(): ReactCompatNode;
+});
 
 // @public
 export interface FetchServerReferenceCallerOptions {
@@ -142,8 +143,6 @@ export interface FlightMapModel {
     kind: "map";
 }
 
-// Warning: (ae-forgotten-export) The symbol "FlightObjectModel" needs to be exported by the entry point flight.d.ts
-//
 // @public
 export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
@@ -155,6 +154,14 @@ export interface FlightNumberModel {
     kind: "number";
     // (undocumented)
     value: "Infinity" | "-Infinity" | "NaN" | "-0";
+}
+
+// @public (undocumented)
+export interface FlightObjectModel {
+    // (undocumented)
+    [key: string]: FlightModel | undefined;
+    // (undocumented)
+    kind?: never;
 }
 
 // @public
@@ -227,23 +234,121 @@ export interface FlightTypedArrayModel {
 export type FlightTypedArrayName = "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" | "BigUint64Array";
 
 // @public
+export interface ForwardRefType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof FORWARD_REF_TYPE;
+    // (undocumented)
+    render: (props: P, ref: unknown) => ReactCompatNode;
+}
+
+// @public
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage;
 
 // @public
 export interface HydrateFlightOptions extends DecodeFlightOptions {
-    // Warning: (ae-forgotten-export) The symbol "HydrateRootOptions" needs to be exported by the entry point flight.d.ts
-    //
     // (undocumented)
     hydrate?: HydrateRootOptions;
 }
 
-// Warning: (ae-forgotten-export) The symbol "hydrateRoot" needs to be exported by the entry point flight.d.ts
-//
 // @public
-export function hydrateFlightResponse(container: Element, response: FlightResponse, options: HydrateFlightOptions): ReturnType<hydrateRoot>;
+export function hydrateFlightResponse(container: Element, response: FlightResponse, options: HydrateFlightOptions): Root;
+
+// @public
+export interface HydrateRootOptions {
+    // (undocumented)
+    consumeResumeMarkers?: boolean;
+    // (undocumented)
+    identifierPrefix?: string;
+    // (undocumented)
+    onRecoverableError?: (error: Error, info: HydrationRecoverableErrorInfo) => void;
+    // (undocumented)
+    resumeId?: string;
+}
+
+// @public
+export interface HydrationRecoverableErrorInfo {
+    // (undocumented)
+    componentStack?: string;
+    // (undocumented)
+    kind: "tag" | "text" | "attribute" | "node" | "suspense-server-error";
+    // (undocumented)
+    path: string;
+}
+
+// @public
+export interface LazyType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof LAZY_TYPE;
+    // (undocumented)
+    error?: unknown;
+    // (undocumented)
+    load: () => Promise<{
+        default: ElementType<P>;
+    }>;
+    // (undocumented)
+    promise?: Promise<void>;
+    // (undocumented)
+    resolved?: ElementType<P>;
+    // (undocumented)
+    status: "uninitialized" | "pending" | "resolved" | "rejected";
+}
+
+// @public
+export interface MemoType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof MEMO_TYPE;
+    // (undocumented)
+    __mreactMemoCompareProps?: readonly string[];
+    // (undocumented)
+    compare?: (previous: P, next: P) => boolean;
+    // (undocumented)
+    type: ElementType<P>;
+}
 
 // @public
 export function parseFlightResponse(payload: string | ArrayBuffer | Uint8Array): FlightResponse;
+
+// @public (undocumented)
+export interface ReactCompatContextProviderShorthand {
+    // (undocumented)
+    Consumer: unknown;
+    // (undocumented)
+    Provider: ReactCompatProviderType;
+}
+
+// @public
+export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+
+// @public
+export interface ReactCompatPortal {
+    // (undocumented)
+    $$typeof: typeof PORTAL_TYPE;
+    // (undocumented)
+    children: ReactCompatNode;
+    // (undocumented)
+    container: Element;
+    // (undocumented)
+    key: string | null;
+}
+
+// @public (undocumented)
+export interface ReactCompatProviderType {
+    // (undocumented)
+    $$typeof: symbol;
+    // (undocumented)
+    context: unknown;
+}
+
+// @public
+export interface ReactCompatRenderableElement {
+    $$typeof: typeof REACT_COMPAT_ELEMENT_TYPE;
+    key: string | null;
+    props: {
+        children?: ReactCompatNode;
+    };
+    ref: unknown;
+    type: unknown;
+}
 
 // @public
 export interface ReactFlightProtocolCoverage {
@@ -257,6 +362,14 @@ export interface ReactFlightProtocolCoverage {
 
 // @public
 export function readFlightResponse(root: Document | ParentNode, id?: string): FlightResponse;
+
+// @public
+export interface Root {
+    // (undocumented)
+    render(element: ReactCompatNode): void;
+    // (undocumented)
+    unmount(): void;
+}
 
 // (No @packageDocumentation comment for this package)
 

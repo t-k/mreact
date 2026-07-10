@@ -15,6 +15,7 @@ export {
   createErrorBoundary,
   createRef,
   forwardRef,
+  isReactCompatElement,
   isValidElement,
   lazy,
   memo,
@@ -22,15 +23,30 @@ export {
 export type {
   ErrorBoundaryOptions,
   ElementType,
+  ForwardRefType,
+  LazyType,
+  MemoType,
+  ReactCompatContextProviderShorthand,
   ReactCompatElement,
   ReactCompatNode,
+  ReactCompatPortal,
+  ReactCompatProviderType,
   ReactCompatRenderableElement,
+  ReactReservedProps,
 } from "./element.js";
+export type { ComponentConstructor, PureComponentConstructor } from "./class-component.js";
 export {
   createContext,
   renderContextConsumerToString,
   renderContextProviderToString,
   useContext,
+} from "./context.js";
+export type {
+  ReactCompatConsumer,
+  ReactCompatContext,
+  ReactCompatExternalContext,
+  ReactCompatContextLike,
+  ReactCompatProvider,
 } from "./context.js";
 export {
   useCallback,
@@ -59,4 +75,4 @@ export {
   version,
 } from "./hooks.js";
 export { renderChildToString, renderToString } from "./server-render.js";
-export type { StartTransition, TransitionScope } from "./hooks.js";
+export type { EffectCallback, RootRuntimeOptions, StartTransition, TransitionScope } from "./hooks.js";

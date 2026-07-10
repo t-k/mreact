@@ -128,11 +128,17 @@ async function createStandaloneApp(tarballs) {
     type: "module",
     dependencies: {
       "@reckona/mreact": tarballSpec(tarballs, "@reckona/mreact"),
+      "@reckona/mreact-compat": tarballSpec(tarballs, "@reckona/mreact-compat"),
+      "@reckona/mreact-compiler": tarballSpec(tarballs, "@reckona/mreact-compiler"),
+      "@reckona/mreact-forms": tarballSpec(tarballs, "@reckona/mreact-forms"),
+      "@reckona/mreact-query": tarballSpec(tarballs, "@reckona/mreact-query"),
+      "@reckona/mreact-reactive-dom": tarballSpec(tarballs, "@reckona/mreact-reactive-dom"),
       "@reckona/mreact-router": tarballSpec(tarballs, "@reckona/mreact-router"),
+      "@reckona/mreact-server": tarballSpec(tarballs, "@reckona/mreact-server"),
       "@reckona/mreact-store": tarballSpec(tarballs, "@reckona/mreact-store"),
       "@types/node": "25.7.0",
       typescript: "7.0.2",
-      vite: "8.0.16",
+      vite: "8.1.4",
     },
     devDependencies: {},
     pnpm: {
@@ -192,6 +198,51 @@ export default defineConfig({
 } from "@reckona/mreact-router";
 import type { ReactElement } from "@reckona/mreact";
 import type {
+  ComponentConstructor,
+  EffectCallback,
+  HydrationEventReplayOptions,
+  ReactCompatContext,
+  ReactCompatElement,
+  ReactCompatPortal,
+  RootRuntimeOptions,
+} from "@reckona/mreact-compat";
+import type { FlightObjectModel, HydrateRootOptions } from "@reckona/mreact-compat/flight";
+import type { EffectCallback as HooksEffectCallback } from "@reckona/mreact-compat/hooks";
+import type {
+  ElementType as JsxElementType,
+  ReactiveDomBlockProps,
+  ReactCompatNode as JsxReactCompatNode,
+} from "@reckona/mreact-compat/jsx-runtime";
+import type {
+  JSXDOMAttributes,
+  ReactiveDomBlockResult,
+} from "@reckona/mreact-compat/jsx-dev-runtime";
+import type {
+  SchedulerProfilingEvent,
+  unstable_CallbackNode,
+  unstable_ProfilingEvent,
+} from "@reckona/mreact-compat/scheduler";
+import type { ReactCompatContextLike } from "@reckona/mreact-compat/server";
+import type { ParserMode } from "@reckona/mreact-compiler";
+import type {
+  AnalyzeToIrInput,
+  AnalyzeToIrOutput,
+  CompilerModuleContext,
+  ModuleIr,
+} from "@reckona/mreact-compiler/oxc";
+import type {
+  BaseCreateFormOptions,
+  StandardSchemaValidationResult,
+} from "@reckona/mreact-forms";
+import type { QueryClient } from "@reckona/mreact-query";
+import type {
+  BindListOptions,
+  BindStaticKeyedSingleNodeListSelectedClassOptions,
+  BindTextBatchOptions,
+  BindTextOptions,
+  SingleNodeRenderer,
+} from "@reckona/mreact-reactive-dom";
+import type {
   AppRouterCache,
   CacheControlOptions,
   CookieOptions,
@@ -227,6 +278,21 @@ import type {
   RouterRequestInstrumentationEvent as LambdaRequestInstrumentationEvent,
 } from "@reckona/mreact-router/adapters/aws-lambda";
 import type { LinkSinkProps } from "@reckona/mreact-router/link";
+import type { LinkSinkChild } from "@reckona/mreact-router";
+import type {
+  AppRouterCache as ViteAppRouterCache,
+  AppRouterProjectOptions,
+  AppRouterRequestStartLogEvent,
+  RequestHostPolicy,
+  ResolvedAppRouterProject,
+} from "@reckona/mreact-router/vite";
+import type {
+  FlightDateModel,
+  FlightObjectModel as ServerFlightObjectModel,
+  ReactFlightProtocolCoverage,
+} from "@reckona/mreact-server";
+import type { NodeBuffer } from "@reckona/mreact-server/buffer-sink";
+import type { HydrationScriptOptions, StreamRender } from "@reckona/mreact-server/html-helpers";
 import {
   persistedStoreState,
   type LegacyStorePersistedState,
@@ -287,6 +353,54 @@ const legacyPersist: StorePersistOptions<PersistedDomainState> = {
     version: 1,
   }),
 };
+type PublicContractMatrix = [
+  ComponentConstructor,
+  EffectCallback,
+  HydrationEventReplayOptions,
+  ReactCompatContext<unknown>,
+  ReactCompatElement,
+  ReactCompatPortal,
+  RootRuntimeOptions,
+  FlightObjectModel,
+  HydrateRootOptions,
+  HooksEffectCallback,
+  JsxElementType,
+  ReactiveDomBlockProps,
+  JsxReactCompatNode,
+  JSXDOMAttributes<HTMLElement>,
+  ReactiveDomBlockResult,
+  SchedulerProfilingEvent,
+  unstable_CallbackNode,
+  unstable_ProfilingEvent,
+  ReactCompatContextLike<unknown>,
+  ParserMode,
+  AnalyzeToIrInput,
+  AnalyzeToIrOutput,
+  CompilerModuleContext,
+  ModuleIr,
+  BaseCreateFormOptions<{ value: string }>,
+  StandardSchemaValidationResult<string>,
+  QueryClient,
+  typeof import("@reckona/mreact-query").isQueryClientScopeUnavailableError,
+  BindListOptions<string>,
+  BindStaticKeyedSingleNodeListSelectedClassOptions<string, HTMLElement>,
+  BindTextBatchOptions,
+  BindTextOptions,
+  SingleNodeRenderer<string, HTMLElement>,
+  LinkSinkChild,
+  ViteAppRouterCache,
+  AppRouterProjectOptions,
+  AppRouterRequestStartLogEvent,
+  RequestHostPolicy,
+  ResolvedAppRouterProject,
+  FlightDateModel,
+  ServerFlightObjectModel,
+  ReactFlightProtocolCoverage,
+  NodeBuffer,
+  HydrationScriptOptions,
+  StreamRender,
+];
+const publicContractMatrix = {} as PublicContractMatrix;
 // @ts-expect-error Untagged legacy envelopes require explicit opt-in.
 const invalidLegacyPersist: StorePersistOptions<PersistedDomainState> = {
   load: () => ({ state: { count: 1 }, version: 1 }),
@@ -330,6 +444,7 @@ void rawPersist;
 void taggedPersist;
 void legacyPersist;
 void invalidLegacyPersist;
+void publicContractMatrix;
 `,
   );
 }

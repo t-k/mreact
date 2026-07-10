@@ -54,6 +54,32 @@ import { hasJsxSyntax } from "./source-jsx.js";
 import { prependTailwindSourceDirectives } from "./tailwind-source.js";
 import { workspacePackageFile } from "./workspace-packages.js";
 
+export type { AppRouterAllowedServerAction, AppRouterServerActionOptions } from "./actions.js";
+export type { AppRouterCache, AppRouterCacheEntry } from "./cache.js";
+export type {
+  AppRouterBuildTarget,
+  AppRouterClientConsoleMethod,
+  AppRouterClientSourceMapMode,
+  AppRouterClientSourceMapOption,
+  AppRouterProductionOptions,
+  AppRouterProjectOptions,
+  ResolvedAppRouterProject,
+} from "./config.js";
+export type { AppRouterImportPolicy } from "./import-policy.js";
+export type {
+  AppRouterCspInlineNonceWarningLogEvent,
+  AppRouterLogError,
+  AppRouterLogEvent,
+  AppRouterLogger,
+  AppRouterRuntime,
+  AppRouterRenderTimingLogEvent,
+  AppRouterRequestEndLogEvent,
+  AppRouterRequestErrorLogEvent,
+  AppRouterRequestStartLogEvent,
+  AppRouterRequestTimingLogEvent,
+} from "./logger.js";
+export type { RequestHostPolicy } from "./serve.js";
+
 /**
  * Configures the app-router Vite middleware used by development servers.
  */

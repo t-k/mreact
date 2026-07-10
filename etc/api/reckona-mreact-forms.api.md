@@ -10,6 +10,18 @@ import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 export type ArrayFieldValue<TValues extends FormValues, Name extends FieldName<TValues>> = TValues[Name] extends readonly (infer Item)[] ? Item : never;
 
 // @public
+export interface BaseCreateFormOptions<TValues extends FormValues> {
+    // (undocumented)
+    initialValues: TValues;
+    // (undocumented)
+    validate?: Partial<{
+        [Name in FieldName<TValues>]: FieldValidationEntry<TValues[Name], TValues>;
+    }> | undefined;
+    // (undocumented)
+    validateOn?: FormValidateMode | readonly FormValidateMode[] | undefined;
+}
+
+// @public
 export function createForm<TValues extends FormValues>(options: CreateFormOptionsWithoutSchema<TValues>): FormApi<TValues, TValues>;
 
 // @public (undocumented)
@@ -18,8 +30,6 @@ export function createForm<TValues extends FormValues, TSubmitValues>(options: C
 // @public
 export type CreateFormOptions<TValues extends FormValues, TSubmitValues = TValues> = CreateFormOptionsWithoutSchema<TValues> | CreateFormOptionsWithSchema<TValues, TSubmitValues>;
 
-// Warning: (ae-forgotten-export) The symbol "BaseCreateFormOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export interface CreateFormOptionsWithoutSchema<TValues extends FormValues> extends BaseCreateFormOptions<TValues> {
     // (undocumented)
@@ -282,8 +292,15 @@ export namespace StandardSchemaV1 {
     }
 }
 
-// Warning: (ae-forgotten-export) The symbol "StandardSchemaValidationResult" needs to be exported by the entry point index.d.ts
-//
+// @public
+export type StandardSchemaValidationResult<Output> = {
+    success: true;
+    value: Output;
+} | {
+    issues: ReadonlyArray<StandardSchemaV1.Issue>;
+    success: false;
+};
+
 // @public
 export function validateStandardSchema<Schema extends StandardSchemaV1>(schema: Schema, value: unknown): Promise<StandardSchemaValidationResult<InferStandardSchemaOutput<Schema>>>;
 

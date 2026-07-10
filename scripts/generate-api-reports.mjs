@@ -4,9 +4,10 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Extractor, ExtractorConfig } from "@microsoft/api-extractor";
 import {
-  adapterApiForgottenExports,
+  apiForgottenExports,
   apiExtractorConfigForEntry,
   collectWorkspaceApiEntries,
+  staleApiForgottenExportAllowlistEntries,
 } from "./api-reference-packages.mjs";
 
 const rootDir = resolve(new URL("..", import.meta.url).pathname);
@@ -18,6 +19,7 @@ const entries = (await collectWorkspaceApiEntries(rootDir)).filter(
   (entry) => args.packageNames.size === 0 || args.packageNames.has(entry.packageName),
 );
 const failures = [];
+const forgottenExportAllowlist = [];
 
 if (entries.length === 0) {
   throw new Error("No API entry points were found.");
@@ -50,7 +52,7 @@ for (const entry of entries) {
       failures.push(`${entry.displayName}: API report is out of date`);
     }
     if (await exists(finalReport)) {
-      recordForgottenAdapterExports(entry, await readFile(finalReport, "utf8"));
+      recordForgottenExports(entry, await readFile(finalReport, "utf8"));
     }
     continue;
   }
@@ -60,7 +62,7 @@ for (const entry of entries) {
   }
 
   if (await exists(finalReport)) {
-    recordForgottenAdapterExports(entry, await readFile(finalReport, "utf8"));
+    recordForgottenExports(entry, await readFile(finalReport, "utf8"));
   }
 
   if (!result.succeeded && !(await exists(finalReport))) {
@@ -135,12 +137,26 @@ function normalizeApiReport(value) {
   return value.replace(/\r\n/g, "\n");
 }
 
-function recordForgottenAdapterExports(entry, report) {
-  const forgottenExports = adapterApiForgottenExports(entry.displayName, report);
+function recordForgottenExports(entry, report) {
+  const forgottenExports = apiForgottenExports(
+    entry.displayName,
+    report,
+    forgottenExportAllowlist,
+  );
+  const staleAllowlistEntries = staleApiForgottenExportAllowlistEntries(
+    entry.displayName,
+    report,
+    forgottenExportAllowlist,
+  );
 
   if (forgottenExports.length > 0) {
     failures.push(
-      `${entry.displayName}: public adapter types are not exported: ${forgottenExports.join(", ")}`,
+      `${entry.displayName}: public types are not exported: ${forgottenExports.join(", ")}`,
+    );
+  }
+  if (staleAllowlistEntries.length > 0) {
+    failures.push(
+      `${entry.displayName}: stale forgotten-export exceptions: ${staleAllowlistEntries.map((entry) => entry.symbol).join(", ")}`,
     );
   }
 }

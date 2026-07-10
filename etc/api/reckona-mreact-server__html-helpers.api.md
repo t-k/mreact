@@ -40,8 +40,12 @@ export interface HtmlResponseOptions {
     statusText?: string;
 }
 
-// Warning: (ae-forgotten-export) The symbol "HydrationScriptOptions" needs to be exported by the entry point html-helpers.d.ts
-//
+// @public
+export interface HydrationScriptOptions {
+    // (undocumented)
+    nonce?: string;
+}
+
 // @public
 export function renderEventHydrationManifest(sink: HtmlSink, manifest: EventHydrationManifest, options?: HydrationScriptOptions): void;
 
@@ -54,8 +58,6 @@ export function renderScriptAsset(sink: HtmlSink, options: ScriptAssetOptions): 
 // @public
 export function renderSsrState(sink: HtmlSink, value: unknown, options?: HydrationScriptOptions): void;
 
-// Warning: (ae-forgotten-export) The symbol "StreamRender" needs to be exported by the entry point html-helpers.d.ts
-//
 // @public
 export function renderToString(render: StreamRender): Promise<string>;
 
@@ -73,6 +75,9 @@ export interface ScriptAssetOptions {
 
 // @public
 export function serializeSsrState(value: unknown): string;
+
+// @public
+export type StreamRender = (sink: HtmlSink) => void | PromiseLike<void>;
 
 // (No @packageDocumentation comment for this package)
 

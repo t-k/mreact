@@ -326,11 +326,12 @@ export function installQueryAsyncStorage(storage: QueryAsyncStorage<QueryClient>
 /** Checks whether an error came from missing server query-client async storage. */
 export function isQueryClientScopeUnavailableError(
   error: unknown,
-): error is QueryClientScopeUnavailableError {
+): error is Error {
   return (
     error instanceof Error &&
-    (error as Partial<QueryClientScopeUnavailableError>)[queryClientScopeUnavailableErrorKey] ===
-      true
+    (error as { [queryClientScopeUnavailableErrorKey]?: true | undefined })[
+      queryClientScopeUnavailableErrorKey
+    ] === true
   );
 }
 

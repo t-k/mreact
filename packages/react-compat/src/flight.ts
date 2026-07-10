@@ -1,5 +1,5 @@
-import type { ReactCompatNode } from "./element.js";
-import { hydrateRoot, type HydrateRootOptions } from "./render.js";
+import type { ElementType, ReactCompatNode } from "./element.js";
+import { hydrateRoot, type HydrateRootOptions, type Root } from "./render.js";
 import {
   getReactFlightProtocolCoverage,
   type ReactFlightProtocolCoverage,
@@ -20,6 +20,7 @@ import type {
   FlightMapModel,
   FlightModel,
   FlightNumberModel,
+  FlightObjectModel,
   FlightPromiseModel,
   FlightResponse,
   FlightServerReference,
@@ -46,6 +47,7 @@ export type {
   FlightMapModel,
   FlightModel,
   FlightNumberModel,
+  FlightObjectModel,
   FlightPromiseModel,
   FlightResponse,
   FlightServerReference,
@@ -56,6 +58,18 @@ export type {
   FlightTypedArrayName,
 };
 export type { ReactFlightProtocolCoverage };
+export type {
+  ElementType,
+  ForwardRefType,
+  LazyType,
+  MemoType,
+  ReactCompatContextProviderShorthand,
+  ReactCompatNode,
+  ReactCompatPortal,
+  ReactCompatProviderType,
+  ReactCompatRenderableElement,
+} from "./element.js";
+export type { HydrateRootOptions, HydrationRecoverableErrorInfo, Root } from "./render.js";
 
 /** Options for creating a fetch-based server reference caller. */
 export interface FetchServerReferenceCallerOptions {
@@ -109,7 +123,7 @@ export function hydrateFlightResponse(
   container: Element,
   response: FlightResponse,
   options: HydrateFlightOptions,
-): ReturnType<typeof import("./render.js").hydrateRoot> {
+): Root {
   return hydrateRoot(container, decodeFlightResponse(response, options), options.hydrate);
 }
 

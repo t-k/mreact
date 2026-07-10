@@ -55,6 +55,7 @@ export type {
   ComponentMetadata,
   Diagnostic,
   ModuleMetadata,
+  ParserMode,
   ServerBootstrapMode,
   ServerEscapeOptions,
   RuntimeImport,

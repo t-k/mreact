@@ -1,5 +1,6 @@
 import { cell, computed, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import { type StandardSchemaV1, validateStandardSchema } from "./standard-schema.js";
+export type { StandardSchemaValidationResult } from "./standard-schema.js";
 
 /** Represents the object shape managed by a form instance. */
 export type FormValues = Record<string, unknown>;
@@ -98,7 +99,8 @@ export interface FieldArrayApi<TValues extends FormValues, Name extends FieldNam
   swap(first: number, second: number): Promise<void>;
 }
 
-interface BaseCreateFormOptions<TValues extends FormValues> {
+/** Configures fields and validation shared by schema and non-schema forms. */
+export interface BaseCreateFormOptions<TValues extends FormValues> {
   initialValues: TValues;
   validate?:
     | Partial<{

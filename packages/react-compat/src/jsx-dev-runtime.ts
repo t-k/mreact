@@ -25,12 +25,28 @@ export { createReactiveDomBlock };
 export type {
   FormEvent,
   FormEventHandler,
+  JSXDOMAttributes,
   JSXEvent,
   JSXEventHandler,
   JSXHTMLAttributes,
   JSXIntrinsicAttributes,
   JSXIntrinsicElements,
 } from "./jsx-runtime.js";
+export type {
+  ElementType,
+  ForwardRefType,
+  LazyType,
+  MemoType,
+  ReactiveDomBlockResult,
+  ReactiveDomBlockProps,
+  ReactiveDomBlockRender,
+  ReactCompatContextProviderShorthand,
+  ReactCompatElement,
+  ReactCompatNode,
+  ReactCompatPortal,
+  ReactCompatProviderType,
+  ReactCompatRenderableElement,
+} from "./element.js";
 
 /** JSX namespace exported by the development JSX runtime. */
 export namespace JSX {

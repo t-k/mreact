@@ -12,32 +12,232 @@ import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
 import { UserConfig } from 'vite';
 
-// Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point vite.d.ts
-//
+// @public
+export interface AppRouterAllowedServerAction extends ServerActionRequestReference {
+    // (undocumented)
+    inferred?: boolean | undefined;
+}
+
+// @public
+export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
+
+// @public
+export interface AppRouterCache {
+    // (undocumented)
+    deleteByPath(path: string): void | Promise<void>;
+    // (undocumented)
+    get(key: string, now?: number): AppRouterCacheEntry | undefined | Promise<AppRouterCacheEntry | undefined>;
+    // (undocumented)
+    set(key: string, entry: AppRouterCacheEntry): void | Promise<void>;
+}
+
+// @public
+export interface AppRouterCacheEntry {
+    // (undocumented)
+    body: string;
+    // (undocumented)
+    cacheControl: string;
+    // (undocumented)
+    expiresAt: number;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    status: number;
+}
+
+// @public
+export type AppRouterClientConsoleMethod = "debug" | "error" | "info" | "log" | "trace" | "warn";
+
+// @public
+export type AppRouterClientSourceMapMode = "none" | "hidden" | "linked";
+
+// @public
+export type AppRouterClientSourceMapOption = boolean | AppRouterClientSourceMapMode;
+
+// @public
+export interface AppRouterCspInlineNonceWarningLogEvent {
+    // (undocumented)
+    directive: "script-src" | "style-src";
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    tag: "script" | "style";
+    // (undocumented)
+    type: "router:csp:inline-nonce-warning";
+}
+
+// @public
+export interface AppRouterImportPolicy {
+    // (undocumented)
+    allowedPackages?: readonly string[] | undefined;
+    // (undocumented)
+    allowedSourceDirs?: readonly string[] | undefined;
+    // (undocumented)
+    projectRoot?: string | undefined;
+}
+
+// @public
+export interface AppRouterLogError {
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
+
+// @public
+export interface AppRouterLogger {
+    // (undocumented)
+    debug?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    error?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    info?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+    // (undocumented)
+    warn?: ((event: AppRouterLogEvent) => void | Promise<void>) | undefined;
+}
+
+// @public
+export interface AppRouterProductionOptions {
+    // (undocumented)
+    dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
+}
+
+// @public (undocumented)
+export interface AppRouterProjectOptions {
+    // (undocumented)
+    allowedSourceDirs?: readonly string[] | undefined;
+    // @deprecated
+    appDir?: string | undefined;
+    // (undocumented)
+    assetBaseUrl?: string | undefined;
+    // (undocumented)
+    buildConcurrency?: number | undefined;
+    // (undocumented)
+    buildTargets?: readonly AppRouterBuildTarget[] | undefined;
+    // (undocumented)
+    clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
+    // (undocumented)
+    production?: AppRouterProductionOptions | undefined;
+    // (undocumented)
+    projectRoot?: string | undefined;
+    // (undocumented)
+    publicAssetBaseUrl?: string | undefined;
+    // (undocumented)
+    publicDir?: string | undefined;
+    // (undocumented)
+    routesDir?: string | undefined;
+}
+
+// @public
+export interface AppRouterRenderTimingLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:render:timing";
+}
+
+// @public
+export interface AppRouterRequestEndLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:end";
+}
+
+// @public
+export interface AppRouterRequestErrorLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    error: AppRouterLogError;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:error";
+}
+
+// @public
+export interface AppRouterRequestStartLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    type: "router:request:start";
+}
+
+// @public
+export interface AppRouterRequestTimingLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    phases: Record<string, number>;
+    // (undocumented)
+    runtime: AppRouterRuntime;
+    // (undocumented)
+    status: number;
+    // (undocumented)
+    type: "router:request:timing";
+}
+
+// @public
+export type AppRouterRuntime = "aws-lambda" | "cloudflare" | "edge" | "node";
+
+// @public
+export interface AppRouterServerActionOptions {
+    // (undocumented)
+    allowedActions?: readonly AppRouterAllowedServerAction[] | "any" | undefined;
+    // (undocumented)
+    authorize?: ServerActionHandlerOptions["authorize"] | undefined;
+    // (undocumented)
+    maxBodyBytes?: number | undefined;
+    // (undocumented)
+    maxFormFields?: number | undefined;
+    // (undocumented)
+    replayStore?: ServerActionReplayStore | undefined;
+}
+
 // @public
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
     // (undocumented)
     define?: UserConfig["define"] | undefined;
-    // Warning: (ae-forgotten-export) The symbol "RequestHostPolicy" needs to be exported by the entry point vite.d.ts
-    //
     // (undocumented)
     hostPolicy?: RequestHostPolicy | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterImportPolicy" needs to be exported by the entry point vite.d.ts
-    //
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterLogger" needs to be exported by the entry point vite.d.ts
-    //
     // (undocumented)
     logger?: AppRouterLogger | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterCache" needs to be exported by the entry point vite.d.ts
-    //
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
-    // Warning: (ae-forgotten-export) The symbol "AppRouterServerActionOptions" needs to be exported by the entry point vite.d.ts
-    //
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
     // (undocumented)
@@ -69,8 +269,6 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
 // @public
 export const mreactRouter: typeof createAppRouterVitePlugin;
 
-// Warning: (ae-forgotten-export) The symbol "ResolvedAppRouterProject" needs to be exported by the entry point vite.d.ts
-//
 // @public
 export function mreactRouterConfigFromPlugins(plugins: readonly unknown[]): ResolvedAppRouterProject | undefined;
 
@@ -79,6 +277,33 @@ export function renderAppRouterClientAsset(appDir: string, pathname: string, opt
     dev?: boolean;
     vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<Response>;
+
+// @public
+export type RequestHostPolicy = "strict" | "trusted-proxy";
+
+// @public (undocumented)
+export interface ResolvedAppRouterProject {
+    // (undocumented)
+    allowedSourceDirs: readonly string[];
+    // (undocumented)
+    assetBaseUrl?: string | undefined;
+    // (undocumented)
+    buildConcurrency?: number | undefined;
+    // (undocumented)
+    buildTargets: readonly AppRouterBuildTarget[];
+    // (undocumented)
+    clientConsolePureFunctions?: readonly string[] | undefined;
+    // (undocumented)
+    clientSourceMaps: AppRouterClientSourceMapMode;
+    // (undocumented)
+    projectRoot: string;
+    // (undocumented)
+    publicAssetBaseUrl?: string | undefined;
+    // (undocumented)
+    publicDir: string;
+    // (undocumented)
+    routesDir: string;
+}
 
 // (No @packageDocumentation comment for this package)
 

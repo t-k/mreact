@@ -31,8 +31,6 @@ export const Children: {
     only(children: ReactCompatNode): Exclude<ReactCompatNode, null | undefined | boolean>;
 };
 
-// Warning: (ae-forgotten-export) The symbol "ReactReservedProps" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function cloneElement<P extends object>(element: ReactCompatElement<P>, props: (Partial<P> & ReactReservedProps) | null, ...children: ReactCompatNode[]): ReactCompatElement<P>;
 
@@ -50,13 +48,19 @@ export interface Component<P extends Record<string, unknown> = Record<string, un
     state?: S;
 }
 
-// Warning: (ae-forgotten-export) The symbol "ComponentConstructor" needs to be exported by the entry point index.d.ts
-//
 // @public
 export const Component: ComponentConstructor;
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatContext" needs to be exported by the entry point index.d.ts
-//
+// @public (undocumented)
+export interface ComponentConstructor {
+    // (undocumented)
+    <P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>>(this: Component<P, S>, props: P): void;
+    // (undocumented)
+    new <P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>>(props: P): Component<P, S>;
+    // (undocumented)
+    prototype: Component<any, any>;
+}
+
 // @public
 export function createContext<T>(defaultValue: T): ReactCompatContext<T>;
 
@@ -68,8 +72,6 @@ export function createErrorBoundary(options: ErrorBoundaryOptions, children: Rea
     children: ReactCompatNode;
 }>;
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatPortal" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function createPortal(children: ReactCompatNode, container: Element, key?: unknown): ReactCompatPortal;
 
@@ -84,19 +86,14 @@ export function createRoot(container: Element, options?: RootOptions): Root;
 // @public
 export function createStreamingHydrationRoot(container: Element, options?: StreamingHydrationRootOptions): StreamingHydrationRoot;
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatContextProviderShorthand" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "ReactCompatProviderType" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "ForwardRefType" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "MemoType" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "LazyType" needs to be exported by the entry point index.d.ts
-//
+// @public
+export type EffectCallback = () => void | (() => void);
+
 // @public
 export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
     render(): ReactCompatNode;
 });
 
-// Warning: (ae-forgotten-export) The symbol "HydrationEventReplayOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function enableEventHydrationManifestReplay(container: Element, manifest: EventHydrationManifest | undefined, options?: HydrationEventReplayOptions): () => void;
 
@@ -146,6 +143,14 @@ export function forwardRef<P, T>(render: (props: P, ref: {
 }>;
 
 // @public
+export interface ForwardRefType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof FORWARD_REF_TYPE;
+    // (undocumented)
+    render: (props: P, ref: unknown) => ReactCompatNode;
+}
+
+// @public
 export const Fragment: unique symbol;
 
 // @public
@@ -163,6 +168,12 @@ export interface HydrateRootOptions {
     resumeId?: string;
 }
 
+// @public (undocumented)
+export interface HydrationEventReplayOptions {
+    // (undocumented)
+    onCapturedEvent?: (event: Event, target: EventTarget) => void;
+}
+
 // @public
 export interface HydrationRecoverableErrorInfo {
     // (undocumented)
@@ -173,8 +184,9 @@ export interface HydrationRecoverableErrorInfo {
     path: string;
 }
 
-// Warning: (ae-forgotten-export) The symbol "isReactCompatElement" needs to be exported by the entry point index.d.ts
-//
+// @public
+export function isReactCompatElement(value: unknown): value is ReactCompatElement;
+
 // @public
 export const isValidElement: typeof isReactCompatElement;
 
@@ -192,7 +204,37 @@ export function lazy<P>(load: () => Promise<{
 }>): LazyType<P>;
 
 // @public
+export interface LazyType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof LAZY_TYPE;
+    // (undocumented)
+    error?: unknown;
+    // (undocumented)
+    load: () => Promise<{
+        default: ElementType<P>;
+    }>;
+    // (undocumented)
+    promise?: Promise<void>;
+    // (undocumented)
+    resolved?: ElementType<P>;
+    // (undocumented)
+    status: "uninitialized" | "pending" | "resolved" | "rejected";
+}
+
+// @public
 export function memo<P>(type: ElementType<P>, compare?: (previous: P, next: P) => boolean): MemoType<P>;
+
+// @public
+export interface MemoType<P = Record<string, unknown>> {
+    // (undocumented)
+    $$typeof: typeof MEMO_TYPE;
+    // (undocumented)
+    __mreactMemoCompareProps?: readonly string[];
+    // (undocumented)
+    compare?: (previous: P, next: P) => boolean;
+    // (undocumented)
+    type: ElementType<P>;
+}
 
 // @public
 export const Profiler: unique symbol;
@@ -203,10 +245,18 @@ export interface PureComponent<P extends Record<string, unknown> = Record<string
     shouldComponentUpdate(nextProps: P, nextState: S): boolean;
 }
 
-// Warning: (ae-forgotten-export) The symbol "PureComponentConstructor" needs to be exported by the entry point index.d.ts
-//
 // @public
 export const PureComponent: PureComponentConstructor;
+
+// @public (undocumented)
+export interface PureComponentConstructor {
+    // (undocumented)
+    <P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>>(this: PureComponent<P, S>, props: P): void;
+    // (undocumented)
+    new <P extends Record<string, unknown> = Record<string, unknown>, S extends Record<string, unknown> = Record<string, unknown>>(props: P): PureComponent<P, S>;
+    // (undocumented)
+    prototype: PureComponent<any, any>;
+}
 
 // @public
 export function queueHydrationEvent(container: Element, event: Event, target: EventTarget): void;
@@ -282,6 +332,43 @@ const ReactCompat: {
 };
 export default ReactCompat;
 
+// @public (undocumented)
+export interface ReactCompatConsumer<T> {
+    // (undocumented)
+    $$typeof: typeof REACT_COMPAT_CONSUMER_TYPE;
+    // (undocumented)
+    context?: ReactCompatContextLike<T>;
+    // (undocumented)
+    _context?: ReactCompatContextLike<T>;
+    // (undocumented)
+    displayName: string | undefined;
+}
+
+// @public (undocumented)
+export interface ReactCompatContext<T> {
+    // (undocumented)
+    Consumer: ReactCompatConsumer<T>;
+    // (undocumented)
+    defaultValue: T;
+    // (undocumented)
+    displayName: string | undefined;
+    // (undocumented)
+    Provider: ReactCompatProvider<T>;
+    // (undocumented)
+    values: T[];
+}
+
+// @public (undocumented)
+export type ReactCompatContextLike<T> = ReactCompatContext<T> | ReactCompatExternalContext<T>;
+
+// @public (undocumented)
+export interface ReactCompatContextProviderShorthand {
+    // (undocumented)
+    Consumer: unknown;
+    // (undocumented)
+    Provider: ReactCompatProviderType;
+}
+
 // @public
 export interface ReactCompatElement<P = Record<string, unknown>> {
     // (undocumented)
@@ -298,8 +385,56 @@ export interface ReactCompatElement<P = Record<string, unknown>> {
     type: ElementType<P>;
 }
 
+// @public (undocumented)
+export interface ReactCompatExternalContext<T> {
+    // (undocumented)
+    $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
+    // (undocumented)
+    Consumer?: unknown;
+    // (undocumented)
+    _currentValue?: T;
+    // (undocumented)
+    _currentValue2?: T;
+    // (undocumented)
+    _defaultValue?: T;
+    // (undocumented)
+    displayName?: string | undefined;
+    // (undocumented)
+    Provider?: unknown;
+}
+
 // @public
 export type ReactCompatNode = ReactCompatRenderableElement | ReactCompatPortal | string | number | boolean | null | undefined | ReactCompatNode[];
+
+// @public
+export interface ReactCompatPortal {
+    // (undocumented)
+    $$typeof: typeof PORTAL_TYPE;
+    // (undocumented)
+    children: ReactCompatNode;
+    // (undocumented)
+    container: Element;
+    // (undocumented)
+    key: string | null;
+}
+
+// @public (undocumented)
+export interface ReactCompatProvider<T> {
+    // (undocumented)
+    $$typeof: typeof REACT_COMPAT_PROVIDER_TYPE;
+    // (undocumented)
+    context?: ReactCompatContextLike<T>;
+    // (undocumented)
+    displayName: string | undefined;
+}
+
+// @public (undocumented)
+export interface ReactCompatProviderType {
+    // (undocumented)
+    $$typeof: symbol;
+    // (undocumented)
+    context: unknown;
+}
 
 // @public
 export interface ReactCompatRenderableElement {
@@ -313,6 +448,18 @@ export interface ReactCompatRenderableElement {
 }
 
 // @public
+export interface ReactReservedProps {
+    // (undocumented)
+    __self?: unknown;
+    // (undocumented)
+    __source?: unknown;
+    // (undocumented)
+    key?: unknown;
+    // (undocumented)
+    ref?: unknown;
+}
+
+// @public
 export function readEventHydrationManifest(root?: ParentNode): EventHydrationManifest | undefined;
 
 // @public
@@ -321,18 +468,12 @@ export function render(element: ReactCompatNode, container: Element): void;
 // @public (undocumented)
 export function renderChildToString(value: unknown): string;
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatConsumer" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function renderContextConsumerToString<T>(consumer: ReactCompatConsumer<T>, render: (value: T) => string): string;
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatProvider" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function renderContextProviderToString<T>(provider: ReactCompatProvider<T>, value: T, render: () => string): string;
 
-// Warning: (ae-forgotten-export) The symbol "RootRuntimeOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function renderToString<TProps>(component: ((props: TProps) => ReactCompatNode) | (new (props: TProps) => {
     render(): ReactCompatNode;
@@ -350,6 +491,14 @@ export interface Root {
 export interface RootOptions {
     // (undocumented)
     identifierPrefix?: string;
+}
+
+// @public (undocumented)
+export interface RootRuntimeOptions {
+    // (undocumented)
+    identifierPrefix?: string;
+    // (undocumented)
+    idMode?: "client" | "server";
 }
 
 // @public
@@ -427,8 +576,6 @@ export function useActionState<TState, TPayload>(action: (previousState: TState,
 // @public
 export function useCallback<T extends (...args: never[]) => unknown>(callback: T, deps?: readonly unknown[]): T;
 
-// Warning: (ae-forgotten-export) The symbol "ReactCompatContextLike" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function useContext<T>(context: ReactCompatContextLike<T>): T;
 
@@ -438,8 +585,6 @@ export function useDebugValue(_value: unknown, _format?: (value: unknown) => unk
 // @public
 export function useDeferredValue<T>(value: T, initialValue?: T): T;
 
-// Warning: (ae-forgotten-export) The symbol "EffectCallback" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function useEffect(callback: EffectCallback, deps?: readonly unknown[]): void;
 

@@ -326,6 +326,9 @@ export function hasTopLevelExportDeclaration(input: {
 export type ModuleMetadata = ModuleMetadata_2;
 
 // @public
+export type ParserMode = "oxc";
+
+// @public
 export type RuntimeImport = RuntimeImport_2;
 
 // @public
@@ -427,8 +430,6 @@ export interface TransformInput {
     filename: string;
     // (undocumented)
     mode?: "auto" | "reactive" | "compat";
-    // Warning: (ae-forgotten-export) The symbol "ParserMode" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     parser?: ParserMode;
     // (undocumented)

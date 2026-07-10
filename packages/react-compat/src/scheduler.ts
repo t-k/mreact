@@ -13,6 +13,13 @@ import {
   type SchedulerPriority,
   type SchedulerTask,
 } from "./fiber-scheduler.js";
+export type {
+  SchedulerCallback,
+  SchedulerPriority,
+  SchedulerProfilingEvent,
+  SchedulerProfilingEventType,
+  SchedulerTask,
+} from "./fiber-scheduler.js";
 
 /** Numeric priority level used by the scheduler-compatible API. */
 export type unstable_PriorityLevel = 1 | 2 | 3 | 4 | 5;
@@ -34,7 +41,12 @@ export const unstable_LowPriority = 4;
 /** Scheduler priority for idle work. */
 export const unstable_IdlePriority = 5;
 /** Profiling controls for scheduler-compatible tracing. */
-export const unstable_Profiling = {
+export interface unstable_ProfilingControls {
+  startLoggingProfilingEvents(): void;
+  stopLoggingProfilingEvents(): readonly SchedulerProfilingEvent[] | null;
+}
+
+export const unstable_Profiling: unstable_ProfilingControls = {
   startLoggingProfilingEvents: startLoggingSchedulerProfilingEvents,
   stopLoggingProfilingEvents: stopLoggingSchedulerProfilingEvents,
 };

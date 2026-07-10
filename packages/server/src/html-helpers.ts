@@ -28,6 +28,9 @@ import {
 import { createStringSink, hasDeferredTasks, type StreamRender } from "./sink.js";
 import { renderToReadableStream } from "./stream.js";
 
+export type { HydrationScriptOptions } from "./boundary.js";
+export type { StreamRender } from "./sink.js";
+
 /** External script asset attributes emitted by renderScriptAsset. */
 export interface ScriptAssetOptions {
   src: string;

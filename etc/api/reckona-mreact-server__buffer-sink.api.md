@@ -6,8 +6,6 @@
 
 // @public
 export interface BufferSink {
-    // Warning: (ae-forgotten-export) The symbol "NodeBuffer" needs to be exported by the entry point buffer-sink.d.ts
-    //
     // (undocumented)
     append(chunk: string | NodeBuffer): void;
     // (undocumented)
@@ -29,6 +27,18 @@ export function createBufferSink(options?: BufferSinkOptions): BufferSink;
 
 // @public
 export function createStreamingBufferSink(options: StreamingBufferSinkOptions): StreamingBufferSink;
+
+// @public (undocumented)
+export interface NodeBuffer extends Uint8Array {
+    // (undocumented)
+    copy(target: NodeBuffer, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;
+    // (undocumented)
+    subarray(start?: number, end?: number): NodeBuffer;
+    // (undocumented)
+    toString(encoding?: string, start?: number, end?: number): string;
+    // (undocumented)
+    write(input: string, offset: number, encoding?: string): number;
+}
 
 // @public
 export interface StreamingBufferSink {

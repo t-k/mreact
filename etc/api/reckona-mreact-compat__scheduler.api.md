@@ -4,11 +4,46 @@
 
 ```ts
 
+// @public (undocumented)
+export type SchedulerCallback = (didTimeout: boolean) => SchedulerCallback | void;
+
+// @public (undocumented)
+export type SchedulerPriority = "immediate" | "user-blocking" | "normal" | "low" | "idle";
+
+// @public (undocumented)
+export interface SchedulerProfilingEvent {
+    // (undocumented)
+    priority: SchedulerPriority;
+    // (undocumented)
+    taskId: number;
+    // (undocumented)
+    time: number;
+    // (undocumented)
+    type: SchedulerProfilingEventType;
+}
+
+// @public (undocumented)
+export type SchedulerProfilingEventType = "schedule" | "cancel" | "start" | "complete" | "yield" | "error";
+
+// @public (undocumented)
+export interface SchedulerTask {
+    // (undocumented)
+    callback: SchedulerCallback | null;
+    // (undocumented)
+    expirationTime: number;
+    // (undocumented)
+    id: number;
+    // (undocumented)
+    priority: SchedulerPriority;
+    // (undocumented)
+    sortIndex: number;
+    // (undocumented)
+    startTime: number;
+}
+
 // @public
 export type unstable_Callback = (didTimeout: boolean) => unstable_Callback | null | void;
 
-// Warning: (ae-forgotten-export) The symbol "SchedulerTask" needs to be exported by the entry point scheduler.d.ts
-//
 // @public
 export type unstable_CallbackNode = SchedulerTask;
 
@@ -51,14 +86,17 @@ export function unstable_pauseExecution(): void;
 // @public
 export type unstable_PriorityLevel = 1 | 2 | 3 | 4 | 5;
 
-// @public
-export const unstable_Profiling: {
-    startLoggingProfilingEvents: typeof startLoggingSchedulerProfilingEvents;
-    stopLoggingProfilingEvents: typeof stopLoggingSchedulerProfilingEvents;
-};
+// @public (undocumented)
+export const unstable_Profiling: unstable_ProfilingControls;
 
-// Warning: (ae-forgotten-export) The symbol "SchedulerProfilingEvent" needs to be exported by the entry point scheduler.d.ts
-//
+// @public
+export interface unstable_ProfilingControls {
+    // (undocumented)
+    startLoggingProfilingEvents(): void;
+    // (undocumented)
+    stopLoggingProfilingEvents(): readonly SchedulerProfilingEvent[] | null;
+}
+
 // @public
 export type unstable_ProfilingEvent = SchedulerProfilingEvent;
 
@@ -81,11 +119,6 @@ export const unstable_UserBlockingPriority = 2;
 
 // @public
 export function unstable_wrapCallback<TArgs extends unknown[], TResult>(callback: (...args: TArgs) => TResult): (...args: TArgs) => TResult;
-
-// Warnings were encountered during analysis:
-//
-// packages/react-compat/src/scheduler.ts:38:3 - (ae-forgotten-export) The symbol "startLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
-// packages/react-compat/src/scheduler.ts:39:3 - (ae-forgotten-export) The symbol "stopLoggingSchedulerProfilingEvents" needs to be exported by the entry point scheduler.d.ts
 
 // (No @packageDocumentation comment for this package)
 

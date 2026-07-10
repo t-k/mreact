@@ -7,7 +7,7 @@ export { defer, isDeferredLoaderData } from "./deferred.js";
 export type { DeferredLoaderData } from "./deferred.js";
 export { definePage } from "./types.js";
 export { Link, linkProps } from "./link.js";
-export type { LinkSerializableAttribute, LinkSinkProps } from "./link.js";
+export type { LinkSerializableAttribute, LinkSinkChild, LinkSinkProps } from "./link.js";
 export { href } from "./typed-routes.js";
 export { parseMultipartStream } from "./multipart.js";
 export type {

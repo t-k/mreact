@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
 import {
-  adapterApiForgottenExports,
+  apiForgottenExports,
   apiExtractorConfigForEntry,
   apiReportFileName,
   collectPackageApiEntries,
   packageSlug,
+  staleApiForgottenExportAllowlistEntries,
 } from "./api-reference-packages.mjs";
 
 describe("API reference package discovery", () => {
@@ -77,23 +78,78 @@ describe("API reference package discovery", () => {
     );
   });
 
-  test("rejects forgotten exports in public router adapter reports", () => {
+  test("rejects forgotten exports in every public entrypoint report", () => {
     expect(
-      adapterApiForgottenExports(
+      apiForgottenExports(
         "@reckona/mreact-router/adapters/aws-lambda",
         '// Warning: (ae-forgotten-export) The symbol "AppRouterCache" needs to be exported',
       ),
     ).toEqual(["AppRouterCache"]);
     expect(
-      adapterApiForgottenExports(
+      apiForgottenExports(
         "@reckona/mreact-router",
         '// Warning: (ae-forgotten-export) The symbol "LegacyType" needs to be exported',
       ),
-    ).toEqual([]);
+    ).toEqual(["LegacyType"]);
     expect(
-      adapterApiForgottenExports(
+      apiForgottenExports(
         "@reckona/mreact-router/adapters/node",
         "// no forgotten exports",
+      ),
+    ).toEqual([]);
+  });
+
+  test("deduplicates repeated forgotten-export diagnostics", () => {
+    const warning = '// Warning: (ae-forgotten-export) The symbol "LeakedType" needs to be exported';
+    expect(apiForgottenExports("@reckona/mreact-query", `${warning}\n${warning}`)).toEqual([
+      "LeakedType",
+    ]);
+  });
+
+  test("applies forgotten-export exceptions to one exact entrypoint and symbol", () => {
+    const warning = '// Warning: (ae-forgotten-export) The symbol "ReviewedType" needs to be exported';
+    const allowlist = [
+      {
+        entrypoint: "@reckona/mreact-query",
+        rationale: "Temporary compatibility bridge with a removal plan.",
+        symbol: "ReviewedType",
+      },
+    ];
+
+    expect(apiForgottenExports("@reckona/mreact-query", warning, allowlist)).toEqual([]);
+    expect(apiForgottenExports("@reckona/mreact-store", warning, allowlist)).toEqual([
+      "ReviewedType",
+    ]);
+    expect(
+      apiForgottenExports(
+        "@reckona/mreact-query",
+        '// Warning: (ae-forgotten-export) The symbol "AnotherType" needs to be exported',
+        allowlist,
+      ),
+    ).toEqual(["AnotherType"]);
+  });
+
+  test("reports stale exact forgotten-export exceptions", () => {
+    const allowlist = [
+      {
+        entrypoint: "@reckona/mreact-query",
+        rationale: "Temporary compatibility bridge with a removal plan.",
+        symbol: "RemovedType",
+      },
+    ];
+
+    expect(
+      staleApiForgottenExportAllowlistEntries(
+        "@reckona/mreact-query",
+        "// no forgotten exports",
+        allowlist,
+      ),
+    ).toEqual(allowlist);
+    expect(
+      staleApiForgottenExportAllowlistEntries(
+        "@reckona/mreact-store",
+        "// no forgotten exports",
+        allowlist,
       ),
     ).toEqual([]);
   });

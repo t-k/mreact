@@ -9,18 +9,300 @@ import type { Diagnostic as Diagnostic_2 } from '@reckona/mreact-shared/compiler
 import type { ServerOutputMode as ServerOutputMode_2 } from '@reckona/mreact-shared/compiler-contract';
 import type { SourceLocation as SourceLocation_2 } from '@reckona/mreact-shared/compiler-contract';
 
-// Warning: (ae-forgotten-export) The symbol "CompilerModuleContext" needs to be exported by the entry point oxc.d.ts
-// Warning: (ae-forgotten-export) The symbol "AnalyzeToIrInput" needs to be exported by the entry point oxc.d.ts
-// Warning: (ae-forgotten-export) The symbol "AnalyzeToIrOutput" needs to be exported by the entry point oxc.d.ts
-//
 // @public
 export function analyzeCompilerModuleContextWithOxc(context: CompilerModuleContext, input: Omit<AnalyzeToIrInput, "code" | "filename">): AnalyzeToIrOutput;
+
+// @public
+export interface AnalyzeModuleOptions {
+    // (undocumented)
+    awaitCompatComponents?: "diagnostic" | "lower";
+    // (undocumented)
+    bodyStatementJsx?: BodyStatementJsxMode;
+    // (undocumented)
+    clientBoundaryFallbackImports?: readonly string[];
+    // (undocumented)
+    clientBoundaryImports?: readonly string[];
+    // (undocumented)
+    compatReactNodeReturn?: boolean;
+    // (undocumented)
+    compatReactNodeReturnRenderMode?: "react-node";
+    // (undocumented)
+    serverOutput?: ServerOutputMode;
+    // (undocumented)
+    topLevelJsx?: "diagnostic" | "compat-object" | "server-string";
+}
 
 // @public
 export function analyzeOxcParity(input: AnalyzeToIrInput): OxcParityResult;
 
 // @public
+export interface AnalyzeToIrInput {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    filename: string;
+    // (undocumented)
+    options?: AnalyzeModuleOptions;
+    // (undocumented)
+    target: CompileTarget;
+}
+
+// @public
+export interface AnalyzeToIrOutput {
+    // (undocumented)
+    diagnostics: Diagnostic[];
+    // (undocumented)
+    ir: ModuleIr;
+    // (undocumented)
+    usedTypescriptFallback?: boolean;
+}
+
+// @public
 export function analyzeWithOxc(input: AnalyzeToIrInput): AnalyzeToIrOutput;
+
+// @public
+export interface AsyncBoundaryIr {
+    // (undocumented)
+    awaitId?: string;
+    // (undocumented)
+    catchChildren?: JsxNodeIr[];
+    // (undocumented)
+    catchName?: string;
+    // (undocumented)
+    children: JsxNodeIr[];
+    // (undocumented)
+    kind: "async-boundary";
+    // (undocumented)
+    loc?: SourceLocation;
+    // (undocumented)
+    placeholderChildren?: JsxNodeIr[];
+    // (undocumented)
+    placeholderTagCode?: string;
+    // (undocumented)
+    valueCode: string;
+    // (undocumented)
+    valueName: string;
+}
+
+// @public
+export type AttributeIr = StaticAttributeIr | DynamicAttributeIr | EventAttributeIr | SpreadAttributeIr;
+
+// @public
+export type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
+
+// @public
+export interface ClientReferenceIr {
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    moduleId: string;
+    // (undocumented)
+    ssrFallback?: boolean;
+}
+
+// @public
+export interface CompilerModuleContext {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    filename: string;
+    // (undocumented)
+    parseErrors: readonly unknown[];
+    // (undocumented)
+    program: unknown;
+}
+
+// @public
+export type CompileTarget = CompileTarget_2;
+
+// @public
+export interface ComponentIr {
+    // (undocumented)
+    async?: boolean;
+    // (undocumented)
+    bindingNames: string[];
+    // (undocumented)
+    bodyStatements: string[];
+    // (undocumented)
+    exportDefault?: boolean;
+    // (undocumented)
+    exported?: boolean;
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    parameterPropAliases?: PropAliasIr[];
+    // (undocumented)
+    parameters: string[];
+    // (undocumented)
+    root: JsxNodeIr;
+}
+
+// @public
+export interface ComponentNamedPropIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    kind: "prop";
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export type ComponentPropIr = ComponentNamedPropIr | ComponentRenderPropIr | ComponentSpreadPropIr;
+
+// @public
+export interface ComponentRefIr {
+    // (undocumented)
+    async?: boolean;
+    // (undocumented)
+    children: JsxNodeIr[];
+    // (undocumented)
+    clientReference?: ClientReferenceIr;
+    // (undocumented)
+    keyCode?: string;
+    // (undocumented)
+    kind: "component";
+    // (undocumented)
+    loc?: SourceLocation;
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    props: ComponentPropIr[];
+    // (undocumented)
+    runtime?: "compat";
+}
+
+// @public
+export interface ComponentRenderPropIr {
+    // (undocumented)
+    children: JsxNodeIr[];
+    // (undocumented)
+    kind: "render-prop";
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    valueName?: string;
+}
+
+// @public
+export interface ComponentSpreadPropIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    kind: "spread-prop";
+}
+
+// @public
+export interface ConditionalIr {
+    // (undocumented)
+    conditionCode: string;
+    // (undocumented)
+    conditionValueName?: string;
+    // (undocumented)
+    kind: "conditional";
+    // (undocumented)
+    whenFalse: JsxNodeIr[];
+    // (undocumented)
+    whenTrue: JsxNodeIr[];
+}
+
+// @public
+export type Diagnostic = Diagnostic_2;
+
+// @public
+export interface DynamicAttributeIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    kind: "dynamic-attr";
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    serialization?: "compat";
+}
+
+// @public
+export interface EventAttributeIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    eventName: string;
+    // (undocumented)
+    kind: "event";
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export interface ExprIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    kind: "expr";
+    // (undocumented)
+    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child";
+}
+
+// @public
+export interface JsxElementIr {
+    // (undocumented)
+    attributes: AttributeIr[];
+    // (undocumented)
+    children: JsxNodeIr[];
+    // (undocumented)
+    keyCode?: string;
+    // (undocumented)
+    kind: "element";
+    // (undocumented)
+    tagName: string;
+}
+
+// @public
+export interface JsxFragmentIr {
+    // (undocumented)
+    bodyStatements?: string[];
+    // (undocumented)
+    children: JsxNodeIr[];
+    // (undocumented)
+    kind: "fragment";
+}
+
+// @public
+export type JsxNodeIr = JsxElementIr | ComponentRefIr | JsxFragmentIr | ConditionalIr | ListIr | TextIr | ExprIr | AsyncBoundaryIr;
+
+// @public
+export interface ListIr {
+    // (undocumented)
+    arrayName?: string;
+    // (undocumented)
+    bodyStatements?: string[];
+    // (undocumented)
+    children: JsxNodeIr[];
+    // (undocumented)
+    indexName?: string;
+    // (undocumented)
+    itemName: string;
+    // (undocumented)
+    itemsCode: string;
+    // (undocumented)
+    keyCode?: string;
+    // (undocumented)
+    kind: "list";
+}
+
+// @public
+export interface ModuleIr {
+    // (undocumented)
+    components: ComponentIr[];
+    // (undocumented)
+    moduleBindingNames: string[];
+    // (undocumented)
+    moduleStatements: string[];
+    // (undocumented)
+    userImports: string[];
+}
 
 // @public
 export interface OxcParityResult {
@@ -36,9 +318,45 @@ export interface OxcParityResult {
     };
 }
 
-// Warnings were encountered during analysis:
-//
-// packages/compiler/src/oxc.ts:107:5 - (ae-forgotten-export) The symbol "ModuleIr" needs to be exported by the entry point oxc.d.ts
+// @public
+export interface PropAliasIr {
+    // (undocumented)
+    localName: string;
+    // (undocumented)
+    propName: string;
+}
+
+// @public
+export type ServerOutputMode = ServerOutputMode_2;
+
+// @public
+export type SourceLocation = SourceLocation_2;
+
+// @public
+export interface SpreadAttributeIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    kind: "spread-attr";
+}
+
+// @public
+export interface StaticAttributeIr {
+    // (undocumented)
+    kind: "static-attr";
+    // (undocumented)
+    name: string;
+    // (undocumented)
+    value: string;
+}
+
+// @public
+export interface TextIr {
+    // (undocumented)
+    kind: "text";
+    // (undocumented)
+    value: string;
+}
 
 // (No @packageDocumentation comment for this package)
 

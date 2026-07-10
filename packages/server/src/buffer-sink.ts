@@ -12,7 +12,7 @@
 // tsconfig は `lib: ES2022 + DOM`, `types: []` なので `@types/node` に
 // 依存しないよう、`Buffer` の最小型を本 file 内で declare する。
 
-interface NodeBuffer extends Uint8Array {
+export interface NodeBuffer extends Uint8Array {
   toString(encoding?: string, start?: number, end?: number): string;
   write(input: string, offset: number, encoding?: string): number;
   copy(target: NodeBuffer, targetStart?: number, sourceStart?: number, sourceEnd?: number): number;

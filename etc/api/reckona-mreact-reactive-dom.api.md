@@ -17,10 +17,18 @@ export interface BindEventOptions {
     direct?: boolean;
 }
 
-// Warning: (ae-forgotten-export) The symbol "BindListOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function bindList<T>(parent: ParentNode, marker: ChildNode, items: () => readonly T[], renderItem: (item: T, index: number, items: readonly T[]) => RenderValue, options?: BindListOptions<T>): Dispose;
+
+// @public (undocumented)
+export interface BindListOptions<T> {
+    // (undocumented)
+    itemMode?: "reactive" | "static";
+    // (undocumented)
+    key?: (item: T, index: number, items: readonly T[]) => unknown;
+    // (undocumented)
+    nestedObjectFallback?: boolean;
+}
 
 // @public
 export function bindProp(element: Element, name: string, value: () => unknown): Dispose;
@@ -37,8 +45,6 @@ export interface BindSelectorClassOptions {
 // @public
 export function bindSpreadProps(element: HTMLElement, props: () => Record<string, unknown> | null | undefined): Dispose;
 
-// Warning: (ae-forgotten-export) The symbol "SingleNodeRenderer" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(parent: ParentNode, marker: ChildNode, items: () => readonly T[], renderItem: SingleNodeRenderer<T, TNode>, options: BindStaticKeyedSingleNodeListOptions<T, TNode>): Dispose;
 
@@ -47,21 +53,39 @@ export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode
     deferEventPromotion?: boolean;
     // (undocumented)
     key: (item: T, index: number, items: readonly T[]) => unknown;
-    // Warning: (ae-forgotten-export) The symbol "BindStaticKeyedSingleNodeListSelectedClassOptions" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     selectedClass?: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "BindTextOptions" needs to be exported by the entry point index.d.ts
-//
+// @public (undocumented)
+export interface BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode extends ChildNode> {
+    // (undocumented)
+    className: string;
+    // (undocumented)
+    preserveInitial?: boolean;
+    // (undocumented)
+    source: ReadonlyCell<unknown>;
+    // (undocumented)
+    target?: (node: TNode, item: T, index: number, items: readonly T[]) => Element | null;
+}
+
 // @public
 export function bindText(node: Text, value: ReadonlyCell<unknown> | (() => unknown), options?: BindTextOptions): Dispose;
 
-// Warning: (ae-forgotten-export) The symbol "BindTextBatchOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function bindTextBatch(nodes: readonly Text[], value: () => unknown, options?: BindTextBatchOptions): Dispose;
+
+// @public (undocumented)
+export interface BindTextBatchOptions {
+    // (undocumented)
+    preserveInitial?: boolean;
+}
+
+// @public (undocumented)
+export interface BindTextOptions {
+    // (undocumented)
+    preserveInitial?: boolean;
+}
 
 // @public
 export function createList<T>(items: () => readonly T[], renderItem: (item: T, index: number, items: readonly T[]) => RenderValue, options?: ListRenderValue<T>["options"]): ListRenderValue<T>;
@@ -103,6 +127,9 @@ export interface ListRenderValue<T = unknown> {
 
 // @public
 export type RenderValue = Node | string | number | boolean | null | undefined | ListRenderValue | readonly RenderValue[];
+
+// @public (undocumented)
+export type SingleNodeRenderer<T, TNode extends ChildNode> = (item: T, index: number, items: readonly T[]) => TNode;
 
 // @public (undocumented)
 export function withBatchedDelegatedRootReleases<T>(fn: () => T): T;

@@ -23,4 +23,4 @@ export {
   version,
 } from "./hooks.js";
 /** Transition function types for the hooks subpath. */
-export type { StartTransition, TransitionScope } from "./hooks.js";
+export type { EffectCallback, StartTransition, TransitionScope } from "./hooks.js";

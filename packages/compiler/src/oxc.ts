@@ -98,6 +98,41 @@ import {
 import { containsRawJsxInIr } from "./oxc-raw-jsx.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
+export type { AnalyzeToIrInput, AnalyzeToIrOutput } from "./internal.js";
+export type { CompilerModuleContext } from "./compiler-module-context.js";
+export type {
+  AsyncBoundaryIr,
+  AttributeIr,
+  ClientReferenceIr,
+  ComponentIr,
+  ComponentNamedPropIr,
+  ComponentPropIr,
+  ComponentRefIr,
+  ComponentRenderPropIr,
+  ComponentSpreadPropIr,
+  ConditionalIr,
+  DynamicAttributeIr,
+  EventAttributeIr,
+  ExprIr,
+  JsxElementIr,
+  JsxFragmentIr,
+  JsxNodeIr,
+  ListIr,
+  ModuleIr,
+  PropAliasIr,
+  SpreadAttributeIr,
+  StaticAttributeIr,
+  TextIr,
+} from "./ir.js";
+export type {
+  AnalyzeModuleOptions,
+  BodyStatementJsxMode,
+  CompileTarget,
+  Diagnostic,
+  ServerOutputMode,
+  SourceLocation,
+} from "./types.js";
+
 /** Reports OXC analysis parity data used by compiler migration and diagnostics tests. */
 export interface OxcParityResult {
   matches: boolean;

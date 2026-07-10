@@ -824,13 +824,14 @@ export type LinkScroll = "top" | "preserve";
 export type LinkSerializableAttribute = boolean | number | string | null | undefined;
 
 // @public
+export type LinkSinkChild = boolean | number | string | null | undefined | TrustedLinkHtml | readonly LinkSinkChild[];
+
+// @public
 export interface LinkSinkProps extends LinkOptions<string> {
     // (undocumented)
     [ariaAttribute: `aria-${string}`]: LinkSerializableAttribute;
     // (undocumented)
     [dataAttribute: `data-${string}`]: LinkSerializableAttribute;
-    // Warning: (ae-forgotten-export) The symbol "LinkSinkChild" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     children?: LinkSinkChild;
     // (undocumented)

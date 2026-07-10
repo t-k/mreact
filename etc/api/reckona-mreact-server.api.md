@@ -79,6 +79,14 @@ export interface FlightArrayBufferModel {
 }
 
 // @public
+export interface FlightBigIntModel {
+    // (undocumented)
+    kind: "bigint";
+    // (undocumented)
+    value: string;
+}
+
+// @public
 export interface FlightClientManifestEntry extends FlightClientReferenceInput {
     // (undocumented)
     chunks: string[];
@@ -123,6 +131,14 @@ export interface FlightDataViewModel {
 }
 
 // @public
+export interface FlightDateModel {
+    // (undocumented)
+    kind: "date";
+    // (undocumented)
+    value: string;
+}
+
+// @public
 export interface FlightElementModel {
     // (undocumented)
     key: string | null;
@@ -134,6 +150,18 @@ export interface FlightElementModel {
     type: string | FlightClientReferenceModel | {
         kind: "fragment";
     };
+}
+
+// @public
+export interface FlightErrorModel {
+    // (undocumented)
+    digest?: string;
+    // (undocumented)
+    kind: "error";
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    name: string;
 }
 
 // @public
@@ -152,20 +180,42 @@ export interface FlightIterableModel {
     values: FlightModel[];
 }
 
-// Warning: (ae-forgotten-export) The symbol "FlightObjectModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightDateModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightBigIntModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightNumberModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightSymbolModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightMapModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightSetModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightErrorModel" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "FlightPromiseModel" needs to be exported by the entry point index.d.ts
-//
+// @public
+export interface FlightMapModel {
+    // (undocumented)
+    entries: [FlightModel, FlightModel][];
+    // (undocumented)
+    kind: "map";
+}
+
 // @public
 export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
 };
+
+// @public
+export interface FlightNumberModel {
+    // (undocumented)
+    kind: "number";
+    // (undocumented)
+    value: "Infinity" | "-Infinity" | "NaN" | "-0";
+}
+
+// @public
+export interface FlightObjectModel {
+    // (undocumented)
+    [key: string]: FlightModel | undefined;
+    // (undocumented)
+    kind?: never;
+}
+
+// @public
+export interface FlightPromiseModel {
+    // (undocumented)
+    id: number;
+    // (undocumented)
+    kind: "promise";
+}
 
 // @public
 export interface FlightResponse {
@@ -208,6 +258,22 @@ export interface FlightServerReferenceModel {
 }
 
 // @public
+export interface FlightSetModel {
+    // (undocumented)
+    kind: "set";
+    // (undocumented)
+    values: FlightModel[];
+}
+
+// @public
+export interface FlightSymbolModel {
+    // (undocumented)
+    kind: "symbol";
+    // (undocumented)
+    name: string;
+}
+
+// @public
 export interface FlightTypedArrayModel {
     // (undocumented)
     arrayType: FlightTypedArrayName;
@@ -225,8 +291,6 @@ export { Fragment }
 // @public
 export function fromReactFlightRows(rows: string): FlightResponse;
 
-// Warning: (ae-forgotten-export) The symbol "ReactFlightProtocolCoverage" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function getReactFlightProtocolCoverage(): ReactFlightProtocolCoverage;
 
@@ -279,6 +343,16 @@ export interface OutOfOrderReorderScriptOptions {
 }
 
 export { ReactCompatNode }
+
+// @public
+export interface ReactFlightProtocolCoverage {
+    // (undocumented)
+    binaryRowTags: string[];
+    // (undocumented)
+    modelTokens: string[];
+    // (undocumented)
+    rowTags: string[];
+}
 
 // @public
 export interface ReactSuspenseBoundaryOptions extends AsyncBoundaryOptions {
