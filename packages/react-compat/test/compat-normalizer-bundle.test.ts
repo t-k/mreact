@@ -1,8 +1,9 @@
 // @vitest-environment happy-dom
 
 import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
@@ -87,6 +88,40 @@ describe("react-compat production bundle", () => {
       "./dist/jsx-runtime.js",
       "./dist/jsx-dev-runtime.js",
     ]));
+  });
+
+  test("preserves side-effect metadata in the packed compat tarball", async () => {
+    const packDir = await mkdtemp(join(tmpdir(), "mreact-compat-tarball-"));
+
+    try {
+      const packageDir = join(process.cwd(), "packages/react-compat");
+      const output = execFileSync(
+        "corepack",
+        ["pnpm", "--dir", packageDir, "pack", "--pack-destination", packDir],
+        { encoding: "utf8" },
+      );
+      const tarball = output.trim().split(/\r?\n/).at(-1);
+      if (tarball === undefined) {
+        throw new Error("expected pnpm pack to emit a tarball path");
+      }
+      const manifest = JSON.parse(
+        execFileSync(
+          "tar",
+          ["-xOf", isAbsolute(tarball) ? tarball : join(packDir, tarball), "package/package.json"],
+          {
+          encoding: "utf8",
+          },
+        ),
+      ) as { sideEffects?: unknown };
+
+      expect(manifest.sideEffects).toEqual(expect.arrayContaining([
+        "./dist/index.js",
+        "./dist/jsx-runtime.js",
+        "./dist/jsx-dev-runtime.js",
+      ]));
+    } finally {
+      await rm(packDir, { force: true, recursive: true });
+    }
   });
 
   test("executes a bundled compat entrypoint with normalized DOM output", async () => {
