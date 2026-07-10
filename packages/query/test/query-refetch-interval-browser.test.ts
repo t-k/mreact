@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { createQuery, createQueryClient } from "../src/index.js";
+import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
+import { createInfiniteQuery, createQuery, createQueryClient } from "../src/index.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -58,5 +59,86 @@ describe("query refetch interval", () => {
     expect(calls).toBe(1);
     observer.dispose();
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  });
+
+  test("stops polling when a result-dependent interval resolves to false", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: async () => ++calls,
+      queryKey: ["result-dependent-poll"],
+      refetchInterval: (result) => (result.status === "success" ? false : 100),
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(calls).toBe(1);
+    observer.dispose();
+  });
+
+  test("does not overlap an in-flight interval request", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    let release!: (value: number) => void;
+    const pending = new Promise<number>((resolve) => {
+      release = resolve;
+    });
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: () => {
+        calls += 1;
+        return pending;
+      },
+      queryKey: ["in-flight-poll"],
+      refetchInterval: 100,
+    });
+
+    await vi.advanceTimersByTimeAsync(400);
+    expect(calls).toBe(1);
+
+    release(1);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(calls).toBe(2);
+    observer.dispose();
+  });
+
+  test("polls infinite queries through the same interval lifecycle", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const observer = createInfiniteQuery(createQueryClient(), {
+      autoFetch: false,
+      getNextPageParam: () => undefined,
+      initialPageParam: 0,
+      queryFn: async () => ++calls,
+      queryKey: ["infinite-poll"],
+      refetchInterval: 100,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(calls).toBe(1);
+    expect(observer.result.get().pages).toEqual([1]);
+    observer.dispose();
+  });
+
+  test("stops interval polling when its cleanup scope is disposed", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    const disposers: Array<() => void> = [];
+    withCleanupScope((dispose) => disposers.push(dispose), () => {
+      createQuery(createQueryClient(), {
+        autoFetch: false,
+        queryFn: async () => ++calls,
+        queryKey: ["scoped-poll"],
+        refetchInterval: 100,
+      });
+    });
+
+    disposers[0]?.();
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(calls).toBe(0);
   });
 });
