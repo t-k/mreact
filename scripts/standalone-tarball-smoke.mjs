@@ -1,55 +1,41 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { copyFile, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
+import { withStandaloneSmokeWorkspace } from "./standalone-tarball-smoke-workspace.mjs";
 
 const rootDir = resolve(new URL("..", import.meta.url).pathname);
 const packagesDir = join(rootDir, "packages");
-const packDir = join(rootDir, "dist", "npm-standalone-smoke");
-const rootLicenseFile = join(rootDir, "LICENSE");
-const smokeDir = await mkdtemp(join(tmpdir(), "mreact-standalone-tarball-smoke-"));
-const appDir = join(smokeDir, "app");
 
-try {
+await withStandaloneSmokeWorkspace(async ({ appDir, packDir }) => {
   await run("pnpm", ["build"], { cwd: rootDir });
-  const tarballs = await packWorkspacePackages();
-  await createStandaloneApp(tarballs);
+  const tarballs = await packWorkspacePackages(packDir);
+  await createStandaloneApp(appDir, tarballs);
   await run("pnpm", ["--dir", appDir, "install", "--ignore-scripts=false"], {
     cwd: rootDir,
   });
   await run("pnpm", ["--dir", appDir, "exec", "tsc", "--noEmit"], { cwd: rootDir });
-  await smokeDevServer();
+  await smokeDevServer(appDir);
   await run("pnpm", ["--dir", appDir, "exec", "mreact-router", "build", "--target=node"], {
     cwd: rootDir,
   });
-  await smokeBuiltServer();
+  await smokeBuiltServer(appDir);
   console.log("Standalone tarball smoke passed.");
-} finally {
-  await rm(smokeDir, { force: true, recursive: true });
-}
+});
 
-async function packWorkspacePackages() {
-  await rm(packDir, { force: true, recursive: true });
+async function packWorkspacePackages(packDir) {
   await mkdir(packDir, { recursive: true });
   const packageInfos = await readPublicPackageInfos();
   const tarballs = new Map();
 
   for (const packageInfo of packageInfos) {
-    const cleanupLicense = await copyRootLicenseForPack(packageInfo.dir);
-    let result;
-
-    try {
-      result = await run(
-        "corepack",
-        ["pnpm", "--dir", packageInfo.dir, "pack", "--pack-destination", packDir],
-        { cwd: rootDir },
-      );
-    } finally {
-      await cleanupLicense();
-    }
+    const result = await run(
+      "corepack",
+      ["pnpm", "--dir", packageInfo.dir, "pack", "--pack-destination", packDir],
+      { cwd: rootDir },
+    );
 
     const tarballName = result.stdout
       .trim()
@@ -101,21 +87,7 @@ async function readPublicPackageInfos() {
   return infos.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-async function copyRootLicenseForPack(packageDir) {
-  const packageLicenseFile = join(packageDir, "LICENSE");
-  const packageHasLicense = await fileExists(packageLicenseFile);
-
-  if (packageHasLicense) {
-    return async () => {};
-  }
-
-  await copyFile(rootLicenseFile, packageLicenseFile);
-  return async () => {
-    await rm(packageLicenseFile, { force: true });
-  };
-}
-
-async function createStandaloneApp(tarballs) {
+async function createStandaloneApp(appDir, tarballs) {
   await mkdir(join(appDir, "app"), { recursive: true });
   const packageJson = {
     name: "mreact-standalone-tarball-smoke",
@@ -449,7 +421,7 @@ void publicContractMatrix;
   );
 }
 
-async function smokeDevServer() {
+async function smokeDevServer(appDir) {
   const server = spawnLongRunning(
     "pnpm",
     ["--dir", appDir, "exec", "mreact-router", "dev", "--port", "0"],
@@ -464,15 +436,28 @@ async function smokeDevServer() {
   }
 }
 
-async function smokeBuiltServer() {
+async function smokeBuiltServer(appDir) {
   const server = spawnLongRunning(
     "pnpm",
-    ["--dir", appDir, "exec", "mreact-router", "start", ".mreact", "--host", "127.0.0.1", "--host-policy", "strict"],
+    [
+      "--dir",
+      appDir,
+      "exec",
+      "mreact-router",
+      "start",
+      ".mreact",
+      "--host",
+      "127.0.0.1",
+      "--host-policy",
+      "strict",
+    ],
     { cwd: rootDir, env: { ...process.env, PORT: "0" } },
   );
 
   try {
-    const url = await server.waitForUrl(/mreact app router serving built output at (?<url>http:\/\/[^\s]+)/u);
+    const url = await server.waitForUrl(
+      /mreact app router serving built output at (?<url>http:\/\/[^\s]+)/u,
+    );
     await expectHtml(url, "Standalone tarball smoke");
   } finally {
     await server.stop();
@@ -501,7 +486,11 @@ function spawnLongRunning(command, args, options) {
   child.on("exit", (code, signal) => {
     settled = true;
     for (const waiter of waiters.splice(0)) {
-      waiter.reject(new Error(`${command} ${args.join(" ")} exited before becoming ready (${formatExit(code, signal)})\n${output}`));
+      waiter.reject(
+        new Error(
+          `${command} ${args.join(" ")} exited before becoming ready (${formatExit(code, signal)})\n${output}`,
+        ),
+      );
     }
   });
 
@@ -586,7 +575,9 @@ async function expectHtml(url, expectedText) {
   const text = await response.text();
 
   if (response.status !== 200 || !text.includes(expectedText)) {
-    throw new Error(`Expected ${url} to return 200 with ${JSON.stringify(expectedText)}, got ${response.status}\n${text.slice(0, 500)}`);
+    throw new Error(
+      `Expected ${url} to return 200 with ${JSON.stringify(expectedText)}, got ${response.status}\n${text.slice(0, 500)}`,
+    );
   }
 }
 
@@ -602,19 +593,6 @@ function tarballSpec(tarballs, name) {
 
 function fileUrl(path) {
   return pathToFileURL(path).href;
-}
-
-async function fileExists(path) {
-  try {
-    await readFile(path);
-    return true;
-  } catch (error) {
-    if (error?.code === "ENOENT") {
-      return false;
-    }
-
-    throw error;
-  }
 }
 
 function run(command, args, options = {}) {
