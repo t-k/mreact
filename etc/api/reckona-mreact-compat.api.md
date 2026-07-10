@@ -185,10 +185,7 @@ export interface HydrationRecoverableErrorInfo {
 }
 
 // @public
-export function isReactCompatElement(value: unknown): value is ReactCompatElement;
-
-// @public
-export const isValidElement: typeof isReactCompatElement;
+export function isValidElement(value: unknown): value is ReactCompatElement;
 
 // @public
 export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
@@ -284,7 +281,7 @@ const ReactCompat: {
     readonly createPortal: typeof createPortal;
     readonly createRef: typeof createRef;
     readonly forwardRef: typeof forwardRef;
-    readonly isValidElement: isReactCompatElement;
+    readonly isValidElement: typeof isValidElement;
     readonly lazy: typeof lazy;
     readonly memo: typeof memo;
     readonly createContext: typeof createContext;

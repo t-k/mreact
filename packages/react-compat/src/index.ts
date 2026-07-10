@@ -20,7 +20,6 @@ export {
   createPortal,
   createRef,
   forwardRef,
-  isReactCompatElement,
   isValidElement,
   lazy,
   memo,

@@ -609,7 +609,10 @@ function hostPropsAreChildrenOnly(props: Record<string, unknown>): boolean {
 }
 
 /** Alias for checking whether a value is a React-compatible element. */
-export const isValidElement = isReactCompatElement;
+/** Returns true when a value is a React-compatible element. */
+export function isValidElement(value: unknown): value is ReactCompatElement {
+  return isReactCompatElement(value);
+}
 
 /** Helpers for iterating, counting, flattening, and validating children. */
 export const Children = {

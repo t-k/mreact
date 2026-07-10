@@ -15,7 +15,6 @@ export {
   createErrorBoundary,
   createRef,
   forwardRef,
-  isReactCompatElement,
   isValidElement,
   lazy,
   memo,

@@ -10,6 +10,6 @@ describe("@reckona/mreact-vite package contract", () => {
       ),
     ) as { peerDependencies?: Record<string, string> };
 
-    expect(packageJson.peerDependencies?.vite).toBe(">=8.0.16 <9");
+    expect(packageJson.peerDependencies?.vite).toBe(">=8.1.4 <9");
   });
 });

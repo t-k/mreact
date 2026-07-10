@@ -302,7 +302,7 @@ describe("router Vite middleware", () => {
     ) as { peerDependencies?: Record<string, string> };
 
     expect(middleware).toHaveLength(3);
-    expect(packageJson.peerDependencies?.vite).toBe(">=8.0.16 <9");
+    expect(packageJson.peerDependencies?.vite).toBe(">=8.1.4 <9");
   });
 
   test("shares the dev app route scan across styles, navigation, and render", async () => {

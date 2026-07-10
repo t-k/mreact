@@ -106,10 +106,7 @@ export interface ForwardRefType<P = Record<string, unknown>> {
 export const Fragment: unique symbol;
 
 // @public
-export function isReactCompatElement(value: unknown): value is ReactCompatElement;
-
-// @public
-export const isValidElement: typeof isReactCompatElement;
+export function isValidElement(value: unknown): value is ReactCompatElement;
 
 // @public
 export function lazy<P>(load: () => Promise<{
