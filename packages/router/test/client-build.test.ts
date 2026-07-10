@@ -6965,6 +6965,39 @@ export default function Page(props) {
     expect(document.getElementById("mreact-client-references-layout")).not.toBeNull();
   });
 
+  test("replaces and clears auth claims hand-off scripts during navigation", async () => {
+    const { routeModule } = await importRouteRuntime("auth-claims-navigation-sync");
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main>Home</main></div>',
+      '<script type="application/json" id="__mreact_auth_session">{"roles":["admin"]}</script>',
+    ].join("");
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="account"><main>Account</main></div>',
+        '<script type="application/json" id="__mreact_auth_session">{"roles":["member"]}</script>',
+        '<script type="application/json" id="mreact-props-account">{}</script>',
+      ].join(""),
+      "/account",
+    );
+
+    expect(document.getElementById("__mreact_auth_session")?.textContent).toBe(
+      '{"roles":["member"]}',
+    );
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="public"><main>Public</main></div>',
+        '<script type="application/json" id="mreact-props-public">{}</script>',
+      ].join(""),
+      "/public",
+    );
+
+    expect(document.getElementById("__mreact_auth_session")).toBeNull();
+  });
+
   test("deferred navigation runtime intercepts immediate same-origin link clicks", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-deferred-nav-click-"));
     const file = join(appDir, "page.mreact.tsx");

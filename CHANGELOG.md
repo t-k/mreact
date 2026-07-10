@@ -5,6 +5,7 @@
 ### Fixed
 
 - Fixed App Router SSR fallback output for inferred client boundary components so JSX children passed to imported shell components remain visible in the initial HTML while boundary props serialization stays compatible.
+- Fixed AWS Lambda payload validation so malformed events are rejected before runtime materialization or preload. Added `warmAwsLambdaRuntime()` for deployments that explicitly choose initialization-time runtime warming.
 
 ## 0.0.188 - 2026-07-09
 

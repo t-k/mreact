@@ -8,6 +8,7 @@ import {
   createPreloadedAwsLambdaRequestHandler,
   createPreloadedAwsLambdaStreamingRequestHandler,
   createAwsLambdaStreamingRequestHandler,
+  warmAwsLambdaRuntime,
   type AwsLambdaHttpEventV2,
 } from "../src/adapters/aws-lambda.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../src/logger.js";
@@ -84,6 +85,27 @@ describe("mreact AWS Lambda adapter", () => {
 
     expect(stream.metadata?.statusCode).toBe(400);
     expect(stream.text()).toContain("payload format 2.0");
+  });
+
+  test("validates malformed events before preloaded handlers materialize a runtime", async () => {
+    const { rootDir } = await createBuiltApp("mreact-lambda-preloaded-boundary-");
+    const missingOutDir = join(rootDir, "missing");
+    const invalidEvent = {
+      rawPath: "/",
+      rawQueryString: "",
+      requestContext: { http: { method: "GET" } },
+      version: "1.0",
+    } as never;
+    const buffered = await createPreloadedAwsLambdaRequestHandler({ outDir: missingOutDir });
+
+    await expect(buffered(invalidEvent)).resolves.toMatchObject({ statusCode: 400 });
+
+    installAwsLambdaStreamingMock();
+    const streaming = await createPreloadedAwsLambdaStreamingRequestHandler({ outDir: missingOutDir });
+    const stream = createTestLambdaResponseStream();
+    await streaming(invalidEvent, stream, {});
+
+    expect(stream.metadata?.statusCode).toBe(400);
   });
 
   test("renders a built app from an API Gateway HTTP API v2 event", async () => {
@@ -572,7 +594,7 @@ export default function Slow(props) {
     await new Promise((resolve) => setTimeout(resolve, 550));
   });
 
-  test("preloaded handler awaits built runtime preload before returning", async () => {
+  test("explicit Lambda warmup preloads the built runtime before a handler is created", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preloaded-handler-");
     await mkdir(join(appDir, "slow"), { recursive: true });
     await writeFile(
@@ -588,6 +610,7 @@ export default function Slow() {
     state.__mreactPreloadedLambda = [];
 
     await buildApp({ appDir, outDir, targets: ["node"] });
+    await warmAwsLambdaRuntime({ outDir });
     const handler = await createPreloadedAwsLambdaRequestHandler({ outDir });
 
     expect(state.__mreactPreloadedLambda).toEqual(["slow-page"]);
@@ -703,6 +726,10 @@ export default function Slow() {
     state.__mreactHotRoutePreload = [];
 
     await buildApp({ appDir, outDir, targets: ["node"] });
+    await warmAwsLambdaRuntime({
+      outDir,
+      preload: { mode: "hot-routes", routes: ["/hot"] },
+    });
     const handler = await createPreloadedAwsLambdaRequestHandler({
       outDir,
       preload: { mode: "hot-routes", routes: ["/hot"] },
@@ -756,6 +783,10 @@ export default function Hot({ data }) {
     state.__mreactHotRouteRequestPreload = [];
 
     await buildApp({ appDir, outDir, targets: ["node"] });
+    await warmAwsLambdaRuntime({
+      outDir,
+      preload: { mode: "hot-route-requests", routes: ["/hot"] },
+    });
     const handler = await createPreloadedAwsLambdaRequestHandler({
       outDir,
       preload: { mode: "hot-route-requests", routes: ["/hot"] },

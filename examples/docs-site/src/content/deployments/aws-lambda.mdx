@@ -34,7 +34,7 @@ unzip -l mreact-lambda.zip | head
 
 ## Generated handler
 
-The default generated handler uses `createPreloadedAwsLambdaRequestHandler()` so route runtime work can happen during Lambda initialization instead of racing the first user request.
+The default generated handler validates the API Gateway payload before it materializes a route runtime or starts preload work.
 
 ```ts
 import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
@@ -119,7 +119,7 @@ Replace `/api/health` with a lightweight route your app provides. The not-found 
 
 ## Cold start and preload
 
-Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. This also applies to stream routes with a loading boundary when the loader source contains router control-flow helpers such as `redirect()`, `notFound()`, or `throwNotFound()`: those routing decisions settle before page render artifacts are loaded. Use `createPreloadedAwsLambdaRequestHandler()` when first-hit latency matters and you accept more initialization work.
+Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. This also applies to stream routes with a loading boundary when the loader source contains router control-flow helpers such as `redirect()`, `notFound()`, or `throwNotFound()`: those routing decisions settle before page render artifacts are loaded. `createPreloadedAwsLambdaRequestHandler()` validates each event before it starts runtime work. Use `warmAwsLambdaRuntime()` during controlled initialization only when measured first-valid-request latency justifies the added initialization work.
 
 Measure before changing preload. Compare cold start, first request, and warm request timings for the same route and Lambda memory size.
 

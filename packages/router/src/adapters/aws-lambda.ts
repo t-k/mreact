@@ -210,18 +210,49 @@ export function createAwsLambdaRequestHandler(
 }
 
 /**
- * Creates a buffered AWS Lambda handler after eagerly preparing and preloading the built runtime.
+ * Creates a buffered AWS Lambda handler that starts full runtime preparation after the first valid event.
  *
- * Use this when startup code can await preload work before the first request instead of letting the first invocation share that cost.
+ * Invalid events are rejected before runtime materialization or preload work begins.
  */
 export async function createPreloadedAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): Promise<AwsLambdaRequestHandler> {
   warnIfImplicitHostTrust(options);
+  let handler: AwsLambdaRequestHandler | undefined;
+
+  return async (event) => {
+    try {
+      validateAwsLambdaHttpEventV2(event);
+    } catch {
+      return invalidAwsLambdaHttpEventV2Result();
+    }
+
+    handler ??= (() => {
+      const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
+      const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise, "all");
+      void runtimePreloadPromise?.catch(() => {});
+      return createAwsLambdaRequestHandlerFromRuntime(
+        options,
+        runtimeDirPromise,
+        runtimePreloadPromise,
+      );
+    })();
+
+    return await handler(event);
+  };
+}
+
+/**
+ * Explicitly materializes and preloads a built Lambda runtime before request handling.
+ *
+ * Call this during controlled Lambda initialization only when the extra startup work is preferable to first-valid-request latency. Request handlers always validate events before they start runtime work.
+ */
+export async function warmAwsLambdaRuntime(
+  options: AwsLambdaRequestHandlerOptions,
+): Promise<void> {
+  warnIfImplicitHostTrust(options);
   const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
   await preloadAwsLambdaRuntime(options, runtimeDir);
-
-  return createAwsLambdaRequestHandlerFromRuntime(options, Promise.resolve(runtimeDir));
 }
 
 function createAwsLambdaRequestHandlerFromRuntime(
@@ -364,21 +395,43 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
 }
 
 /**
- * Creates a streaming AWS Lambda handler after eagerly preparing and preloading the built runtime.
+ * Creates a streaming AWS Lambda handler that starts full runtime preparation after the first valid event.
+ *
+ * Invalid events are rejected before runtime materialization or preload work begins.
  */
 export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
 ): Promise<AwsLambdaStreamingRequestHandler<TContext>> {
   warnIfImplicitHostTrust(options);
   const runtime = awsLambdaRuntime();
-  const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
-  await preloadAwsLambdaRuntime(options, runtimeDir);
+  let handler: AwsLambdaStreamingRequestHandler<TContext> | undefined;
 
-  return createAwsLambdaStreamingRequestHandlerFromRuntime<TContext>(
-    options,
-    runtime,
-    Promise.resolve(runtimeDir),
-  );
+  return runtime.streamifyResponse(async (event, responseStream, context) => {
+    try {
+      validateAwsLambdaHttpEventV2(event);
+    } catch {
+      await streamResponseToLambda(
+        invalidAwsLambdaHttpEventV2Response(),
+        responseStream,
+        runtime,
+      );
+      return;
+    }
+
+    handler ??= (() => {
+      const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
+      const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise, "all");
+      void runtimePreloadPromise?.catch(() => {});
+      return createAwsLambdaStreamingRequestHandlerFromRuntime<TContext>(
+        options,
+        runtime,
+        runtimeDirPromise,
+        runtimePreloadPromise,
+      );
+    })();
+
+    await handler(event, responseStream, context);
+  });
 }
 
 function startAwsLambdaRuntimePreload(

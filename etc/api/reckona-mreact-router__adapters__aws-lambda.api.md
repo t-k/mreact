@@ -193,6 +193,9 @@ export interface RouterInstrumentation {
     onRequestStart?: (event: RouterRequestInstrumentationEvent) => void | Promise<void>;
 }
 
+// @public
+export function warmAwsLambdaRuntime(options: AwsLambdaRequestHandlerOptions): Promise<void>;
+
 // (No @packageDocumentation comment for this package)
 
 ```
