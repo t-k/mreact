@@ -30,6 +30,7 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<Fetc
     refetchInterval?: false | number | ((result: InfiniteQueryResult<TPage, TPageParam>) => false | number) | undefined;
     // (undocumented)
     refetchIntervalInBackground?: boolean | undefined;
+    refetchOnInvalidate?: boolean | undefined;
     // (undocumented)
     refetchOnReconnect?: boolean | undefined;
     // (undocumented)

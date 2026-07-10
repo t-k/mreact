@@ -132,6 +132,8 @@ describe("router Link", () => {
       Link(
         { append(value) { html += value; } },
         {
+          "data-config": { mode: "full" },
+          children: {} as Node,
           href: "/profile",
           onClick() {},
           ref: { current: null },
@@ -143,6 +145,8 @@ describe("router Link", () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("MR_LINK_SINK_UNSUPPORTED_PROP"));
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("onClick"));
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("ref"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("data-config"));
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("children"));
     } finally {
       warn.mockRestore();
       vi.unstubAllEnvs();

@@ -210,8 +210,9 @@ describe("query refetch interval", () => {
       release = resolve;
     });
     const client = createQueryClient();
+    client.setQueryData(["trigger-race"], 0);
     const observer = createQuery(client, {
-      autoFetch: false,
+      autoFetch: true,
       queryFn: () => {
         calls += 1;
         return pending;
@@ -220,6 +221,7 @@ describe("query refetch interval", () => {
       refetchInterval: 100,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
+      staleTime: 60_000,
     });
 
     await vi.advanceTimersByTimeAsync(100);
@@ -230,9 +232,13 @@ describe("query refetch interval", () => {
     expect(calls).toBe(1);
 
     release(1);
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
     expect(calls).toBe(1);
+
+    client.invalidateQueries({ queryKey: ["trigger-race"] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toBe(2);
     observer.dispose();
   });
 
@@ -263,8 +269,9 @@ describe("query refetch interval", () => {
       release = resolve;
     });
     const client = createQueryClient();
+    client.setQueryData(["infinite-trigger-race"], { pageParams: [0], pages: [0] });
     const observer = createInfiniteQuery(client, {
-      autoFetch: false,
+      autoFetch: true,
       getNextPageParam: () => undefined,
       initialPageParam: 0,
       queryFn: () => {
@@ -275,6 +282,7 @@ describe("query refetch interval", () => {
       refetchInterval: 100,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
+      staleTime: 60_000,
     });
 
     await vi.advanceTimersByTimeAsync(100);
@@ -285,9 +293,13 @@ describe("query refetch interval", () => {
     expect(calls).toBe(1);
 
     release(1);
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
     expect(calls).toBe(1);
+
+    client.invalidateQueries({ queryKey: ["infinite-trigger-race"] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toBe(2);
     observer.dispose();
   });
 

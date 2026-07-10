@@ -76,12 +76,21 @@ export type LinkSerializableAttribute =
   | number
   | string
   | null
+  | undefined;
+
+/** Represents child values that an HtmlSink Link can serialize without a browser DOM. */
+export type LinkSinkChild =
+  | boolean
+  | number
+  | string
+  | null
   | undefined
-  | Readonly<Record<string, boolean | number | string | null | undefined>>;
+  | TrustedLinkHtml
+  | readonly LinkSinkChild[];
 
 /** Configures an HtmlSink Link without browser-only event handlers or refs. */
 export interface LinkSinkProps extends LinkOptions<string> {
-  children?: LinkChild;
+  children?: LinkSinkChild;
   class?: string | undefined;
   className?: string | undefined;
   download?: string | boolean | undefined;
@@ -142,7 +151,7 @@ export function Link(
 ): ReactCompatElement | string | HTMLAnchorElement | void {
   if (maybeProps !== undefined) {
     reportUnsupportedSinkProps(maybeProps);
-    (sinkOrProps as HtmlSink).append(renderLinkString(maybeProps));
+    (sinkOrProps as HtmlSink).append(renderLinkString(maybeProps as LinkSinkProps));
     return;
   }
 
@@ -163,7 +172,11 @@ function reportUnsupportedSinkProps(props: LinkProps<string> | LinkSinkProps): v
   const unsupported = Object.entries(props)
     .filter(
       ([name, value]) =>
-        name === "ref" || typeof value === "function" || typeof value === "symbol",
+        name === "ref" ||
+        typeof value === "function" ||
+        typeof value === "symbol" ||
+        (name === "children" && !isSerializableSinkChild(value)) ||
+        (name !== "children" && name !== "style" && typeof value === "object" && value !== null),
     )
     .map(([name]) => name);
 
@@ -194,13 +207,14 @@ function renderLink(props: LinkProps<string>): string | HTMLAnchorElement {
   return renderAnchorString(propsWithLinkAttrs);
 }
 
-function renderLinkString(props: LinkProps<string> | LinkSinkProps): string {
+function renderLinkString(props: LinkSinkProps): string {
   const { href, prefetch, reload, scroll, transition, ...rest } = props;
-
-  return renderAnchorString({
+  const propsWithLinkAttrs = {
     ...rest,
     ...linkProps({ href, prefetch, reload, scroll, transition }),
-  });
+  };
+
+  return `<a${renderAnchorAttributes(propsWithLinkAttrs)}>${renderSinkChildren(props.children)}</a>`;
 }
 
 function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement {
@@ -288,6 +302,10 @@ function renderAnchorAttributes(props: Record<string, unknown>): string {
       continue;
     }
 
+    if (name !== "style" && typeof value === "object" && value !== null) {
+      continue;
+    }
+
     const attrName = attributeName(name);
     if (name === "style" && typeof value === "object" && value !== null) {
       const style = Object.entries(value as Record<string, unknown>)
@@ -363,6 +381,41 @@ function renderChildren(child: LinkChild): string {
   }
 
   return escapeHtmlText(child);
+}
+
+function renderSinkChildren(child: LinkSinkChild): string {
+  if (child === null || child === undefined || typeof child === "boolean") {
+    return "";
+  }
+
+  if (Array.isArray(child)) {
+    return child.map(renderSinkChildren).join("");
+  }
+
+  if (isTrustedLinkHtml(child)) {
+    return child[TRUSTED_LINK_HTML];
+  }
+
+  if (typeof child === "object") {
+    return "";
+  }
+
+  return escapeHtmlText(String(child));
+}
+
+function isSerializableSinkChild(value: unknown): value is LinkSinkChild {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === "boolean" ||
+    typeof value === "number" ||
+    typeof value === "string" ||
+    isTrustedLinkHtml(value)
+  ) {
+    return true;
+  }
+
+  return Array.isArray(value) && value.every(isSerializableSinkChild);
 }
 
 function isTrustedLinkHtml(value: unknown): value is TrustedLinkHtml {

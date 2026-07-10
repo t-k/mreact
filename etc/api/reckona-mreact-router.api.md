@@ -821,7 +821,7 @@ export function linkProps(options: LinkOptions<string>): Record<string, string>;
 export type LinkScroll = "top" | "preserve";
 
 // @public
-export type LinkSerializableAttribute = boolean | number | string | null | undefined | Readonly<Record<string, boolean | number | string | null | undefined>>;
+export type LinkSerializableAttribute = boolean | number | string | null | undefined;
 
 // @public
 export interface LinkSinkProps extends LinkOptions<string> {
@@ -829,8 +829,10 @@ export interface LinkSinkProps extends LinkOptions<string> {
     [ariaAttribute: `aria-${string}`]: LinkSerializableAttribute;
     // (undocumented)
     [dataAttribute: `data-${string}`]: LinkSerializableAttribute;
+    // Warning: (ae-forgotten-export) The symbol "LinkSinkChild" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    children?: LinkChild;
+    children?: LinkSinkChild;
     // (undocumented)
     class?: string | undefined;
     // (undocumented)

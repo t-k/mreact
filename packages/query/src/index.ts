@@ -176,6 +176,8 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
   initialData?: InfiniteQueryData<TPage, TPageParam> | undefined;
   initialPageParam: TPageParam;
   queryFn: (context: InfiniteQueryFunctionContext<TPageParam>) => Promise<TPage> | TPage;
+  /** Refetch the first page when this active query is invalidated. Defaults to true. */
+  refetchOnInvalidate?: boolean | undefined;
   refetchOnReconnect?: boolean | undefined;
   refetchOnWindowFocus?: boolean | undefined;
   refetchInterval?: false | number | ((result: InfiniteQueryResult<TPage, TPageParam>) => false | number) | undefined;
@@ -435,10 +437,20 @@ export function createInfiniteQuery<TPage, TPageParam>(
     result.set(next);
     return next;
   };
+  const autoFetch = options.autoFetch ?? typeof document !== "undefined";
+  let refetchInvalidated: () => void = () => {};
   const unsubscribe = client.subscribe<InfiniteQueryData<TPage, TPageParam>>(
     options.queryKey,
-    () => {
+    (entry) => {
       updateResult();
+      if (
+        entry.stale &&
+        !entry.isFetching &&
+        autoFetch &&
+        options.refetchOnInvalidate !== false
+      ) {
+        refetchInvalidated();
+      }
     },
     { exact: true },
   );
@@ -459,15 +471,22 @@ export function createInfiniteQuery<TPage, TPageParam>(
       },
     });
 
-  const refetch = async () => {
-    client.invalidateQueries({ queryKey: options.queryKey });
+  const fetchFirstPage = async () => {
     removeInfinitePageEntries(client, options.queryKey);
     await client.fetchQuery(firstPageOptions());
     removeInfinitePageEntries(client, options.queryKey);
     return updateResult();
   };
+  const refetch = async () => {
+    client.invalidateQueries({ queryKey: options.queryKey });
+    return fetchFirstPage();
+  };
+  refetchInvalidated = () => {
+    void fetchFirstPage().catch(() => {
+      updateResult();
+    });
+  };
 
-  const autoFetch = options.autoFetch ?? typeof document !== "undefined";
   if (autoFetch && client.getQueryData(options.queryKey) === undefined) {
     void client.fetchQuery(firstPageOptions()).catch(() => {
       updateResult();

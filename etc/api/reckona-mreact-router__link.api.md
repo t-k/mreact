@@ -76,7 +76,10 @@ export function linkProps(options: LinkOptions<string>): Record<string, string>;
 export type LinkScroll = "top" | "preserve";
 
 // @public
-export type LinkSerializableAttribute = boolean | number | string | null | undefined | Readonly<Record<string, boolean | number | string | null | undefined>>;
+export type LinkSerializableAttribute = boolean | number | string | null | undefined;
+
+// @public
+export type LinkSinkChild = boolean | number | string | null | undefined | TrustedLinkHtml | readonly LinkSinkChild[];
 
 // @public
 export interface LinkSinkProps extends LinkOptions<string> {
@@ -85,7 +88,7 @@ export interface LinkSinkProps extends LinkOptions<string> {
     // (undocumented)
     [dataAttribute: `data-${string}`]: LinkSerializableAttribute;
     // (undocumented)
-    children?: LinkChild;
+    children?: LinkSinkChild;
     // (undocumented)
     class?: string | undefined;
     // (undocumented)

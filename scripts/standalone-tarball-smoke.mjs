@@ -190,6 +190,7 @@ export default defineConfig({
   ResponseSinkStrategy,
   StartServerOptions,
 } from "@reckona/mreact-router";
+import type { ReactElement } from "@reckona/mreact";
 import type {
   AppRouterCache,
   CacheControlOptions,
@@ -200,6 +201,7 @@ import type {
 } from "@reckona/mreact-router/request";
 import type {
   AppRouterCache as NodeAppRouterCache,
+  NodeRequestHandler,
   NodeRequestHandlerOptions,
   RequestHostPolicy as NodeRequestHostPolicy,
   ResponseSinkStrategy as NodeResponseSinkStrategy,
@@ -207,17 +209,21 @@ import type {
 } from "@reckona/mreact-router/adapters/node";
 import type {
   AppRouterLogger as EdgeAppRouterLogger,
+  EdgeRequestHandler,
   EdgeRequestHandlerOptions,
 } from "@reckona/mreact-router/adapters/edge";
 import type {
   AppRoute as CloudflareAppRoute,
   BuiltServerManifest as CloudflareBuiltServerManifest,
   CloudflareRequestHandlerOptions,
+  CloudflareRequestHandler,
   RouteMetadata as CloudflareRouteMetadata,
 } from "@reckona/mreact-router/adapters/cloudflare";
 import type {
   AppRouterCache as LambdaAppRouterCache,
+  AwsLambdaRequestHandler,
   AwsLambdaRequestHandlerOptions,
+  AwsLambdaStreamingRequestHandler,
   RouterRequestInstrumentationEvent as LambdaRequestInstrumentationEvent,
 } from "@reckona/mreact-router/adapters/aws-lambda";
 import type { LinkSinkProps } from "@reckona/mreact-router/link";
@@ -242,18 +248,31 @@ const nodeHostPolicy: NodeRequestHostPolicy = "strict";
 const nodeSink: NodeResponseSinkStrategy = "buffer";
 const nodeInstrumentation = {} as NodeRequestInstrumentationEvent;
 const nodeOptions = {} as NodeRequestHandlerOptions;
+const nodeHandler = {} as NodeRequestHandler;
 const edgeLogger = {} as EdgeAppRouterLogger;
 const edgeOptions = {} as EdgeRequestHandlerOptions;
+const edgeHandler = {} as EdgeRequestHandler;
 const cloudflareRoute = {} as CloudflareAppRoute;
 const cloudflareManifest = {} as CloudflareBuiltServerManifest;
 const cloudflareMetadata = {} as CloudflareRouteMetadata;
 const cloudflareOptions = {} as CloudflareRequestHandlerOptions;
+const cloudflareHandler = {} as CloudflareRequestHandler;
 const lambdaCache = {} as LambdaAppRouterCache;
 const lambdaInstrumentation = {} as LambdaRequestInstrumentationEvent;
 const lambdaOptions = {} as AwsLambdaRequestHandlerOptions;
+const lambdaHandler = {} as AwsLambdaRequestHandler;
+const lambdaStreamingHandler = {} as AwsLambdaStreamingRequestHandler;
 const validSinkProps: LinkSinkProps = { href: "/typed", style: { color: "red" } };
 // @ts-expect-error HtmlSink Link props reject browser-only function values.
 const invalidSinkProps: LinkSinkProps = { href: "/typed", onClick() {} };
+// @ts-expect-error HtmlSink data attributes accept only primitive serializable values.
+const invalidSinkData: LinkSinkProps = { href: "/typed", "data-config": { mode: "full" } };
+// @ts-expect-error HtmlSink children cannot contain browser DOM nodes.
+const invalidSinkChild: LinkSinkProps = { href: "/typed", children: document.createElement("span") };
+// @ts-expect-error HtmlSink children cannot contain compat elements.
+const invalidSinkElement: LinkSinkProps = { href: "/typed", children: {} as ReactElement };
+// @ts-expect-error HtmlSink Link props reject browser refs.
+const invalidSinkRef: LinkSinkProps = { href: "/typed", ref: { current: null } };
 type PersistedDomainState = { count: number };
 const rawPersist: StorePersistOptions<PersistedDomainState> = {
   load: () => ({ count: 1 }),
@@ -287,17 +306,26 @@ void nodeHostPolicy;
 void nodeSink;
 void nodeInstrumentation;
 void nodeOptions;
+void nodeHandler;
 void edgeLogger;
 void edgeOptions;
+void edgeHandler;
 void cloudflareRoute;
 void cloudflareManifest;
 void cloudflareMetadata;
 void cloudflareOptions;
+void cloudflareHandler;
 void lambdaCache;
 void lambdaInstrumentation;
 void lambdaOptions;
+void lambdaHandler;
+void lambdaStreamingHandler;
 void validSinkProps;
 void invalidSinkProps;
+void invalidSinkData;
+void invalidSinkChild;
+void invalidSinkElement;
+void invalidSinkRef;
 void rawPersist;
 void taggedPersist;
 void legacyPersist;

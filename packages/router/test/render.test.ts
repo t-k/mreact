@@ -2534,11 +2534,12 @@ export default function Page() { return <main>A</main>; }`,
     );
     await writeFile(
       join(appDir, "b", "page.tsx"),
-      `import { cacheControl, revalidatePath } from "@reckona/mreact-router";
+      `import { revalidatePath } from "@reckona/mreact-router";
+
+export const revalidate = 0;
 
 export async function loader() {
   const state = globalThis.__mreactInterleavedRouteCache;
-  cacheControl({ sMaxAge: 0 });
   revalidatePath("/b");
   state.bStarted();
   await state.waitForB;
@@ -2569,7 +2570,7 @@ export default function Page() { return <main>B</main>; }`,
       const renderedB = await responseB;
 
       expect(renderedA.headers.get("cache-control")).toBe("s-maxage=11");
-      expect(renderedB.headers.get("cache-control")).toBe("s-maxage=0");
+      expect(renderedB.headers.get("cache-control")).toBe("no-store");
       expect(cacheA.calls).toContain("deleteByPath:/a");
       expect(cacheA.calls).not.toContain("deleteByPath:/b");
       expect(cacheB.calls).toContain("deleteByPath:/b");

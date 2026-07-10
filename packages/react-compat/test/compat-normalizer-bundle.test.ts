@@ -9,6 +9,13 @@ import { gzipSync } from "node:zlib";
 import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
+const packedCompatConsumerSizeBudgets = {
+  root: { gzipBytes: 11_200, rawBytes: 41_000 },
+  "jsx-runtime": { gzipBytes: 11_200, rawBytes: 41_100 },
+  "jsx-dev-runtime": { gzipBytes: 11_200, rawBytes: 41_200 },
+  native: { gzipBytes: 9_000, rawBytes: 34_000 },
+} as const;
+
 describe("react-compat production bundle", () => {
   test.each([
     ["root", 'import { createElement } from "@reckona/mreact-compat"; void createElement("div", null);'],
@@ -154,7 +161,11 @@ describe("react-compat production bundle", () => {
           text: "packed jsx dev",
         },
       ] as const;
-      const sizes: Array<{ gzipBytes: number; name: string; rawBytes: number }> = [];
+      const sizes: Array<{
+        gzipBytes: number;
+        name: Exclude<keyof typeof packedCompatConsumerSizeBudgets, "native">;
+        rawBytes: number;
+      }> = [];
 
       for (const scenario of scenarios) {
         const chunk = await bundlePackedScenario(root, scenario.name, `${scenario.factory}
@@ -197,6 +208,21 @@ export function mount(container) {
       );
       expect(sizes).toHaveLength(3);
       expect(sizes.every((size) => size.rawBytes > size.gzipBytes)).toBe(true);
+      for (const size of sizes) {
+        const budget = packedCompatConsumerSizeBudgets[size.name];
+        expect(size.rawBytes, `${size.name} packed consumer raw bytes`).toBeLessThanOrEqual(
+          budget.rawBytes,
+        );
+        expect(size.gzipBytes, `${size.name} packed consumer gzip bytes`).toBeLessThanOrEqual(
+          budget.gzipBytes,
+        );
+      }
+      expect(Buffer.byteLength(native.code), "native packed consumer raw bytes").toBeLessThanOrEqual(
+        packedCompatConsumerSizeBudgets.native.rawBytes,
+      );
+      expect(gzipSync(native.code).length, "native packed consumer gzip bytes").toBeLessThanOrEqual(
+        packedCompatConsumerSizeBudgets.native.gzipBytes,
+      );
     } finally {
       await rm(root, { force: true, recursive: true });
     }
