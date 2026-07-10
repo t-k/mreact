@@ -27,6 +27,7 @@
   "emit": "both",
   "json": "docs/api/index.json",
   "out": "docs/api",
+  "gitRevision": "main",
   "readme": "README.md",
   "excludeInternal": true,
   "excludePrivate": true,
