@@ -205,6 +205,9 @@ describe("router Vite middleware", () => {
     const source = await load?.call({} as never, "\0mreact-router-reactive-devtools", {});
 
     expect(source).toContain("export function currentReactiveDevtools()");
+    expect(source).toContain("export function emitReactiveEffectRunDevtoolsEvent()");
+    expect(source).toContain("export function invalidateReactiveDevtoolsCache()");
+    expect(source).toContain("export function prepareReactiveEffectRunDevtoolsEvent()");
     expect(source).toContain("return undefined");
   });
 
