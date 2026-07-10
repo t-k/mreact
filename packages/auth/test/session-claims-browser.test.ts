@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   __MREACT_AUTH_SESSION_SCRIPT_ID,
   __resetAuthForTesting,
+  configureAuth,
   createMemorySessionStore,
   getSession,
   getSessionClaims,
@@ -67,6 +68,27 @@ describe("browser session claims hand-off", () => {
       new Response(null),
       createMemorySessionStore(),
     );
+
+    expect(document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)).toBeNull();
+    expect(getSessionClaims()).toBeUndefined();
+  });
+
+  it("clears browser claims when a custom serializer cannot produce JSON", async () => {
+    __resetAuthForTesting();
+    document.body.innerHTML = `<script id="${__MREACT_AUTH_SESSION_SCRIPT_ID}" type="application/json">{"roles":["admin"]}</script>`;
+    configureAuth({
+      serializeClaims: () => ({ roles: ["member"], unsupported: 1n }),
+    });
+    const store = createMemorySessionStore<{ userId: string }>();
+    await store.set({
+      createdAt: Date.now(),
+      data: { userId: "bea" },
+      expiresAt: Date.now() + 60_000,
+      id: "non-json-session",
+    });
+    const request = { headers: new Headers({ cookie: "session=non-json-session" }) } as Request;
+
+    await refreshSession(request, new Response(null), store, { cookieName: "session" });
 
     expect(document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)).toBeNull();
     expect(getSessionClaims()).toBeUndefined();

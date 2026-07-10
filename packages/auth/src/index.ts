@@ -427,14 +427,14 @@ function setSessionClaims(data: unknown): void {
     return;
   }
 
-  if (claims === undefined) {
+  const browserClaims = claims !== undefined && writeClaimsToDocument(claims) ? claims : undefined;
+
+  if (browserClaims === undefined) {
     document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)?.remove();
-  } else {
-    writeClaimsToDocument(claims);
   }
 
-  state.browserClaims = claims;
-  state.currentClaims = claims;
+  state.browserClaims = browserClaims;
+  state.currentClaims = browserClaims;
 }
 
 function authRequestConfig(): AuthConfig | undefined {
@@ -472,8 +472,14 @@ function readClaimsFromDocument(): AuthSessionClaims | undefined {
   }
 }
 
-function writeClaimsToDocument(claims: AuthSessionClaims): void {
-  const serialized = JSON.stringify(claims);
+function writeClaimsToDocument(claims: AuthSessionClaims): boolean {
+  let serialized: string;
+
+  try {
+    serialized = JSON.stringify(claims);
+  } catch {
+    return false;
+  }
   let node = document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID);
 
   if (node === null) {
@@ -484,6 +490,7 @@ function writeClaimsToDocument(claims: AuthSessionClaims): void {
   }
 
   node.textContent = serialized;
+  return true;
 }
 
 function defaultSerializeSessionClaims(data: unknown): AuthSessionClaims | undefined {
