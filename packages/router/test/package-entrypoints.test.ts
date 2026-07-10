@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import * as ts from "@typescript/typescript6";
 import { describe, expect, test } from "vitest";
+import { build as viteBuild, type Rollup } from "vite";
 
 const packageEntrypointTypeCheckTimeoutMs = 30_000;
 
@@ -15,6 +16,31 @@ describe("router package entrypoints", () => {
     expect(manifest.exports).toHaveProperty("./session");
     expect(manifest.exports).toHaveProperty("./native-escape");
     expect(manifest.exports).toHaveProperty("./request");
+  });
+
+  test("bundles the request entrypoint without router build or dev toolchain code", async () => {
+    const result = await viteBuild({
+      build: {
+        lib: {
+          entry: join(process.cwd(), "packages", "router", "src", "request.ts"),
+          formats: ["es"],
+        },
+        minify: false,
+        rollupOptions: { treeshake: true },
+        write: false,
+      },
+      configFile: false,
+      logLevel: "silent",
+    });
+    const code = (Array.isArray(result) ? result : [result])
+      .flatMap((output) => output.output)
+      .filter((output): output is Rollup.OutputChunk => output.type === "chunk")
+      .map((chunk) => chunk.code)
+      .join("\n");
+
+    expect(code).not.toContain("createDevServer");
+    expect(code).not.toContain("buildApp");
+    expect(code).not.toContain("createViteServer");
   });
 
   test("exposes app-router global types for Slot layouts", async () => {
