@@ -83,6 +83,10 @@
       "types": "./dist/native-escape.d.ts",
       "default": "./dist/native-escape.js"
     },
+    "./request": {
+      "types": "./dist/request.d.ts",
+      "default": "./dist/request.js"
+    },
     "./session": {
       "types": "./dist/session.d.ts",
       "default": "./dist/session.js"

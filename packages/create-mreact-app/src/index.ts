@@ -1252,7 +1252,7 @@ export async function POST(request: Request): Promise<Response> {
 `;
 
 const dashboardMiddlewareSource = `import { getSession } from "@reckona/mreact-auth";
-import { redirect } from "@reckona/mreact-router";
+import { redirect } from "@reckona/mreact-router/request";
 import { sessions } from "./session-store.js";
 
 export const config = { matcher: ["/dashboard/:path*"] };

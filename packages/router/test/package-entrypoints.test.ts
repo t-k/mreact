@@ -14,6 +14,7 @@ describe("router package entrypoints", () => {
 
     expect(manifest.exports).toHaveProperty("./session");
     expect(manifest.exports).toHaveProperty("./native-escape");
+    expect(manifest.exports).toHaveProperty("./request");
   });
 
   test("exposes app-router global types for Slot layouts", async () => {
