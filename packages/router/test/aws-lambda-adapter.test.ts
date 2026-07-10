@@ -36,6 +36,30 @@ describe("mreact AWS Lambda adapter", () => {
     });
   });
 
+  test("rejects each routing-critical malformed payload shape in buffered and streaming handlers", async () => {
+    const { outDir } = await createBuiltApp("mreact-lambda-invalid-event-matrix-");
+    const invalidEvents: unknown[] = [
+      { ...lambdaEvent("/"), version: "1.0" },
+      { ...lambdaEvent("/"), version: "3.0" },
+      { ...lambdaEvent("/"), rawPath: undefined },
+      { ...lambdaEvent("/"), requestContext: { http: { method: "" } } },
+    ];
+    const buffered = createAwsLambdaRequestHandler({ outDir });
+    installAwsLambdaStreamingMock();
+    const streaming = createAwsLambdaStreamingRequestHandler({ outDir });
+
+    for (const event of invalidEvents) {
+      await expect(buffered(event as never)).resolves.toMatchObject({
+        body: expect.stringContaining("payload format 2.0"),
+        statusCode: 400,
+      });
+      const stream = createTestLambdaResponseStream();
+      await streaming(event as never, stream, {});
+      expect(stream.metadata?.statusCode).toBe(400);
+      expect(stream.text()).toContain("payload format 2.0");
+    }
+  });
+
   test("returns the payload format diagnostic from preloaded buffered and streaming handlers", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preloaded-invalid-event-");
     await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main>ok</main>; }");
