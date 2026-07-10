@@ -124,6 +124,8 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
    * Refetch active observers when their query is invalidated. Defaults to true.
    */
   refetchOnInvalidate?: boolean | undefined;
+  /** Refetch at this interval in milliseconds; disabled by false. */
+  refetchInterval?: false | number | ((result: QueryResult<TData>) => false | number) | undefined;
 }
 
 /** Observes one query result and exposes refetch and disposal controls. */
@@ -172,6 +174,7 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
   queryFn: (context: InfiniteQueryFunctionContext<TPageParam>) => Promise<TPage> | TPage;
   refetchOnReconnect?: boolean | undefined;
   refetchOnWindowFocus?: boolean | undefined;
+  refetchInterval?: false | number | ((result: InfiniteQueryResult<TPage, TPageParam>) => false | number) | undefined;
 }
 
 /** Observes paginated query data and exposes next-page, refetch, and disposal controls. */
@@ -368,6 +371,7 @@ export function createQuery<TData>(
     return updateResult(next);
   };
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
+  const unsubscribeRefetchInterval = registerRefetchInterval(options.refetchInterval, refetch, () => result.get());
 
   let disposed = false;
   const dispose = () => {
@@ -375,6 +379,7 @@ export function createQuery<TData>(
       disposed = true;
       unsubscribe();
       unsubscribeBrowserRevalidation();
+      unsubscribeRefetchInterval();
     }
   };
   registerCleanup(dispose);
@@ -460,6 +465,7 @@ export function createInfiniteQuery<TPage, TPageParam>(
   }
 
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
+  const unsubscribeRefetchInterval = registerRefetchInterval(options.refetchInterval, refetch, () => result.get());
 
   let disposed = false;
   const dispose = () => {
@@ -467,6 +473,7 @@ export function createInfiniteQuery<TPage, TPageParam>(
       disposed = true;
       unsubscribe();
       unsubscribeBrowserRevalidation();
+      unsubscribeRefetchInterval();
     }
   };
   registerCleanup(dispose);
@@ -791,6 +798,40 @@ function registerBrowserRevalidation(
   return () => {
     for (const cleanup of cleanups) {
       cleanup();
+    }
+  };
+}
+
+function registerRefetchInterval<TResult>(
+  interval: false | number | ((result: TResult) => false | number) | undefined,
+  refetch: () => Promise<unknown>,
+  result: () => TResult,
+): () => void {
+  if (interval === false || interval === undefined || typeof window === "undefined") {
+    return () => {};
+  }
+
+  let disposed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const schedule = () => {
+    const delay = typeof interval === "function" ? interval(result()) : interval;
+    if (disposed || delay === false || !Number.isFinite(delay) || delay < 0) {
+      return;
+    }
+    timer = setTimeout(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        schedule();
+        return;
+      }
+      void refetch().catch(() => {}).finally(schedule);
+    }, delay);
+  };
+
+  schedule();
+  return () => {
+    disposed = true;
+    if (timer !== undefined) {
+      clearTimeout(timer);
     }
   };
 }
