@@ -159,6 +159,33 @@ function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement 
       continue;
     }
 
+    if (name === "ref") {
+      if (typeof value === "function") {
+        (value as (element: HTMLAnchorElement) => void)(anchor);
+      } else if (typeof value === "object" && value !== null && "current" in value) {
+        (value as { current: HTMLAnchorElement | null }).current = anchor;
+      }
+      continue;
+    }
+
+    if (/^on[A-Z]/.test(name) && typeof value === "function") {
+      const capture = name.endsWith("Capture");
+      const eventName = name.slice(2, capture ? -"Capture".length : undefined).toLowerCase();
+      anchor.addEventListener(eventName, value as EventListener, capture);
+      continue;
+    }
+
+    if (name === "style" && typeof value === "object" && value !== null) {
+      for (const [property, styleValue] of Object.entries(value as Record<string, unknown>)) {
+        const cssProperty = linkStylePropertyName(property);
+        const cssValue = linkStyleValue(styleValue);
+        if (cssProperty !== undefined && cssValue !== undefined) {
+          anchor.style.setProperty(cssProperty, cssValue);
+        }
+      }
+      continue;
+    }
+
     if (!shouldSetAttribute(name, value)) {
       continue;
     }
@@ -170,7 +197,7 @@ function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement 
       continue;
     }
 
-    anchor.setAttribute(attrName, safeValue);
+    anchor.setAttribute(attrName, value === true ? "" : safeValue);
   }
 
   return anchor;
@@ -204,11 +231,26 @@ function renderAnchorAttributes(props: Record<string, unknown>): string {
   const attrs: string[] = [];
 
   for (const [name, value] of Object.entries(props)) {
-    if (name === "children" || !shouldSetAttribute(name, value)) {
+    if (name === "children" || /^on/i.test(name) || !shouldSetAttribute(name, value)) {
       continue;
     }
 
     const attrName = attributeName(name);
+    if (name === "style" && typeof value === "object" && value !== null) {
+      const style = Object.entries(value as Record<string, unknown>)
+        .flatMap(([property, styleValue]) => {
+          const cssProperty = linkStylePropertyName(property);
+          const cssValue = linkStyleValue(styleValue);
+          return cssProperty === undefined || cssValue === undefined
+            ? []
+            : [`${cssProperty}:${cssValue}`];
+        })
+        .join(";");
+      if (style !== "") {
+        attrs.push(`${escapeHtmlAttribute(attrName)}="${escapeHtmlAttribute(style)}"`);
+      }
+      continue;
+    }
     const attrValue = String(value);
     const safeValue = safeUrlAttributeValue(attrName, attrValue);
 
@@ -236,6 +278,22 @@ function shouldSetAttribute(name: string, value: unknown): boolean {
 
 function attributeName(name: string): string {
   return name === "className" ? "class" : name;
+}
+
+function linkStylePropertyName(property: string): string | undefined {
+  const cssProperty = property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+  return /^(?:--[a-zA-Z0-9_-]+|[a-zA-Z][a-zA-Z0-9-]*)$/.test(cssProperty)
+    ? cssProperty
+    : undefined;
+}
+
+function linkStyleValue(value: unknown): string | undefined {
+  if (value === null || value === undefined || value === false) {
+    return undefined;
+  }
+
+  const cssValue = String(value);
+  return /[;{}]/.test(cssValue) ? undefined : cssValue;
 }
 
 function renderChildren(child: LinkChild): string {

@@ -48,6 +48,17 @@ describe("router Link", () => {
     expect(html).toBe('<a href="https://example.com/about">External</a>');
   });
 
+  test("does not serialize event props and serializes style objects", () => {
+    const html = Link({
+      children: "Profile",
+      href: "/profile",
+      onmouseover: "alert(1)",
+      style: { color: "red" },
+    });
+
+    expect(html).toBe('<a style="color:red" href="/profile">Profile</a>');
+  });
+
   test("escapes string children in the sink/server form", () => {
     let html = "";
     Link(
