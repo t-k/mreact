@@ -443,18 +443,23 @@ describe("query refetch interval", () => {
     client.invalidateQueries({ queryKey: ["disposed-in-flight-invalidation"] });
     await Promise.resolve();
     client.invalidateQueries({ queryKey: ["disposed-in-flight-invalidation"] });
+    const disposedSnapshot = observer.result.get();
     observer.dispose();
     release(1);
     for (let index = 0; index < 12; index += 1) await Promise.resolve();
 
     expect(calls).toBe(1);
+    expect(observer.result.get()).toBe(disposedSnapshot);
   });
 
   test("coalesces invalidations received during an infinite fetch into one follow-up", async () => {
     const releases: Array<(value: number) => void> = [];
     let calls = 0;
     const client = createQueryClient();
-    client.setQueryData(["infinite-in-flight-invalidation"], { pageParams: [0], pages: [0] });
+    client.setQueryData(["infinite-in-flight-invalidation"], {
+      pageParams: [0, 1],
+      pages: [0, 99],
+    });
     const observer = createInfiniteQuery(client, {
       autoFetch: true,
       getNextPageParam: () => undefined,
@@ -480,6 +485,7 @@ describe("query refetch interval", () => {
     for (let index = 0; index < 8; index += 1) await Promise.resolve();
     expect(calls).toBe(2);
     expect(observer.result.get().pages).toEqual([2]);
+    expect(observer.result.get().pageParams).toEqual([0]);
     observer.dispose();
   });
 
