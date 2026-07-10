@@ -38,4 +38,30 @@ describe("Link client rendering", () => {
     expect(anchor.getAttribute("download")).toBe("");
     expect(ref).toBe(anchor);
   });
+
+  test("combines navigation attributes with user events and ordinary DOM properties", () => {
+    const ref: { current: HTMLAnchorElement | null } = { current: null };
+    let clicks = 0;
+    const anchor = Link({
+      "aria-label": "Account settings",
+      "data-section": "account",
+      children: "Settings",
+      className: "navigation-link",
+      href: "/settings",
+      onClick: () => {
+        clicks += 1;
+      },
+      prefetch: "viewport",
+      ref,
+    }) as HTMLAnchorElement;
+
+    anchor.click();
+
+    expect(clicks).toBe(1);
+    expect(anchor.getAttribute("aria-label")).toBe("Account settings");
+    expect(anchor.getAttribute("data-section")).toBe("account");
+    expect(anchor.className).toBe("navigation-link");
+    expect(anchor.getAttribute("data-mreact-prefetch")).toBe("viewport");
+    expect(ref.current).toBe(anchor);
+  });
 });

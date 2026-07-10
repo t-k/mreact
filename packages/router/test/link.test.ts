@@ -59,6 +59,23 @@ describe("router Link", () => {
     expect(html).toBe('<a style="color:red" href="/profile">Profile</a>');
   });
 
+  test("drops unsafe href values in server and HtmlSink forms", () => {
+    expect(
+      Link({
+        children: "Unsafe",
+        href: "javascript:alert(1)",
+      }),
+    ).toBe("<a>Unsafe</a>");
+
+    let html = "";
+    Link(
+      { append(value) { html += value; } },
+      { children: "Unsafe", href: "javascript:alert(1)" },
+    );
+
+    expect(html).toBe("<a>Unsafe</a>");
+  });
+
   test("escapes string children in the sink/server form", () => {
     let html = "";
     Link(
