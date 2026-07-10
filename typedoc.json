@@ -44,6 +44,7 @@
     "npm": "https://www.npmjs.com/search?q=%40reckona%2Fmreact"
   },
   "packageOptions": {
+    "gitRevision": "main",
     "excludeInternal": true,
     "excludePrivate": true,
     "excludeProtected": true,
