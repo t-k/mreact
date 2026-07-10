@@ -4,6 +4,14 @@ import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
  * Selects the deployment runtime artifacts emitted by an app-router build.
  */
 export type AppRouterBuildTarget = "node" | "cloudflare" | "aws-lambda";
+
+export const appRouterBuildTargetMetadata = {
+  allTargets: ["node", "cloudflare", "aws-lambda"],
+  defaultTargets: ["node"],
+} as const satisfies {
+  allTargets: readonly AppRouterBuildTarget[];
+  defaultTargets: readonly AppRouterBuildTarget[];
+};
 /**
  * Names a browser console method that can be stripped from client bundles.
  */
@@ -180,7 +188,7 @@ export function resolveBuildTargets(
   targets: readonly AppRouterBuildTarget[] | undefined,
 ): readonly AppRouterBuildTarget[] {
   if (targets === undefined) {
-    return ["node"];
+    return appRouterBuildTargetMetadata.defaultTargets;
   }
 
   const uniqueTargets = [...new Set(targets)];
@@ -190,7 +198,7 @@ export function resolveBuildTargets(
   }
 
   for (const target of uniqueTargets) {
-    if (target !== "node" && target !== "cloudflare" && target !== "aws-lambda") {
+    if (!appRouterBuildTargetMetadata.allTargets.some((supported) => supported === target)) {
       throw new Error(
         `Unsupported mreactRouter build target ${JSON.stringify(target)}. Expected "node", "cloudflare", or "aws-lambda".`,
       );

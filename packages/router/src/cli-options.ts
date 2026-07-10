@@ -1,7 +1,8 @@
 import type { AppRouterLogger, AppRouterLogEvent } from "./logger.js";
-import type {
-  AppRouterBuildTarget,
-  AppRouterClientSourceMapMode,
+import {
+  appRouterBuildTargetMetadata,
+  type AppRouterBuildTarget,
+  type AppRouterClientSourceMapMode,
 } from "./config.js";
 import type { RequestHostPolicy } from "./serve.js";
 
@@ -178,6 +179,11 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
 }
 
 export function formatCliHelp(command?: string | undefined): string {
+  const defaultTargetLabel = formatBuildTargetDisplayList(
+    appRouterBuildTargetMetadata.defaultTargets,
+  );
+  const allTargetValues = formatBuildTargetValueList(appRouterBuildTargetMetadata.allTargets);
+
   if (command === "build") {
     return [
       "Usage: mreact-router build [appDir] [options]",
@@ -186,7 +192,7 @@ export function formatCliHelp(command?: string | undefined): string {
       "",
       "Options:",
       "  --target=node|cloudflare|aws-lambda|all",
-      "      Select build artifacts. Defaults to node. aws-lambda writes .mreact/aws-lambda/mreact-handler.mjs and .mreact/server/import-policy.json.",
+      `      Select build artifacts. Defaults to ${defaultTargetLabel.toLowerCase()}. all selects ${allTargetValues}. aws-lambda writes .mreact/aws-lambda/mreact-handler.mjs and .mreact/server/import-policy.json.`,
       "  --client-source-maps=none|hidden",
       "      Control production client source map output.",
       "  -h, --help",
@@ -196,6 +202,7 @@ export function formatCliHelp(command?: string | undefined): string {
       "  mreact-router build --target=node",
       "  mreact-router build --target=cloudflare",
       "  mreact-router build --target=aws-lambda",
+      "  mreact-router build --target=all",
     ].join("\n");
   }
 
@@ -272,7 +279,7 @@ export function formatCliHelp(command?: string | undefined): string {
     "",
     "Commands:",
     "  dev [appDir]                              Start the development server.",
-    "  build [appDir]                            Build Node artifacts by default.",
+    `  build [appDir]                            Build ${defaultTargetLabel} artifacts by default.`,
     "  build --target=aws-lambda                 Build Lambda artifacts including generated handler and import policy.",
     "  start [outDir]                            Serve built Node output.",
     "  package aws-lambda --from .mreact --out .lambda",
@@ -290,6 +297,7 @@ export function formatCliHelp(command?: string | undefined): string {
     "Examples:",
     "  mreact-router build --target=cloudflare",
     "  mreact-router build --target=aws-lambda",
+    "  mreact-router build --target=all",
     "  mreact-router package aws-lambda --from .mreact --out .lambda",
     "  mreact-router build --help",
   ].join("\n");
@@ -302,7 +310,21 @@ export function buildTargetsFromCliTarget(
     return undefined;
   }
 
-  return target === "all" ? ["node", "cloudflare", "aws-lambda"] : [target];
+  return target === "all" ? appRouterBuildTargetMetadata.allTargets : [target];
+}
+
+function formatBuildTargetDisplayList(targets: readonly AppRouterBuildTarget[]): string {
+  return targets.map(formatBuildTargetDisplayName).join(", ");
+}
+
+function formatBuildTargetDisplayName(target: AppRouterBuildTarget): string {
+  if (target === "aws-lambda") return "AWS Lambda";
+  return target[0]?.toUpperCase() + target.slice(1);
+}
+
+function formatBuildTargetValueList(targets: readonly AppRouterBuildTarget[]): string {
+  if (targets.length < 2) return targets[0] ?? "";
+  return `${targets.slice(0, -1).join(", ")}, and ${targets.at(-1)}`;
 }
 
 export function resolveCliRequestLogMode(

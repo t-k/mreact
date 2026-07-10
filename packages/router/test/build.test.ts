@@ -31,6 +31,7 @@ import {
   packageAwsLambdaArtifact,
   packageCloudflarePagesArtifact,
 } from "../src/build.js";
+import { appRouterBuildTargetMetadata } from "../src/config.js";
 import { exportStaticApp } from "../src/adapters/static.js";
 import { hasFastPathBody } from "../src/http.js";
 import { renderAppRequest } from "../src/render.js";
@@ -1324,10 +1325,12 @@ export default function Page() {
       outDir,
       projectRoot: rootDir,
       routesDir: "app",
-      targets: ["aws-lambda", "cloudflare"],
+      targets: appRouterBuildTargetMetadata.allTargets,
     });
     const lambdaHandler = await readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8");
     const cloudflareWorker = await readFile(join(outDir, "cloudflare", "worker.mjs"), "utf8");
+    await expect(access(join(outDir, "server", "manifest.json"))).resolves.toBeUndefined();
+    await expect(access(join(outDir, "client", "manifest.json"))).resolves.toBeUndefined();
     const pagesOutDir = join(rootDir, ".pages");
     const packaged = await packageAwsLambdaArtifact({
       fromDir: outDir,
@@ -5883,6 +5886,11 @@ export default function Page() { return <main>no link rendered</main>; }`,
 
     await buildApp({ appDir, outDir });
 
+    const outputEntries = (await readdir(outDir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort();
+    expect(outputEntries).toEqual(["client", "server"]);
     await expect(access(join(outDir, "server", "manifest.json"))).resolves.toBeUndefined();
     await expect(access(join(outDir, "client", "manifest.json"))).resolves.toBeUndefined();
     await expect(access(join(outDir, "cloudflare", "worker.mjs"))).rejects.toThrow();

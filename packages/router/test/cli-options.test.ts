@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { resolveBuildTargets } from "../src/config.js";
+import { appRouterBuildTargetMetadata, resolveBuildTargets } from "../src/config.js";
 import {
   buildTargetsFromCliTarget,
   createCliRequestLogger,
@@ -149,13 +149,22 @@ describe("router CLI options", () => {
   test("keeps root and build help aligned with resolved target defaults", () => {
     const rootHelp = formatCliHelp();
     const buildHelp = formatCliHelp("build");
+    const parsedDefault = parseCliArguments(["build"]);
 
-    expect(resolveBuildTargets(undefined)).toEqual(["node"]);
+    expect(resolveBuildTargets(buildTargetsFromCliTarget(parsedDefault.target))).toEqual(
+      appRouterBuildTargetMetadata.defaultTargets,
+    );
+    expect(buildTargetsFromCliTarget("cloudflare")).toEqual(["cloudflare"]);
+    expect(buildTargetsFromCliTarget("aws-lambda")).toEqual(["aws-lambda"]);
+    expect(buildTargetsFromCliTarget("all")).toEqual(appRouterBuildTargetMetadata.allTargets);
     expect(rootHelp).toContain("Build Node artifacts by default.");
     expect(buildHelp).toContain("Defaults to node.");
     expect(rootHelp).toContain("build --target=cloudflare");
     expect(rootHelp).toContain("build --target=aws-lambda");
+    expect(rootHelp).toContain("build --target=all");
     expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
+    expect(buildHelp).toContain("all selects node, cloudflare, and aws-lambda");
+    expect(buildHelp).toContain("build --target=all");
   });
 
   test("parses package artifact options", () => {
