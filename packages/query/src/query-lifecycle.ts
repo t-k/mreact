@@ -27,6 +27,7 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
 }
 
 interface SetSuccessOptions {
+  stale?: boolean | undefined;
   updatedAt?: number | undefined;
 }
 
@@ -147,7 +148,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     entry.abortController = undefined;
     entry.canceled = false;
     entry.promise = undefined;
-    entry.stale = false;
+    entry.stale = options.stale ?? false;
     entry.status = "success";
     entry.updatedAt = options.updatedAt ?? Date.now();
     notify(entry);
@@ -268,13 +269,16 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
       entry.canceled = false;
       entry.version += 1;
       const fetchVersion = entry.version;
+      const fetchInvalidationRevision = entry.invalidationRevision;
       notify(entry);
       const removeExternalAbort = linkAbortSignals(options.signal, entry.abortController);
       entry.promise = executeQueryWithRetry(options, entry.abortController.signal).then(
         (data) => {
           removeExternalAbort();
           if (cache.get(entry.queryHash) === entry && entry.version === fetchVersion) {
-            setSuccess(options.queryKey, data);
+            setSuccess(options.queryKey, data, {
+              stale: entry.invalidationRevision !== fetchInvalidationRevision,
+            });
           }
           return data;
         },
@@ -523,8 +527,10 @@ export function resultFromQueryEntry<TData>(
 
 export function queryInvalidationRevision(entry: QueryEntry | undefined): number {
   return (
-    entry as (QueryEntry & { [queryInvalidationRevisionKey]?: number | undefined }) | undefined
-  )?.[queryInvalidationRevisionKey] ?? 0;
+    (entry as (QueryEntry & { [queryInvalidationRevisionKey]?: number | undefined }) | undefined)?.[
+      queryInvalidationRevisionKey
+    ] ?? 0
+  );
 }
 
 function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TData> {

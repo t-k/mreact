@@ -185,7 +185,11 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
   refetchOnInvalidate?: boolean | undefined;
   refetchOnReconnect?: boolean | undefined;
   refetchOnWindowFocus?: boolean | undefined;
-  refetchInterval?: false | number | ((result: InfiniteQueryResult<TPage, TPageParam>) => false | number) | undefined;
+  refetchInterval?:
+    | false
+    | number
+    | ((result: InfiniteQueryResult<TPage, TPageParam>) => false | number)
+    | undefined;
   refetchIntervalInBackground?: boolean | undefined;
 }
 
@@ -356,15 +360,17 @@ export function createQuery<TData>(
     (entry) => {
       const invalidationRevision = queryInvalidationRevision(entry);
       const invalidated = invalidationRevision !== observedInvalidationRevision;
-      observedInvalidationRevision = invalidationRevision;
       if (entry.queryHash === queryHash) {
         updateResult(resultFromQueryEntry(entry));
-        if (
-          invalidated &&
-          !entry.isFetching &&
-          autoFetch &&
-          options.refetchOnInvalidate !== false
-        ) {
+        if (!invalidated) {
+          return;
+        }
+        if (!autoFetch || options.refetchOnInvalidate === false) {
+          observedInvalidationRevision = invalidationRevision;
+          return;
+        }
+        if (!entry.isFetching) {
+          observedInvalidationRevision = invalidationRevision;
           void client.fetchQuery(options).catch(() => {
             // The observer receives the error state through the query cache. Avoid an
             // unhandled rejection for fire-and-forget invalidation refetches.
@@ -455,14 +461,16 @@ export function createInfiniteQuery<TPage, TPageParam>(
     (entry) => {
       const invalidationRevision = queryInvalidationRevision(entry);
       const invalidated = invalidationRevision !== observedInvalidationRevision;
-      observedInvalidationRevision = invalidationRevision;
       updateResult();
-      if (
-        invalidated &&
-        !entry.isFetching &&
-        autoFetch &&
-        options.refetchOnInvalidate !== false
-      ) {
+      if (!invalidated) {
+        return;
+      }
+      if (!autoFetch || options.refetchOnInvalidate === false) {
+        observedInvalidationRevision = invalidationRevision;
+        return;
+      }
+      if (!entry.isFetching) {
+        observedInvalidationRevision = invalidationRevision;
         refetchInvalidated();
       }
     },
@@ -883,7 +891,9 @@ function registerRefetchInterval<TResult>(
         schedule();
         return;
       }
-      void refetch().catch(() => {}).finally(schedule);
+      void refetch()
+        .catch(() => {})
+        .finally(schedule);
     }, delay);
   };
 

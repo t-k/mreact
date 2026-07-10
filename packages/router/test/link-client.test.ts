@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { Link } from "../src/link.js";
 
 describe("Link client rendering", () => {
@@ -37,6 +37,43 @@ describe("Link client rendering", () => {
     expect(anchor.style.color).toBe("red");
     expect(anchor.getAttribute("download")).toBe("");
     expect(ref).toBe(anchor);
+  });
+
+  test.each(["onclick", "onMouseOver", "ONFOCUS"])(
+    "rejects executable string event attribute %s without echoing its value",
+    (name) => {
+      const payload = "globalThis.__mreactLinkExecuted = true";
+      const browser = globalThis as typeof globalThis & { __mreactLinkExecuted?: boolean };
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      browser.__mreactLinkExecuted = false;
+
+      try {
+        const anchor = Link({ href: "/safe", [name]: payload }) as HTMLAnchorElement;
+        anchor.dispatchEvent(new Event(name.slice(2).toLowerCase()));
+
+        expect(anchor.getAttribute(name)).toBeNull();
+        expect(browser.__mreactLinkExecuted).toBe(false);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(name));
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining(payload));
+      } finally {
+        delete browser.__mreactLinkExecuted;
+        warn.mockRestore();
+      }
+    },
+  );
+
+  test("keeps supported bubble and capture handlers as listeners instead of attributes", () => {
+    const calls: string[] = [];
+    const anchor = Link({
+      href: "/safe",
+      onClick: () => calls.push("bubble"),
+      onClickCapture: () => calls.push("capture"),
+    }) as HTMLAnchorElement;
+
+    anchor.click();
+
+    expect(calls).toEqual(["capture", "bubble"]);
+    expect(anchor.getAttribute("onclick")).toBeNull();
   });
 
   test("combines navigation attributes with user events and ordinary DOM properties", () => {

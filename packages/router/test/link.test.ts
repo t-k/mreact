@@ -34,9 +34,7 @@ describe("router Link", () => {
       prefetch: false,
     });
 
-    expect(html).toBe(
-      '<a class="nav-link" href="/about" data-mreact-prefetch="none">About</a>',
-    );
+    expect(html).toBe('<a class="nav-link" href="/about" data-mreact-prefetch="none">About</a>');
   });
 
   test("renders an external href as a plain anchor", () => {
@@ -48,16 +46,29 @@ describe("router Link", () => {
     expect(html).toBe('<a href="https://example.com/about">External</a>');
   });
 
-  test("does not serialize event props and serializes style objects", () => {
-    const html = Link({
-      children: "Profile",
-      href: "/profile",
-      onmouseover: "alert(1)",
-      style: { color: "red" },
-    });
+  test.each(["onclick", "onMouseOver", "ONFOCUS"])(
+    "does not serialize event-like prop %s in server or HtmlSink forms",
+    (name) => {
+      const html = Link({
+        children: "Profile",
+        href: "/profile",
+        [name]: "alert(1)",
+        style: { color: "red" },
+      });
+      let sinkHtml = "";
+      Link(
+        {
+          append(value) {
+            sinkHtml += value;
+          },
+        },
+        { children: "Profile", href: "/profile", [name]: "alert(1)" } as unknown as LinkSinkProps,
+      );
 
-    expect(html).toBe('<a style="color:red" href="/profile">Profile</a>');
-  });
+      expect(html).toBe('<a style="color:red" href="/profile">Profile</a>');
+      expect(sinkHtml).toBe('<a href="/profile">Profile</a>');
+    },
+  );
 
   test("drops unsafe href values in server and HtmlSink forms", () => {
     expect(
@@ -69,7 +80,11 @@ describe("router Link", () => {
 
     let html = "";
     Link(
-      { append(value) { html += value; } },
+      {
+        append(value) {
+          html += value;
+        },
+      },
       { children: "Unsafe", href: "javascript:alert(1)" },
     );
 
@@ -90,9 +105,7 @@ describe("router Link", () => {
       },
     );
 
-    expect(html).toBe(
-      '<a href="/profile">&lt;script&gt;alert(1)&lt;/script&gt;</a>',
-    );
+    expect(html).toBe('<a href="/profile">&lt;script&gt;alert(1)&lt;/script&gt;</a>');
   });
 
   test("escapes entity-encoded javascript urls in string children", () => {
@@ -130,7 +143,11 @@ describe("router Link", () => {
 
     try {
       Link(
-        { append(value) { html += value; } },
+        {
+          append(value) {
+            html += value;
+          },
+        },
         {
           "data-config": { mode: "full" },
           children: {} as Node,
@@ -158,10 +175,7 @@ describe("router Link", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
     try {
-      Link(
-        { append() {} },
-        { href: "/profile", onClick() {} } as unknown as LinkSinkProps,
-      );
+      Link({ append() {} }, { href: "/profile", onClick() {} } as unknown as LinkSinkProps);
       expect(warn).not.toHaveBeenCalled();
     } finally {
       warn.mockRestore();
@@ -169,26 +183,33 @@ describe("router Link", () => {
     }
   });
 
-  test.each(["x onmouseover", "x=onmouseover", "x`onmouseover", "x\u0000onmouseover", 'x"onmouseover'])(
-    "drops malformed attribute name %j before SSR or HtmlSink serialization",
-    (name) => {
-      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-      try {
-        const serverHtml = Link({ href: "/safe", [name]: "alert(1)" });
-        let sinkHtml = "";
-        Link(
-          { append(value) { sinkHtml += value; } },
-          { href: "/safe", [name]: "alert(1)" } as unknown as LinkSinkProps,
-        );
+  test.each([
+    "x onmouseover",
+    "x=onmouseover",
+    "x`onmouseover",
+    "x\u0000onmouseover",
+    'x"onmouseover',
+  ])("drops malformed attribute name %j before SSR or HtmlSink serialization", (name) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const serverHtml = Link({ href: "/safe", [name]: "alert(1)" });
+      let sinkHtml = "";
+      Link(
+        {
+          append(value) {
+            sinkHtml += value;
+          },
+        },
+        { href: "/safe", [name]: "alert(1)" } as unknown as LinkSinkProps,
+      );
 
-        expect(serverHtml).toBe('<a href="/safe"></a>');
-        expect(sinkHtml).toBe('<a href="/safe"></a>');
-        expect(serverHtml).not.toContain("onmouseover=");
-        expect(sinkHtml).not.toContain("onmouseover=");
-        expect(warn).toHaveBeenCalledWith(expect.stringContaining(name));
-      } finally {
-        warn.mockRestore();
-      }
-    },
-  );
+      expect(serverHtml).toBe('<a href="/safe"></a>');
+      expect(sinkHtml).toBe('<a href="/safe"></a>');
+      expect(serverHtml).not.toContain("onmouseover=");
+      expect(sinkHtml).not.toContain("onmouseover=");
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining(name));
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

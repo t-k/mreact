@@ -72,12 +72,7 @@ export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<H
 }
 
 /** Represents attributes that can be serialized when Link writes to an HtmlSink. */
-export type LinkSerializableAttribute =
-  | boolean
-  | number
-  | string
-  | null
-  | undefined;
+export type LinkSerializableAttribute = boolean | number | string | null | undefined;
 
 /** Represents child values that an HtmlSink Link can serialize without a browser DOM. */
 export type LinkSinkChild =
@@ -122,7 +117,9 @@ export function linkProps(options: LinkOptions<string>): Record<string, string> 
     ...(options.scroll === undefined || options.scroll === "top"
       ? {}
       : { "data-mreact-scroll": options.scroll }),
-    ...(options.transition === undefined || options.transition === false || options.transition === "none"
+    ...(options.transition === undefined ||
+    options.transition === false ||
+    options.transition === "none"
       ? {}
       : { "data-mreact-transition": options.transition }),
   };
@@ -176,6 +173,7 @@ function reportUnsupportedSinkProps(props: LinkProps<string> | LinkSinkProps): v
         name === "ref" ||
         typeof value === "function" ||
         typeof value === "symbol" ||
+        isLinkEventAttributeName(name) ||
         (name === "children" && !isSerializableSinkChild(value)) ||
         (name !== "children" && name !== "style" && typeof value === "object" && value !== null) ||
         (name !== "children" && !isSafeLinkAttributeName(attributeName(name))),
@@ -244,6 +242,11 @@ function createAnchorElement(props: Record<string, unknown>): HTMLAnchorElement 
       continue;
     }
 
+    if (isLinkEventAttributeName(name)) {
+      reportRejectedBrowserEventProp(name);
+      continue;
+    }
+
     if (name === "style" && typeof value === "object" && value !== null) {
       for (const [property, styleValue] of Object.entries(value as Record<string, unknown>)) {
         const cssProperty = linkStylePropertyName(property);
@@ -303,7 +306,7 @@ function renderAnchorAttributes(props: Record<string, unknown>): string {
   const attrs: string[] = [];
 
   for (const [name, value] of Object.entries(props)) {
-    if (name === "children" || /^on/i.test(name) || !shouldSetAttribute(name, value)) {
+    if (name === "children" || isLinkEventAttributeName(name) || !shouldSetAttribute(name, value)) {
       continue;
     }
 
@@ -363,11 +366,27 @@ function isSafeLinkAttributeName(name: string): boolean {
   return VALID_LINK_ATTRIBUTE_NAME.test(name);
 }
 
+function isLinkEventAttributeName(name: string): boolean {
+  return /^on/i.test(name);
+}
+
+function reportRejectedBrowserEventProp(name: string): void {
+  const nodeEnv = (
+    globalThis as typeof globalThis & {
+      process?: { env?: { NODE_ENV?: string | undefined } | undefined } | undefined;
+    }
+  ).process?.env?.NODE_ENV;
+
+  if (nodeEnv !== "production") {
+    console.warn(
+      `[MR_LINK_UNSAFE_EVENT_PROP] Link rejected event-like prop ${JSON.stringify(name)}. Pass a supported camel-cased function handler such as onClick instead.`,
+    );
+  }
+}
+
 function linkStylePropertyName(property: string): string | undefined {
   const cssProperty = property.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-  return /^(?:--[a-zA-Z0-9_-]+|[a-zA-Z][a-zA-Z0-9-]*)$/.test(cssProperty)
-    ? cssProperty
-    : undefined;
+  return /^(?:--[a-zA-Z0-9_-]+|[a-zA-Z][a-zA-Z0-9-]*)$/.test(cssProperty) ? cssProperty : undefined;
 }
 
 function linkStyleValue(value: unknown): string | undefined {

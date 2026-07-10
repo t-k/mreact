@@ -182,14 +182,17 @@ describe("query refetch interval", () => {
     });
     const cadence = vi.fn(() => 100);
     const disposers: Array<() => void> = [];
-    withCleanupScope((dispose) => disposers.push(dispose), () => {
-      createQuery(createQueryClient(), {
-        autoFetch: false,
-        queryFn: () => pending,
-        queryKey: ["scope-disposed-cadence"],
-        refetchInterval: cadence,
-      });
-    });
+    withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () => {
+        createQuery(createQueryClient(), {
+          autoFetch: false,
+          queryFn: () => pending,
+          queryKey: ["scope-disposed-cadence"],
+          refetchInterval: cadence,
+        });
+      },
+    );
 
     expect(cadence).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(100);
@@ -233,12 +236,12 @@ describe("query refetch interval", () => {
 
     release(1);
     for (let index = 0; index < 8; index += 1) await Promise.resolve();
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
 
     client.invalidateQueries({ queryKey: ["trigger-race"] });
     await Promise.resolve();
     await Promise.resolve();
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     observer.dispose();
   });
 
@@ -294,12 +297,12 @@ describe("query refetch interval", () => {
 
     release(1);
     for (let index = 0; index < 8; index += 1) await Promise.resolve();
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
 
     client.invalidateQueries({ queryKey: ["infinite-trigger-race"] });
     await Promise.resolve();
     await Promise.resolve();
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     observer.dispose();
   });
 
@@ -359,18 +362,142 @@ describe("query refetch interval", () => {
     observer.dispose();
   });
 
+  test("coalesces invalidations received during an ordinary fetch into one follow-up", async () => {
+    const releases: Array<(value: number) => void> = [];
+    let calls = 0;
+    const client = createQueryClient();
+    client.setQueryData(["ordinary-in-flight-invalidation"], 0);
+    const observer = createQuery(client, {
+      autoFetch: true,
+      queryFn: () => {
+        calls += 1;
+        return new Promise<number>((resolve) => releases.push(resolve));
+      },
+      queryKey: ["ordinary-in-flight-invalidation"],
+      staleTime: 60_000,
+    });
+
+    client.invalidateQueries({ queryKey: ["ordinary-in-flight-invalidation"] });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    client.invalidateQueries({ queryKey: ["ordinary-in-flight-invalidation"] });
+    client.invalidateQueries({ queryKey: ["ordinary-in-flight-invalidation"] });
+    releases[0]?.(1);
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    expect(calls).toBe(2);
+    releases[1]?.(2);
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    expect(calls).toBe(2);
+    expect(observer.result.get().data).toBe(2);
+    observer.dispose();
+  });
+
+  test("runs one bounded ordinary follow-up when the in-flight request fails", async () => {
+    const settlements: Array<{ reject(error: Error): void; resolve(value: number): void }> = [];
+    let calls = 0;
+    const client = createQueryClient();
+    client.setQueryData(["failed-in-flight-invalidation"], 0);
+    const observer = createQuery(client, {
+      autoFetch: true,
+      queryFn: () => {
+        calls += 1;
+        return new Promise<number>((resolve, reject) => settlements.push({ reject, resolve }));
+      },
+      queryKey: ["failed-in-flight-invalidation"],
+      retry: 0,
+      staleTime: 60_000,
+    });
+
+    client.invalidateQueries({ queryKey: ["failed-in-flight-invalidation"] });
+    await Promise.resolve();
+    client.invalidateQueries({ queryKey: ["failed-in-flight-invalidation"] });
+    settlements[0]?.reject(new Error("first request failed"));
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    expect(calls).toBe(2);
+    settlements[1]?.resolve(2);
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    expect(calls).toBe(2);
+    expect(observer.result.get().data).toBe(2);
+    observer.dispose();
+  });
+
+  test("does not run an ordinary invalidation follow-up after disposal", async () => {
+    let release!: (value: number) => void;
+    let calls = 0;
+    const client = createQueryClient();
+    client.setQueryData(["disposed-in-flight-invalidation"], 0);
+    const observer = createQuery(client, {
+      autoFetch: true,
+      queryFn: () => {
+        calls += 1;
+        return new Promise<number>((resolve) => {
+          release = resolve;
+        });
+      },
+      queryKey: ["disposed-in-flight-invalidation"],
+      staleTime: 60_000,
+    });
+
+    client.invalidateQueries({ queryKey: ["disposed-in-flight-invalidation"] });
+    await Promise.resolve();
+    client.invalidateQueries({ queryKey: ["disposed-in-flight-invalidation"] });
+    observer.dispose();
+    release(1);
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    expect(calls).toBe(1);
+  });
+
+  test("coalesces invalidations received during an infinite fetch into one follow-up", async () => {
+    const releases: Array<(value: number) => void> = [];
+    let calls = 0;
+    const client = createQueryClient();
+    client.setQueryData(["infinite-in-flight-invalidation"], { pageParams: [0], pages: [0] });
+    const observer = createInfiniteQuery(client, {
+      autoFetch: true,
+      getNextPageParam: () => undefined,
+      initialPageParam: 0,
+      queryFn: () => {
+        calls += 1;
+        return new Promise<number>((resolve) => releases.push(resolve));
+      },
+      queryKey: ["infinite-in-flight-invalidation"],
+      staleTime: 60_000,
+    });
+
+    client.invalidateQueries({ queryKey: ["infinite-in-flight-invalidation"] });
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    client.invalidateQueries({ queryKey: ["infinite-in-flight-invalidation"] });
+    client.invalidateQueries({ queryKey: ["infinite-in-flight-invalidation"] });
+    releases[0]?.(1);
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    expect(calls).toBe(2);
+    releases[1]?.(2);
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    expect(calls).toBe(2);
+    expect(observer.result.get().pages).toEqual([2]);
+    observer.dispose();
+  });
+
   test("stops interval polling when its cleanup scope is disposed", async () => {
     vi.useFakeTimers();
     let calls = 0;
     const disposers: Array<() => void> = [];
-    withCleanupScope((dispose) => disposers.push(dispose), () => {
-      createQuery(createQueryClient(), {
-        autoFetch: false,
-        queryFn: async () => ++calls,
-        queryKey: ["scoped-poll"],
-        refetchInterval: 100,
-      });
-    });
+    withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () => {
+        createQuery(createQueryClient(), {
+          autoFetch: false,
+          queryFn: async () => ++calls,
+          queryKey: ["scoped-poll"],
+          refetchInterval: 100,
+        });
+      },
+    );
 
     disposers[0]?.();
     await vi.advanceTimersByTimeAsync(300);
@@ -381,15 +508,18 @@ describe("query refetch interval", () => {
   test("removes focus, visibility, and reconnect listeners with its cleanup scope", async () => {
     let calls = 0;
     const disposers: Array<() => void> = [];
-    withCleanupScope((dispose) => disposers.push(dispose), () => {
-      createQuery(createQueryClient(), {
-        autoFetch: false,
-        queryFn: async () => ++calls,
-        queryKey: ["scoped-browser-revalidation"],
-        refetchOnReconnect: true,
-        refetchOnWindowFocus: true,
-      });
-    });
+    withCleanupScope(
+      (dispose) => disposers.push(dispose),
+      () => {
+        createQuery(createQueryClient(), {
+          autoFetch: false,
+          queryFn: async () => ++calls,
+          queryKey: ["scoped-browser-revalidation"],
+          refetchOnReconnect: true,
+          refetchOnWindowFocus: true,
+        });
+      },
+    );
 
     disposers[0]?.();
     window.dispatchEvent(new Event("focus"));
