@@ -237,7 +237,9 @@ export function createStore<T extends object>(initial: T, options: StoreOptions<
         await persist.save?.(first);
         await flushPersistSaveQueue();
       })
-      .catch(async () => {
+      .catch(async (error) => {
+        persistenceError.set(error);
+        persistenceStatus.set("error");
         await flushPersistSaveQueue();
       });
   }

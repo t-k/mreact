@@ -434,6 +434,8 @@ describe("createStore", () => {
     await flushMicrotasks();
 
     expect(saved).toEqual([2, 3]);
+    expect(store.persistence.status.get()).toBe("error");
+    expect(store.persistence.error.get()).toBeInstanceOf(Error);
   });
 
   it("coalesces pending async persist callback saves to the latest state", async () => {
