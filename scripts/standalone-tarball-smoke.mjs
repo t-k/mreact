@@ -129,7 +129,7 @@ async function createStandaloneApp(tarballs) {
       "@reckona/mreact": tarballSpec(tarballs, "@reckona/mreact"),
       "@reckona/mreact-router": tarballSpec(tarballs, "@reckona/mreact-router"),
       typescript: "7.0.2",
-      vite: "8.0.11",
+      vite: "8.0.16",
     },
     devDependencies: {},
     pnpm: {
@@ -176,6 +176,45 @@ export default defineConfig({
     `export default function Page() {
   return <main>Standalone tarball smoke</main>;
 }
+`,
+  );
+  await writeFile(
+    join(appDir, "public-contract.ts"),
+    `import type {
+  AppRouterRenderPreload,
+  RenderBuiltAppRequestOptions,
+  ResponseSinkStrategy,
+  StartServerOptions,
+} from "@reckona/mreact-router";
+import type {
+  AppRouterCache,
+  CacheControlOptions,
+  CookieOptions,
+  MemoryRouteCacheOptions,
+  RedirectOptions,
+  RequestCookies,
+} from "@reckona/mreact-router/request";
+
+const cacheControl: CacheControlOptions = { sMaxAge: 60 };
+const cookie: CookieOptions = { httpOnly: true, path: "/" };
+const memory: MemoryRouteCacheOptions = { maxEntries: 10 };
+const redirect: RedirectOptions = { status: 303 };
+const cache = {} as AppRouterCache;
+const cookies = {} as RequestCookies;
+const preload = {} as AppRouterRenderPreload;
+const sink: ResponseSinkStrategy = "string";
+const render = {} as RenderBuiltAppRequestOptions;
+const server = {} as StartServerOptions;
+void cacheControl;
+void cookie;
+void memory;
+void redirect;
+void cache;
+void cookies;
+void preload;
+void sink;
+void render;
+void server;
 `,
   );
 }
