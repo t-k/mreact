@@ -272,7 +272,7 @@ export function formatCliHelp(command?: string | undefined): string {
     "",
     "Commands:",
     "  dev [appDir]                              Start the development server.",
-    "  build [appDir]                            Build Node and Cloudflare artifacts by default.",
+    "  build [appDir]                            Build Node artifacts by default.",
     "  build --target=aws-lambda                 Build Lambda artifacts including generated handler and import policy.",
     "  start [outDir]                            Serve built Node output.",
     "  package aws-lambda --from .mreact --out .lambda",

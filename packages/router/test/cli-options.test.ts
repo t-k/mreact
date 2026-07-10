@@ -122,6 +122,8 @@ describe("router CLI options", () => {
     const help = formatCliHelp();
     const buildHelp = formatCliHelp("build");
 
+    expect(help).toContain("Build Node artifacts by default.");
+    expect(help).not.toContain("Build Node and Cloudflare artifacts by default.");
     expect(help).toContain("mreact-router build --target=aws-lambda");
     expect(help).toContain("mreact-router package aws-lambda --from .mreact --out .lambda");
     expect(help).toContain("package cloudflare-pages --from .mreact --out .mreact/pages");
