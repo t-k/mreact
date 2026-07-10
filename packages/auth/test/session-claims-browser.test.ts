@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import {
   __MREACT_AUTH_SESSION_SCRIPT_ID,
   __resetAuthForTesting,
+  createMemorySessionStore,
   getSessionClaims,
+  revokeCurrentSession,
 } from "../src/index.js";
 
 describe("browser session claims hand-off", () => {
@@ -28,6 +30,21 @@ describe("browser session claims hand-off", () => {
     document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)!.textContent = JSON.stringify({ userId: "bea" });
     expect(getSessionClaims()).toEqual({ userId: "bea" });
     document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)?.remove();
+    expect(getSessionClaims()).toBeUndefined();
+  });
+
+  it("clears the browser hand-off script when a session is revoked", async () => {
+    __resetAuthForTesting();
+    document.body.innerHTML = `<script id="${__MREACT_AUTH_SESSION_SCRIPT_ID}" type="application/json">{"userId":"ada"}</script>`;
+    expect(getSessionClaims()).toEqual({ userId: "ada" });
+
+    await revokeCurrentSession(
+      new Request("https://app.test/"),
+      new Response(null),
+      createMemorySessionStore(),
+    );
+
+    expect(document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)).toBeNull();
     expect(getSessionClaims()).toBeUndefined();
   });
 

@@ -103,6 +103,7 @@ export async function loader(context: LoaderContext): Promise<DashboardSummary> 
   return context.queryClient.fetchQuery({
     queryKey: DASHBOARD_SUMMARY_KEY,
     staleTime: DASHBOARD_SUMMARY_STALE_TIME_MS,
+    refetchInterval: 60_000,
     queryFn: () => fetchDashboardSummary(),
   });
 }
@@ -137,16 +138,7 @@ export function DashboardLiveSummary(props: { initialSummary: DashboardSummary }
   });
   const summary = observer.result.get().data ?? props.initialSummary;
 
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void observer.refetch();
-    }, 60_000);
-
-    return () => {
-      window.clearInterval(intervalId);
-      observer.dispose();
-    };
-  }, []);
+  useEffect(() => () => observer.dispose(), []);
 
   return (
     <section>
@@ -159,7 +151,7 @@ export function DashboardLiveSummary(props: { initialSummary: DashboardSummary }
 }
 ```
 
-`refetchOnWindowFocus` listens for focus and visible-tab transitions. `refetchOnReconnect` listens for the browser `online` event. `refetchOnInvalidate` lets an active observer refetch when its query key is invalidated, which is useful when a mutation updates server state and the visible view should refresh without waiting for focus, reconnect, or a manual `refetch()`. Mreact Query does not currently have a built-in `refetchInterval` option, so use a small client-side timer when the view needs periodic polling. Always dispose long-lived observers and timers when integrating outside a component cleanup lifecycle.
+`refetchOnWindowFocus` listens for focus and visible-tab transitions. `refetchOnReconnect` listens for the browser `online` event. `refetchOnInvalidate` lets an active observer refetch when its query key is invalidated, which is useful when a mutation updates server state and the visible view should refresh without waiting for focus, reconnect, or a manual `refetch()`. `refetchInterval` schedules the next poll after the preceding fetch settles, so requests never overlap; it pauses while the document is hidden and resumes without replaying missed ticks. Set `refetchIntervalInBackground: true` only when hidden-tab polling is required. Always dispose long-lived observers when integrating outside a component cleanup lifecycle.
 
 ## Cross-tab sync
 

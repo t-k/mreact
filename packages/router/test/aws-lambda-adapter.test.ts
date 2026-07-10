@@ -29,7 +29,10 @@ describe("mreact AWS Lambda adapter", () => {
         requestContext: { http: { method: "GET" } },
         version: "1.0",
       } as never),
-    ).resolves.toMatchObject({ body: "Bad Request", statusCode: 400 });
+    ).resolves.toMatchObject({
+      body: expect.stringContaining("payload format 2.0"),
+      statusCode: 400,
+    });
   });
 
   test("renders a built app from an API Gateway HTTP API v2 event", async () => {

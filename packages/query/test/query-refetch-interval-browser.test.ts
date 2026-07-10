@@ -41,4 +41,22 @@ describe("query refetch interval", () => {
     observer.dispose();
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
   });
+
+  test("can continue interval polling while the document is hidden", async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    const observer = createQuery(createQueryClient(), {
+      autoFetch: false,
+      queryFn: async () => ++calls,
+      queryKey: ["background-poll"],
+      refetchInterval: 100,
+      refetchIntervalInBackground: true,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(calls).toBe(1);
+    observer.dispose();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+  });
 });

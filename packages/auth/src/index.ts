@@ -427,6 +427,10 @@ function setSessionClaims(data: unknown): void {
     return;
   }
 
+  if (claims === undefined) {
+    document.getElementById(__MREACT_AUTH_SESSION_SCRIPT_ID)?.remove();
+  }
+
   state.browserClaims = claims;
   state.currentClaims = claims;
 }

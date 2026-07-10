@@ -128,6 +128,8 @@ export interface CreateQueryOptions<TData> extends FetchQueryOptions<TData> {
   refetchOnInvalidate?: boolean | undefined;
   /** Refetch at this interval in milliseconds; disabled by false. */
   refetchInterval?: false | number | ((result: QueryResult<TData>) => false | number) | undefined;
+  /** Continue interval polling while the document is hidden. Defaults to false. */
+  refetchIntervalInBackground?: boolean | undefined;
 }
 
 /** Observes one query result and exposes refetch and disposal controls. */
@@ -177,6 +179,7 @@ export interface CreateInfiniteQueryOptions<TPage, TPageParam> extends Omit<
   refetchOnReconnect?: boolean | undefined;
   refetchOnWindowFocus?: boolean | undefined;
   refetchInterval?: false | number | ((result: InfiniteQueryResult<TPage, TPageParam>) => false | number) | undefined;
+  refetchIntervalInBackground?: boolean | undefined;
 }
 
 /** Observes paginated query data and exposes next-page, refetch, and disposal controls. */
@@ -373,7 +376,12 @@ export function createQuery<TData>(
     return updateResult(next);
   };
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
-  const unsubscribeRefetchInterval = registerRefetchInterval(options.refetchInterval, refetch, () => result.get());
+  const unsubscribeRefetchInterval = registerRefetchInterval(
+    options.refetchInterval,
+    options.refetchIntervalInBackground === true,
+    refetch,
+    () => result.get(),
+  );
 
   let disposed = false;
   const dispose = () => {
@@ -467,7 +475,12 @@ export function createInfiniteQuery<TPage, TPageParam>(
   }
 
   const unsubscribeBrowserRevalidation = registerBrowserRevalidation(options, refetch);
-  const unsubscribeRefetchInterval = registerRefetchInterval(options.refetchInterval, refetch, () => result.get());
+  const unsubscribeRefetchInterval = registerRefetchInterval(
+    options.refetchInterval,
+    options.refetchIntervalInBackground === true,
+    refetch,
+    () => result.get(),
+  );
 
   let disposed = false;
   const dispose = () => {
@@ -806,6 +819,7 @@ function registerBrowserRevalidation(
 
 function registerRefetchInterval<TResult>(
   interval: false | number | ((result: TResult) => false | number) | undefined,
+  inBackground: boolean,
   refetch: () => Promise<unknown>,
   result: () => TResult,
 ): () => void {
@@ -821,7 +835,11 @@ function registerRefetchInterval<TResult>(
       return;
     }
     timer = setTimeout(() => {
-      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      if (
+        !inBackground &&
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
         schedule();
         return;
       }

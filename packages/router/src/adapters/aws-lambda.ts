@@ -156,6 +156,25 @@ export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (
   context: TContext,
 ) => Promise<void>;
 
+const invalidAwsLambdaHttpEventV2Diagnostic =
+  'Expected an AWS Lambda HTTP API payload format 2.0 event with rawPath and requestContext.http.method.';
+
+function invalidAwsLambdaHttpEventV2Result(): AwsLambdaHttpResultV2 {
+  return {
+    body: invalidAwsLambdaHttpEventV2Diagnostic,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+    isBase64Encoded: false,
+    statusCode: 400,
+  };
+}
+
+function invalidAwsLambdaHttpEventV2Response(): Response {
+  return new Response(invalidAwsLambdaHttpEventV2Diagnostic, {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+    status: 400,
+  });
+}
+
 /**
  * Creates a buffered AWS Lambda HTTP API v2 handler for built app-router output.
  *
@@ -171,7 +190,7 @@ export function createAwsLambdaRequestHandler(
     try {
       validateAwsLambdaHttpEventV2(event);
     } catch {
-      return { body: "Bad Request", isBase64Encoded: false, statusCode: 400 };
+      return invalidAwsLambdaHttpEventV2Result();
     }
 
     handler ??= (() => {
@@ -212,6 +231,12 @@ function createAwsLambdaRequestHandlerFromRuntime(
   defaultPreloadMode: AwsLambdaDefaultPreloadMode = "all",
 ): AwsLambdaRequestHandler {
   return async (event) => {
+    try {
+      validateAwsLambdaHttpEventV2(event);
+    } catch {
+      return invalidAwsLambdaHttpEventV2Result();
+    }
+
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
     const eventToRequestStartedAt = phaseStartedAt(phases);
@@ -314,10 +339,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
       validateAwsLambdaHttpEventV2(event);
     } catch {
       await streamResponseToLambda(
-        new Response("Bad Request", {
-          headers: { "content-type": "text/plain; charset=utf-8" },
-          status: 400,
-        }),
+        invalidAwsLambdaHttpEventV2Response(),
         responseStream,
         runtime,
       );
@@ -506,6 +528,17 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
   defaultPreloadMode: AwsLambdaDefaultPreloadMode = "all",
 ): AwsLambdaStreamingRequestHandler<TContext> {
   return runtime.streamifyResponse(async (event, responseStream, _context) => {
+    try {
+      validateAwsLambdaHttpEventV2(event);
+    } catch {
+      await streamResponseToLambda(
+        invalidAwsLambdaHttpEventV2Response(),
+        responseStream,
+        runtime,
+      );
+      return;
+    }
+
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
     const eventToRequestStartedAt = phaseStartedAt(phases);
@@ -716,9 +749,7 @@ function validateAwsLambdaHttpEventV2(event: AwsLambdaHttpEventV2): void {
     typeof ((candidate as { requestContext: { http: { method?: unknown } } }).requestContext.http.method) !== "string" ||
     (candidate as { requestContext: { http: { method: string } } }).requestContext.http.method === ""
   ) {
-    throw new Error(
-      'Expected an AWS Lambda HTTP API v2 event with version "2.0", rawPath, and requestContext.http.method.',
-    );
+    throw new Error(invalidAwsLambdaHttpEventV2Diagnostic);
   }
 }
 

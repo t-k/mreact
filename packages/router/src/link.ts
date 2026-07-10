@@ -70,6 +70,21 @@ export interface LinkProps<Href extends string = LinkHref> extends LinkOptions<H
   [attribute: string]: unknown;
 }
 
+/** Represents attributes that can be serialized when Link writes to an HtmlSink. */
+export type LinkSerializableAttribute =
+  | boolean
+  | number
+  | string
+  | null
+  | undefined
+  | Readonly<Record<string, boolean | number | string | null | undefined>>;
+
+/** Configures an HtmlSink Link without browser-only event handlers or refs. */
+export interface LinkSinkProps extends LinkOptions<string> {
+  children?: LinkChild;
+  [attribute: string]: LinkChild | LinkSerializableAttribute;
+}
+
 /**
  * Converts router link options into anchor attributes consumed by the client navigation runtime.
  *
@@ -108,7 +123,7 @@ export type ConcreteLinkHrefGuard<Href extends string> = [RegisteredAppRoutePath
 export function Link<const Href extends LinkHref>(
   props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>,
 ): ReactCompatElement;
-export function Link(sink: HtmlSink, props: LinkProps<string>): void;
+export function Link(sink: HtmlSink, props: LinkSinkProps): void;
 export function Link(
   sinkOrProps: HtmlSink | LinkProps<string>,
   maybeProps?: LinkProps<string>,
