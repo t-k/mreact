@@ -25,8 +25,14 @@ export interface StoreInstrumentationEvent<T extends object> {
 }
 
 export interface StorePersistedState<T extends object> {
+  readonly __mreactStorePersistedState: true;
   state: T;
   version: number;
+}
+
+/** Creates an unambiguous versioned persistence record for Store.load(). */
+export function persistedStoreState<T extends object>(state: T, version: number): StorePersistedState<T> {
+  return { __mreactStorePersistedState: true, state, version };
 }
 
 export interface StorePersistOptions<T extends object> {
@@ -463,6 +469,7 @@ function isPersistedStateDescriptor<T extends object>(
   return (
     typeof value === "object" &&
     value !== null &&
+    (value as { __mreactStorePersistedState?: unknown }).__mreactStorePersistedState === true &&
     "version" in value &&
     "state" in value &&
     isObject((value as { state: unknown }).state)

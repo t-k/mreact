@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { effect } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { createStore, shallowEqual } from "../src/index.js";
+import { createStore, persistedStoreState, shallowEqual } from "../src/index.js";
 
 describe("createStore", () => {
   it("returns the current state and shallow-merges set patches", () => {
@@ -305,13 +305,30 @@ describe("createStore", () => {
     expect(store.get()).toEqual({ count: 2 });
   });
 
+  it("preserves raw persisted state that has state and version domain fields", async () => {
+    const store = createStore(
+      { state: { status: "new" }, version: 0, workspace: "initial" },
+      {
+        persist: {
+          load() {
+            return { state: { status: "open" }, version: 1, workspace: "alpha" };
+          },
+        },
+      },
+    );
+
+    await flushMicrotasks();
+
+    expect(store.get()).toEqual({ state: { status: "open" }, version: 1, workspace: "alpha" });
+  });
+
   it("runs persist migrations when the loaded version differs", async () => {
     const store = createStore(
       { count: 0 },
       {
         persist: {
           load() {
-            return { state: { count: 1 }, version: 1 };
+            return persistedStoreState({ count: 1 }, 1);
           },
           migrate(state, version) {
             return { count: state.count + (version ?? 0) };
