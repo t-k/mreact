@@ -141,4 +141,26 @@ describe("query refetch interval", () => {
 
     expect(calls).toBe(0);
   });
+
+  test("removes focus, visibility, and reconnect listeners with its cleanup scope", async () => {
+    let calls = 0;
+    const disposers: Array<() => void> = [];
+    withCleanupScope((dispose) => disposers.push(dispose), () => {
+      createQuery(createQueryClient(), {
+        autoFetch: false,
+        queryFn: async () => ++calls,
+        queryKey: ["scoped-browser-revalidation"],
+        refetchOnReconnect: true,
+        refetchOnWindowFocus: true,
+      });
+    });
+
+    disposers[0]?.();
+    window.dispatchEvent(new Event("focus"));
+    window.dispatchEvent(new Event("online"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await Promise.resolve();
+
+    expect(calls).toBe(0);
+  });
 });
