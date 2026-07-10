@@ -53,7 +53,8 @@ import {
 import { serverActionCookie } from "./csrf.js";
 import {
   type AppRouterCache,
-  beginRouteCacheContext,
+  activeRouteCacheContext,
+  withRouteCacheContext,
   cachedRouteResponse,
   cacheRouteResponse,
   routeCacheKey,
@@ -981,8 +982,7 @@ async function renderAppRequestInternal(
         script: string | undefined;
       }
     | undefined;
-  let routeCacheContext: ReturnType<typeof beginRouteCacheContext> | undefined;
-
+  return (await withRouteCacheContext(options.routeCache, async () => {
   try {
     if (matched.route.kind === "asset") {
       return await dispatchConventionAssetRoute({
@@ -1031,7 +1031,6 @@ async function renderAppRequestInternal(
       return methodResponse;
     }
 
-    routeCacheContext = beginRouteCacheContext(options.routeCache);
     const clientScript = options.clientScripts?.get(matched.route.path);
     const clientStyleSheets = options.clientStyles?.get(matched.route.path);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
@@ -1607,7 +1606,7 @@ async function renderAppRequestInternal(
       preparedActions.csrfTokenIsNew === true,
     );
 
-    const effectiveCachePolicy = cachePolicy ?? routeCacheContext.cachePolicy;
+    const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
 
     const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)
@@ -1686,9 +1685,8 @@ async function renderAppRequestInternal(
     });
     emitRenderTiming(options, timing, response.status);
     return response;
-  } finally {
-    await routeCacheContext?.dispose();
   }
+  })).value;
 }
 
 async function applyAppRouterResponseHook(

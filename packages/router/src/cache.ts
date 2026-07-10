@@ -58,6 +58,7 @@ interface AppRouterCacheState {
 interface RouteCacheContext {
   cache: AppRouterCache;
   cachePolicy?: RouteCachePolicy | undefined;
+  closed?: boolean | undefined;
   revalidatedPaths: Set<string>;
 }
 
@@ -472,15 +473,20 @@ export async function withRouteCacheContext<T>(
   };
 
   return cacheState.storage.run(context, async () => {
-    const value = await fn();
-    const cachePolicy = context.cachePolicy;
-    const revalidatedPaths = Array.from(context.revalidatedPaths);
+    try {
+      const value = await fn();
+      context.closed = true;
+      const cachePolicy = context.cachePolicy;
+      const revalidatedPaths = Array.from(context.revalidatedPaths);
 
-    for (const path of revalidatedPaths) {
-      await context.cache.deleteByPath(path);
+      for (const path of revalidatedPaths) {
+        await context.cache.deleteByPath(path);
+      }
+
+      return { cachePolicy, revalidatedPaths, value };
+    } finally {
+      context.closed = true;
     }
-
-    return { cachePolicy, revalidatedPaths, value };
   });
 }
 
@@ -500,15 +506,17 @@ export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
       return context.cachePolicy;
     },
     async dispose() {
+      context.closed = true;
       const revalidatedPaths = Array.from(context.revalidatedPaths);
-
-      for (const path of revalidatedPaths) {
-        await context.cache.deleteByPath(path);
-      }
-
-      const index = cacheState.activeContexts.lastIndexOf(context);
-      if (index !== -1) {
-        cacheState.activeContexts.splice(index, 1);
+      try {
+        for (const path of revalidatedPaths) {
+          await context.cache.deleteByPath(path);
+        }
+      } finally {
+        const index = cacheState.activeContexts.lastIndexOf(context);
+        if (index !== -1) {
+          cacheState.activeContexts.splice(index, 1);
+        }
       }
 
       return { revalidatedPaths };
@@ -516,8 +524,22 @@ export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
   };
 }
 
-function activeRouteCacheContext(): RouteCacheContext | undefined {
-  return cacheState.storage.getStore() ?? cacheState.activeContexts.at(-1);
+export function activeRouteCacheContext(): RouteCacheContext | undefined {
+  const asyncContext = cacheState.storage.getStore();
+
+  if (asyncContext !== undefined) {
+    return asyncContext.closed === true ? undefined : asyncContext;
+  }
+
+  for (let index = cacheState.activeContexts.length - 1; index >= 0; index -= 1) {
+    const context = cacheState.activeContexts[index];
+
+    if (context?.closed !== true) {
+      return context;
+    }
+  }
+
+  return undefined;
 }
 
 // Host is excluded from the cache key to prevent attacker-supplied Host

@@ -2483,6 +2483,104 @@ export default function Page(props) {
     expect(second.headers.get("x-mreact-cache")).toBe("HIT");
   });
 
+  test("keeps interleaved page route-cache state request-local", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-interleaved-"));
+    await mkdir(join(appDir, "a"), { recursive: true });
+    await mkdir(join(appDir, "b"), { recursive: true });
+    let resolveAStarted: (() => void) | undefined;
+    let resolveBStarted: (() => void) | undefined;
+    let releaseA: (() => void) | undefined;
+    let releaseB: (() => void) | undefined;
+    const aStarted = new Promise<void>((resolve) => {
+      resolveAStarted = resolve;
+    });
+    const bStarted = new Promise<void>((resolve) => {
+      resolveBStarted = resolve;
+    });
+    const waitForA = new Promise<void>((resolve) => {
+      releaseA = resolve;
+    });
+    const waitForB = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    const state = globalThis as {
+      __mreactInterleavedRouteCache?: {
+        aStarted(): void;
+        bStarted(): void;
+        waitForA: Promise<void>;
+        waitForB: Promise<void>;
+      };
+    };
+    state.__mreactInterleavedRouteCache = {
+      aStarted: () => resolveAStarted?.(),
+      bStarted: () => resolveBStarted?.(),
+      waitForA,
+      waitForB,
+    };
+    await writeFile(
+      join(appDir, "a", "page.tsx"),
+      `import { cacheControl, revalidatePath } from "@reckona/mreact-router";
+
+export async function loader() {
+  const state = globalThis.__mreactInterleavedRouteCache;
+  state.aStarted();
+  await state.waitForA;
+  cacheControl({ sMaxAge: 11 });
+  revalidatePath("/a");
+  return {};
+}
+
+export default function Page() { return <main>A</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "b", "page.tsx"),
+      `import { cacheControl, revalidatePath } from "@reckona/mreact-router";
+
+export async function loader() {
+  const state = globalThis.__mreactInterleavedRouteCache;
+  cacheControl({ sMaxAge: 0 });
+  revalidatePath("/b");
+  state.bStarted();
+  await state.waitForB;
+  return {};
+}
+
+export default function Page() { return <main>B</main>; }`,
+    );
+    const cacheA = createRecordingRouteCache();
+    const cacheB = createRecordingRouteCache();
+
+    try {
+      const responseA = renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/a"),
+        routeCache: cacheA,
+      });
+      await aStarted;
+      const responseB = renderAppRequest({
+        appDir,
+        request: new Request("http://local.test/b"),
+        routeCache: cacheB,
+      });
+      await bStarted;
+      releaseA?.();
+      const renderedA = await responseA;
+      releaseB?.();
+      const renderedB = await responseB;
+
+      expect(renderedA.headers.get("cache-control")).toBe("s-maxage=11");
+      expect(renderedB.headers.get("cache-control")).toBe("s-maxage=0");
+      expect(cacheA.calls).toContain("deleteByPath:/a");
+      expect(cacheA.calls).not.toContain("deleteByPath:/b");
+      expect(cacheB.calls).toContain("deleteByPath:/b");
+      expect(cacheB.calls).not.toContain("deleteByPath:/a");
+    } finally {
+      releaseA?.();
+      releaseB?.();
+      delete state.__mreactInterleavedRouteCache;
+    }
+  }, 20_000);
+
   test("does not cache routes exported with revalidate zero", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-no-store-"));
     await writeFile(
