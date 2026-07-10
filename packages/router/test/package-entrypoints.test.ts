@@ -556,10 +556,21 @@ routeHandlerContext.params.id.toUpperCase();
       filename,
       `
 import type {
+  AppRouterProjectOptions,
   AppRouterRenderPreload,
+  BuiltPrerenderedRoute,
+  BuiltServerModuleArtifact,
+  ClientRouteInferenceCache,
+  LinkSinkProps,
+  MemoryPrerenderStoreEntry,
+  MiddlewareNext,
   PreparedFormActionReference,
+  RedirectOptions,
+  RequestCookies,
   RenderAppRequestOptions,
   ResponseSinkStrategy,
+  RouteMatcher,
+  ScanAppRoutesOptions,
 } from "@reckona/mreact-router";
 
 const reference: PreparedFormActionReference = {
@@ -578,8 +589,30 @@ const options = {} as RenderAppRequestOptions;
 options.serverActionReferencesByFile = new Map([["page.tsx", [reference]]]);
 const preload = {} as AppRouterRenderPreload;
 const sink: ResponseSinkStrategy = "string";
+const project = {} as AppRouterProjectOptions;
+const prerendered = {} as BuiltPrerenderedRoute;
+const builtModule = {} as BuiltServerModuleArtifact;
+const cache = {} as ClientRouteInferenceCache;
+const link = {} as LinkSinkProps;
+const memoryEntry = {} as MemoryPrerenderStoreEntry;
+const next = undefined as MiddlewareNext;
+const redirect = {} as RedirectOptions;
+const cookies = {} as RequestCookies;
+const matcher = {} as RouteMatcher;
+const scan = {} as ScanAppRoutesOptions;
 void preload;
 void sink;
+void project;
+void prerendered;
+void builtModule;
+void cache;
+void link;
+void memoryEntry;
+void next;
+void redirect;
+void cookies;
+void matcher;
+void scan;
 `,
     );
 

@@ -103,7 +103,7 @@ export interface ClientRouteInferenceCache {
   transformedSourceByFile: Map<string, Promise<CachedClientRouteSource>>;
 }
 
-interface CachedClientRouteSource {
+export interface CachedClientRouteSource {
   signature: string;
   source: string;
 }

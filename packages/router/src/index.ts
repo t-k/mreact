@@ -7,6 +7,7 @@ export { defer, isDeferredLoaderData } from "./deferred.js";
 export type { DeferredLoaderData } from "./deferred.js";
 export { definePage } from "./types.js";
 export { Link, linkProps } from "./link.js";
+export type { LinkSerializableAttribute, LinkSinkProps } from "./link.js";
 export { href } from "./typed-routes.js";
 export { parseMultipartStream } from "./multipart.js";
 export type {
@@ -35,7 +36,7 @@ export {
   textError,
   throwNotFound,
 } from "./navigation.js";
-export type { ParseSchema } from "./navigation.js";
+export type { MiddlewareNext, ParseSchema, RedirectOptions, RequestCookies } from "./navigation.js";
 export { createMemoryPrerenderStore } from "./prerender-store.js";
 export { getServerRuntimeState } from "./runtime-state.js";
 import {
@@ -57,31 +58,62 @@ import type {
  *
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
-export const createMemorySessionStore = createMemorySessionStoreInternal;
+export function createMemorySessionStore<TData = unknown>(
+  options: MemorySessionStoreOptionsInternal = {},
+): SessionStoreInternal<TData> {
+  return createMemorySessionStoreInternal<TData>(options);
+}
 /**
  * Creates a deprecated session record and cookie alias.
  *
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
-export const createSession = createSessionInternal;
+export async function createSession<TData>(
+  response: Response,
+  store: SessionStoreInternal<TData>,
+  data: TData,
+  options: SessionCookieOptionsInternal = {},
+): Promise<SessionRecordInternal<TData>> {
+  return createSessionInternal(response, store, data, options);
+}
 /**
  * Destroys a session through a deprecated router session alias.
  *
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
-export const destroySession = destroySessionInternal;
+export async function destroySession<TData>(
+  request: Request,
+  response: Response,
+  store: SessionStoreInternal<TData>,
+  options: SessionCookieOptionsInternal = {},
+): Promise<void> {
+  return destroySessionInternal(request, response, store, options);
+}
 /**
  * Reads a session through a deprecated router session alias.
  *
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
-export const getSession = getSessionInternal;
+export async function getSession<TData>(
+  request: Request,
+  store: SessionStoreInternal<TData>,
+  options: SessionCookieOptionsInternal = {},
+): Promise<SessionRecordInternal<TData> | undefined> {
+  return getSessionInternal(request, store, options);
+}
 /**
  * Rotates a session through a deprecated router session alias.
  *
  * @deprecated Import session helpers from `@reckona/mreact-auth` instead.
  */
-export const rotateSession = rotateSessionInternal;
+export async function rotateSession<TData>(
+  request: Request,
+  response: Response,
+  store: SessionStoreInternal<TData>,
+  options: SessionCookieOptionsInternal = {},
+): Promise<SessionRecordInternal<TData> | undefined> {
+  return rotateSessionInternal(request, response, store, options);
+}
 export type {
   AwsLambdaArtifactManifest,
   BuildAppPhase,
@@ -90,10 +122,15 @@ export type {
   BuildAppProgressEvent,
   BuildAppResult,
   BuiltImportPolicyArtifact,
+  BuiltPrerenderedRoute,
+  BuiltRouteSourceAnalysisSummary,
+  BuiltServerModuleArtifact,
+  BuiltServerModuleOutput,
   CloudflarePagesArtifactManifest,
   PackageAwsLambdaArtifactOptions,
   PackageCloudflarePagesArtifactOptions,
 } from "./build.js";
+export type { AppRouterProjectOptions } from "./config.js";
 export type { ServerActionContext } from "./actions.js";
 export type {
   AppRouteHref,
@@ -106,7 +143,11 @@ export type {
   RouteParamsFor,
   RouteSearchParams,
   RouteSearchValue,
+  SegmentRouteParam,
   StaticHrefOptions,
+  ExtractRouteParams,
+  HasRouteParams,
+  Simplify,
 } from "./typed-routes.js";
 export type {
   InferLoaderData,
@@ -180,7 +221,7 @@ export type {
 } from "./navigation-state.js";
 export type { RouterRuntimeCacheStat } from "./runtime-cache.js";
 /** Configures the deprecated router memory session store alias. */
-export type { MemorySessionStoreOptionsInternal as MemorySessionStoreOptions };
+export type { MemorySessionStoreOptions } from "./session.js";
 export type {
   AppRouterCspInlineNonceWarningLogEvent,
   AppRouterLogError,
@@ -211,19 +252,19 @@ export type {
  *
  * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */
-export type SessionCookieOptions = SessionCookieOptionsInternal;
+export type { SessionCookieOptions } from "./session.js";
 /**
  * Stores session data through the deprecated router session record alias.
  *
  * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */
-export type SessionRecord<TData = unknown> = SessionRecordInternal<TData>;
+export type { SessionRecord } from "./session.js";
 /**
  * Defines session persistence through the deprecated router session store alias.
  *
  * @deprecated Import session helpers and types from `@reckona/mreact-auth` instead.
  */
-export type SessionStore<TData = unknown> = SessionStoreInternal<TData>;
+export type { SessionStore } from "./session.js";
 export { startDevServer } from "./dev-server.js";
 export type { StartDevServerOptions } from "./dev-server.js";
 export { renderAppRequest } from "./render.js";
@@ -251,6 +292,7 @@ export type {
   FileSystemPrerenderStoreOptions,
   KeyValuePrerenderStoreAdapter,
   KeyValuePrerenderStoreOptions,
+  MemoryPrerenderStoreEntry,
   MemoryPrerenderStoreOptions,
 } from "./prerender-store.js";
 export { createFileSystemPrerenderStore, createKeyValuePrerenderStore } from "./prerender-store.js";
@@ -265,6 +307,8 @@ export type {
   StartServerOptions,
 } from "./serve.js";
 export { matchRoute, scanAppRoutes } from "./routes.js";
+export type { CachedClientRouteSource, ClientRouteInferenceCache } from "./client.js";
+export type { RouteMatcher, ScanAppRoutesOptions } from "./routes.js";
 export type { AppFileConvention } from "./file-conventions.js";
 export type {
   AppAssetRoute,

@@ -188,8 +188,6 @@ export type AppRouterNavigationType = "push" | "replace" | "pop" | "refresh";
 export interface AppRouterPrerenderStore {
     // (undocumented)
     delete(path: string): void | Promise<void>;
-    // Warning: (ae-forgotten-export) The symbol "BuiltPrerenderedRoute" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     get(path: string): BuiltPrerenderedRoute | undefined | Promise<BuiltPrerenderedRoute | undefined>;
     // (undocumented)
@@ -202,6 +200,32 @@ export interface AppRouterPrerenderStore {
 export interface AppRouterProductionOptions {
     // (undocumented)
     dropClientConsole?: boolean | readonly AppRouterClientConsoleMethod[] | undefined;
+}
+
+// @public (undocumented)
+export interface AppRouterProjectOptions {
+    // (undocumented)
+    allowedSourceDirs?: readonly string[] | undefined;
+    // @deprecated
+    appDir?: string | undefined;
+    // (undocumented)
+    assetBaseUrl?: string | undefined;
+    // (undocumented)
+    buildConcurrency?: number | undefined;
+    // (undocumented)
+    buildTargets?: readonly AppRouterBuildTarget[] | undefined;
+    // (undocumented)
+    clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
+    // (undocumented)
+    production?: AppRouterProductionOptions | undefined;
+    // (undocumented)
+    projectRoot?: string | undefined;
+    // (undocumented)
+    publicAssetBaseUrl?: string | undefined;
+    // (undocumented)
+    publicDir?: string | undefined;
+    // (undocumented)
+    routesDir?: string | undefined;
 }
 
 // @public (undocumented)
@@ -369,8 +393,6 @@ export interface AwsLambdaArtifactManifest {
 // @public
 export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 
-// Warning: (ae-forgotten-export) The symbol "AppRouterProjectOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export interface BuildAppOptions extends AppRouterProjectOptions {
     // (undocumented)
@@ -436,6 +458,72 @@ export interface BuiltImportPolicyArtifact {
     version: 1;
 }
 
+// @public (undocumented)
+export interface BuiltPrerenderedRoute {
+    // (undocumented)
+    headers: Record<string, string>;
+    // (undocumented)
+    html: string;
+    // (undocumented)
+    status: number;
+}
+
+// @public (undocumented)
+export interface BuiltRouteSourceAnalysisSummary {
+    // (undocumented)
+    authIncludesClaims: boolean;
+    // (undocumented)
+    cachePolicy?: RouteCachePolicy | undefined;
+    // (undocumented)
+    clientBoundaryFallbackImports: readonly string[];
+    // (undocumented)
+    clientBoundaryImports: readonly string[];
+    // (undocumented)
+    clientRoute: boolean;
+    // (undocumented)
+    hasLoader: boolean;
+    // (undocumented)
+    routeCode: string;
+    // (undocumented)
+    routePath: string;
+    // (undocumented)
+    sourceHash: string;
+    // (undocumented)
+    streamRoute: boolean;
+    // (undocumented)
+    usesRuntimeCacheControl: boolean;
+}
+
+// @public (undocumented)
+export interface BuiltServerModuleArtifact {
+    // (undocumented)
+    analysis?: BuiltRouteSourceAnalysisSummary;
+    // (undocumented)
+    loader?: BuiltServerModuleOutput;
+    // (undocumented)
+    request?: BuiltServerModuleOutput;
+    // (undocumented)
+    routeMetadata?: BuiltServerModuleOutput;
+    // (undocumented)
+    stream?: BuiltServerModuleOutput;
+    // (undocumented)
+    string?: BuiltServerModuleOutput;
+}
+
+// @public (undocumented)
+export interface BuiltServerModuleOutput {
+    // (undocumented)
+    bundleCode?: string;
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    metadata?: ModuleMetadata;
+    // (undocumented)
+    moduleFile?: string;
+    // (undocumented)
+    sourceHash: string;
+}
+
 // @public
 export function cacheControl(options: CacheControlOptions): void;
 
@@ -447,6 +535,28 @@ export interface CacheControlOptions {
     sMaxAge?: number | undefined;
     // (undocumented)
     staleWhileRevalidate?: boolean | number | undefined;
+}
+
+// @public (undocumented)
+export interface CachedClientRouteSource {
+    // (undocumented)
+    signature: string;
+    // (undocumented)
+    source: string;
+}
+
+// @public (undocumented)
+export interface ClientRouteInferenceCache {
+    // (undocumented)
+    moduleAnalysisByFile: Map<string, Promise<ClientRouteModuleAnalysis>>;
+    // (undocumented)
+    moduleContextByFile: Map<string, Promise<CompilerModuleContext>>;
+    // (undocumented)
+    resolvedByImport: Map<string, Promise<string | undefined>>;
+    // (undocumented)
+    sourceByFile: Map<string, Promise<CachedClientRouteSource>>;
+    // (undocumented)
+    transformedSourceByFile: Map<string, Promise<CachedClientRouteSource>>;
 }
 
 // @public
@@ -489,8 +599,6 @@ export interface CookieOptions {
     secure?: boolean;
 }
 
-// Warning: (ae-forgotten-export) The symbol "RequestCookies" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function cookies(request: Request): RequestCookies;
 
@@ -509,15 +617,11 @@ export function createMemoryPrerenderStore(options?: MemoryPrerenderStoreOptions
 // @public
 export function createMemoryRouteCache(options?: MemoryRouteCacheOptions): AppRouterCache;
 
-// Warning: (ae-forgotten-export) The symbol "createMemorySessionStore_2" needs to be exported by the entry point index.d.ts
-//
 // @public @deprecated
-export const createMemorySessionStore: typeof createMemorySessionStore_2;
+export function createMemorySessionStore<TData = unknown>(options?: MemorySessionStoreOptions): SessionStore<TData>;
 
-// Warning: (ae-forgotten-export) The symbol "createSession_2" needs to be exported by the entry point index.d.ts
-//
 // @public @deprecated
-export const createSession: typeof createSession_2;
+export function createSession<TData>(response: Response, store: SessionStore<TData>, data: TData, options?: SessionCookieOptions): Promise<SessionRecord<TData>>;
 
 // @public
 export function defer<TData extends Record<string, unknown>>(data: TData): DeferredLoaderData<TData>;
@@ -536,10 +640,8 @@ export function definePage<TLoader extends RouteLoader>(component: PageComponent
 // @public
 export function deleteCookie(response: Response, name: string, options?: Pick<CookieOptions, "domain" | "path" | "sameSite" | "secure">): Response;
 
-// Warning: (ae-forgotten-export) The symbol "destroySession_2" needs to be exported by the entry point index.d.ts
-//
 // @public @deprecated
-export const destroySession: typeof destroySession_2;
+export function destroySession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<void>;
 
 // @public
 export interface DetectedLocale<Locale extends string = string> {
@@ -559,6 +661,9 @@ export interface DynamicHrefOptions<Path extends `/${string}`> extends StaticHre
     // (undocumented)
     params: RouteParamsFor<Path>;
 }
+
+// @public (undocumented)
+export type ExtractRouteParams<Path extends string> = Path extends `${infer Segment}/${infer Rest}` ? SegmentRouteParam<Segment> & ExtractRouteParams<Rest> : SegmentRouteParam<Path>;
 
 // @public
 export interface FileSystemPrerenderStoreOptions {
@@ -597,16 +702,15 @@ export function getRouterRuntimeCacheStats(): RouterRuntimeCacheStat[];
 // @public
 export function getServerRuntimeState<TState extends object>(key: string, create: () => TState): TState;
 
-// Warning: (ae-forgotten-export) The symbol "getSession_2" needs to be exported by the entry point index.d.ts
-//
 // @public @deprecated
-export const getSession: typeof getSession_2;
+export function getSession<TData>(request: Request, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
+
+// @public (undocumented)
+export type HasRouteParams<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never ? false : true;
 
 // @public
 export function headers(request: Request): Headers;
 
-// Warning: (ae-forgotten-export) The symbol "HasRouteParams" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function href<const Path extends `/${string}`>(path: Path, ...args: HasRouteParams<Path> extends true ? [options: DynamicHrefOptions<Path>] : [options?: StaticHrefOptions]): string;
 
@@ -676,8 +780,6 @@ export interface LayoutProps<TParams extends RouteParams = RouteParams> {
 // @public
 export function Link<const Href extends LinkHref>(props: LinkProps<Href> & ConcreteLinkHrefGuard<Href>): ReactCompatElement;
 
-// Warning: (ae-forgotten-export) The symbol "LinkSinkProps" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export function Link(sink: HtmlSink, props: LinkSinkProps): void;
 
@@ -717,6 +819,41 @@ export function linkProps(options: LinkOptions<string>): Record<string, string>;
 
 // @public
 export type LinkScroll = "top" | "preserve";
+
+// @public
+export type LinkSerializableAttribute = boolean | number | string | null | undefined | Readonly<Record<string, boolean | number | string | null | undefined>>;
+
+// @public
+export interface LinkSinkProps extends LinkOptions<string> {
+    // (undocumented)
+    [ariaAttribute: `aria-${string}`]: LinkSerializableAttribute;
+    // (undocumented)
+    [dataAttribute: `data-${string}`]: LinkSerializableAttribute;
+    // (undocumented)
+    children?: LinkChild;
+    // (undocumented)
+    class?: string | undefined;
+    // (undocumented)
+    className?: string | undefined;
+    // (undocumented)
+    download?: string | boolean | undefined;
+    // (undocumented)
+    id?: string | undefined;
+    // (undocumented)
+    name?: string | undefined;
+    // (undocumented)
+    rel?: string | undefined;
+    // (undocumented)
+    role?: string | undefined;
+    // (undocumented)
+    style?: Readonly<Record<string, boolean | number | string | null | undefined>> | undefined;
+    // (undocumented)
+    tabIndex?: number | undefined;
+    // (undocumented)
+    target?: string | undefined;
+    // (undocumented)
+    title?: string | undefined;
+}
 
 // @public
 export type LinkTransition = "auto" | "none" | false;
@@ -765,10 +902,18 @@ export interface MatchedRoute {
 // @public
 export function matchRoute(routes: readonly AppRoute[], pathname: string): MatchedRoute | undefined;
 
+// @public (undocumented)
+export interface MemoryPrerenderStoreEntry {
+    // (undocumented)
+    entry: BuiltPrerenderedRoute;
+    // (undocumented)
+    expiresAt: number;
+    // (undocumented)
+    lastAccessedAt: number;
+}
+
 // @public
 export interface MemoryPrerenderStoreOptions {
-    // Warning: (ae-forgotten-export) The symbol "MemoryPrerenderStoreEntry" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     backing?: Map<string, MemoryPrerenderStoreEntry>;
     // (undocumented)
@@ -830,6 +975,9 @@ export interface MetadataThemeColor {
 // @public
 export type MetadataViewport = Record<string, MetadataScalar | null | undefined>;
 
+// @public (undocumented)
+export type MiddlewareNext = undefined;
+
 // @public
 export type MReactNode = ReactCompatNode;
 
@@ -881,8 +1029,6 @@ export interface MultipartStreamPart {
     text(): Promise<string>;
 }
 
-// Warning: (ae-forgotten-export) The symbol "MiddlewareNext" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function next(): MiddlewareNext;
 
@@ -991,8 +1137,6 @@ export interface PreparedFormActionReference {
     start: number;
 }
 
-// Warning: (ae-forgotten-export) The symbol "RedirectOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function redirect(location: string, options?: RedirectOptions): never;
 
@@ -1001,6 +1145,12 @@ export function redirect303(location: string, init?: ResponseInit): Response;
 
 // @public
 export function redirectExternal(location: string, options?: RedirectOptions): never;
+
+// @public (undocumented)
+export interface RedirectOptions {
+    // (undocumented)
+    status?: 301 | 302 | 303 | 307 | 308;
+}
 
 // @public
 export type RegisteredAppRoutePath = AppRouteDeclarations extends {
@@ -1016,8 +1166,6 @@ export interface RenderAppRequestOptions {
     appDir: string;
     // (undocumented)
     assetBaseUrl?: string | undefined;
-    // Warning: (ae-forgotten-export) The symbol "ClientRouteInferenceCache" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     clientRouteInferenceCache?: ClientRouteInferenceCache | undefined;
     // (undocumented)
@@ -1058,8 +1206,6 @@ export interface RenderAppRequestOptions {
     requestUrl?: URL | undefined;
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
-    // Warning: (ae-forgotten-export) The symbol "RouteMatcher" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     routeMatcher?: RouteMatcher | undefined;
     // (undocumented)
@@ -1070,8 +1216,6 @@ export interface RenderAppRequestOptions {
     serverActions?: AppRouterServerActionOptions | undefined;
     // (undocumented)
     serverModuleCacheVersion?: string | undefined;
-    // Warning: (ae-forgotten-export) The symbol "BuiltServerModuleArtifact" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
     // (undocumented)
@@ -1113,6 +1257,16 @@ export interface RenderBuiltAppRequestOptions {
     serverActions?: AppRouterServerActionOptions | undefined;
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy;
+}
+
+// @public (undocumented)
+export interface RequestCookies {
+    // (undocumented)
+    entries(): IterableIterator<[string, string]>;
+    // (undocumented)
+    get(name: string): string | undefined;
+    // (undocumented)
+    has(name: string): boolean;
 }
 
 // @public
@@ -1157,10 +1311,8 @@ export interface RobotsRule {
     userAgent: string | readonly string[];
 }
 
-// Warning: (ae-forgotten-export) The symbol "rotateSession_2" needs to be exported by the entry point index.d.ts
-//
 // @public @deprecated
-export const rotateSession: typeof rotateSession_2;
+export function rotateSession<TData>(request: Request, response: Response, store: SessionStore<TData>, options?: SessionCookieOptions): Promise<SessionRecord<TData> | undefined>;
 
 // @public
 export interface RouteCachePolicy {
@@ -1192,6 +1344,12 @@ export interface RouteHeadDescriptor {
 
 // @public
 export type RouteLoader = (...args: never[]) => unknown;
+
+// @public (undocumented)
+export interface RouteMatcher {
+    // (undocumented)
+    match(pathname: string): MatchedRoute | undefined;
+}
 
 // @public
 export interface RouteMetadata {
@@ -1243,9 +1401,6 @@ export interface RouteMetadata {
 // @public
 export type RouteParams = Record<string, readonly string[] | string>;
 
-// Warning: (ae-forgotten-export) The symbol "Simplify" needs to be exported by the entry point index.d.ts
-// Warning: (ae-forgotten-export) The symbol "ExtractRouteParams" needs to be exported by the entry point index.d.ts
-//
 // @public
 export type RouteParamsFor<Path extends `/${string}`> = Simplify<ExtractRouteParams<Path>>;
 
@@ -1381,10 +1536,21 @@ export interface RouteStrictTransportSecurity {
     preload?: boolean | undefined;
 }
 
-// Warning: (ae-forgotten-export) The symbol "ScanAppRoutesOptions" needs to be exported by the entry point index.d.ts
-//
 // @public
 export function scanAppRoutes(options: ScanAppRoutesOptions): Promise<AppRoute[]>;
+
+// @public
+export interface ScanAppRoutesOptions {
+    // (undocumented)
+    appDir: string;
+}
+
+// @public (undocumented)
+export type SegmentRouteParam<Segment extends string> = Segment extends `:...${infer Name}` ? {
+    [Key in Name]: readonly string[];
+} : Segment extends `:${infer Name}` ? {
+    [Key in Name]: string;
+} : Record<never, never>;
 
 // @public
 export function serializeCookie(name: string, value: string, options?: CookieOptions): string;
@@ -1413,23 +1579,51 @@ export interface ServerRoute {
     segments: RouteSegment[];
 }
 
-// Warning: (ae-forgotten-export) The symbol "SessionCookieOptions_2" needs to be exported by the entry point index.d.ts
-//
-// @public @deprecated
-export type SessionCookieOptions = SessionCookieOptions_2;
+// @public
+export interface SessionCookieOptions {
+    // (undocumented)
+    cookieName?: string;
+    // (undocumented)
+    maxAgeSeconds?: number;
+    // (undocumented)
+    path?: string;
+    // (undocumented)
+    sameSite?: "Strict" | "Lax" | "None";
+    // (undocumented)
+    secure?: boolean;
+}
 
-// Warning: (ae-forgotten-export) The symbol "SessionRecord_2" needs to be exported by the entry point index.d.ts
-//
-// @public @deprecated
-export type SessionRecord<TData = unknown> = SessionRecord_2<TData>;
+// @public
+export interface SessionRecord<TData = unknown> {
+    // (undocumented)
+    createdAt: number;
+    // (undocumented)
+    data: TData;
+    // (undocumented)
+    expiresAt: number;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    rotatedAt?: number;
+}
 
-// Warning: (ae-forgotten-export) The symbol "SessionStore_2" needs to be exported by the entry point index.d.ts
-//
-// @public @deprecated
-export type SessionStore<TData = unknown> = SessionStore_2<TData>;
+// @public
+export interface SessionStore<TData = unknown> {
+    // (undocumented)
+    delete(id: string): void | Promise<void>;
+    // (undocumented)
+    get(id: string): SessionRecord<TData> | undefined | Promise<SessionRecord<TData> | undefined>;
+    // (undocumented)
+    set(record: SessionRecord<TData>): void | Promise<void>;
+}
 
 // @public
 export function setCookie(response: Response, name: string, value: string, options?: CookieOptions): Response;
+
+// @public (undocumented)
+export type Simplify<T> = {
+    [Key in keyof T]: T[Key];
+} & {};
 
 // @public
 export interface SitemapContext {

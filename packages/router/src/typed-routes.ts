@@ -43,21 +43,21 @@ export interface DynamicHrefOptions<Path extends `/${string}`> extends StaticHre
   params: RouteParamsFor<Path>;
 }
 
-type HasRouteParams<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never
+export type HasRouteParams<Path extends `/${string}`> = keyof RouteParamsFor<Path> extends never
   ? false
   : true;
 
-type ExtractRouteParams<Path extends string> = Path extends `${infer Segment}/${infer Rest}`
+export type ExtractRouteParams<Path extends string> = Path extends `${infer Segment}/${infer Rest}`
   ? SegmentRouteParam<Segment> & ExtractRouteParams<Rest>
   : SegmentRouteParam<Path>;
 
-type SegmentRouteParam<Segment extends string> = Segment extends `:...${infer Name}`
+export type SegmentRouteParam<Segment extends string> = Segment extends `:...${infer Name}`
   ? { [Key in Name]: readonly string[] }
   : Segment extends `:${infer Name}`
     ? { [Key in Name]: string }
     : Record<never, never>;
 
-type Simplify<T> = { [Key in keyof T]: T[Key] } & {};
+export type Simplify<T> = { [Key in keyof T]: T[Key] } & {};
 
 /**
  * Represents the search and hash suffix portion of a typed route href.
