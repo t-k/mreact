@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as ts from "@typescript/typescript6";
 import { describe, expect, test } from "vitest";
@@ -45,8 +53,13 @@ describe("router package entrypoints", () => {
   });
 
   test("evaluates only request-plane modules through the public request specifier", () => {
-    const directory = mkdtempSync(
-      join(process.cwd(), "node_modules", ".tmp-mreact-request-module-graph-"),
+    const directory = mkdtempSync(join(tmpdir(), "mreact-request-module-graph-"));
+    const packageScopeDirectory = join(directory, "node_modules", "@reckona");
+    mkdirSync(packageScopeDirectory, { recursive: true });
+    symlinkSync(
+      join(process.cwd(), "packages", "router"),
+      join(packageScopeDirectory, "mreact-router"),
+      process.platform === "win32" ? "junction" : "dir",
     );
     const bootstrap = join(directory, "bootstrap.mjs");
     const loader = join(directory, "loader.mjs");
