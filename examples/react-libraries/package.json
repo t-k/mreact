@@ -23,8 +23,8 @@
     "@lexical/link": "^0.21.0",
     "@lexical/selection": "^0.21.0",
     "@lexical/utils": "^0.21.0",
-    "@conform-to/react": "^1.2.2",
-    "@conform-to/zod": "^1.2.2",
+    "@conform-to/react": "^1.19.4",
+    "@conform-to/zod": "^1.19.4",
     "zod": "^3.24.1",
     "@radix-ui/react-dialog": "^1.1.6"
   }
