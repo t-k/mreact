@@ -261,7 +261,7 @@ export function formatCliHelp(command?: string | undefined): string {
       "  --handler <entry>",
       "      For aws-lambda only, bundle a custom handler entry into mreact-handler.mjs. App-local extensionless TypeScript imports are bundled; package imports stay external.",
       "  --aws-lambda-preload=middleware|hot-route-requests|all|none",
-      "      Select generated Lambda initialization preload. Defaults to middleware.",
+      "      Override generated Lambda initialization preload. Omission preserves the build policy; legacy output without policy metadata falls back to middleware.",
       "  --aws-lambda-preload-routes=/,/login",
       "      Select routes for hot-route-requests initialization preload.",
       "  -h, --help        Show this help message.",
