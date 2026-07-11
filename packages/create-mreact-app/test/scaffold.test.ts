@@ -676,7 +676,6 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("warm middleware during Lambda initialization by default");
     expect(deployDocs).toContain("mreact-streaming-handler.handler");
     expect(deployDocs).toContain("still materializes the writable runtime directory");
-    expect(deployDocs).toContain("warms middleware during Lambda initialization by default");
     expect(deployDocs).toContain("--aws-lambda-preload=hot-route-requests");
     expect(deployDocs).toContain("`src/` is not required at runtime");
     expect(deployDocs).toContain("Streaming SSR");
