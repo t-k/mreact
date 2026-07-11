@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -65,8 +66,24 @@ for (const path of ["/route-0", "/"]) {
 const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
 const dir = await createDatedResultsDir();
 const markdown = formatLambdaGeneratedHandlerLatencyMarkdown(env, rows);
+const generatedHandlerSha256 = Object.fromEntries(
+  await Promise.all(
+    policies.map(async (policy) => [
+      policy,
+      createHash("sha256")
+        .update(await readFile(join(packageDirs[policy], "mreact-handler.mjs")))
+        .digest("hex"),
+    ]),
+  ),
+);
 
-await writeJsonFile(join(dir, "lambda-generated-handler-latency.summary.json"), rows);
+await writeJsonFile(join(dir, "lambda-generated-handler-latency.summary.json"), {
+  environment: env,
+  generatedHandlerSha256,
+  repeatCount,
+  routeCount,
+  rows,
+});
 await writeTextFile(join(dir, "lambda-generated-handler-latency.md"), markdown);
 
 console.log(markdown);
