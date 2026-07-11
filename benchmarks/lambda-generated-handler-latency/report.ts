@@ -4,6 +4,7 @@ import type { LambdaGeneratedHandlerLatencyRow } from "./types.js";
 export function formatLambdaGeneratedHandlerLatencyMarkdown(
   env: BenchmarkEnvironment,
   rows: readonly LambdaGeneratedHandlerLatencyRow[],
+  targetCommit = env.gitCommit,
 ): string {
   const lines = [
     "# AWS Lambda Generated Handler Latency Benchmark",
@@ -12,6 +13,7 @@ export function formatLambdaGeneratedHandlerLatencyMarkdown(
     "",
     `- Date: ${env.date}`,
     `- Git commit: ${env.gitCommit}`,
+    `- Target commit: ${targetCommit}`,
     `- Node: ${env.nodeVersion}`,
     `- NODE_ENV: ${env.nodeEnv}`,
     `- pnpm: ${env.pnpmVersion}`,

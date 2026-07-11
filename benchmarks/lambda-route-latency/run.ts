@@ -1,13 +1,12 @@
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildApp } from "../../packages/router/src/build.js";
-import {
-  createAwsLambdaRequestHandler,
-  createAwsLambdaStreamingRequestHandler,
-  type AwsLambdaHttpEventV2,
-  type AwsLambdaStreamingResponseMetadata,
-  type AwsLambdaStreamingResponseStream,
+import { pathToFileURL } from "node:url";
+import { execFileSync } from "node:child_process";
+import type {
+  AwsLambdaHttpEventV2,
+  AwsLambdaStreamingResponseMetadata,
+  AwsLambdaStreamingResponseStream,
 } from "../../packages/router/src/adapters/aws-lambda.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../../packages/router/src/logger.js";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
@@ -18,6 +17,13 @@ import type { LambdaRouteLatencyRow } from "./types.js";
 const simulatedLoaderMs = readNumberEnv("MREACT_LAMBDA_BENCH_LOADER_MS", 25);
 const simulatedMiddlewareMs = readNumberEnv("MREACT_LAMBDA_BENCH_MIDDLEWARE_MS", 10);
 const repeatCount = readNumberEnv("MREACT_LAMBDA_BENCH_REPEATS", 3);
+const targetRoot = process.env.MREACT_LAMBDA_BENCH_TARGET_ROOT ?? process.cwd();
+const { buildApp } = (await import(
+  pathToFileURL(join(targetRoot, "packages/router/dist/build.js")).href
+)) as typeof import("../../packages/router/src/build.js");
+const { createAwsLambdaRequestHandler, createAwsLambdaStreamingRequestHandler } = (await import(
+  pathToFileURL(join(targetRoot, "packages/router/dist/adapters/aws-lambda.js")).href
+)) as typeof import("../../packages/router/src/adapters/aws-lambda.js");
 const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-route-latency-"));
 const appDir = join(rootDir, "app");
 const outDir = join(rootDir, ".mreact");
@@ -93,9 +99,20 @@ for (let index = 1; index <= repeatCount; index += 1) {
 
 const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
 const dir = await createDatedResultsDir();
-const markdown = formatLambdaRouteLatencyMarkdown(env, rows);
+const targetCommit = execFileSync("git", ["-C", targetRoot, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
+const markdown = formatLambdaRouteLatencyMarkdown(env, rows).replace(
+  "## Environment",
+  `## Environment\n\n- Target commit: ${targetCommit}`,
+);
 
-await writeJsonFile(join(dir, "lambda-route-latency.summary.json"), rows);
+await writeJsonFile(join(dir, "lambda-route-latency.summary.json"), {
+  buildMode: "production",
+  environment: env,
+  rows,
+  targetCommit,
+});
 await writeTextFile(join(dir, "lambda-route-latency.md"), markdown);
 
 console.log(markdown);

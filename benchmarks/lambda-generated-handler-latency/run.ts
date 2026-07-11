@@ -26,6 +26,7 @@ const policies: LambdaGeneratedHandlerPreloadMode[] = ["middleware", "hot-route-
 const packageDirs = Object.fromEntries(
   policies.map((policy) => [policy, join(rootDir, `.lambda-${policy}`)]),
 ) as Record<LambdaGeneratedHandlerPreloadMode, string>;
+const synthesizedStreamingPolicies: LambdaGeneratedHandlerPreloadMode[] = [];
 const routes = ["/", ...Array.from({ length: routeCount }, (_, index) => `/route-${index}`)];
 const hotRoutes = ["/", "/route-0"];
 
@@ -46,6 +47,7 @@ for (const policy of policies) {
     outDir: packageDir,
     skipRuntimeDependencyCheck: true,
   });
+  if (await ensureStreamingBaselineEntry(packageDir)) synthesizedStreamingPolicies.push(policy);
   await linkLocalRouterPackage(packageDir);
 }
 
@@ -57,11 +59,7 @@ for (const path of ["/route-0", "/"]) {
       for (const entry of ["buffered", "streaming"] as const) {
         const handlerFile =
           entry === "buffered" ? "mreact-handler.mjs" : "mreact-streaming-handler.mjs";
-        try {
-          await readFile(join(packageDirs[preload], handlerFile));
-        } catch {
-          continue;
-        }
+        await readFile(join(packageDirs[preload], handlerFile));
         rows.push(
           await invokeGeneratedHandlerScenario({
             entry,
@@ -79,7 +77,10 @@ for (const path of ["/route-0", "/"]) {
 
 const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
 const dir = await createDatedResultsDir();
-const markdown = formatLambdaGeneratedHandlerLatencyMarkdown(env, rows);
+const targetCommit = execFileSync("git", ["-C", targetRoot, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
+const markdown = formatLambdaGeneratedHandlerLatencyMarkdown(env, rows, targetCommit);
 const generatedHandlerSources: Record<string, string> = {};
 const generatedHandlerSha256: Record<string, string> = {};
 for (const policy of policies) {
@@ -96,14 +97,12 @@ for (const policy of policies) {
     } catch {}
   }
 }
-const targetCommit = execFileSync("git", ["-C", targetRoot, "rev-parse", "HEAD"], {
-  encoding: "utf8",
-}).trim();
 
 await writeJsonFile(join(dir, "lambda-generated-handler-latency.summary.json"), {
   environment: env,
   buildMode: "production/aws-lambda",
   generatedHandlerSources,
+  synthesizedStreamingPolicies,
   generatedHandlerSha256,
   repeatCount,
   routes,
@@ -165,6 +164,27 @@ async function linkLocalRouterPackage(packageDir: string): Promise<void> {
   );
 }
 
+async function ensureStreamingBaselineEntry(packageDir: string): Promise<boolean> {
+  const streamingPath = join(packageDir, "mreact-streaming-handler.mjs");
+  try {
+    await readFile(streamingPath);
+    return false;
+  } catch (error) {
+    if (!isNodeErrorCode(error, "ENOENT")) throw error;
+  }
+
+  const bufferedSource = await readFile(join(packageDir, "mreact-handler.mjs"), "utf8");
+  const streamingSource = bufferedSource.replaceAll(
+    "createPreloadedAwsLambdaRequestHandler",
+    "createPreloadedAwsLambdaStreamingRequestHandler",
+  );
+  if (streamingSource === bufferedSource) {
+    throw new Error("Cannot synthesize the baseline streaming handler from generated source.");
+  }
+  await writeFile(streamingPath, streamingSource);
+  return true;
+}
+
 async function invokeGeneratedHandlerScenario(options: {
   entry: "buffered" | "streaming";
   handlerFile: string;
@@ -186,12 +206,14 @@ async function invokeGeneratedHandlerScenario(options: {
     `  requestContext: { http: { method: "GET" } },`,
     `  version: "2.0",`,
     `};`,
-    `const stream = { write: () => true, end: () => {}, once: (_event, callback) => callback() };`,
+    `const makeStream = () => ({ write: () => true, end: () => {}, once: (_event, callback) => callback() });`,
     `const beforeFirst = performance.now();`,
-    `const first = ${options.entry === "streaming" ? "await mod.handler(event, stream, {})" : "await mod.handler(event)"};`,
+    `responseMetadata = undefined;`,
+    `const first = ${options.entry === "streaming" ? "await mod.handler(event, makeStream(), {})" : "await mod.handler(event)"};`,
     `const afterFirst = performance.now();`,
     `const beforeWarm = performance.now();`,
-    `${options.entry === "streaming" ? "await mod.handler(event, stream, {})" : "await mod.handler(event)"};`,
+    `responseMetadata = undefined;`,
+    `${options.entry === "streaming" ? "await mod.handler(event, makeStream(), {})" : "await mod.handler(event)"};`,
     `const afterWarm = performance.now();`,
     `console.log(JSON.stringify({`,
     `  importMs: afterImport - beforeImport,`,
@@ -260,4 +282,13 @@ function readNumberEnv(name: string, fallback: number): number {
 
 function round(value: number): number {
   return Math.round(value * 1000) / 1000;
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }
