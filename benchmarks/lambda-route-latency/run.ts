@@ -111,6 +111,14 @@ await writeJsonFile(join(dir, "lambda-route-latency.summary.json"), {
   buildMode: "production",
   environment: env,
   rows,
+  scenarioBuildTargets: {
+    "cold-healthz": "node",
+    "streaming-healthz": "node",
+    "first-root-redirect": "node",
+    "warm-root-redirect": "node",
+    "first-login": "node",
+    "shared-pkg-*": "aws-lambda",
+  },
   targetCommit,
 });
 await writeTextFile(join(dir, "lambda-route-latency.md"), markdown);

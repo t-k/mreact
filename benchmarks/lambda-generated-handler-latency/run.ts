@@ -27,6 +27,10 @@ const packageDirs = Object.fromEntries(
   policies.map((policy) => [policy, join(rootDir, `.lambda-${policy}`)]),
 ) as Record<LambdaGeneratedHandlerPreloadMode, string>;
 const synthesizedStreamingPolicies: LambdaGeneratedHandlerPreloadMode[] = [];
+const effectivePolicies = {} as Record<
+  LambdaGeneratedHandlerPreloadMode,
+  LambdaGeneratedHandlerPreloadMode
+>;
 const routes = ["/", ...Array.from({ length: routeCount }, (_, index) => `/route-${index}`)];
 const hotRoutes = ["/", "/route-0"];
 
@@ -48,6 +52,9 @@ for (const policy of policies) {
     skipRuntimeDependencyCheck: true,
   });
   if (await ensureStreamingBaselineEntry(packageDir)) synthesizedStreamingPolicies.push(policy);
+  effectivePolicies[policy] = readEffectivePreloadMode(
+    await readFile(join(packageDir, "mreact-handler.mjs"), "utf8"),
+  );
   await linkLocalRouterPackage(packageDir);
 }
 
@@ -63,6 +70,7 @@ for (const path of ["/route-0", "/"]) {
         rows.push(
           await invokeGeneratedHandlerScenario({
             entry,
+            effectivePreload: effectivePolicies[preload],
             handlerFile,
             iteration,
             packageDir: packageDirs[preload],
@@ -102,6 +110,11 @@ await writeJsonFile(join(dir, "lambda-generated-handler-latency.summary.json"), 
   environment: env,
   buildMode: "production/aws-lambda",
   generatedHandlerSources,
+  effectivePolicies,
+  streamingSynthesisMethod:
+    synthesizedStreamingPolicies.length === 0
+      ? null
+      : "Replace the baseline generated buffered preloaded factory name with the baseline preloaded streaming factory name; preserve all other generated source and options.",
   synthesizedStreamingPolicies,
   generatedHandlerSha256,
   repeatCount,
@@ -187,6 +200,7 @@ async function ensureStreamingBaselineEntry(packageDir: string): Promise<boolean
 
 async function invokeGeneratedHandlerScenario(options: {
   entry: "buffered" | "streaming";
+  effectivePreload: LambdaGeneratedHandlerPreloadMode;
   handlerFile: string;
   iteration: number;
   packageDir: string;
@@ -227,6 +241,7 @@ async function invokeGeneratedHandlerScenario(options: {
   return {
     coldTotalMs: round(result.importMs + result.firstMs),
     entry: options.entry,
+    effectivePreload: options.effectivePreload,
     firstMs: round(result.firstMs),
     importMs: round(result.importMs),
     iteration: options.iteration,
@@ -291,4 +306,12 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
     "code" in error &&
     (error as { code?: unknown }).code === code
   );
+}
+
+function readEffectivePreloadMode(source: string): LambdaGeneratedHandlerPreloadMode {
+  const match = source.match(/preload: \{ mode: "(all|hot-route-requests|middleware)"/);
+  if (match?.[1] === "all" || match?.[1] === "hot-route-requests" || match?.[1] === "middleware") {
+    return match[1];
+  }
+  throw new Error("Generated handler source does not contain a supported preload mode.");
 }

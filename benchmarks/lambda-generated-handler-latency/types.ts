@@ -3,6 +3,7 @@ export type LambdaGeneratedHandlerPreloadMode = "all" | "hot-route-requests" | "
 export interface LambdaGeneratedHandlerLatencyRow {
   coldTotalMs: number;
   entry: "buffered" | "streaming";
+  effectivePreload: LambdaGeneratedHandlerPreloadMode;
   firstMs: number;
   importMs: number;
   iteration: number;

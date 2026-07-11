@@ -27,8 +27,8 @@ export function formatLambdaGeneratedHandlerLatencyMarkdown(
     "",
     "## Results",
     "",
-    "| scenario | entry | preload | iteration | path | status | handler import ms | first hit ms | warm hit ms | cold total ms |",
-    "| --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
+    "| scenario | entry | requested preload | effective preload | iteration | path | status | handler import ms | first hit ms | warm hit ms | cold total ms |",
+    "| --- | --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
   ];
 
   for (const row of rows) {
@@ -37,6 +37,7 @@ export function formatLambdaGeneratedHandlerLatencyMarkdown(
         row.scenario,
         row.entry,
         row.preload,
+        row.effectivePreload,
         row.iteration,
         row.path,
         row.status,
