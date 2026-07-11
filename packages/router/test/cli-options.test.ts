@@ -112,6 +112,24 @@ describe("router CLI options", () => {
     });
   });
 
+  test("parses generated AWS Lambda preload flags", () => {
+    expect(parseCliArguments(["build", "--aws-lambda-preload=hot-route-requests"])).toEqual({
+      awsLambdaPreload: "hot-route-requests",
+      command: "build",
+      routeArg: undefined,
+    });
+    expect(
+      parseCliArguments(["package", "aws-lambda", "--aws-lambda-preload", "all"]),
+    ).toEqual({
+      awsLambdaPreload: "all",
+      command: "package",
+      routeArg: "aws-lambda",
+    });
+    expect(() => parseCliArguments(["build", "--aws-lambda-preload=invalid"])).toThrow(
+      /aws-lambda-preload/,
+    );
+  });
+
   test("parses help entrypoints", () => {
     expect(parseCliArguments(["--help"])).toEqual({ command: "help", help: true });
     expect(parseCliArguments(["help"])).toEqual({ command: "help" });

@@ -61,6 +61,9 @@ if (parsed !== undefined) {
         try {
           const result = await buildApp({
             ...loaded.project,
+            ...(parsed.awsLambdaPreload === undefined
+              ? {}
+              : { awsLambdaPreload: parsed.awsLambdaPreload }),
             ...(parsed.clientSourceMaps === undefined
               ? {}
               : { clientSourceMaps: parsed.clientSourceMaps }),
@@ -87,6 +90,9 @@ if (parsed !== undefined) {
       } else if (command === "package") {
         if (routeArg === "aws-lambda") {
           const manifest = await packageAwsLambdaArtifact({
+            ...(parsed.awsLambdaPreload === undefined
+              ? {}
+              : { awsLambdaPreload: parsed.awsLambdaPreload }),
             fromDir: resolve(parsed.from ?? ".mreact"),
             ...(parsed.handler === undefined ? {} : { handlerEntry: resolve(parsed.handler) }),
             outDir: resolve(parsed.out ?? ".lambda"),

@@ -5,11 +5,13 @@ import {
   type AppRouterClientSourceMapMode,
 } from "./config.js";
 import type { RequestHostPolicy } from "./serve.js";
+import type { AwsLambdaGeneratedHandlerPreloadMode } from "./build.js";
 
 export type CliRequestLogMode = "requests";
 export type CliBuildTarget = AppRouterBuildTarget | "all";
 
 export interface ParsedCliArguments {
+  awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
   allowedHosts?: readonly string[] | undefined;
@@ -157,6 +159,21 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
       continue;
     }
 
+    if (value === "--aws-lambda-preload") {
+      parsed.awsLambdaPreload = parseCliAwsLambdaPreloadMode(
+        readOptionValue(argv, index, "aws-lambda-preload"),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--aws-lambda-preload=")) {
+      parsed.awsLambdaPreload = parseCliAwsLambdaPreloadMode(
+        value.slice("--aws-lambda-preload=".length),
+      );
+      continue;
+    }
+
     if (value.startsWith("--client-source-maps=")) {
       parsed.clientSourceMaps = parseCliClientSourceMapMode(
         value.slice("--client-source-maps=".length),
@@ -195,6 +212,8 @@ export function formatCliHelp(command?: string | undefined): string {
       `      Select build artifacts. Defaults to ${defaultTargetLabel.toLowerCase()}. all selects ${allTargetValues}. aws-lambda writes .mreact/aws-lambda/mreact-handler.mjs and .mreact/server/import-policy.json.`,
       "  --client-source-maps=none|hidden",
       "      Control production client source map output.",
+      "  --aws-lambda-preload=middleware|hot-route-requests|all|none",
+      "      Select generated Lambda initialization preload. Defaults to middleware.",
       "  -h, --help",
       "      Show this help message.",
       "",
@@ -223,6 +242,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "      For aws-lambda only, skip the production node_modules check when a later deploy step installs dependencies into the package directory.",
       "  --handler <entry>",
       "      For aws-lambda only, bundle a custom handler entry into mreact-handler.mjs. App-local extensionless TypeScript imports are bundled; package imports stay external.",
+      "  --aws-lambda-preload=middleware|hot-route-requests|all|none",
+      "      Select generated Lambda initialization preload. Defaults to middleware.",
       "  -h, --help        Show this help message.",
       "",
       "Examples:",
@@ -459,6 +480,21 @@ function parseCliClientSourceMapMode(value: string): AppRouterClientSourceMapMod
 
   throw new Error(
     `Unsupported client source map mode ${JSON.stringify(value)} for --client-source-maps. Expected "none", "hidden", or "linked".`,
+  );
+}
+
+function parseCliAwsLambdaPreloadMode(value: string): AwsLambdaGeneratedHandlerPreloadMode {
+  if (
+    value === "all" ||
+    value === "hot-route-requests" ||
+    value === "middleware" ||
+    value === "none"
+  ) {
+    return value;
+  }
+
+  throw new Error(
+    `Unsupported aws-lambda-preload ${JSON.stringify(value)}. Expected "middleware", "hot-route-requests", "all", or "none".`,
   );
 }
 

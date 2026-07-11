@@ -1342,10 +1342,12 @@ export default function Page() {
       await readFile(join(lambdaOutDir, "mreact-lambda-artifact.json"), "utf8"),
     ) as { totalBytes?: number };
 
-    expect(lambdaHandler).toContain("createPreloadedAwsLambdaRequestHandler");
+    expect(lambdaHandler).toContain("warmAwsLambdaRuntime");
+    expect(lambdaHandler).toContain("createAwsLambdaRequestHandler");
     expect(lambdaHandler).toContain('importPolicy: "generated"');
     expect(lambdaHandler).toContain('outDir: resolve(here, "..")');
-    expect(lambdaHandler).toContain('preload: { mode: "all" }');
+    expect(lambdaHandler).toContain('preload: { mode: "middleware" }');
+    expect(lambdaHandler).not.toContain('preload: { mode: "all" }');
     expect(cloudflareWorker).toContain("createCloudflareBuiltRequestHandler");
     expect(cloudflareWorker).toContain("createCloudflareStaticAssetLoader");
     expect(packaged.totalBytes).toBeGreaterThan(0);
@@ -1369,6 +1371,45 @@ export default function Page() {
       "@reckona/mreact-router/adapters/cloudflare",
     );
   });
+
+  test.each(["hot-route-requests", "all"] as const)(
+    "emits AWS Lambda handlers with the configured %s preload strategy",
+    async (awsLambdaPreload) => {
+      const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-lambda-preload-option-"));
+      const appDir = join(rootDir, "app");
+      const outDir = join(rootDir, ".mreact");
+      const lambdaOutDir = join(rootDir, ".lambda");
+      await mkdir(appDir, { recursive: true });
+      await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+      await writeFile(
+        join(appDir, "page.tsx"),
+        "export default function Page() { return <main>lambda preload</main>; }",
+      );
+
+      await buildApp({
+        allowedSourceDirs: ["app"],
+        awsLambdaPreload,
+        outDir,
+        projectRoot: rootDir,
+        routesDir: "app",
+        targets: ["aws-lambda"],
+      });
+      await packageAwsLambdaArtifact({
+        awsLambdaPreload,
+        fromDir: outDir,
+        outDir: lambdaOutDir,
+        skipRuntimeDependencyCheck: true,
+      });
+
+      const expected = `preload: { mode: ${JSON.stringify(awsLambdaPreload)} }`;
+      await expect(readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8")).resolves.toContain(
+        expected,
+      );
+      await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
+        expected,
+      );
+    },
+  );
 
   test("excludes colocated test files from Cloudflare worker manifests and Pages packaging", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-test-source-exclusion-"));
@@ -2607,6 +2648,70 @@ export default function Page() {
 
     expect(result.statusCode).toBe(200);
     expect(result.body).toContain("<main>packaged lambda</main>");
+  });
+
+  test("warms middleware without evaluating unrelated pages when importing a packaged Lambda handler", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-lambda-packaged-preload-plane-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const lambdaOutDir = join(rootDir, ".lambda");
+    await mkdir(join(appDir, "slow"), { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `globalThis.__mreactGeneratedLambdaPreload = [
+  ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
+  "middleware-module",
+];
+export const config = { matcher: "/admin/:path*" };
+export function middleware() {}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>root</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "slow", "page.tsx"),
+      `globalThis.__mreactGeneratedLambdaPreload = [
+  ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
+  "slow-page-module",
+];
+export default function Slow() { return <main>slow</main>; }
+`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["aws-lambda"],
+    });
+    await packageAwsLambdaArtifact({
+      fromDir: outDir,
+      outDir: lambdaOutDir,
+      skipRuntimeDependencyCheck: true,
+    });
+    await rename(appDir, join(rootDir, "app.moved"));
+    await rename(outDir, join(rootDir, ".mreact.moved"));
+    await mkdir(join(lambdaOutDir, "node_modules", "@reckona"), { recursive: true });
+    await symlink(
+      join(process.cwd(), "packages", "router"),
+      join(lambdaOutDir, "node_modules", "@reckona", "mreact-router"),
+    );
+
+    const smokeOutput = await runNodeModuleScript(
+      [
+        `await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, "mreact-handler.mjs")).href)});`,
+        `console.log(JSON.stringify(globalThis.__mreactGeneratedLambdaPreload ?? []));`,
+      ].join("\n"),
+      lambdaOutDir,
+    );
+    const preloaded = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "[]") as string[];
+
+    expect(preloaded).toContain("middleware-module");
+    expect(preloaded).not.toContain("slow-page-module");
   });
 
   test("packages a bundled AWS Lambda custom handler with app-local server imports", async () => {

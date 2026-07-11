@@ -270,11 +270,14 @@ describe("router CLI entry", () => {
       ".lambda",
       "--handler",
       "lambda/mreact-handler.ts",
+      "--aws-lambda-preload",
+      "hot-route-requests",
     ];
     const previousExitCode = process.exitCode;
     try {
       await import("../src/cli.ts");
       expect(packageAwsLambdaArtifact).toHaveBeenCalledWith({
+        awsLambdaPreload: "hot-route-requests",
         fromDir: expect.stringMatching(/\.mreact$/),
         handlerEntry: expect.stringMatching(/lambda\/mreact-handler\.ts$/),
         outDir: expect.stringMatching(/\.lambda$/),
