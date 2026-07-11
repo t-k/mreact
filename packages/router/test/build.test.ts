@@ -206,9 +206,17 @@ async function runNodeModuleScript(script: string, cwd: string): Promise<string>
   child.stdout.on("data", (chunk: Buffer) => output.push(chunk.toString()));
   child.stderr.on("data", (chunk: Buffer) => output.push(chunk.toString()));
 
-  const exitCode = await new Promise<number | null>((resolve) => {
-    child.once("exit", (code) => resolve(code));
-  });
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  let exitCode: number | null;
+  try {
+    exitCode = await new Promise<number | null>((resolve, reject) => {
+      child.once("exit", (code) => resolve(code));
+      deadline = setTimeout(() => reject(new Error("Node module script timed out after 30 seconds.")), 30_000);
+    });
+  } finally {
+    clearTimeout(deadline);
+    await stopChildProcess(child);
+  }
 
   if (exitCode !== 0) {
     throw new Error(`Node script failed with exit code ${exitCode}.\n${output.join("")}`);
@@ -2703,7 +2711,7 @@ export default function Page() { return <main>root</main>; }`,
   ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
   "slow-page-module",
 ];
-await new Promise((resolve) => { globalThis.__releaseSlowPage = resolve; });
+await globalThis.__slowPageGate;
 export default function Slow() { return <main>slow</main>; }
 `,
     );
@@ -2731,6 +2739,8 @@ export default function Slow() { return <main>slow</main>; }
     const smokeOutput = await runNodeModuleScript(
       [
         `let responseMetadata;`,
+        `let releaseSlowPage;`,
+        `globalThis.__slowPageGate = new Promise((resolve) => { releaseSlowPage = resolve; });`,
         `globalThis.awslambda = { streamifyResponse: (handler) => handler, HttpResponseStream: { from: (stream, metadata) => { responseMetadata = metadata; return stream; } } };`,
         `const mod = await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, handlerFile)).href)});`,
         `const event = { headers: { host: "lambda.test" }, rawPath: "/", rawQueryString: "", requestContext: { http: { method: "GET" } }, version: "2.0" };`,
@@ -2739,7 +2749,7 @@ export default function Slow() { return <main>slow</main>; }
         `let timeoutId;`,
         `const result = await Promise.race([request.then((value) => ({ kind: "response", value })), new Promise((resolve) => { timeoutId = setTimeout(() => resolve({ kind: "timeout" }), 1000); })]);`,
         `clearTimeout(timeoutId);`,
-        `globalThis.__releaseSlowPage?.();`,
+        `releaseSlowPage();`,
         `if (result.kind === "timeout") await request;`,
         `console.log(JSON.stringify({ kind: result.kind, preloaded: globalThis.__mreactGeneratedLambdaPreload ?? [], status: ${handlerFile === "mreact-streaming-handler.mjs" ? "responseMetadata?.statusCode" : "result.value?.statusCode"} }));`,
       ].join("\n"),
