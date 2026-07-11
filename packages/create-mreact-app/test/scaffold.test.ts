@@ -673,6 +673,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("--config.node-linker=hoisted");
     expect(deployDocs).toContain("find .lambda -type l");
     expect(deployDocs).toContain("actual file bytes");
+    expect(deployDocs).toContain("warms middleware during Lambda initialization by default");
+    expect(deployDocs).toContain("--aws-lambda-preload=hot-route-requests");
     expect(deployDocs).toContain("`src/` is not required at runtime");
     expect(deployDocs).toContain("Streaming SSR");
     expect(deployDocs).toContain("S3 + CloudFront");
