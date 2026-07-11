@@ -64,6 +64,9 @@ if (parsed !== undefined) {
             ...(parsed.awsLambdaPreload === undefined
               ? {}
               : { awsLambdaPreload: parsed.awsLambdaPreload }),
+            ...(parsed.awsLambdaPreloadRoutes === undefined
+              ? {}
+              : { awsLambdaPreloadRoutes: parsed.awsLambdaPreloadRoutes }),
             ...(parsed.clientSourceMaps === undefined
               ? {}
               : { clientSourceMaps: parsed.clientSourceMaps }),
@@ -93,6 +96,9 @@ if (parsed !== undefined) {
             ...(parsed.awsLambdaPreload === undefined
               ? {}
               : { awsLambdaPreload: parsed.awsLambdaPreload }),
+            ...(parsed.awsLambdaPreloadRoutes === undefined
+              ? {}
+              : { awsLambdaPreloadRoutes: parsed.awsLambdaPreloadRoutes }),
             fromDir: resolve(parsed.from ?? ".mreact"),
             ...(parsed.handler === undefined ? {} : { handlerEntry: resolve(parsed.handler) }),
             outDir: resolve(parsed.out ?? ".lambda"),

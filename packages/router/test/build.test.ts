@@ -1389,25 +1389,32 @@ export default function Page() {
       await buildApp({
         allowedSourceDirs: ["app"],
         awsLambdaPreload,
+        ...(awsLambdaPreload === "hot-route-requests"
+          ? { awsLambdaPreloadRoutes: ["/"] }
+          : {}),
         outDir,
         projectRoot: rootDir,
         routesDir: "app",
         targets: ["aws-lambda"],
       });
       await packageAwsLambdaArtifact({
-        awsLambdaPreload,
         fromDir: outDir,
         outDir: lambdaOutDir,
         skipRuntimeDependencyCheck: true,
       });
 
-      const expected = `preload: { mode: ${JSON.stringify(awsLambdaPreload)} }`;
+      const expected = `preload: { mode: ${JSON.stringify(awsLambdaPreload)}`;
       await expect(readFile(join(outDir, "aws-lambda", "mreact-handler.mjs"), "utf8")).resolves.toContain(
         expected,
       );
       await expect(readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8")).resolves.toContain(
         expected,
       );
+      if (awsLambdaPreload === "hot-route-requests") {
+        await expect(
+          readFile(join(lambdaOutDir, "mreact-handler.mjs"), "utf8"),
+        ).resolves.toContain('routes: ["/"]');
+      }
     },
   );
 

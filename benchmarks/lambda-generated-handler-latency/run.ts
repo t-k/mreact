@@ -39,6 +39,9 @@ for (const policy of policies) {
   const packageDir = packageDirs[policy];
   await packageAwsLambdaArtifact({
     awsLambdaPreload: policy,
+    ...(policy === "hot-route-requests"
+      ? { awsLambdaPreloadRoutes: ["/", "/route-0"] }
+      : {}),
     fromDir: outDir,
     outDir: packageDir,
     skipRuntimeDependencyCheck: true,

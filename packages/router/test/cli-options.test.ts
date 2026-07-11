@@ -113,8 +113,15 @@ describe("router CLI options", () => {
   });
 
   test("parses generated AWS Lambda preload flags", () => {
-    expect(parseCliArguments(["build", "--aws-lambda-preload=hot-route-requests"])).toEqual({
+    expect(
+      parseCliArguments([
+        "build",
+        "--aws-lambda-preload=hot-route-requests",
+        "--aws-lambda-preload-routes=/,/login",
+      ]),
+    ).toEqual({
       awsLambdaPreload: "hot-route-requests",
+      awsLambdaPreloadRoutes: ["/", "/login"],
       command: "build",
       routeArg: undefined,
     });

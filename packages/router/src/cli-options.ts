@@ -12,6 +12,7 @@ export type CliBuildTarget = AppRouterBuildTarget | "all";
 
 export interface ParsedCliArguments {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
+  awsLambdaPreloadRoutes?: readonly string[] | undefined;
   clientSourceMaps?: AppRouterClientSourceMapMode | undefined;
   command: string;
   allowedHosts?: readonly string[] | undefined;
@@ -174,6 +175,21 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
       continue;
     }
 
+    if (value === "--aws-lambda-preload-routes") {
+      parsed.awsLambdaPreloadRoutes = parseCliAwsLambdaPreloadRoutes(
+        readOptionValue(argv, index, "aws-lambda-preload-routes"),
+      );
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--aws-lambda-preload-routes=")) {
+      parsed.awsLambdaPreloadRoutes = parseCliAwsLambdaPreloadRoutes(
+        value.slice("--aws-lambda-preload-routes=".length),
+      );
+      continue;
+    }
+
     if (value.startsWith("--client-source-maps=")) {
       parsed.clientSourceMaps = parseCliClientSourceMapMode(
         value.slice("--client-source-maps=".length),
@@ -214,6 +230,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "      Control production client source map output.",
       "  --aws-lambda-preload=middleware|hot-route-requests|all|none",
       "      Select generated Lambda initialization preload. Defaults to middleware.",
+      "  --aws-lambda-preload-routes=/,/login",
+      "      Select routes for hot-route-requests initialization preload.",
       "  -h, --help",
       "      Show this help message.",
       "",
@@ -244,6 +262,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "      For aws-lambda only, bundle a custom handler entry into mreact-handler.mjs. App-local extensionless TypeScript imports are bundled; package imports stay external.",
       "  --aws-lambda-preload=middleware|hot-route-requests|all|none",
       "      Select generated Lambda initialization preload. Defaults to middleware.",
+      "  --aws-lambda-preload-routes=/,/login",
+      "      Select routes for hot-route-requests initialization preload.",
       "  -h, --help        Show this help message.",
       "",
       "Examples:",
@@ -496,6 +516,14 @@ function parseCliAwsLambdaPreloadMode(value: string): AwsLambdaGeneratedHandlerP
   throw new Error(
     `Unsupported aws-lambda-preload ${JSON.stringify(value)}. Expected "middleware", "hot-route-requests", "all", or "none".`,
   );
+}
+
+function parseCliAwsLambdaPreloadRoutes(value: string): readonly string[] {
+  const routes = value.split(",").filter((route) => route.startsWith("/"));
+  if (routes.length === 0 || routes.join(",") !== value) {
+    throw new Error("aws-lambda-preload-routes must be a comma-separated list of absolute routes.");
+  }
+  return routes;
 }
 
 function readOptionValue(values: readonly string[], index: number, name: string): string {

@@ -128,6 +128,7 @@ export type AwsLambdaGeneratedHandlerPreloadMode =
  */
 export interface BuildAppOptions extends AppRouterProjectOptions {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
+  awsLambdaPreloadRoutes?: readonly string[] | undefined;
   onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
   onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
   outDir: string;
@@ -288,6 +289,7 @@ export interface CloudflarePagesArtifactManifest {
  */
 export interface PackageAwsLambdaArtifactOptions {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
+  awsLambdaPreloadRoutes?: readonly string[] | undefined;
   fromDir: string;
   handlerEntry?: string | undefined;
   outDir: string;
@@ -819,7 +821,13 @@ async function buildAppWithResolvedProject(
   if (shouldTrackBuildPhases === false) {
     await Promise.all([
       ...(shouldBuildAwsLambda
-        ? [writeAwsLambdaHandlerArtifact(options.outDir, options.awsLambdaPreload)]
+        ? [
+            writeAwsLambdaHandlerArtifact(
+              options.outDir,
+              options.awsLambdaPreload,
+              options.awsLambdaPreloadRoutes,
+            ),
+          ]
         : []),
       ...(shouldBuildCloudflare
         ? [
@@ -836,7 +844,13 @@ async function buildAppWithResolvedProject(
     await timeBuildPhase(timingSink, progressSink, "adapterArtifacts", async () => {
       await Promise.all([
         ...(shouldBuildAwsLambda
-          ? [writeAwsLambdaHandlerArtifact(options.outDir, options.awsLambdaPreload)]
+          ? [
+              writeAwsLambdaHandlerArtifact(
+                options.outDir,
+                options.awsLambdaPreload,
+                options.awsLambdaPreloadRoutes,
+              ),
+            ]
           : []),
         ...(shouldBuildCloudflare
           ? [
@@ -6498,10 +6512,18 @@ async function writeNavigationRuntimeBundle(
 async function writeAwsLambdaHandlerArtifact(
   outDir: string,
   preload?: AwsLambdaGeneratedHandlerPreloadMode,
+  routes?: readonly string[],
 ): Promise<void> {
   const awsLambdaDir = join(outDir, "aws-lambda");
   await mkdir(awsLambdaDir, { recursive: true });
-  await writeFile(join(awsLambdaDir, "mreact-handler.mjs"), awsLambdaHandlerSource("..", preload));
+  const policy = { mode: preload ?? "middleware", ...(routes === undefined ? {} : { routes }) };
+  await Promise.all([
+    writeFile(
+      join(awsLambdaDir, "mreact-handler.mjs"),
+      awsLambdaHandlerSource("..", policy.mode, policy.routes),
+    ),
+    writeFile(join(awsLambdaDir, "preload-policy.json"), JSON.stringify(policy, null, 2)),
+  ]);
 }
 
 async function writeCloudflareWorkerArtifact(options: {
@@ -6556,9 +6578,12 @@ export async function packageAwsLambdaArtifact(
     outDir: options.outDir,
   });
   if (options.handlerEntry === undefined) {
+    const builtPolicy = await readAwsLambdaGeneratedPreloadPolicy(options.fromDir);
+    const preload = options.awsLambdaPreload ?? builtPolicy.mode;
+    const routes = options.awsLambdaPreloadRoutes ?? builtPolicy.routes;
     await writeFile(
       join(options.outDir, "mreact-handler.mjs"),
-      awsLambdaHandlerSource(".mreact", options.awsLambdaPreload),
+      awsLambdaHandlerSource(".mreact", preload, routes),
     );
   } else {
     await writeAwsLambdaCustomHandlerArtifact({
@@ -6809,6 +6834,7 @@ async function collectArtifactFiles(
 function awsLambdaHandlerSource(
   outDirRelativeToHandler: string,
   preload: AwsLambdaGeneratedHandlerPreloadMode = "middleware",
+  routes?: readonly string[],
 ): string {
   return `import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -6818,7 +6844,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const options = {
   importPolicy: "generated",
   outDir: resolve(here, ${JSON.stringify(outDirRelativeToHandler)}),
-  preload: { mode: ${JSON.stringify(preload)} },
+  preload: { mode: ${JSON.stringify(preload)}${routes === undefined ? "" : `, routes: ${JSON.stringify(routes)}`} },
   timings: process.env.MREACT_ROUTER_TIMINGS === "1",
 };
 
@@ -6828,6 +6854,33 @@ export const handler = createAwsLambdaRequestHandler({
   preload: { mode: "none" },
 });
 `;
+}
+
+async function readAwsLambdaGeneratedPreloadPolicy(outDir: string): Promise<{
+  mode: AwsLambdaGeneratedHandlerPreloadMode;
+  routes?: readonly string[] | undefined;
+}> {
+  const path = join(outDir, "aws-lambda", "preload-policy.json");
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as {
+      mode: AwsLambdaGeneratedHandlerPreloadMode;
+      routes?: readonly string[] | undefined;
+    };
+  } catch (error) {
+    if (isNodeErrorCode(error, "ENOENT")) {
+      return { mode: "middleware" };
+    }
+    throw error;
+  }
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === code
+  );
 }
 
 async function validateProductionRoutes(options: {
