@@ -88,9 +88,8 @@ export function scheduleCallback(
   taskIdCounter += 1;
 
   if (start > currentTime) {
-    timerQueue.push(task);
-    sortQueue(timerQueue);
-    if (taskQueue.length === 0 && timerQueue[0] === task) {
+    pushHeap(timerQueue, task, compareTasks);
+    if (taskQueue.length === 0 && peek(timerQueue) === task) {
       if (isHostTimeoutScheduled) {
         getHost().cancelHostTimeout(taskTimeoutId);
       }
@@ -101,8 +100,7 @@ export function scheduleCallback(
       );
     }
   } else {
-    taskQueue.push(task);
-    sortQueue(taskQueue);
+    pushHeap(taskQueue, task, compareTasks);
     requestHostCallbackIfNeeded();
   }
 
@@ -116,6 +114,7 @@ export function cancelCallback(task: SchedulerTask): void {
 }
 
 export function getFirstCallbackNode(): SchedulerTask | null {
+  discardCancelledRoots(taskQueue);
   return peek(taskQueue);
 }
 
@@ -230,12 +229,12 @@ function workLoop(initialTime: number): boolean {
       }
 
       if (currentTask === peek(taskQueue)) {
-        taskQueue.shift();
+        popHeap(taskQueue, compareTasks);
       }
       recordProfilingEvent("complete", currentTask);
       advanceTimers(currentTime);
     } else {
-      taskQueue.shift();
+      popHeap(taskQueue, compareTasks);
     }
 
     currentTask = peek(taskQueue);
@@ -283,12 +282,11 @@ function advanceTimers(currentTime: number): void {
 
   while (timer !== null) {
     if (timer.callback === null) {
-      timerQueue.shift();
+      popHeap(timerQueue, compareTasks);
     } else if (timer.startTime <= currentTime) {
-      timerQueue.shift();
+      popHeap(timerQueue, compareTasks);
       timer.sortIndex = timer.expirationTime;
-      taskQueue.push(timer);
-      sortQueue(taskQueue);
+      pushHeap(taskQueue, timer, compareTasks);
     } else {
       return;
     }
@@ -335,11 +333,19 @@ function performWorkUntilDeadline(): void {
 }
 
 function peek(queue: SchedulerTask[]): SchedulerTask | null {
-  return queue[0] ?? null;
+  return peekHeap(queue);
 }
 
-function sortQueue(queue: SchedulerTask[]): void {
-  queue.sort((left, right) => left.sortIndex - right.sortIndex || left.id - right.id);
+function compareTasks(left: SchedulerTask, right: SchedulerTask): number {
+  return left.sortIndex - right.sortIndex || left.id - right.id;
+}
+
+function discardCancelledRoots(queue: SchedulerTask[]): void {
+  let task = peek(queue);
+  while (task?.callback === null) {
+    popHeap(queue, compareTasks);
+    task = peek(queue);
+  }
 }
 
 function getHost(): SchedulerHost {
@@ -433,3 +439,8 @@ function createInputPendingChecker(): (() => boolean) | undefined {
 
   return undefined;
 }
+import {
+  peek as peekHeap,
+  pop as popHeap,
+  push as pushHeap,
+} from "./scheduler-heap.js";

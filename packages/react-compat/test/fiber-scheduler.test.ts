@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "vitest";
 import {
   cancelCallback,
   forceFrameRate,
+  getFirstCallbackNode,
   requestPaint,
   scheduleCallback,
   setSchedulerHostForTesting,
@@ -97,6 +98,17 @@ describe("fiber scheduler", () => {
     host.flushOneHostCallback();
 
     expect(calls).toEqual(["kept"]);
+  });
+
+  test("does not expose a cancelled ready task as the first callback", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const cancelled = scheduleCallback("user-blocking", () => {});
+    const kept = scheduleCallback("normal", () => {});
+
+    cancelCallback(cancelled);
+
+    expect(getFirstCallbackNode()).toBe(kept);
   });
 
   test("yields when the frame interval is exhausted and resumes continuation on the next host callback", () => {
