@@ -204,11 +204,7 @@ export async function loader(context: LoaderContext<{ id: string }>): Promise<Us
 }
 
 export default definePage<typeof loader>(function UserPage(props) {
-  return (
-    <h1>
-      {props.params.id}: {props.data.name}
-    </h1>
-  );
+  return <h1>{props.params.id}: {props.data.name}</h1>;
 });
 ```
 
@@ -259,13 +255,7 @@ Routes that render route-local `<Await>` directly or through app-local server co
 
 ```tsx
 function FeedList(props) {
-  return (
-    <ul>
-      {props.items.map((item) => (
-        <li>{item}</li>
-      ))}
-    </ul>
-  );
+  return <ul>{props.items.map((item) => <li>{item}</li>)}</ul>;
 }
 
 export default function Page() {
@@ -310,7 +300,9 @@ export default function Page() {
           placeholderAs="div"
           placeholder={<StorySkeleton count={batch.size} start={batch.start + 1} />}
         >
-          {(resolved) => <StoryRows stories={resolved.items} start={resolved.start + 1} />}
+          {(resolved) => (
+            <StoryRows stories={resolved.items} start={resolved.start + 1} />
+          )}
         </Await>
       ))}
     </ol>
@@ -350,11 +342,7 @@ Server-only pages get the lightweight navigation runtime automatically — witho
 import { Link } from "@reckona/mreact-router/link";
 
 export default function Page() {
-  return (
-    <Link href="/docs" prefetch="viewport">
-      Docs
-    </Link>
-  );
+  return <Link href="/docs" prefetch="viewport">Docs</Link>;
 }
 ```
 

@@ -1636,9 +1636,10 @@ function readmeSource(
   const tailwindNote = options.tailwind
     ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
     : "";
-  const starterNote = options.dashboard
-    ? ""
-    : "\nThe generated home page is a counter starter that uses `cell` for client interactivity.\n";
+  const starterNote =
+    options.dashboard
+      ? ""
+      : "\nThe generated home page is a counter starter that uses `cell` for client interactivity.\n";
   const cloudflareNote = options.cloudflare
     ? `
 ## Cloudflare Workers
