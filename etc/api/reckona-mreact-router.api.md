@@ -385,16 +385,25 @@ export interface AwsLambdaArtifactManifest {
     // (undocumented)
     runtime: "aws-lambda";
     // (undocumented)
+    streamingHandler?: string | undefined;
+    // (undocumented)
     totalBytes: number;
     // (undocumented)
     version: 1;
 }
+
+// @public (undocumented)
+export type AwsLambdaGeneratedHandlerPreloadMode = "all" | "hot-route-requests" | "middleware" | "none";
 
 // @public
 export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 
 // @public
 export interface BuildAppOptions extends AppRouterProjectOptions {
+    // (undocumented)
+    awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
+    // (undocumented)
+    awsLambdaPreloadRoutes?: readonly string[] | undefined;
     // (undocumented)
     onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
     // (undocumented)
@@ -1043,6 +1052,10 @@ export function packageAwsLambdaArtifact(options: PackageAwsLambdaArtifactOption
 
 // @public
 export interface PackageAwsLambdaArtifactOptions {
+    // (undocumented)
+    awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
+    // (undocumented)
+    awsLambdaPreloadRoutes?: readonly string[] | undefined;
     // (undocumented)
     fromDir: string;
     // (undocumented)

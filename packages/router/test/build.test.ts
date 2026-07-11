@@ -2693,7 +2693,9 @@ export function middleware() {}
     );
     await writeFile(
       join(appDir, "page.tsx"),
-      `export default function Page() { return <main>root</main>; }`,
+      `import { redirect } from "@reckona/mreact-router";
+export function loader() { redirect("/login", { status: 303 }); }
+export default function Page() { return <main>root</main>; }`,
     );
     await writeFile(
       join(appDir, "slow", "page.tsx"),
@@ -2701,6 +2703,7 @@ export function middleware() {}
   ...(globalThis.__mreactGeneratedLambdaPreload ?? []),
   "slow-page-module",
 ];
+await new Promise((resolve) => { globalThis.__releaseSlowPage = resolve; });
 export default function Slow() { return <main>slow</main>; }
 `,
     );
@@ -2727,16 +2730,30 @@ export default function Slow() { return <main>slow</main>; }
 
     const smokeOutput = await runNodeModuleScript(
       [
-        `globalThis.awslambda = { streamifyResponse: (handler) => handler, HttpResponseStream: { from: (stream) => stream } };`,
-        `await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, handlerFile)).href)});`,
-        `console.log(JSON.stringify(globalThis.__mreactGeneratedLambdaPreload ?? []));`,
+        `let responseMetadata;`,
+        `globalThis.awslambda = { streamifyResponse: (handler) => handler, HttpResponseStream: { from: (stream, metadata) => { responseMetadata = metadata; return stream; } } };`,
+        `const mod = await import(${JSON.stringify(pathToFileURL(join(lambdaOutDir, handlerFile)).href)});`,
+        `const event = { headers: { host: "lambda.test" }, rawPath: "/", rawQueryString: "", requestContext: { http: { method: "GET" } }, version: "2.0" };`,
+        `const stream = { write: () => true, end: () => {}, once: (_event, callback) => callback() };`,
+        `const request = ${handlerFile === "mreact-streaming-handler.mjs" ? "mod.handler(event, stream, {})" : "mod.handler(event)"};`,
+        `let timeoutId;`,
+        `const result = await Promise.race([request.then((value) => ({ kind: "response", value })), new Promise((resolve) => { timeoutId = setTimeout(() => resolve({ kind: "timeout" }), 1000); })]);`,
+        `clearTimeout(timeoutId);`,
+        `globalThis.__releaseSlowPage?.();`,
+        `if (result.kind === "timeout") await request;`,
+        `console.log(JSON.stringify({ kind: result.kind, preloaded: globalThis.__mreactGeneratedLambdaPreload ?? [], status: ${handlerFile === "mreact-streaming-handler.mjs" ? "responseMetadata?.statusCode" : "result.value?.statusCode"} }));`,
       ].join("\n"),
       lambdaOutDir,
     );
-    const preloaded = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "[]") as string[];
+    const result = JSON.parse(smokeOutput.trim().split("\n").at(-1) ?? "{}") as {
+      kind?: string;
+      preloaded?: string[];
+      status?: number;
+    };
 
-    expect(preloaded).toContain("middleware-module");
-    expect(preloaded).not.toContain("slow-page-module");
+    expect(result).toMatchObject({ kind: "response", status: 303 });
+    expect(result.preloaded).toContain("middleware-module");
+    expect(result.preloaded).not.toContain("slow-page-module");
     },
   );
 
