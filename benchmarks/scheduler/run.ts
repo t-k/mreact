@@ -10,7 +10,8 @@ import {
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 
 const sizes = [1_000, 2_000, 4_000, 8_000, 16_000];
-const samples = 5;
+const sampleCount = 9;
+const targetSampleMs = 100;
 
 interface BenchmarkHost extends SchedulerHost {
   advanceTo(time: number): void;
@@ -57,14 +58,22 @@ function median(values: number[]): number {
   return [...values].sort((left, right) => left - right)[Math.floor(values.length / 2)] ?? 0;
 }
 
-function measure(operation: (size: number) => void, size: number): number {
+function measure(operation: (size: number) => void, size: number): {
+  iterations: number;
+  medianMs: number;
+  samplesMs: number[];
+} {
   operation(size);
-  const values = Array.from({ length: samples }, () => {
+  const pilotStarted = performance.now();
+  operation(size);
+  const pilotMs = Math.max(performance.now() - pilotStarted, 0.001);
+  const iterations = Math.max(1, Math.min(1_000, Math.ceil(targetSampleMs / pilotMs)));
+  const samplesMs = Array.from({ length: sampleCount }, () => {
     const started = performance.now();
-    operation(size);
-    return performance.now() - started;
+    for (let iteration = 0; iteration < iterations; iteration += 1) operation(size);
+    return (performance.now() - started) / iterations;
   });
-  return median(values);
+  return { iterations, medianMs: median(samplesMs), samplesMs };
 }
 
 const scenarios = {
@@ -98,11 +107,14 @@ const scenarios = {
 const rows = Object.entries(scenarios).flatMap(([scenario, operation]) => {
   let previous: number | undefined;
   return sizes.map((size) => {
-    const medianMs = measure(operation, size);
+    const measurement = measure(operation, size);
+    const { medianMs } = measurement;
     const row = {
       scenario,
       size,
       medianMs,
+      iterations: measurement.iterations,
+      samplesMs: measurement.samplesMs,
       nanosecondsPerCallback: (medianMs * 1_000_000) / size,
       doublingRatio: previous === undefined ? null : medianMs / previous,
     };
@@ -114,7 +126,7 @@ const rows = Object.entries(scenarios).flatMap(([scenario, operation]) => {
 setSchedulerHostForTesting(undefined);
 const outputDir = await createDatedResultsDir();
 const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-const result = { commit, node: process.version, sizes, samples, rows };
+const result = { commit, node: process.version, sampleCount, sizes, targetSampleMs, rows };
 await writeJsonFile(join(outputDir, "scheduler.json"), result);
 await writeTextFile(
   join(outputDir, "scheduler.md"),
@@ -124,9 +136,9 @@ await writeTextFile(
     `Commit: \`${commit}\``,
     `Node: \`${process.version}\``,
     "",
-    "| Scenario | Callbacks | Median (ms) | ns/callback | Doubling ratio |",
-    "| --- | ---: | ---: | ---: | ---: |",
-    ...rows.map((row) => `| ${row.scenario} | ${row.size} | ${row.medianMs.toFixed(3)} | ${row.nanosecondsPerCallback.toFixed(1)} | ${row.doublingRatio?.toFixed(2) ?? "-"} |`),
+    "| Scenario | Callbacks | Iterations/sample | Median (ms) | ns/callback | Doubling ratio |",
+    "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ...rows.map((row) => `| ${row.scenario} | ${row.size} | ${row.iterations} | ${row.medianMs.toFixed(3)} | ${row.nanosecondsPerCallback.toFixed(1)} | ${row.doublingRatio?.toFixed(2) ?? "-"} |`),
   ].join("\n"),
 );
 console.log(JSON.stringify(result, null, 2));

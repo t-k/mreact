@@ -13,7 +13,10 @@ import {
 
 interface TestHost extends SchedulerHost {
   advance(ms: number): void;
+  advanceTo(time: number): void;
+  flushAllHostCallbacks(): void;
   flushOneHostCallback(): void;
+  pendingTimeouts(): Array<{ due: number; id: number }>;
   setInputPending(pending: boolean): void;
   scheduledHostCallbackCount(): number;
 }
@@ -22,7 +25,7 @@ function createTestHost(): TestHost {
   let time = 0;
   let inputPending = false;
   const callbacks: (() => void)[] = [];
-  const timeouts = new Map<number, () => void>();
+  const timeouts = new Map<number, { callback: () => void; due: number }>();
   let nextTimeoutId = 1;
 
   return {
@@ -31,10 +34,10 @@ function createTestHost(): TestHost {
       callbacks.push(callback);
       return callback;
     },
-    scheduleHostTimeout(callback, _ms) {
+    scheduleHostTimeout(callback, ms) {
       const id = nextTimeoutId;
       nextTimeoutId += 1;
-      timeouts.set(id, callback);
+      timeouts.set(id, { callback, due: time + ms });
       return id;
     },
     cancelHostTimeout(id) {
@@ -42,14 +45,31 @@ function createTestHost(): TestHost {
     },
     isInputPending: () => inputPending,
     advance(ms) {
-      time += ms;
-      for (const callback of Array.from(timeouts.values())) {
-        callback();
+      this.advanceTo(time + ms);
+    },
+    advanceTo(target) {
+      while (true) {
+        const next = [...timeouts.entries()]
+          .filter(([, timeout]) => timeout.due <= target)
+          .sort(([leftId, left], [rightId, right]) => left.due - right.due || leftId - rightId)[0];
+        if (next === undefined) break;
+        const [id, timeout] = next;
+        time = timeout.due;
+        timeouts.delete(id);
+        timeout.callback();
       }
-      timeouts.clear();
+      time = target;
+    },
+    flushAllHostCallbacks() {
+      while (callbacks.length > 0) callbacks.shift()?.();
     },
     flushOneHostCallback() {
       callbacks.shift()?.();
+    },
+    pendingTimeouts() {
+      return [...timeouts.entries()]
+        .map(([id, timeout]) => ({ due: timeout.due, id }))
+        .sort((left, right) => left.due - right.due || left.id - right.id);
     },
     setInputPending(pending) {
       inputPending = pending;
@@ -109,6 +129,78 @@ describe("fiber scheduler", () => {
     cancelCallback(cancelled);
 
     expect(getFirstCallbackNode()).toBe(kept);
+  });
+
+  test("does not expose cancelled ready tasks at either the root or below it", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const calls: string[] = [];
+    const root = scheduleCallback("user-blocking", () => calls.push("root"));
+    const kept = scheduleCallback("normal", () => calls.push("kept"));
+    const belowRoot = scheduleCallback("low", () => calls.push("below-root"));
+
+    cancelCallback(root);
+    cancelCallback(belowRoot);
+
+    expect(getFirstCallbackNode()).toBe(kept);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual(["kept"]);
+  });
+
+  test("promotes delayed tasks only when their start time is reached", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const calls: string[] = [];
+    scheduleCallback("normal", () => calls.push("ten"), { delay: 10 });
+    scheduleCallback("normal", () => calls.push("twenty-first"), { delay: 20 });
+    scheduleCallback("normal", () => calls.push("twenty-second"), { delay: 20 });
+
+    host.advanceTo(9);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual([]);
+    host.advanceTo(10);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual(["ten"]);
+    host.advanceTo(20);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual(["ten", "twenty-first", "twenty-second"]);
+  });
+
+  test("skips a cancelled delayed root and reschedules the next timeout", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const calls: string[] = [];
+    const root = scheduleCallback("normal", () => calls.push("cancelled"), { delay: 10 });
+    scheduleCallback("normal", () => calls.push("kept"), { delay: 30 });
+    cancelCallback(root);
+
+    expect(host.pendingTimeouts().map(({ due }) => due)).toEqual([10]);
+    host.advanceTo(10);
+    expect(host.pendingTimeouts().map(({ due }) => due)).toEqual([30]);
+    host.advanceTo(29);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual([]);
+    host.advanceTo(30);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual(["kept"]);
+  });
+
+  test("skips a cancelled delayed timer below the heap root", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const calls: string[] = [];
+    scheduleCallback("normal", () => calls.push("ten"), { delay: 10 });
+    const cancelled = scheduleCallback("normal", () => calls.push("cancelled"), { delay: 20 });
+    scheduleCallback("normal", () => calls.push("thirty"), { delay: 30 });
+    cancelCallback(cancelled);
+
+    host.advanceTo(10);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual(["ten"]);
+    expect(host.pendingTimeouts().map(({ due }) => due)).toEqual([30]);
+    host.advanceTo(30);
+    host.flushAllHostCallbacks();
+    expect(calls).toEqual(["ten", "thirty"]);
   });
 
   test("yields when the frame interval is exhausted and resumes continuation on the next host callback", () => {
