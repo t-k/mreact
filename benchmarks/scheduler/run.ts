@@ -1,17 +1,17 @@
 import { performance } from "node:perf_hooks";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import {
-  cancelCallback,
-  scheduleCallback,
-  setSchedulerHostForTesting,
-  type SchedulerHost,
-} from "../../packages/react-compat/src/fiber-scheduler.js";
+import { pathToFileURL } from "node:url";
+import type { SchedulerHost } from "../../packages/react-compat/src/fiber-scheduler.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 
 const sizes = [1_000, 2_000, 4_000, 8_000, 16_000];
 const sampleCount = 9;
 const targetSampleMs = 100;
+const targetRoot = process.env.MREACT_SCHEDULER_BENCH_TARGET_ROOT ?? process.cwd();
+const { cancelCallback, scheduleCallback, setSchedulerHostForTesting } = (await import(
+  pathToFileURL(join(targetRoot, "packages/react-compat/dist/fiber-scheduler.js")).href
+)) as typeof import("../../packages/react-compat/src/fiber-scheduler.js");
 
 interface BenchmarkHost extends SchedulerHost {
   advanceTo(time: number): void;
@@ -125,7 +125,9 @@ const rows = Object.entries(scenarios).flatMap(([scenario, operation]) => {
 
 setSchedulerHostForTesting(undefined);
 const outputDir = await createDatedResultsDir();
-const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const commit = execFileSync("git", ["-C", targetRoot, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
 const result = { commit, node: process.version, sampleCount, sizes, targetSampleMs, rows };
 await writeJsonFile(join(outputDir, "scheduler.json"), result);
 await writeTextFile(
