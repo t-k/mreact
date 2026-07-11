@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Changed generated AWS Lambda handlers to warm middleware during module initialization by default, added configurable `middleware`, `hot-route-requests`, `all`, and `none` generated preload policies, and kept ordinary handlers lazy until a valid event.
+- Changed generated buffered and streaming AWS Lambda handlers to warm the same configurable `middleware`, `hot-route-requests`, `all`, or `none` policy during module initialization, while keeping ordinary handlers lazy until a valid event.
 - Improved React-compatible scheduler callback burst scaling by replacing repeatedly sorted ready and delayed queues with stable min-heaps.
 
 ## 0.0.190 - 2026-07-10

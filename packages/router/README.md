@@ -204,7 +204,11 @@ export async function loader(context: LoaderContext<{ id: string }>): Promise<Us
 }
 
 export default definePage<typeof loader>(function UserPage(props) {
-  return <h1>{props.params.id}: {props.data.name}</h1>;
+  return (
+    <h1>
+      {props.params.id}: {props.data.name}
+    </h1>
+  );
 });
 ```
 
@@ -255,7 +259,13 @@ Routes that render route-local `<Await>` directly or through app-local server co
 
 ```tsx
 function FeedList(props) {
-  return <ul>{props.items.map((item) => <li>{item}</li>)}</ul>;
+  return (
+    <ul>
+      {props.items.map((item) => (
+        <li>{item}</li>
+      ))}
+    </ul>
+  );
 }
 
 export default function Page() {
@@ -300,9 +310,7 @@ export default function Page() {
           placeholderAs="div"
           placeholder={<StorySkeleton count={batch.size} start={batch.start + 1} />}
         >
-          {(resolved) => (
-            <StoryRows stories={resolved.items} start={resolved.start + 1} />
-          )}
+          {(resolved) => <StoryRows stories={resolved.items} start={resolved.start + 1} />}
         </Await>
       ))}
     </ol>
@@ -342,7 +350,11 @@ Server-only pages get the lightweight navigation runtime automatically — witho
 import { Link } from "@reckona/mreact-router/link";
 
 export default function Page() {
-  return <Link href="/docs" prefetch="viewport">Docs</Link>;
+  return (
+    <Link href="/docs" prefetch="viewport">
+      Docs
+    </Link>
+  );
 }
 ```
 
@@ -392,7 +404,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler(options);
 
 Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. `mreact-router build` writes `.mreact/server/import-policy.json` from server-side static imports. The built Node server used by `mreact-router start .mreact`, `renderBuiltAppRequest()`, and `createBuiltRequestRuntime()` reads that generated policy automatically and merges its runtime packages with any explicit policy options. Lambda handlers can use `importPolicy: "generated"`. You can still pass an explicit `importPolicy.allowedPackages` list when you need a hand-audited policy.
 
-For Lambda deployments, build with `mreact-router build --target=aws-lambda` or `buildApp({ targets: ["aws-lambda"] })`. The generated handler warms middleware during module initialization by default and then uses a request handler with duplicate preload disabled. Select a broader or disabled initialization policy with `--aws-lambda-preload=hot-route-requests|all|none` or `buildApp({ awsLambdaPreload: "all", targets: ["aws-lambda"] })` only after measuring the packaged handler; pair `hot-route-requests` with `--aws-lambda-preload-routes=/,/login` or `awsLambdaPreloadRoutes`. The package command preserves the build-generated policy unless package options explicitly override it. The target writes Node-compatible server/client output, `.mreact/server/import-policy.json`, and `.mreact/aws-lambda/mreact-handler.mjs` while skipping `.mreact/cloudflare` route modules, so loaders and server helpers may import Node-only dependencies such as database drivers without being bundled for the Workers runtime.
+For Lambda deployments, build with `mreact-router build --target=aws-lambda` or `buildApp({ targets: ["aws-lambda"] })`. The generated buffered and streaming handlers warm the same middleware policy during module initialization by default and then use request handlers with duplicate preload disabled. The artifact manifest records `mreact-handler.handler` and `mreact-streaming-handler.handler` separately. Select a broader or disabled initialization policy with `--aws-lambda-preload=hot-route-requests|all|none` or `buildApp({ awsLambdaPreload: "all", targets: ["aws-lambda"] })` only after measuring the packaged handler; pair `hot-route-requests` with `--aws-lambda-preload-routes=/,/login` or `awsLambdaPreloadRoutes`. `none` disables generated module preload but still materializes the writable runtime directory during generated handler import. The package command preserves the build-generated policy unless package options explicitly override it. The target writes Node-compatible server/client output, `.mreact/server/import-policy.json`, and generated Lambda entries while skipping `.mreact/cloudflare` route modules, so loaders and server helpers may import Node-only dependencies such as database drivers without being bundled for the Workers runtime.
 
 Package Lambda deployments with `mreact-router package aws-lambda --from .mreact --out .lambda` instead of pointing deployment tooling at the full project checkout. AWS Lambda enforces a 250 MB unzipped deployment package limit, and the runtime only needs `.mreact/`, `mreact-handler.mjs`, `package.json` / lockfiles, and production `node_modules`; `src/`, tests, dev dependencies, build caches, and Vite/Vitest/Playwright tooling are not required. `mreact-router build --target=aws-lambda` keeps compiled server route artifacts in `.mreact/server/server-modules/*.json` instead of embedding them in one large server manifest, writes compiled module bodies as hashed `.mjs` files, and keeps request/control artifacts separate from render artifacts so loader redirects do not read page render bundles. AWS Lambda request/control artifacts bundle the generated import-policy packages they use for loaders, middleware, route handlers, and metadata, reducing first-hit package resolution on sparse Lambda traffic while leaving render-only, server action, custom handler, and adapter dependencies in production `node_modules`. `createAwsLambdaRequestHandler()` treats `outDir` as read-only and materializes generated runtime files under `/tmp/mreact-router/<hash>/runtime` by default, with a `node_modules` symlink back to the deployed package root. Direct `createAwsLambdaRequestHandler()` and `createAwsLambdaStreamingRequestHandler()` handlers start only middleware and shared runtime preload in the background by default, so all-route preload work does not compete with the first user request. If a request arrives before preload finishes, middleware is resolved first, middleware responses or redirects return without loading the matched page artifact, and continuing requests load only the matched route's artifact closure. Static middleware `config.matcher` and `config.id` values are checked before importing the middleware module, so unmatched health checks and route-local middleware skips avoid evaluating heavyweight middleware dependencies. Route request artifacts omit page render exports, and built loader and route metadata artifacts are split, so loader redirects do not evaluate page-only or metadata-only dependencies before render or metadata is needed. Loader redirects settle before page component server transforms and render imports for non-stream routes, stream routes without a loading boundary, and stream loading routes whose loader source contains router control-flow helpers such as `redirect()` or `notFound()`. `createPreloadedAwsLambdaRequestHandler()` validates the first event before it starts full preload. When a deployment intentionally accepts extra Lambda initialization work to reduce first-valid-request latency, call `await warmAwsLambdaRuntime(options)` during controlled initialization before creating the handler. Pass `runtimeDir` only when you need to control that writable cache location. With pnpm, run `pnpm --dir .lambda install --prod --frozen-lockfile --ignore-scripts --config.node-linker=hoisted`. pnpm's default isolated linker is symlink-heavy, so verify the artifact's symlink count with `find .lambda -type l | wc -l` and measure actual file bytes in addition to `du -sh .lambda` before upload. Packages listed in the generated import policy may still be needed by render-only modules, inferred server actions, custom handlers, or adapter code, so keep them installed in that production artifact.
 

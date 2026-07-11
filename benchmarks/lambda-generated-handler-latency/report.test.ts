@@ -20,6 +20,7 @@ describe("AWS Lambda generated handler latency report", () => {
       [
         {
           coldTotalMs: 16,
+          entry: "buffered",
           firstMs: 6,
           importMs: 10,
           iteration: 1,
@@ -34,9 +35,10 @@ describe("AWS Lambda generated handler latency report", () => {
 
     expect(markdown).toContain("# AWS Lambda Generated Handler Latency Benchmark");
     expect(markdown).toContain(
-      "| scenario | preload | iteration | path | status | handler import ms | first hit ms | warm hit ms | cold total ms |",
+      "| scenario | entry | preload | iteration | path | status | handler import ms | first hit ms | warm hit ms | cold total ms |",
     );
-    expect(markdown).toContain("| generated-first-route | middleware | 1 | /users | 200 | 10 | 6 | 1 | 16 |");
+    expect(markdown).toContain(
+      "| generated-first-route | buffered | middleware | 1 | /users | 200 | 10 | 6 | 1 | 16 |",
+    );
   });
 });
-

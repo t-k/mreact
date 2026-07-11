@@ -37,7 +37,10 @@ unzip -l mreact-lambda.zip | head
 The default generated handler warms middleware during Lambda module initialization, then validates every API Gateway payload before request handling. This keeps initialization work narrow while avoiding first-valid-request contention from unrelated route render modules.
 
 ```ts
-import { createAwsLambdaRequestHandler, warmAwsLambdaRuntime } from "@reckona/mreact-router/adapters/aws-lambda";
+import {
+  createAwsLambdaRequestHandler,
+  warmAwsLambdaRuntime,
+} from "@reckona/mreact-router/adapters/aws-lambda";
 
 const options = {
   importPolicy: "generated",
@@ -48,7 +51,7 @@ await warmAwsLambdaRuntime(options);
 export const handler = createAwsLambdaRequestHandler({ ...options, preload: "none" });
 ```
 
-The generated package writes `mreact-lambda-artifact.json` with `"handler": "mreact-handler.handler"`. Use that value as the Lambda handler.
+The generated package writes `mreact-lambda-artifact.json` with `"handler": "mreact-handler.handler"` and `"streamingHandler": "mreact-streaming-handler.handler"`. Both entries warm the same policy during module initialization; select the streaming entry only for a Lambda Function URL configured for response streaming.
 
 Use a custom handler when you need adapter options such as `allowedHosts`, `serverActions.authorize`, `onResponse`, or a custom error handler. Package it with the handler entry so the bundled output still lands at `mreact-handler.mjs`.
 
@@ -122,7 +125,7 @@ Replace `/api/health` with a lightweight route your app provides. The not-found 
 
 ## Cold start and preload
 
-Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Generated handlers warm `middleware` during initialization by default; select `hot-route-requests`, `all`, or `none` with `--aws-lambda-preload` only after measuring the packaged handler, and pair `hot-route-requests` with a comma-separated route list such as `--aws-lambda-preload-routes=/,/login`. The package command preserves the policy written by the build unless an explicit package option overrides it. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. This also applies to stream routes with a loading boundary when the loader source contains router control-flow helpers such as `redirect()`, `notFound()`, or `throwNotFound()`: those routing decisions settle before page render artifacts are loaded. Ordinary handlers, including `createPreloadedAwsLambdaRequestHandler()`, validate each event before they start implicit runtime work.
+Lambda handlers materialize runtime files under `/tmp` by default while treating deployed `.mreact` output as read-only. Generated handlers warm `middleware` during initialization by default; select `hot-route-requests`, `all`, or `none` with `--aws-lambda-preload` only after measuring the packaged handler, and pair `hot-route-requests` with a comma-separated route list such as `--aws-lambda-preload-routes=/,/login`. `none` disables generated module preload but still materializes the writable runtime directory during generated handler import. The package command preserves the policy written by the build unless an explicit package option overrides it. Direct handlers keep preload conservative so simple middleware responses, health checks, and loader redirects do not eagerly load page render artifacts. This also applies to stream routes with a loading boundary when the loader source contains router control-flow helpers such as `redirect()`, `notFound()`, or `throwNotFound()`: those routing decisions settle before page render artifacts are loaded. Ordinary handlers, including `createPreloadedAwsLambdaRequestHandler()`, validate each event before they start implicit runtime work.
 
 Measure before changing preload. Compare cold start, first request, and warm request timings for the same route and Lambda memory size.
 

@@ -1573,7 +1573,7 @@ export const handler = await createPreloadedAwsLambdaRequestHandler({
 });
 \`\`\`
 
-The packaged generated handler warms middleware during Lambda initialization by default and avoids starting the same preload again on the first request. Use \`--aws-lambda-preload=hot-route-requests\` or \`--aws-lambda-preload=all\` only after measuring the packaged handler, or use \`none\` to disable generated initialization preload. Custom handlers remain lazy until a valid event unless they call \`warmAwsLambdaRuntime()\` explicitly. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, source analysis, page module load, page component render, layout module load, layout component render, response construction, and Lambda response conversion.
+The packaged generated buffered and streaming handlers warm middleware during Lambda initialization by default and avoid starting the same preload again on the first request. Use \`--aws-lambda-preload=hot-route-requests\` or \`--aws-lambda-preload=all\` only after measuring the packaged handler. \`none\` disables generated module preload but still materializes the writable runtime directory during generated handler import. Custom handlers remain lazy until a valid event unless they call \`warmAwsLambdaRuntime()\` explicitly. Add \`timings: true\` while diagnosing production latency to emit \`router:request:timing\` and \`router:render:timing\` debug events for request conversion, render phases, loader wait, source analysis, page module load, page component render, layout module load, layout component render, response construction, and Lambda response conversion.
 
 ## Streaming SSR
 
@@ -1581,8 +1581,7 @@ API Gateway and Lambda Function URL proxy responses are buffered. mreact still
 renders through the same server pipeline, but Streaming SSR is materialized into
 one Lambda response body.
 
-For Lambda Function URL response streaming, switch \`src/lambda.ts\` to the
-explicit streaming handler:
+For Lambda Function URL response streaming, use the generated \`mreact-streaming-handler.handler\` entry recorded as \`streamingHandler\` in \`mreact-lambda-artifact.json\`. A custom handler can use the same adapter explicitly:
 
 \`\`\`ts
 import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
@@ -1637,10 +1636,9 @@ function readmeSource(
   const tailwindNote = options.tailwind
     ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
     : "";
-  const starterNote =
-    options.dashboard
-      ? ""
-      : "\nThe generated home page is a counter starter that uses `cell` for client interactivity.\n";
+  const starterNote = options.dashboard
+    ? ""
+    : "\nThe generated home page is a counter starter that uses `cell` for client interactivity.\n";
   const cloudflareNote = options.cloudflare
     ? `
 ## Cloudflare Workers

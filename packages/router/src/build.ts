@@ -269,6 +269,7 @@ export interface AwsLambdaArtifactManifest {
   files: Array<{ bytes: number; path: string }>;
   handler: string;
   runtime: "aws-lambda";
+  streamingHandler?: string | undefined;
   totalBytes: number;
   version: 1;
 }
@@ -914,14 +915,18 @@ async function createIncrementalBuildCacheFingerprint(options: {
     }))
     .sort((left, right) => left.file.localeCompare(right.file));
   const payload = {
-    appDir: normalizeBuildInputPath(relative(options.project.projectRoot, options.project.routesDir)),
+    appDir: normalizeBuildInputPath(
+      relative(options.project.projectRoot, options.project.routesDir),
+    ),
     assetBaseUrl: options.project.assetBaseUrl ?? null,
     clientConsolePureFunctions: options.project.clientConsolePureFunctions ?? [],
     clientSourceMaps: options.project.clientSourceMaps,
     define,
     nodeEnv: process.env.NODE_ENV ?? null,
     publicAssetBaseUrl: options.project.publicAssetBaseUrl ?? null,
-    publicDir: normalizeBuildInputPath(relative(options.project.projectRoot, options.project.publicDir)),
+    publicDir: normalizeBuildInputPath(
+      relative(options.project.projectRoot, options.project.publicDir),
+    ),
     routes,
     sourceDirs: options.project.allowedSourceDirs
       .map((directory) => normalizeBuildInputPath(relative(options.project.projectRoot, directory)))
@@ -1035,10 +1040,7 @@ async function readJsonBuildOutput<T>(file: string): Promise<T | undefined> {
   try {
     return JSON.parse(await readFile(file, "utf8")) as T;
   } catch (error) {
-    if (
-      (isNodeError(error) && error.code === "ENOENT") ||
-      error instanceof SyntaxError
-    ) {
+    if ((isNodeError(error) && error.code === "ENOENT") || error instanceof SyntaxError) {
       return undefined;
     }
 
@@ -6520,7 +6522,11 @@ async function writeAwsLambdaHandlerArtifact(
   await Promise.all([
     writeFile(
       join(awsLambdaDir, "mreact-handler.mjs"),
-      awsLambdaHandlerSource("..", policy.mode, policy.routes),
+      awsLambdaHandlerSource("buffered", "..", policy.mode, policy.routes),
+    ),
+    writeFile(
+      join(awsLambdaDir, "mreact-streaming-handler.mjs"),
+      awsLambdaHandlerSource("streaming", "..", policy.mode, policy.routes),
     ),
     writeFile(join(awsLambdaDir, "preload-policy.json"), JSON.stringify(policy, null, 2)),
   ]);
@@ -6583,7 +6589,11 @@ export async function packageAwsLambdaArtifact(
     const routes = options.awsLambdaPreloadRoutes ?? builtPolicy.routes;
     await writeFile(
       join(options.outDir, "mreact-handler.mjs"),
-      awsLambdaHandlerSource(".mreact", preload, routes),
+      awsLambdaHandlerSource("buffered", ".mreact", preload, routes),
+    );
+    await writeFile(
+      join(options.outDir, "mreact-streaming-handler.mjs"),
+      awsLambdaHandlerSource("streaming", ".mreact", preload, routes),
     );
   } else {
     await writeAwsLambdaCustomHandlerArtifact({
@@ -6602,6 +6612,9 @@ export async function packageAwsLambdaArtifact(
     files,
     handler: "mreact-handler.handler",
     runtime: "aws-lambda",
+    ...(options.handlerEntry === undefined
+      ? { streamingHandler: "mreact-streaming-handler.handler" }
+      : {}),
     totalBytes: files.reduce((total, file) => total + file.bytes, 0),
     version: 1,
   } satisfies AwsLambdaArtifactManifest;
@@ -6832,13 +6845,18 @@ async function collectArtifactFiles(
 }
 
 function awsLambdaHandlerSource(
+  kind: "buffered" | "streaming",
   outDirRelativeToHandler: string,
   preload: AwsLambdaGeneratedHandlerPreloadMode = "middleware",
   routes?: readonly string[],
 ): string {
+  const createHandler =
+    kind === "streaming"
+      ? "createAwsLambdaStreamingRequestHandler"
+      : "createAwsLambdaRequestHandler";
   return `import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { createAwsLambdaRequestHandler, warmAwsLambdaRuntime } from "@reckona/mreact-router/adapters/aws-lambda";
+import { ${createHandler}, warmAwsLambdaRuntime } from "@reckona/mreact-router/adapters/aws-lambda";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const options = {
@@ -6849,7 +6867,7 @@ const options = {
 };
 
 await warmAwsLambdaRuntime(options);
-export const handler = createAwsLambdaRequestHandler({
+export const handler = ${createHandler}({
   ...options,
   preload: { mode: "none" },
 });

@@ -423,9 +423,7 @@ describe("create-mreact-app scaffolder", () => {
       "@reckona/mreact-router",
     ]);
     expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.16-import-policy-normalize");
-    expect(dryRun.codemods.map((item) => item.id)).toContain(
-      "0.0.148-interactive-counter-starter",
-    );
+    expect(dryRun.codemods.map((item) => item.id)).toContain("0.0.148-interactive-counter-starter");
     expect(dryRunPackage).toContain('"@reckona/mreact": "^0.0.10"');
 
     const result = await upgradeMreactApp({ directory, fromVersion: "0.0.10" });
@@ -581,10 +579,14 @@ describe("create-mreact-app scaffolder", () => {
       template: "basic",
     });
 
-    const hiddenPackage = JSON.parse(await readFile(join(hiddenDirectory, "package.json"), "utf8")) as {
+    const hiddenPackage = JSON.parse(
+      await readFile(join(hiddenDirectory, "package.json"), "utf8"),
+    ) as {
       name: string;
     };
-    const underscorePackage = JSON.parse(await readFile(join(underscoreDirectory, "package.json"), "utf8")) as {
+    const underscorePackage = JSON.parse(
+      await readFile(join(underscoreDirectory, "package.json"), "utf8"),
+    ) as {
       name: string;
     };
     const longPackage = JSON.parse(await readFile(join(longDirectory, "package.json"), "utf8")) as {
@@ -673,7 +675,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("--config.node-linker=hoisted");
     expect(deployDocs).toContain("find .lambda -type l");
     expect(deployDocs).toContain("actual file bytes");
-    expect(deployDocs).toContain("warms middleware during Lambda initialization by default");
+    expect(deployDocs).toContain("warm middleware during Lambda initialization by default");
+    expect(deployDocs).toContain("mreact-streaming-handler.handler");
+    expect(deployDocs).toContain("still materializes the writable runtime directory");
     expect(deployDocs).toContain("--aws-lambda-preload=hot-route-requests");
     expect(deployDocs).toContain("`src/` is not required at runtime");
     expect(deployDocs).toContain("Streaming SSR");

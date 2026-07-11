@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildApp, packageAwsLambdaArtifact } from "../../packages/router/src/build.js";
+import { execFileSync } from "node:child_process";
 import { collectBenchmarkEnvironment } from "../shared/env.js";
 import { createDatedResultsDir, writeJsonFile, writeTextFile } from "../shared/results.js";
 import { formatLambdaGeneratedHandlerLatencyMarkdown } from "./report.js";
@@ -15,17 +15,19 @@ import type {
 
 const routeCount = readNumberEnv("MREACT_LAMBDA_GENERATED_HANDLER_ROUTES", 72);
 const repeatCount = readNumberEnv("MREACT_LAMBDA_GENERATED_HANDLER_REPEATS", 5);
+const targetRoot = process.env.MREACT_LAMBDA_BENCH_TARGET_ROOT ?? process.cwd();
+const { buildApp, packageAwsLambdaArtifact } = (await import(
+  pathToFileURL(join(targetRoot, "packages/router/dist/build.js")).href
+)) as typeof import("../../packages/router/src/build.js");
 const rootDir = await mkdtemp(join(tmpdir(), "mreact-lambda-generated-handler-"));
 const appDir = join(rootDir, "app");
 const outDir = join(rootDir, ".mreact");
-const policies: LambdaGeneratedHandlerPreloadMode[] = [
-  "middleware",
-  "hot-route-requests",
-  "all",
-];
+const policies: LambdaGeneratedHandlerPreloadMode[] = ["middleware", "hot-route-requests", "all"];
 const packageDirs = Object.fromEntries(
   policies.map((policy) => [policy, join(rootDir, `.lambda-${policy}`)]),
 ) as Record<LambdaGeneratedHandlerPreloadMode, string>;
+const routes = ["/", ...Array.from({ length: routeCount }, (_, index) => `/route-${index}`)];
+const hotRoutes = ["/", "/route-0"];
 
 await writeFixtureApp(appDir, routeCount);
 await buildApp({
@@ -39,9 +41,7 @@ for (const policy of policies) {
   const packageDir = packageDirs[policy];
   await packageAwsLambdaArtifact({
     awsLambdaPreload: policy,
-    ...(policy === "hot-route-requests"
-      ? { awsLambdaPreloadRoutes: ["/", "/route-0"] }
-      : {}),
+    ...(policy === "hot-route-requests" ? { awsLambdaPreloadRoutes: hotRoutes } : {}),
     fromDir: outDir,
     outDir: packageDir,
     skipRuntimeDependencyCheck: true,
@@ -54,14 +54,25 @@ const rows: LambdaGeneratedHandlerLatencyRow[] = [];
 for (const path of ["/route-0", "/"]) {
   for (let iteration = 1; iteration <= repeatCount; iteration += 1) {
     for (const preload of policies) {
-      rows.push(
-        await invokeGeneratedHandlerScenario({
-          iteration,
-          packageDir: packageDirs[preload],
-          path,
-          preload,
-        }),
-      );
+      for (const entry of ["buffered", "streaming"] as const) {
+        const handlerFile =
+          entry === "buffered" ? "mreact-handler.mjs" : "mreact-streaming-handler.mjs";
+        try {
+          await readFile(join(packageDirs[preload], handlerFile));
+        } catch {
+          continue;
+        }
+        rows.push(
+          await invokeGeneratedHandlerScenario({
+            entry,
+            handlerFile,
+            iteration,
+            packageDir: packageDirs[preload],
+            path,
+            preload,
+          }),
+        );
+      }
     }
   }
 }
@@ -69,22 +80,36 @@ for (const path of ["/route-0", "/"]) {
 const env = await collectBenchmarkEnvironment(["@reckona/mreact-router"]);
 const dir = await createDatedResultsDir();
 const markdown = formatLambdaGeneratedHandlerLatencyMarkdown(env, rows);
-const generatedHandlerSha256 = Object.fromEntries(
-  await Promise.all(
-    policies.map(async (policy) => [
-      policy,
-      createHash("sha256")
-        .update(await readFile(join(packageDirs[policy], "mreact-handler.mjs")))
-        .digest("hex"),
-    ]),
-  ),
-);
+const generatedHandlerSources: Record<string, string> = {};
+const generatedHandlerSha256: Record<string, string> = {};
+for (const policy of policies) {
+  for (const [entry, handlerFile] of [
+    ["buffered", "mreact-handler.mjs"],
+    ["streaming", "mreact-streaming-handler.mjs"],
+  ] as const) {
+    try {
+      const source = await readFile(join(packageDirs[policy], handlerFile), "utf8");
+      generatedHandlerSources[`${policy}:${entry}`] = source;
+      generatedHandlerSha256[`${policy}:${entry}`] = createHash("sha256")
+        .update(source)
+        .digest("hex");
+    } catch {}
+  }
+}
+const targetCommit = execFileSync("git", ["-C", targetRoot, "rev-parse", "HEAD"], {
+  encoding: "utf8",
+}).trim();
 
 await writeJsonFile(join(dir, "lambda-generated-handler-latency.summary.json"), {
   environment: env,
+  buildMode: "production/aws-lambda",
+  generatedHandlerSources,
   generatedHandlerSha256,
   repeatCount,
+  routes,
   routeCount,
+  hotRoutes,
+  targetCommit,
   rows,
 });
 await writeTextFile(join(dir, "lambda-generated-handler-latency.md"), markdown);
@@ -135,20 +160,24 @@ export default function Page({ data }) {
 async function linkLocalRouterPackage(packageDir: string): Promise<void> {
   await mkdir(join(packageDir, "node_modules", "@reckona"), { recursive: true });
   await symlink(
-    join(process.cwd(), "packages", "router"),
+    join(targetRoot, "packages", "router"),
     join(packageDir, "node_modules", "@reckona", "mreact-router"),
   );
 }
 
 async function invokeGeneratedHandlerScenario(options: {
+  entry: "buffered" | "streaming";
+  handlerFile: string;
   iteration: number;
   packageDir: string;
   path: string;
   preload: LambdaGeneratedHandlerPreloadMode;
 }): Promise<LambdaGeneratedHandlerLatencyRow> {
   const script = [
+    `let responseMetadata;`,
+    `globalThis.awslambda = { streamifyResponse: (handler) => handler, HttpResponseStream: { from: (stream, metadata) => { responseMetadata = metadata; return stream; } } };`,
     `const beforeImport = performance.now();`,
-    `const mod = await import(${JSON.stringify(pathToFileURL(join(options.packageDir, "mreact-handler.mjs")).href)});`,
+    `const mod = await import(${JSON.stringify(pathToFileURL(join(options.packageDir, options.handlerFile)).href)});`,
     `const afterImport = performance.now();`,
     `const event = {`,
     `  headers: { host: "lambda.test", "x-forwarded-proto": "https" },`,
@@ -157,16 +186,17 @@ async function invokeGeneratedHandlerScenario(options: {
     `  requestContext: { http: { method: "GET" } },`,
     `  version: "2.0",`,
     `};`,
+    `const stream = { write: () => true, end: () => {}, once: (_event, callback) => callback() };`,
     `const beforeFirst = performance.now();`,
-    `const first = await mod.handler(event);`,
+    `const first = ${options.entry === "streaming" ? "await mod.handler(event, stream, {})" : "await mod.handler(event)"};`,
     `const afterFirst = performance.now();`,
     `const beforeWarm = performance.now();`,
-    `await mod.handler(event);`,
+    `${options.entry === "streaming" ? "await mod.handler(event, stream, {})" : "await mod.handler(event)"};`,
     `const afterWarm = performance.now();`,
     `console.log(JSON.stringify({`,
     `  importMs: afterImport - beforeImport,`,
     `  firstMs: afterFirst - beforeFirst,`,
-    `  status: first.statusCode,`,
+    `  status: ${options.entry === "streaming" ? "responseMetadata.statusCode" : "first.statusCode"},`,
     `  warmMs: afterWarm - beforeWarm,`,
     `}));`,
   ].join("\n");
@@ -174,6 +204,7 @@ async function invokeGeneratedHandlerScenario(options: {
 
   return {
     coldTotalMs: round(result.importMs + result.firstMs),
+    entry: options.entry,
     firstMs: round(result.firstMs),
     importMs: round(result.importMs),
     iteration: options.iteration,

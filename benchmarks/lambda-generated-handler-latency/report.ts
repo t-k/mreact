@@ -25,14 +25,15 @@ export function formatLambdaGeneratedHandlerLatencyMarkdown(
     "",
     "## Results",
     "",
-    "| scenario | preload | iteration | path | status | handler import ms | first hit ms | warm hit ms | cold total ms |",
-    "| --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
+    "| scenario | entry | preload | iteration | path | status | handler import ms | first hit ms | warm hit ms | cold total ms |",
+    "| --- | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: |",
   ];
 
   for (const row of rows) {
     lines.push(
       [
         row.scenario,
+        row.entry,
         row.preload,
         row.iteration,
         row.path,
@@ -55,4 +56,3 @@ export function formatLambdaGeneratedHandlerLatencyMarkdown(
 function escapeMarkdownCell(value: string): string {
   return value.replaceAll("\\", "\\\\").replaceAll("|", "\\|");
 }
-
