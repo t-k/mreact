@@ -1,0 +1,1 @@
+{"framework":"angular-cf-v22.0.0-keyed","keyed":true,"benchmark":"41_size-uncompressed","type":"size","values":{"DEFAULT":{"min":143.4,"max":143.4,"median":143.4,"mean":143.4,"stddev":null,"values":[143.4]}}}
