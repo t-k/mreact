@@ -16,6 +16,7 @@ This directory contains fair, repeatable benchmark fixtures for mreact and peer 
   It invokes API Gateway HTTP API v2-style events directly against the mreact
   Lambda handler and records request/render timing phases for cold health
   checks, first redirects, and warm redirects.
+- `scheduler`: React-compatible scheduler queue scaling for ready callbacks, delayed timer promotion, and cancellation-heavy callback bursts.
 - `scenarios`: reserved for user-centric scenario reports.
 
 ## Fairness Policy
@@ -44,6 +45,7 @@ pnpm bench:request-fastpaths
 pnpm bench:non-router
 pnpm bench:router
 pnpm bench:lambda-routes
+pnpm bench:scheduler
 pnpm bench:all
 ```
 
