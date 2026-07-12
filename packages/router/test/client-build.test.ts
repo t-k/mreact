@@ -2673,6 +2673,44 @@ export default function Page() {
     expect(entry.code).not.toContain(" as HTMLInputElement");
   });
 
+  test("dev client route entry lowers component returns after an early prologue branch", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-early-prologue-return-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+const landing = cell(false);
+const variant = cell(false);
+
+function LandingPage() { return <section>Landing</section>; }
+function VariantA() { return <aside>Variant</aside>; }
+function MainView() { return <main>Main</main>; }
+
+export default function Page() {
+  landing.get();
+  if (landing.get()) {
+    return <LandingPage />;
+  }
+
+  const showVariant = variant.get();
+  const ready = true;
+  if (showVariant && ready) {
+    return <VariantA />;
+  }
+
+  return <MainView />;
+}`;
+    await writeFile(file, code);
+
+    const entry = await buildClientRouteEntrySource({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(entry.code).not.toContain("return <VariantA");
+    expect(entry.code).not.toContain("return <MainView");
+  });
+
   test("hydrates explicit client routes whose handlers live only in imported children", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-imported-child-route-"));
     const file = join(appDir, "page.mreact.tsx");

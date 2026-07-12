@@ -667,6 +667,65 @@ export function App() {
     expect(host.textContent).toBe("Error");
   });
 
+  test("client transform lowers component returns after an early prologue branch", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const landing = cell(true);
+const variant = cell(false);
+(globalThis as any).__showMain = () => landing.set(false);
+(globalThis as any).__showVariant = () => variant.set(true);
+
+function LandingPage() {
+  return <section>Landing</section>;
+}
+
+function VariantA() {
+  return <aside>Variant</aside>;
+}
+
+function MainView() {
+  return <main>Main</main>;
+}
+
+export function App() {
+  landing.get();
+  if (landing.get()) {
+    return <LandingPage />;
+  }
+
+  const showVariant = variant.get();
+  const ready = true;
+  if (showVariant && ready) {
+    return <VariantA />;
+  }
+
+  return <MainView />;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("return <VariantA");
+
+    const App = compileClientComponent(output.code);
+    const host = document.createElement("div");
+    host.append(App());
+    await flushEffects();
+
+    expect(host.textContent).toBe("Landing");
+
+    (globalThis as { __showMain(): void }).__showMain();
+    await flushEffects();
+    expect(host.textContent).toBe("Main");
+
+    (globalThis as { __showVariant(): void }).__showVariant();
+    await flushEffects();
+    expect(host.textContent).toBe("Variant");
+  });
+
   test("client transform keeps nested ternary route branches reactive through local nullable aliases", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

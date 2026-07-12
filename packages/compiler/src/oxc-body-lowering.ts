@@ -7,7 +7,11 @@ import { transformJsxWithOxc } from "./oxc-transform.js";
 import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
 export interface OxcBodyLowerers {
-  lowerDomNodeExpression(code: string, expression: Record<string, unknown>): string | undefined;
+  lowerDomNodeExpression(
+    code: string,
+    expression: Record<string, unknown>,
+    componentNames: Set<string>,
+  ): string | undefined;
   lowerCompatObjectExpression(
     code: string,
     expression: Record<string, unknown>,
@@ -152,7 +156,7 @@ export function lowerOxcBodyStatementJsx(
 
   const lowered =
     mode === "dom-node"
-      ? lowerers.lowerDomNodeExpression(code, initializer)
+      ? lowerers.lowerDomNodeExpression(code, initializer, componentNames)
       : mode === "compat-object"
         ? lowerers.lowerCompatObjectExpression(code, initializer, componentNames, target, diagnostics)
         : mode === "server-string"
@@ -298,7 +302,7 @@ function lowerOxcReturnStatementJsx(
 
   const lowered =
     mode === "dom-node"
-      ? lowerers.lowerDomNodeExpression(code, argument)
+      ? lowerers.lowerDomNodeExpression(code, argument, componentNames)
       : mode === "compat-object"
         ? lowerers.lowerCompatObjectExpression(code, argument, componentNames, target, diagnostics)
         : mode === "server-string"
@@ -415,7 +419,7 @@ function lowerOxcPushJsxStatement(
 
   const lowered =
     mode === "dom-node"
-      ? lowerers.lowerDomNodeExpression(code, argument)
+      ? lowerers.lowerDomNodeExpression(code, argument, componentNames)
       : mode === "compat-object"
         ? lowerers.lowerCompatObjectExpression(code, argument, componentNames, target, diagnostics)
         : mode === "server-string"

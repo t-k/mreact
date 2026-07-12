@@ -18,7 +18,9 @@ import type { ClientReferenceIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 const oxcNestedBodyLowerers: OxcBodyLowerers = {
-  lowerDomNodeExpression: lowerOxcDomNodeExpression,
+  lowerDomNodeExpression: (code, expression, componentNames) =>
+    lowerOxcReactiveValueExpression(code, expression, componentNames) ??
+    lowerOxcDomNodeExpression(code, expression),
   lowerCompatObjectExpression: lowerOxcCompatObjectExpression,
   lowerServerStringExpression: lowerOxcServerStringExpression,
 };

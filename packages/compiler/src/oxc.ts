@@ -84,6 +84,7 @@ import {
   lowerOxcCompatObjectExpression,
   lowerOxcCompatReactNodeExpression,
   lowerOxcNestedJsxExpression,
+  lowerOxcReactiveValueExpression,
   lowerOxcServerStringExpression,
 } from "./oxc-nested-lowering.js";
 import { isOxcJsxBranch, readOxcReturnExpressionFromStatement } from "./oxc-expression-utils.js";
@@ -151,7 +152,9 @@ function createOxcBodyLowerers(
   compatRuntimeImports: ReadonlyMap<string, ClientReferenceIr> = new Map(),
 ): OxcBodyLowerers {
   return {
-    lowerDomNodeExpression: lowerOxcDomNodeExpression,
+    lowerDomNodeExpression: (code, expression, componentNames) =>
+      lowerOxcReactiveValueExpression(code, expression, componentNames) ??
+      lowerOxcDomNodeExpression(code, expression),
     lowerCompatObjectExpression: lowerOxcCompatObjectExpression,
     lowerServerStringExpression: (code, expression, componentNames, target, diagnostics) =>
       lowerOxcServerStringExpression(
