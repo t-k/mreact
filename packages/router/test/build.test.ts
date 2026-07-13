@@ -1567,11 +1567,89 @@ export default function Page() {
       routesDir: "app",
       targets: ["cloudflare"],
     });
-    const pagesPackaged = await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir });
+    const pagesPackaged = await packageCloudflarePagesArtifact({
+      fromDir: outDir,
+      outDir: pagesOutDir,
+    });
 
     expect(pagesPackaged.worker).toBe("_worker.js");
     await expect(access(join(pagesOutDir, "_worker.js"))).resolves.toBeUndefined();
     await expect(readFile(join(pagesOutDir, "_worker.js"), "utf8")).resolves.toContain("node:util");
+  });
+
+  test("packages a custom Cloudflare Pages worker with generated route wiring", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-custom-worker-"));
+    const appDir = join(rootDir, "app");
+    const srcDir = join(rootDir, "src");
+    const outDir = join(rootDir, ".mreact");
+    const pagesOutDir = join(rootDir, ".pages");
+    await mkdir(appDir, { recursive: true });
+    await mkdir(srcDir, { recursive: true });
+    await writeFile(join(rootDir, "package.json"), JSON.stringify({ dependencies: {} }));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>custom worker</main>; }`,
+    );
+    await writeFile(
+      join(srcDir, "response-headers.ts"),
+      `export function applyResponseHeaders(response, { request }) {
+  response.headers.append("vary", "cookie");
+  if (request.headers.has("cookie")) {
+    response.headers.set("cache-control", "private, no-store");
+  }
+}`,
+    );
+    const workerEntry = join(srcDir, "worker.ts");
+    await writeFile(
+      workerEntry,
+      `import { createDefaultCloudflarePagesHandler } from "mreact-router/generated-cloudflare";
+import { applyResponseHeaders } from "./response-headers";
+
+export default createDefaultCloudflarePagesHandler({ onResponse: applyResponseHeaders });`,
+    );
+
+    await buildApp({
+      allowedSourceDirs: ["app"],
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "app",
+      targets: ["cloudflare"],
+    });
+    await packageCloudflarePagesArtifact({ fromDir: outDir, outDir: pagesOutDir, workerEntry });
+
+    const worker = (await import(pathToFileURL(join(pagesOutDir, "_worker.js")).href)) as {
+      default: ExportedHandler;
+    };
+    const response = await worker.default.fetch!(
+      new Request("https://example.test/", { headers: { cookie: "session=active" } }),
+      { ASSETS: { fetch: () => new Response("missing", { status: 404 }) } },
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("custom worker");
+    expect(response.headers.get("vary")).toBe("cookie");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  test("rejects a missing custom Cloudflare Pages worker entry", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-pages-missing-worker-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>missing worker</main>; }`,
+    );
+    await buildApp({ outDir, projectRoot: rootDir, routesDir: "app", targets: ["cloudflare"] });
+
+    await expect(
+      packageCloudflarePagesArtifact({
+        fromDir: outDir,
+        outDir: join(rootDir, ".pages"),
+        workerEntry: join(rootDir, "src", "missing-worker.ts"),
+      }),
+    ).rejects.toThrow(/missing-worker\.ts/);
   });
 
   test("packaged Cloudflare Pages worker renders multiple routes that share a component graph", async () => {

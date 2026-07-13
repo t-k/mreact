@@ -6696,11 +6696,13 @@ export async function packageCloudflarePagesArtifact(
   options: PackageCloudflarePagesArtifactOptions,
 ): Promise<CloudflarePagesArtifactManifest> {
   const clientManifestPath = join(options.fromDir, "client", "manifest.json");
-  const workerPath = join(options.fromDir, "cloudflare", "worker.mjs");
+  const generatedWorkerPath = join(options.fromDir, "cloudflare", "worker.mjs");
+  const workerPath = options.workerEntry ?? generatedWorkerPath;
 
   await assertRequiredBuildFile(clientManifestPath);
-  await assertRequiredBuildFile(workerPath);
+  await assertRequiredBuildFile(generatedWorkerPath);
   await assertRequiredBuildFile(join(options.fromDir, "cloudflare", "route-modules.mjs"));
+  await assertRequiredBuildFile(workerPath);
   assertPackageOutputDoesNotReplaceBuildOutput(options);
 
   const clientManifest = JSON.parse(await readFile(clientManifestPath, "utf8")) as {
@@ -6727,7 +6729,21 @@ export async function packageCloudflarePagesArtifact(
     nodeBuiltins: "externalize",
     outfile: "_worker.js",
     platform: "browser",
-    plugins: [cloudflareWorkspaceRuntimePlugin()],
+    plugins: [
+      ...(options.workerEntry === undefined
+        ? []
+        : [
+            cloudflarePagesGeneratedModulePlugin({
+              clientManifest: await readFile(clientManifestPath, "utf8"),
+              cloudflareDir: join(options.fromDir, "cloudflare"),
+              serverManifest: await readFile(
+                join(options.fromDir, "server", "manifest.json"),
+                "utf8",
+              ),
+            }),
+          ]),
+      cloudflareWorkspaceRuntimePlugin(),
+    ],
     preserveExports: true,
     target: "es2022",
   });
@@ -6748,6 +6764,44 @@ export async function packageCloudflarePagesArtifact(
   );
 
   return manifest;
+}
+
+function cloudflarePagesGeneratedModulePlugin(options: {
+  clientManifest: string;
+  cloudflareDir: string;
+  serverManifest: string;
+}): RouterCompatPlugin {
+  return {
+    name: "mreact-router-cloudflare-pages-generated-module",
+    setup(buildApi) {
+      buildApi.onResolve({ filter: /^mreact-router\/generated-cloudflare$/ }, () => ({
+        namespace: "mreact-cloudflare-pages-generated",
+        path: "generated-cloudflare",
+      }));
+      buildApi.onLoad(
+        { filter: /^generated-cloudflare$/, namespace: "mreact-cloudflare-pages-generated" },
+        () => ({
+          contents: [
+            `import { createCloudflareBuiltRequestHandler, createCloudflareRouteModuleRenderer, createCloudflareStaticAssetLoader } from "@reckona/mreact-router/adapters/cloudflare";`,
+            `import { routeModules } from ${JSON.stringify(join(options.cloudflareDir, "route-modules.mjs"))};`,
+            `const serverManifest = ${options.serverManifest};`,
+            `const clientManifest = ${options.clientManifest};`,
+            `export function createDefaultCloudflarePagesHandler(overrides = {}) {`,
+            `  return createCloudflareBuiltRequestHandler({`,
+            `    assets: createCloudflareStaticAssetLoader({ binding: (env) => env?.ASSETS, clientManifest }),`,
+            `    clientManifest,`,
+            `    renderRoute: createCloudflareRouteModuleRenderer({ modules: routeModules }),`,
+            `    serverManifest,`,
+            `    ...overrides,`,
+            `  });`,
+            `}`,
+          ].join("\n"),
+          loader: "js",
+          resolveDir: options.cloudflareDir,
+        }),
+      );
+    },
+  };
 }
 
 async function assertRequiredBuildFile(path: string): Promise<void> {
