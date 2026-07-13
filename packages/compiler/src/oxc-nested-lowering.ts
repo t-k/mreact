@@ -1,18 +1,12 @@
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { type OxcBodyLowerers } from "./oxc-body-lowering.js";
-import {
-  analyzeOxcExpressionChild,
-  type OxcChildAnalysisContext,
-} from "./oxc-child-analysis.js";
+import { analyzeOxcExpressionChild, type OxcChildAnalysisContext } from "./oxc-child-analysis.js";
 import { markOxcCompatRuntimeReferences } from "./oxc-component-references.js";
 import { lowerOxcDomNodeExpression } from "./oxc-dom-lowering.js";
 import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
-import {
-  emitOxcCompatObjectChildren,
-  emitOxcServerStringChildren,
-} from "./oxc-runtime-emit.js";
+import { emitOxcCompatObjectChildren, emitOxcServerStringChildren } from "./oxc-runtime-emit.js";
 import { stripTypeScriptWithOxc } from "./oxc-transform.js";
 import type { ClientReferenceIr } from "./ir.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
@@ -199,7 +193,9 @@ export function lowerOxcReactiveValueExpression(
   const tagName = readOxcJsxTagName(readObject(openingElement.name));
 
   if (/^[a-z]/.test(tagName)) {
-    return lowerOxcDomNodeExpression(code, unwrapped);
+    return lowerOxcDomNodeExpression(code, unwrapped, (expression) =>
+      lowerOxcNestedJsxExpression(code, expression, componentNames, "client", [], "dom-node"),
+    );
   }
 
   if (!componentNames.has(tagName)) {

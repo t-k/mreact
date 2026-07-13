@@ -281,9 +281,7 @@ export default function Page() {
     };
     const referencedScripts = new Set([
       ...manifest.routes.flatMap((route) =>
-        route.client && route.script !== undefined
-          ? [route.script, ...(route.imports ?? [])]
-          : [],
+        route.client && route.script !== undefined ? [route.script, ...(route.imports ?? [])] : [],
       ),
       ...(manifest.assets ?? []).filter((asset) => asset.endsWith(".js")),
     ]);
@@ -2680,9 +2678,9 @@ export default function Page() {
 
 const landing = cell(false);
 const variant = cell(false);
+const statusMessage = cell("Saved");
 
 function LandingPage() { return <section>Landing</section>; }
-function VariantA() { return <aside>Variant</aside>; }
 function MainView() { return <main>Main</main>; }
 
 export default function Page() {
@@ -2694,7 +2692,7 @@ export default function Page() {
   const showVariant = variant.get();
   const ready = true;
   if (showVariant && ready) {
-    return <VariantA />;
+    return <aside>Variant{statusMessage.get() && <p aria-live="polite">{statusMessage.get()}</p>}</aside>;
   }
 
   return <MainView />;
@@ -2707,7 +2705,7 @@ export default function Page() {
       routePath: "/",
     });
 
-    expect(entry.code).not.toContain("return <VariantA");
+    expect(entry.code).not.toContain("&& <p");
     expect(entry.code).not.toContain("return <MainView");
   });
 
@@ -7128,9 +7126,7 @@ export async function __mreactNavigate(url, options) {
 
     expect(userClicks).toBe(1);
     expect(event.defaultPrevented).toBe(true);
-    expect(requests).toEqual([
-      { navigation: "1", url: "http://localhost:3000/target" },
-    ]);
+    expect(requests).toEqual([{ navigation: "1", url: "http://localhost:3000/target" }]);
     expect(document.querySelector("[data-mreact-route-id='target']")?.textContent).toBe("Target");
   });
 });

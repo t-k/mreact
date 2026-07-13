@@ -54,13 +54,12 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      'import { cell } from "@reckona/mreact-reactive-core";',
-    );
+    expect(output.code).toContain('import { cell } from "@reckona/mreact-reactive-core";');
   });
 
   test("client transform escapes hostile client boundary props JSON", async () => {
-    const payload = "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
+    const payload =
+      "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
     const output = transform({
       code: `import Chart from "./Chart.compat.tsx";
 
@@ -280,9 +279,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<section><span>Hello Ada</span></section>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<section><span>Hello Ada</span></section>");
   });
 
   test("client transform renders component values selected from a route-local registry", async () => {
@@ -313,9 +310,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<main><article>Details</article></main>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<main><article>Details</article></main>");
   });
 
   test("client transform renders non-exported internal component references", async () => {
@@ -337,9 +332,7 @@ export function App() {
     expect(output.code).not.toContain("export function Child");
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<section><span>Hello Ada</span></section>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<section><span>Hello Ada</span></section>");
   });
 
   test("client transform lowers imported component identifiers as value references", () => {
@@ -355,7 +348,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("Header({ title: (\"x\") })");
+    expect(output.code).toContain('Header({ title: ("x") })');
     expect(output.code).not.toContain("<Header");
   });
 
@@ -400,9 +393,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<section><span>A:2</span></section>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<section><span>A:2</span></section>");
   });
 
   test("client transform passes JSX children to same-module component references", async () => {
@@ -422,9 +413,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<section><p>inside</p><!----></section>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<section><p>inside</p><!----></section>");
   });
 
   test("client transform applies JSX spread attributes", async () => {
@@ -438,9 +427,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      '<div id="app" class="primary">Hello</div>',
-    );
+    expect((node as HTMLElement).outerHTML).toBe('<div id="app" class="primary">Hello</div>');
   });
 
   test("client transform emits loadable templates for control characters in static attributes", async () => {
@@ -469,9 +456,7 @@ line2	end">Hello</div>; }`,
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<div><span>A</span><!----></div>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<div><span>A</span><!----></div>");
   });
 
   test("client transform lowers exported component conditional root returns", async () => {
@@ -673,15 +658,12 @@ export function App() {
 
 const landing = cell(true);
 const variant = cell(false);
+const statusMessage = cell("Saved");
 (globalThis as any).__showMain = () => landing.set(false);
 (globalThis as any).__showVariant = () => variant.set(true);
 
 function LandingPage() {
   return <section>Landing</section>;
-}
-
-function VariantA() {
-  return <aside>Variant</aside>;
 }
 
 function MainView() {
@@ -697,7 +679,7 @@ export function App() {
   const showVariant = variant.get();
   const ready = true;
   if (showVariant && ready) {
-    return <VariantA />;
+    return <aside>Variant{statusMessage.get() && <p aria-live="polite">{statusMessage.get()}</p>}</aside>;
   }
 
   return <MainView />;
@@ -708,7 +690,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).not.toContain("return <VariantA");
+    expect(output.code).not.toContain("&& <p");
 
     const App = compileClientComponent(output.code);
     const host = document.createElement("div");
@@ -723,7 +705,8 @@ export function App() {
 
     (globalThis as { __showVariant(): void }).__showVariant();
     await flushEffects();
-    expect(host.textContent).toBe("Variant");
+    expect(host.querySelector("aside")?.firstChild?.textContent).toBe("Variant");
+    expect(host.querySelector("[aria-live='polite']")?.textContent).toBe("Saved");
   });
 
   test("client transform keeps nested ternary route branches reactive through local nullable aliases", async () => {
@@ -904,9 +887,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<p><em>shown</em><!----></p>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<p><em>shown</em><!----></p>");
   });
 
   test("client transform renders renderable falsy logical-and left operands", async () => {
@@ -969,9 +950,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<div><span>A</span>B<!----></div>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<div><span>A</span>B<!----></div>");
     expect(node.textContent).not.toContain("[object HTMLSpanElement]");
   });
 
@@ -989,9 +968,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<div><span>A</span>B<!----></div>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<div><span>A</span>B<!----></div>");
     expect(node.textContent).not.toContain("[object HTMLSpanElement]");
   });
 
@@ -1027,9 +1004,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<p><em>fallback</em><!----></p>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<p><em>fallback</em><!----></p>");
   });
 
   test("client transform evaluates logical-or left JSX child once", async () => {
@@ -1088,14 +1063,12 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<main><h2>B</h2><!----></main>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<main><h2>B</h2><!----></main>");
   });
 
   test("client transform lowers list JSX children", async () => {
     const output = transform({
-      code: "export function App() { const items = [\"A\", \"B\"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }",
+      code: 'export function App() { const items = ["A", "B"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }',
       filename: "App.tsx",
       target: "client",
       dev: true,
@@ -1104,9 +1077,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<ul><li>0:A</li><li>1:B</li><!----></ul>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<ul><li>0:A</li><li>1:B</li><!----></ul>");
   });
 
   test("client transform keeps map parameters from shadowed reactive aliases", async () => {
@@ -1166,9 +1137,7 @@ export function App() {
     expect(output.code).not.toContain(": string");
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<ul><li>0:A</li><li>1:B</li><!----></ul>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<ul><li>0:A</li><li>1:B</li><!----></ul>");
   });
 
   test("client transform strips TypeScript from block-body anchor list renderers inside dynamic array expressions", async () => {
@@ -1259,9 +1228,7 @@ export function App() {
     expect(output.code).not.toContain("rows.push(<li>");
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<ul><li>A</li><li>B</li><!----></ul>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<ul><li>A</li><li>B</li><!----></ul>");
   });
 
   test("client transform lowers JSX pushed inside classic for statements", async () => {
@@ -1282,9 +1249,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<ul><li>0:A</li><li>1:B</li><!----></ul>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<ul><li>0:A</li><li>1:B</li><!----></ul>");
   });
 
   test("client transform lowers JSX pushed inside nested loops", async () => {
@@ -1308,9 +1273,7 @@ export function App() {
     expect(output.code).not.toContain("rows.push(<li>");
 
     const node = await runClientComponent(output.code);
-    expect((node as HTMLElement).outerHTML).toBe(
-      "<ul><li>A</li><li>B</li><!----></ul>",
-    );
+    expect((node as HTMLElement).outerHTML).toBe("<ul><li>A</li><li>B</li><!----></ul>");
   });
 
   test("client transform lowers conditional returns in list renderers", async () => {
@@ -1392,9 +1355,7 @@ export function App() {
     (node as HTMLElement).querySelector("button")?.click();
     await flushEffects();
 
-    expect((node as HTMLElement).textContent).toBe(
-      "LoadAda Lovelaceada@example.test",
-    );
+    expect((node as HTMLElement).textContent).toBe("LoadAda Lovelaceada@example.test");
   });
 
   test("client keyed list render values preserve DOM across unrelated parent state updates", async () => {

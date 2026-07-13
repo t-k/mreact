@@ -6,12 +6,21 @@ import { isEventLikePropName } from "@reckona/mreact-shared";
 export function lowerOxcDomNodeExpression(
   code: string,
   node: Record<string, unknown>,
+  lowerExpressionChild?: (expression: Record<string, unknown>) => string | undefined,
 ): string | undefined {
   const unwrapped = unwrapOxcParentheses(node);
 
   if (unwrapped.type === "ConditionalExpression") {
-    const whenTrue = lowerOxcDomNodeExpression(code, readObject(unwrapped.consequent));
-    const whenFalse = lowerOxcDomNodeExpression(code, readObject(unwrapped.alternate));
+    const whenTrue = lowerOxcDomNodeExpression(
+      code,
+      readObject(unwrapped.consequent),
+      lowerExpressionChild,
+    );
+    const whenFalse = lowerOxcDomNodeExpression(
+      code,
+      readObject(unwrapped.alternate),
+      lowerExpressionChild,
+    );
 
     if (whenTrue !== undefined && whenFalse !== undefined) {
       return `((${readSource(code, readObject(unwrapped.test))}) ? ${whenTrue} : ${whenFalse})`;
@@ -19,7 +28,11 @@ export function lowerOxcDomNodeExpression(
   }
 
   if (unwrapped.type === "LogicalExpression") {
-    const right = lowerOxcDomNodeExpression(code, readObject(unwrapped.right));
+    const right = lowerOxcDomNodeExpression(
+      code,
+      readObject(unwrapped.right),
+      lowerExpressionChild,
+    );
 
     if (right !== undefined && unwrapped.operator === "&&") {
       return `((${readSource(code, readObject(unwrapped.left))}) ? ${right} : false)`;
@@ -32,12 +45,15 @@ export function lowerOxcDomNodeExpression(
   }
 
   if (unwrapped.type === "ArrayExpression") {
-    return `[${readArray(unwrapped.elements).map((element) => {
-      const object = readObject(element);
-      return Object.keys(object).length === 0
-        ? "undefined"
-        : (lowerOxcDomNodeExpression(code, object) ?? readSource(code, object));
-    }).join(", ")}]`;
+    return `[${readArray(unwrapped.elements)
+      .map((element) => {
+        const object = readObject(element);
+        return Object.keys(object).length === 0
+          ? "undefined"
+          : (lowerOxcDomNodeExpression(code, object, lowerExpressionChild) ??
+              readSource(code, object));
+      })
+      .join(", ")}]`;
   }
 
   if (unwrapped.type === "Literal" && (unwrapped.value === null || unwrapped.value === false)) {
@@ -61,7 +77,7 @@ export function lowerOxcDomNodeExpression(
     "(() => {",
     `  const _node = document.createElement(${JSON.stringify(tagName)});`,
     ...lowerOxcDomAttributes(code, readArray(openingElement.attributes)),
-    ...lowerOxcDomChildren(code, readArray(node.children)),
+    ...lowerOxcDomChildren(code, readArray(node.children), lowerExpressionChild),
     "  return _node;",
     "})()",
   ].join("\n");
@@ -126,9 +142,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
           `  { const _value = (${expression}); if (_value && typeof _value === "object" && typeof _value.__html === "string") _node.setAttribute(${JSON.stringify(domName)}, _value.__html); }`,
         ];
       }
-      return [
-        `  _node.setAttribute(${JSON.stringify(domName)}, String(${expression}));`,
-      ];
+      return [`  _node.setAttribute(${JSON.stringify(domName)}, String(${expression}));`];
     }
 
     return [];
@@ -143,9 +157,9 @@ function safeDomAttributeHelperLines(): string[] {
   return [
     "  const __mreactSafeDomUrlAttribute = (name, value) => {",
     '    if (name === "srcset" || name === "imagesrcset") {',
-    "      const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, \"\").replace(/[\\t\\r\\n]/g, \"\");",
-    "      for (const _candidate of _canonicalSet.split(\",\")) {",
-    "        const _url = (_candidate.trim().split(/\\s+/)[0] || \"\");",
+    '      const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, "").replace(/[\\t\\r\\n]/g, "");',
+    '      for (const _candidate of _canonicalSet.split(",")) {',
+    '        const _url = (_candidate.trim().split(/\\s+/)[0] || "");',
     '        if (_url !== "" && __mreactSafeDomUrlAttribute("src", _url) === undefined) return undefined;',
     "      }",
     "      return value;",
@@ -253,24 +267,35 @@ const srcsetAttributeNames = new Set(["srcset", "imagesrcset"]);
 const dangerousHtmlAttributeNames = new Set(["srcdoc"]);
 const unsafeUrlSchemes = new Set(["javascript", "data", "vbscript", "livescript", "mhtml", "file"]);
 
-function lowerOxcDomChildren(code: string, children: readonly unknown[]): string[] {
+function lowerOxcDomChildren(
+  code: string,
+  children: readonly unknown[],
+  lowerExpressionChild?: (expression: Record<string, unknown>) => string | undefined,
+): string[] {
   return children.flatMap((child, index): string[] => {
     const object = readObject(child);
 
     if (object.type === "JSXText") {
       const value =
-        typeof object.value === "string"
-          ? normalizeOxcJsxText(object.value, children, index)
-          : "";
+        typeof object.value === "string" ? normalizeOxcJsxText(object.value, children, index) : "";
       return value === "" ? [] : [`  _node.append(${JSON.stringify(value)});`];
     }
 
     if (object.type === "JSXExpressionContainer") {
-      return [`  _node.append(String(${readSource(code, readObject(object.expression))}));`];
+      const expression = readObject(object.expression);
+      const lowered = lowerExpressionChild?.(expression);
+
+      if (lowered === undefined) {
+        return [`  _node.append(String(${readSource(code, expression)}));`];
+      }
+
+      return [
+        `  { const _child = (${lowered}); const _children = Array.isArray(_child) ? _child.flat(Infinity) : [_child]; _node.append(..._children.filter((_value) => _value != null && typeof _value !== "boolean")); }`,
+      ];
     }
 
     if (object.type === "JSXElement") {
-      const lowered = lowerOxcDomNodeExpression(code, object);
+      const lowered = lowerOxcDomNodeExpression(code, object, lowerExpressionChild);
       return lowered === undefined ? [] : [`  _node.append(${lowered});`];
     }
 
