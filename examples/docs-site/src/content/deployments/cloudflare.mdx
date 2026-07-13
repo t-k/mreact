@@ -25,6 +25,29 @@ wrangler pages deploy .mreact/pages --project-name=mreact-app --branch=main
 
 Pages provides the `ASSETS` binding to `_worker.js`. Mreact serves only allowed manifest assets, route-linked CSS, generated client assets, and copied public files from that binding, which keeps traversal-style asset requests out of the static asset path.
 
+### Custom Pages worker
+
+Pass `--worker` when the Pages deployment needs existing Cloudflare adapter options such as `onResponse`, `onError`, or `logger`. The package command bundles the TypeScript entry and provides `mreact-router/generated-cloudflare`, a package-time module whose factory preserves the generated manifests, route renderer, and static asset allowlist.
+
+```bash
+mreact-router package cloudflare-pages --from .mreact --out .mreact/pages --worker src/worker.ts
+```
+
+```ts
+import { createDefaultCloudflarePagesHandler } from "mreact-router/generated-cloudflare";
+
+export default createDefaultCloudflarePagesHandler({
+  onResponse(response, { request }) {
+    response.headers.append("vary", "cookie");
+    if (request.headers.has("cookie")) {
+      response.headers.set("cache-control", "private, no-store");
+    }
+  },
+});
+```
+
+The generated module exists while `package cloudflare-pages` bundles the custom entry; do not import it from ordinary application modules. The option changes production Pages packaging only. It does not make `mreact-router dev` or `mreact-router start` load the custom worker.
+
 ## Workers deployment
 
 Use Workers when you want an ordinary Worker service with an explicit static assets binding. The generator writes `wrangler.toml`, and Wrangler also accepts a JSONC config when you prefer that format. Point `main` at the generated Worker and bind `.mreact/client` as `ASSETS`.

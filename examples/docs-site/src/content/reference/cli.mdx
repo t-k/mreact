@@ -34,7 +34,10 @@ mreact-router package aws-lambda --from .mreact --out .lambda
 - `mreact-router dev` reads `--host` and `--port`.
 - `mreact-router start` reads `--host`, `--host-policy`, and `--allowed-hosts`. Set `PORT` when you need a non-default start-server port.
 - `--log requests` enables compact request logs. `MREACT_ROUTER_LOG=requests` enables the same mode from the environment.
-- `--from`, `--out`, `--handler`, and `--skip-runtime-dependency-check` are packaging options used after a build.
+- `--from` and `--out` select packaging input and output directories after a build.
+- `--handler <entry>` bundles a custom AWS Lambda handler.
+- `--worker <entry>` bundles a custom Cloudflare Pages worker that can import `createDefaultCloudflarePagesHandler` from the package-time `mreact-router/generated-cloudflare` module.
+- `--skip-runtime-dependency-check` applies to AWS Lambda packaging when a later deployment step installs production dependencies.
 
 ## Package scripts
 
