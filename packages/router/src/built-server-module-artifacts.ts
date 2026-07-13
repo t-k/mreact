@@ -39,8 +39,8 @@ async function loadBuiltServerModuleArtifact(
 
   const artifactPath =
     kind === "request"
-      ? (runtime.serverModuleRequestFiles.get(file) ?? runtime.serverModuleFiles.get(file))
-      : (runtime.serverModuleRenderFiles.get(file) ?? runtime.serverModuleFiles.get(file));
+      ? runtime.serverModuleRequestFiles.get(file) ?? runtime.serverModuleFiles.get(file)
+      : runtime.serverModuleRenderFiles.get(file) ?? runtime.serverModuleFiles.get(file);
 
   if (artifactPath === undefined) {
     return;
@@ -74,11 +74,7 @@ async function loadBuiltServerModuleArtifact(
     .catch((error) => {
       runtime.serverModuleArtifactLoads.delete(`${kind}\0${file}`);
       if (isMissingFileError(error)) {
-        throw builtArtifactReadError(
-          `built server module artifact for ${file}`,
-          artifactPath,
-          error,
-        );
+        throw builtArtifactReadError(`built server module artifact for ${file}`, artifactPath, error);
       }
       throw error;
     });
@@ -163,8 +159,6 @@ export async function loadBuiltServerModuleArtifactsForRequest(
   const roots = [
     join(runtime.appDir, "middleware.ts"),
     join(runtime.appDir, "middleware.mreact.ts"),
-    join(runtime.appDir, "on-response.ts"),
-    join(runtime.appDir, "on-response.mreact.ts"),
     ...(routeFile === undefined
       ? []
       : [

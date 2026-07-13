@@ -99,46 +99,6 @@ describe("mreact app request rendering", () => {
     expect(middlewareResponse.headers.get("x-content-type-options")).toBe("nosniff");
   });
 
-  test("prefers an explicit response hook over the app convention", async () => {
-    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-response-hook-precedence-"));
-    await writeFile(
-      join(appDir, "page.mreact.tsx"),
-      "export default function Page() { return <main>Home</main>; }",
-    );
-    await writeFile(
-      join(appDir, "on-response.ts"),
-      `export function onResponse(response: Response) {
-  response.headers.set("x-response-hook", "convention");
-}`,
-    );
-
-    const response = await renderAppRequest({
-      appDir,
-      onResponse(rendered) {
-        rendered.headers.set("x-response-hook", "explicit");
-      },
-      request: new Request("http://local.test/"),
-    });
-
-    expect(response.headers.get("x-response-hook")).toBe("explicit");
-  });
-
-  test("rejects an invalid response hook convention export", async () => {
-    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-invalid-response-hook-"));
-    await writeFile(
-      join(appDir, "page.mreact.tsx"),
-      "export default function Page() { return <main>Home</main>; }",
-    );
-    await writeFile(join(appDir, "on-response.ts"), `export const onResponse = "invalid";`);
-
-    await expect(
-      renderAppRequest({
-        appDir,
-        request: new Request("http://local.test/"),
-      }),
-    ).rejects.toThrow(/Invalid on-response convention.*on-response\.ts.*onResponse/u);
-  });
-
   test("passes dynamic route params to page components", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-params-"));
     await mkdir(join(appDir, "users", "$id"), { recursive: true });
@@ -2085,10 +2045,7 @@ export function middleware() {
 }
 `;
     await writeFile(file, code);
-    await writeFile(
-      join(appDir, "page.mreact.tsx"),
-      "export default function Page() { return null; }",
-    );
+    await writeFile(join(appDir, "page.mreact.tsx"), "export default function Page() { return null; }");
 
     const bundled = await bundleMiddlewareModuleCode({
       appDir,

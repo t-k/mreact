@@ -1223,34 +1223,6 @@ export default function Page() {
     expect(body).not.toContain(appDir);
     expect(body).not.toContain(" at ");
   });
-
-  test("loads the app response hook convention", async () => {
-    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-response-hook-"));
-    await writeFile(
-      join(appDir, "page.tsx"),
-      `export default function Page() { return <main>Hooked</main>; }`,
-    );
-    await writeFile(
-      join(appDir, "on-response.ts"),
-      `export function onResponse(response: Response, context: { request: Request }) {
-  const headers = new Headers(response.headers);
-  headers.set("vary", "Cookie");
-  if (context.request.headers.get("cookie")?.includes("session=")) {
-    headers.set("cache-control", "private, no-store");
-  }
-  return new Response(response.body, { headers, status: response.status, statusText: response.statusText });
-}`,
-    );
-    const server = await startTrackedDevServer({ appDir, port: 0 });
-
-    const publicResponse = await fetch(server.url);
-    const sessionResponse = await fetch(server.url, { headers: { cookie: "session=active" } });
-
-    expect(publicResponse.headers.get("vary")).toBe("Cookie");
-    expect(publicResponse.headers.get("cache-control")).toBeNull();
-    expect(sessionResponse.headers.get("vary")).toBe("Cookie");
-    expect(sessionResponse.headers.get("cache-control")).toBe("private, no-store");
-  });
 });
 
 async function startTrackedDevServer(options: StartDevServerOptions) {
