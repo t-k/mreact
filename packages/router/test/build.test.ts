@@ -4010,6 +4010,42 @@ export default function Page() {
     expect(response.headers.get("strict-transport-security")).toBe("max-age=31536000");
   });
 
+  test("loads the app response hook convention in the built Node server", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-built-response-convention-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return <main>Built hook</main>; }",
+    );
+    await writeFile(
+      join(appDir, "on-response.ts"),
+      `export function onResponse(response: Response, context: { request: Request }) {
+  const headers = new Headers(response.headers);
+  headers.set("vary", "Cookie");
+  if (context.request.headers.get("cookie")?.includes("session=")) {
+    headers.set("cache-control", "private, no-store");
+  }
+  return new Response(response.body, { headers, status: response.status, statusText: response.statusText });
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const server = await startServer({ outDir, port: 0 });
+    try {
+      const publicResponse = await fetch(server.url);
+      const sessionResponse = await fetch(server.url, { headers: { cookie: "session=active" } });
+
+      expect(publicResponse.headers.get("vary")).toBe("Cookie");
+      expect(publicResponse.headers.get("cache-control")).toBeNull();
+      expect(sessionResponse.headers.get("vary")).toBe("Cookie");
+      expect(sessionResponse.headers.get("cache-control")).toBe("private, no-store");
+    } finally {
+      await server.close();
+    }
+  });
+
   test("writes and enforces the built server action manifest", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-actions-manifest-"));
     const appDir = join(rootDir, "app");

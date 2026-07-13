@@ -159,6 +159,8 @@ export async function loadBuiltServerModuleArtifactsForRequest(
   const roots = [
     join(runtime.appDir, "middleware.ts"),
     join(runtime.appDir, "middleware.mreact.ts"),
+    join(runtime.appDir, "on-response.ts"),
+    join(runtime.appDir, "on-response.mreact.ts"),
     ...(routeFile === undefined
       ? []
       : [

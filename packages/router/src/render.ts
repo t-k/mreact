@@ -1693,11 +1693,66 @@ async function applyAppRouterResponseHook(
   response: Response,
   options: RenderAppRequestOptions,
 ): Promise<Response> {
-  const hooked = await options.onResponse?.(response, {
+  const onResponse = options.onResponse ?? (await loadAppResponseHook(options));
+  const hooked = await onResponse?.(response, {
     request: options.request,
   });
 
   return hooked instanceof Response ? hooked : response;
+}
+
+async function loadAppResponseHook(
+  options: Pick<
+    RenderAppRequestOptions,
+    | "appDir"
+    | "define"
+    | "devServerModuleCacheVersion"
+    | "importPolicy"
+    | "serverModules"
+    | "serverModuleCacheVersion"
+    | "serverSourceFiles"
+    | "vitePlugins"
+  >,
+): Promise<AppRouterResponseHook | undefined> {
+  const candidates = [
+    join(options.appDir, "on-response.ts"),
+    join(options.appDir, "on-response.mreact.ts"),
+  ];
+
+  for (const file of candidates) {
+    try {
+      await access(file);
+    } catch {
+      continue;
+    }
+
+    const code = await readServerSourceFile(
+      file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    const loaded = (await loadBundledMiddlewareModule({
+      appDir: options.appDir,
+      code,
+      define: options.define,
+      devServerModuleCacheVersion: options.devServerModuleCacheVersion,
+      file,
+      importPolicy: options.importPolicy,
+      prebuiltArtifact: prebuiltRequestModuleArtifact(options.serverModules, file, code),
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      vitePlugins: options.vitePlugins,
+    })) as unknown as { onResponse?: unknown };
+
+    if (typeof loaded.onResponse !== "function") {
+      throw new Error(
+        `Invalid on-response convention ${file}: expected a callable onResponse export.`,
+      );
+    }
+
+    return loaded.onResponse as AppRouterResponseHook;
+  }
+
+  return undefined;
 }
 
 function withOptionalActionCookie(
