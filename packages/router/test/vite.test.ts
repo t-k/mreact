@@ -558,6 +558,55 @@ export default function Page() {
     expect(body).toContain("Browser build cannot import Node builtin");
   });
 
+  test("surfaces generated client route transform failures without changing unknown route 404s", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-transform-error-"));
+    const appDir = join(projectRoot, "src", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+export default function Page() {
+  return <button type="button" onClick={() => count.set(count.get() + 1)}>{count.get()}</button>;
+}`,
+    );
+    const devServer = await startDevServer({
+      port: 0,
+      projectRoot,
+      routesDir: appDir,
+      viteConfig: {
+        plugins: [
+          {
+            name: "fixture-client-route-transform-failure",
+            transform(_code, id) {
+              if (id.includes("mreact-router-client-route=")) {
+                throw new Error("controlled client route transform failure");
+              }
+            },
+          },
+        ],
+      },
+    });
+    devServers.push(devServer);
+
+    const documentResponse = await fetch(devServer.url);
+    const html = await documentResponse.text();
+    const routeScript = html.match(/<script type="module" src="([^"]*\/_mreact\/client\/routes\/[^"]+)"/u)?.[1];
+
+    expect(documentResponse.status, html).toBe(200);
+    expect(routeScript).toBeDefined();
+
+    const routeResponse = await fetch(new URL(routeScript!, devServer.url));
+    const routeBody = await routeResponse.text();
+    const unknownResponse = await fetch(`${devServer.url}/_mreact/client/routes/unknown.js`);
+
+    expect(routeResponse.status, routeBody).toBe(500);
+    expect(routeBody).toContain("controlled client route transform failure");
+    expect(unknownResponse.status).toBe(404);
+  });
+
   test("sends render errors to the Vite error overlay websocket", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-vite-render-error-overlay-"));
     await writeFile(

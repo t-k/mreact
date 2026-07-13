@@ -277,6 +277,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
     },
     configureServer(server) {
       server.middlewares.use(createDevCssProxyMiddleware());
+      server.middlewares.use(createClientRouteTransformMiddleware(project.routesDir, server));
 
       return () => {
         const middlewareOptions: AppRouterViteRuntimeMiddlewareOptions = {
@@ -449,6 +450,48 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`;
   };
 
   return plugin;
+}
+
+function createClientRouteTransformMiddleware(
+  appDir: string,
+  server: ViteDevServer,
+): Connect.NextHandleFunction {
+  return (request, response, next) => {
+    void (async () => {
+      const url = new URL(request.url ?? "/", "http://localhost");
+
+      if (!url.pathname.startsWith(`${clientPrefix}routes/`)) {
+        next();
+        return;
+      }
+
+      const route = await clientRouteForRequestPath(appDir, url.pathname);
+
+      if (route === undefined) {
+        next();
+        return;
+      }
+
+      try {
+        const transformed = await server.transformRequest(`${url.pathname}${url.search}`);
+
+        if (transformed === null) {
+          next();
+          return;
+        }
+
+        await sendResponse(
+          response,
+          new Response(transformed.code, {
+            headers: { "content-type": "text/javascript; charset=utf-8" },
+          }),
+        );
+      } catch (error) {
+        sendViteErrorOverlay(server, error);
+        await sendResponse(response, clientAssetBuildErrorResponse(route.file, error));
+      }
+    })().catch(next);
+  };
 }
 
 function isMreactClientSourceDependency(
