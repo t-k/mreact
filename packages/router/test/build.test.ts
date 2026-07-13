@@ -4033,16 +4033,26 @@ export default function Page() { return <main>Built hook</main>; }`,
       `export function onResponse(response: Response, context: { request: Request }) {
   const headers = new Headers(response.headers);
   headers.set("vary", "Cookie");
-  if (context.request.headers.get("cookie")?.includes("session=")) {
+  const hasSession = context.request.headers.get("cookie")?.includes("session=") === true;
+  if (hasSession) {
     headers.set("cache-control", "private, no-store");
   }
-  return new Response(response.body, { headers, status: response.status, statusText: response.statusText });
+  return new Response(response.body, { headers, status: hasSession ? 403 : response.status, statusText: response.statusText });
 }`,
     );
 
     await buildApp({ appDir, outDir });
     await rm(appDir, { recursive: true });
-    const server = await startServer({ outDir, port: 0 });
+    const completedStatuses: number[] = [];
+    const server = await startServer({
+      instrumentation: {
+        onRequestEnd(event) {
+          completedStatuses.push(event.status);
+        },
+      },
+      outDir,
+      port: 0,
+    });
     try {
       const publicResponse = await fetch(server.url);
       const sessionResponse = await fetch(server.url, { headers: { cookie: "session=active" } });
@@ -4052,11 +4062,13 @@ export default function Page() { return <main>Built hook</main>; }`,
 
       expect(publicResponse.headers.get("vary")).toBe("Cookie");
       expect(publicResponse.headers.get("cache-control")).toBeNull();
+      expect(sessionResponse.status).toBe(403);
       expect(sessionResponse.headers.get("vary")).toBe("Cookie");
       expect(sessionResponse.headers.get("cache-control")).toBe("private, no-store");
       expect(middlewareResponse.status).toBe(403);
       expect(middlewareResponse.headers.get("vary")).toBe("Cookie");
       expect(middlewareResponse.headers.get("cache-control")).toBe("private, no-store");
+      expect(completedStatuses).toEqual([200, 403, 403]);
     } finally {
       await server.close();
     }

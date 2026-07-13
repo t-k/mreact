@@ -38,7 +38,11 @@ import {
   type AppRouterResponseHook,
   type RenderAppRequestRuntimeOptions,
 } from "./render.js";
-import type { RouterInstrumentation } from "./trace.js";
+import {
+  invokeRouterInstrumentation,
+  traceContextFromRequest,
+  type RouterInstrumentation,
+} from "./trace.js";
 import {
   bytesResponse,
   htmlResponse,
@@ -236,8 +240,10 @@ export async function createBuiltRequestRuntime(
       });
     },
     async render(request, renderOptions = {}) {
+      emitBuiltRequestStart(renderOptions.instrumentation, request);
       const response = await renderBuiltAppRequestWithRuntime({
         ...renderOptions,
+        instrumentation: withoutBuiltRequestInstrumentation(renderOptions.instrumentation),
         importPolicy:
           renderOptions.importPolicy === undefined
             ? defaultImportPolicy
@@ -247,7 +253,7 @@ export async function createBuiltRequestRuntime(
         runtime,
       });
 
-      return applyBuiltAppResponseHook(
+      const finalResponse = await applyBuiltAppResponseHook(
         response,
         {
           onResponse: renderOptions.onResponse,
@@ -255,6 +261,8 @@ export async function createBuiltRequestRuntime(
         },
         runtime,
       );
+      emitBuiltRequestEnd(renderOptions.instrumentation, request, finalResponse.status);
+      return finalResponse;
     },
   };
 }
@@ -355,6 +363,7 @@ function builtRuntimePreloadRoutes(
 export async function renderBuiltAppRequest(
   options: RenderBuiltAppRequestOptions,
 ): Promise<Response> {
+  emitBuiltRequestStart(options.instrumentation, options.request);
   const runtime = await readBuiltRuntime({
     outDir: options.outDir,
     immutable: options.immutableRuntime,
@@ -362,11 +371,54 @@ export async function renderBuiltAppRequest(
   });
   const response = await renderBuiltAppRequestWithRuntime({
     ...options,
+    instrumentation: withoutBuiltRequestInstrumentation(options.instrumentation),
     importPolicy: mergeBuiltRuntimeImportPolicy(runtime, options.importPolicy),
     runtime,
   });
 
-  return applyBuiltAppResponseHook(response, options, runtime);
+  const finalResponse = await applyBuiltAppResponseHook(response, options, runtime);
+  emitBuiltRequestEnd(options.instrumentation, options.request, finalResponse.status);
+  return finalResponse;
+}
+
+function withoutBuiltRequestInstrumentation(
+  instrumentation: RouterInstrumentation | undefined,
+): RouterInstrumentation | undefined {
+  if (instrumentation === undefined) {
+    return undefined;
+  }
+
+  const { onRequestEnd: _onRequestEnd, onRequestStart: _onRequestStart, ...remaining } =
+    instrumentation;
+  return remaining;
+}
+
+function emitBuiltRequestStart(
+  instrumentation: RouterInstrumentation | undefined,
+  request: Request,
+): void {
+  const trace = traceContextFromRequest(request);
+  invokeRouterInstrumentation(instrumentation?.onRequestStart, {
+    method: request.method,
+    path: new URL(request.url).pathname,
+    request,
+    ...(trace === undefined ? {} : { trace }),
+  });
+}
+
+function emitBuiltRequestEnd(
+  instrumentation: RouterInstrumentation | undefined,
+  request: Request,
+  status: number,
+): void {
+  const trace = traceContextFromRequest(request);
+  invokeRouterInstrumentation(instrumentation?.onRequestEnd, {
+    method: request.method,
+    path: new URL(request.url).pathname,
+    request,
+    status,
+    ...(trace === undefined ? {} : { trace }),
+  });
 }
 
 async function renderBuiltAppRequestWithRuntime(
