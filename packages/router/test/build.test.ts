@@ -4017,7 +4017,16 @@ export default function Page() {
     await mkdir(appDir, { recursive: true });
     await writeFile(
       join(appDir, "page.mreact.tsx"),
-      "export default function Page() { return <main>Built hook</main>; }",
+      `export const prerender = true;
+export default function Page() { return <main>Built hook</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export function middleware(request: Request) {
+  if (new URL(request.url).pathname === "/blocked") {
+    return new Response("Blocked", { status: 403 });
+  }
+}`,
     );
     await writeFile(
       join(appDir, "on-response.ts"),
@@ -4032,15 +4041,22 @@ export default function Page() {
     );
 
     await buildApp({ appDir, outDir });
+    await rm(appDir, { recursive: true });
     const server = await startServer({ outDir, port: 0 });
     try {
       const publicResponse = await fetch(server.url);
       const sessionResponse = await fetch(server.url, { headers: { cookie: "session=active" } });
+      const middlewareResponse = await fetch(`${server.url}/blocked`, {
+        headers: { cookie: "session=active" },
+      });
 
       expect(publicResponse.headers.get("vary")).toBe("Cookie");
       expect(publicResponse.headers.get("cache-control")).toBeNull();
       expect(sessionResponse.headers.get("vary")).toBe("Cookie");
       expect(sessionResponse.headers.get("cache-control")).toBe("private, no-store");
+      expect(middlewareResponse.status).toBe(403);
+      expect(middlewareResponse.headers.get("vary")).toBe("Cookie");
+      expect(middlewareResponse.headers.get("cache-control")).toBe("private, no-store");
     } finally {
       await server.close();
     }

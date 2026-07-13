@@ -182,6 +182,19 @@ export async function loadBuiltServerModuleArtifactsForRequest(
   }
 }
 
+export async function loadBuiltResponseHookArtifacts(
+  runtime: BuiltServerModuleArtifactRuntime,
+): Promise<void> {
+  const seen = new Set<string>();
+
+  for (const file of [
+    join(runtime.appDir, "on-response.ts"),
+    join(runtime.appDir, "on-response.mreact.ts"),
+  ]) {
+    await loadBuiltServerModuleArtifactClosure(runtime, file, seen, "request");
+  }
+}
+
 async function loadBuiltServerModuleArtifactClosure(
   runtime: BuiltServerModuleArtifactRuntime,
   file: string,

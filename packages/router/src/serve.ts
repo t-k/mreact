@@ -18,6 +18,7 @@ import {
 } from "./built-runtime.js";
 import {
   allBuiltServerModuleFiles,
+  loadBuiltResponseHookArtifacts,
   loadBuiltServerModuleArtifacts,
   loadBuiltServerModuleArtifactsForRequest,
 } from "./built-server-module-artifacts.js";
@@ -30,6 +31,7 @@ import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
   preloadBuiltRequestModules,
   renderAppRequest,
+  resolveAppRouterResponseHook,
   resolveAppRouterMiddleware,
   type AppRouterServerRenderArtifactLoader,
   type AppRouterRenderPreload,
@@ -245,10 +247,14 @@ export async function createBuiltRequestRuntime(
         runtime,
       });
 
-      return applyBuiltAppResponseHook(response, {
-        onResponse: renderOptions.onResponse,
-        request,
-      });
+      return applyBuiltAppResponseHook(
+        response,
+        {
+          onResponse: renderOptions.onResponse,
+          request,
+        },
+        runtime,
+      );
     },
   };
 }
@@ -360,7 +366,7 @@ export async function renderBuiltAppRequest(
     runtime,
   });
 
-  return applyBuiltAppResponseHook(response, options);
+  return applyBuiltAppResponseHook(response, options, runtime);
 }
 
 async function renderBuiltAppRequestWithRuntime(
@@ -534,8 +540,18 @@ function emitBuiltRenderTiming(
 async function applyBuiltAppResponseHook(
   response: Response,
   options: Pick<RenderBuiltAppRequestOptions, "onResponse" | "request">,
+  runtime: BuiltRuntime,
 ): Promise<Response> {
-  const hooked = await options.onResponse?.(response, {
+  await loadBuiltResponseHookArtifacts(runtime);
+  const onResponse = await resolveAppRouterResponseHook({
+    appDir: runtime.appDir,
+    importPolicy: runtime.generatedImportPolicy,
+    onResponse: options.onResponse,
+    serverModules: runtime.serverModules,
+    serverModuleCacheVersion: runtime.serverModuleCacheVersion,
+    serverSourceFiles: runtime.serverSourceFiles,
+  });
+  const hooked = await onResponse?.(response, {
     request: options.request,
   });
 
@@ -814,6 +830,7 @@ function builtRenderAppRequestOptions(
       options.runtime.serverActionManifest,
     ),
     skipMiddleware: true,
+    applyResponseHookConvention: false,
     ...(options.preload === undefined ? {} : { preload: options.preload }),
   };
 

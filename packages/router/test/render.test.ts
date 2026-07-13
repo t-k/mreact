@@ -112,15 +112,26 @@ describe("mreact app request rendering", () => {
 }`,
     );
 
+    const completedStatuses: number[] = [];
     const response = await renderAppRequest({
       appDir,
+      instrumentation: {
+        onRequestEnd(event) {
+          completedStatuses.push(event.status);
+        },
+      },
       onResponse(rendered) {
-        rendered.headers.set("x-response-hook", "explicit");
+        return new Response(rendered.body, {
+          headers: { ...Object.fromEntries(rendered.headers), "x-response-hook": "explicit" },
+          status: 403,
+        });
       },
       request: new Request("http://local.test/"),
     });
 
     expect(response.headers.get("x-response-hook")).toBe("explicit");
+    expect(response.status).toBe(403);
+    expect(completedStatuses).toEqual([403]);
   });
 
   test("rejects an invalid response hook convention export", async () => {

@@ -572,6 +572,7 @@ export default function Page() {
   return <button type="button" onClick={() => count.set(count.get() + 1)}>{count.get()}</button>;
 }`,
     );
+    const overlayMessages: unknown[] = [];
     const devServer = await startDevServer({
       port: 0,
       projectRoot,
@@ -580,6 +581,13 @@ export default function Page() {
         plugins: [
           {
             name: "fixture-client-route-transform-failure",
+            configureServer(server) {
+              const send = server.ws.send.bind(server.ws);
+              server.ws.send = ((payload: unknown) => {
+                overlayMessages.push(payload);
+                return send(payload as never);
+              }) as typeof server.ws.send;
+            },
             transform(_code, id) {
               if (id.includes("mreact-router-client-route=")) {
                 throw new Error("controlled client route transform failure");
@@ -604,6 +612,12 @@ export default function Page() {
 
     expect(routeResponse.status, routeBody).toBe(500);
     expect(routeBody).toContain("controlled client route transform failure");
+    expect(overlayMessages).toContainEqual({
+      type: "error",
+      err: expect.objectContaining({
+        message: expect.stringContaining("controlled client route transform failure"),
+      }),
+    });
     expect(unknownResponse.status).toBe(404);
   });
 

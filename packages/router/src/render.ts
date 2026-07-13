@@ -198,6 +198,7 @@ export interface RenderAppRequestOptions {
   navigationScripts?: ReadonlyMap<string, string> | undefined;
   onRenderError?: ((error: unknown) => void) | undefined;
   onResponse?: AppRouterResponseHook | undefined;
+  applyResponseHookConvention?: boolean | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
   requestUrl?: URL | undefined;
@@ -677,12 +678,16 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   };
   invokeRouterInstrumentation(options.instrumentation?.onRequestStart, requestEvent);
   const response = await renderAppRequestInternal({ ...options, requestUrl: url });
+  const finalResponse =
+    options.applyResponseHookConvention === false
+      ? response
+      : await applyAppRouterResponseHook(response, options);
   invokeRouterInstrumentation(options.instrumentation?.onRequestEnd, {
     ...requestEvent,
-    status: response.status,
+    status: finalResponse.status,
   });
 
-  return applyAppRouterResponseHook(response, options);
+  return finalResponse;
 }
 
 function createRenderTiming(logger: AppRouterLogger | undefined): RenderTiming | undefined {
@@ -1693,7 +1698,7 @@ async function applyAppRouterResponseHook(
   response: Response,
   options: RenderAppRequestOptions,
 ): Promise<Response> {
-  const onResponse = options.onResponse ?? (await loadAppResponseHook(options));
+  const onResponse = await resolveAppRouterResponseHook(options);
   const hooked = await onResponse?.(response, {
     request: options.request,
   });
@@ -1701,29 +1706,38 @@ async function applyAppRouterResponseHook(
   return hooked instanceof Response ? hooked : response;
 }
 
-async function loadAppResponseHook(
+export async function resolveAppRouterResponseHook(
   options: Pick<
     RenderAppRequestOptions,
     | "appDir"
     | "define"
     | "devServerModuleCacheVersion"
     | "importPolicy"
+    | "onResponse"
     | "serverModules"
     | "serverModuleCacheVersion"
     | "serverSourceFiles"
     | "vitePlugins"
   >,
 ): Promise<AppRouterResponseHook | undefined> {
+  if (options.onResponse !== undefined) {
+    return options.onResponse;
+  }
+
   const candidates = [
     join(options.appDir, "on-response.ts"),
     join(options.appDir, "on-response.mreact.ts"),
   ];
 
   for (const file of candidates) {
-    try {
-      await access(file);
-    } catch {
-      continue;
+    const embedded =
+      options.serverSourceFiles?.has(file) === true || options.serverModules?.has(file) === true;
+    if (!embedded) {
+      try {
+        await access(file);
+      } catch {
+        continue;
+      }
     }
 
     const code = await readServerSourceFile(
