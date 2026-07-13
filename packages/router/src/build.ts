@@ -1975,6 +1975,27 @@ async function buildGeneratedImportPolicy(options: {
     }
   }
 
+  const responseHookFile = ["on-response.ts", "on-response.mreact.ts"]
+    .map((file) => (relativeRoutesDir === "" ? file : `${relativeRoutesDir}/${file}`))
+    .find((file) => options.files[file] !== undefined);
+
+  if (responseHookFile !== undefined) {
+    const packages = await collectRuntimePackagesForFile({
+      file: responseHookFile,
+      files: options.files,
+      packageJsonLookupCache,
+      projectRoot: options.projectRoot,
+      seen: new Set(),
+    });
+
+    if (packages.length > 0) {
+      routePackages.set("on-response", packages);
+      for (const packageName of packages) {
+        allPackages.add(packageName);
+      }
+    }
+  }
+
   return {
     byRoute: Object.fromEntries(
       [...routePackages.entries()].sort(([left], [right]) => left.localeCompare(right)),
@@ -2685,6 +2706,10 @@ async function buildServerModuleArtifacts(options: {
       requestArtifactFiles.add(file);
     }
 
+    if (isResponseHookFile(options.project.routesDir, absoluteFile)) {
+      requestArtifactFiles.add(file);
+    }
+
     if (route?.kind === "server" || route?.kind === "metadata") {
       requestArtifactFiles.add(file);
     }
@@ -2721,7 +2746,10 @@ async function buildServerModuleArtifacts(options: {
       });
     }
 
-    if (isMiddlewareFile(options.project.routesDir, absoluteFile)) {
+    if (
+      isMiddlewareFile(options.project.routesDir, absoluteFile) ||
+      isResponseHookFile(options.project.routesDir, absoluteFile)
+    ) {
       // Middleware joins the batch when runtime packages are bundled so the
       // auth/control dependency graph is shared with route loader artifacts.
       if (options.bundleRequestRuntimePackages) {
@@ -3164,7 +3192,10 @@ async function buildRequestModuleArtifactCode(options: {
   source: string;
   vitePlugins?: readonly PluginOption[] | undefined;
 }): Promise<string> {
-  if (isMiddlewareFile(options.appDir, options.filename)) {
+  if (
+    isMiddlewareFile(options.appDir, options.filename) ||
+    isResponseHookFile(options.appDir, options.filename)
+  ) {
     return await bundleMiddlewareModuleCode({
       appDir: options.appDir,
       code: options.source,
@@ -3466,6 +3497,10 @@ function stableCacheKey(value: unknown): string {
 
 function isMiddlewareFile(appDir: string, file: string): boolean {
   return file === join(appDir, "middleware.ts") || file === join(appDir, "middleware.mreact.ts");
+}
+
+function isResponseHookFile(appDir: string, file: string): boolean {
+  return file === join(appDir, "on-response.ts") || file === join(appDir, "on-response.mreact.ts");
 }
 
 function hasMetadataExport(code: string): boolean {
