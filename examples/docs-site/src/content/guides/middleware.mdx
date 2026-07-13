@@ -88,6 +88,30 @@ export function middleware(request: Request) {
 
 Keep expensive data fetching out of middleware unless the decision must happen before route selection. Prefer loaders for page data, HTTP APIs for endpoints, and server actions for framework-handled mutations.
 
+## Customize every completed response
+
+Create `src/app/on-response.ts` when an app needs to inspect or replace completed responses consistently in `mreact-router dev`, `mreact-router start`, and built request rendering. Export an `onResponse(response, { request })` function and return a replacement `Response`, or mutate the provided response and return nothing.
+
+```ts
+// src/app/on-response.ts
+export function onResponse(response: Response, { request }: { request: Request }) {
+  const headers = new Headers(response.headers);
+  headers.append("Vary", "Cookie");
+
+  if (request.headers.get("cookie")?.includes("session=")) {
+    headers.set("Cache-Control", "private, no-store");
+  }
+
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+```
+
+Use middleware for decisions that happen before rendering, such as redirects and rewrites. Use `on-response.ts` for policy that must see the final page, middleware, or route response. A programmatic `onResponse` option passed to a renderer or adapter takes precedence over the convention, so a custom worker or handler can import and reuse the same function when it needs platform-specific setup.
+
 ## Skip middleware for a route
 
 Use route-local middleware controls when a subtree normally matches middleware but a specific page or layout should bypass it. `skip: true` skips all app middleware for that route.
