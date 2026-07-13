@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.0.193 - 2026-07-13
+
+### Added
+
+- Added custom Cloudflare Pages Worker packaging through `mreact-router package cloudflare-pages --worker <entry>` and `packageCloudflarePagesArtifact({ workerEntry })`. Custom entries can import the package-time `mreact-router/generated-cloudflare` factory to reuse generated manifests, route rendering, and static asset wiring while configuring existing Cloudflare adapter options such as `onResponse`.
+
+### Fixed
+
+- Fixed App Router client route generation when a component has an early prologue return followed by a later return branch containing conditional nested JSX, preventing raw JSX from reaching Vite and preserving hydration.
+
 ## 0.0.192 - 2026-07-13
 
 ### Fixed

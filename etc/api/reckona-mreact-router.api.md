@@ -1075,6 +1075,8 @@ export interface PackageCloudflarePagesArtifactOptions {
     fromDir: string;
     // (undocumented)
     outDir: string;
+    // (undocumented)
+    workerEntry?: string | undefined;
 }
 
 // @public
