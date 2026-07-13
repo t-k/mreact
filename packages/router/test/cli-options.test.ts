@@ -155,6 +155,7 @@ describe("router CLI options", () => {
     expect(help).toContain("package cloudflare-pages --from .mreact --out .mreact/pages");
     expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
     expect(buildHelp).toContain(".mreact/aws-lambda/mreact-handler.mjs");
+    expect(formatCliHelp("package")).toContain("--worker <entry>");
 
     const startHelp = formatCliHelp("start");
     expect(startHelp).toContain("--host <host>");
@@ -204,6 +205,16 @@ describe("router CLI options", () => {
       from: ".mreact",
       out: ".mreact/pages",
       routeArg: "cloudflare-pages",
+    });
+    expect(parseCliArguments(["package", "cloudflare-pages", "--worker", "src/worker.ts"])).toEqual({
+      command: "package",
+      routeArg: "cloudflare-pages",
+      worker: "src/worker.ts",
+    });
+    expect(parseCliArguments(["package", "cloudflare-pages", "--worker=src/worker.ts"])).toEqual({
+      command: "package",
+      routeArg: "cloudflare-pages",
+      worker: "src/worker.ts",
     });
     expect(parseCliArguments(["package", "aws-lambda", "--handler", "lambda/mreact-handler.ts"])).toEqual({
       command: "package",

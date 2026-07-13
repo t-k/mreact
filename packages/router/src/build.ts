@@ -303,6 +303,7 @@ export interface PackageAwsLambdaArtifactOptions {
 export interface PackageCloudflarePagesArtifactOptions {
   fromDir: string;
   outDir: string;
+  workerEntry?: string | undefined;
 }
 
 export interface BuiltServerManifest {

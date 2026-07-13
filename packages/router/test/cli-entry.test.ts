@@ -230,6 +230,8 @@ describe("router CLI entry", () => {
       ".mreact",
       "--out",
       ".mreact/pages",
+      "--worker",
+      "src/worker.ts",
     ];
     const previousExitCode = process.exitCode;
     try {
@@ -237,6 +239,7 @@ describe("router CLI entry", () => {
       expect(packageCloudflarePagesArtifact).toHaveBeenCalledWith({
         fromDir: expect.stringMatching(/\.mreact$/),
         outDir: expect.stringMatching(/\.mreact\/pages$/),
+        workerEntry: expect.stringMatching(/src\/worker\.ts$/),
       });
       expect(logSpy).toHaveBeenCalledWith(
         "Packaged Cloudflare Pages artifact with 1 files (12 bytes).",

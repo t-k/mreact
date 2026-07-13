@@ -27,6 +27,7 @@ export interface ParsedCliArguments {
   routeArg?: string | undefined;
   skipRuntimeDependencyCheck?: boolean | undefined;
   target?: CliBuildTarget | undefined;
+  worker?: string | undefined;
 }
 
 export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
@@ -133,6 +134,17 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
 
     if (value.startsWith("--handler=")) {
       parsed.handler = value.slice("--handler=".length);
+      continue;
+    }
+
+    if (value === "--worker") {
+      parsed.worker = readOptionValue(argv, index, "worker");
+      index += 1;
+      continue;
+    }
+
+    if (value.startsWith("--worker=")) {
+      parsed.worker = value.slice("--worker=".length);
       continue;
     }
 
@@ -260,6 +272,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "      For aws-lambda only, skip the production node_modules check when a later deploy step installs dependencies into the package directory.",
       "  --handler <entry>",
       "      For aws-lambda only, bundle a custom handler entry into mreact-handler.mjs. App-local extensionless TypeScript imports are bundled; package imports stay external.",
+      "  --worker <entry>",
+      "      For cloudflare-pages only, bundle a custom Worker entry into _worker.js.",
       "  --aws-lambda-preload=middleware|hot-route-requests|all|none",
       "      Override generated Lambda initialization preload. Omission preserves the build policy; legacy output without policy metadata falls back to middleware.",
       "  --aws-lambda-preload-routes=/,/login",

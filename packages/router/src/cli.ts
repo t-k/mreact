@@ -111,6 +111,7 @@ if (parsed !== undefined) {
           const manifest = await packageCloudflarePagesArtifact({
             fromDir: resolve(parsed.from ?? ".mreact"),
             outDir: resolve(parsed.out ?? ".mreact/pages"),
+            ...(parsed.worker === undefined ? {} : { workerEntry: resolve(parsed.worker) }),
           });
           console.log(
             `Packaged Cloudflare Pages artifact with ${manifest.files.length} files (${manifest.totalBytes} bytes).`,
