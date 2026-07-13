@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.192 - 2026-07-13
+
+### Fixed
+
+- Fixed App Router client route generation when an early component return is followed by local declarations and later component return branches, preventing raw JSX from reaching Vite and preserving reactive branch updates after hydration.
+
 ## 0.0.191 - 2026-07-11
 
 ### Changed
