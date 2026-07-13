@@ -198,7 +198,6 @@ export interface RenderAppRequestOptions {
   navigationScripts?: ReadonlyMap<string, string> | undefined;
   onRenderError?: ((error: unknown) => void) | undefined;
   onResponse?: AppRouterResponseHook | undefined;
-  applyResponseHookConvention?: boolean | undefined;
   queryClient?: QueryClient | undefined;
   request: Request;
   requestUrl?: URL | undefined;
@@ -678,10 +677,7 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   };
   invokeRouterInstrumentation(options.instrumentation?.onRequestStart, requestEvent);
   const response = await renderAppRequestInternal({ ...options, requestUrl: url });
-  const finalResponse =
-    options.applyResponseHookConvention === false
-      ? response
-      : await applyAppRouterResponseHook(response, options);
+  const finalResponse = await applyAppRouterResponseHook(response, options);
   invokeRouterInstrumentation(options.instrumentation?.onRequestEnd, {
     ...requestEvent,
     status: finalResponse.status,

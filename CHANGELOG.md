@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.194 - 2026-07-13
+
+### Added
+
+- Added the `on-response.ts` and `on-response.mreact.ts` app conventions for applying a shared `onResponse(response, { request })` hook in development, built Node servers, prerendered responses, middleware short circuits, and built request runtimes. Explicit programmatic hooks continue to take precedence.
+
+### Fixed
+
+- Fixed Vite development diagnostics for generated client route transform failures so known route modules return the original error through a 500 JavaScript response and the Vite overlay instead of appearing as an ordinary 404. Unknown route modules continue to return 404.
+- Fixed built response-hook lifecycle handling so artifact-only deployments load the prebuilt hook without the source tree, every response path applies the hook once, and request instrumentation records the final hooked status.
+
 ## 0.0.193 - 2026-07-13
 
 ### Added

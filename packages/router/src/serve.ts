@@ -882,7 +882,7 @@ function builtRenderAppRequestOptions(
       options.runtime.serverActionManifest,
     ),
     skipMiddleware: true,
-    applyResponseHookConvention: false,
+    onResponse: () => undefined,
     ...(options.preload === undefined ? {} : { preload: options.preload }),
   };
 
