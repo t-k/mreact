@@ -1565,6 +1565,13 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
       expect(rawTextHtml).toContain("<textarea>Body</textarea>");
       expect(rawTextHtml).toContain('data-mreact-client-boundary-children="AppShell"');
       expect(rawTextHtml).not.toContain("<textarea><!--mreact-client-boundary-children-start-->");
+
+      globalWithShell.AppShell = (props) => `<template>${props.children ?? ""}</template>`;
+      const templateHtml = runServerComponent(output.code, "App", { children: "Body" });
+
+      expect(templateHtml).toContain("<template>Body</template>");
+      expect(templateHtml).toContain('data-mreact-client-boundary-children="AppShell"');
+      expect(templateHtml).not.toContain("<template><!--mreact-client-boundary-children-start-->");
     } finally {
       if (previousShell === undefined) {
         delete globalWithShell.AppShell;

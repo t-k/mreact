@@ -372,7 +372,7 @@ function emitClientBoundaryHelper(name: string): string {
     `  const _opening = /<([a-z][a-z0-9:-]*)(?:\\s[^<>]*)?>$/i.exec(fallbackHtml.slice(0, _start));`,
     `  const _closing = /^<\\/([a-z][a-z0-9:-]*)\\s*>/i.exec(fallbackHtml.slice(_end));`,
     `  if (_opening === null || _closing === null || _opening[1].toLowerCase() !== _closing[1].toLowerCase()) return undefined;`,
-    `  if (["iframe", "noembed", "noframes", "noscript", "plaintext", "script", "style", "textarea", "title", "xmp"].includes(_opening[1].toLowerCase())) return undefined;`,
+    `  if (["iframe", "noembed", "noframes", "noscript", "plaintext", "script", "style", "template", "textarea", "title", "xmp"].includes(_opening[1].toLowerCase())) return undefined;`,
     `  return fallbackHtml.slice(0, _start) + startMarker + childrenHtml + endMarker + fallbackHtml.slice(_end);`,
     `}`,
     `async function ${renderHelperName}(value) {`,
