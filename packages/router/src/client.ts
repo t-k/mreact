@@ -4295,7 +4295,10 @@ function __mreactClientBoundaryFallbackChildren(placeholder, propsElement) {
   }
 
   if (componentFallback) {
-    return __mreactExtractClientBoundaryChildren(nodes);
+    return __mreactExtractClientBoundaryChildren(
+      nodes,
+      placeholder.getAttribute("data-mreact-client-boundary"),
+    );
   }
 
   if (nodes.length === 0) {
@@ -4305,73 +4308,43 @@ function __mreactClientBoundaryFallbackChildren(placeholder, propsElement) {
   return nodes.length === 1 ? nodes[0] : nodes;
 }
 
-function __mreactExtractClientBoundaryChildren(nodes) {
+function __mreactExtractClientBoundaryChildren(nodes, name) {
   const startMarker = "mreact-client-boundary-children-start";
   const endMarker = "mreact-client-boundary-children-end";
-  const markers = [];
+  const archive = nodes.find(
+    (node) =>
+      node.nodeType === Node.ELEMENT_NODE &&
+      node.tagName === "TEMPLATE" &&
+      node.getAttribute("data-mreact-client-boundary-children") === name,
+  );
 
-  const visit = (node) => {
-    if (
-      node.nodeType === Node.COMMENT_NODE &&
-      (node.nodeValue === startMarker || node.nodeValue === endMarker)
-    ) {
-      markers.push(node);
-    }
-
-    for (const child of Array.from(node.childNodes ?? [])) {
-      visit(child);
-    }
-  };
-
-  for (const node of nodes) {
-    visit(node);
+  if (archive === undefined) {
+    return undefined;
   }
 
-  let start;
-  let depth = 0;
+  const content = archive.content;
+  const start = Array.from(content.childNodes).find(
+    (node) => node.nodeType === Node.COMMENT_NODE && node.nodeValue === startMarker,
+  );
 
-  for (const marker of markers) {
-    if (marker.nodeValue === startMarker) {
-      if (depth === 0) {
-        start = marker;
-      }
-      depth += 1;
-      continue;
-    }
+  if (start === undefined) {
+    return undefined;
+  }
 
-    if (depth === 0 || start === undefined) {
-      continue;
-    }
+  const children = [];
+  let current = start.nextSibling;
 
-    depth -= 1;
-
-    if (depth !== 0) {
-      continue;
-    }
-
-    if (start.parentNode !== marker.parentNode) {
-      start = undefined;
-      continue;
-    }
-
-    const children = [];
-    let current = start.nextSibling;
-
-    while (current !== null && current !== marker) {
-      const next = current.nextSibling;
+  while (current !== null) {
+    if (current.nodeType === Node.COMMENT_NODE && current.nodeValue === endMarker) {
+      start.remove();
       current.remove();
-      children.push(current);
-      current = next;
+      return children.length === 0 ? undefined : children.length === 1 ? children[0] : children;
     }
 
-    start.remove();
-    marker.remove();
-
-    if (children.length === 0) {
-      return undefined;
-    }
-
-    return children.length === 1 ? children[0] : children;
+    const next = current.nextSibling;
+    current.remove();
+    children.push(current);
+    current = next;
   }
 
   return undefined;

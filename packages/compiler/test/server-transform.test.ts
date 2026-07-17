@@ -1473,7 +1473,7 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      '_renderClientBoundary("Navigation", { label: ("Albums") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true)',
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true, "")',
     );
   });
 
@@ -1498,7 +1498,7 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      '_renderClientBoundary("Navigation", { label: ("Albums") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true)',
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true, "")',
     );
   });
 
@@ -1527,7 +1527,8 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     expect(output.code).toContain("<!--mreact-client-boundary-children-start-->");
     expect(output.code).toContain("<!--mreact-client-boundary-children-end-->");
     expect(output.code).toContain("data-mreact-client-boundary-fallback");
-    expect(output.code).toContain("), true)");
+    expect(output.code).toContain("data-mreact-client-boundary-children");
+    expect(output.code).toContain("), true,");
     expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
     expect(output.code).toContain('"Body"');
   });

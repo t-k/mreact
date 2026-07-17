@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { buildApp } from "../dist/build.js";
+import { buildClientRouteBundle } from "../dist/client.js";
 import { startDevServer } from "../dist/dev-server.js";
 import { startServer } from "../dist/serve.js";
 
@@ -1157,10 +1159,12 @@ export default function FullPage() {
 
       if (route.componentFallback) {
         expect(html).toContain('data-mreact-client-boundary-fallback="component"');
+        expect(html).toContain('data-mreact-client-boundary-children="Shell"');
         expect(html).toContain("<!--mreact-client-boundary-children-start-->");
         expect(html).toContain("<!--mreact-client-boundary-children-end-->");
       } else {
         expect(html).not.toContain('data-mreact-client-boundary-fallback="component"');
+        expect(html).not.toContain('data-mreact-client-boundary-children="Shell"');
         expect(html).not.toContain("<!--mreact-client-boundary-children-start-->");
         expect(html).not.toContain("<!--mreact-client-boundary-children-end-->");
       }
@@ -1232,6 +1236,72 @@ export default function FullPage() {
     }
   } finally {
     await close();
+  }
+});
+
+test("route resume removes stale SSR siblings after replacing a boundary template", async ({
+  page,
+}) => {
+  const appDir = await mkdtemp(join(tmpdir(), "mreact-route-resume-browser-"));
+  const file = join(appDir, "page.mreact.tsx");
+  const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main data-shell="active"><h1>Settings</h1><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`;
+  await writeFile(file, code);
+  const bundle = await buildClientRouteBundle({
+    code,
+    filename: file,
+    routePath: "/",
+  });
+  const html = [
+    "<!doctype html><html><body>",
+    '<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell"></template><main data-shell="stale"><h1>Stale settings</h1></main><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>',
+    '<script type="application/json" id="mreact-props-index">{}</script>',
+    '<script type="application/json" id="mreact-client-references-index">[]</script>',
+    '<script type="module" src="/route.js"></script>',
+    "</body></html>",
+  ].join("");
+  const server = createServer((request, response) => {
+    if (request.url === "/route.js") {
+      response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+      response.end(bundle);
+      return;
+    }
+
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+
+  if (address === null || typeof address === "string") {
+    server.close();
+    await rm(appDir, { force: true, recursive: true });
+    throw new Error("Route resume browser fixture did not bind a TCP port.");
+  }
+
+  try {
+    await page.goto(`http://127.0.0.1:${address.port}`);
+    const marker = page.locator("[data-mreact-route-id='index']");
+
+    await expect(marker.locator(":scope > *")).toHaveCount(1);
+    await expect(marker.locator("main")).toHaveCount(1);
+    await expect(marker.locator("[data-shell='active']")).toHaveCount(1);
+    await expect(marker.locator("[data-shell='stale']")).toHaveCount(0);
+    await expect(marker.locator("script[data-mreact-client-boundary-props]")).toHaveCount(0);
+    await page.getByRole("button", { name: "count: 0" }).click();
+    await expect(page.getByRole("button", { name: "count: 1" })).toBeVisible();
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error === undefined ? resolve() : reject(error)));
+    });
+    await rm(appDir, { force: true, recursive: true });
   }
 });
 

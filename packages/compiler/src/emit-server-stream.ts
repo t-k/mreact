@@ -295,6 +295,7 @@ function usesClientBoundary(ir: ModuleIr, serverHydration: boolean): boolean {
 
 function emitClientBoundaryHelper(name: string): string {
   const propsHelperName = `${name}$hasNonSerializableProps`;
+  const renderHelperName = `${name}$renderHtml`;
 
   return [
     `function ${propsHelperName}(value) {`,
@@ -306,20 +307,32 @@ function emitClientBoundaryHelper(name: string): string {
     `  }`,
     `  return false;`,
     `}`,
-    `function ${name}(name, props, childrenHtml = "", componentFallback = false) {`,
+    `async function ${renderHelperName}(value) {`,
+    `  if (typeof value !== "function") return value ?? "";`,
+    `  let _out = "";`,
+    `  await value({ append(chunk) { _out += chunk; } });`,
+    `  return _out;`,
+    `}`,
+    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "") {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
     `  const _nonSerializable = ${propsHelperName}(_props);`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
-    `  const _componentFallbackAttr = componentFallback ? ' data-mreact-client-boundary-fallback="component"' : "";`,
     `  const _json = (JSON.stringify(_props) ?? "{}")`,
     `    .replaceAll("&", "\\\\u0026")`,
     `    .replaceAll("<", "\\\\u003c")`,
     `    .replaceAll(">", "\\\\u003e")`,
     `    .replaceAll("\\u2028", "\\\\u2028")`,
     `    .replaceAll("\\u2029", "\\\\u2029");`,
-    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}\${_componentFallbackAttr}></template>\${childrenHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  if (!componentFallback) return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template>\${fallbackHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  return (async () => {`,
+    `    const _originalChildrenHtml = await ${renderHelperName}(originalChildrenHtml);`,
+    `    const _fallbackValue = typeof fallbackHtml === "function" ? await fallbackHtml(_originalChildrenHtml) : fallbackHtml;`,
+    `    const _fallbackHtml = await ${renderHelperName}(_fallbackValue);`,
+    `    const _childrenArchive = '<template data-mreact-client-boundary-children="' + _escapedName + '"><!--mreact-client-boundary-children-start-->' + _originalChildrenHtml + '<!--mreact-client-boundary-children-end--></template>';`,
+    `    return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr} data-mreact-client-boundary-fallback="component"></template>\${_fallbackHtml}\${_childrenArchive}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  })();`,
     `}`,
   ].join("\n");
 }
@@ -1159,8 +1172,62 @@ function collectHtmlParts(
   }
 
   if (node.kind === "conditional") {
-    const whenTrue = emitHtmlExpressionFromChildren(node.whenTrue, escapeHelperName);
-    const whenFalse = emitHtmlExpressionFromChildren(node.whenFalse, escapeHelperName);
+    const collectChildren = (children: JsxNodeIr[]) =>
+      children.flatMap((child) =>
+        collectHtmlParts(
+          child,
+          escapeHelperName,
+          asyncBoundaryHelperName,
+          outOfOrderBoundaryHelperName,
+          reactSuspenseBoundaryHelperName,
+          reactSuspenseOutOfOrderBoundaryHelperName,
+          state,
+        ),
+      );
+    const trueParts = collectChildren(node.whenTrue);
+    const falseParts = collectChildren(node.whenFalse);
+    const emitStringExpression = (parts: HtmlPart[]): string | undefined => {
+      if (!parts.every(isHtmlSyncPart)) {
+        return undefined;
+      }
+
+      const expressions = parts.map((part) =>
+        tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName),
+      );
+
+      return expressions.some((expression) => expression === undefined)
+        ? undefined
+        : expressions.length === 0
+          ? '""'
+          : (expressions as string[]).join(" + ");
+    };
+    const whenTrue = emitStringExpression(trueParts);
+    const whenFalse = emitStringExpression(falseParts);
+
+    if (whenTrue === undefined || whenFalse === undefined) {
+      const condition = node.conditionValueName ?? node.conditionCode;
+      const conditionStatement = node.conditionValueName === undefined
+        ? ""
+        : `  const ${node.conditionValueName} = (${node.conditionCode});\n`;
+      const trueStatements = emitNestedStreamAppendStatements(
+        trueParts,
+        "$sink",
+        currentCompatRenderToStringHelperName,
+      );
+      const falseStatements = emitNestedStreamAppendStatements(
+        falseParts,
+        "$sink",
+        currentCompatRenderToStringHelperName,
+      );
+
+      return [
+        {
+          kind: "stream-node",
+          code: `async ($sink) => {\n${conditionStatement}  if (${condition}) {\n${trueStatements}\n  } else {\n${falseStatements}\n  }\n}`,
+          escapeHelperName,
+        },
+      ];
+    }
 
     return [
       {
@@ -1445,22 +1512,25 @@ function collectHtmlParts(
         const hasComponentFallback = shouldRenderClientBoundaryFallback(node);
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
         const fallbackHtml = hasComponentFallback
-          ? emitRenderableHtmlExpression(
-              `${node.name}(${emitPropsObject(
-                node.props,
-                node.children,
-                escapeHelperName,
-                node.name,
-                true,
-              )})`,
-            )
+          ? `(_childrenHtml) => ${emitRenderableHtmlExpression(
+              `${node.name}(${emitPropsObject(node.props, node.children, escapeHelperName, node.name, "_childrenHtml")})`,
+            )}`
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
-        return [
-          {
-            kind: "raw-dynamic",
-            code: `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${hasComponentFallback ? ", true" : ""})`,
-          },
-        ];
+        const originalChildrenHtml = hasComponentFallback
+          ? (emitStreamRendererFromChildren(node.children, escapeHelperName) ??
+            emitHtmlExpressionFromChildren(node.children, escapeHelperName))
+          : undefined;
+        const helperCall = `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}`})`;
+
+        return hasComponentFallback
+          ? [
+              {
+                kind: "stream-node",
+                code: `async ($sink) => { $sink.append(await ${helperCall}); }`,
+                escapeHelperName,
+              },
+            ]
+          : [{ kind: "raw-dynamic", code: helperCall }];
       }
 
       return [{ kind: "static", value: clientBoundaryPlaceholder(node) }];
@@ -2292,7 +2362,8 @@ function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {
 
   if (node.kind === "component") {
     if (isClientBoundaryPlaceholder(node)) {
-      return false;
+      return shouldRenderClientBoundaryFallback(node) &&
+        node.children.some((child) => containsAsyncBoundary(child, outOfOrder));
     }
 
     return node.name === "Suspense" ? false : true;
@@ -2328,7 +2399,7 @@ function containsAnyAsyncBoundary(node: JsxNodeIr): boolean {
 
   if (node.kind === "component") {
     if (isClientBoundaryPlaceholder(node)) {
-      return false;
+      return shouldRenderClientBoundaryFallback(node);
     }
 
     return node.name === "Suspense" ? true : true;
@@ -2344,6 +2415,11 @@ function containsReactSuspense(node: JsxNodeIr, outOfOrder: boolean): boolean {
           containsAsyncComponent(node.children)
       : findSuspenseAsyncBoundary(node.children) === undefined &&
           !containsAsyncComponent(node.children);
+  }
+
+  if (node.kind === "component" && isClientBoundaryPlaceholder(node)) {
+    return shouldRenderClientBoundaryFallback(node) &&
+      node.children.some((child) => containsReactSuspense(child, outOfOrder));
   }
 
   if (node.kind === "conditional") {
@@ -2610,7 +2686,7 @@ function emitPropsObject(
   children: JsxNodeIr[] = [],
   escapeHelperName = "_escapeHtml",
   componentName?: string,
-  markClientBoundaryChildren = false,
+  childrenExpressionOverride?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -2626,13 +2702,11 @@ function emitPropsObject(
 
   if (children.length > 0) {
     const childrenExpression =
+      childrenExpressionOverride ??
       emitStreamRendererFromChildren(children, escapeHelperName) ??
       emitHtmlExpressionFromChildren(children, escapeHelperName);
-    const serializedChildren = markClientBoundaryChildren
-      ? `${JSON.stringify("<!--mreact-client-boundary-children-start-->")} + (${childrenExpression}) + ${JSON.stringify("<!--mreact-client-boundary-children-end-->")}`
-      : childrenExpression;
     entries.push(
-      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${serializedChildren})` : serializedChildren}`,
+      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
   }
 

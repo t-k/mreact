@@ -1298,14 +1298,113 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      '_renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(AppShell({ currentPath: ("/settings/email"), children:',
+      'await _renderClientBoundary("AppShell", { currentPath: ("/settings/email") }, (_childrenHtml) => ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(AppShell({ currentPath: ("/settings/email"), children: _childrenHtml }))',
     );
     expect(output.code).toContain("<!--mreact-client-boundary-children-start-->");
     expect(output.code).toContain("<!--mreact-client-boundary-children-end-->");
     expect(output.code).toContain("data-mreact-client-boundary-fallback");
-    expect(output.code).toContain("), true)");
+    expect(output.code).toContain("data-mreact-client-boundary-children");
+    expect(output.code).toContain("), true,");
     expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
     expect(output.code).toContain('"Body"');
+  });
+
+  test("emitted client boundary protocol renders async original children instead of function source", async () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+
+      export function App() {
+        return (
+          <AppShell>
+            <Await value={Promise.resolve("Ready")}>{value => <h1>{value}</h1>}</Await>
+          </AppShell>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./AppShell"],
+      clientBoundaryFallbackImports: ["./AppShell"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const globalWithShell = globalThis as typeof globalThis & {
+      AppShell?: (props: { children?: string }) => string;
+    };
+    const previousShell = globalWithShell.AppShell;
+    globalWithShell.AppShell = (props) => `<main>${props.children ?? ""}</main>`;
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousShell === undefined) {
+        delete globalWithShell.AppShell;
+      } else {
+        globalWithShell.AppShell = previousShell;
+      }
+    }
+
+    expect(html).toContain("<main><h1>Ready</h1></main>");
+    expect(html).toContain(
+      '<template data-mreact-client-boundary-children="AppShell"><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></template>',
+    );
+    expect(html).not.toContain("async ($sink)");
+  });
+
+  test("preserves client boundary fallbacks in logical and ternary stream branches", async () => {
+    const sources = [
+      `import { AppShell } from "./AppShell";
+
+      export function App(props) {
+        return <section>{props.visible && <AppShell>Logical</AppShell>}</section>;
+      }`,
+      `import { AppShell } from "./AppShell";
+
+      export function App(props) {
+        return <section>{props.visible ? <AppShell>Ternary</AppShell> : <p>Hidden</p>}</section>;
+      }`,
+    ];
+    const globalWithShell = globalThis as typeof globalThis & {
+      AppShell?: (props: { children?: string }) => string;
+    };
+    const previousShell = globalWithShell.AppShell;
+    globalWithShell.AppShell = (props) => `<main>${props.children ?? ""}</main>`;
+
+    try {
+      for (const [index, code] of sources.entries()) {
+        const output = transform({
+          code,
+          filename: `App${index}.tsx`,
+          target: "server",
+          dev: true,
+          serverOutput: "stream",
+          clientBoundaryImports: ["./AppShell"],
+          clientBoundaryFallbackImports: ["./AppShell"],
+        });
+
+        expect(output.diagnostics).toEqual([]);
+        const visibleHtml = await runServerStreamComponent(output.code, "App", {
+          visible: true,
+        });
+        const hiddenHtml = await runServerStreamComponent(output.code, "App", {
+          visible: false,
+        });
+        const label = index === 0 ? "Logical" : "Ternary";
+
+        expect(visibleHtml).toContain(`<main>${label}</main>`);
+        expect(visibleHtml).toContain(`data-mreact-client-boundary-children="AppShell"`);
+        expect(hiddenHtml).not.toContain("data-mreact-client-boundary-fallback");
+        expect(hiddenHtml).toBe(index === 0 ? "<section></section>" : "<section><p>Hidden</p></section>");
+      }
+    } finally {
+      if (previousShell === undefined) {
+        delete globalWithShell.AppShell;
+      } else {
+        globalWithShell.AppShell = previousShell;
+      }
+    }
   });
 
   test("emitted server stream component escapes hostile client boundary props JSON", async () => {

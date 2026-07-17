@@ -1242,10 +1242,9 @@ export default function Page() {
     const file = join(appDir, "page.mreact.tsx");
     await writeFile(
       join(appDir, "Shell.tsx"),
-      `"use client";
-
-export function Shell(props) {
-  return <main data-shell="settings">{props.children}</main>;
+      `export function Shell(props) {
+  const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
+  return <main data-shell="settings" data-pathname={pathname}>{props.children}</main>;
 }`,
     );
     const code = `import { Shell } from "./Shell";
@@ -1255,7 +1254,7 @@ export default function Page() {
 }`;
     await writeFile(file, code);
     document.body.innerHTML = [
-      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="settings"><!--mreact-client-boundary-children-start--><h1>Settings</h1><!--mreact-client-boundary-children-end--></main><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>',
+      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="settings"><p>Server-only fallback</p></main><template data-mreact-client-boundary-children="Shell"><!--mreact-client-boundary-children-start--><h1>Settings</h1><!--mreact-client-boundary-children-end--></template><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>',
       '<script type="application/json" id="mreact-props-index">{}</script>',
       '<script type="application/json" id="mreact-client-references-index">[{"name":"Shell","moduleId":"./Shell","exportName":"Shell"}]</script>',
     ].join("");
@@ -1273,10 +1272,64 @@ export default function Page() {
 
     expect(document.querySelectorAll("[data-shell='settings']")).toHaveLength(1);
     expect(document.querySelectorAll("h1")).toHaveLength(1);
+    expect(document.querySelectorAll("p")).toHaveLength(0);
     expect(shell?.querySelector("[data-shell='settings']")).toBeNull();
     expect(shell?.textContent).toBe("Settings");
     expect(document.querySelector("template[data-mreact-client-boundary='Shell']")).toBeNull();
+    expect(document.querySelector("template[data-mreact-client-boundary-children='Shell']")).toBeNull();
     expect(document.querySelector("script[data-mreact-client-boundary-props='Shell']")).toBeNull();
+  });
+
+  test("hydrates nested client boundaries restored from the original children archive", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-nested-archive-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Shell.tsx"),
+      `export function Shell(props) {
+  const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
+  return <main data-shell="settings" data-pathname={pathname}>{props.children}</main>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "Counter.tsx"),
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" data-counter onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}`,
+    );
+    const code = `import { Counter } from "./Counter";
+import { Shell } from "./Shell";
+
+export default function Page() {
+  return <Shell><Counter /></Shell>;
+}`;
+    await writeFile(file, code);
+    const nestedBoundary = '<template data-mreact-client-boundary="Counter"></template><button type="button" data-counter>count: 0</button><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script>';
+    document.body.innerHTML = [
+      `<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="settings">${nestedBoundary}</main><template data-mreact-client-boundary-children="Shell"><!--mreact-client-boundary-children-start-->${nestedBoundary}<!--mreact-client-boundary-children-end--></template><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>`,
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"Counter","moduleId":"./Counter","exportName":"Counter"},{"name":"Shell","moduleId":"./Shell","exportName":"Shell"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#nested-boundary-archive`
+    );
+
+    const counter = document.querySelector<HTMLButtonElement>("button[data-counter]");
+
+    expect(document.querySelectorAll("[data-shell='settings']")).toHaveLength(1);
+    expect(document.querySelectorAll("button[data-counter]")).toHaveLength(1);
+    expect(document.querySelectorAll("template[data-mreact-client-boundary]")).toHaveLength(0);
+    counter?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await Promise.resolve();
+    expect(counter?.textContent).toBe("count: 1");
   });
 
   test("hydrates inferred client boundary wrappers with multiple SSR fallback siblings", async () => {

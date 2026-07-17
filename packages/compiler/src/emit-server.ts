@@ -557,7 +557,6 @@ function collectHtmlStatements(
                 contextConsumerHelperName,
                 reactNodeRenderHelperName,
                 node.name,
-                true,
               ),
               asyncComponentNames,
             )
@@ -571,8 +570,20 @@ function collectHtmlStatements(
               contextConsumerHelperName,
               reactNodeRenderHelperName,
             );
+        const originalChildrenHtml = hasComponentFallback
+          ? emitHtmlExpressionFromChildren(
+              node.children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            )
+          : undefined;
         return [
-          `${outVar} += ${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${hasComponentFallback ? ", true" : ""});`,
+          `${outVar} += ${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}`});`,
         ];
       }
 
@@ -891,7 +902,6 @@ function collectHtmlParts(
                 contextConsumerHelperName,
                 reactNodeRenderHelperName,
                 node.name,
-                true,
               ),
               asyncComponentNames,
             )
@@ -905,8 +915,20 @@ function collectHtmlParts(
               contextConsumerHelperName,
               reactNodeRenderHelperName,
             );
+        const originalChildrenHtml = hasComponentFallback
+          ? emitHtmlExpressionFromChildren(
+              node.children,
+              escapeHelperName,
+              escapeBatchHelperName,
+              asyncComponentNames,
+              dynamicAttributes,
+              contextProviderHelperName,
+              contextConsumerHelperName,
+              reactNodeRenderHelperName,
+            )
+          : undefined;
         return [
-          `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${hasComponentFallback ? ", true" : ""})`,
+          `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}`})`,
         ];
       }
 
@@ -1578,7 +1600,6 @@ function emitPropsObject(
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
   componentName?: string,
-  markClientBoundaryChildren = false,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -1603,11 +1624,8 @@ function emitPropsObject(
       contextConsumerHelperName,
       reactNodeRenderHelperName,
     );
-    const serializedChildren = markClientBoundaryChildren
-      ? `${JSON.stringify("<!--mreact-client-boundary-children-start-->")} + (${childrenExpression}) + ${JSON.stringify("<!--mreact-client-boundary-children-end-->")}`
-      : childrenExpression;
     entries.push(
-      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${serializedChildren})` : serializedChildren}`,
+      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
   }
 
@@ -1840,20 +1858,21 @@ function emitClientBoundaryHelper(name: string): string {
     `  }`,
     `  return false;`,
     `}`,
-    `function ${name}(name, props, childrenHtml = "", componentFallback = false) {`,
+    `function ${name}(name, props, childrenHtml = "", componentFallback = false, originalChildrenHtml = "") {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
     `  const _nonSerializable = ${propsHelperName}(_props);`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
     `  const _componentFallbackAttr = componentFallback ? ' data-mreact-client-boundary-fallback="component"' : "";`,
+    `  const _childrenArchive = componentFallback ? '<template data-mreact-client-boundary-children="' + _escapedName + '"><!--mreact-client-boundary-children-start-->' + originalChildrenHtml + '<!--mreact-client-boundary-children-end--></template>' : "";`,
     `  const _json = (JSON.stringify(_props) ?? "{}")`,
     `    .replaceAll("&", "\\\\u0026")`,
     `    .replaceAll("<", "\\\\u003c")`,
     `    .replaceAll(">", "\\\\u003e")`,
     `    .replaceAll("\\u2028", "\\\\u2028")`,
     `    .replaceAll("\\u2029", "\\\\u2029");`,
-    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}\${_componentFallbackAttr}></template>\${childrenHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}\${_componentFallbackAttr}></template>\${childrenHtml}\${_childrenArchive}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `}`,
   ].join("\n");
 }
