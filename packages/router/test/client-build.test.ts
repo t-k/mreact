@@ -1280,6 +1280,40 @@ export default function Page() {
     expect(document.querySelector("script[data-mreact-client-boundary-props='Shell']")).toBeNull();
   });
 
+  test("restores an explicitly empty original children archive as an empty string", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-empty-archive-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Shell.tsx"),
+      `export function Shell(props) {
+  return <main data-children={props.children === "" ? "empty" : "missing"}>{props.children}</main>;
+}`,
+    );
+    const code = `import { Shell } from "./Shell";
+
+export default function Page(props) {
+  return <Shell>{props.label}</Shell>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-children="empty"></main><template data-mreact-client-boundary-children="Shell"><!--mreact-client-boundary-children-start--><!--mreact-client-boundary-children-end--></template><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>',
+      '<script type="application/json" id="mreact-props-index">{"label":""}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"Shell","moduleId":"./Shell","exportName":"Shell"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#empty-boundary-archive`
+    );
+
+    expect(document.querySelector("main")?.getAttribute("data-children")).toBe("empty");
+    expect(document.querySelector("template[data-mreact-client-boundary-children='Shell']")).toBeNull();
+  });
+
   test("hydrates nested client boundaries restored from the original children archive", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-nested-archive-"));
     const file = join(appDir, "page.mreact.tsx");

@@ -4378,7 +4378,7 @@ function __mreactExtractClientBoundaryChildren(nodes, name) {
 
     start.remove();
     marker.remove();
-    return children.length === 0 ? undefined : children.length === 1 ? children[0] : children;
+    return children.length === 0 ? "" : children.length === 1 ? children[0] : children;
   }
 
   return undefined;

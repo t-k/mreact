@@ -351,6 +351,7 @@ function usesClientBoundary(ir: ModuleIr, serverHydration: boolean): boolean {
 
 function emitClientBoundaryHelper(name: string): string {
   const propsHelperName = `${name}$hasNonSerializableProps`;
+  const markChildrenHelperName = `${name}$markChildren`;
   const renderHelperName = `${name}$renderHtml`;
 
   return [
@@ -362,6 +363,17 @@ function emitClientBoundaryHelper(name: string): string {
     `    if (${propsHelperName}(value[key])) return true;`,
     `  }`,
     `  return false;`,
+    `}`,
+    `function ${markChildrenHelperName}(fallbackHtml, childrenHtml, startMarker, endMarker) {`,
+    `  if (childrenHtml === "") return undefined;`,
+    `  const _start = fallbackHtml.indexOf(childrenHtml);`,
+    `  if (_start === -1 || fallbackHtml.indexOf(childrenHtml, _start + childrenHtml.length) !== -1) return undefined;`,
+    `  const _end = _start + childrenHtml.length;`,
+    `  const _opening = /<([a-z][a-z0-9:-]*)(?:\\s[^<>]*)?>$/i.exec(fallbackHtml.slice(0, _start));`,
+    `  const _closing = /^<\\/([a-z][a-z0-9:-]*)\\s*>/i.exec(fallbackHtml.slice(_end));`,
+    `  if (_opening === null || _closing === null || _opening[1].toLowerCase() !== _closing[1].toLowerCase()) return undefined;`,
+    `  if (["iframe", "noembed", "noframes", "noscript", "plaintext", "script", "style", "textarea", "title", "xmp"].includes(_opening[1].toLowerCase())) return undefined;`,
+    `  return fallbackHtml.slice(0, _start) + startMarker + childrenHtml + endMarker + fallbackHtml.slice(_end);`,
     `}`,
     `async function ${renderHelperName}(value) {`,
     `  if (typeof value !== "function") return value ?? "";`,
@@ -376,7 +388,7 @@ function emitClientBoundaryHelper(name: string): string {
     `  while (_tasks.length > 0) await Promise.all(_tasks.splice(0));`,
     `  return _out;`,
     `}`,
-    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "") {`,
+    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "", hasOriginalChildren = false) {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
@@ -393,13 +405,12 @@ function emitClientBoundaryHelper(name: string): string {
     `    const _originalChildrenHtml = await ${renderHelperName}(originalChildrenHtml);`,
     `    const _startMarker = "<!--mreact-client-boundary-children-start-->";`,
     `    const _endMarker = "<!--mreact-client-boundary-children-end-->";`,
-    `    const _markedChildrenHtml = _startMarker + _originalChildrenHtml + _endMarker;`,
-    `    const _fallbackValue = typeof fallbackHtml === "function" ? await fallbackHtml(_markedChildrenHtml) : fallbackHtml;`,
+    `    const _fallbackValue = typeof fallbackHtml === "function" ? await fallbackHtml(_originalChildrenHtml) : fallbackHtml;`,
     `    const _fallbackHtml = String(await ${renderHelperName}(_fallbackValue));`,
-    `    const _startIndex = _fallbackHtml.indexOf(_startMarker);`,
-    `    const _preservesChildren = _startIndex !== -1 && _fallbackHtml.indexOf(_endMarker, _startIndex + _startMarker.length) !== -1;`,
-    `    const _childrenArchive = _preservesChildren ? "" : '<template data-mreact-client-boundary-children="' + _escapedName + '">' + _startMarker + _originalChildrenHtml + _endMarker + '</template>';`,
-    `    return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr} data-mreact-client-boundary-fallback="component"></template>\${_fallbackHtml}\${_childrenArchive}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `    const _markedFallbackHtml = ${markChildrenHelperName}(_fallbackHtml, _originalChildrenHtml, _startMarker, _endMarker);`,
+    `    const _visibleHtml = _markedFallbackHtml ?? _fallbackHtml;`,
+    `    const _childrenArchive = hasOriginalChildren && _markedFallbackHtml === undefined ? '<template data-mreact-client-boundary-children="' + _escapedName + '">' + _startMarker + _originalChildrenHtml + _endMarker + '</template>' : "";`,
+    `    return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr} data-mreact-client-boundary-fallback="component"></template>\${_visibleHtml}\${_childrenArchive}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `  })();`,
     `}`,
   ].join("\n");
@@ -1603,7 +1614,7 @@ function collectHtmlParts(
           ? (emitStreamRendererFromChildren(node.children, escapeHelperName, true) ??
             emitHtmlExpressionFromChildren(node.children, escapeHelperName))
           : undefined;
-        const helperCall = `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}`})`;
+        const helperCall = `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}, ${node.children.length > 0}`})`;
 
         return hasComponentFallback
           ? [

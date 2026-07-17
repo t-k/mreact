@@ -1473,7 +1473,7 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      '_renderClientBoundary("Navigation", { label: ("Albums") }, (_childrenHtml) => ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true, "")',
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, (_childrenHtml) => ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true, "", false)',
     );
   });
 
@@ -1498,7 +1498,7 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      '_renderClientBoundary("Navigation", { label: ("Albums") }, (_childrenHtml) => ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true, "")',
+      '_renderClientBoundary("Navigation", { label: ("Albums") }, (_childrenHtml) => ((_value) => _value == null || typeof _value === "boolean" ? "" : _value)(Navigation({ label: ("Albums") })), true, "", false)',
     );
   });
 
@@ -1531,6 +1531,47 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     expect(output.code).toContain("), true,");
     expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
     expect(output.code).toContain('"Body"');
+  });
+
+  test("does not change fallback children semantics to optimize the children archive", () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+
+      export function App(props) {
+        return <AppShell>{props.children}</AppShell>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      clientBoundaryImports: ["./AppShell"],
+      clientBoundaryFallbackImports: ["./AppShell"],
+    });
+    const globalWithShell = globalThis as typeof globalThis & {
+      AppShell?: (props: { children?: string }) => string;
+    };
+    const previousShell = globalWithShell.AppShell;
+
+    try {
+      globalWithShell.AppShell = (props) => props.children ? "<p>has children</p>" : "<p>empty</p>";
+      const emptyHtml = runServerComponent(output.code, "App", { children: "" });
+
+      expect(emptyHtml).toContain("<p>empty</p>");
+      expect(emptyHtml).not.toContain("<p>has children</p>");
+      expect(emptyHtml).toContain('data-mreact-client-boundary-children="AppShell"');
+
+      globalWithShell.AppShell = (props) => `<textarea>${props.children ?? ""}</textarea>`;
+      const rawTextHtml = runServerComponent(output.code, "App", { children: "Body" });
+
+      expect(rawTextHtml).toContain("<textarea>Body</textarea>");
+      expect(rawTextHtml).toContain('data-mreact-client-boundary-children="AppShell"');
+      expect(rawTextHtml).not.toContain("<textarea><!--mreact-client-boundary-children-start-->");
+    } finally {
+      if (previousShell === undefined) {
+        delete globalWithShell.AppShell;
+      } else {
+        globalWithShell.AppShell = previousShell;
+      }
+    }
   });
 
   test("emitted server component leaves compat client references as client boundaries", () => {

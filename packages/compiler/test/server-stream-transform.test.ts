@@ -1306,7 +1306,7 @@ export function App() {
     expect(output.code).toContain("data-mreact-client-boundary-children");
     expect(output.code).toContain("), true,");
     expect(output.code).toContain('data-testid=\\"settings-email-ready-state\\"');
-    expect(output.code).toContain('"Body"');
+    expect(output.code).toContain("Body");
   });
 
   test("emitted client boundary protocol renders async original children instead of function source", async () => {
