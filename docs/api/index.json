@@ -172277,9 +172277,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 480,
+									"line": 515,
 									"character": 13,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L480"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L515"
 								}
 							],
 							"type": {
@@ -172297,9 +172297,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 61,
+									"line": 74,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L61"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L74"
 								}
 							],
 							"signatures": [
@@ -172320,9 +172320,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 61,
+											"line": 74,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L61"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L74"
 										}
 									],
 									"typeParameters": [
@@ -172427,9 +172427,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 453,
+									"line": 488,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L453"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L488"
 								}
 							],
 							"signatures": [
@@ -172450,9 +172450,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 453,
+											"line": 488,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L453"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L488"
 										}
 									],
 									"parameters": [
@@ -172584,9 +172584,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 230,
+									"line": 243,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L230"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L243"
 								}
 							],
 							"signatures": [
@@ -172607,9 +172607,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 230,
+											"line": 243,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L230"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L243"
 										}
 									],
 									"typeParameters": [
@@ -172713,9 +172713,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 302,
+									"line": 326,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L302"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L326"
 								}
 							],
 							"signatures": [
@@ -172736,9 +172736,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 302,
+											"line": 326,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L302"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L326"
 										}
 									],
 									"parameters": [
@@ -172786,9 +172786,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 327,
+									"line": 351,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L327"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L351"
 								}
 							],
 							"signatures": [
@@ -172809,9 +172809,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 327,
+											"line": 351,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L327"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L351"
 										}
 									],
 									"parameters": [
@@ -172932,9 +172932,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 393,
+									"line": 428,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L393"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L428"
 								}
 							],
 							"signatures": [
@@ -172955,9 +172955,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 393,
+											"line": 428,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L393"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L428"
 										}
 									],
 									"parameters": [
@@ -173092,9 +173092,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/boundary.ts",
-									"line": 344,
+									"line": 368,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L344"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L368"
 								}
 							],
 							"signatures": [
@@ -173115,9 +173115,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/boundary.ts",
-											"line": 344,
+											"line": 368,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L344"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/boundary.ts#L368"
 										}
 									],
 									"typeParameters": [
@@ -197865,7 +197865,7 @@
 		}
 	],
 	"packageName": "mreact",
-	"packageVersion": "0.0.194",
+	"packageVersion": "0.0.195",
 	"readme": [
 		{
 			"kind": "text",

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.195 - 2026-07-17
+
+### Fixed
+
+- Fixed App Router hydration for SSR-capable native client-boundary wrappers so components receive their original server-rendered children instead of their complete rendered fallback, preserving a single wrapper through hydration across nested boundaries, async children, empty children, raw-text elements, and template elements.
+- Fixed client route resume after replacing a boundary template so stale SSR fallback siblings and boundary props scripts are removed without disturbing nested route ownership.
+
 ## 0.0.194 - 2026-07-13
 
 ### Added
