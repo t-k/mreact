@@ -306,19 +306,20 @@ function emitClientBoundaryHelper(name: string): string {
     `  }`,
     `  return false;`,
     `}`,
-    `function ${name}(name, props, childrenHtml = "") {`,
+    `function ${name}(name, props, childrenHtml = "", componentFallback = false) {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
     `  const _nonSerializable = ${propsHelperName}(_props);`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
+    `  const _componentFallbackAttr = componentFallback ? ' data-mreact-client-boundary-fallback="component"' : "";`,
     `  const _json = (JSON.stringify(_props) ?? "{}")`,
     `    .replaceAll("&", "\\\\u0026")`,
     `    .replaceAll("<", "\\\\u003c")`,
     `    .replaceAll(">", "\\\\u003e")`,
     `    .replaceAll("\\u2028", "\\\\u2028")`,
     `    .replaceAll("\\u2029", "\\\\u2029");`,
-    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template>\${childrenHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
+    `  return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}\${_componentFallbackAttr}></template>\${childrenHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `}`,
   ].join("\n");
 }
@@ -1441,21 +1442,23 @@ function collectHtmlParts(
     if (isClientBoundaryPlaceholder(node, state.hydration)) {
       const helperName = currentClientBoundaryHelperName;
       if (helperName !== undefined) {
+        const hasComponentFallback = shouldRenderClientBoundaryFallback(node);
         const boundaryProps = emitPropsObject(node.props, [], escapeHelperName);
-        const fallbackHtml = shouldRenderClientBoundaryFallback(node)
+        const fallbackHtml = hasComponentFallback
           ? emitRenderableHtmlExpression(
               `${node.name}(${emitPropsObject(
                 node.props,
                 node.children,
                 escapeHelperName,
                 node.name,
+                true,
               )})`,
             )
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         return [
           {
             kind: "raw-dynamic",
-            code: `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml})`,
+            code: `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${hasComponentFallback ? ", true" : ""})`,
           },
         ];
       }
@@ -2607,6 +2610,7 @@ function emitPropsObject(
   children: JsxNodeIr[] = [],
   escapeHelperName = "_escapeHtml",
   componentName?: string,
+  markClientBoundaryChildren = false,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -2624,8 +2628,11 @@ function emitPropsObject(
     const childrenExpression =
       emitStreamRendererFromChildren(children, escapeHelperName) ??
       emitHtmlExpressionFromChildren(children, escapeHelperName);
+    const serializedChildren = markClientBoundaryChildren
+      ? `${JSON.stringify("<!--mreact-client-boundary-children-start-->")} + (${childrenExpression}) + ${JSON.stringify("<!--mreact-client-boundary-children-end-->")}`
+      : childrenExpression;
     entries.push(
-      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
+      `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${serializedChildren})` : serializedChildren}`,
     );
   }
 

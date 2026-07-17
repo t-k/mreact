@@ -4276,6 +4276,8 @@ function __mreactClientBoundaryPropsElement(placeholder, name) {
 }
 
 function __mreactClientBoundaryFallbackChildren(placeholder, propsElement) {
+  const componentFallback =
+    placeholder.getAttribute("data-mreact-client-boundary-fallback") === "component";
   const nodes = [];
   let next = placeholder.nextSibling;
 
@@ -4292,11 +4294,87 @@ function __mreactClientBoundaryFallbackChildren(placeholder, propsElement) {
     nodes.push(current);
   }
 
+  if (componentFallback) {
+    return __mreactExtractClientBoundaryChildren(nodes);
+  }
+
   if (nodes.length === 0) {
     return undefined;
   }
 
   return nodes.length === 1 ? nodes[0] : nodes;
+}
+
+function __mreactExtractClientBoundaryChildren(nodes) {
+  const startMarker = "mreact-client-boundary-children-start";
+  const endMarker = "mreact-client-boundary-children-end";
+  const markers = [];
+
+  const visit = (node) => {
+    if (
+      node.nodeType === Node.COMMENT_NODE &&
+      (node.nodeValue === startMarker || node.nodeValue === endMarker)
+    ) {
+      markers.push(node);
+    }
+
+    for (const child of Array.from(node.childNodes ?? [])) {
+      visit(child);
+    }
+  };
+
+  for (const node of nodes) {
+    visit(node);
+  }
+
+  let start;
+  let depth = 0;
+
+  for (const marker of markers) {
+    if (marker.nodeValue === startMarker) {
+      if (depth === 0) {
+        start = marker;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (depth === 0 || start === undefined) {
+      continue;
+    }
+
+    depth -= 1;
+
+    if (depth !== 0) {
+      continue;
+    }
+
+    if (start.parentNode !== marker.parentNode) {
+      start = undefined;
+      continue;
+    }
+
+    const children = [];
+    let current = start.nextSibling;
+
+    while (current !== null && current !== marker) {
+      const next = current.nextSibling;
+      current.remove();
+      children.push(current);
+      current = next;
+    }
+
+    start.remove();
+    marker.remove();
+
+    if (children.length === 0) {
+      return undefined;
+    }
+
+    return children.length === 1 ? children[0] : children;
+  }
+
+  return undefined;
 }
 
 function __mreactResumeRoute(marker, nextNode) {
@@ -4314,12 +4392,23 @@ function __mreactResumeRoute(marker, nextNode) {
 
   __mreactResumeNode(current, nextNode);
 
-  if (current.parentNode !== marker) {
+  const active = current.parentNode === marker
+    ? current
+    : nextNode.parentNode === marker
+      ? nextNode
+      : null;
+
+  if (active === null) {
     return;
   }
 
-  while (marker.childNodes.length > 1) {
-    marker.lastChild?.remove();
+  for (const child of Array.from(marker.childNodes)) {
+    if (child === active) {
+      continue;
+    }
+
+    __mreactUnmountCompatBoundaries(child);
+    child.remove();
   }
 }
 

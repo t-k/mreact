@@ -1237,6 +1237,48 @@ export default function Page() {
     expect(document.body.getAttribute("data-pull-hydrated")).toBe("yes");
   });
 
+  test("hydrates native boundary children without nesting the rendered component fallback", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-complete-fallback-"));
+    const file = join(appDir, "page.mreact.tsx");
+    await writeFile(
+      join(appDir, "Shell.tsx"),
+      `"use client";
+
+export function Shell(props) {
+  return <main data-shell="settings">{props.children}</main>;
+}`,
+    );
+    const code = `import { Shell } from "./Shell";
+
+export default function Page() {
+  return <Shell><h1>Settings</h1></Shell>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="settings"><!--mreact-client-boundary-children-start--><h1>Settings</h1><!--mreact-client-boundary-children-end--></main><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[{"name":"Shell","moduleId":"./Shell","exportName":"Shell"}]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#complete-boundary-fallback`
+    );
+
+    const shell = document.querySelector("[data-shell='settings']");
+
+    expect(document.querySelectorAll("[data-shell='settings']")).toHaveLength(1);
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
+    expect(shell?.querySelector("[data-shell='settings']")).toBeNull();
+    expect(shell?.textContent).toBe("Settings");
+    expect(document.querySelector("template[data-mreact-client-boundary='Shell']")).toBeNull();
+    expect(document.querySelector("script[data-mreact-client-boundary-props='Shell']")).toBeNull();
+  });
+
   test("hydrates inferred client boundary wrappers with multiple SSR fallback siblings", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-client-boundary-multiple-runtime-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -2909,10 +2951,20 @@ export default function LoginPage() {
     expect(routeScript).toContain("LoginForm");
     expect(routeScript).toContain("loginWithPassword");
 
-    setDocumentBodyFromHtml(await response.text());
+    const html = await response.text();
+    setDocumentBodyFromHtml(html);
+    const marker = document.querySelector("[data-mreact-route-id='login']");
+
+    expect(marker?.querySelectorAll("main")).toHaveLength(1);
     await import(
       `data:text/javascript;charset=utf-8,${encodeURIComponent(routeScript)}#futaba-login-route`
     );
+
+    expect(marker?.querySelectorAll("main")).toHaveLength(1);
+    expect(marker?.children).toHaveLength(1);
+    expect(marker?.querySelector("template[data-mreact-client-boundary]")).toBeNull();
+    expect(marker?.querySelector("script[data-mreact-client-boundary-props]")).toBeNull();
+
     const form = document.querySelector("form");
     const email = document.querySelector<HTMLInputElement>("input[name='email']");
     const password = document.querySelector<HTMLInputElement>("input[name='password']");
@@ -5274,6 +5326,40 @@ export default function Page() {
     await Promise.resolve();
 
     expect(resumedButton?.textContent).toBe("count: 1");
+  });
+
+  test("removes stale boundary fallback siblings when route resume replaces the first child", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-resume-replaced-boundary-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export default function Page() {
+  const count = cell(0);
+  return <main data-shell="active"><h1>Settings</h1><button type="button" onClick={() => count.set(value => value + 1)}>count: {count.get()}</button></main>;
+}`;
+    await writeFile(file, code);
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell"></template><main data-shell="stale"><h1>Stale settings</h1></main><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+      '<script type="application/json" id="mreact-client-references-index">[]</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#replaced-boundary-cleanup`
+    );
+
+    const marker = document.querySelector("[data-mreact-route-id='index']");
+
+    expect(marker?.children).toHaveLength(1);
+    expect(marker?.querySelectorAll("main")).toHaveLength(1);
+    expect(marker?.querySelector("[data-shell='active']")).not.toBeNull();
+    expect(marker?.querySelector("[data-shell='stale']")).toBeNull();
+    expect(marker?.querySelector("script[data-mreact-client-boundary-props]")).toBeNull();
   });
 
   test("exports a hot hydrate entrypoint that preserves route cell state", async () => {

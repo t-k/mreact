@@ -1122,6 +1122,119 @@ export default function LegalPage() {
   }
 });
 
+test("native boundary wrappers never duplicate during hydration", async ({ page }) => {
+  const { close, url } = await startFixtureServer({
+    "Shell.tsx": `export function Shell(props) {
+  const pathname = typeof window === "undefined" ? "/" : window.location.pathname;
+  return <main id="main-content" data-shell="settings" data-pathname={pathname}>{props.children}</main>;
+}`,
+    "page.tsx": `import { Shell } from "./Shell";
+
+export default function Page() {
+  return <Shell><h1>Boundary only</h1></Shell>;
+}`,
+    "full/page.tsx": `"use client";
+
+import { Shell } from "../Shell";
+
+export default function FullPage() {
+  return <Shell><h1>Full route</h1></Shell>;
+}`,
+  });
+  const routes = [
+    { componentFallback: true, heading: "Boundary only", pathname: "/" },
+    { componentFallback: false, heading: "Full route", pathname: "/full" },
+  ] as const;
+
+  try {
+    for (const route of routes) {
+      const response = await fetch(`${url}${route.pathname}`);
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(html.match(/data-shell="settings"/g) ?? []).toHaveLength(1);
+      expect(html.match(/id="main-content"/g) ?? []).toHaveLength(1);
+
+      if (route.componentFallback) {
+        expect(html).toContain('data-mreact-client-boundary-fallback="component"');
+        expect(html).toContain("<!--mreact-client-boundary-children-start-->");
+        expect(html).toContain("<!--mreact-client-boundary-children-end-->");
+      } else {
+        expect(html).not.toContain('data-mreact-client-boundary-fallback="component"');
+        expect(html).not.toContain("<!--mreact-client-boundary-children-start-->");
+        expect(html).not.toContain("<!--mreact-client-boundary-children-end-->");
+      }
+    }
+
+    await page.addInitScript(() => {
+      const report = {
+        maxMainContent: 0,
+        maxNestedShells: 0,
+        maxShells: 0,
+      };
+      const sample = () => {
+        report.maxMainContent = Math.max(
+          report.maxMainContent,
+          document.querySelectorAll("#main-content").length,
+        );
+        report.maxNestedShells = Math.max(
+          report.maxNestedShells,
+          document.querySelectorAll("[data-shell] [data-shell]").length,
+        );
+        report.maxShells = Math.max(
+          report.maxShells,
+          document.querySelectorAll("[data-shell]").length,
+        );
+      };
+      const observer = new MutationObserver(sample);
+      observer.observe(document, { childList: true, subtree: true });
+      const tick = () => {
+        sample();
+        if (!document.documentElement?.hasAttribute("data-mreact-hydrated")) {
+          requestAnimationFrame(tick);
+        }
+      };
+
+      (
+        globalThis as typeof globalThis & {
+          __mreactHydrationReport?: typeof report;
+        }
+      ).__mreactHydrationReport = report;
+      requestAnimationFrame(tick);
+    });
+
+    for (const route of routes) {
+      await page.goto(`${url}${route.pathname}`);
+      await expect(page.locator("html")).toHaveAttribute("data-mreact-hydrated", "true");
+      await expect(page.getByRole("heading", { name: route.heading })).toHaveCount(1);
+      await expect(page.locator("[data-shell='settings']")).toHaveCount(1);
+      await expect(page.locator("[data-shell='settings'] [data-shell='settings']")).toHaveCount(0);
+      await expect(page.locator("script[data-mreact-client-boundary-props]")).toHaveCount(0);
+
+      const report = await page.evaluate(
+        () =>
+          (
+            globalThis as typeof globalThis & {
+              __mreactHydrationReport?: {
+                maxMainContent: number;
+                maxNestedShells: number;
+                maxShells: number;
+              };
+            }
+          ).__mreactHydrationReport,
+      );
+
+      expect(report).toEqual({
+        maxMainContent: 1,
+        maxNestedShells: 0,
+        maxShells: 1,
+      });
+    }
+  } finally {
+    await close();
+  }
+});
+
 async function startFixtureServer(files: Record<string, string>): Promise<{
   close(): Promise<void>;
   url: string;
