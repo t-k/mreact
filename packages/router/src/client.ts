@@ -4150,13 +4150,15 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
     return false;
   }
 
-  const placeholders = Array.from(marker.querySelectorAll("template[data-mreact-client-boundary]"));
+  let hydrated = false;
 
-  if (placeholders.length === 0) {
-    return false;
-  }
+  while (true) {
+    const placeholder = marker.querySelector("template[data-mreact-client-boundary]");
 
-  for (const placeholder of placeholders) {
+    if (placeholder === null) {
+      return hydrated;
+    }
+
     const name = placeholder.getAttribute("data-mreact-client-boundary");
     const entry = name === null ? undefined : components.get(name);
     const component = typeof entry === "function" ? entry : entry?.component;
@@ -4190,6 +4192,7 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
       const root = __mreactCompatCreateRoot(container);
       container.__mreactCompatRoot = root;
       root.render(__mreactCompatCreateElement(component, props));
+      hydrated = true;
       continue;
     }
 
@@ -4197,9 +4200,8 @@ function __mreactHydrateClientBoundaries(marker, references, components) {
 
     placeholder.replaceWith(node);
     propsElement?.remove();
+    hydrated = true;
   }
-
-  return true;
 }
 
 function __mreactClientBoundaryParentContainer(placeholder, propsElement) {
@@ -4318,33 +4320,65 @@ function __mreactExtractClientBoundaryChildren(nodes, name) {
       node.getAttribute("data-mreact-client-boundary-children") === name,
   );
 
-  if (archive === undefined) {
-    return undefined;
-  }
-
-  const content = archive.content;
-  const start = Array.from(content.childNodes).find(
-    (node) => node.nodeType === Node.COMMENT_NODE && node.nodeValue === startMarker,
-  );
-
-  if (start === undefined) {
-    return undefined;
-  }
-
-  const children = [];
-  let current = start.nextSibling;
-
-  while (current !== null) {
-    if (current.nodeType === Node.COMMENT_NODE && current.nodeValue === endMarker) {
-      start.remove();
-      current.remove();
-      return children.length === 0 ? undefined : children.length === 1 ? children[0] : children;
+  const roots = archive === undefined ? nodes : Array.from(archive.content.childNodes);
+  const markers = [];
+  const visit = (node) => {
+    if (
+      node.nodeType === Node.COMMENT_NODE &&
+      (node.nodeValue === startMarker || node.nodeValue === endMarker)
+    ) {
+      markers.push(node);
     }
 
-    const next = current.nextSibling;
-    current.remove();
-    children.push(current);
-    current = next;
+    for (const child of Array.from(node.childNodes ?? [])) {
+      visit(child);
+    }
+  };
+
+  for (const root of roots) {
+    visit(root);
+  }
+
+  let start;
+  let depth = 0;
+
+  for (const marker of markers) {
+    if (marker.nodeValue === startMarker) {
+      if (depth === 0) {
+        start = marker;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (depth === 0 || start === undefined) {
+      continue;
+    }
+
+    depth -= 1;
+
+    if (depth !== 0) {
+      continue;
+    }
+
+    if (start.parentNode !== marker.parentNode) {
+      start = undefined;
+      continue;
+    }
+
+    const children = [];
+    let current = start.nextSibling;
+
+    while (current !== null && current !== marker) {
+      const next = current.nextSibling;
+      current.remove();
+      children.push(current);
+      current = next;
+    }
+
+    start.remove();
+    marker.remove();
+    return children.length === 0 ? undefined : children.length === 1 ? children[0] : children;
   }
 
   return undefined;

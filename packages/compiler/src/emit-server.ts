@@ -544,7 +544,7 @@ function collectHtmlStatements(
           reactNodeRenderHelperName,
         );
         const fallbackHtml = hasComponentFallback
-          ? emitComponentCallExpression(
+          ? `(_childrenHtml) => ${emitComponentCallExpression(
               node.name,
               emitPropsObject(
                 node.props,
@@ -557,9 +557,10 @@ function collectHtmlStatements(
                 contextConsumerHelperName,
                 reactNodeRenderHelperName,
                 node.name,
+                "_childrenHtml",
               ),
               asyncComponentNames,
-            )
+            )}`
           : emitHtmlExpressionFromChildren(
               node.children,
               escapeHelperName,
@@ -889,7 +890,7 @@ function collectHtmlParts(
           reactNodeRenderHelperName,
         );
         const fallbackHtml = hasComponentFallback
-          ? emitComponentCallExpression(
+          ? `(_childrenHtml) => ${emitComponentCallExpression(
               node.name,
               emitPropsObject(
                 node.props,
@@ -902,9 +903,10 @@ function collectHtmlParts(
                 contextConsumerHelperName,
                 reactNodeRenderHelperName,
                 node.name,
+                "_childrenHtml",
               ),
               asyncComponentNames,
-            )
+            )}`
           : emitHtmlExpressionFromChildren(
               node.children,
               escapeHelperName,
@@ -1600,6 +1602,7 @@ function emitPropsObject(
   contextConsumerHelperName?: string,
   reactNodeRenderHelperName?: string,
   componentName?: string,
+  childrenExpressionOverride?: string,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -1614,16 +1617,18 @@ function emitPropsObject(
   });
 
   if (children.length > 0) {
-    const childrenExpression = emitHtmlExpressionFromChildren(
-      children,
-      escapeHelperName,
-      escapeBatchHelperName,
-      asyncComponentNames,
-      dynamicAttributes,
-      contextProviderHelperName,
-      contextConsumerHelperName,
-      reactNodeRenderHelperName,
-    );
+    const childrenExpression =
+      childrenExpressionOverride ??
+      emitHtmlExpressionFromChildren(
+        children,
+        escapeHelperName,
+        escapeBatchHelperName,
+        asyncComponentNames,
+        dynamicAttributes,
+        contextProviderHelperName,
+        contextConsumerHelperName,
+        reactNodeRenderHelperName,
+      );
     entries.push(
       `children: ${isRouterLinkComponentName(componentName) ? `${componentName}.trustedHtml(${childrenExpression})` : childrenExpression}`,
     );
@@ -1858,14 +1863,20 @@ function emitClientBoundaryHelper(name: string): string {
     `  }`,
     `  return false;`,
     `}`,
-    `function ${name}(name, props, childrenHtml = "", componentFallback = false, originalChildrenHtml = "") {`,
+    `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "") {`,
     `  const _name = String(name);`,
     `  const _escapedName = _name.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");`,
     `  const _props = props ?? {};`,
     `  const _nonSerializable = ${propsHelperName}(_props);`,
     `  const _nonSerializableAttr = _nonSerializable ? ' data-mreact-client-boundary-nonserializable="true"' : "";`,
     `  const _componentFallbackAttr = componentFallback ? ' data-mreact-client-boundary-fallback="component"' : "";`,
-    `  const _childrenArchive = componentFallback ? '<template data-mreact-client-boundary-children="' + _escapedName + '"><!--mreact-client-boundary-children-start-->' + originalChildrenHtml + '<!--mreact-client-boundary-children-end--></template>' : "";`,
+    `  const _startMarker = "<!--mreact-client-boundary-children-start-->";`,
+    `  const _endMarker = "<!--mreact-client-boundary-children-end-->";`,
+    `  const _markedChildrenHtml = _startMarker + originalChildrenHtml + _endMarker;`,
+    `  const childrenHtml = String(componentFallback && typeof fallbackHtml === "function" ? fallbackHtml(_markedChildrenHtml) : fallbackHtml);`,
+    `  const _startIndex = componentFallback ? childrenHtml.indexOf(_startMarker) : -1;`,
+    `  const _preservesChildren = _startIndex !== -1 && childrenHtml.indexOf(_endMarker, _startIndex + _startMarker.length) !== -1;`,
+    `  const _childrenArchive = componentFallback && !_preservesChildren ? '<template data-mreact-client-boundary-children="' + _escapedName + '">' + _startMarker + originalChildrenHtml + _endMarker + '</template>' : "";`,
     `  const _json = (JSON.stringify(_props) ?? "{}")`,
     `    .replaceAll("&", "\\\\u0026")`,
     `    .replaceAll("<", "\\\\u003c")`,

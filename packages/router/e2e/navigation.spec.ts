@@ -1159,7 +1159,7 @@ export default function FullPage() {
 
       if (route.componentFallback) {
         expect(html).toContain('data-mreact-client-boundary-fallback="component"');
-        expect(html).toContain('data-mreact-client-boundary-children="Shell"');
+        expect(html).not.toContain('data-mreact-client-boundary-children="Shell"');
         expect(html).toContain("<!--mreact-client-boundary-children-start-->");
         expect(html).toContain("<!--mreact-client-boundary-children-end-->");
       } else {
@@ -1295,6 +1295,75 @@ export default function Page() {
     await expect(marker.locator("[data-shell='active']")).toHaveCount(1);
     await expect(marker.locator("[data-shell='stale']")).toHaveCount(0);
     await expect(marker.locator("script[data-mreact-client-boundary-props]")).toHaveCount(0);
+    await page.getByRole("button", { name: "count: 0" }).click();
+    await expect(page.getByRole("button", { name: "count: 1" })).toBeVisible();
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error === undefined ? resolve() : reject(error)));
+    });
+    await rm(appDir, { force: true, recursive: true });
+  }
+});
+
+test("hydrates a nested client boundary restored from an outer children archive", async ({ page }) => {
+  const appDir = await mkdtemp(join(tmpdir(), "mreact-nested-boundary-browser-"));
+  const file = join(appDir, "page.mreact.tsx");
+  const code = `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Shell(props) {
+  return <main data-shell="outer">{props.children}</main>;
+}
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" data-counter onClick={() => count.set(value => value + 1)}>count: {count.get()}</button>;
+}
+
+export default function Page() {
+  return <Shell><Counter /></Shell>;
+}`;
+  await writeFile(file, code);
+  const bundle = await buildClientRouteBundle({
+    code,
+    filename: file,
+    routePath: "/",
+  });
+  const nestedBoundary = '<template data-mreact-client-boundary="Counter"></template><button type="button" data-counter>count: 0</button><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script>';
+  const html = [
+    "<!doctype html><html><body>",
+    `<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="outer">${nestedBoundary}</main><template data-mreact-client-boundary-children="Shell"><!--mreact-client-boundary-children-start-->${nestedBoundary}<!--mreact-client-boundary-children-end--></template><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>`,
+    '<script type="application/json" id="mreact-props-index">{}</script>',
+    '<script type="application/json" id="mreact-client-references-index">[{"name":"Shell","moduleId":"./page.mreact.tsx","exportName":"Shell"},{"name":"Counter","moduleId":"./page.mreact.tsx","exportName":"Counter"}]</script>',
+    '<script type="module" src="/route.js"></script>',
+    "</body></html>",
+  ].join("");
+  const server = createServer((request, response) => {
+    if (request.url === "/route.js") {
+      response.writeHead(200, { "content-type": "text/javascript; charset=utf-8" });
+      response.end(bundle);
+      return;
+    }
+
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(html);
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+
+  if (address === null || typeof address === "string") {
+    server.close();
+    await rm(appDir, { force: true, recursive: true });
+    throw new Error("Nested boundary browser fixture did not bind a TCP port.");
+  }
+
+  try {
+    await page.goto(`http://127.0.0.1:${address.port}`);
+    await expect(page.locator("[data-shell='outer']")).toHaveCount(1);
+    await expect(page.locator("button[data-counter]")).toHaveCount(1);
+    await expect(page.locator("template[data-mreact-client-boundary]")).toHaveCount(0);
     await page.getByRole("button", { name: "count: 0" }).click();
     await expect(page.getByRole("button", { name: "count: 1" })).toBeVisible();
   } finally {

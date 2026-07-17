@@ -624,6 +624,49 @@ describe("server streaming runtime", () => {
     expect(html).toContain('$RC("B:0","S:0")');
   });
 
+  test("out-of-order boundaries render resolved HTML into a forced in-order sink", async () => {
+    const html = await renderToString((sink) => {
+      Object.assign(sink, { __mreactForceInOrder: true });
+      renderOutOfOrderBoundary(
+        sink,
+        "mreact-0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          placeholder(boundarySink) {
+            boundarySink.append("<em>loading</em>");
+          },
+        },
+      );
+    });
+
+    expect(html).toBe("<span>Ada</span>");
+  });
+
+  test("React Suspense out-of-order boundaries render resolved HTML into a forced in-order sink", async () => {
+    const html = await renderToString((sink) => {
+      Object.assign(sink, { __mreactForceInOrder: true });
+      renderReactSuspenseOutOfOrderBoundary(
+        sink,
+        "B:0",
+        "S:0",
+        Promise.resolve("Ada"),
+        (boundarySink, name) => {
+          boundarySink.append(`<span>${name}</span>`);
+        },
+        {
+          fallback(boundarySink) {
+            boundarySink.append("<em>loading</em>");
+          },
+        },
+      );
+    });
+
+    expect(html).toBe("<span>Ada</span>");
+  });
+
   test("React Suspense out-of-order boundaries uniquify repeated ids per sink", async () => {
     const html = await renderToString((sink) => {
       renderReactSuspenseOutOfOrderBoundary(

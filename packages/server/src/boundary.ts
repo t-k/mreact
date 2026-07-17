@@ -57,6 +57,19 @@ export type AsyncBoundaryRender<T> = (
 
 const outOfOrderBoundaryInstances = new WeakMap<HtmlSink, Map<string, number>>();
 
+function isForcedInOrderSink(sink: HtmlSink): boolean {
+  return (sink as HtmlSink & { __mreactForceInOrder?: boolean }).__mreactForceInOrder === true;
+}
+
+function deferBoundaryTask(sink: HtmlSink, task: PromiseLike<void>): void {
+  if (sink.defer === undefined) {
+    void task;
+    return;
+  }
+
+  sink.defer(task);
+}
+
 /** Renders a value once it resolves, or renders a configured catch branch on error. */
 export async function renderAsyncBoundary<T>(
   sink: HtmlSink,
@@ -234,6 +247,17 @@ export function renderOutOfOrderBoundary<T>(
   render: AsyncBoundaryRender<T>,
   options: OutOfOrderBoundaryOptions = {},
 ): void {
+  if (isForcedInOrderSink(sink)) {
+    const task = renderAsyncBoundary(sink, value, render, {
+      ...(options.catch === undefined ? {} : { catch: options.catch }),
+      ...(options.hydrationAwaitId === undefined
+        ? {}
+        : { hydrationAwaitId: options.hydrationAwaitId }),
+    });
+    deferBoundaryTask(sink, task);
+    return;
+  }
+
   const boundaryId = nextOutOfOrderBoundaryInstanceId(sink, id);
   const placeholderSink = createStringSink();
   const placeholderResult = options.placeholder?.(placeholderSink);
@@ -349,6 +373,17 @@ export function renderReactSuspenseOutOfOrderBoundary<T>(
   render: AsyncBoundaryRender<T>,
   options: ReactSuspenseBoundaryOptions = {},
 ): void {
+  if (isForcedInOrderSink(sink)) {
+    const task = renderAsyncBoundary(
+      sink,
+      value,
+      render,
+      options.catch === undefined ? {} : { catch: options.catch },
+    );
+    deferBoundaryTask(sink, task);
+    return;
+  }
+
   const actualBoundaryId = nextOutOfOrderBoundaryInstanceId(sink, boundaryId);
   const suffix = actualBoundaryId.slice(boundaryId.length);
   const actualSegmentId = `${segmentId}${suffix}`;

@@ -1346,11 +1346,103 @@ export function App() {
       }
     }
 
-    expect(html).toContain("<main><h1>Ready</h1></main>");
+    expect(html).toContain("<main><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></main>");
+    expect(html).not.toContain('data-mreact-client-boundary-children="AppShell"');
+    expect(html).not.toContain("async ($sink)");
+  });
+
+  test("archives the resolved value of an out-of-order Await child", async () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+
+      export function App() {
+        return (
+          <AppShell>
+            <Await value={Promise.resolve("Ready")} placeholder={<p>Loading</p>}>
+              {value => <h1>{value}</h1>}
+            </Await>
+          </AppShell>
+        );
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./AppShell"],
+      clientBoundaryFallbackImports: ["./AppShell"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const globalWithShell = globalThis as typeof globalThis & {
+      AppShell?: (props: { children?: string }) => string;
+    };
+    const previousShell = globalWithShell.AppShell;
+    globalWithShell.AppShell = (props) => `<main>${props.children ?? ""}</main>`;
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousShell === undefined) {
+        delete globalWithShell.AppShell;
+      } else {
+        globalWithShell.AppShell = previousShell;
+      }
+    }
+
+    expect(html).toContain("<main><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></main>");
+    expect(html).toContain("<!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end-->");
+    expect(html).not.toContain("data-mreact-oob-placeholder");
+    expect(html).not.toContain("data-mreact-oob-fragment");
+  });
+
+  test("archives resolved out-of-order children emitted by a nested server component", async () => {
+    const output = transform({
+      code: `import { AppShell } from "./AppShell";
+
+      function Inner() {
+        return (
+          <Await value={Promise.resolve("Ready")} placeholder={<p>Loading</p>}>
+            {value => <h1>{value}</h1>}
+          </Await>
+        );
+      }
+
+      export function App() {
+        return <AppShell><Inner /></AppShell>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+      clientBoundaryImports: ["./AppShell"],
+      clientBoundaryFallbackImports: ["./AppShell"],
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const globalWithShell = globalThis as typeof globalThis & {
+      AppShell?: () => string;
+    };
+    const previousShell = globalWithShell.AppShell;
+    globalWithShell.AppShell = () => "<main>Fallback</main>";
+    let html: string;
+
+    try {
+      html = await runServerStreamComponent(output.code);
+    } finally {
+      if (previousShell === undefined) {
+        delete globalWithShell.AppShell;
+      } else {
+        globalWithShell.AppShell = previousShell;
+      }
+    }
+
+    expect(html).toContain("<main>Fallback</main>");
     expect(html).toContain(
       '<template data-mreact-client-boundary-children="AppShell"><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></template>',
     );
-    expect(html).not.toContain("async ($sink)");
+    expect(html).not.toContain("data-mreact-oob-placeholder");
+    expect(html).not.toContain("data-mreact-oob-fragment");
   });
 
   test("preserves client boundary fallbacks in logical and ternary stream branches", async () => {
@@ -1393,8 +1485,8 @@ export function App() {
         });
         const label = index === 0 ? "Logical" : "Ternary";
 
-        expect(visibleHtml).toContain(`<main>${label}</main>`);
-        expect(visibleHtml).toContain(`data-mreact-client-boundary-children="AppShell"`);
+        expect(visibleHtml).toContain(`<main><!--mreact-client-boundary-children-start-->${label}<!--mreact-client-boundary-children-end--></main>`);
+        expect(visibleHtml).not.toContain(`data-mreact-client-boundary-children="AppShell"`);
         expect(hiddenHtml).not.toContain("data-mreact-client-boundary-fallback");
         expect(hiddenHtml).toBe(index === 0 ? "<section></section>" : "<section><p>Hidden</p></section>");
       }

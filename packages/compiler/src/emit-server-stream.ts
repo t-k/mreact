@@ -262,7 +262,63 @@ function collectImports(ir: ModuleIr, serverBootstrap: ServerBootstrapMode): Run
 }
 
 function hasInOrderAsyncBoundary(ir: ModuleIr): boolean {
-  return ir.components.some((component) => containsAsyncBoundary(component.root, false));
+  return ir.components.some(
+    (component) =>
+      containsAsyncBoundary(component.root, false) ||
+      containsForcedClientBoundaryAsyncBoundary(component.root),
+  );
+}
+
+function containsForcedClientBoundaryAsyncBoundary(node: JsxNodeIr): boolean {
+  if (node.kind === "component") {
+    if (
+      isClientBoundaryPlaceholder(node) &&
+      shouldRenderClientBoundaryFallback(node) &&
+      node.children.some(containsAwaitBoundary)
+    ) {
+      return true;
+    }
+
+    return node.children.some(containsForcedClientBoundaryAsyncBoundary);
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsForcedClientBoundaryAsyncBoundary);
+  }
+
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsForcedClientBoundaryAsyncBoundary);
+  }
+
+  if (node.kind === "async-boundary") {
+    return [
+      ...node.children,
+      ...(node.placeholderChildren ?? []),
+      ...(node.catchChildren ?? []),
+    ].some(containsForcedClientBoundaryAsyncBoundary);
+  }
+
+  return false;
+}
+
+function containsAwaitBoundary(node: JsxNodeIr): boolean {
+  if (node.kind === "async-boundary") {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some(containsAwaitBoundary);
+  }
+
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some(containsAwaitBoundary);
+  }
+
+  if (node.kind === "component") {
+    return node.children.some(containsAwaitBoundary);
+  }
+
+  return false;
 }
 
 function hasOutOfOrderAsyncBoundary(ir: ModuleIr): boolean {
@@ -310,7 +366,14 @@ function emitClientBoundaryHelper(name: string): string {
     `async function ${renderHelperName}(value) {`,
     `  if (typeof value !== "function") return value ?? "";`,
     `  let _out = "";`,
-    `  await value({ append(chunk) { _out += chunk; } });`,
+    `  const _tasks = [];`,
+    `  const _sink = {`,
+    `    __mreactForceInOrder: true,`,
+    `    append(chunk) { _out += chunk; },`,
+    `    defer(task) { _tasks.push(Promise.resolve(task)); },`,
+    `  };`,
+    `  await value(_sink);`,
+    `  while (_tasks.length > 0) await Promise.all(_tasks.splice(0));`,
     `  return _out;`,
     `}`,
     `function ${name}(name, props, fallbackHtml = "", componentFallback = false, originalChildrenHtml = "") {`,
@@ -328,9 +391,14 @@ function emitClientBoundaryHelper(name: string): string {
     `  if (!componentFallback) return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr}></template>\${fallbackHtml}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `  return (async () => {`,
     `    const _originalChildrenHtml = await ${renderHelperName}(originalChildrenHtml);`,
-    `    const _fallbackValue = typeof fallbackHtml === "function" ? await fallbackHtml(_originalChildrenHtml) : fallbackHtml;`,
-    `    const _fallbackHtml = await ${renderHelperName}(_fallbackValue);`,
-    `    const _childrenArchive = '<template data-mreact-client-boundary-children="' + _escapedName + '"><!--mreact-client-boundary-children-start-->' + _originalChildrenHtml + '<!--mreact-client-boundary-children-end--></template>';`,
+    `    const _startMarker = "<!--mreact-client-boundary-children-start-->";`,
+    `    const _endMarker = "<!--mreact-client-boundary-children-end-->";`,
+    `    const _markedChildrenHtml = _startMarker + _originalChildrenHtml + _endMarker;`,
+    `    const _fallbackValue = typeof fallbackHtml === "function" ? await fallbackHtml(_markedChildrenHtml) : fallbackHtml;`,
+    `    const _fallbackHtml = String(await ${renderHelperName}(_fallbackValue));`,
+    `    const _startIndex = _fallbackHtml.indexOf(_startMarker);`,
+    `    const _preservesChildren = _startIndex !== -1 && _fallbackHtml.indexOf(_endMarker, _startIndex + _startMarker.length) !== -1;`,
+    `    const _childrenArchive = _preservesChildren ? "" : '<template data-mreact-client-boundary-children="' + _escapedName + '">' + _startMarker + _originalChildrenHtml + _endMarker + '</template>';`,
     `    return \`<template data-mreact-client-boundary="\${_escapedName}"\${_nonSerializableAttr} data-mreact-client-boundary-fallback="component"></template>\${_fallbackHtml}\${_childrenArchive}<script type="application/json" data-mreact-client-boundary-props="\${_escapedName}">\${_json}</script>\`;`,
     `  })();`,
     `}`,
@@ -1127,6 +1195,7 @@ interface CollectHtmlState {
   reactSuspenseRevealScriptNonce?: string;
   reactSuspenseRevealScriptSrc?: string;
   selectedValueCode?: string;
+  forceInOrder?: boolean;
 }
 
 function collectHtmlParts(
@@ -1270,7 +1339,7 @@ function collectHtmlParts(
   }
 
   if (node.kind === "async-boundary") {
-    if (node.placeholderChildren !== undefined) {
+    if (node.placeholderChildren !== undefined && state.forceInOrder !== true) {
       const id = `mreact-${state.nextFragmentId}`;
       state.nextFragmentId += 1;
 
@@ -1380,6 +1449,20 @@ function collectHtmlParts(
 
   if (node.kind === "component") {
     if (node.name === "Suspense") {
+      if (state.forceInOrder === true) {
+        return node.children.flatMap((child) =>
+          collectHtmlParts(
+            child,
+            escapeHelperName,
+            asyncBoundaryHelperName,
+            outOfOrderBoundaryHelperName,
+            reactSuspenseBoundaryHelperName,
+            reactSuspenseOutOfOrderBoundaryHelperName,
+            state,
+          ),
+        );
+      }
+
       const asyncBoundary = findSuspenseAsyncBoundary(node.children);
 
       if (asyncBoundary !== undefined) {
@@ -1517,7 +1600,7 @@ function collectHtmlParts(
             )}`
           : emitHtmlExpressionFromChildren(node.children, escapeHelperName);
         const originalChildrenHtml = hasComponentFallback
-          ? (emitStreamRendererFromChildren(node.children, escapeHelperName) ??
+          ? (emitStreamRendererFromChildren(node.children, escapeHelperName, true) ??
             emitHtmlExpressionFromChildren(node.children, escapeHelperName))
           : undefined;
         const helperCall = `${helperName}(${stringLiteral(node.name)}, ${boundaryProps}, ${fallbackHtml}${originalChildrenHtml === undefined ? "" : `, true, ${originalChildrenHtml}`})`;
@@ -2293,6 +2376,7 @@ function emitHtmlExpressionFromChildren(children: JsxNodeIr[], escapeHelperName:
 function emitStreamRendererFromChildren(
   children: JsxNodeIr[],
   escapeHelperName: string,
+  forceInOrder = false,
 ): string | undefined {
   if (children.length === 0) {
     return undefined;
@@ -2304,6 +2388,7 @@ function emitStreamRendererFromChildren(
     hydration: false,
     awaitHydration: false,
     nextFragmentId: parentState?.nextFragmentId ?? 0,
+    ...(forceInOrder ? { forceInOrder: true } : {}),
     ...(parentState?.reactSuspenseRevealScriptNonce === undefined
       ? {}
       : { reactSuspenseRevealScriptNonce: parentState.reactSuspenseRevealScriptNonce }),
@@ -2327,6 +2412,7 @@ function emitStreamRendererFromChildren(
   }
 
   if (
+    !forceInOrder &&
     parts.every(
       (part) =>
         isHtmlSyncPart(part) &&
