@@ -21,6 +21,7 @@ export interface ParsedCliArguments {
   help?: boolean | undefined;
   host?: string | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
+  json?: boolean | undefined;
   log?: CliRequestLogMode | undefined;
   out?: string | undefined;
   port?: number | undefined;
@@ -46,6 +47,14 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
 
     if (value === "--help" || value === "-h") {
       parsed.help = true;
+      continue;
+    }
+
+    if (value === "--json") {
+      if (command !== "boundaries") {
+        throw new Error("--json is only supported by the boundaries command");
+      }
+      parsed.json = true;
       continue;
     }
 
@@ -255,6 +264,22 @@ export function formatCliHelp(command?: string | undefined): string {
     ].join("\n");
   }
 
+  if (command === "boundaries") {
+    return [
+      "Usage: mreact-router boundaries [appDir] [options]",
+      "",
+      "Inspect server and client component boundaries for every route without building.",
+      "",
+      "Options:",
+      "  --json          Print a machine-readable versioned report.",
+      "  -h, --help      Show this help message.",
+      "",
+      "Examples:",
+      "  mreact-router boundaries",
+      "  mreact-router boundaries src/app --json",
+    ].join("\n");
+  }
+
   if (command === "package") {
     return [
       "Usage: mreact-router package <target> [options]",
@@ -335,6 +360,7 @@ export function formatCliHelp(command?: string | undefined): string {
     "Commands:",
     "  dev [appDir]                              Start the development server.",
     `  build [appDir]                            Build ${defaultTargetLabel} artifacts by default.`,
+    "  boundaries [appDir]                       Inspect route and component boundaries.",
     "  build --target=aws-lambda                 Build Lambda artifacts including generated handler and import policy.",
     "  start [outDir]                            Serve built Node output.",
     "  package aws-lambda --from .mreact --out .lambda",
@@ -477,7 +503,9 @@ function parseCliPort(value: string): number {
     return port;
   }
 
-  throw new Error(`Unsupported port ${JSON.stringify(value)}. Expected an integer from 0 to 65535.`);
+  throw new Error(
+    `Unsupported port ${JSON.stringify(value)}. Expected an integer from 0 to 65535.`,
+  );
 }
 
 function parseCliHostPolicy(value: string): RequestHostPolicy {

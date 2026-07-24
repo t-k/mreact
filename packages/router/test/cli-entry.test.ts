@@ -56,9 +56,100 @@ describe("router CLI entry", () => {
     }
   });
 
-  test("prints compact build progress and a duration summary", async () => {
+  test("prints route and component boundaries without building", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-boundaries-text-"));
+    await writeFile(
+      join(rootDir, "page.tsx"),
+      `import Counter from "./Counter.client";
+
+export default function Page() {
+  return <main><Counter /></main>;
+}`,
+    );
+    await writeFile(
+      join(rootDir, "Counter.client.tsx"),
+      `export default function Counter() {
+  return <button type="button">Count</button>;
+}`,
+    );
+    process.argv = [process.argv[0]!, "cli.ts", "boundaries", rootDir];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("/ [server-render]"));
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Counter.client.tsx#default  client-boundary"),
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  test("prints one JSON document for boundaries --json", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-router-boundaries-json-"));
+    await writeFile(
+      join(rootDir, "page.tsx"),
+      `export default function Page() {
+  return <main>Home</main>;
+}`,
+    );
+    process.argv = [process.argv[0]!, "cli.ts", "boundaries", rootDir, "--json"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+
+      expect(logSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(String(logSpy.mock.calls[0]?.[0]))).toEqual(
+        expect.objectContaining({
+          routes: [
+            expect.objectContaining({
+              classification: "server-render",
+              path: "/",
+            }),
+          ],
+          version: 1,
+        }),
+      );
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
+  test("prints detailed boundaries with build progress and a duration summary", async () => {
     const buildApp = vi.fn(
       async (options: {
+        onBoundaryReport?: (report: {
+          diagnostics: readonly [];
+          routes: readonly [
+            {
+              classification: "server-render";
+              components: readonly [
+                {
+                  classification: "server-render";
+                  exportName: "default";
+                  file: "app/page.tsx";
+                  origin: "server-render";
+                },
+              ];
+              entry: "app/page.tsx";
+              path: "/";
+            },
+          ];
+          summary: {
+            clientBoundaries: 0;
+            clientRoutes: 0;
+            serverOnlyComponents: 0;
+            serverRenderComponents: 1;
+            serverRenderRoutes: 1;
+            sharedComponents: 0;
+            unknownComponents: 0;
+          };
+          version: 1;
+        }) => void;
         onBuildProgress?: (event: {
           count?: number;
           kind: string;
@@ -69,6 +160,34 @@ describe("router CLI entry", () => {
         options.onBuildProgress?.({ kind: "phase-start", phase: "scan" });
         options.onBuildProgress?.({ kind: "phase-end", ms: 2.5, phase: "scan" });
         options.onBuildProgress?.({ count: 2, kind: "routes-discovered" });
+        options.onBoundaryReport?.({
+          diagnostics: [],
+          routes: [
+            {
+              classification: "server-render",
+              components: [
+                {
+                  classification: "server-render",
+                  exportName: "default",
+                  file: "app/page.tsx",
+                  origin: "server-render",
+                },
+              ],
+              entry: "app/page.tsx",
+              path: "/",
+            },
+          ],
+          summary: {
+            clientBoundaries: 0,
+            clientRoutes: 0,
+            serverOnlyComponents: 0,
+            serverRenderComponents: 1,
+            serverRenderRoutes: 1,
+            sharedComponents: 0,
+            unknownComponents: 0,
+          },
+          version: 1,
+        });
         options.onBuildProgress?.({ kind: "phase-start", phase: "serverModules" });
         options.onBuildProgress?.({ kind: "phase-end", ms: 10, phase: "serverModules" });
         options.onBuildProgress?.({ kind: "phase-start", phase: "clientBundles" });
@@ -103,6 +222,7 @@ describe("router CLI entry", () => {
         "Config: loading...",
         "Routes: discovering...",
         "Routes: 2 discovered",
+        expect.stringContaining("app/page.tsx#default  server-render"),
         "Server: building...",
         "Client: building...",
         "Artifacts: writing...",

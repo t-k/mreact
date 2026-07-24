@@ -103,13 +103,13 @@ describe("router CLI options", () => {
   });
 
   test("parses package runtime dependency check flags", () => {
-    expect(
-      parseCliArguments(["package", "aws-lambda", "--skip-runtime-dependency-check"]),
-    ).toEqual({
-      command: "package",
-      routeArg: "aws-lambda",
-      skipRuntimeDependencyCheck: true,
-    });
+    expect(parseCliArguments(["package", "aws-lambda", "--skip-runtime-dependency-check"])).toEqual(
+      {
+        command: "package",
+        routeArg: "aws-lambda",
+        skipRuntimeDependencyCheck: true,
+      },
+    );
   });
 
   test("parses generated AWS Lambda preload flags", () => {
@@ -125,9 +125,7 @@ describe("router CLI options", () => {
       command: "build",
       routeArg: undefined,
     });
-    expect(
-      parseCliArguments(["package", "aws-lambda", "--aws-lambda-preload", "all"]),
-    ).toEqual({
+    expect(parseCliArguments(["package", "aws-lambda", "--aws-lambda-preload", "all"])).toEqual({
       awsLambdaPreload: "all",
       command: "package",
       routeArg: "aws-lambda",
@@ -144,6 +142,17 @@ describe("router CLI options", () => {
     expect(parseCliArguments(["build", "--help"])).toEqual({ command: "build", help: true });
   });
 
+  test("parses the boundaries JSON flag", () => {
+    expect(parseCliArguments(["boundaries", "src/app", "--json"])).toEqual({
+      command: "boundaries",
+      json: true,
+      routeArg: "src/app",
+    });
+    expect(() => parseCliArguments(["build", "--json"])).toThrow(
+      /--json is only supported by the boundaries command/,
+    );
+  });
+
   test("formats help text with build and Lambda options", () => {
     const help = formatCliHelp();
     const buildHelp = formatCliHelp("build");
@@ -151,6 +160,7 @@ describe("router CLI options", () => {
     expect(help).toContain("Build Node artifacts by default.");
     expect(help).not.toContain("Build Node and Cloudflare artifacts by default.");
     expect(help).toContain("mreact-router build --target=aws-lambda");
+    expect(help).toContain("boundaries [appDir]");
     expect(help).toContain("mreact-router package aws-lambda --from .mreact --out .lambda");
     expect(help).toContain("package cloudflare-pages --from .mreact --out .mreact/pages");
     expect(buildHelp).toContain("--target=node|cloudflare|aws-lambda|all");
@@ -170,6 +180,10 @@ describe("router CLI options", () => {
     expect(devHelp).toContain("HOST");
     expect(devHelp).toContain("--port <port>");
     expect(devHelp).toContain("PORT");
+
+    const boundariesHelp = formatCliHelp("boundaries");
+    expect(boundariesHelp).toContain("Usage: mreact-router boundaries [appDir] [options]");
+    expect(boundariesHelp).toContain("--json");
   });
 
   test("keeps root and build help aligned with resolved target defaults", () => {
@@ -194,29 +208,43 @@ describe("router CLI options", () => {
   });
 
   test("parses package artifact options", () => {
-    expect(parseCliArguments(["package", "aws-lambda", "--from", ".mreact", "--out=.lambda"])).toEqual({
+    expect(
+      parseCliArguments(["package", "aws-lambda", "--from", ".mreact", "--out=.lambda"]),
+    ).toEqual({
       command: "package",
       from: ".mreact",
       out: ".lambda",
       routeArg: "aws-lambda",
     });
-    expect(parseCliArguments(["package", "cloudflare-pages", "--from=.mreact", "--out", ".mreact/pages"])).toEqual({
+    expect(
+      parseCliArguments([
+        "package",
+        "cloudflare-pages",
+        "--from=.mreact",
+        "--out",
+        ".mreact/pages",
+      ]),
+    ).toEqual({
       command: "package",
       from: ".mreact",
       out: ".mreact/pages",
       routeArg: "cloudflare-pages",
     });
-    expect(parseCliArguments(["package", "cloudflare-pages", "--worker", "src/worker.ts"])).toEqual({
-      command: "package",
-      routeArg: "cloudflare-pages",
-      worker: "src/worker.ts",
-    });
+    expect(parseCliArguments(["package", "cloudflare-pages", "--worker", "src/worker.ts"])).toEqual(
+      {
+        command: "package",
+        routeArg: "cloudflare-pages",
+        worker: "src/worker.ts",
+      },
+    );
     expect(parseCliArguments(["package", "cloudflare-pages", "--worker=src/worker.ts"])).toEqual({
       command: "package",
       routeArg: "cloudflare-pages",
       worker: "src/worker.ts",
     });
-    expect(parseCliArguments(["package", "aws-lambda", "--handler", "lambda/mreact-handler.ts"])).toEqual({
+    expect(
+      parseCliArguments(["package", "aws-lambda", "--handler", "lambda/mreact-handler.ts"]),
+    ).toEqual({
       command: "package",
       handler: "lambda/mreact-handler.ts",
       routeArg: "aws-lambda",
@@ -240,9 +268,7 @@ describe("router CLI options", () => {
   });
 
   test("resolves MREACT_ROUTER_LOG=requests as the CLI request log mode", () => {
-    expect(resolveCliRequestLogMode(undefined, { MREACT_ROUTER_LOG: "requests" })).toBe(
-      "requests",
-    );
+    expect(resolveCliRequestLogMode(undefined, { MREACT_ROUTER_LOG: "requests" })).toBe("requests");
     expect(resolveCliRequestLogMode("requests", { MREACT_ROUTER_LOG: "" })).toBe("requests");
     expect(resolveCliRequestLogMode(undefined, {})).toBeUndefined();
   });
@@ -264,13 +290,13 @@ describe("router CLI options", () => {
     expect(resolveCliHostPolicy("strict", { MREACT_ROUTER_HOST_POLICY: "trusted-proxy" })).toBe(
       "strict",
     );
-    expect(resolveCliHostPolicy(undefined, { MREACT_ROUTER_HOST_POLICY: "strict" })).toBe(
-      "strict",
-    );
-    expect(resolveCliAllowedHosts(["app.example.com"], { MREACT_ROUTER_ALLOWED_HOSTS: "env.test" }))
-      .toEqual(["app.example.com"]);
-    expect(resolveCliAllowedHosts(undefined, { MREACT_ROUTER_ALLOWED_HOSTS: "app.test, api.test" }))
-      .toEqual(["app.test", "api.test"]);
+    expect(resolveCliHostPolicy(undefined, { MREACT_ROUTER_HOST_POLICY: "strict" })).toBe("strict");
+    expect(
+      resolveCliAllowedHosts(["app.example.com"], { MREACT_ROUTER_ALLOWED_HOSTS: "env.test" }),
+    ).toEqual(["app.example.com"]);
+    expect(
+      resolveCliAllowedHosts(undefined, { MREACT_ROUTER_ALLOWED_HOSTS: "app.test, api.test" }),
+    ).toEqual(["app.test", "api.test"]);
     expect(resolveCliAllowedHosts(undefined, {})).toBeUndefined();
   });
 

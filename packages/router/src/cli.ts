@@ -10,6 +10,11 @@ import {
   type BuildAppProgressEvent,
 } from "./build.js";
 import {
+  analyzeAppBoundaries,
+  formatBoundaryReport,
+  formatBoundaryReportJson,
+} from "./boundaries.js";
+import {
   buildTargetsFromCliTarget,
   createCliRequestLogger,
   type CliBuildTarget,
@@ -70,6 +75,9 @@ if (parsed !== undefined) {
             ...(parsed.clientSourceMaps === undefined
               ? {}
               : { clientSourceMaps: parsed.clientSourceMaps }),
+            onBoundaryReport(report) {
+              console.log(formatBoundaryReport(report).trimEnd());
+            },
             onBuildProgress(event) {
               activeBuildPhase = updateBuildProgressLog(event, activeBuildPhase);
             },
@@ -90,6 +98,21 @@ if (parsed !== undefined) {
           }
           throw error;
         }
+      } else if (command === "boundaries") {
+        const loaded =
+          routeArg === undefined
+            ? await loadMreactRouterViteConfigDetails({ command: "build", cwd: process.cwd() })
+            : { project: { appDir: resolve(routeArg) }, viteConfig: undefined };
+        const report = await analyzeAppBoundaries({
+          ...loaded.project,
+          viteConfig: loaded.viteConfig,
+        });
+        console.log(
+          (parsed.json === true
+            ? formatBoundaryReportJson(report)
+            : formatBoundaryReport(report)
+          ).trimEnd(),
+        );
       } else if (command === "package") {
         if (routeArg === "aws-lambda") {
           const manifest = await packageAwsLambdaArtifact({
