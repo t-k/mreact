@@ -19,10 +19,26 @@ const clientDevtoolsDisabled =
 
 /** Runs a reactive side effect and returns a disposer. */
 export function effect(fn: () => void | (() => void)): () => void {
+  return createEffect(fn);
+}
+
+/** @internal Runs a labeled effect used by development diagnostics. */
+export function effectWithDebugLabel(
+  fn: () => void | (() => void),
+  debugLabel: string,
+): () => void {
+  return createEffect(fn, debugLabel);
+}
+
+function createEffect(
+  fn: () => void | (() => void),
+  debugLabel?: string,
+): () => void {
   let cleanup: (() => void) | undefined;
 
   const computation: ReactiveComputation = {
     id: runtimeState.nextComputationId,
+    ...(debugLabel === undefined ? {} : { debugLabel }),
     deps: new Set(),
     disposed: false,
     queued: false,

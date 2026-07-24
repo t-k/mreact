@@ -1,6 +1,10 @@
 import { invalidateDevtoolsWriteCache } from "./cell.js";
 import { invalidateReactiveDevtoolsCache } from "./devtools.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
+import {
+  clearCellWriterDiagnostics,
+  describeCompetingCellWriters,
+} from "./writer-diagnostics.js";
 
 /** Scheduler used to enqueue pending reactive computations. */
 export interface Scheduler {
@@ -25,6 +29,7 @@ let queueRequiresSort = false;
 let scheduled = false;
 let flushing = false;
 const maxFlushIterations = 100;
+const competingWriterDiagnosticIteration = 10;
 
 /** Replaces the reactive scheduler and returns a restore function. */
 export function setScheduler(nextScheduler: Scheduler): () => void {
@@ -100,6 +105,15 @@ export function flushQueuedComputations(): void {
 
   try {
     for (let iteration = 0; queue.length > 0; iteration += 1) {
+      if (iteration >= competingWriterDiagnosticIteration) {
+        const competingWriters = describeCompetingCellWriters();
+        if (competingWriters !== undefined) {
+          throw new Error(
+            `${competingWriters} Reactive flush stopped after ${iteration} iterations before reaching the generic ${maxFlushIterations}-iteration limit.`,
+          );
+        }
+      }
+
       if (iteration >= maxFlushIterations) {
         throw new Error(
           `Reactive flush limit exceeded after ${maxFlushIterations} iterations; an effect or computed likely writes a value it also reads. Check for cell.set() inside a computation that reads the same cell. Queued computations: ${queue.length}.`,
@@ -126,6 +140,7 @@ export function flushQueuedComputations(): void {
     }
   } finally {
     flushing = false;
+    clearCellWriterDiagnostics();
   }
 }
 

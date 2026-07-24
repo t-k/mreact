@@ -8,6 +8,29 @@ import {
 } from "./helpers.js";
 
 describe("compiler client runtime dynamic output", () => {
+  test("emits dynamic writer source labels only in development output", () => {
+    const code = `export function App(props) {
+      return <main>{props.active ? <span>Active</span> : <span>Idle</span>}</main>;
+    }`;
+    const development = transform({
+      code,
+      filename: "/app/page.mreact.tsx",
+      target: "client",
+      dev: true,
+    });
+    const production = transform({
+      code,
+      filename: "/app/page.mreact.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(development.code).toContain("/app/page.mreact.tsx#App");
+    expect(development.code).toContain("debugLabel");
+    expect(production.code).not.toContain("/app/page.mreact.tsx");
+    expect(production.code).not.toContain("debugLabel");
+  });
+
   test("runs intrinsic domRef after the generated element is connected", async () => {
     const output = transform({
       code: `export function App() {

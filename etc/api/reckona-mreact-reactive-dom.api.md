@@ -122,7 +122,9 @@ export { effect }
 export function getDomRefBindings(element: Element): readonly DomRefBinding[];
 
 // @public
-export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () => RenderValue): Dispose;
+export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () => RenderValue, options?: {
+    debugLabel?: string;
+}): Dispose;
 
 // @public
 export const LIST_RENDER_VALUE: unique symbol;

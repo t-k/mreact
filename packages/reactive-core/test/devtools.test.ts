@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { installDevtools, type Devtools } from "@reckona/mreact-devtools";
 import { batch, cell, effect } from "../src/index.js";
-import { flushEffects } from "../src/testing.js";
+import { effectWithDebugLabel } from "../src/internal.js";
+import { createReactiveTestRuntime, flushEffects } from "../src/testing.js";
 
 let activeDevtools: Devtools | undefined;
 
@@ -11,6 +12,39 @@ afterEach(() => {
 });
 
 describe("reactive-core devtools instrumentation", () => {
+  test("identifies competing labeled writers before reporting the flush limit", () => {
+    const devtools = installDevtools();
+    activeDevtools = devtools;
+    const runtime = createReactiveTestRuntime();
+    const turn = cell<"a" | "b">("a");
+
+    try {
+      effectWithDebugLabel(() => {
+        if (turn.get() === "b") {
+          turn.set("a");
+        }
+      }, "/app/page.mreact.tsx#ViewerA");
+      effectWithDebugLabel(() => {
+        if (turn.get() === "a") {
+          turn.set("b");
+        }
+      }, "/app/page.mreact.tsx#ViewerB");
+
+      let message = "";
+      try {
+        runtime.flushNext();
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect(message).toMatch(/competing computations.*same cell/is);
+      expect(message).toContain("ViewerA");
+      expect(message).toContain("ViewerB");
+      expect(message).toMatch(/generic 100-iteration limit/i);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   test("emits opt-in cell and effect events through the global devtools hook", async () => {
     const devtools = installDevtools();
     activeDevtools = devtools;

@@ -14,10 +14,12 @@ export interface Source {
   onNoSubscribers?: (() => void) | undefined;
   trackedBy?: ReactiveComputation | undefined;
   trackedVersion?: number | undefined;
+  debugWriters?: Map<number, string> | undefined;
 }
 
 export interface ReactiveComputation {
   readonly id: number;
+  readonly debugLabel?: string | undefined;
   deps: Set<Source>;
   orderedDeps?: Source[] | undefined;
   trackingAddedDeps?: Source[] | undefined;

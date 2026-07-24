@@ -2,6 +2,7 @@ import type { Cell } from "./types.js";
 import type { Source } from "./state.js";
 import { runtimeState } from "./state.js";
 import { notifySubscribers, sourceSubscriberCount, trackSource } from "./tracking.js";
+import { recordCellWriter } from "./writer-diagnostics.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
@@ -100,6 +101,15 @@ function writeCellValue<T>(source: CellSource<T>, next: T | ((prev: T) => T)): v
   }
 
   source.value = resolved;
+
+  const activeTracker = runtimeState.activeTracker;
+  if (
+    !clientDevtoolsDisabled &&
+    source.subscribers !== null &&
+    activeTracker?.debugLabel !== undefined
+  ) {
+    recordCellWriter(source, activeTracker.id, activeTracker.debugLabel);
+  }
 
   // clientDevtoolsDisabled folds to true under the client build define, which
   // makes this branch statically dead so bundlers drop the emit path (and its

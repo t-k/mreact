@@ -1,4 +1,5 @@
 import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
+import { effectWithDebugLabel } from "@reckona/mreact-reactive-core/internal";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
 import {
@@ -15,6 +16,7 @@ export function insertDynamic(
   parent: ParentNode,
   marker: ChildNode,
   value: () => RenderValue,
+  options?: { debugLabel?: string },
 ): Dispose {
   void parent;
   const markForHydration = isDynamicHydrationEnabled();
@@ -40,7 +42,7 @@ export function insertDynamic(
     current = [];
   };
 
-  const dispose = effect(() => {
+  const run = () => {
     if (currentList === undefined) {
       disposeCurrentScope?.();
       disposeCurrentScope = undefined;
@@ -137,7 +139,11 @@ export function insertDynamic(
     for (const node of current) {
       insertionParent.insertBefore(node, marker);
     }
-  });
+  };
+  const dispose =
+    options?.debugLabel === undefined
+      ? effect(run)
+      : effectWithDebugLabel(run, options.debugLabel);
 
   return registerDispose(() => {
     dispose();

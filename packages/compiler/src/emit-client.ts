@@ -13,7 +13,10 @@ export interface EmitResult {
   imports: RuntimeImport[];
 }
 
-export function emitClient(ir: ModuleIr): EmitResult {
+export function emitClient(
+  ir: ModuleIr,
+  options: { dev?: boolean; filename?: string } = {},
+): EmitResult {
   const imports = collectImports(ir);
   const helperNames = allocateRuntimeHelperNames(ir, imports[0]?.specifiers ?? []);
   const importLine =
@@ -28,7 +31,13 @@ export function emitClient(ir: ModuleIr): EmitResult {
     clientBoundaryHelperName === undefined ? "" : emitClientBoundaryHelper(clientBoundaryHelperName);
   const components = ir.components
     .map((component) =>
-      emitComponent(component, moduleAllocator, helperNames, clientBoundaryHelperName),
+      emitComponent(
+        component,
+        moduleAllocator,
+        helperNames,
+        clientBoundaryHelperName,
+        options,
+      ),
     )
     .join("\n\n")
     .replaceAll("__MREACT_BIND_DOM_REF__", helperNames.bindDomRef);
@@ -297,6 +306,7 @@ function emitComponent(
   moduleAllocator: NameAllocator,
   helperNames: RuntimeHelperNames,
   clientBoundaryHelperName: string | undefined,
+  options: { dev?: boolean; filename?: string },
 ): string {
   const templateName = moduleAllocator(
     "_tmpl_" + component.name,
@@ -306,9 +316,19 @@ function emitComponent(
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
   const functionKeyword = emitFunctionKeyword(component);
+  const debugLabel =
+    options.dev === true && options.filename !== undefined
+      ? `${options.filename}#${component.name}`
+      : undefined;
 
   if (component.root.kind === "component") {
-    const state = { allocateName: allocator, textIndex: 0, helperNames, clientBoundaryHelperName };
+    const state = {
+      allocateName: allocator,
+      textIndex: 0,
+      helperNames,
+      clientBoundaryHelperName,
+      debugLabel,
+    };
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
@@ -326,7 +346,13 @@ function emitComponent(
   }
 
   if (component.root.kind === "conditional") {
-    const state = { allocateName: allocator, textIndex: 0, helperNames, clientBoundaryHelperName };
+    const state = {
+      allocateName: allocator,
+      textIndex: 0,
+      helperNames,
+      clientBoundaryHelperName,
+      debugLabel,
+    };
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
     return [
@@ -335,7 +361,7 @@ function emitComponent(
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)});`,
+      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDebugOptions(debugLabel)});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -349,6 +375,7 @@ function emitComponent(
     textIndex: 0,
     helperNames,
     clientBoundaryHelperName,
+    debugLabel,
   });
   return [
     `const ${templateName} = ${helperNames.createTemplate}(${templateHtml});`,
@@ -411,6 +438,13 @@ interface EmitSetupState {
   textIndex: number;
   helperNames: RuntimeHelperNames;
   clientBoundaryHelperName?: string | undefined;
+  debugLabel?: string | undefined;
+}
+
+function emitDebugOptions(debugLabel: string | undefined): string {
+  return debugLabel === undefined
+    ? ""
+    : `, { debugLabel: ${JSON.stringify(debugLabel)} }`;
 }
 
 function emitSetup(
@@ -509,7 +543,7 @@ function emitSetup(
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
         lines.push(
-          `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => (${child.code}));`,
+          `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => (${child.code})${emitDebugOptions(state.debugLabel)});`,
         );
         childIndex += 1;
         continue;
@@ -528,7 +562,7 @@ function emitSetup(
 
     if (child.kind === "conditional") {
       lines.push(
-        `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)});`,
+        `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDebugOptions(state.debugLabel)});`,
       );
       childIndex += 1;
       continue;
