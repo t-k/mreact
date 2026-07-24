@@ -2463,7 +2463,7 @@ function hasClientRuntimeSyntaxNode(node: unknown): boolean {
 
   if (object.type === "JSXAttribute") {
     const name = readOptionalObject(object.name)?.name;
-    return typeof name === "string" && /^on[A-Z]/.test(name);
+    return typeof name === "string" && (name === "domRef" || /^on[A-Z]/.test(name));
   }
 
   if (object.type === "CallExpression") {
@@ -2596,6 +2596,7 @@ export type {
   ComponentPropIr,
   ComponentRefIr,
   ConditionalIr,
+  DomRefAttributeIr,
   DynamicAttributeIr,
   EventAttributeIr,
   ExprIr,

@@ -85,7 +85,7 @@ export interface AsyncBoundaryIr {
 }
 
 // @public
-export type AttributeIr = StaticAttributeIr | DynamicAttributeIr | EventAttributeIr | SpreadAttributeIr;
+export type AttributeIr = StaticAttributeIr | DynamicAttributeIr | DomRefAttributeIr | EventAttributeIr | SpreadAttributeIr;
 
 // @public
 export type BodyStatementJsxMode = "dom-node" | "compat-object" | "server-string" | "unsupported";
@@ -210,6 +210,18 @@ export interface ConditionalIr {
 
 // @public
 export type Diagnostic = Diagnostic_2;
+
+// @public
+export interface DomRefAttributeIr {
+    // (undocumented)
+    code: string;
+    // (undocumented)
+    kind: "dom-ref";
+    // (undocumented)
+    name: "domRef";
+    // (undocumented)
+    serialization?: never;
+}
 
 // @public
 export interface DynamicAttributeIr {

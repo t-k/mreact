@@ -73,6 +73,9 @@ export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<
 export type FormEventHandler<TCurrentTarget extends EventTarget = Element> =
   JSXEventHandler<TCurrentTarget, SubmitEvent>;
 
+/** Post-commit callback for a compiler-owned intrinsic DOM element. */
+export type DomRefCallback = (element: Element) => void | (() => void);
+
 /** DOM event attributes accepted by JSX elements. */
 export interface JSXDOMAttributes<TElement extends EventTarget> {
   children?: ReactCompatNode;
@@ -85,6 +88,7 @@ export interface JSXDOMAttributes<TElement extends EventTarget> {
 /** HTML attributes accepted by JSX host elements. */
 export interface JSXHTMLAttributes<TElement extends HTMLElement>
   extends JSXDOMAttributes<TElement> {
+  domRef?: DomRefCallback;
   [attributeName: string]: unknown;
 }
 

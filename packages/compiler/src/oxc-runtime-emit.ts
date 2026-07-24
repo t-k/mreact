@@ -107,7 +107,7 @@ function emitOxcServerComponentProps(
 }
 
 function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
-  if (attr.kind === "spread-attr" || attr.kind === "event") {
+  if (attr.kind === "spread-attr" || attr.kind === "event" || attr.kind === "dom-ref") {
     return '""';
   }
 

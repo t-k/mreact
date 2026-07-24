@@ -23,6 +23,7 @@ export { REACTIVE_STATE_BINDING_META };
 export { createReactiveDomBlock };
 /** JSX event and attribute types re-exported by the development JSX runtime. */
 export type {
+  DomRefCallback,
   FormEvent,
   FormEventHandler,
   JSXDOMAttributes,

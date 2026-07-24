@@ -487,7 +487,7 @@ function emitSpreadAttributesHelper(
     `  for (const _rawName of Object.keys(props)) {`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
-    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "children") continue;`,
+    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children") continue;`,
     `    if (/^on[A-Za-z]/.test(_rawName)) continue;`,
     `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (${name}$aliases[_rawName] ?? _rawName);`,
     `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
@@ -1761,6 +1761,10 @@ function collectHtmlAttributeParts(
   escapeBatchHelperName: string | undefined,
   dynamicAttributes: "drop" | "emit",
 ): HtmlSyncPart[] {
+  if (attr.kind === "dom-ref") {
+    return [];
+  }
+
   if (attr.kind === "spread-attr") {
     return dynamicAttributes === "drop"
       ? []

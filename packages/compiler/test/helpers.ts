@@ -1,4 +1,5 @@
 import {
+  bindDomRef,
   bindEvent,
   bindList,
   bindProp,
@@ -342,7 +343,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -399,6 +400,10 @@ function getReactiveCoreRuntimeValue(importedName: string): unknown {
 }
 
 function getClientRuntimeValue(importedName: string): unknown {
+  if (importedName === "bindDomRef") {
+    return bindDomRef;
+  }
+
   if (importedName === "createTemplate") {
     return createTemplate;
   }

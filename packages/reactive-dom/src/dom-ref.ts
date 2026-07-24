@@ -1,4 +1,4 @@
-import { registerDispose } from "./scope.js";
+import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import type { Dispose } from "./types.js";
 
 export type DomRefCallback = (element: Element) => void | Dispose;
@@ -133,7 +133,7 @@ export function bindDomRef(
   };
 
   attachBinding(element, binding);
-  registerDispose(binding.dispose);
+  registerCleanup(binding.dispose);
   enqueue(binding);
   return binding;
 }

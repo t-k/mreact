@@ -99,6 +99,16 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
       return [];
     }
 
+    if (name === "domRef") {
+      if (value.type !== "JSXExpressionContainer") {
+        return [];
+      }
+
+      return [
+        `  __MREACT_BIND_DOM_REF__(_node, ${readSource(code, readObject(value.expression))});`,
+      ];
+    }
+
     if (isEventLikePropName(name)) {
       if (value.type !== "JSXExpressionContainer") {
         return [];

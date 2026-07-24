@@ -1,6 +1,7 @@
 import type { AttributeIr } from "./ir.js";
 import { isEventLikePropName } from "@reckona/mreact-shared";
 import {
+  invalidDomRefAttributeDiagnostic,
   unsupportedRefAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
 } from "./diagnostics.js";
@@ -47,6 +48,22 @@ export function analyzeOxcAttribute(
 
   if (name === "ref" && options.allowRef !== true) {
     diagnostics.push(unsupportedRefAttributeDiagnostic(getOxcLocation(code, object.name)));
+  }
+
+  if (name === "domRef") {
+    if (value.type !== "JSXExpressionContainer") {
+      diagnostics.push(invalidDomRefAttributeDiagnostic(getOxcLocation(code, object.name)));
+      return [];
+    }
+
+    const expression = readObject(value.expression);
+    return [
+      {
+        kind: "dom-ref",
+        name: "domRef",
+        code: options.resolveExpressionCode?.(expression) ?? readSource(code, expression),
+      },
+    ];
   }
 
   if (isEventAttribute) {

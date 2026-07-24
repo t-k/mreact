@@ -123,6 +123,27 @@ describe("compiler diagnostics", () => {
     expect(output.code).toContain("ref:");
   });
 
+  test("reports unsupported domRef shapes", () => {
+    const output = transform({
+      code: `
+        function Child() { return <span />; }
+        export function App() {
+          return <main><Child domRef={() => {}} /><div domRef="invalid" /></main>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "MR_UNSUPPORTED_COMPONENT_DOM_REF", level: "error" }),
+        expect.objectContaining({ code: "MR_INVALID_DOM_REF_ATTRIBUTE", level: "error" }),
+      ]),
+    );
+  });
+
   test("reports Oxc server diagnostics with source locations", () => {
     const code = [
       "export function App(props) {",

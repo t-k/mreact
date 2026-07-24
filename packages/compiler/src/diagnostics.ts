@@ -73,6 +73,25 @@ export function unsupportedRefAttributeDiagnostic(loc?: SourceLocation): Diagnos
   };
 }
 
+export function invalidDomRefAttributeDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_INVALID_DOM_REF_ATTRIBUTE",
+    message: "domRef must be an expression callback on an intrinsic JSX element.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
+export function unsupportedComponentDomRefDiagnostic(loc?: SourceLocation): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_COMPONENT_DOM_REF",
+    message:
+      "domRef is only supported on intrinsic JSX elements. Pass an explicit element callback prop to a component instead.",
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unsupportedCompatServerTargetDiagnostic(): Diagnostic {
   return {
     level: "error",

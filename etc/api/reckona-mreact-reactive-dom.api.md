@@ -9,6 +9,9 @@ import { ReadonlyCell } from '@reckona/mreact-reactive-core';
 import type { Selector } from '@reckona/mreact-reactive-core';
 
 // @public
+export function bindDomRef(element: Element, callback: DomRefCallback): DomRefBinding;
+
+// @public
 export function bindEvent<K extends keyof HTMLElementEventMap>(element: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void, options?: BindEventOptions): Dispose;
 
 // @public
@@ -102,7 +105,21 @@ export function createTemplateElement<TElement extends Element = Element>(html: 
 // @public
 export type Dispose = () => void;
 
+// @public (undocumented)
+export interface DomRefBinding {
+    // (undocumented)
+    dispose(): void;
+    // (undocumented)
+    retarget(element: Element): void;
+}
+
+// @public (undocumented)
+export type DomRefCallback = (element: Element) => void | Dispose;
+
 export { effect }
+
+// @public
+export function getDomRefBindings(element: Element): readonly DomRefBinding[];
 
 // @public
 export function insertDynamic(parent: ParentNode, marker: ChildNode, value: () => RenderValue): Dispose;

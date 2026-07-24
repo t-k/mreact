@@ -8,6 +8,35 @@ import {
 } from "./helpers.js";
 
 describe("compiler client runtime dynamic output", () => {
+  test("runs intrinsic domRef after the generated element is connected", async () => {
+    const output = transform({
+      code: `export function App() {
+        return <section domRef={(element) => {
+          globalThis.__attachedDomRef = element;
+        }}>Ready</section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindDomRef");
+    const { App } = compileClientModule(output.code);
+    const node = App();
+    const runtimeState = globalThis as typeof globalThis & {
+      __attachedDomRef?: Element;
+    };
+    expect(runtimeState.__attachedDomRef).toBeUndefined();
+
+    document.body.append(node);
+    await Promise.resolve();
+
+    expect(runtimeState.__attachedDomRef).toBe(node);
+    delete runtimeState.__attachedDomRef;
+    node.remove();
+  });
+
   test("preserves component body statements used by dynamic text", async () => {
     const output = transform({
       code: 'export function App() { const name = "Ada"; return <div>Hello {name}</div>; }',

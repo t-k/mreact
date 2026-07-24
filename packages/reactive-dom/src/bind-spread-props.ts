@@ -125,6 +125,7 @@ function shouldSkipSpreadProp(name: string, value: unknown): boolean {
     name === "defaultValue" ||
     name === "key" ||
     name === "ref" ||
+    name === "domRef" ||
     name === "suppressHydrationWarning" ||
     name === "value" ||
     (isEventLikePropName(name) && typeof value !== "function")

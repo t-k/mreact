@@ -1,4 +1,7 @@
-import { unsupportedRefAttributeDiagnostic } from "./diagnostics.js";
+import {
+  unsupportedComponentDomRefDiagnostic,
+  unsupportedRefAttributeDiagnostic,
+} from "./diagnostics.js";
 import type { ComponentPropIr, JsxNodeIr } from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import { stripOxcGeneratedImports } from "./oxc-code-utils.js";
@@ -44,6 +47,11 @@ export function analyzeOxcComponentProp(
 
   if (name === "ref" && options.allowRef !== true) {
     diagnostics.push(unsupportedRefAttributeDiagnostic(getOxcLocation(code, object.name)));
+  }
+
+  if (name === "domRef") {
+    diagnostics.push(unsupportedComponentDomRefDiagnostic(getOxcLocation(code, object.name)));
+    return [];
   }
 
   if (value.type === "Literal") {

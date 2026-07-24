@@ -8,6 +8,9 @@
 export function createReactiveDomBlock<P extends object = Record<string, unknown>>(render: ReactiveDomBlockRender<P>, blockProps?: P): ReactCompatElement<ReactiveDomBlockProps>;
 
 // @public
+export type DomRefCallback = (element: Element) => void | (() => void);
+
+// @public
 export type ElementType<P = Record<string, unknown>> = string | typeof Fragment | typeof Suspense | typeof SuspenseList | typeof Activity | typeof Profiler | typeof ERROR_BOUNDARY_TYPE | typeof REACTIVE_DOM_BLOCK_TYPE | typeof STRICT_MODE_TYPE | ReactCompatContextProviderShorthand | ReactCompatProviderType | ForwardRefType<P> | MemoType<P> | LazyType<P> | ((props: P) => ReactCompatNode | PromiseLike<ReactCompatNode>) | (new (props: P) => {
     render(): ReactCompatNode;
 });
@@ -76,6 +79,8 @@ export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends E
 export interface JSXHTMLAttributes<TElement extends HTMLElement> extends JSXDOMAttributes<TElement> {
     // (undocumented)
     [attributeName: string]: unknown;
+    // (undocumented)
+    domRef?: DomRefCallback;
 }
 
 // @public

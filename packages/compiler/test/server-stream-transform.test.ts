@@ -3,6 +3,22 @@ import { transform } from "../src/index.js";
 import { runServerStreamComponent } from "./helpers.js";
 
 describe("compiler server stream JSX transform", () => {
+  test("omits domRef without evaluating its callback expression", async () => {
+    const output = transform({
+      code: `export function App() {
+        return <section domRef={(() => { throw new Error("must not evaluate"); })()}>Ready</section>;
+      }`,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("must not evaluate");
+    await expect(runServerStreamComponent(output.code)).resolves.toBe("<section>Ready</section>");
+  });
+
   test("emitted static server stream component appends HTML chunks", async () => {
     const output = transform({
       code: 'export function App() { return <div id="app">Hello stream</div>; }',

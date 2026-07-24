@@ -151,6 +151,7 @@ export interface AsyncBoundaryIr {
 export type AttributeIr =
   | StaticAttributeIr
   | DynamicAttributeIr
+  | DomRefAttributeIr
   | EventAttributeIr
   | SpreadAttributeIr;
 
@@ -169,6 +170,14 @@ export interface DynamicAttributeIr {
   // "compat" applies react-compat serialization semantics (px suffix for
   // numeric style values, interpreter-equivalent filtering).
   serialization?: "compat";
+}
+
+/** Represents a post-commit callback for an intrinsic DOM element. */
+export interface DomRefAttributeIr {
+  kind: "dom-ref";
+  name: "domRef";
+  code: string;
+  serialization?: never;
 }
 
 /** Represents an event handler attribute emitted for client hydration. */

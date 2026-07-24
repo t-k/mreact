@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
+import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { bindDomRef, getDomRefBindings } from "../src/dom-ref.js";
 
 describe("bindDomRef", () => {
@@ -48,6 +49,26 @@ describe("bindDomRef", () => {
     await Promise.resolve();
     binding.dispose();
     binding.dispose();
+
+    expect(cleanupCount).toBe(1);
+    expect(getDomRefBindings(element)).toEqual([]);
+    element.remove();
+  });
+
+  test("is disposed by its reactive cleanup owner", async () => {
+    const element = document.createElement("section");
+    document.body.append(element);
+    let disposeOwner: (() => void) | undefined;
+    let cleanupCount = 0;
+
+    withCleanupScope((dispose) => {
+      disposeOwner = dispose;
+    }, () => bindDomRef(element, () => () => {
+      cleanupCount += 1;
+    }));
+
+    await Promise.resolve();
+    disposeOwner?.();
 
     expect(cleanupCount).toBe(1);
     expect(getDomRefBindings(element)).toEqual([]);

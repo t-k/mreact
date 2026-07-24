@@ -30,7 +30,8 @@ export function emitClient(ir: ModuleIr): EmitResult {
     .map((component) =>
       emitComponent(component, moduleAllocator, helperNames, clientBoundaryHelperName),
     )
-    .join("\n\n");
+    .join("\n\n")
+    .replaceAll("__MREACT_BIND_DOM_REF__", helperNames.bindDomRef);
 
   return {
     code: `${[importLine, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
@@ -40,6 +41,7 @@ export function emitClient(ir: ModuleIr): EmitResult {
 
 type RuntimeHelperName =
   | "bindList"
+  | "bindDomRef"
   | "bindEvent"
   | "bindProp"
   | "bindSpreadProps"
@@ -64,6 +66,7 @@ function allocateRuntimeHelperNames(
   ]);
   const helperNames: RuntimeHelperNames = {
     bindList: "bindList",
+    bindDomRef: "bindDomRef",
     bindEvent: "bindEvent",
     bindProp: "bindProp",
     bindSpreadProps: "bindSpreadProps",
@@ -114,6 +117,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   const specifiers = new Set<string>(["createTemplate"]);
 
+  if (JSON.stringify(ir).includes("__MREACT_BIND_DOM_REF__")) {
+    specifiers.add("bindDomRef");
+  }
+
   for (const component of ir.components) {
     visit(component.root, (node) => {
       if (node.kind === "expr") {
@@ -134,6 +141,10 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         for (const attr of node.attributes) {
           if (attr.kind === "dynamic-attr") {
             specifiers.add("bindProp");
+          }
+
+          if (attr.kind === "dom-ref") {
+            specifiers.add("bindDomRef");
           }
 
           if (attr.kind === "spread-attr") {
@@ -444,6 +455,10 @@ function emitSetup(
         lines.push(
           `  ${state.helperNames.bindProp}(${path}, "${attr.name}", () => (${attr.code}));`,
         );
+      }
+
+      if (attr.kind === "dom-ref") {
+        lines.push(`  ${state.helperNames.bindDomRef}(${path}, ${attr.code});`);
       }
 
       if (attr.kind === "spread-attr") {

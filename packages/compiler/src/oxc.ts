@@ -112,6 +112,7 @@ export type {
   ComponentRenderPropIr,
   ComponentSpreadPropIr,
   ConditionalIr,
+  DomRefAttributeIr,
   DynamicAttributeIr,
   EventAttributeIr,
   ExprIr,
