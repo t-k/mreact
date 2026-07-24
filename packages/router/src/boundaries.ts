@@ -15,6 +15,9 @@ import { resolveAppRouterProjectOptions, type AppRouterProjectOptions } from "./
 import { stripRouteClientSource } from "./route-source.js";
 import { scanAppRoutes } from "./routes.js";
 
+/**
+ * Describes one statically traced component in a route boundary report.
+ */
 export interface BoundaryReportComponent {
   classification: ClientRouteComponentClassification;
   exportName: string;
@@ -22,6 +25,9 @@ export interface BoundaryReportComponent {
   origin: ClientRouteComponentOrigin;
 }
 
+/**
+ * Describes the rendered component boundary graph for one page route.
+ */
 export interface BoundaryReportRoute {
   classification: "client-route" | "server-render";
   components: readonly BoundaryReportComponent[];
@@ -29,6 +35,9 @@ export interface BoundaryReportRoute {
   path: string;
 }
 
+/**
+ * Counts route and component classifications across a boundary report.
+ */
 export interface BoundaryReportSummary {
   clientBoundaries: number;
   clientRoutes: number;
@@ -39,6 +48,9 @@ export interface BoundaryReportSummary {
   unknownComponents: number;
 }
 
+/**
+ * Contains a deterministic, versioned snapshot of app-router component boundaries.
+ */
 export interface BoundaryReport {
   diagnostics: readonly ClientRouteInferenceDiagnostic[];
   routes: readonly BoundaryReportRoute[];
@@ -58,10 +70,16 @@ export interface CreateBoundaryReportInput {
   routes: readonly CreateBoundaryReportRouteInput[];
 }
 
+/**
+ * Supplies project and Vite settings for standalone boundary analysis.
+ */
 export interface AnalyzeAppBoundariesOptions extends AppRouterProjectOptions {
   viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
 }
 
+/**
+ * Inspects every page route without writing build artifacts or executing application code.
+ */
 export async function analyzeAppBoundaries(
   options: AnalyzeAppBoundariesOptions,
 ): Promise<BoundaryReport> {
@@ -125,10 +143,15 @@ export function createBoundaryReport(input: CreateBoundaryReportInput): Boundary
     );
   const diagnostics = input.routes
     .flatMap((route) => route.diagnostics)
-    .map((diagnostic) => ({
-      ...diagnostic,
-      filename: projectRelativePath(input.projectRoot, diagnostic.filename),
-    }))
+    .map((diagnostic) => {
+      const filename = projectRelativePath(input.projectRoot, diagnostic.filename);
+
+      return {
+        ...diagnostic,
+        filename,
+        message: diagnostic.message.split(diagnostic.filename).join(filename),
+      };
+    })
     .sort((left, right) =>
       left.filename === right.filename
         ? left.code.localeCompare(right.code)

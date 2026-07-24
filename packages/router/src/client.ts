@@ -179,10 +179,10 @@ export interface ClientRouteReferenceResult extends ClientRouteInferenceResult {
 
 export interface ClientRouteInferenceDiagnostic {
   code:
-    | typeof clientBoundaryInferenceServerOnlyReferenceCode
-    | typeof clientBoundaryInferenceFunctionCallInteractiveCode
-    | typeof clientBoundaryInferenceUnsupportedReferenceCode
-    | typeof navigationRuntimeLinkDisabledCode;
+    | "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE"
+    | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE"
+    | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE"
+    | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
   filename: string;
   level: "warn";
   localNames: string[];

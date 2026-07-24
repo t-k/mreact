@@ -130,9 +130,16 @@ describe("docs-site content integrity", () => {
 
     expect(cli).not.toContain("5173");
     expect(environmentVariables).not.toContain("5173");
+    expect(cli).toContain("`mreact-router boundaries [appDir]`");
+    expect(cli).toContain("`mreact-router boundaries --json`");
+    expect(cli).toContain("Every production build prints the same full route-by-route report");
     expect(cli).toContain("`mreact-router dev` reads `--host` and `--port`.");
-    expect(cli).toContain("`mreact-router start` reads `--host`, `--host-policy`, and `--allowed-hosts`.");
-    expect(cloudflare).toContain("`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, and `ALL`");
+    expect(cli).toContain(
+      "`mreact-router start` reads `--host`, `--host-policy`, and `--allowed-hosts`.",
+    );
+    expect(cloudflare).toContain(
+      "`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, and `ALL`",
+    );
   });
 });
 
@@ -143,7 +150,7 @@ describe("docs-site accessibility affordances", () => {
 
     expect(layout).toContain('role="combobox"');
     expect(layout).toContain('aria-controls="site-search-results"');
-    expect(layout).toContain('aria-activedescendant');
+    expect(layout).toContain("aria-activedescendant");
     expect(layout).toContain('role="listbox"');
     expect(searchScript).toContain('event.key === "Escape"');
     expect(searchScript).toContain('setAttribute("aria-expanded",');

@@ -132,6 +132,7 @@ export type AwsLambdaGeneratedHandlerPreloadMode =
 export interface BuildAppOptions extends AppRouterProjectOptions {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
   awsLambdaPreloadRoutes?: readonly string[] | undefined;
+  /** Receives the full route and component boundary report after source analysis. */
   onBoundaryReport?: ((report: BoundaryReport) => void) | undefined;
   onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
   onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;

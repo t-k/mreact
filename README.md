@@ -48,6 +48,15 @@ pnpm install
 pnpm dev
 ```
 
+Inspect the inferred server/client split without creating build artifacts:
+
+```bash
+mreact-router boundaries
+mreact-router boundaries --json
+```
+
+Production builds print the same full route-by-route component boundary report before writing artifacts.
+
 ## Examples
 
 The `examples/` directory contains focused applications:

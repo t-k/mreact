@@ -21,6 +21,15 @@ import { ServerActionRequestReference } from '@reckona/mreact-server';
 import { UserConfig } from 'vite';
 
 // @public
+export function analyzeAppBoundaries(options: AnalyzeAppBoundariesOptions): Promise<BoundaryReport>;
+
+// @public
+export interface AnalyzeAppBoundariesOptions extends AppRouterProjectOptions {
+    // (undocumented)
+    viteConfig?: Pick<UserConfig, "define" | "plugins"> | undefined;
+}
+
+// @public
 export interface AppAssetRoute {
     // (undocumented)
     convention: AppFileConvention;
@@ -396,6 +405,60 @@ export interface AwsLambdaArtifactManifest {
 export type AwsLambdaGeneratedHandlerPreloadMode = "all" | "hot-route-requests" | "middleware" | "none";
 
 // @public
+export interface BoundaryReport {
+    // (undocumented)
+    diagnostics: readonly ClientRouteInferenceDiagnostic[];
+    // (undocumented)
+    routes: readonly BoundaryReportRoute[];
+    // (undocumented)
+    summary: BoundaryReportSummary;
+    // (undocumented)
+    version: 1;
+}
+
+// @public
+export interface BoundaryReportComponent {
+    // (undocumented)
+    classification: ClientRouteComponentClassification;
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    origin: ClientRouteComponentOrigin;
+}
+
+// @public
+export interface BoundaryReportRoute {
+    // (undocumented)
+    classification: "client-route" | "server-render";
+    // (undocumented)
+    components: readonly BoundaryReportComponent[];
+    // (undocumented)
+    entry: string;
+    // (undocumented)
+    path: string;
+}
+
+// @public
+export interface BoundaryReportSummary {
+    // (undocumented)
+    clientBoundaries: number;
+    // (undocumented)
+    clientRoutes: number;
+    // (undocumented)
+    serverOnlyComponents: number;
+    // (undocumented)
+    serverRenderComponents: number;
+    // (undocumented)
+    serverRenderRoutes: number;
+    // (undocumented)
+    sharedComponents: number;
+    // (undocumented)
+    unknownComponents: number;
+}
+
+// @public
 export function buildApp(options: BuildAppOptions): Promise<BuildAppResult>;
 
 // @public
@@ -404,6 +467,7 @@ export interface BuildAppOptions extends AppRouterProjectOptions {
     awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
     // (undocumented)
     awsLambdaPreloadRoutes?: readonly string[] | undefined;
+    onBoundaryReport?: ((report: BoundaryReport) => void) | undefined;
     // (undocumented)
     onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
     // (undocumented)
@@ -555,6 +619,24 @@ export interface CachedClientRouteSource {
 }
 
 // @public (undocumented)
+export interface ClientRouteComponent {
+    // (undocumented)
+    classification: ClientRouteComponentClassification;
+    // (undocumented)
+    exportName: string;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    origin: ClientRouteComponentOrigin;
+}
+
+// @public (undocumented)
+export type ClientRouteComponentClassification = "client-boundary" | "client-route" | "server-only" | "server-render" | "shared" | "unknown";
+
+// @public (undocumented)
+export type ClientRouteComponentOrigin = "client-filename" | "compat-filename" | "inferred-client-runtime" | "server-only-import" | "server-render" | "use-client-directive" | "use-server-directive";
+
+// @public (undocumented)
 export interface ClientRouteInferenceCache {
     // (undocumented)
     moduleAnalysisByFile: Map<string, Promise<ClientRouteModuleAnalysis>>;
@@ -566,6 +648,24 @@ export interface ClientRouteInferenceCache {
     sourceByFile: Map<string, Promise<CachedClientRouteSource>>;
     // (undocumented)
     transformedSourceByFile: Map<string, Promise<CachedClientRouteSource>>;
+}
+
+// @public (undocumented)
+export interface ClientRouteInferenceDiagnostic {
+    // (undocumented)
+    code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE" | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
+    // (undocumented)
+    filename: string;
+    // (undocumented)
+    level: "warn";
+    // (undocumented)
+    localNames: string[];
+    // (undocumented)
+    message: string;
+    // (undocumented)
+    routePath?: string | undefined;
+    // (undocumented)
+    source: string;
 }
 
 // @public
@@ -610,6 +710,29 @@ export interface CookieOptions {
 
 // @public
 export function cookies(request: Request): RequestCookies;
+
+// @public (undocumented)
+export function createBoundaryReport(input: CreateBoundaryReportInput): BoundaryReport;
+
+// @public (undocumented)
+export interface CreateBoundaryReportInput {
+    // (undocumented)
+    projectRoot: string;
+    // (undocumented)
+    routes: readonly CreateBoundaryReportRouteInput[];
+}
+
+// @public (undocumented)
+export interface CreateBoundaryReportRouteInput {
+    // (undocumented)
+    components: readonly ClientRouteComponent[];
+    // (undocumented)
+    diagnostics: readonly ClientRouteInferenceDiagnostic[];
+    // (undocumented)
+    entry: string;
+    // (undocumented)
+    path: string;
+}
 
 // @public
 export function createFileSystemPrerenderStore(options: FileSystemPrerenderStoreOptions): AppRouterPrerenderStore;
@@ -685,6 +808,12 @@ export interface FileSystemPrerenderStoreOptions {
     // (undocumented)
     namespace?: string;
 }
+
+// @public (undocumented)
+export function formatBoundaryReport(report: BoundaryReport): string;
+
+// @public (undocumented)
+export function formatBoundaryReportJson(report: BoundaryReport): string;
 
 // @public
 export function formCsrfCookie(csrfToken: string): string;

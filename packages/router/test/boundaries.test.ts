@@ -91,6 +91,39 @@ describe("boundary reports", () => {
     expect(json.endsWith("\n")).toBe(true);
   });
 
+  test("normalizes diagnostic filenames inside messages", () => {
+    const filename = "/workspace/src/app/page.tsx";
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [],
+          diagnostics: [
+            {
+              code: "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE",
+              filename,
+              level: "warn",
+              localNames: ["Panel"],
+              message: `${filename}: unsupported reference`,
+              routePath: "/",
+              source: "./Panel",
+            },
+          ],
+          entry: filename,
+          path: "/",
+        },
+      ],
+    });
+
+    expect(report.diagnostics[0]).toEqual(
+      expect.objectContaining({
+        filename: "src/app/page.tsx",
+        message: "src/app/page.tsx: unsupported reference",
+      }),
+    );
+    expect(formatBoundaryReportJson(report)).not.toContain("/workspace");
+  });
+
   test("analyzes routes, shells, explicit boundaries, barrels, and Vite transforms without building", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-boundary-report-"));
     const appDir = join(projectRoot, "src", "app");

@@ -320,7 +320,14 @@ export type {
   StartServerOptions,
 } from "./serve.js";
 export { matchRoute, scanAppRoutes } from "./routes.js";
-export type { CachedClientRouteSource, ClientRouteInferenceCache } from "./client.js";
+export type {
+  CachedClientRouteSource,
+  ClientRouteComponent,
+  ClientRouteComponentClassification,
+  ClientRouteComponentOrigin,
+  ClientRouteInferenceCache,
+  ClientRouteInferenceDiagnostic,
+} from "./client.js";
 export type { RouteMatcher, ScanAppRoutesOptions } from "./routes.js";
 export type { AppFileConvention } from "./file-conventions.js";
 export type {

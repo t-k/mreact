@@ -1,17 +1,18 @@
 export const title = "CLI";
-export const description = "mreact-router command overview for development, production builds, servers, and deployment packages.";
+export const description = "mreact-router command overview for development, boundary inspection, production builds, servers, and deployment packages.";
 
 # CLI
 
-The `mreact-router` CLI is the operational entrypoint for local development, production builds, serving Node output, and packaging adapter artifacts. Use command-level help when you need the exact option list for the installed version.
+The `mreact-router` CLI is the operational entrypoint for local development, server/client boundary inspection, production builds, serving Node output, and packaging adapter artifacts. Use command-level help when you need the exact option list for the installed version.
 
 ## When to use this page
 
-Use this page when you need to choose the right CLI command, map an npm script to a build target, enable request logging, or create deployment artifacts from an existing `.mreact` build.
+Use this page when you need to choose the right CLI command, inspect which components run on the server or client, map an npm script to a build target, enable request logging, or create deployment artifacts from an existing `.mreact` build.
 
 ## Commands
 
 - `mreact-router dev` starts the Vite-backed development server. It is the default when no command is provided.
+- `mreact-router boundaries [appDir]` analyzes every route and lists its statically traceable rendered server and client components without creating build artifacts.
 - `mreact-router build --target=node` builds Node server output and client assets into `.mreact`.
 - `mreact-router build --target=cloudflare` builds Cloudflare-compatible output.
 - `mreact-router build --target=aws-lambda` builds AWS Lambda-compatible output.
@@ -22,6 +23,8 @@ Use this page when you need to choose the right CLI command, map an npm script t
 
 ```bash
 mreact-router dev --host 0.0.0.0 --port 3001 --log requests
+mreact-router boundaries
+mreact-router boundaries --json
 mreact-router build --target=node --client-source-maps=hidden
 mreact-router build --target=aws-lambda
 mreact-router package aws-lambda --from .mreact --out .lambda
@@ -29,6 +32,7 @@ mreact-router package aws-lambda --from .mreact --out .lambda
 
 ## Options to know first
 
+- `mreact-router boundaries --json` prints a deterministic, versioned JSON document for tooling. Paths are relative to the project root.
 - `--target=node|cloudflare|aws-lambda|all` controls which production artifact is built.
 - `--client-source-maps=none|hidden` controls production browser source maps. Use `hidden` when you upload maps to Sentry or another error pipeline without publishing source map comments to browsers.
 - `mreact-router dev` reads `--host` and `--port`.
@@ -38,6 +42,14 @@ mreact-router package aws-lambda --from .mreact --out .lambda
 - `--handler <entry>` bundles a custom AWS Lambda handler.
 - `--worker <entry>` bundles a custom Cloudflare Pages worker that can import `createDefaultCloudflarePagesHandler` from the package-time `mreact-router/generated-cloudflare` module.
 - `--skip-runtime-dependency-check` applies to AWS Lambda packaging when a later deployment step installs production dependencies.
+
+## Boundary reports
+
+The boundary report classifies each route as `server-render` or `client-route`, then lists every rendered component that static analysis can trace through pages, layouts, templates, and barrel exports. Component classifications distinguish `server-render`, `server-only`, `client-boundary`, `client-route`, `shared`, and `unknown` code, and origins explain explicit filename or directive boundaries versus inferred client runtime.
+
+Every production build prints the same full route-by-route report before it builds server and client artifacts. The build reuses its existing production boundary analysis rather than scanning the graph a second time.
+
+Dynamic component selection that cannot be resolved statically is reported as a diagnostic or `unknown`; the report does not execute application code. The standalone command reads the same Vite plugins as a configured production build, but it does not write `.mreact` or start a server.
 
 ## Package scripts
 
@@ -63,4 +75,4 @@ Keep application scripts explicit about the target they produce. That makes CI l
 - [Cloudflare](/deployments/cloudflare/)
 - [Container and Cloud Run](/deployments/container-and-cloud-run/)
 
-API reference: [buildApp()](/api/functions/_reckona_mreact-router..buildApp.html), [startServer()](/api/functions/_reckona_mreact-router..startServer.html), [packageAwsLambdaArtifact()](/api/functions/_reckona_mreact-router..packageAwsLambdaArtifact.html), and [packageCloudflarePagesArtifact()](/api/functions/_reckona_mreact-router..packageCloudflarePagesArtifact.html).
+API reference: [analyzeAppBoundaries()](/api/functions/_reckona_mreact-router..analyzeAppBoundaries.html), [buildApp()](/api/functions/_reckona_mreact-router..buildApp.html), [startServer()](/api/functions/_reckona_mreact-router..startServer.html), [packageAwsLambdaArtifact()](/api/functions/_reckona_mreact-router..packageAwsLambdaArtifact.html), and [packageCloudflarePagesArtifact()](/api/functions/_reckona_mreact-router..packageCloudflarePagesArtifact.html).
