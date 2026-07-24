@@ -10,6 +10,7 @@ import {
   type BoundaryGraphResult,
   type ClientRouteModuleAnalysis,
   type ClientRouteStaticImportReference,
+  type StaticExportReference,
   type StaticImportReference,
   type TopLevelExportRenderInfo,
 } from "@reckona/mreact-compiler";
@@ -118,7 +119,32 @@ export interface ClientRouteInferenceResult {
   client: boolean;
   clientBoundaryImports: string[];
   clientBoundaryFallbackImports: string[];
+  components?: ClientRouteComponent[] | undefined;
   diagnostics: ClientRouteInferenceDiagnostic[];
+}
+
+export type ClientRouteComponentClassification =
+  | "client-boundary"
+  | "client-route"
+  | "server-only"
+  | "server-render"
+  | "shared"
+  | "unknown";
+
+export type ClientRouteComponentOrigin =
+  | "client-filename"
+  | "compat-filename"
+  | "inferred-client-runtime"
+  | "server-only-import"
+  | "server-render"
+  | "use-client-directive"
+  | "use-server-directive";
+
+export interface ClientRouteComponent {
+  classification: ClientRouteComponentClassification;
+  exportName: string;
+  file: string;
+  origin: ClientRouteComponentOrigin;
 }
 
 interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
@@ -132,6 +158,11 @@ interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
   serverOnly: boolean;
   serverOnlyClientRuntime: boolean;
   usesNavigationLink: boolean;
+}
+
+interface ClientRouteComponentCollector {
+  components: Map<string, ClientRouteComponent>;
+  reachable: Set<string>;
 }
 
 export interface ClientReferenceImport {
@@ -218,6 +249,7 @@ export async function inferClientRouteModule(options: {
   appDir?: string | undefined;
   cache?: ClientRouteInferenceCache | undefined;
   code: string;
+  collectComponents?: boolean | undefined;
   filename: string;
   moduleContext?: CompilerModuleContext | undefined;
   routePath?: string | undefined;
@@ -225,6 +257,9 @@ export async function inferClientRouteModule(options: {
 }): Promise<ClientRouteInferenceResult> {
   const cache = options.cache ?? createClientRouteInferenceCache();
   const sourceTransform = clientRouteSourceTransformForVitePlugins(options.vitePlugins);
+  const componentCollector: ClientRouteComponentCollector | undefined = options.collectComponents
+    ? { components: new Map(), reachable: new Set() }
+    : undefined;
   const code = await transformClientRouteSource({
     code: options.code,
     filename: options.filename,
@@ -235,6 +270,7 @@ export async function inferClientRouteModule(options: {
     const routeInference = await inferClientRouteModuleSource({
       cache,
       code,
+      componentCollector,
       filename: options.filename,
       ...(sourceTransform === undefined ? { moduleContext: options.moduleContext } : {}),
       root: true,
@@ -254,12 +290,23 @@ export async function inferClientRouteModule(options: {
       : routeInference;
 
     if (options.appDir === undefined) {
-      return withClientRouteDiagnosticPath(mergedRouteInference, options.routePath);
+      return withClientRouteDiagnosticPath(
+        {
+          ...mergedRouteInference,
+          ...(componentCollector === undefined
+            ? {}
+            : {
+                components: normalizedClientRouteComponents(componentCollector, options.filename),
+              }),
+        },
+        options.routePath,
+      );
     }
 
     const shellInferences = await inferClientRouteShellModules({
       appDir: options.appDir,
       cache,
+      componentCollector,
       filename: options.filename,
       sourceTransform,
     });
@@ -270,6 +317,11 @@ export async function inferClientRouteModule(options: {
           mergedRouteInference.client || shellInferences.some((inference) => inference.client),
         clientBoundaryImports: mergedRouteInference.clientBoundaryImports,
         clientBoundaryFallbackImports: mergedRouteInference.clientBoundaryFallbackImports,
+        ...(componentCollector === undefined
+          ? {}
+          : {
+              components: normalizedClientRouteComponents(componentCollector, options.filename),
+            }),
         diagnostics: [
           ...mergedRouteInference.diagnostics,
           ...shellInferences.flatMap((inference) => inference.diagnostics),
@@ -604,6 +656,7 @@ export function navigationRuntimeLinkDisabledDiagnostic(options: {
 async function inferClientRouteShellModules(options: {
   appDir: string;
   cache: ClientRouteInferenceCache;
+  componentCollector?: ClientRouteComponentCollector | undefined;
   filename: string;
   sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteInferenceResult[]> {
@@ -620,6 +673,7 @@ async function inferClientRouteShellModules(options: {
       return await inferClientRouteModuleSource({
         cache: options.cache,
         code,
+        componentCollector: options.componentCollector,
         filename: shell,
         root: true,
         seen: new Set(),
@@ -662,6 +716,186 @@ export function isClientRouteSource(code: string): boolean {
   );
 }
 
+function collectClientRouteComponentsForModule(
+  collector: ClientRouteComponentCollector | undefined,
+  options: {
+    analysis: ClientRouteModuleAnalysis;
+    filename: string;
+    root: boolean;
+  },
+): void {
+  if (collector === undefined) {
+    return;
+  }
+
+  if (options.root) {
+    markClientRouteComponentReachable(collector, options.filename, ["default"]);
+  }
+
+  const serverOnly =
+    options.analysis.hasUseServerDirective || hasServerOnlyImports(options.analysis);
+  const explicitClient = isExplicitClientRouteSource(options.analysis, options.filename);
+
+  for (const info of options.analysis.topLevelExportRenderInfo) {
+    const component = {
+      classification: serverOnly
+        ? "server-only"
+        : explicitClient || info.clientRuntime
+          ? options.root
+            ? "client-route"
+            : "client-boundary"
+          : "server-render",
+      exportName: info.name,
+      file: options.filename,
+      origin: clientRouteComponentOrigin({
+        analysis: options.analysis,
+        filename: options.filename,
+        info,
+        serverOnly,
+      }),
+    } satisfies ClientRouteComponent;
+    collector.components.set(
+      clientRouteComponentKey(component.file, component.exportName),
+      component,
+    );
+  }
+}
+
+function clientRouteComponentOrigin(options: {
+  analysis: ClientRouteModuleAnalysis;
+  filename: string;
+  info: TopLevelExportRenderInfo;
+  serverOnly: boolean;
+}): ClientRouteComponentOrigin {
+  if (options.analysis.hasUseServerDirective) {
+    return "use-server-directive";
+  }
+
+  if (options.serverOnly) {
+    return "server-only-import";
+  }
+
+  if (options.analysis.hasUseClientDirective) {
+    return "use-client-directive";
+  }
+
+  if (/\.compat(?:\.mreact)?\.[cm]?[jt]sx?$/.test(options.filename)) {
+    return "compat-filename";
+  }
+
+  if (/\.client(?:\.mreact)?\.[cm]?[jt]sx?$/.test(options.filename)) {
+    return "client-filename";
+  }
+
+  return options.info.clientRuntime ? "inferred-client-runtime" : "server-render";
+}
+
+function normalizedClientRouteComponents(
+  collector: ClientRouteComponentCollector,
+  routeFile: string,
+): ClientRouteComponent[] {
+  return Array.from(collector.components.values())
+    .filter(
+      (component) =>
+        collector.reachable.has(clientRouteComponentKey(component.file, component.exportName)) ||
+        collector.reachable.has(clientRouteComponentKey(component.file, "*")),
+    )
+    .sort((left, right) => {
+      const leftRoute = left.file === routeFile;
+      const rightRoute = right.file === routeFile;
+
+      if (leftRoute !== rightRoute) {
+        return leftRoute ? -1 : 1;
+      }
+
+      return left.file === right.file
+        ? left.exportName === right.exportName
+          ? left.classification.localeCompare(right.classification)
+          : left.exportName.localeCompare(right.exportName)
+        : left.file.localeCompare(right.file);
+    });
+}
+
+function clientRouteComponentKey(file: string, exportName: string): string {
+  return `${file}\0${exportName}`;
+}
+
+function markClientRouteComponentReachable(
+  collector: ClientRouteComponentCollector | undefined,
+  file: string,
+  exportNames: readonly string[] | undefined,
+): void {
+  if (collector === undefined) {
+    return;
+  }
+
+  if (exportNames === undefined) {
+    collector.reachable.add(clientRouteComponentKey(file, "*"));
+    return;
+  }
+
+  for (const exportName of exportNames) {
+    collector.reachable.add(clientRouteComponentKey(file, exportName));
+  }
+}
+
+function isClientRouteComponentReachable(
+  collector: ClientRouteComponentCollector | undefined,
+  file: string,
+  exportName: string,
+): boolean {
+  return (
+    collector === undefined ||
+    collector.reachable.has(clientRouteComponentKey(file, exportName)) ||
+    collector.reachable.has(clientRouteComponentKey(file, "*"))
+  );
+}
+
+function propagateClientRouteComponentStaticExport(
+  collector: ClientRouteComponentCollector | undefined,
+  file: string,
+  resolved: string,
+  reference: StaticExportReference,
+): void {
+  if (collector === undefined) {
+    return;
+  }
+
+  const wildcardReachable = collector.reachable.has(clientRouteComponentKey(file, "*"));
+
+  if (reference.exportAll) {
+    if (wildcardReachable) {
+      markClientRouteComponentReachable(collector, resolved, undefined);
+    }
+
+    for (const key of collector.reachable) {
+      const [reachableFile, exportName] = key.split("\0");
+
+      if (reachableFile === file && exportName !== undefined && exportName !== "*") {
+        markClientRouteComponentReachable(collector, resolved, [exportName]);
+      }
+    }
+    return;
+  }
+
+  for (const specifier of reference.specifiers) {
+    if (
+      wildcardReachable ||
+      collector.reachable.has(clientRouteComponentKey(file, specifier.exportedName))
+    ) {
+      markClientRouteComponentReachable(collector, resolved, [specifier.localName]);
+    }
+  }
+
+  if (reference.specifiers.length === 0) {
+    for (const exportName of reference.exportedNames) {
+      if (wildcardReachable || collector.reachable.has(clientRouteComponentKey(file, exportName))) {
+        markClientRouteComponentReachable(collector, resolved, [exportName]);
+      }
+    }
+  }
+}
+
 function isExplicitClientRouteSource(
   analysis: ClientRouteModuleAnalysis,
   filename: string,
@@ -688,6 +922,7 @@ function hasServerOnlyImports(analysis: ClientRouteModuleAnalysis): boolean {
 async function inferClientRouteModuleSource(options: {
   cache: ClientRouteInferenceCache;
   code: string;
+  componentCollector?: ClientRouteComponentCollector | undefined;
   filename: string;
   moduleContext?: CompilerModuleContext | undefined;
   root: boolean;
@@ -696,6 +931,11 @@ async function inferClientRouteModuleSource(options: {
 }): Promise<ClientRouteModuleInferenceResult> {
   const analysis = await clientRouteModuleAnalysisForSource(options);
   const usesNavigationLinkLocal = detectLinkComponentUsage(analysis);
+  collectClientRouteComponentsForModule(options.componentCollector, {
+    analysis,
+    filename: options.filename,
+    root: options.root,
+  });
 
   if (isServerOnlyClientRouteSource(analysis)) {
     return emptyClientRouteModuleInferenceResult({
@@ -786,6 +1026,23 @@ async function inferClientRouteModuleSource(options: {
         continue;
       }
 
+      const renderingExportNames = rendered ? renderedLocalExportNames(reference, exportInfo) : [];
+      const renderedImportedNames = rendered
+        ? renderedImportedExportNames(reference, renderedComponentRoots)
+        : [];
+      if (
+        rendered &&
+        renderingExportNames.some((exportName) =>
+          isClientRouteComponentReachable(options.componentCollector, options.filename, exportName),
+        )
+      ) {
+        markClientRouteComponentReachable(
+          options.componentCollector,
+          resolved,
+          renderedImportedNames,
+        );
+      }
+
       const source = await readClientRouteSource({
         cache: options.cache,
         filename: resolved,
@@ -794,6 +1051,7 @@ async function inferClientRouteModuleSource(options: {
       const imported = await inferClientRouteModuleSource({
         cache: options.cache,
         code: source,
+        componentCollector: options.componentCollector,
         filename: resolved,
         moduleContext: await compilerModuleContextForSource({
           cache: options.cache,
@@ -844,8 +1102,8 @@ async function inferClientRouteModuleSource(options: {
       }
 
       if (rendered) {
-        const importedExportNames = renderedImportedExportNames(reference, renderedComponentRoots);
-        const renderedExportNames = renderedLocalExportNames(reference, exportInfo);
+        const importedExportNames = renderedImportedNames;
+        const renderedExportNames = renderingExportNames;
         const importedBoundary =
           imported.clientBoundaryModule ||
           matchesInferredExportNames(importedExportNames, imported.clientBoundaryExportNames);
@@ -914,6 +1172,13 @@ async function inferClientRouteModuleSource(options: {
           continue;
         }
 
+        propagateClientRouteComponentStaticExport(
+          options.componentCollector,
+          options.filename,
+          resolved,
+          reference,
+        );
+
         const source = await readClientRouteSource({
           cache: options.cache,
           filename: resolved,
@@ -922,6 +1187,7 @@ async function inferClientRouteModuleSource(options: {
         const exported = await inferClientRouteModuleSource({
           cache: options.cache,
           code: source,
+          componentCollector: options.componentCollector,
           filename: resolved,
           moduleContext: await compilerModuleContextForSource({
             cache: options.cache,
@@ -1426,7 +1692,7 @@ function removeSafeCallbackHandlerAttributes(
 
 function matchingBraceEnd(source: string, openBraceIndex: number): number | undefined {
   let depth = 0;
-  let quote: "\"" | "'" | "`" | undefined;
+  let quote: '"' | "'" | "`" | undefined;
   let escaped = false;
 
   for (let index = openBraceIndex; index < source.length; index += 1) {
@@ -1443,7 +1709,7 @@ function matchingBraceEnd(source: string, openBraceIndex: number): number | unde
       continue;
     }
 
-    if (char === "\"" || char === "'" || char === "`") {
+    if (char === '"' || char === "'" || char === "`") {
       quote = char;
       continue;
     }
@@ -1492,9 +1758,7 @@ function destructuredPropsCallbackNames(source: string): Set<string> {
     addDestructuredCallbackNames(names, match[1] ?? "");
   }
 
-  for (const match of source.matchAll(
-    /\{[^{}]*:\s*\{([^{}]+)\}\s*(?:=\s*\{\})?[^{}]*\}/gu,
-  )) {
+  for (const match of source.matchAll(/\{[^{}]*:\s*\{([^{}]+)\}\s*(?:=\s*\{\})?[^{}]*\}/gu)) {
     addDestructuredCallbackNames(names, match[1] ?? "");
   }
 
@@ -1532,10 +1796,7 @@ function addDestructuredCallbackNames(names: Set<string>, destructured: string):
     const alias = destructuredBindingName(rawAlias);
     const name = alias ?? property;
 
-    if (
-      name !== undefined &&
-      (isCallbackPropName(property) || isCallbackPropName(name))
-    ) {
+    if (name !== undefined && (isCallbackPropName(property) || isCallbackPropName(name))) {
       names.add(name);
     }
   }
@@ -2268,8 +2529,7 @@ export async function buildClientRouteEntrySource(
   const routeUsesReactiveEffect = detectRouteReactiveEffectHint(compiled.code);
   const routeUsesDomRefs = compiled.metadata.imports.some(
     (entry) =>
-      entry.source === "@reckona/mreact-reactive-dom" &&
-      entry.specifiers.includes("bindDomRef"),
+      entry.source === "@reckona/mreact-reactive-dom" && entry.specifiers.includes("bindDomRef"),
   );
   const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect || routeUsesDomRefs;
   const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
@@ -4813,8 +5073,8 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
           if (
             isAbsolute(args.path) &&
             isRouteClientDependencySourcePath(args.path, routeFiles) &&
-            !runtimePackageDirs.some(
-              (runtimePackageDir) => args.path.startsWith(`${runtimePackageDir}${sep}`),
+            !runtimePackageDirs.some((runtimePackageDir) =>
+              args.path.startsWith(`${runtimePackageDir}${sep}`),
             )
           ) {
             options.sourceRegionModulePaths?.add(args.path);

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
@@ -44,6 +44,134 @@ export default function Page() { return <button onClick={() => undefined}>ok</bu
       await buildClientRouteOutputFromClient(options),
     );
   });
+
+  test("collects rendered server and client components through a barrel on demand", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-components-"));
+    const appDir = join(dir, "app");
+    const componentsDir = join(appDir, "components");
+    await mkdir(componentsDir, { recursive: true });
+    const serverPanelFile = join(componentsDir, "ServerPanel.tsx");
+    const counterFile = join(componentsDir, "Counter.tsx");
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      serverPanelFile,
+      `export function ServerPanel() {
+  return <section>Server panel</section>;
+}`,
+    );
+    await writeFile(
+      counterFile,
+      `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Counter() {
+  const count = cell(0);
+  return <button type="button" onClick={() => count.set(count.get() + 1)}>{count.get()}</button>;
+}`,
+    );
+    await writeFile(
+      join(componentsDir, "index.ts"),
+      `export { Counter } from "./Counter";
+export { ServerPanel } from "./ServerPanel";`,
+    );
+    await writeFile(
+      pageFile,
+      `import { Counter, ServerPanel } from "./components";
+
+export default function Page() {
+  return <main><ServerPanel /><Counter /></main>;
+}`,
+    );
+
+    const result = await inferClientRouteModule({
+      appDir,
+      code: await readFile(pageFile, "utf8"),
+      collectComponents: true,
+      filename: pageFile,
+      routePath: "/",
+    });
+
+    expect(result.components).toEqual([
+      {
+        classification: "server-render",
+        exportName: "default",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "client-boundary",
+        exportName: "Counter",
+        file: counterFile,
+        origin: "inferred-client-runtime",
+      },
+      {
+        classification: "server-render",
+        exportName: "ServerPanel",
+        file: serverPanelFile,
+        origin: "server-render",
+      },
+    ]);
+    expect(result.clientBoundaryImports).toEqual(["./components"]);
+  });
+
+  test("records explicit route and filename boundary origins", async () => {
+    const routeFile = "/app/editor/page.tsx";
+    const route = await inferClientRouteModule({
+      code: `"use client";
+export default function EditorPage() { return <main>Editor</main>; }`,
+      collectComponents: true,
+      filename: routeFile,
+    });
+
+    expect(route.components).toEqual([
+      {
+        classification: "client-route",
+        exportName: "default",
+        file: routeFile,
+        origin: "use-client-directive",
+      },
+    ]);
+
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-shell-components-"));
+    const appDir = join(dir, "app");
+    await mkdir(appDir, { recursive: true });
+    const toolbarFile = join(appDir, "Toolbar.client.tsx");
+    const layoutFile = join(appDir, "layout.tsx");
+    const pageFile = join(appDir, "page.tsx");
+    await writeFile(
+      toolbarFile,
+      `export function Toolbar() { return <button type="button">Tools</button>; }`,
+    );
+    await writeFile(
+      layoutFile,
+      `import { Toolbar } from "./Toolbar.client";
+export default function Layout() { return <div><Toolbar /></div>; }`,
+    );
+    await writeFile(pageFile, `export default function Page() { return <main>Page</main>; }`);
+
+    const page = await inferClientRouteModule({
+      appDir,
+      code: await readFile(pageFile, "utf8"),
+      collectComponents: true,
+      filename: pageFile,
+    });
+
+    expect(page.components).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "server-render",
+          exportName: "default",
+          file: layoutFile,
+          origin: "server-render",
+        },
+        {
+          classification: "client-boundary",
+          exportName: "Toolbar",
+          file: toolbarFile,
+          origin: "client-filename",
+        },
+      ]),
+    );
+  });
 });
 
 describe("detectNavigationRuntimeOverride", () => {
@@ -78,7 +206,9 @@ export default function Page() { return null; }`;
 
 describe("detectClientNavigationHint", () => {
   test("defaults to true when no hint is present", () => {
-    expect(detectClientNavigationHint("export default function Page() { return null; }")).toBe(true);
+    expect(detectClientNavigationHint("export default function Page() { return null; }")).toBe(
+      true,
+    );
   });
 
   test("returns false for an explicit false export", () => {
@@ -1578,10 +1708,30 @@ export default function Page() {
     await writeFile(pageFile, code);
 
     const result = await collectClientRouteReferences({ appDir, code, filename: pageFile });
+    const detailed = await inferClientRouteModule({
+      appDir,
+      code,
+      collectComponents: true,
+      filename: pageFile,
+    });
 
     expect(result.client).toBe(false);
     expect(result.clientBoundaryImports).toEqual([]);
     expect(result.clientReferenceManifest).toEqual([]);
+    expect(detailed.components).toEqual([
+      {
+        classification: "server-render",
+        exportName: "default",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "StaticNav",
+        file: join(appDir, "components", "navigation.tsx"),
+        origin: "server-render",
+      },
+    ]);
   });
 
   test("marks anonymous default arrow optional callback guards as SSR fallback eligible", async () => {
