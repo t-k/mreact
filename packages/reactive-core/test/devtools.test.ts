@@ -45,6 +45,39 @@ describe("reactive-core devtools instrumentation", () => {
     }
   });
 
+  test("identifies competing writers whose diagnostic labels are identical", () => {
+    const devtools = installDevtools();
+    activeDevtools = devtools;
+    const runtime = createReactiveTestRuntime();
+    const turn = cell<"a" | "b">("a");
+    const duplicateLabel = "page.mreact.tsx#Page";
+
+    try {
+      effectWithDebugLabel(() => {
+        if (turn.get() === "b") {
+          turn.set("a");
+        }
+      }, duplicateLabel);
+      effectWithDebugLabel(() => {
+        if (turn.get() === "a") {
+          turn.set("b");
+        }
+      }, duplicateLabel);
+
+      let message = "";
+      try {
+        runtime.flushNext();
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error);
+      }
+      expect(message).toMatch(/competing computations.*same cell/is);
+      expect(message.match(/page\.mreact\.tsx#Page/g)).toHaveLength(2);
+      expect(message.match(/computation \d+/g)).toHaveLength(2);
+    } finally {
+      runtime.dispose();
+    }
+  });
+
   test("emits opt-in cell and effect events through the global devtools hook", async () => {
     const devtools = installDevtools();
     activeDevtools = devtools;

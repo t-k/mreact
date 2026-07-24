@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { basename, dirname, extname, join, relative, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import {
   analyzeBoundaryGraph,
   collectClientRouteModuleAnalysis,
@@ -68,6 +68,7 @@ export interface ClientRouteManifestEntry {
 export interface BuildClientRouteOutputOptions {
   cacheDir?: string | undefined;
   code: string;
+  debugLabelRoot?: string | undefined;
   debugLabels?: boolean | undefined;
   clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
@@ -2105,6 +2106,14 @@ export async function buildClientRouteOutput(
   const entry = await buildClientRouteEntrySource(options);
   const dropConsoleFunctions =
     options.dropConsoleFunctions ?? resolveClientConsolePureFunctions(options.dropClientConsole);
+  const sourceRegionModulePaths =
+    options.debugLabels === true ? undefined : new Set([options.filename]);
+  const runtimePlugin = workspaceRuntimePlugin({
+    debugLabelRoot: options.debugLabelRoot,
+    debugLabels: options.debugLabels === true,
+    routeFiles: [options.filename],
+    sourceRegionModulePaths,
+  });
   const bundled = await bundleRouterModule({
     code: entry.code,
     cacheDir: options.cacheDir,
@@ -2116,13 +2125,8 @@ export async function buildClientRouteOutput(
     minify: options.minify === true,
     platform: "browser",
     preserveExports: true,
-    sanitizeSourceRegionPaths: options.debugLabels !== true,
-    plugins: [
-      workspaceRuntimePlugin({
-        debugLabels: options.debugLabels === true,
-        routeFiles: [options.filename],
-      }),
-    ],
+    sourceRegionModulePaths,
+    plugins: [runtimePlugin],
     sourceMap: options.sourceMap,
     vitePlugins: options.vitePlugins,
   });
@@ -2150,12 +2154,23 @@ export async function buildClientRouteBatchOutput(options: {
       routePath: route.routePath,
       source: await buildClientRouteEntrySource({
         ...route,
+        debugLabelRoot: route.debugLabelRoot ?? options.projectRoot,
         minify: options.minify ?? route.minify,
         sourceMap: options.sourceMap ?? route.sourceMap,
         vitePlugins: options.vitePlugins ?? route.vitePlugins,
       }),
     })),
   );
+  const debugLabels = options.routes.some((route) => route.debugLabels === true);
+  const sourceRegionModulePaths = debugLabels
+    ? undefined
+    : new Set(entries.map((entry) => entry.filename));
+  const runtimePlugin = workspaceRuntimePlugin({
+    debugLabelRoot: options.projectRoot,
+    debugLabels,
+    routeFiles: entries.map((entry) => entry.filename),
+    sourceRegionModulePaths,
+  });
   const bundled = await bundleRouterModules({
     base: options.assetBaseUrl ?? "/_mreact/client/",
     cacheDir: options.cacheDir,
@@ -2169,13 +2184,8 @@ export async function buildClientRouteBatchOutput(options: {
     })),
     minify: options.minify === true,
     platform: "browser",
-    sanitizeSourceRegionPaths: !options.routes.some((route) => route.debugLabels === true),
-    plugins: [
-      workspaceRuntimePlugin({
-        debugLabels: options.routes.some((route) => route.debugLabels === true),
-        routeFiles: entries.map((entry) => entry.filename),
-      }),
-    ],
+    sourceRegionModulePaths,
+    plugins: [runtimePlugin],
     root: options.projectRoot,
     sourceMap: options.sourceMap,
     dropConsoleFunctions: options.dropConsoleFunctions,
@@ -2212,8 +2222,11 @@ export async function buildClientRouteEntrySource(
     filename: options.filename,
   });
   const routeSourceAnalysis = collectClientRouteModuleAnalysisFromContext(moduleContext);
-  const compilerFilename =
-    options.debugLabels === true ? basename(options.filename) : options.filename;
+  const compilerFilename = compilerFilenameForDebugLabel(
+    options.filename,
+    options.debugLabels === true,
+    options.debugLabelRoot,
+  );
   const compilerModuleContext =
     compilerFilename === options.filename
       ? moduleContext
@@ -4671,8 +4684,10 @@ function __mreactResumeChildren(current, next) {
 }
 
 function workspaceRuntimePlugin(options: {
+  debugLabelRoot?: string | undefined;
   debugLabels: boolean;
   routeFiles: readonly string[];
+  sourceRegionModulePaths?: Set<string> | undefined;
 }) {
   const routeFiles = new Set(options.routeFiles);
   const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
@@ -4806,8 +4821,19 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
           return undefined;
         }
 
+        if (
+          !runtimePackageDirs.some(
+            (runtimePackageDir) => args.path.startsWith(`${runtimePackageDir}${sep}`),
+          )
+        ) {
+          options.sourceRegionModulePaths?.add(args.path);
+        }
         const source = await readFile(args.path, "utf8");
-        const compilerFilename = options.debugLabels ? basename(args.path) : args.path;
+        const compilerFilename = compilerFilenameForDebugLabel(
+          args.path,
+          options.debugLabels,
+          options.debugLabelRoot,
+        );
         const moduleContext = createCompilerModuleContext({
           code: source,
           filename: compilerFilename,
@@ -4842,6 +4868,29 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
       });
     },
   };
+}
+
+function compilerFilenameForDebugLabel(
+  filename: string,
+  debugLabels: boolean,
+  root: string | undefined,
+): string {
+  if (!debugLabels) {
+    return filename;
+  }
+
+  if (root === undefined) {
+    return basename(filename);
+  }
+
+  const relativeFilename = relative(root, filename);
+
+  return relativeFilename === "" ||
+    relativeFilename === ".." ||
+    relativeFilename.startsWith(`..${sep}`) ||
+    isAbsolute(relativeFilename)
+    ? basename(filename)
+    : relativeFilename.split(sep).join("/");
 }
 
 function isRouteClientDependencySourcePath(path: string, routeFiles: ReadonlySet<string>): boolean {

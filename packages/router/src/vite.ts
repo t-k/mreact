@@ -848,6 +848,7 @@ async function renderAppRouterClientRouteDevModule(
     clientReferenceImports: references.clientReferenceImports,
     clientReferenceManifest: references.clientReferenceManifest,
     clientNavigation: navigation || detectAnchorElementUsage(clientSource, route.file),
+    debugLabelRoot: appDir,
     debugLabels: true,
     filename: route.file,
     routeMayUseOutOfOrderFragments: true,

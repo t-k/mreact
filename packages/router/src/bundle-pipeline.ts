@@ -1,6 +1,6 @@
 import { builtinModules } from "node:module";
 import { access } from "node:fs/promises";
-import { dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   build as viteBuild,
@@ -28,7 +28,7 @@ export interface RouterBundleOptions {
   platform: "browser" | "node";
   preserveExports?: boolean | undefined;
   root?: string | undefined;
-  sanitizeSourceRegionPaths?: boolean | undefined;
+  sourceRegionModulePaths?: ReadonlySet<string> | undefined;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   sourceMap?: boolean | undefined;
@@ -48,7 +48,7 @@ export interface RouterBundleModulesOptions {
   platform: "browser" | "node";
   plugins?: readonly RouterCompatPlugin[] | undefined;
   root?: string | undefined;
-  sanitizeSourceRegionPaths?: boolean | undefined;
+  sourceRegionModulePaths?: ReadonlySet<string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   sourceMap?: boolean | undefined;
   target?: string | undefined;
@@ -353,7 +353,11 @@ async function bundleRouterModuleUncached(
 
   return {
     ...(assets.length === 0 ? {} : { assets }),
-    code: sanitizeBundleCode(chunk.code, options.sanitizeSourceRegionPaths === true),
+    code: sanitizeBundleCode(
+      chunk.code,
+      options.sourceRegionModulePaths,
+      options.root ?? dirname(options.filename),
+    ),
     ...(map !== undefined && typeof map.source === "string" ? { map: map.source } : {}),
   };
 }
@@ -450,7 +454,11 @@ export async function bundleRouterModules(
       const map = mapAssets.get(`${chunk.fileName}.map`);
 
       return {
-        code: sanitizeBundleCode(chunk.code, options.sanitizeSourceRegionPaths === true),
+        code: sanitizeBundleCode(
+          chunk.code,
+          options.sourceRegionModulePaths,
+          options.root ?? dirname(options.entries[0]?.filename ?? process.cwd()),
+        ),
         fileName: chunk.fileName,
         imports: chunk.imports ?? [],
         isEntry: chunk.isEntry === true,
@@ -579,18 +587,41 @@ function stripSourceMappingUrl(code: string): string {
   return code.replace(/\n?\/\/# sourceMappingURL=[^\n]+\.map\s*$/u, "");
 }
 
-function sanitizeBundleCode(code: string, sanitizeSourceRegionPaths: boolean): string {
+function sanitizeBundleCode(
+  code: string,
+  sourceRegionModulePaths: ReadonlySet<string> | undefined,
+  root: string,
+): string {
   const withoutSourceMapUrl = stripSourceMappingUrl(code);
 
-  if (!sanitizeSourceRegionPaths) {
+  if (sourceRegionModulePaths === undefined) {
     return withoutSourceMapUrl;
   }
 
+  const sourceRegionCandidates = new Set<string>();
+
+  for (const modulePath of sourceRegionModulePaths) {
+    sourceRegionCandidates.add(normalizeSourceRegionPath(modulePath));
+    sourceRegionCandidates.add(normalizeSourceRegionPath(relative(root, modulePath)));
+    sourceRegionCandidates.add(normalizeSourceRegionPath(relative(process.cwd(), modulePath)));
+  }
+
   return withoutSourceMapUrl.replace(
-    /^\/\/#region ((?:\.\.\/|\/|[A-Za-z]:\/)[^\r\n]+)$/gmu,
-    (_match, sourcePath: string) =>
-      `//#region ${sourcePath.slice(sourcePath.lastIndexOf("/") + 1)}`,
+    /^\/\/#region ([^\r\n]+)$/gmu,
+    (match, sourcePathWithQuery: string) => {
+      const queryIndex = sourcePathWithQuery.indexOf("?");
+      const sourcePath =
+        queryIndex === -1 ? sourcePathWithQuery : sourcePathWithQuery.slice(0, queryIndex);
+
+      return sourceRegionCandidates.has(normalizeSourceRegionPath(sourcePath))
+        ? `//#region ${basename(normalizeSourceRegionPath(sourcePath))}${queryIndex === -1 ? "" : sourcePathWithQuery.slice(queryIndex)}`
+        : match;
+    },
   );
+}
+
+function normalizeSourceRegionPath(path: string): string {
+  return path.replaceAll("\\", "/");
 }
 
 function virtualEntryPlugin(entryId: string, code: string): VitePlugin {

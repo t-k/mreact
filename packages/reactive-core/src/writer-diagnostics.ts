@@ -10,10 +10,14 @@ export function recordCellWriter(source: Source, computationId: number, label: s
 
 export function describeCompetingCellWriters(): string | undefined {
   for (const source of writtenSources) {
-    const labels = Array.from(new Set(source.debugWriters?.values() ?? []));
+    const writers = source.debugWriters;
 
-    if (labels.length > 1) {
-      return `Reactive flush detected competing computations writing the same cell: ${labels.join(" and ")}.`;
+    if (writers !== undefined && writers.size > 1) {
+      const descriptions = Array.from(writers, ([computationId, label]) =>
+        `${label} (computation ${computationId})`,
+      );
+
+      return `Reactive flush detected competing computations writing the same cell: ${descriptions.join(" and ")}.`;
     }
   }
 

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
@@ -809,6 +809,73 @@ export default function Page() {
     expect(output.code).toContain("//#region ViewTransition.tsx");
     expect(output.code).toContain("//#region page.mreact.tsx?mreact-router-entry");
     expect(output.code).toContain("//#region packages/reactive-dom/src/scope.ts");
+  });
+
+  test("does not leak project-relative component paths from production batch output", async () => {
+    const rootDir = await mkdtemp(join(process.cwd(), ".mreact-production-batch-regions-"));
+    const appDir = join(rootDir, "src");
+    const filename = join(appDir, "page.mreact.tsx");
+    const componentFilename = join(appDir, "ViewTransition.tsx");
+    const code = `import { ViewTransition } from "./ViewTransition.js";
+export default function Page() {
+  return <ViewTransition />;
+}`;
+    try {
+      await mkdir(appDir, { recursive: true });
+      await writeFile(filename, code);
+      await writeFile(
+        componentFilename,
+        `export function ViewTransition() {
+  return <main>Visible</main>;
+}`,
+      );
+
+      const output = await import("../src/client.js").then((module) =>
+        module.buildClientRouteBatchOutput({
+          minify: false,
+          projectRoot: process.cwd(),
+          routes: [{ code, filename, routePath: "/" }],
+        }),
+      );
+      const bundleCode = output.chunks.map((chunk) => chunk.code).join("\n");
+
+      expect(bundleCode).not.toContain(rootDir);
+      expect(bundleCode).not.toContain(componentFilename);
+      expect(bundleCode).not.toContain(
+        join(rootDir.slice(process.cwd().length + 1), "src", "ViewTransition.tsx"),
+      );
+      expect(bundleCode).toContain("//#region ViewTransition.tsx");
+      expect(bundleCode).toMatch(/\/\/#region packages\/reactive-dom\/src\/[^/\n]+\.ts/);
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
+  });
+
+  test("uses project-relative development labels for same-name route components", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-development-labels-"));
+    const firstFilename = join(rootDir, "first", "page.mreact.tsx");
+    const secondFilename = join(rootDir, "second", "page.mreact.tsx");
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+const visible = cell(true);
+export default function Page() {
+  return <main>{visible.get() ? <span>Ready</span> : <i>Hidden</i>}</main>;
+}`;
+    const [first, second] = await Promise.all(
+      [firstFilename, secondFilename].map((filename) =>
+        buildClientRouteEntrySource({
+          code,
+          debugLabelRoot: rootDir,
+          debugLabels: true,
+          filename,
+          routePath: "/",
+        }),
+      ),
+    );
+
+    expect(first.code).not.toContain(rootDir);
+    expect(second.code).not.toContain(rootDir);
+    expect(first.code).toContain("first/page.mreact.tsx#Page");
+    expect(second.code).toContain("second/page.mreact.tsx#Page");
   });
 
   test("builds client route modules for imported interactive child components", async () => {
