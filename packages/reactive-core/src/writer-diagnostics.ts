@@ -26,4 +26,3 @@ export function clearCellWriterDiagnostics(): void {
   }
   writtenSources.clear();
 }
-
