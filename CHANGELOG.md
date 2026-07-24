@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.197 - 2026-07-24
+
+### Added
+
+- Added `mreact-router boundaries [appDir]` with deterministic versioned JSON output for inspecting every route and its statically traceable rendered server, client, shared, server-only, and unresolved components without creating build artifacts.
+- Added the `analyzeAppBoundaries()`, `createBoundaryReport()`, boundary report formatter APIs, and `buildApp({ onBoundaryReport })` callback for programmatic boundary tooling.
+
+### Changed
+
+- Changed production App Router builds to print the full route-by-route component boundary report on every build while reusing the existing production source analysis.
+
 ## 0.0.196 - 2026-07-24
 
 ### Added
