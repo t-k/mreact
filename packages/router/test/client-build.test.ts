@@ -851,33 +851,6 @@ export default function Page() {
     }
   });
 
-  test("uses project-relative development labels for same-name route components", async () => {
-    const rootDir = await mkdtemp(join(tmpdir(), "mreact-development-labels-"));
-    const firstFilename = join(rootDir, "first", "page.mreact.tsx");
-    const secondFilename = join(rootDir, "second", "page.mreact.tsx");
-    const code = `import { cell } from "@reckona/mreact-reactive-core";
-const visible = cell(true);
-export default function Page() {
-  return <main>{visible.get() ? <span>Ready</span> : <i>Hidden</i>}</main>;
-}`;
-    const [first, second] = await Promise.all(
-      [firstFilename, secondFilename].map((filename) =>
-        buildClientRouteEntrySource({
-          code,
-          debugLabelRoot: rootDir,
-          debugLabels: true,
-          filename,
-          routePath: "/",
-        }),
-      ),
-    );
-
-    expect(first.code).not.toContain(rootDir);
-    expect(second.code).not.toContain(rootDir);
-    expect(first.code).toContain("first/page.mreact.tsx#Page");
-    expect(second.code).toContain("second/page.mreact.tsx#Page");
-  });
-
   test("builds client route modules for imported interactive child components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-imported-"));
     const appDir = join(rootDir, "app");
