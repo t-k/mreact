@@ -408,7 +408,7 @@ export interface TopLevelExportRenderInfo {
     // (undocumented)
     clientRuntime: boolean;
     // (undocumented)
-    localName: string;
+    localName?: string | undefined;
     // (undocumented)
     name: string;
     // (undocumented)

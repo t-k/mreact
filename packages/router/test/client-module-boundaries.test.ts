@@ -268,6 +268,120 @@ export default function Page() {
     ]);
   });
 
+  test.each([
+    {
+      barrel: `export { A } from "./a";
+export { B } from "./b";`,
+      importName: "B",
+      name: "named re-export",
+    },
+    {
+      barrel: `export { A } from "./a";
+export { B as RenamedB } from "./b";`,
+      importName: "RenamedB",
+      name: "renamed re-export",
+    },
+    {
+      barrel: `export * from "./a";
+export * from "./b";`,
+      importName: "B",
+      name: "export star",
+    },
+  ])("does not report valid $name barrel cycles as unknown", async ({ barrel, importName }) => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-barrel-cycle-"));
+    const appDir = join(dir, "app");
+    const componentsDir = join(appDir, "components");
+    await mkdir(componentsDir, { recursive: true });
+    const pageFile = join(appDir, "page.tsx");
+    const aFile = join(componentsDir, "a.tsx");
+    const bFile = join(componentsDir, "b.tsx");
+    await writeFile(join(componentsDir, "index.ts"), barrel);
+    await writeFile(
+      aFile,
+      `import { ${importName} } from "./index";
+export function A() { return <section><${importName} /></section>; }`,
+    );
+    await writeFile(bFile, `export function B() { return <span>B</span>; }`);
+    const code = `import { A } from "./components";
+export default function Page() { return <main><A /></main>; }`;
+    await writeFile(pageFile, code);
+
+    const result = await inferClientRouteModule({
+      appDir,
+      code,
+      collectComponents: true,
+      filename: pageFile,
+      routePath: "/",
+    });
+
+    expect(result.components).toEqual([
+      {
+        classification: "server-render",
+        exportName: "default",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "A",
+        file: aFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "B",
+        file: bFile,
+        origin: "server-render",
+      },
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
+  test("reports a genuinely missing rendered export inside a barrel cycle", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-invalid-barrel-cycle-"));
+    const appDir = join(dir, "app");
+    const componentsDir = join(appDir, "components");
+    await mkdir(componentsDir, { recursive: true });
+    const pageFile = join(appDir, "page.tsx");
+    const aFile = join(componentsDir, "a.tsx");
+    const indexFile = join(componentsDir, "index.ts");
+    await writeFile(indexFile, `export * from "./a";`);
+    await writeFile(
+      aFile,
+      `import { Missing } from "./index";
+export function A() { return <section><Missing /></section>; }`,
+    );
+    const code = `import { A } from "./components";
+export default function Page() { return <main><A /></main>; }`;
+    await writeFile(pageFile, code);
+
+    const result = await inferClientRouteModule({
+      appDir,
+      code,
+      collectComponents: true,
+      filename: pageFile,
+      routePath: "/",
+    });
+
+    expect(result.components).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "unknown",
+          exportName: "Missing",
+          file: indexFile,
+          origin: "unresolved-reference",
+        },
+      ]),
+    );
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
+        filename: aFile,
+        source: "./index",
+      }),
+    ]);
+  });
+
   test("classifies client layouts and templates as boundaries rather than client routes", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-client-shells-"));
     const appDir = join(dir, "app");

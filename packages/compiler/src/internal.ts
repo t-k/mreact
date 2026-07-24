@@ -61,7 +61,7 @@ export interface StaticExportSpecifierReference {
 export interface TopLevelExportRenderInfo {
   calledComponentRoots: string[];
   clientRuntime: boolean;
-  localName: string;
+  localName?: string | undefined;
   name: string;
   renderedComponentRoots: string[];
 }
@@ -548,7 +548,7 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
             renderedComponentRoots,
           };
     })
-    .filter((item): item is TopLevelExportRenderInfo => item !== undefined)
+    .filter((item) => item !== undefined)
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

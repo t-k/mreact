@@ -31,10 +31,7 @@ import {
   isOxcRenderValueExpression,
   markOxcRenderValueExpressions,
 } from "../src/oxc-render-values.js";
-import {
-  analyzeOxcComponentProp,
-  readOxcConsumerRenderProp,
-} from "../src/oxc-component-props.js";
+import { analyzeOxcComponentProp, readOxcConsumerRenderProp } from "../src/oxc-component-props.js";
 import {
   collectOxcVariableInitializers,
   detectUnserializableAwaitValueReason,
@@ -52,10 +49,7 @@ import {
   lowerOxcBodyStatementJsx,
   lowerOxcTopLevelStatement,
 } from "../src/oxc-body-lowering.js";
-import {
-  analyzeOxcExpressionChild,
-  analyzeOxcJsxNode,
-} from "../src/oxc-child-analysis.js";
+import { analyzeOxcExpressionChild, analyzeOxcJsxNode } from "../src/oxc-child-analysis.js";
 import {
   lowerOxcCompatReactNodeExpression,
   lowerOxcNestedJsxExpression,
@@ -68,13 +62,22 @@ import {
 import { lowerOxcDomNodeExpression } from "../src/oxc-dom-lowering.js";
 import { containsRawJsxInIr } from "../src/oxc-raw-jsx.js";
 import type { ModuleIr } from "../src/ir.js";
+import type { TopLevelExportRenderInfo } from "../src/internal.js";
 
 describe("compiler OXC internals", () => {
+  test("keeps top-level export render info compatible with the pre-local-name shape", () => {
+    const legacyInfo: TopLevelExportRenderInfo = {
+      calledComponentRoots: [],
+      clientRuntime: false,
+      name: "Panel",
+      renderedComponentRoots: [],
+    };
+
+    expect(legacyInfo.name).toBe("Panel");
+  });
+
   test("memoizes repeated module parses for route source helper calls", async () => {
-    const source = await readFile(
-      join(process.cwd(), "packages/compiler/src/internal.ts"),
-      "utf8",
-    );
+    const source = await readFile(join(process.cwd(), "packages/compiler/src/internal.ts"), "utf8");
 
     expect(source).toContain("parseModuleCache");
     expect(source).toContain("parseModuleCacheLimit");
@@ -227,7 +230,10 @@ export default function Page() {
 
   test("reads a top-level boolean export value", () => {
     expect(
-      readTopLevelBooleanExport({ code: "export const navigationRuntime = true;", name: "navigationRuntime" }),
+      readTopLevelBooleanExport({
+        code: "export const navigationRuntime = true;",
+        name: "navigationRuntime",
+      }),
     ).toBe(true);
     expect(
       readTopLevelBooleanExport({
@@ -489,16 +495,17 @@ export default function Page() {
 
     assignOxcAwaitIds(ir);
 
-    const [first] = ir.components[0]?.root.kind === "fragment" ? ir.components[0].root.children : [];
+    const [first] =
+      ir.components[0]?.root.kind === "fragment" ? ir.components[0].root.children : [];
     expect(first?.kind).toBe("async-boundary");
     if (first?.kind !== "async-boundary") {
       throw new Error("expected async boundary");
     }
 
     expect(first.awaitId).toBe("await0");
-    expect(first.children[0]?.kind === "async-boundary" ? first.children[0].awaitId : undefined).toBe(
-      "await1",
-    );
+    expect(
+      first.children[0]?.kind === "async-boundary" ? first.children[0].awaitId : undefined,
+    ).toBe("await1");
     expect(
       first.placeholderChildren?.[0]?.kind === "async-boundary"
         ? first.placeholderChildren[0].awaitId
@@ -522,20 +529,19 @@ export default function Page() {
     };
 
     expect(readOxcPlainComponent(statement)?.name).toBe("Card");
-    expect(readOxcPlainComponent({
-      ...statement,
-      id: { type: "Identifier", name: "renderCard" },
-    })?.name).toBe("renderCard");
+    expect(
+      readOxcPlainComponent({
+        ...statement,
+        id: { type: "Identifier", name: "renderCard" },
+      })?.name,
+    ).toBe("renderCard");
   });
 
   test("collects local bindings from imports and nested statements", () => {
     expect(
       collectImportBindingNames({
         type: "ImportDeclaration",
-        specifiers: [
-          { local: { name: "createElement" } },
-          { local: { name: "Fragment" } },
-        ],
+        specifiers: [{ local: { name: "createElement" } }, { local: { name: "Fragment" } }],
       }),
     ).toEqual(["createElement", "Fragment"]);
 
@@ -652,7 +658,10 @@ export default function Page() {
     };
     const clientReferences = new Map([["UI", { moduleId: "./ui.client", exportName: "*" }]]);
 
-    markOxcClientReferences(ir.components[0]?.root ?? { kind: "fragment", children: [] }, clientReferences);
+    markOxcClientReferences(
+      ir.components[0]?.root ?? { kind: "fragment", children: [] },
+      clientReferences,
+    );
 
     expect(ir.components[0]?.root).toMatchObject({
       runtime: "compat",
@@ -740,7 +749,7 @@ export default function Page() {
   });
 
   test("analyzes lowercase event attributes as event handlers", () => {
-    const code = '<button onclick={save} />';
+    const code = "<button onclick={save} />";
     const diagnostics: { code: string; message: string }[] = [];
 
     expect(
@@ -780,8 +789,8 @@ export default function Page() {
   });
 
   test("collects JSX-producing body bindings without reassigned let bindings", () => {
-    expect(
-      [...collectOxcBodyJsxBindingNames([
+    expect([
+      ...collectOxcBodyJsxBindingNames([
         {
           type: "VariableDeclaration",
           kind: "const",
@@ -852,8 +861,8 @@ export default function Page() {
             arguments: [{ type: "JSXElement" }],
           },
         },
-      ])],
-    ).toEqual(["stable", "items", "moreItems"]);
+      ]),
+    ]).toEqual(["stable", "items", "moreItems"]);
   });
 
   test("ignores nested function assignments when they target shadowed JSX bindings", () => {
@@ -1070,7 +1079,7 @@ export default function Page() {
   });
 
   test("reads Await expression attributes and resolves obvious unserializable values", () => {
-    const code = '<Await value={Promise.resolve(new Date())} />';
+    const code = "<Await value={Promise.resolve(new Date())} />";
     const valueStart = code.indexOf("Promise.resolve");
     const dateStart = code.indexOf("new Date()");
     const expression = {
@@ -1089,7 +1098,7 @@ export default function Page() {
         },
       ],
       start: valueStart,
-      end: code.indexOf("}") ,
+      end: code.indexOf("}"),
     };
     const attributes = [
       {
@@ -1168,7 +1177,7 @@ export default function Page() {
     const jsx = { type: "JSXElement" };
     const diagnostics: never[] = [];
     const lowerers = {
-      lowerDomNodeExpression: () => "document.createElement(\"span\")",
+      lowerDomNodeExpression: () => 'document.createElement("span")',
       lowerCompatObjectExpression: () => "compatNode",
       lowerServerStringExpression: () => '"<span></span>"',
     };
@@ -1278,7 +1287,7 @@ export default function Page() {
     ]);
 
     expect(compatCode).toContain("type: Card");
-    expect(compatCode).toContain('String(row.id)');
+    expect(compatCode).toContain("String(row.id)");
     expect(compatCode).toContain('"data-id": (row.id)');
     expect(compatCode).toContain('children: "Ada"');
   });
@@ -1349,7 +1358,7 @@ export default function Page() {
   });
 
   test("lowers lowercase DOM event attributes to addEventListener", () => {
-    const code = '<button onclick={save}>Save</button>';
+    const code = "<button onclick={save}>Save</button>";
     const saveStart = code.indexOf("save");
     const lowered = lowerOxcDomNodeExpression(code, {
       type: "JSXElement",
@@ -1490,7 +1499,7 @@ export default function Page() {
   });
 
   test("lowers DOM logical-or expressions without duplicating the left operand", () => {
-    const code = 'sideEffect() || <span>Fallback</span>';
+    const code = "sideEffect() || <span>Fallback</span>";
     const lowered = lowerOxcDomNodeExpression(code, {
       type: "LogicalExpression",
       operator: "||",
@@ -1616,7 +1625,7 @@ export default function Page() {
       ),
     ).toContain('type: "span"');
 
-    const reactiveCode = '<Card title={<span>Hi</span>}>Body</Card>';
+    const reactiveCode = "<Card title={<span>Hi</span>}>Body</Card>";
     const reactiveSpan = {
       type: "JSXElement",
       start: reactiveCode.indexOf("<span>"),

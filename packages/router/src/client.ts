@@ -165,7 +165,23 @@ interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
 interface ClientRouteComponentCollector {
   clientReachable: Set<string>;
   components: Map<string, ClientRouteComponent>;
+  localExportNamesByFile: Map<string, Set<string>>;
+  pendingExportValidations: ClientRoutePendingExportValidation[];
   reachable: Set<string>;
+  staticExportEdges: ClientRouteStaticExportEdge[];
+}
+
+interface ClientRoutePendingExportValidation {
+  exportNames: string[];
+  file: string;
+  importer: string;
+  source: string;
+}
+
+interface ClientRouteStaticExportEdge {
+  file: string;
+  reference: StaticExportReference;
+  resolved: string;
 }
 
 export interface ClientReferenceImport {
@@ -262,7 +278,14 @@ export async function inferClientRouteModule(options: {
   const cache = options.cache ?? createClientRouteInferenceCache();
   const sourceTransform = clientRouteSourceTransformForVitePlugins(options.vitePlugins);
   const componentCollector: ClientRouteComponentCollector | undefined = options.collectComponents
-    ? { clientReachable: new Set(), components: new Map(), reachable: new Set() }
+    ? {
+        clientReachable: new Set(),
+        components: new Map(),
+        localExportNamesByFile: new Map(),
+        pendingExportValidations: [],
+        reachable: new Set(),
+        staticExportEdges: [],
+      }
     : undefined;
   const code = await transformClientRouteSource({
     code: options.code,
@@ -295,6 +318,7 @@ export async function inferClientRouteModule(options: {
       : routeInference;
 
     if (options.appDir === undefined) {
+      const exportDiagnostics = finalizeClientRouteComponentExportValidations(componentCollector);
       return withClientRouteDiagnosticPath(
         {
           ...mergedRouteInference,
@@ -303,6 +327,7 @@ export async function inferClientRouteModule(options: {
             : {
                 components: normalizedClientRouteComponents(componentCollector, options.filename),
               }),
+          diagnostics: [...mergedRouteInference.diagnostics, ...exportDiagnostics],
         },
         options.routePath,
       );
@@ -315,6 +340,7 @@ export async function inferClientRouteModule(options: {
       filename: options.filename,
       sourceTransform,
     });
+    const exportDiagnostics = finalizeClientRouteComponentExportValidations(componentCollector);
 
     return withClientRouteDiagnosticPath(
       {
@@ -330,6 +356,7 @@ export async function inferClientRouteModule(options: {
         diagnostics: [
           ...mergedRouteInference.diagnostics,
           ...shellInferences.flatMap((inference) => inference.diagnostics),
+          ...exportDiagnostics,
         ],
       },
       options.routePath,
@@ -742,6 +769,13 @@ function collectClientRouteComponentsForModule(
     markClientRouteComponentReachable(collector, options.filename, ["default"]);
   }
 
+  const localExportNames =
+    collector.localExportNamesByFile.get(options.filename) ?? new Set<string>();
+  for (const info of options.analysis.topLevelExportRenderInfo) {
+    localExportNames.add(info.name);
+  }
+  collector.localExportNamesByFile.set(options.filename, localExportNames);
+
   const serverOnly =
     options.analysis.hasUseServerDirective || hasServerOnlyImports(options.analysis);
   const explicitClient = isExplicitClientRouteSource(options.analysis, options.filename);
@@ -783,7 +817,7 @@ function collectClientRouteComponentsForModule(
     for (const rendered of options.analysis.topLevelExportRenderInfo) {
       if (
         rendered.name !== "default" &&
-        (renderedNames.has(rendered.name) || renderedNames.has(rendered.localName))
+        (renderedNames.has(rendered.name) || renderedNames.has(rendered.localName ?? rendered.name))
       ) {
         markClientRouteComponentReachable(collector, options.filename, [rendered.name], {
           clientExecution: clientRouteComponentRunsOnClient(collector, options.filename, info.name),
@@ -1004,6 +1038,94 @@ function collectUnknownClientRouteComponents(
   }
 }
 
+function collectClientRoutePendingExportValidation(
+  collector: ClientRouteComponentCollector | undefined,
+  options: ClientRoutePendingExportValidation,
+): void {
+  if (collector === undefined || options.exportNames.length === 0) {
+    return;
+  }
+
+  collector.pendingExportValidations.push(options);
+}
+
+function collectClientRouteStaticExportEdge(
+  collector: ClientRouteComponentCollector | undefined,
+  options: ClientRouteStaticExportEdge,
+): void {
+  collector?.staticExportEdges.push(options);
+}
+
+function finalizeClientRouteComponentExportValidations(
+  collector: ClientRouteComponentCollector | undefined,
+): ClientRouteInferenceDiagnostic[] {
+  if (collector === undefined) {
+    return [];
+  }
+
+  const exportNamesByFile = new Map<string, Set<string>>();
+  for (const [file, names] of collector.localExportNamesByFile) {
+    exportNamesByFile.set(file, new Set(names));
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+
+    for (const edge of collector.staticExportEdges) {
+      const exportedNames = exportNamesByFile.get(edge.file) ?? new Set<string>();
+      const sourceNames = exportNamesByFile.get(edge.resolved) ?? new Set<string>();
+      const namesToAdd = edge.reference.exportAll
+        ? sourceNames
+        : new Set(
+            edge.reference.specifiers
+              .filter((specifier) => sourceNames.has(specifier.localName))
+              .map((specifier) => specifier.exportedName),
+          );
+
+      for (const exportName of namesToAdd) {
+        if (!exportedNames.has(exportName)) {
+          exportedNames.add(exportName);
+          changed = true;
+        }
+      }
+
+      exportNamesByFile.set(edge.file, exportedNames);
+    }
+  }
+
+  const diagnostics: ClientRouteInferenceDiagnostic[] = [];
+  const seen = new Set<string>();
+  for (const pending of collector.pendingExportValidations) {
+    const availableExportNames = exportNamesByFile.get(pending.file) ?? new Set<string>();
+    const missingExportNames = pending.exportNames.filter(
+      (exportName) => !availableExportNames.has(exportName),
+    );
+    if (missingExportNames.length === 0) {
+      continue;
+    }
+
+    const key = `${pending.importer}\0${pending.source}\0${missingExportNames.join("\0")}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    collectUnknownClientRouteComponents(collector, {
+      exportNames: missingExportNames,
+      file: pending.file,
+    });
+    diagnostics.push(
+      unresolvedClientRouteReferenceDiagnostic({
+        exportNames: missingExportNames,
+        filename: pending.importer,
+        source: pending.source,
+      }),
+    );
+  }
+
+  return diagnostics;
+}
+
 function isExplicitClientRouteSource(
   analysis: ClientRouteModuleAnalysis,
   filename: string,
@@ -1190,6 +1312,14 @@ async function inferClientRouteModuleSource(options: {
           renderedImportedNames,
           { clientExecution },
         );
+        if (renderedImportedNames !== undefined) {
+          collectClientRoutePendingExportValidation(options.componentCollector, {
+            exportNames: renderedImportedNames,
+            file: resolved,
+            importer: options.filename,
+            source: reference.source,
+          });
+        }
       }
 
       const source = await readClientRouteSource({
@@ -1213,27 +1343,6 @@ async function inferClientRouteModuleSource(options: {
         sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
-      const missingExportNames =
-        options.componentCollector !== undefined &&
-        renderedFromReachableExport &&
-        renderedImportedNames !== undefined
-          ? renderedImportedNames.filter(
-              (exportName) => !imported.availableExportNames.includes(exportName),
-            )
-          : [];
-      if (missingExportNames.length > 0) {
-        collectUnknownClientRouteComponents(options.componentCollector, {
-          exportNames: missingExportNames,
-          file: resolved,
-        });
-        diagnostics.push(
-          unresolvedClientRouteReferenceDiagnostic({
-            exportNames: missingExportNames,
-            filename: options.filename,
-            source: reference.source,
-          }),
-        );
-      }
       // Propagate the navigation runtime only for imports that are actually
       // rendered here, and only for the specific exports whose subtree renders a
       // `Link`. A merely-referenced import (e.g. `const C = Nav`) recurses for
@@ -1358,6 +1467,11 @@ async function inferClientRouteModuleSource(options: {
           resolved,
           reference,
         );
+        collectClientRouteStaticExportEdge(options.componentCollector, {
+          file: options.filename,
+          reference,
+          resolved,
+        });
 
         const source = await readClientRouteSource({
           cache: options.cache,

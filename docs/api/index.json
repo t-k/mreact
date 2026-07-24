@@ -72354,7 +72354,9 @@
 									"name": "localName",
 									"variant": "declaration",
 									"kind": 1024,
-									"flags": {},
+									"flags": {
+										"isOptional": true
+									},
 									"sources": [
 										{
 											"fileName": "internal.ts",
@@ -120441,9 +120443,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 184,
+											"line": 200,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L184"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L200"
 										}
 									],
 									"type": {
@@ -120481,9 +120483,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 190,
+											"line": 206,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L190"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L206"
 										}
 									],
 									"type": {
@@ -120500,9 +120502,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 191,
+											"line": 207,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L191"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L207"
 										}
 									],
 									"type": {
@@ -120519,9 +120521,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 192,
+											"line": 208,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L192"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L208"
 										}
 									],
 									"type": {
@@ -120541,9 +120543,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 193,
+											"line": 209,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L193"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L209"
 										}
 									],
 									"type": {
@@ -120562,9 +120564,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 194,
+											"line": 210,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L194"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L210"
 										}
 									],
 									"type": {
@@ -120581,9 +120583,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/client.ts",
-											"line": 195,
+											"line": 211,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L195"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L211"
 										}
 									],
 									"type": {
@@ -120609,9 +120611,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/client.ts",
-									"line": 183,
+									"line": 199,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L183"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/client.ts#L199"
 								}
 							]
 						},
