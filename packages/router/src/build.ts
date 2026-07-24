@@ -36,8 +36,11 @@ import {
   navigationRuntimeLinkDisabledDiagnostic,
   resolveNavigationRuntime,
   type ClientRouteManifestEntry,
+  type ClientRouteComponent,
+  type ClientRouteInferenceDiagnostic,
   type ClientRouteInferenceCache,
 } from "./client-route-inference.js";
+import { createBoundaryReport, type BoundaryReport } from "./boundaries.js";
 import {
   buildClientRouteBatchOutput,
   buildNavigationRuntimeBundle,
@@ -129,6 +132,7 @@ export type AwsLambdaGeneratedHandlerPreloadMode =
 export interface BuildAppOptions extends AppRouterProjectOptions {
   awsLambdaPreload?: AwsLambdaGeneratedHandlerPreloadMode | undefined;
   awsLambdaPreloadRoutes?: readonly string[] | undefined;
+  onBoundaryReport?: ((report: BoundaryReport) => void) | undefined;
   onBuildProgress?: ((event: BuildAppProgressEvent) => void) | undefined;
   onBuildPhaseTiming?: ((timing: BuildAppPhaseTiming) => void) | undefined;
   outDir: string;
@@ -382,6 +386,8 @@ interface BuildRouteSourceAnalysis extends BuildSourceAnalysis {
   clientBoundaryImports: readonly string[];
   clientBoundaryFallbackImports: readonly string[];
   clientRoute: boolean;
+  components: readonly ClientRouteComponent[];
+  diagnostics: readonly ClientRouteInferenceDiagnostic[];
   file: string;
   route: AppRoute & { kind: "page" };
   routeCode: string;
@@ -389,6 +395,7 @@ interface BuildRouteSourceAnalysis extends BuildSourceAnalysis {
 }
 
 interface BuildSourceAnalysisScope {
+  boundaryReport: BoundaryReport;
   byFile: ReadonlyMap<string, BuildSourceAnalysis>;
   byRouteFile: ReadonlyMap<string, BuildRouteSourceAnalysis>;
 }
@@ -485,6 +492,7 @@ async function buildAppWithResolvedProject(
             vitePlugins,
           }),
         );
+  options.onBoundaryReport?.(sourceAnalysis.boundaryReport);
 
   if (shouldTrackBuildPhases === false) {
     await validateProductionRoutes({
@@ -1347,6 +1355,7 @@ async function analyzeBuildRouteSources(options: {
         appDir: options.project.routesDir,
         cache: options.clientRouteInferenceCache,
         code: stripRouteClientSource({ code: source, filename: route.file }),
+        collectComponents: true,
         filename: route.file,
         routePath: route.path,
         vitePlugins: options.vitePlugins,
@@ -1363,6 +1372,8 @@ async function analyzeBuildRouteSources(options: {
           clientBoundaryImports: clientInference.clientBoundaryImports,
           clientBoundaryFallbackImports: clientInference.clientBoundaryFallbackImports,
           clientRoute: clientInference.client,
+          components: clientInference.components ?? [],
+          diagnostics: clientInference.diagnostics,
           file,
           route,
           routeCode,
@@ -1384,7 +1395,19 @@ async function analyzeBuildRouteSources(options: {
     }
   }
 
-  return { byFile, byRouteFile };
+  return {
+    boundaryReport: createBoundaryReport({
+      projectRoot: options.projectRoot,
+      routes: Array.from(byRouteFile.values(), (analysis) => ({
+        components: analysis.components,
+        diagnostics: analysis.diagnostics,
+        entry: analysis.route.file,
+        path: analysis.route.path,
+      })),
+    }),
+    byFile,
+    byRouteFile,
+  };
 }
 
 function analyzeBuildSource(source: string, filename: string): BuildSourceAnalysis {
