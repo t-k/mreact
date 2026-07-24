@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
+import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createList, insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
@@ -273,6 +274,28 @@ describe("insertDynamic", () => {
     expect(parent.innerHTML).toBe("<!--marker-->");
 
     dispose();
+  });
+
+  test("clears the current branch when its reactive cleanup owner is disposed", () => {
+    const events: string[] = [];
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+    const ownerDisposers: Array<() => void> = [];
+
+    withCleanupScope((dispose) => {
+      ownerDisposers.push(dispose);
+    }, () => insertDynamic(parent, marker, () => {
+      registerDispose(() => events.push("cleanup"));
+      return document.createTextNode("owned");
+    }));
+
+    for (const dispose of ownerDisposers) {
+      dispose();
+    }
+
+    expect(events).toEqual(["cleanup"]);
+    expect(parent.innerHTML).toBe("<!--marker-->");
   });
 
   test("normalizes compat JSX elements passed through dynamic component children", () => {

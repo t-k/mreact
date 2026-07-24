@@ -1,5 +1,8 @@
 import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
-import { effectWithDebugLabel } from "@reckona/mreact-reactive-core/internal";
+import {
+  effectWithDebugLabel,
+  registerCleanup,
+} from "@reckona/mreact-reactive-core/internal";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
 import {
@@ -145,10 +148,12 @@ export function insertDynamic(
       ? effect(run)
       : effectWithDebugLabel(run, options.debugLabel);
 
-  return registerDispose(() => {
+  const disposeOwnedDynamic = registerDispose(() => {
     dispose();
     clear();
   });
+  registerCleanup(disposeOwnedDynamic);
+  return disposeOwnedDynamic;
 }
 
 interface BoundDynamicList {

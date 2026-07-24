@@ -2604,12 +2604,15 @@ function __mreactDisposeRoute(routeId) {
 }
 `
     : "";
-  const routeCleanupNavigationDispose = routeUsesCleanupScope
-    ? `  if (currentRouteId !== nextRouteId) {
-    __mreactDisposeRoute(currentRouteId);
+  const routeCleanupNavigationDispose = `  if (currentRouteId !== nextRouteId) {
+    const __mreactRegisteredRouteDisposers = __mreactGlobal.__mreactRouteDisposers;
+    const __mreactRegisteredRouteDispose = __mreactRegisteredRouteDisposers?.get(currentRouteId);
+    if (__mreactRegisteredRouteDispose !== undefined) {
+      __mreactRegisteredRouteDisposers.delete(currentRouteId);
+      __mreactRegisteredRouteDispose();
+    }
   }
-`
-    : "";
+`;
   const routeNodeResolver = routeUsesCells
     ? `
 function __mreactResolveRouteNode(value) {
@@ -3346,13 +3349,14 @@ function __mreactApplyNavigationHtml(html, url) {
   const currentRouteId = currentMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
   const nextRouteId = nextMarker.getAttribute("${routeHydrationContract.routeMarkerAttribute}");
 
+${routeCleanupNavigationDispose}
   __mreactMarkRouteHydrating();
   __mreactSyncHeadMetadata(template.content, html);
   if (!__mreactApplyNavigationShellHtml(currentMarker, nextMarker)) {
     __mreactUnmountCompatBoundaries(currentMarker);
     __mreactResumeNode(currentMarker, nextMarker);
   }
-${routeCleanupNavigationDispose}  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
+  __mreactSyncRouteDataScripts(template.content, currentRouteId, nextRouteId);
 
   const script = template.content.querySelector('script[type="module"][src]')?.getAttribute("src");
   if (script !== null && script !== undefined) {

@@ -106,6 +106,90 @@ export default function About() {
   }
 });
 
+test("domRef attaches to committed SSR and replacement nodes and cleans up before removal", async ({
+  page,
+}) => {
+  const { close, url } = await startFixtureServer({
+    "page.tsx": `import { cell } from "@reckona/mreact-reactive-core";
+
+const alternate = cell(false);
+const state = globalThis as typeof globalThis & { __domRefEvents?: string[] };
+
+function record(element: Element) {
+  state.__domRefEvents ??= [];
+  state.__domRefEvents.push(\`attach:\${element.id}:\${element.isConnected}\`);
+  return () => {
+    state.__domRefEvents?.push(\`cleanup:\${element.id}:\${element.isConnected}\`);
+  };
+}
+
+export default function Page() {
+  return (
+    <main>
+      <h1>Home</h1>
+      <button type="button" onClick={() => alternate.set(value => !value)}>Replace</button>
+      <a href="/about">About</a>
+      {alternate.get()
+        ? <section id="sentinel-b" domRef={record}>B</section>
+        : <div id="sentinel-a" domRef={record}>A</div>}
+    </main>
+  );
+}`,
+    "about/page.tsx": `export default function About() {
+  return <main><h1>About</h1></main>;
+}`,
+  });
+
+  try {
+    await page.goto(url);
+    const ssrSentinel = await page.locator("#sentinel-a").elementHandle();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = globalThis as typeof globalThis & { __domRefEvents?: string[] };
+          return state.__domRefEvents ?? [];
+        }),
+      )
+      .toEqual(["attach:sentinel-a:true"]);
+    expect(
+      await ssrSentinel?.evaluate((element) => element === document.querySelector("#sentinel-a")),
+    ).toBe(true);
+
+    await page.getByRole("button", { name: "Replace" }).click();
+    await expect(page.locator("#sentinel-b")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = globalThis as typeof globalThis & { __domRefEvents?: string[] };
+          return state.__domRefEvents ?? [];
+        }),
+      )
+      .toEqual([
+        "attach:sentinel-a:true",
+        "cleanup:sentinel-a:true",
+        "attach:sentinel-b:true",
+      ]);
+
+    await page.getByRole("link", { name: "About" }).click();
+    await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const state = globalThis as typeof globalThis & { __domRefEvents?: string[] };
+          return state.__domRefEvents ?? [];
+        }),
+      )
+      .toEqual([
+        "attach:sentinel-a:true",
+        "cleanup:sentinel-a:true",
+        "attach:sentinel-b:true",
+        "cleanup:sentinel-b:true",
+      ]);
+  } finally {
+    await close();
+  }
+});
+
 test("client navigation preserves module singleton state shared by route chunks", async ({
   page,
 }) => {
