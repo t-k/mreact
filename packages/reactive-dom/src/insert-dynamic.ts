@@ -41,12 +41,25 @@ export function insertDynamic(
   };
 
   const dispose = effect(() => {
+    if (currentList === undefined) {
+      disposeCurrentScope?.();
+      disposeCurrentScope = undefined;
+    }
+
     const nextValueRef: { value: RenderValue } = { value: undefined };
-    const next = createScopedRenderNodes(() => {
-      nextValueRef.value = value();
-      const nextValue = nextValueRef.value;
-      return isListRenderValue(nextValue) ? null : nextValue;
-    });
+    let next;
+
+    try {
+      next = createScopedRenderNodes(() => {
+        nextValueRef.value = value();
+        const nextValue = nextValueRef.value;
+        return isListRenderValue(nextValue) ? null : nextValue;
+      });
+    } catch (error) {
+      clear();
+      throw error;
+    }
+
     const nextValue = nextValueRef.value;
 
     if (isListRenderValue(nextValue)) {
@@ -104,7 +117,7 @@ export function insertDynamic(
     }
 
     if (isSameNodeList(current, next.nodes)) {
-      next.dispose();
+      disposeCurrentScope = next.dispose;
       return;
     }
 

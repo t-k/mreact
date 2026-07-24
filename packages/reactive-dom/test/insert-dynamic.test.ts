@@ -6,6 +6,7 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { createList, insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
+import { registerDispose } from "../src/scope.js";
 
 const REACT_COMPAT_ELEMENT_TYPE = Symbol.for("react.transitional.element");
 
@@ -218,6 +219,58 @@ describe("insertDynamic", () => {
 
     await expect(flushEffects()).resolves.toBeUndefined();
     expect(parent.textContent).toBe("No family");
+
+    dispose();
+  });
+
+  test("disposes the previous branch before evaluating its replacement", async () => {
+    const events: string[] = [];
+    const selected = cell("a");
+    const shared = cell("initial");
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => {
+      const branch = selected.get();
+      registerDispose(() => events.push(`dispose:${branch}`));
+      events.push(`render:${branch}`);
+      shared.set(branch);
+      return document.createTextNode(branch);
+    });
+
+    selected.set("b");
+    await flushEffects();
+
+    expect(events).toEqual(["render:a", "dispose:a", "render:b"]);
+    expect(shared.get()).toBe("b");
+
+    dispose();
+  });
+
+  test("clears the stopped branch when evaluating its replacement throws", async () => {
+    const selected = cell<"ready" | "error">("ready");
+    const events: string[] = [];
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(parent, marker, () => {
+      const branch = selected.get();
+      registerDispose(() => events.push(`dispose:${branch}`));
+
+      if (branch === "error") {
+        throw new Error("replacement failed");
+      }
+
+      return document.createTextNode(branch);
+    });
+
+    selected.set("error");
+
+    await expect(flushEffects()).rejects.toThrow("replacement failed");
+    expect(events).toEqual(["dispose:ready", "dispose:error"]);
+    expect(parent.innerHTML).toBe("<!--marker-->");
 
     dispose();
   });
