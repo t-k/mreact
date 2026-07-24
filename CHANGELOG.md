@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.0.196 - 2026-07-24
+
+### Added
+
+- Added the reactive intrinsic `domRef` lifecycle attribute for running browser callbacks after an element is committed, retargeting bindings to retained SSR nodes, and cleaning up on replacement, root disposal, and route navigation.
+- Added development diagnostics that identify competing labeled computations writing the same cell before the generic reactive flush limit.
+
+### Fixed
+
+- Fixed non-list dynamic branch replacement and App Router navigation so the previous branch is disposed before its replacement renders, including when lifecycle cleanup throws.
+- Fixed server JSX spread filtering so event-like attributes are rejected case-insensitively and omitted `domRef` getters are not evaluated.
+- Fixed production client bundles so unminified Rolldown region comments do not expose absolute or project-relative application source paths while runtime package regions remain available.
+- Fixed compiler runtime helper collisions and placeholder replacement so component-local `bindDomRef` bindings and matching user strings or identifiers remain intact.
+
 ## 0.0.195 - 2026-07-17
 
 ### Fixed
