@@ -33,22 +33,51 @@ export function insertDynamic(
   let currentList: BoundDynamicList | undefined;
 
   const clear = () => {
-    currentList?.dispose();
+    const disposeList = currentList?.dispose;
     currentList = undefined;
-    disposeCurrentScope?.();
+    const disposeScope = disposeCurrentScope;
     disposeCurrentScope = undefined;
+    let firstError: unknown;
+
+    try {
+      disposeList?.();
+    } catch (error) {
+      firstError = error;
+    }
+
+    try {
+      disposeScope?.();
+    } catch (error) {
+      firstError ??= error;
+    }
 
     for (const node of current) {
-      node.parentNode?.removeChild(node);
+      try {
+        node.parentNode?.removeChild(node);
+      } catch (error) {
+        firstError ??= error;
+      }
     }
 
     current = [];
+
+    if (firstError !== undefined) {
+      throw firstError;
+    }
   };
 
   const run = () => {
+    let firstError: unknown;
+
     if (currentList === undefined) {
-      disposeCurrentScope?.();
+      const disposeScope = disposeCurrentScope;
       disposeCurrentScope = undefined;
+
+      try {
+        disposeScope?.();
+      } catch (error) {
+        firstError = error;
+      }
     }
 
     const nextValueRef: { value: RenderValue } = { value: undefined };
@@ -61,8 +90,12 @@ export function insertDynamic(
         return isListRenderValue(nextValue) ? null : nextValue;
       });
     } catch (error) {
-      clear();
-      throw error;
+      try {
+        clear();
+      } catch (cleanupError) {
+        firstError ??= cleanupError;
+      }
+      throw firstError ?? error;
     }
 
     const nextValue = nextValueRef.value;
@@ -78,14 +111,24 @@ export function insertDynamic(
         currentList.nestedObjectFallback === nextNestedObjectFallback
       ) {
         currentList.value.set(nextValue);
+        if (firstError !== undefined) {
+          throw firstError;
+        }
         return;
       }
 
-      clear();
+      try {
+        clear();
+      } catch (error) {
+        firstError ??= error;
+      }
 
       const insertionParent = marker.parentNode;
 
       if (insertionParent === null) {
+        if (firstError !== undefined) {
+          throw firstError;
+        }
         return;
       }
 
@@ -114,19 +157,33 @@ export function insertDynamic(
           options,
         ),
       };
+      if (firstError !== undefined) {
+        throw firstError;
+      }
       return;
     }
 
     if (currentList !== undefined) {
-      clear();
+      try {
+        clear();
+      } catch (error) {
+        firstError ??= error;
+      }
     }
 
     if (isSameNodeList(current, next.nodes)) {
       disposeCurrentScope = next.dispose;
+      if (firstError !== undefined) {
+        throw firstError;
+      }
       return;
     }
 
-    clear();
+    try {
+      clear();
+    } catch (error) {
+      firstError ??= error;
+    }
     current = markForHydration ? markDynamicNodes(next.nodes) : next.nodes;
     disposeCurrentScope = next.dispose;
 
@@ -134,13 +191,27 @@ export function insertDynamic(
 
     if (insertionParent === null) {
       current = [];
-      disposeCurrentScope?.();
+      const disposeScope = disposeCurrentScope;
       disposeCurrentScope = undefined;
+
+      try {
+        disposeScope?.();
+      } catch (error) {
+        firstError ??= error;
+      }
+
+      if (firstError !== undefined) {
+        throw firstError;
+      }
       return;
     }
 
     for (const node of current) {
       insertionParent.insertBefore(node, marker);
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
     }
   };
   const dispose =

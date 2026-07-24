@@ -28,6 +28,7 @@ export interface RouterBundleOptions {
   platform: "browser" | "node";
   preserveExports?: boolean | undefined;
   root?: string | undefined;
+  sanitizeSourceRegionPaths?: boolean | undefined;
   plugins?: readonly RouterCompatPlugin[] | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   sourceMap?: boolean | undefined;
@@ -47,6 +48,7 @@ export interface RouterBundleModulesOptions {
   platform: "browser" | "node";
   plugins?: readonly RouterCompatPlugin[] | undefined;
   root?: string | undefined;
+  sanitizeSourceRegionPaths?: boolean | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   sourceMap?: boolean | undefined;
   target?: string | undefined;
@@ -351,7 +353,7 @@ async function bundleRouterModuleUncached(
 
   return {
     ...(assets.length === 0 ? {} : { assets }),
-    code: stripSourceMappingUrl(chunk.code),
+    code: sanitizeBundleCode(chunk.code, options.sanitizeSourceRegionPaths === true),
     ...(map !== undefined && typeof map.source === "string" ? { map: map.source } : {}),
   };
 }
@@ -448,7 +450,7 @@ export async function bundleRouterModules(
       const map = mapAssets.get(`${chunk.fileName}.map`);
 
       return {
-        code: stripSourceMappingUrl(chunk.code),
+        code: sanitizeBundleCode(chunk.code, options.sanitizeSourceRegionPaths === true),
         fileName: chunk.fileName,
         imports: chunk.imports ?? [],
         isEntry: chunk.isEntry === true,
@@ -575,6 +577,20 @@ function routerBundleTreeshakeOptions(
 
 function stripSourceMappingUrl(code: string): string {
   return code.replace(/\n?\/\/# sourceMappingURL=[^\n]+\.map\s*$/u, "");
+}
+
+function sanitizeBundleCode(code: string, sanitizeSourceRegionPaths: boolean): string {
+  const withoutSourceMapUrl = stripSourceMappingUrl(code);
+
+  if (!sanitizeSourceRegionPaths) {
+    return withoutSourceMapUrl;
+  }
+
+  return withoutSourceMapUrl.replace(
+    /^\/\/#region ((?:\.\.\/|\/|[A-Za-z]:\/)[^\r\n]+)$/gmu,
+    (_match, sourcePath: string) =>
+      `//#region ${sourcePath.slice(sourcePath.lastIndexOf("/") + 1)}`,
+  );
 }
 
 function virtualEntryPlugin(entryId: string, code: string): VitePlugin {

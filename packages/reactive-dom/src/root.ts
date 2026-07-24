@@ -20,7 +20,22 @@ export function createRoot(
   container.replaceChildren(...nodes);
 
   return () => {
-    disposeScope(scope);
-    container.replaceChildren();
+    let firstError: unknown;
+
+    try {
+      disposeScope(scope);
+    } catch (error) {
+      firstError = error;
+    }
+
+    try {
+      container.replaceChildren();
+    } catch (error) {
+      firstError ??= error;
+    }
+
+    if (firstError !== undefined) {
+      throw firstError;
+    }
   };
 }

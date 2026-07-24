@@ -2116,7 +2116,13 @@ export async function buildClientRouteOutput(
     minify: options.minify === true,
     platform: "browser",
     preserveExports: true,
-    plugins: [workspaceRuntimePlugin({ routeFiles: [options.filename] })],
+    sanitizeSourceRegionPaths: options.debugLabels !== true,
+    plugins: [
+      workspaceRuntimePlugin({
+        debugLabels: options.debugLabels === true,
+        routeFiles: [options.filename],
+      }),
+    ],
     sourceMap: options.sourceMap,
     vitePlugins: options.vitePlugins,
   });
@@ -2163,7 +2169,13 @@ export async function buildClientRouteBatchOutput(options: {
     })),
     minify: options.minify === true,
     platform: "browser",
-    plugins: [workspaceRuntimePlugin({ routeFiles: entries.map((entry) => entry.filename) })],
+    sanitizeSourceRegionPaths: !options.routes.some((route) => route.debugLabels === true),
+    plugins: [
+      workspaceRuntimePlugin({
+        debugLabels: options.routes.some((route) => route.debugLabels === true),
+        routeFiles: entries.map((entry) => entry.filename),
+      }),
+    ],
     root: options.projectRoot,
     sourceMap: options.sourceMap,
     dropConsoleFunctions: options.dropConsoleFunctions,
@@ -4658,7 +4670,10 @@ function __mreactResumeChildren(current, next) {
   };
 }
 
-function workspaceRuntimePlugin(options: { routeFiles: readonly string[] }) {
+function workspaceRuntimePlugin(options: {
+  debugLabels: boolean;
+  routeFiles: readonly string[];
+}) {
   const routeFiles = new Set(options.routeFiles);
   const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
     workspacePackageFile({
@@ -4792,9 +4807,10 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
         }
 
         const source = await readFile(args.path, "utf8");
+        const compilerFilename = options.debugLabels ? basename(args.path) : args.path;
         const moduleContext = createCompilerModuleContext({
           code: source,
-          filename: args.path,
+          filename: compilerFilename,
         });
 
         if (!hasJsxSyntax(moduleContext.program)) {
@@ -4803,8 +4819,8 @@ export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
 
         const output = transformCompilerModuleContext({
           code: source,
-          dev: true,
-          filename: args.path,
+          dev: options.debugLabels,
+          filename: compilerFilename,
           mode: isCompatSourcePath(args.path) ? "compat" : "reactive",
           moduleContext,
           target: "client",

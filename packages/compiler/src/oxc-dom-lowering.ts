@@ -3,6 +3,8 @@ import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
 import { isEventLikePropName } from "@reckona/mreact-shared";
 
+export const OXC_BIND_DOM_REF_PLACEHOLDER = "\0mreact:bind-dom-ref\0";
+
 export function lowerOxcDomNodeExpression(
   code: string,
   node: Record<string, unknown>,
@@ -105,7 +107,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
       }
 
       return [
-        `  __MREACT_BIND_DOM_REF__(_node, ${readSource(code, readObject(value.expression))});`,
+        `  ${OXC_BIND_DOM_REF_PLACEHOLDER}(_node, ${readSource(code, readObject(value.expression))});`,
       ];
     }
 

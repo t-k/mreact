@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { createList, insertDynamic } from "../src/index.js";
+import { bindDomRef, createList, insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 import { registerDispose } from "../src/scope.js";
@@ -77,6 +77,32 @@ describe("insertDynamic", () => {
     expect(parent.innerHTML).toBe("<strong>stable</strong><!--marker-->");
 
     dispose();
+  });
+
+  test("completes branch replacement after the previous cleanup throws", async () => {
+    const value = cell("a");
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+    document.body.append(parent);
+    const dispose = insertDynamic(parent, marker, () => {
+      const section = document.createElement("section");
+      section.textContent = value.get();
+      bindDomRef(section, () => () => {
+        if (section.textContent === "a") {
+          throw new Error("cleanup failed");
+        }
+      });
+      return section;
+    });
+    await Promise.resolve();
+
+    value.set("b");
+
+    await expect(flushEffects()).rejects.toThrow("cleanup failed");
+    expect(parent.innerHTML).toBe("<section>b</section><!--marker-->");
+    dispose();
+    parent.remove();
   });
 
   test("keeps keyed list render value nodes across unrelated dynamic updates", async () => {

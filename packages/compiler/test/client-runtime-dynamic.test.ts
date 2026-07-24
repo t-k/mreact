@@ -60,6 +60,57 @@ describe("compiler client runtime dynamic output", () => {
     node.remove();
   });
 
+  test("aliases the domRef runtime helper around component-local bindings", async () => {
+    const output = transform({
+      code: `export function App() {
+        const bindDomRef = () => {
+          globalThis.__localBindDomRefCalled = true;
+        };
+        return <section domRef={(element) => {
+          globalThis.__attachedDomRef = element;
+        }}>Ready</section>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+    const runtimeState = globalThis as typeof globalThis & {
+      __attachedDomRef?: Element;
+      __localBindDomRefCalled?: boolean;
+    };
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindDomRef as _bindDomRef");
+    const { App } = compileClientModule(output.code);
+    const node = App();
+    document.body.append(node);
+    await Promise.resolve();
+
+    expect(runtimeState.__localBindDomRefCalled).toBeUndefined();
+    expect(runtimeState.__attachedDomRef).toBe(node);
+    delete runtimeState.__attachedDomRef;
+    node.remove();
+  });
+
+  test("preserves user literals and identifiers that match old emitter placeholders", async () => {
+    const output = transform({
+      code: `export function App() {
+        const __MREACT_BIND_DOM_REF__ = "identifier";
+        const literal = "__MREACT_BIND_DOM_REF__";
+        return <div>{__MREACT_BIND_DOM_REF__}:{literal}</div>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('const __MREACT_BIND_DOM_REF__ = "identifier"');
+    expect(output.code).toContain('const literal = "__MREACT_BIND_DOM_REF__"');
+    const node = await runClientComponent(output.code);
+    expect(node.textContent).toBe("identifier:__MREACT_BIND_DOM_REF__");
+  });
+
   test("preserves component body statements used by dynamic text", async () => {
     const output = transform({
       code: 'export function App() { const name = "Ada"; return <div>Hello {name}</div>; }',

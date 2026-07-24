@@ -6,6 +6,7 @@ import type {
 } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
+import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitResult {
@@ -40,7 +41,7 @@ export function emitClient(
       ),
     )
     .join("\n\n")
-    .replaceAll("__MREACT_BIND_DOM_REF__", helperNames.bindDomRef);
+    .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef);
 
   return {
     code: `${[importLine, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
@@ -65,14 +66,16 @@ function allocateRuntimeHelperNames(
   ir: ModuleIr,
   specifiers: readonly string[],
 ): RuntimeHelperNames {
-  const allocator = createNameAllocator([
+  const bindingNames = [
     ...ir.moduleBindingNames,
     ...ir.components.flatMap((component) => [
       component.name,
       component.exportName,
       ...component.bindingNames,
     ]),
-  ]);
+  ];
+  const allocator = createNameAllocator(bindingNames);
+  const occupiedNames = new Set(bindingNames);
   const helperNames: RuntimeHelperNames = {
     bindList: "bindList",
     bindDomRef: "bindDomRef",
@@ -87,10 +90,7 @@ function allocateRuntimeHelperNames(
 
   for (const specifier of specifiers) {
     const helper = specifier as RuntimeHelperName;
-
-    if (ir.moduleBindingNames.includes(helper)) {
-      helperNames[helper] = allocator(`_${helper}`);
-    }
+    helperNames[helper] = allocator(occupiedNames.has(helper) ? `_${helper}` : helper);
   }
 
   return helperNames;
@@ -126,7 +126,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   const specifiers = new Set<string>(["createTemplate"]);
 
-  if (JSON.stringify(ir).includes("__MREACT_BIND_DOM_REF__")) {
+  if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
     specifiers.add("bindDomRef");
   }
 

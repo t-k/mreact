@@ -100,6 +100,25 @@ describe("bindDomRef", () => {
     container.remove();
   });
 
+  test("removes root DOM after a domRef cleanup throws", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const disposeRoot = createRoot(container, () => {
+      const element = document.createElement("section");
+      bindDomRef(element, () => () => {
+        throw new Error("cleanup failed");
+      });
+      return element;
+    });
+
+    await Promise.resolve();
+
+    expect(() => disposeRoot()).toThrow("cleanup failed");
+    expect(container.childNodes).toHaveLength(0);
+    expect(container.isConnected).toBe(true);
+    container.remove();
+  });
+
   test("commits later bindings and reports the first callback error asynchronously", () => {
     const tasks: VoidFunction[] = [];
     const queueMicrotaskSpy = vi

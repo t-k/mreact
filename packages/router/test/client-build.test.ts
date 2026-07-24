@@ -780,6 +780,37 @@ export default function Page() {
     expect(development.code).toContain("debugLabel");
   });
 
+  test("does not leak imported component paths into unminified production output", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-production-debug-labels-"));
+    const filename = join(rootDir, "page.mreact.tsx");
+    const componentFilename = join(rootDir, "ViewTransition.tsx");
+    const code = `import { ViewTransition } from "./ViewTransition.js";
+export default function Page() {
+  return <ViewTransition visible={true} />;
+}`;
+    await writeFile(filename, code);
+    await writeFile(
+      componentFilename,
+      `export function ViewTransition(props: { visible: boolean }) {
+  return <main>{props.visible && <span>Visible</span>}</main>;
+}`,
+    );
+
+    const output = await buildClientRouteOutput({
+      code,
+      filename,
+      minify: false,
+      routePath: "/",
+    });
+
+    expect(output.code).not.toContain(rootDir);
+    expect(output.code).not.toContain(componentFilename);
+    expect(output.code).not.toContain("ViewTransition.tsx#ViewTransition");
+    expect(output.code).toContain("//#region ViewTransition.tsx");
+    expect(output.code).toContain("//#region page.mreact.tsx?mreact-router-entry");
+    expect(output.code).toContain("//#region packages/reactive-dom/src/scope.ts");
+  });
+
   test("builds client route modules for imported interactive child components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-imported-"));
     const appDir = join(rootDir, "app");
