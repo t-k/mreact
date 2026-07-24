@@ -61,9 +61,10 @@ describe("router CLI entry", () => {
     await writeFile(
       join(rootDir, "page.tsx"),
       `import Counter from "./Counter.client";
+import { MissingPanel } from "./MissingPanel";
 
 export default function Page() {
-  return <main><Counter /></main>;
+  return <main><Counter /><MissingPanel /></main>;
 }`,
     );
     await writeFile(
@@ -81,6 +82,10 @@ export default function Page() {
       expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("/ [server-render]"));
       expect(logSpy).toHaveBeenCalledWith(
         expect.stringContaining("Counter.client.tsx#default  client-boundary"),
+      );
+      expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("MissingPanel  unknown"));
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining("MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE"),
       );
       expect(errorSpy).not.toHaveBeenCalled();
     } finally {

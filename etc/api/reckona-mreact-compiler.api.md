@@ -408,6 +408,8 @@ export interface TopLevelExportRenderInfo {
     // (undocumented)
     clientRuntime: boolean;
     // (undocumented)
+    localName: string;
+    // (undocumented)
     name: string;
     // (undocumented)
     renderedComponentRoots: string[];

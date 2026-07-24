@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   analyzeBoundaryGraph,
   collectClientRouteModuleAnalysis,
@@ -137,6 +137,7 @@ export type ClientRouteComponentOrigin =
   | "inferred-client-runtime"
   | "server-only-import"
   | "server-render"
+  | "unresolved-reference"
   | "use-client-directive"
   | "use-server-directive";
 
@@ -148,6 +149,7 @@ export interface ClientRouteComponent {
 }
 
 interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
+  availableExportNames: string[];
   boundaryGraphFallbackCandidate: boolean;
   boundaryGraphFallbackRequired: boolean;
   clientBoundaryExportNames: string[];
@@ -161,6 +163,7 @@ interface ClientRouteModuleInferenceResult extends ClientRouteInferenceResult {
 }
 
 interface ClientRouteComponentCollector {
+  clientReachable: Set<string>;
   components: Map<string, ClientRouteComponent>;
   reachable: Set<string>;
 }
@@ -181,6 +184,7 @@ export interface ClientRouteInferenceDiagnostic {
   code:
     | "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE"
     | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE"
+    | "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE"
     | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE"
     | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
   filename: string;
@@ -258,7 +262,7 @@ export async function inferClientRouteModule(options: {
   const cache = options.cache ?? createClientRouteInferenceCache();
   const sourceTransform = clientRouteSourceTransformForVitePlugins(options.vitePlugins);
   const componentCollector: ClientRouteComponentCollector | undefined = options.collectComponents
-    ? { components: new Map(), reachable: new Set() }
+    ? { clientReachable: new Set(), components: new Map(), reachable: new Set() }
     : undefined;
   const code = await transformClientRouteSource({
     code: options.code,
@@ -274,6 +278,7 @@ export async function inferClientRouteModule(options: {
       filename: options.filename,
       ...(sourceTransform === undefined ? { moduleContext: options.moduleContext } : {}),
       root: true,
+      routeEntry: true,
       seen: new Set(),
       sourceTransform,
     });
@@ -429,6 +434,7 @@ export async function collectClientRouteReferences(options: {
     filename: options.filename,
     moduleContext: routeModuleContext,
     root: true,
+    routeEntry: true,
     seen: new Set(),
     sourceTransform,
   });
@@ -465,6 +471,7 @@ export async function collectClientRouteReferences(options: {
         filename: sourceOptions.filename,
         moduleContext,
         root: true,
+        routeEntry: false,
         seen: new Set(),
         sourceTransform,
       }));
@@ -511,6 +518,7 @@ export async function collectClientRouteReferences(options: {
           filename: shell,
           moduleContext,
           root: true,
+          routeEntry: false,
           seen: new Set(),
           sourceTransform,
         }),
@@ -676,6 +684,7 @@ async function inferClientRouteShellModules(options: {
         componentCollector: options.componentCollector,
         filename: shell,
         root: true,
+        routeEntry: false,
         seen: new Set(),
         sourceTransform: options.sourceTransform,
       });
@@ -722,6 +731,7 @@ function collectClientRouteComponentsForModule(
     analysis: ClientRouteModuleAnalysis;
     filename: string;
     root: boolean;
+    routeEntry: boolean;
   },
 ): void {
   if (collector === undefined) {
@@ -741,7 +751,7 @@ function collectClientRouteComponentsForModule(
       classification: serverOnly
         ? "server-only"
         : explicitClient || info.clientRuntime
-          ? options.root
+          ? options.routeEntry && info.name === "default"
             ? "client-route"
             : "client-boundary"
           : "server-render",
@@ -758,6 +768,28 @@ function collectClientRouteComponentsForModule(
       clientRouteComponentKey(component.file, component.exportName),
       component,
     );
+  }
+
+  for (const info of options.analysis.topLevelExportRenderInfo) {
+    if (!isClientRouteComponentReachable(collector, options.filename, info.name)) {
+      continue;
+    }
+
+    const renderedNames = new Set([
+      ...(options.analysis.reachableExportRenderedComponentNames[info.name] ?? []),
+      ...(options.analysis.reachableExportRenderedComponentRoots[info.name] ?? []),
+    ]);
+
+    for (const rendered of options.analysis.topLevelExportRenderInfo) {
+      if (
+        rendered.name !== "default" &&
+        (renderedNames.has(rendered.name) || renderedNames.has(rendered.localName))
+      ) {
+        markClientRouteComponentReachable(collector, options.filename, [rendered.name], {
+          clientExecution: clientRouteComponentRunsOnClient(collector, options.filename, info.name),
+        });
+      }
+    }
   }
 }
 
@@ -800,9 +832,18 @@ function normalizedClientRouteComponents(
         collector.reachable.has(clientRouteComponentKey(component.file, component.exportName)) ||
         collector.reachable.has(clientRouteComponentKey(component.file, "*")),
     )
+    .map((component) =>
+      component.classification === "server-render" &&
+      (collector.clientReachable.has(
+        clientRouteComponentKey(component.file, component.exportName),
+      ) ||
+        collector.clientReachable.has(clientRouteComponentKey(component.file, "*")))
+        ? { ...component, classification: "shared" as const }
+        : component,
+    )
     .sort((left, right) => {
-      const leftRoute = left.file === routeFile;
-      const rightRoute = right.file === routeFile;
+      const leftRoute = left.file === routeFile && left.exportName === "default";
+      const rightRoute = right.file === routeFile && right.exportName === "default";
 
       if (leftRoute !== rightRoute) {
         return leftRoute ? -1 : 1;
@@ -824,6 +865,7 @@ function markClientRouteComponentReachable(
   collector: ClientRouteComponentCollector | undefined,
   file: string,
   exportNames: readonly string[] | undefined,
+  options: { clientExecution?: boolean | undefined } = {},
 ): void {
   if (collector === undefined) {
     return;
@@ -831,12 +873,39 @@ function markClientRouteComponentReachable(
 
   if (exportNames === undefined) {
     collector.reachable.add(clientRouteComponentKey(file, "*"));
+    if (options.clientExecution === true) {
+      collector.clientReachable.add(clientRouteComponentKey(file, "*"));
+    }
     return;
   }
 
   for (const exportName of exportNames) {
-    collector.reachable.add(clientRouteComponentKey(file, exportName));
+    const key = clientRouteComponentKey(file, exportName);
+    collector.reachable.add(key);
+    if (options.clientExecution === true) {
+      collector.clientReachable.add(key);
+    }
   }
+}
+
+function clientRouteComponentRunsOnClient(
+  collector: ClientRouteComponentCollector | undefined,
+  file: string,
+  exportName: string,
+): boolean {
+  if (collector === undefined) {
+    return false;
+  }
+
+  const key = clientRouteComponentKey(file, exportName);
+  const component = collector.components.get(key);
+  return (
+    component?.classification === "client-boundary" ||
+    component?.classification === "client-route" ||
+    component?.classification === "shared" ||
+    collector.clientReachable.has(key) ||
+    collector.clientReachable.has(clientRouteComponentKey(file, "*"))
+  );
 }
 
 function isClientRouteComponentReachable(
@@ -862,17 +931,22 @@ function propagateClientRouteComponentStaticExport(
   }
 
   const wildcardReachable = collector.reachable.has(clientRouteComponentKey(file, "*"));
+  const wildcardClientExecution = clientRouteComponentRunsOnClient(collector, file, "*");
 
   if (reference.exportAll) {
     if (wildcardReachable) {
-      markClientRouteComponentReachable(collector, resolved, undefined);
+      markClientRouteComponentReachable(collector, resolved, undefined, {
+        clientExecution: wildcardClientExecution,
+      });
     }
 
     for (const key of collector.reachable) {
       const [reachableFile, exportName] = key.split("\0");
 
       if (reachableFile === file && exportName !== undefined && exportName !== "*") {
-        markClientRouteComponentReachable(collector, resolved, [exportName]);
+        markClientRouteComponentReachable(collector, resolved, [exportName], {
+          clientExecution: clientRouteComponentRunsOnClient(collector, file, exportName),
+        });
       }
     }
     return;
@@ -883,16 +957,50 @@ function propagateClientRouteComponentStaticExport(
       wildcardReachable ||
       collector.reachable.has(clientRouteComponentKey(file, specifier.exportedName))
     ) {
-      markClientRouteComponentReachable(collector, resolved, [specifier.localName]);
+      markClientRouteComponentReachable(collector, resolved, [specifier.localName], {
+        clientExecution:
+          wildcardClientExecution ||
+          clientRouteComponentRunsOnClient(collector, file, specifier.exportedName),
+      });
     }
   }
 
   if (reference.specifiers.length === 0) {
     for (const exportName of reference.exportedNames) {
       if (wildcardReachable || collector.reachable.has(clientRouteComponentKey(file, exportName))) {
-        markClientRouteComponentReachable(collector, resolved, [exportName]);
+        markClientRouteComponentReachable(collector, resolved, [exportName], {
+          clientExecution:
+            wildcardClientExecution ||
+            clientRouteComponentRunsOnClient(collector, file, exportName),
+        });
       }
     }
+  }
+}
+
+function collectUnknownClientRouteComponents(
+  collector: ClientRouteComponentCollector | undefined,
+  options: {
+    exportNames: readonly string[] | undefined;
+    file: string;
+  },
+): void {
+  if (collector === undefined) {
+    return;
+  }
+
+  for (const exportName of options.exportNames ?? ["*"]) {
+    const component = {
+      classification: "unknown",
+      exportName,
+      file: options.file,
+      origin: "unresolved-reference",
+    } satisfies ClientRouteComponent;
+    collector.components.set(
+      clientRouteComponentKey(component.file, component.exportName),
+      component,
+    );
+    markClientRouteComponentReachable(collector, component.file, [component.exportName]);
   }
 }
 
@@ -926,6 +1034,7 @@ async function inferClientRouteModuleSource(options: {
   filename: string;
   moduleContext?: CompilerModuleContext | undefined;
   root: boolean;
+  routeEntry: boolean;
   seen: Set<string>;
   sourceTransform?: ClientRouteSourceTransform | undefined;
 }): Promise<ClientRouteModuleInferenceResult> {
@@ -935,26 +1044,35 @@ async function inferClientRouteModuleSource(options: {
     analysis,
     filename: options.filename,
     root: options.root,
+    routeEntry: options.routeEntry,
   });
+  const forcedInference = isServerOnlyClientRouteSource(analysis)
+    ? emptyClientRouteModuleInferenceResult({
+        availableExportNames: analysis.topLevelExportRenderInfo.map((info) => info.name),
+        navigationLinkExportNames: detectLinkComponentExportNames(analysis),
+        serverOnly: true,
+        serverOnlyClientRuntime: analysis.clientRuntime,
+        usesNavigationLink: usesNavigationLinkLocal,
+      })
+    : isExplicitClientRouteSource(analysis, options.filename)
+      ? emptyClientRouteModuleInferenceResult({
+          availableExportNames: analysis.topLevelExportRenderInfo.map((info) => info.name),
+          client: true,
+          clientBoundaryModule: true,
+        })
+      : undefined;
 
-  if (isServerOnlyClientRouteSource(analysis)) {
-    return emptyClientRouteModuleInferenceResult({
-      navigationLinkExportNames: detectLinkComponentExportNames(analysis),
-      serverOnly: true,
-      serverOnlyClientRuntime: analysis.clientRuntime,
-      usesNavigationLink: usesNavigationLinkLocal,
-    });
-  }
-
-  if (isExplicitClientRouteSource(analysis, options.filename)) {
-    return emptyClientRouteModuleInferenceResult({
-      client: true,
-      clientBoundaryModule: true,
-    });
+  if (forcedInference !== undefined && options.componentCollector === undefined) {
+    return forcedInference;
   }
 
   if (options.seen.has(options.filename)) {
-    return emptyClientRouteModuleInferenceResult();
+    return (
+      forcedInference ??
+      emptyClientRouteModuleInferenceResult({
+        availableExportNames: analysis.topLevelExportRenderInfo.map((info) => info.name),
+      })
+    );
   }
 
   options.seen.add(options.filename);
@@ -966,11 +1084,14 @@ async function inferClientRouteModuleSource(options: {
     const nestedClientExportNames = new Set<string>();
     const clientReferenceSourceFiles: string[] = [];
     const diagnostics: ClientRouteInferenceDiagnostic[] = [];
+    const availableExportNames = new Set(
+      analysis.topLevelExportRenderInfo.map((info) => info.name),
+    );
     let boundaryGraphFallbackRequired = false;
     let clientProxy = false;
     let nestedClient = false;
     let usesNavigationLink = usesNavigationLinkLocal;
-    const navigationLinkExportNames = new Set<string>(detectLinkComponentExportNames(analysis));
+    const navigationLinkExportNames = new Set(detectLinkComponentExportNames(analysis));
     const exportInfo = analysis.topLevelExportRenderInfo;
     const implicitModuleClient = exportInfo.length === 0 && analysis.clientRuntime;
     for (const info of exportInfo) {
@@ -980,9 +1101,12 @@ async function inferClientRouteModuleSource(options: {
     }
     if (
       hasServerOnlyImports(analysis) &&
-      (implicitModuleClient || clientBoundaryExportNames.size > 0)
+      (implicitModuleClient || clientBoundaryExportNames.size > 0) &&
+      options.componentCollector === undefined
     ) {
       return emptyClientRouteModuleInferenceResult({
+        availableExportNames: Array.from(availableExportNames),
+        navigationLinkExportNames: detectLinkComponentExportNames(analysis),
         serverOnly: true,
         serverOnlyClientRuntime: true,
       });
@@ -1015,31 +1139,56 @@ async function inferClientRouteModuleSource(options: {
         continue;
       }
 
+      const renderingExportNames = rendered ? renderedLocalExportNames(reference, exportInfo) : [];
+      const renderedImportedNames = rendered
+        ? renderedImportedExportNames(reference, renderedComponentRoots)
+        : [];
+      const renderedFromReachableExport =
+        rendered &&
+        renderingExportNames.some((exportName) =>
+          isClientRouteComponentReachable(options.componentCollector, options.filename, exportName),
+        );
       const resolved = await resolveAppLocalModule({
         allowExplicitNonSource: options.sourceTransform !== undefined,
         cache: options.cache,
         importer: options.filename,
         specifier: reference.source,
+        tolerateUnresolved: options.componentCollector !== undefined,
       });
 
       if (resolved === undefined) {
+        if (
+          options.componentCollector !== undefined &&
+          renderedFromReachableExport &&
+          reference.source.startsWith(".")
+        ) {
+          collectUnknownClientRouteComponents(options.componentCollector, {
+            exportNames: renderedImportedNames,
+            file: resolve(dirname(options.filename), reference.source),
+          });
+          diagnostics.push(
+            unresolvedClientRouteReferenceDiagnostic({
+              filename: options.filename,
+              source: reference.source,
+            }),
+          );
+        }
         continue;
       }
 
-      const renderingExportNames = rendered ? renderedLocalExportNames(reference, exportInfo) : [];
-      const renderedImportedNames = rendered
-        ? renderedImportedExportNames(reference, renderedComponentRoots)
-        : [];
-      if (
-        rendered &&
-        renderingExportNames.some((exportName) =>
-          isClientRouteComponentReachable(options.componentCollector, options.filename, exportName),
-        )
-      ) {
+      if (renderedFromReachableExport) {
+        const clientExecution = renderingExportNames.some((exportName) =>
+          clientRouteComponentRunsOnClient(
+            options.componentCollector,
+            options.filename,
+            exportName,
+          ),
+        );
         markClientRouteComponentReachable(
           options.componentCollector,
           resolved,
           renderedImportedNames,
+          { clientExecution },
         );
       }
 
@@ -1059,10 +1208,32 @@ async function inferClientRouteModuleSource(options: {
           filename: resolved,
         }),
         root: false,
+        routeEntry: false,
         seen: options.seen,
         sourceTransform: options.sourceTransform,
       });
       diagnostics.push(...imported.diagnostics);
+      const missingExportNames =
+        options.componentCollector !== undefined &&
+        renderedFromReachableExport &&
+        renderedImportedNames !== undefined
+          ? renderedImportedNames.filter(
+              (exportName) => !imported.availableExportNames.includes(exportName),
+            )
+          : [];
+      if (missingExportNames.length > 0) {
+        collectUnknownClientRouteComponents(options.componentCollector, {
+          exportNames: missingExportNames,
+          file: resolved,
+        });
+        diagnostics.push(
+          unresolvedClientRouteReferenceDiagnostic({
+            exportNames: missingExportNames,
+            filename: options.filename,
+            source: reference.source,
+          }),
+        );
+      }
       // Propagate the navigation runtime only for imports that are actually
       // rendered here, and only for the specific exports whose subtree renders a
       // `Link`. A merely-referenced import (e.g. `const C = Nav`) recurses for
@@ -1166,9 +1337,18 @@ async function inferClientRouteModuleSource(options: {
           cache: options.cache,
           importer: options.filename,
           specifier: reference.source,
+          tolerateUnresolved: options.componentCollector !== undefined,
         });
 
         if (resolved === undefined) {
+          if (options.componentCollector !== undefined) {
+            diagnostics.push(
+              unresolvedClientRouteReferenceDiagnostic({
+                filename: options.filename,
+                source: reference.source,
+              }),
+            );
+          }
           continue;
         }
 
@@ -1195,10 +1375,23 @@ async function inferClientRouteModuleSource(options: {
             filename: resolved,
           }),
           root: false,
+          routeEntry: false,
           seen: options.seen,
           sourceTransform: options.sourceTransform,
         });
         diagnostics.push(...exported.diagnostics);
+        if (reference.exportAll) {
+          for (const exportName of exported.availableExportNames) {
+            availableExportNames.add(exportName);
+          }
+        } else {
+          for (const specifier of reference.specifiers) {
+            availableExportNames.add(specifier.exportedName);
+          }
+          for (const exportName of reference.exportedNames) {
+            availableExportNames.add(exportName);
+          }
+        }
         // A re-export renders nothing itself, so it does not set the module's
         // own `usesNavigationLink`; it only forwards per-export `Link` usage so
         // an importer that renders this name can decide precisely. Map the
@@ -1240,7 +1433,8 @@ async function inferClientRouteModuleSource(options: {
       }
     }
 
-    return {
+    const inferred = {
+      availableExportNames: Array.from(availableExportNames),
       boundaryGraphFallbackCandidate:
         analysis.staticExports.length > 0 || boundaryGraphFallbackRequired,
       boundaryGraphFallbackRequired,
@@ -1262,6 +1456,15 @@ async function inferClientRouteModuleSource(options: {
       serverOnlyClientRuntime: false,
       usesNavigationLink,
     };
+    return forcedInference === undefined
+      ? inferred
+      : {
+          ...forcedInference,
+          availableExportNames: inferred.availableExportNames,
+          diagnostics,
+          navigationLinkExportNames: inferred.navigationLinkExportNames,
+          usesNavigationLink: inferred.usesNavigationLink,
+        };
   } finally {
     options.seen.delete(options.filename);
   }
@@ -1271,6 +1474,7 @@ function emptyClientRouteModuleInferenceResult(
   overrides: Partial<ClientRouteModuleInferenceResult> = {},
 ): ClientRouteModuleInferenceResult {
   return {
+    availableExportNames: [],
     boundaryGraphFallbackCandidate: false,
     boundaryGraphFallbackRequired: false,
     client: false,
@@ -1885,6 +2089,28 @@ function serverOnlyClientImportReferenceDiagnostic(options: {
   };
 }
 
+function unresolvedClientRouteReferenceDiagnostic(options: {
+  exportNames?: readonly string[] | undefined;
+  filename: string;
+  source: string;
+}): ClientRouteInferenceDiagnostic {
+  const exportSuffix =
+    options.exportNames === undefined || options.exportNames.length === 0
+      ? ""
+      : ` (${options.exportNames.map((name) => JSON.stringify(name)).join(", ")})`;
+
+  return {
+    code: "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
+    filename: options.filename,
+    level: "warn",
+    localNames: [...(options.exportNames ?? [])],
+    message:
+      `${options.filename}: rendered component reference ${JSON.stringify(options.source)}${exportSuffix} ` +
+      "could not be resolved to an exported component.",
+    source: options.source,
+  };
+}
+
 function functionCallInteractiveImportDiagnostic(options: {
   filename: string;
   reference: StaticImportReference;
@@ -1980,6 +2206,7 @@ async function resolveAppLocalModule(options: {
   cache: ClientRouteInferenceCache;
   importer: string;
   specifier: string;
+  tolerateUnresolved?: boolean | undefined;
 }): Promise<string | undefined> {
   if (!options.specifier.startsWith(".")) {
     return undefined;
@@ -1987,7 +2214,7 @@ async function resolveAppLocalModule(options: {
 
   const cacheKey = `${options.importer}\0${options.specifier}\0${
     options.allowExplicitNonSource === true ? "explicit" : "source"
-  }`;
+  }\0${options.tolerateUnresolved === true ? "tolerant" : "strict"}`;
   const cached = options.cache.resolvedByImport.get(cacheKey);
 
   if (cached !== undefined) {
@@ -1998,6 +2225,7 @@ async function resolveAppLocalModule(options: {
     allowExplicitNonSource: options.allowExplicitNonSource === true,
     importer: options.importer,
     specifier: options.specifier,
+    tolerateUnresolved: options.tolerateUnresolved === true,
   });
   options.cache.resolvedByImport.set(cacheKey, resolved);
   return resolved;
@@ -2007,6 +2235,7 @@ async function resolveAppLocalModuleUncached(options: {
   allowExplicitNonSource: boolean;
   importer: string;
   specifier: string;
+  tolerateUnresolved: boolean;
 }): Promise<string | undefined> {
   const { importer, specifier } = options;
   const base = join(dirname(importer), specifier);
@@ -2024,6 +2253,10 @@ async function resolveAppLocalModuleUncached(options: {
     if (await isFile(candidate)) {
       return candidate;
     }
+  }
+
+  if (options.tolerateUnresolved) {
+    return undefined;
   }
 
   throw new Error(`${importer}: could not resolve app-local import ${JSON.stringify(specifier)}.`);

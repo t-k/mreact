@@ -1,8 +1,5 @@
 import type { ModuleIr } from "./ir.js";
-import {
-  analyzeCompilerModuleContextWithOxc,
-  analyzeWithOxc,
-} from "./oxc.js";
+import { analyzeCompilerModuleContextWithOxc, analyzeWithOxc } from "./oxc.js";
 import {
   createCompilerModuleContextWithOxc,
   type CompilerModuleContext,
@@ -10,11 +7,7 @@ import {
 export { transformCompilerModuleContext } from "./transform.js";
 export { stripTypeScriptWithOxc } from "./oxc-transform.js";
 export type { CompilerModuleContext } from "./compiler-module-context.js";
-import type {
-  AnalyzeModuleOptions,
-  CompileTarget,
-  Diagnostic,
-} from "./types.js";
+import type { AnalyzeModuleOptions, CompileTarget, Diagnostic } from "./types.js";
 
 /** Configures source code, filename, target, and analysis options for IR generation. */
 export interface AnalyzeToIrInput {
@@ -68,6 +61,7 @@ export interface StaticExportSpecifierReference {
 export interface TopLevelExportRenderInfo {
   calledComponentRoots: string[];
   clientRuntime: boolean;
+  localName: string;
   name: string;
   renderedComponentRoots: string[];
 }
@@ -264,9 +258,7 @@ export function stripUnusedStaticValueImports(input: {
   const parsed = parseModule(input.code, input.filename);
   const referencedNames = new Set(collectIdentifierReferenceNames(input));
   const replacements = programBody(parsed.program)
-    .map((statement) =>
-      unusedStaticValueImportReplacement(input.code, statement, referencedNames),
-    )
+    .map((statement) => unusedStaticValueImportReplacement(input.code, statement, referencedNames))
     .filter((replacement): replacement is Replacement => replacement !== undefined)
     .sort((left, right) => right.start - left.start);
   let code = input.code;
@@ -508,7 +500,9 @@ function collectModuleExportMap(program: unknown): ModuleExportMap {
       continue;
     }
 
-    const specifiers = Array.isArray(statement.specifiers) ? statement.specifiers.map(readObject) : [];
+    const specifiers = Array.isArray(statement.specifiers)
+      ? statement.specifiers.map(readObject)
+      : [];
     for (const specifier of specifiers) {
       const exportedName = exportedNameForSpecifier(specifier);
       const localName = localNameForExportSpecifier(specifier);
@@ -528,32 +522,28 @@ function collectTopLevelExportRenderInfoFromProgram(program: unknown): TopLevelE
   return [...exported.entries()]
     .map(([name, localName]) => {
       const node = directExports.get(name) ?? declarations.get(localName);
-      const calledComponentRoots = node === undefined
-        ? []
-        : collectComponentCallRootNamesFromSubtree(
-            node,
-            aliasState.aliases,
-          );
-      const renderedComponentRoots = node === undefined
-        ? []
-        : collectJsxComponentRootNamesFromSubtree(
-            node,
-            aliasState.aliases,
-          );
-      const clientRuntime = node === undefined
-        ? false
-        : hasReachableExportClientRuntime({
-            aliases: aliasState.aliases,
-            declarations,
-            localName,
-            node,
-          });
+      const calledComponentRoots =
+        node === undefined
+          ? []
+          : collectComponentCallRootNamesFromSubtree(node, aliasState.aliases);
+      const renderedComponentRoots =
+        node === undefined ? [] : collectJsxComponentRootNamesFromSubtree(node, aliasState.aliases);
+      const clientRuntime =
+        node === undefined
+          ? false
+          : hasReachableExportClientRuntime({
+              aliases: aliasState.aliases,
+              declarations,
+              localName,
+              node,
+            });
 
       return node === undefined
         ? undefined
         : {
             calledComponentRoots,
             clientRuntime,
+            localName,
             name,
             renderedComponentRoots,
           };
@@ -716,10 +706,7 @@ function hasReachableExportClientRuntimeNode(options: {
     return true;
   }
 
-  const references = collectRuntimeReferenceRootNamesFromSubtree(
-    options.node,
-    options.aliases,
-  );
+  const references = collectRuntimeReferenceRootNamesFromSubtree(options.node, options.aliases);
 
   for (const reference of references) {
     const declaration = options.declarations.get(reference);
@@ -732,14 +719,8 @@ function hasReachableExportClientRuntimeNode(options: {
     }
   }
 
-  const calledRoots = collectRuntimeCallRootNamesFromSubtree(
-    options.node,
-    options.aliases,
-  );
-  const renderedRoots = collectJsxComponentRootNamesFromSubtree(
-    options.node,
-    options.aliases,
-  );
+  const calledRoots = collectRuntimeCallRootNamesFromSubtree(options.node, options.aliases);
+  const renderedRoots = collectJsxComponentRootNamesFromSubtree(options.node, options.aliases);
 
   if (
     hasReachableLocalClientRuntime({
@@ -776,12 +757,7 @@ function collectRuntimeCallRootNamesFromSubtree(
   aliases: ReadonlyMap<string, string>,
 ): string[] {
   const names = new Set<string>();
-  collectRuntimeCallRootNamesFromNode(
-    node,
-    names,
-    createComponentAliasState(aliases),
-    new Set(),
-  );
+  collectRuntimeCallRootNamesFromNode(node, names, createComponentAliasState(aliases), new Set());
   return Array.from(names).sort();
 }
 
@@ -795,14 +771,7 @@ function collectRuntimeReferenceRootNamesFromNode(
 ): void {
   if (Array.isArray(node)) {
     for (const child of node) {
-      collectRuntimeReferenceRootNamesFromNode(
-        child,
-        names,
-        state,
-        shadowed,
-        parent,
-        parentKey,
-      );
+      collectRuntimeReferenceRootNamesFromNode(child, names, state, shadowed, parent, parentKey);
     }
     return;
   }
@@ -813,10 +782,7 @@ function collectRuntimeReferenceRootNamesFromNode(
   }
 
   if (object.type === "Identifier" && typeof object.name === "string") {
-    if (
-      !shadowed.has(object.name) &&
-      isRuntimeReferenceIdentifier(parent, parentKey)
-    ) {
+    if (!shadowed.has(object.name) && isRuntimeReferenceIdentifier(parent, parentKey)) {
       names.add(state.aliases.get(object.name) ?? object.name);
     }
     return;
@@ -849,14 +815,7 @@ function collectRuntimeReferenceRootNamesFromNode(
       continue;
     }
 
-    collectRuntimeReferenceRootNamesFromNode(
-      value,
-      names,
-      state,
-      childShadowed,
-      object,
-      key,
-    );
+    collectRuntimeReferenceRootNamesFromNode(value, names, state, childShadowed, object, key);
   }
 }
 
@@ -921,10 +880,7 @@ function shouldSkipRuntimeReferenceNode(node: Record<string, unknown>): boolean 
   );
 }
 
-function shouldSkipRuntimeReferenceProperty(
-  node: Record<string, unknown>,
-  key: string,
-): boolean {
+function shouldSkipRuntimeReferenceProperty(node: Record<string, unknown>, key: string): boolean {
   if (key === "type" || key === "start" || key === "end" || key === "loc") {
     return true;
   }
@@ -976,10 +932,7 @@ function isRuntimeReferenceIdentifier(
   );
 }
 
-function addBlockBindingNames(
-  node: unknown,
-  names: Set<string>,
-): ReadonlySet<string> {
+function addBlockBindingNames(node: unknown, names: Set<string>): ReadonlySet<string> {
   const body = readArray(readObject(node).body);
 
   for (const statement of body) {
@@ -1491,9 +1444,7 @@ function staticImportSpecifierReference(
 
   const imported = readOptionalObject(specifier.imported);
   const importedName = imported?.name ?? imported?.value;
-  return typeof importedName === "string"
-    ? [{ importedName, kind: "named", localName }]
-    : [];
+  return typeof importedName === "string" ? [{ importedName, kind: "named", localName }] : [];
 }
 
 function staticExportReference(statement: Record<string, unknown>): StaticExportReference[] {
@@ -1551,10 +1502,7 @@ function sourceValue(statement: Record<string, unknown>): string[] {
   return typeof value === "string" ? [value] : [];
 }
 
-function collectJsxComponentRootNamesFromNode(
-  node: unknown,
-  names: Set<string>,
-): void {
+function collectJsxComponentRootNamesFromNode(node: unknown, names: Set<string>): void {
   if (Array.isArray(node)) {
     for (const child of node) {
       collectJsxComponentRootNamesFromNode(child, names);
@@ -1713,10 +1661,7 @@ function jsxNameRoot(node: Record<string, unknown> | undefined): string | undefi
   return undefined;
 }
 
-function collectSimpleComponentAliasesFromNode(
-  node: unknown,
-  state: ComponentAliasState,
-): void {
+function collectSimpleComponentAliasesFromNode(node: unknown, state: ComponentAliasState): void {
   if (Array.isArray(node)) {
     for (const child of node) {
       collectSimpleComponentAliasesFromNode(child, state);
@@ -1820,7 +1765,11 @@ function collectObjectLiteralComponentAliases(
       continue;
     }
 
-    const keyName = propertyName(readOptionalObject(property.key), property.computed === true, state);
+    const keyName = propertyName(
+      readOptionalObject(property.key),
+      property.computed === true,
+      state,
+    );
     const valueName = expressionRootName(readOptionalObject(property.value), state);
     if (keyName !== undefined && valueName !== undefined) {
       state.aliases.set(`${objectName}.${keyName}`, valueName);
@@ -1877,8 +1826,12 @@ function isObjectAssignCall(node: Record<string, unknown>): boolean {
 
   const object = readOptionalObject(callee.object);
   const property = readOptionalObject(callee.property);
-  return object?.type === "Identifier" && object.name === "Object" &&
-    property?.type === "Identifier" && property.name === "assign";
+  return (
+    object?.type === "Identifier" &&
+    object.name === "Object" &&
+    property?.type === "Identifier" &&
+    property.name === "assign"
+  );
 }
 
 function expandJsxComponentAliasRoots(
@@ -1914,20 +1867,26 @@ function expressionRootName(
   if (node.type === "MemberExpression") {
     const objectRoot = expressionRootName(readOptionalObject(node.object), state);
     const aliasedObjectRoot =
-      objectRoot === undefined ? undefined : state?.aliases.get(objectRoot) ?? objectRoot;
-    const memberName = propertyName(readOptionalObject(node.property), node.computed === true, state);
+      objectRoot === undefined ? undefined : (state?.aliases.get(objectRoot) ?? objectRoot);
+    const memberName = propertyName(
+      readOptionalObject(node.property),
+      node.computed === true,
+      state,
+    );
     const memberAlias =
       objectRoot !== undefined && memberName !== undefined
-        ? state?.aliases.get(`${objectRoot}.${memberName}`) ??
+        ? (state?.aliases.get(`${objectRoot}.${memberName}`) ??
           (aliasedObjectRoot === undefined
             ? undefined
-            : state?.aliases.get(`${aliasedObjectRoot}.${memberName}`))
+            : state?.aliases.get(`${aliasedObjectRoot}.${memberName}`)))
         : undefined;
 
-    return memberAlias ??
+    return (
+      memberAlias ??
       (node.computed === true && memberName === undefined
         ? uniqueObjectMemberAlias(aliasedObjectRoot, state)
-        : aliasedObjectRoot);
+        : aliasedObjectRoot)
+    );
   }
 
   if (node.type === "ConditionalExpression") {
@@ -2022,10 +1981,7 @@ function uniqueDefinedString(values: readonly (string | undefined)[]): string | 
   return unique.size === 1 ? Array.from(unique)[0] : undefined;
 }
 
-function collectIdentifierReferenceNamesFromNode(
-  node: unknown,
-  names: Set<string>,
-): void {
+function collectIdentifierReferenceNamesFromNode(node: unknown, names: Set<string>): void {
   if (Array.isArray(node)) {
     for (const child of node) {
       collectIdentifierReferenceNamesFromNode(child, names);
@@ -2236,8 +2192,7 @@ function isUndefinedStringLiteral(node: unknown): boolean {
   const object = readOptionalObject(node);
 
   return (
-    (object?.type === "Literal" || object?.type === "StringLiteral") &&
-    object.value === "undefined"
+    (object?.type === "Literal" || object?.type === "StringLiteral") && object.value === "undefined"
   );
 }
 

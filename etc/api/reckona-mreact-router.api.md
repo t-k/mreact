@@ -634,7 +634,7 @@ export interface ClientRouteComponent {
 export type ClientRouteComponentClassification = "client-boundary" | "client-route" | "server-only" | "server-render" | "shared" | "unknown";
 
 // @public (undocumented)
-export type ClientRouteComponentOrigin = "client-filename" | "compat-filename" | "inferred-client-runtime" | "server-only-import" | "server-render" | "use-client-directive" | "use-server-directive";
+export type ClientRouteComponentOrigin = "client-filename" | "compat-filename" | "inferred-client-runtime" | "server-only-import" | "server-render" | "unresolved-reference" | "use-client-directive" | "use-server-directive";
 
 // @public (undocumented)
 export interface ClientRouteInferenceCache {
@@ -653,7 +653,7 @@ export interface ClientRouteInferenceCache {
 // @public (undocumented)
 export interface ClientRouteInferenceDiagnostic {
     // (undocumented)
-    code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE" | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
+    code: "MR_CLIENT_BOUNDARY_INFERENCE_SERVER_ONLY_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_FUNCTION_CALL_INTERACTIVE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE" | "MR_CLIENT_BOUNDARY_INFERENCE_UNSUPPORTED_REFERENCE" | "MR_NAVIGATION_RUNTIME_LINK_DISABLED";
     // (undocumented)
     filename: string;
     // (undocumented)

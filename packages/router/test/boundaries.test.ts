@@ -124,6 +124,30 @@ describe("boundary reports", () => {
     expect(formatBoundaryReportJson(report)).not.toContain("/workspace");
   });
 
+  test("summarizes components shared by server rendering and client execution", () => {
+    const report = createBoundaryReport({
+      projectRoot: "/workspace",
+      routes: [
+        {
+          components: [
+            {
+              classification: "shared",
+              exportName: "LayoutFrame",
+              file: "/workspace/src/app/LayoutFrame.tsx",
+              origin: "server-render",
+            },
+          ],
+          diagnostics: [],
+          entry: "/workspace/src/app/page.tsx",
+          path: "/",
+        },
+      ],
+    });
+
+    expect(report.summary.sharedComponents).toBe(1);
+    expect(formatBoundaryReport(report)).toContain("1 shared component");
+  });
+
   test("analyzes routes, shells, explicit boundaries, barrels, and Vite transforms without building", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-boundary-report-"));
     const appDir = join(projectRoot, "src", "app");
@@ -212,5 +236,72 @@ export default function EditorPage() { return <main>Editor</main>; }`,
       ),
     );
     await expect(stat(join(projectRoot, ".mreact"))).rejects.toThrow();
+  });
+
+  test("preserves unresolved rendered modules and exports as unknown diagnostics", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-boundary-unknown-"));
+    const appDir = join(projectRoot, "src", "app");
+    const missingExportDir = join(appDir, "missing-export");
+    await mkdir(missingExportDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { MissingPanel } from "./MissingPanel";
+export default function Page() { return <main><MissingPanel /></main>; }`,
+    );
+    await writeFile(
+      join(missingExportDir, "page.tsx"),
+      `import { MissingPanel } from "../components";
+export default function Page() { return <main><MissingPanel /></main>; }`,
+    );
+    await writeFile(
+      join(appDir, "components.tsx"),
+      `export function PresentPanel() { return <section>Present</section>; }`,
+    );
+
+    const report = await analyzeAppBoundaries({ projectRoot });
+
+    expect(report.routes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          components: expect.arrayContaining([
+            expect.objectContaining({
+              classification: "unknown",
+              exportName: "MissingPanel",
+              file: "src/app/MissingPanel",
+            }),
+          ]),
+          path: "/",
+        }),
+        expect.objectContaining({
+          components: expect.arrayContaining([
+            expect.objectContaining({
+              classification: "unknown",
+              exportName: "MissingPanel",
+              file: "src/app/components.tsx",
+            }),
+          ]),
+          path: "/missing-export",
+        }),
+      ]),
+    );
+    expect(report.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
+          filename: "src/app/page.tsx",
+          source: "./MissingPanel",
+        }),
+        expect.objectContaining({
+          code: "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
+          filename: "src/app/missing-export/page.tsx",
+          source: "../components",
+        }),
+      ]),
+    );
+    expect(formatBoundaryReport(report)).toContain("Warnings:");
+    expect(formatBoundaryReport(report)).toContain(
+      "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
+    );
+    expect(formatBoundaryReportJson(report)).not.toContain(projectRoot);
   });
 });

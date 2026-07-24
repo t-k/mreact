@@ -184,6 +184,9 @@ describe("router CLI options", () => {
     const boundariesHelp = formatCliHelp("boundaries");
     expect(boundariesHelp).toContain("Usage: mreact-router boundaries [appDir] [options]");
     expect(boundariesHelp).toContain("--json");
+    expect(boundariesHelp).toContain("same Vite project configuration as build");
+    expect(boundariesHelp).toContain("server-render, client-boundary, client-route");
+    expect(boundariesHelp).toContain("server-only, shared, unknown");
   });
 
   test("keeps root and build help aligned with resolved target defaults", () => {

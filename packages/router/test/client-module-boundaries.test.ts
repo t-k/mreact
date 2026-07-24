@@ -172,6 +172,169 @@ export default function Layout() { return <div><Toolbar /></div>; }`,
       ]),
     );
   });
+
+  test("collects same-module component closures from the route default export", async () => {
+    const pageFile = "/app/page.tsx";
+    const result = await inferClientRouteModule({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+export function Badge() {
+  return <span>Ready</span>;
+}
+
+export function ServerPanel() {
+  return <section><Badge /></section>;
+}
+
+export function Counter() {
+  const count = cell(0);
+  return <button onClick={() => count.set(count.get() + 1)}>{count.get()}</button>;
+}
+
+export default function Page() {
+  return <main><ServerPanel /><Counter /></main>;
+}`,
+      collectComponents: true,
+      filename: pageFile,
+    });
+
+    expect(result.components).toEqual([
+      {
+        classification: "client-route",
+        exportName: "default",
+        file: pageFile,
+        origin: "inferred-client-runtime",
+      },
+      {
+        classification: "shared",
+        exportName: "Badge",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "client-boundary",
+        exportName: "Counter",
+        file: pageFile,
+        origin: "inferred-client-runtime",
+      },
+      {
+        classification: "shared",
+        exportName: "ServerPanel",
+        file: pageFile,
+        origin: "server-render",
+      },
+    ]);
+  });
+
+  test("collects aliased and cyclic same-module component closures", async () => {
+    const pageFile = "/app/page.tsx";
+    const result = await inferClientRouteModule({
+      code: `function InnerPanel(props: { stop?: boolean }) {
+  return props.stop ? <section>Done</section> : <InnerBadge />;
+}
+
+function InnerBadge() {
+  return <InnerPanel stop />;
+}
+
+export { InnerBadge as Badge, InnerPanel as Panel };
+
+export default function Page() {
+  return <main><InnerPanel /></main>;
+}`,
+      collectComponents: true,
+      filename: pageFile,
+    });
+
+    expect(result.components).toEqual([
+      {
+        classification: "server-render",
+        exportName: "default",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "Badge",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "Panel",
+        file: pageFile,
+        origin: "server-render",
+      },
+    ]);
+  });
+
+  test("classifies client layouts and templates as boundaries rather than client routes", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-client-shells-"));
+    const appDir = join(dir, "app");
+    const pageFile = join(appDir, "page.tsx");
+    const layoutFile = join(appDir, "layout.tsx");
+    const layoutFrameFile = join(appDir, "LayoutFrame.tsx");
+    const templateFile = join(appDir, "template.tsx");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(pageFile, `export default function Page() { return <main>Page</main>; }`);
+    await writeFile(
+      layoutFile,
+      `"use client";
+import { LayoutFrame } from "./LayoutFrame";
+export default function Layout() { return <LayoutFrame />; }`,
+    );
+    await writeFile(layoutFrameFile, `export function LayoutFrame() { return <div>Layout</div>; }`);
+    await writeFile(
+      templateFile,
+      `import { cell } from "@reckona/mreact-reactive-core";
+export default function Template() {
+  const ready = cell(true);
+  return <section>{ready.get() ? "Ready" : "Waiting"}</section>;
+}`,
+    );
+
+    const result = await inferClientRouteModule({
+      appDir,
+      code: await readFile(pageFile, "utf8"),
+      collectComponents: true,
+      filename: pageFile,
+    });
+
+    expect(result.components).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "client-boundary",
+          exportName: "default",
+          file: layoutFile,
+          origin: "use-client-directive",
+        },
+        {
+          classification: "client-boundary",
+          exportName: "default",
+          file: templateFile,
+          origin: "inferred-client-runtime",
+        },
+        {
+          classification: "shared",
+          exportName: "LayoutFrame",
+          file: layoutFrameFile,
+          origin: "server-render",
+        },
+      ]),
+    );
+    expect(result.components).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          classification: "client-route",
+          file: layoutFile,
+        }),
+        expect.objectContaining({
+          classification: "client-route",
+          file: templateFile,
+        }),
+      ]),
+    );
+  });
 });
 
 describe("detectNavigationRuntimeOverride", () => {

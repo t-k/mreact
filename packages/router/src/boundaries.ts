@@ -181,6 +181,14 @@ export function formatBoundaryReport(report: BoundaryReport): string {
     lines.push("");
   }
 
+  if (report.diagnostics.length > 0) {
+    lines.push("Warnings:");
+    for (const diagnostic of report.diagnostics) {
+      lines.push(`  ${diagnostic.code}: ${diagnostic.message}`);
+    }
+    lines.push("");
+  }
+
   const summary = report.summary;
   lines.push(
     [
@@ -268,6 +276,7 @@ function formatComponentOrigin(origin: ClientRouteComponentOrigin): string {
   if (origin === "compat-filename") return " (.compat.*)";
   if (origin === "inferred-client-runtime") return " (inferred)";
   if (origin === "server-only-import") return " (server-only import)";
+  if (origin === "unresolved-reference") return " (unresolved)";
   return "";
 }
 
