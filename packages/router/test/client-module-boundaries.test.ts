@@ -382,6 +382,106 @@ export default function Page() { return <main><A /></main>; }`;
     ]);
   });
 
+  test("does not treat default as re-exported through an export-star cycle", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-default-star-cycle-"));
+    const appDir = join(dir, "app");
+    const componentsDir = join(appDir, "components");
+    await mkdir(componentsDir, { recursive: true });
+    const pageFile = join(appDir, "page.tsx");
+    const aFile = join(componentsDir, "a.tsx");
+    const indexFile = join(componentsDir, "index.ts");
+    await writeFile(indexFile, `export * from "./a";`);
+    await writeFile(
+      aFile,
+      `import MissingDefault from "./index";
+export function A() { return <section><MissingDefault /></section>; }
+export default function OwnDefault() { return <span>Own</span>; }`,
+    );
+    const code = `import { A } from "./components";
+export default function Page() { return <main><A /></main>; }`;
+    await writeFile(pageFile, code);
+
+    const result = await inferClientRouteModule({
+      appDir,
+      code,
+      collectComponents: true,
+      filename: pageFile,
+      routePath: "/",
+    });
+
+    expect(result.components).toEqual(
+      expect.arrayContaining([
+        {
+          classification: "unknown",
+          exportName: "default",
+          file: indexFile,
+          origin: "unresolved-reference",
+        },
+      ]),
+    );
+    expect(result.diagnostics).toEqual([
+      expect.objectContaining({
+        code: "MR_CLIENT_BOUNDARY_INFERENCE_UNRESOLVED_REFERENCE",
+        filename: aFile,
+        source: "./index",
+      }),
+    ]);
+  });
+
+  test("propagates an explicit default re-export through a barrel cycle", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-explicit-default-cycle-"));
+    const appDir = join(dir, "app");
+    const componentsDir = join(appDir, "components");
+    await mkdir(componentsDir, { recursive: true });
+    const pageFile = join(appDir, "page.tsx");
+    const aFile = join(componentsDir, "a.tsx");
+    const bFile = join(componentsDir, "b.tsx");
+    await writeFile(
+      join(componentsDir, "index.ts"),
+      `export { default } from "./a";
+export { B } from "./b";`,
+    );
+    await writeFile(
+      aFile,
+      `import { B } from "./index";
+export default function A() { return <section><B /></section>; }`,
+    );
+    await writeFile(bFile, `export function B() { return <span>B</span>; }`);
+    const code = `import A from "./components";
+export default function Page() { return <main><A /></main>; }`;
+    await writeFile(pageFile, code);
+
+    const result = await inferClientRouteModule({
+      appDir,
+      code,
+      collectComponents: true,
+      filename: pageFile,
+      routePath: "/",
+    });
+
+    expect(result.components).toEqual([
+      {
+        classification: "server-render",
+        exportName: "default",
+        file: pageFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "default",
+        file: aFile,
+        origin: "server-render",
+      },
+      {
+        classification: "server-render",
+        exportName: "B",
+        file: bFile,
+        origin: "server-render",
+      },
+    ]);
+    expect(result.diagnostics).toEqual([]);
+  });
+
   test("classifies client layouts and templates as boundaries rather than client routes", async () => {
     const dir = await mkdtemp(join(tmpdir(), "mreact-boundary-client-shells-"));
     const appDir = join(dir, "app");

@@ -1076,7 +1076,7 @@ function finalizeClientRouteComponentExportValidations(
       const exportedNames = exportNamesByFile.get(edge.file) ?? new Set<string>();
       const sourceNames = exportNamesByFile.get(edge.resolved) ?? new Set<string>();
       const namesToAdd = edge.reference.exportAll
-        ? sourceNames
+        ? new Set([...sourceNames].filter((exportName) => exportName !== "default"))
         : new Set(
             edge.reference.specifiers
               .filter((specifier) => sourceNames.has(specifier.localName))
