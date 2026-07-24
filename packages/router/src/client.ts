@@ -2238,7 +2238,12 @@ export async function buildClientRouteEntrySource(
   const routeId = routeIdForPath(options.routePath);
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
   const routeUsesReactiveEffect = detectRouteReactiveEffectHint(compiled.code);
-  const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect;
+  const routeUsesDomRefs = compiled.metadata.imports.some(
+    (entry) =>
+      entry.source === "@reckona/mreact-reactive-dom" &&
+      entry.specifiers.includes("bindDomRef"),
+  );
+  const routeUsesCleanupScope = routeUsesCells || routeUsesReactiveEffect || routeUsesDomRefs;
   const routeExplicitlyRequiresHydration = isExplicitClientRouteSource(
     routeSourceAnalysis,
     options.filename,
@@ -2254,6 +2259,7 @@ export async function buildClientRouteEntrySource(
     routeExplicitlyRequiresHydration ||
     routeUsesCells ||
     routeUsesReactiveEffect ||
+    routeUsesDomRefs ||
     routeHasEventBindings;
   const routeUsesOnlyClientReferenceBoundaries =
     !routeRequiresFullHydration &&
@@ -2276,7 +2282,7 @@ export async function buildClientRouteEntrySource(
     ? `import { bindCapturedEvent as __mreactBindCapturedEvent } from "@reckona/mreact-reactive-dom/internal";\n`
     : "";
   const routeReactiveDomMetadataImport = !routeUsesOnlyClientReferenceBoundaries
-    ? `${routeCapturedEventImport}import { withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
+    ? `${routeCapturedEventImport}import { ${routeUsesDomRefs ? "getDomRefBindings as __mreactGetDomRefBindings, " : ""}withEventBindingMetadata as __mreactWithEventBindingMetadata, withPropBindingMetadata as __mreactWithPropBindingMetadata } from "@reckona/mreact-reactive-dom";\n`
     : "";
   const navigationStateDeclaration = inlineClientNavigation
     ? `const __mreactNavigationState = __mreactGlobal.__mreactNavigationState ??= {
@@ -2681,6 +2687,19 @@ function __mreactResolveRouteNode(value) {
   current.__mreactEventDisposers = [];
   current.__mreactHasEvents = false;
 }
+`;
+  const routeDomRefBindingSyncFunction = routeUsesDomRefs
+    ? `function __mreactSyncDomRefBindings(current, next) {
+  for (const binding of Array.from(__mreactGetDomRefBindings(current))) {
+    binding.dispose();
+  }
+
+  for (const binding of Array.from(__mreactGetDomRefBindings(next))) {
+    binding.retarget(current);
+  }
+}
+`
+    : `function __mreactSyncDomRefBindings() {}
 `;
   const boundaryOnlyHydrationBlock = routeRequiresFullHydration
     ? ""
@@ -4491,6 +4510,7 @@ function __mreactResumeNode(current, next) {
   }
 
   __mreactSyncEventBindings(current, next);
+  __mreactSyncDomRefBindings(current, next);
   __mreactSyncAttributes(current, next);
   __mreactSyncPropBindings(current, next);
   __mreactResumeChildren(current, next);
@@ -4513,6 +4533,7 @@ function __mreactShouldReplaceNode(current, next) {
 }
 
 ${routeEventBindingSyncFunction}
+${routeDomRefBindingSyncFunction}
 
 function __mreactSyncAttributes(current, next) {
   for (const attribute of Array.from(current.attributes)) {

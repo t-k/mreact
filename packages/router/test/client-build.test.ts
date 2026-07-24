@@ -718,6 +718,35 @@ export default function Page() {
     );
   });
 
+  test("builds a client route and cleanup scope for a domRef-only page", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-dom-ref-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() {
+  return <main domRef={(element) => {
+    const observer = new IntersectionObserver(() => {});
+    observer.observe(element);
+    return () => observer.disconnect();
+  }}>Observed</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    ) as { routes: Array<{ client: boolean; script?: string }> };
+    const script = manifest.routes[0]?.script;
+    const clientCode = await readFile(join(outDir, "client", script ?? ""), "utf8");
+
+    expect(manifest.routes[0]?.client).toBe(true);
+    expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
+    expect(clientCode).toContain("__mreactRouteDisposers");
+    expect(clientCode).toContain("__mreactDomRefBindings");
+  });
+
   test("builds client route modules for imported interactive child components", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-client-imported-"));
     const appDir = join(rootDir, "app");
@@ -5681,6 +5710,69 @@ export default function Page() {
 
     expect(document.querySelector("main")?.textContent).toBe("Two");
     expect(state.__closes).toBe(1);
+  });
+
+  test("retargets domRef to retained SSR DOM and cleans it up on navigation", async () => {
+    const code = `const state = globalThis as typeof globalThis & {
+  __domRefAttaches?: number;
+  __domRefCleanups?: number;
+  __domRefConnected?: boolean;
+  __domRefNode?: Element;
+};
+
+export default function Page() {
+  return <main domRef={(element) => {
+    state.__domRefAttaches = (state.__domRefAttaches ?? 0) + 1;
+    state.__domRefConnected = element.isConnected;
+    state.__domRefNode = element;
+    return () => {
+      state.__domRefCleanups = (state.__domRefCleanups ?? 0) + 1;
+    };
+  }}>One</main>;
+}`;
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: [],
+      clientReferenceManifest: [],
+      filename: "/app/one/page.mreact.tsx",
+      routePath: "/one",
+    });
+    const state = globalThis as typeof globalThis & {
+      __domRefAttaches?: number;
+      __domRefCleanups?: number;
+      __domRefConnected?: boolean;
+      __domRefNode?: Element;
+    };
+    state.__domRefAttaches = 0;
+    state.__domRefCleanups = 0;
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="one"><main>One</main></div>',
+      '<script type="application/json" id="mreact-props-one">{}</script>',
+    ].join("");
+    const ssrNode = document.querySelector("main");
+
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#dom-ref-route`
+    )) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+    await Promise.resolve();
+
+    expect(state.__domRefNode).toBe(ssrNode);
+    expect(state.__domRefConnected).toBe(true);
+    expect(state.__domRefAttaches).toBe(1);
+    expect(state.__domRefCleanups).toBe(0);
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="two"><main>Two</main></div>',
+        '<script type="application/json" id="mreact-props-two">{}</script>',
+      ].join(""),
+      "/two",
+    );
+
+    expect(state.__domRefCleanups).toBe(1);
   });
 
   test("unmounts compat client boundary roots before SPA navigation removes them", async () => {
