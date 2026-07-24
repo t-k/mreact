@@ -1,5 +1,20 @@
 export { buildApp, packageAwsLambdaArtifact, packageCloudflarePagesArtifact } from "./build.js";
 export { assetHref, assetPreloadLinks } from "./assets.js";
+export {
+  analyzeAppBoundaries,
+  createBoundaryReport,
+  formatBoundaryReport,
+  formatBoundaryReportJson,
+} from "./boundaries.js";
+export type {
+  AnalyzeAppBoundariesOptions,
+  BoundaryReport,
+  BoundaryReportComponent,
+  BoundaryReportRoute,
+  BoundaryReportSummary,
+  CreateBoundaryReportInput,
+  CreateBoundaryReportRouteInput,
+} from "./boundaries.js";
 export { cacheControl, createMemoryRouteCache, revalidatePath } from "./cache.js";
 export { deleteCookie, parseCookieHeader, serializeCookie, setCookie } from "./cookies.js";
 export { defineMessages, detectLocale } from "./i18n.js";
@@ -275,10 +290,7 @@ export type {
   AppRouterResponseHookContext,
   RenderAppRequestOptions,
 } from "./render.js";
-export {
-  parseTraceContext,
-  traceContextFromRequest,
-} from "./trace.js";
+export { parseTraceContext, traceContextFromRequest } from "./trace.js";
 export type {
   RouterInstrumentation,
   RouterMiddlewareEndInstrumentationEvent,
