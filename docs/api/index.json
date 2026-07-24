@@ -200624,7 +200624,7 @@
 		},
 		{
 			"kind": "text",
-			"text": " directory contains focused applications:\n\n| Example                                                      | Purpose                                                                                                                                                                        |\n| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |\n| [examples/app-router]("
+			"text": " directory contains focused applications:\n\n| Example | Purpose |\n| --- | --- |\n| [examples/app-router]("
 		},
 		{
 			"kind": "relative-link",
@@ -200633,7 +200633,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ")                   | Full app-router tour covering routing, layouts, metadata, loaders, actions, middleware, forms, auth, i18n, and deployments                                                     |\n| [examples/hacker-news]("
+			"text": ") | Full app-router tour covering routing, layouts, metadata, loaders, actions, middleware, forms, auth, i18n, and deployments |\n| [examples/hacker-news]("
 		},
 		{
 			"kind": "relative-link",
@@ -200642,7 +200642,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ")                 | Hacker News clone using streaming SSR, Tailwind CSS, router navigation, and Cloudflare Workers deployment.<br />Live demo: https://mreact-hacker-news.t-kaniwa-e16.workers.dev |\n| [examples/docs-site]("
+			"text": ") | Hacker News clone using streaming SSR, Tailwind CSS, router navigation, and Cloudflare Workers deployment.<br />Live demo: https://mreact-hacker-news.t-kaniwa-e16.workers.dev |\n| [examples/docs-site]("
 		},
 		{
 			"kind": "relative-link",
@@ -200651,7 +200651,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ")                     | This documentation site with MDX, static export, Pagefind search, API reference rendering, and benchmark result cards                                                          |\n| [examples/react-libraries]("
+			"text": ") | This documentation site with MDX, static export, Pagefind search, API reference rendering, and benchmark result cards |\n| [examples/react-libraries]("
 		},
 		{
 			"kind": "relative-link",
@@ -200660,7 +200660,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ")         | React ecosystem libraries running through Mreact compatibility boundaries                                                                                                      |\n| [examples/reactive-primitives]("
+			"text": ") | React ecosystem libraries running through Mreact compatibility boundaries |\n| [examples/reactive-primitives]("
 		},
 		{
 			"kind": "relative-link",
@@ -200693,7 +200693,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ", and DOM updates                                                                                                                                  |\n| [examples/store]("
+			"text": ", and DOM updates |\n| [examples/store]("
 		},
 		{
 			"kind": "relative-link",
@@ -200702,7 +200702,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ")                             | Shared store, selectors, transactions, and subscriptions                                                                                                                       |\n| [examples/virtual-grid]("
+			"text": ") | Shared store, selectors, transactions, and subscriptions |\n| [examples/virtual-grid]("
 		},
 		{
 			"kind": "relative-link",
@@ -200711,7 +200711,7 @@
 		},
 		{
 			"kind": "text",
-			"text": ")               | Responsive grid virtualization                                                                                                                                                 |\n\nMore details: <https://t-k.github.io/mreact/examples/>\n\n## Packages\n\nCore packages:\n\n- "
+			"text": ") | Responsive grid virtualization |\n\nMore details: <https://t-k.github.io/mreact/examples/>\n\n## Packages\n\nCore packages:\n\n- "
 		},
 		{
 			"kind": "code",
