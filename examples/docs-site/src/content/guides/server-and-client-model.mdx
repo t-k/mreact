@@ -32,6 +32,25 @@ export default function CounterPage() {
 
 Mreact infers common client needs from supported route shapes and app-local static imports. This is not a general semantic or TypeScript type-flow analyzer; use an explicit boundary when the browser work is hidden behind a dynamic registry, indirect dispatch, or another shape the analyzer cannot follow.
 
+## Post-commit DOM lifecycle
+
+Use `domRef` on an intrinsic element when an imperative browser API needs the committed DOM node. Mreact infers client interactivity from `domRef`, calls the callback only after the current element is connected, and runs the returned cleanup before that element is replaced, removed, or discarded by route navigation.
+
+```tsx
+export default function Chart() {
+  return (
+    <div
+      domRef={(element) => {
+        const chart = mountChart(element);
+        return () => chart.destroy();
+      }}
+    />
+  );
+}
+```
+
+Server string and stream rendering omit `domRef` without evaluating its callback. During hydration, the callback receives the retained SSR element rather than a detached client clone. `domRef` is supported on intrinsic elements only; pass an explicit callback prop when a component needs to expose one of its elements. The callback identity is not reactive, so use a keyed or conditional replacement when a different lifecycle owner must attach.
+
 ## Client boundaries
 
 Start with ordinary app-local components. Mreact can infer client interactivity from supported static render shapes, so a page can remain server-rendered while a nested control hydrates in the browser.
