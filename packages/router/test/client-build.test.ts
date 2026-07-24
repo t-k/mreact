@@ -816,6 +816,7 @@ export default function Page() {
     const appDir = join(rootDir, "src");
     const filename = join(appDir, "page.mreact.tsx");
     const componentFilename = join(appDir, "ViewTransition.tsx");
+    const storeFilename = join(appDir, "store.ts");
     const code = `import { ViewTransition } from "./ViewTransition.js";
 export default function Page() {
   return <ViewTransition />;
@@ -825,10 +826,12 @@ export default function Page() {
       await writeFile(filename, code);
       await writeFile(
         componentFilename,
-        `export function ViewTransition() {
-  return <main>Visible</main>;
+        `import { label } from "./store.js";
+export function ViewTransition() {
+  return <main>{label}</main>;
 }`,
       );
+      await writeFile(storeFilename, `export const label = "Visible";`);
 
       const output = await import("../src/client.js").then((module) =>
         module.buildClientRouteBatchOutput({
@@ -841,10 +844,15 @@ export default function Page() {
 
       expect(bundleCode).not.toContain(rootDir);
       expect(bundleCode).not.toContain(componentFilename);
+      expect(bundleCode).not.toContain(storeFilename);
       expect(bundleCode).not.toContain(
         join(rootDir.slice(process.cwd().length + 1), "src", "ViewTransition.tsx"),
       );
+      expect(bundleCode).not.toContain(
+        join(rootDir.slice(process.cwd().length + 1), "src", "store.ts"),
+      );
       expect(bundleCode).toContain("//#region ViewTransition.tsx");
+      expect(bundleCode).toContain("//#region store.ts");
       expect(bundleCode).toMatch(/\/\/#region packages\/reactive-dom\/src\/[^/\n]+\.ts/);
     } finally {
       await rm(rootDir, { force: true, recursive: true });

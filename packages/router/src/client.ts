@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { basename, dirname, extname, join, relative, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, sep } from "node:path";
 import {
   analyzeBoundaryGraph,
   collectClientRouteModuleAnalysis,
@@ -4808,18 +4808,26 @@ export function invalidateReactiveDevtoolsCache() {}
 export function prepareReactiveEffectRunDevtoolsEvent() { return undefined; }`,
         loader: "ts",
       }));
+      if (options.sourceRegionModulePaths !== undefined) {
+        buildApi.onLoad({ filter: /.*/ }, (args) => {
+          if (
+            isAbsolute(args.path) &&
+            isRouteClientDependencySourcePath(args.path, routeFiles) &&
+            !runtimePackageDirs.some(
+              (runtimePackageDir) => args.path.startsWith(`${runtimePackageDir}${sep}`),
+            )
+          ) {
+            options.sourceRegionModulePaths?.add(args.path);
+          }
+
+          return undefined;
+        });
+      }
       buildApi.onLoad({ filter: /\.(?:mreact\.)?[cm]?[jt]sx$/ }, async (args) => {
         if (!isRouteClientDependencySourcePath(args.path, routeFiles)) {
           return undefined;
         }
 
-        if (
-          !runtimePackageDirs.some(
-            (runtimePackageDir) => args.path.startsWith(`${runtimePackageDir}${sep}`),
-          )
-        ) {
-          options.sourceRegionModulePaths?.add(args.path);
-        }
         const source = await readFile(args.path, "utf8");
         const compilerFilename = options.debugLabels ? basename(args.path) : args.path;
         const moduleContext = createCompilerModuleContext({
