@@ -1,8 +1,13 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { bindDomRef, getDomRefBindings } from "../src/dom-ref.js";
+import { createRoot } from "../src/root.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("bindDomRef", () => {
   test("attaches after a synchronous DOM commit", async () => {
@@ -73,6 +78,70 @@ describe("bindDomRef", () => {
     expect(cleanupCount).toBe(1);
     expect(getDomRefBindings(element)).toEqual([]);
     element.remove();
+  });
+
+  test("is disposed when its reactive DOM root unmounts", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    let cleanupCount = 0;
+    const disposeRoot = createRoot(container, () => {
+      const element = document.createElement("section");
+      bindDomRef(element, () => () => {
+        cleanupCount += 1;
+      });
+      return element;
+    });
+
+    await Promise.resolve();
+    disposeRoot();
+
+    expect(cleanupCount).toBe(1);
+    expect(container.childNodes).toHaveLength(0);
+    container.remove();
+  });
+
+  test("commits later bindings and reports the first callback error asynchronously", () => {
+    const tasks: VoidFunction[] = [];
+    const queueMicrotaskSpy = vi
+      .spyOn(globalThis, "queueMicrotask")
+      .mockImplementation((task) => tasks.push(task));
+    const first = document.createElement("section");
+    const second = document.createElement("section");
+    const events: string[] = [];
+    document.body.append(first, second);
+
+    const firstBinding = bindDomRef(first, () => {
+      events.push("first");
+      throw new Error("attach failed");
+    });
+    const secondBinding = bindDomRef(second, () => {
+      events.push("second");
+    });
+
+    expect(tasks).toHaveLength(1);
+    expect(() => tasks.shift()?.()).not.toThrow();
+    expect(events).toEqual(["first", "second"]);
+    expect(tasks).toHaveLength(1);
+    expect(() => tasks.shift()?.()).toThrow("attach failed");
+
+    firstBinding.dispose();
+    secondBinding.dispose();
+    first.remove();
+    second.remove();
+    queueMicrotaskSpy.mockRestore();
+  });
+
+  test("ignores conflicting public expandos when storing binding metadata", () => {
+    const element = document.createElement("section") as Element & {
+      __mreactDomRefBindings?: unknown;
+    };
+    element.__mreactDomRefBindings = "application-owned";
+
+    const binding = bindDomRef(element, () => {});
+
+    expect(element.__mreactDomRefBindings).toBe("application-owned");
+    expect(getDomRefBindings(element)).toEqual([binding]);
+    binding.dispose();
   });
 
   test("retargets a pending binding to the connected SSR element", async () => {

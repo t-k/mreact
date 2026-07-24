@@ -1,4 +1,5 @@
 import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
+import { registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
 export type DomRefCallback = (element: Element) => void | Dispose;
@@ -12,11 +13,8 @@ interface InternalDomRefBinding extends DomRefBinding {
   commit(): void;
 }
 
-interface ElementWithDomRefBindings extends Element {
-  __mreactDomRefBindings?: InternalDomRefBinding[] | undefined;
-}
-
 const pendingBindings = new Set<InternalDomRefBinding>();
+const bindingsByElement = new WeakMap<Element, Set<InternalDomRefBinding>>();
 let commitScheduled = false;
 
 function enqueue(binding: InternalDomRefBinding): void {
@@ -34,46 +32,40 @@ function commitPendingBindings(): void {
   commitScheduled = false;
   const bindings = Array.from(pendingBindings);
   pendingBindings.clear();
+  let firstError: unknown;
 
   for (const binding of bindings) {
-    binding.commit();
+    try {
+      binding.commit();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+
+  if (firstError !== undefined) {
+    queueMicrotask(() => {
+      throw firstError;
+    });
   }
 }
 
 function attachBinding(element: Element, binding: InternalDomRefBinding): void {
-  const target = element as ElementWithDomRefBindings;
-  const bindings = target.__mreactDomRefBindings;
-
-  if (bindings === undefined) {
-    Object.defineProperty(target, "__mreactDomRefBindings", {
-      configurable: true,
-      value: [binding],
-      writable: true,
-    });
-    return;
-  }
-
-  if (!bindings.includes(binding)) {
-    bindings.push(binding);
-  }
+  const bindings = bindingsByElement.get(element) ?? new Set();
+  bindings.add(binding);
+  bindingsByElement.set(element, bindings);
 }
 
 function detachBinding(element: Element, binding: InternalDomRefBinding): void {
-  const target = element as ElementWithDomRefBindings;
-  const bindings = target.__mreactDomRefBindings;
+  const bindings = bindingsByElement.get(element);
 
   if (bindings === undefined) {
     return;
   }
 
-  const index = bindings.indexOf(binding);
+  bindings.delete(binding);
 
-  if (index !== -1) {
-    bindings.splice(index, 1);
-  }
-
-  if (bindings.length === 0) {
-    delete target.__mreactDomRefBindings;
+  if (bindings.size === 0) {
+    bindingsByElement.delete(element);
   }
 }
 
@@ -133,12 +125,13 @@ export function bindDomRef(
   };
 
   attachBinding(element, binding);
+  registerIdempotentDispose(binding.dispose);
   registerCleanup(binding.dispose);
   enqueue(binding);
   return binding;
 }
 
-/** Returns the sparse DOM ref metadata attached to one annotated element. */
+/** Returns the DOM ref bindings owned by one annotated element. */
 export function getDomRefBindings(element: Element): readonly DomRefBinding[] {
-  return (element as ElementWithDomRefBindings).__mreactDomRefBindings ?? [];
+  return Array.from(bindingsByElement.get(element) ?? []);
 }

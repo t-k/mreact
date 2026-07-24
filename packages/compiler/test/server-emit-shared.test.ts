@@ -161,6 +161,30 @@ export function SunIcon(props: { class?: string }) {
     );
   });
 
+  test("string and stream emitters drop case-insensitive event attributes from spreads", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  return <div {...{ ONCLICK: "globalThis.pwned = true", OnError: "globalThis.pwned = true", id: "safe" }}>x</div>;
+}`,
+      '<div id="safe">x</div>',
+    );
+  });
+
+  test("string and stream emitters omit reserved spread props before reading getters", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  const props = {
+    get domRef() {
+      throw new Error("domRef getter evaluated");
+    },
+    id: "safe",
+  };
+  return <div {...props}>x</div>;
+}`,
+      '<div id="safe">x</div>',
+    );
+  });
+
   test("string and stream emitters render numeric edge children the same way", async () => {
     await expectServerPairHtml(
       `export function App() {

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 // @vitest-environment happy-dom
 
 import { buildApp } from "../src/build.js";
@@ -18,6 +18,10 @@ import { stripRouteClientOnlyExports } from "../src/route-source.js";
 import { renderAppRouterClientAsset } from "../src/vite.js";
 
 const nativeFetch = globalThis.fetch;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 async function sumClientJavaScriptGzipBytes(directory: string): Promise<number> {
   let total = 0;
@@ -744,7 +748,36 @@ export default function Page() {
     expect(manifest.routes[0]?.client).toBe(true);
     expect(script).toMatch(/^assets\/routes\/index\.[a-f0-9]{8}\.js$/);
     expect(clientCode).toContain("__mreactRouteDisposers");
-    expect(clientCode).toContain("__mreactDomRefBindings");
+    expect(clientCode).not.toContain("__mreactDomRefBindings");
+  });
+
+  test("does not couple unminified output to source-path diagnostics", async () => {
+    const filename = "/srv/private/customer/app/page.mreact.tsx";
+    const code = `import { cell } from "@reckona/mreact-reactive-core";
+const visible = cell(true);
+export default function Page() {
+  return <main>{visible.get() && <span>Visible</span>}</main>;
+}`;
+
+    const productionLike = await buildClientRouteEntrySource({
+      code,
+      filename,
+      minify: false,
+      routePath: "/",
+    });
+    const development = await buildClientRouteEntrySource({
+      code,
+      debugLabels: true,
+      filename,
+      minify: false,
+      routePath: "/",
+    });
+
+    expect(productionLike.code).not.toContain(filename);
+    expect(productionLike.code).not.toContain("debugLabel");
+    expect(development.code).not.toContain(filename);
+    expect(development.code).toContain("page.mreact.tsx#Page");
+    expect(development.code).toContain("debugLabel");
   });
 
   test("builds client route modules for imported interactive child components", async () => {
@@ -5773,6 +5806,66 @@ export default function Page() {
     );
 
     expect(state.__domRefCleanups).toBe(1);
+  });
+
+  test("continues SPA navigation after one route cleanup throws", async () => {
+    const code = `import { effect } from "@reckona/mreact-reactive-core";
+
+const state = globalThis as typeof globalThis & { __cleanupEvents?: string[] };
+
+export default function Page() {
+  effect(() => () => {
+    state.__cleanupEvents?.push("first");
+  });
+  effect(() => () => {
+    state.__cleanupEvents?.push("second");
+    throw new Error("cleanup failed");
+  });
+  return <main>One</main>;
+}`;
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: [],
+      clientReferenceManifest: [],
+      filename: "/app/one/page.mreact.tsx",
+      routePath: "/one",
+    });
+    const state = globalThis as typeof globalThis & { __cleanupEvents?: string[] };
+    state.__cleanupEvents = [];
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="one"><main>One</main></div>',
+      '<script type="application/json" id="mreact-props-one">{}</script>',
+    ].join("");
+    const tasks: VoidFunction[] = [];
+    const queueMicrotaskSpy = vi
+      .spyOn(globalThis, "queueMicrotask")
+      .mockImplementation((task) => tasks.push(task));
+    const routeModule = (await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#throwing-route-cleanup`
+    )) as {
+      __mreactNavigateToHtml: (html: string, url: string) => void;
+    };
+
+    routeModule.__mreactNavigateToHtml(
+      [
+        "<!DOCTYPE html>",
+        '<div data-mreact-route-id="two"><main>Two</main></div>',
+        '<script type="application/json" id="mreact-props-two">{}</script>',
+      ].join(""),
+      "/two",
+    );
+
+    expect(document.querySelector("main")?.textContent).toBe("Two");
+    expect(state.__cleanupEvents).toEqual(["first", "second"]);
+    expect(tasks.some((task) => {
+      try {
+        task();
+        return false;
+      } catch (error) {
+        return error instanceof Error && error.message === "cleanup failed";
+      }
+    })).toBe(true);
+    queueMicrotaskSpy.mockRestore();
   });
 
   test("unmounts compat client boundary roots before SPA navigation removes them", async () => {

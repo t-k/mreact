@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import { builtinModules } from "node:module";
-import { dirname, extname, join, relative, sep } from "node:path";
+import { basename, dirname, extname, join, relative, sep } from "node:path";
 import {
   analyzeBoundaryGraph,
   collectClientRouteModuleAnalysis,
@@ -68,6 +68,7 @@ export interface ClientRouteManifestEntry {
 export interface BuildClientRouteOutputOptions {
   cacheDir?: string | undefined;
   code: string;
+  debugLabels?: boolean | undefined;
   clientBoundaryImports?: readonly string[] | undefined;
   clientReferenceImports?: readonly ClientReferenceImport[] | undefined;
   clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
@@ -2199,13 +2200,22 @@ export async function buildClientRouteEntrySource(
     filename: options.filename,
   });
   const routeSourceAnalysis = collectClientRouteModuleAnalysisFromContext(moduleContext);
+  const compilerFilename =
+    options.debugLabels === true ? basename(options.filename) : options.filename;
+  const compilerModuleContext =
+    compilerFilename === options.filename
+      ? moduleContext
+      : createCompilerModuleContext({
+          code: options.code,
+          filename: compilerFilename,
+        });
   const compiled = transformCompilerModuleContext({
     code: options.code,
     clientBoundaryImports: options.clientBoundaryImports ?? [],
-    filename: options.filename,
-    moduleContext,
+    filename: compilerFilename,
+    moduleContext: compilerModuleContext,
     target: "client",
-    dev: options.minify !== true,
+    dev: options.debugLabels === true,
   });
 
   if (compiled.diagnostics.length > 0) {
@@ -2558,9 +2568,10 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
       __mreactActiveCellIndex = 0;
     }
     return () => {
-      for (const __mreactDispose of Array.from(__mreactRouteEffectDisposers)) {
-        __mreactDispose();
-      }
+      __mreactRunLifecycleTasks(
+        Array.from(__mreactRouteEffectDisposers),
+        (__mreactDispose) => __mreactDispose(),
+      );
       __mreactRouteEffectDisposers.clear();
     };
   });
@@ -2572,13 +2583,33 @@ __mreactGlobal.__mreactRouteCell = (nativeCell, initial) => {
       ? `  __mreactDisposeRoute(__mreactRouteId);
   const __mreactRouteEffectDisposers = new Set();
   __mreactRouteDisposers.set(__mreactRouteId, () => {
-    for (const __mreactDispose of Array.from(__mreactRouteEffectDisposers)) {
-      __mreactDispose();
-    }
+    __mreactRunLifecycleTasks(
+      Array.from(__mreactRouteEffectDisposers),
+      (__mreactDispose) => __mreactDispose(),
+    );
     __mreactRouteEffectDisposers.clear();
   });
 `
       : "";
+  const routeLifecycleFunctions = `
+function __mreactRunLifecycleTasks(values, run) {
+  let firstError;
+
+  for (const value of values) {
+    try {
+      run(value);
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+
+  if (firstError !== undefined) {
+    queueMicrotask(() => {
+      throw firstError;
+    });
+  }
+}
+`;
   const routeCellDropFunction = routeUsesCells
     ? `
 function __mreactDropMismatchedRouteState(previousState, nextState) {
@@ -2609,7 +2640,10 @@ function __mreactDisposeRoute(routeId) {
     const __mreactRegisteredRouteDispose = __mreactRegisteredRouteDisposers?.get(currentRouteId);
     if (__mreactRegisteredRouteDispose !== undefined) {
       __mreactRegisteredRouteDisposers.delete(currentRouteId);
-      __mreactRegisteredRouteDispose();
+      __mreactRunLifecycleTasks(
+        [__mreactRegisteredRouteDispose],
+        (__mreactDispose) => __mreactDispose(),
+      );
     }
   }
 `;
@@ -2651,9 +2685,7 @@ function __mreactResolveRouteNode(value) {
   const previousDisposers = current.__mreactEventDisposers;
 
   if (Array.isArray(previousDisposers)) {
-    for (const dispose of previousDisposers) {
-      dispose();
-    }
+    __mreactRunLifecycleTasks(previousDisposers, (dispose) => dispose());
   }
 
   const rawBindings = next.__mreactEventBindings;
@@ -2682,9 +2714,7 @@ function __mreactResolveRouteNode(value) {
   const previousDisposers = current.__mreactEventDisposers;
 
   if (Array.isArray(previousDisposers)) {
-    for (const dispose of previousDisposers) {
-      dispose();
-    }
+    __mreactRunLifecycleTasks(previousDisposers, (dispose) => dispose());
   }
 
   current.__mreactEventDisposers = [];
@@ -2693,13 +2723,14 @@ function __mreactResolveRouteNode(value) {
 `;
   const routeDomRefBindingSyncFunction = routeUsesDomRefs
     ? `function __mreactSyncDomRefBindings(current, next) {
-  for (const binding of Array.from(__mreactGetDomRefBindings(current))) {
-    binding.dispose();
-  }
-
-  for (const binding of Array.from(__mreactGetDomRefBindings(next))) {
-    binding.retarget(current);
-  }
+  __mreactRunLifecycleTasks(
+    Array.from(__mreactGetDomRefBindings(current)),
+    (binding) => binding.dispose(),
+  );
+  __mreactRunLifecycleTasks(
+    Array.from(__mreactGetDomRefBindings(next)),
+    (binding) => binding.retarget(current),
+  );
 }
 `
     : `function __mreactSyncDomRefBindings() {}
@@ -2762,6 +2793,7 @@ ${routeCellHydrationIndent}__mreactMarker.setAttribute(__mreactRouteHydratedAttr
 ${routeCellHydrationIndent}__mreactMarkRouteHydrated();
 ${routeCellHydrationEnd}}
 ${routeCellDropFunction}
+${routeLifecycleFunctions}
 ${routeCleanupFunction}
 
 function __mreactMarkRouteHydrated() {
@@ -4557,9 +4589,7 @@ function __mreactSyncPropBindings(current, next) {
   const previousBindings = current.__mreactPropBindings;
 
   if (Array.isArray(previousBindings)) {
-    for (const binding of previousBindings) {
-      binding.dispose?.();
-    }
+    __mreactRunLifecycleTasks(previousBindings, (binding) => binding.dispose?.());
   }
 
   const bindings = next.__mreactPropBindings;
@@ -4575,9 +4605,7 @@ function __mreactSyncPropBindings(current, next) {
   next.__mreactPropBindings = [];
   next.__mreactHasReactiveProps = false;
 
-  for (const binding of bindings) {
-    binding.retarget?.(current);
-  }
+  __mreactRunLifecycleTasks(bindings, (binding) => binding.retarget?.(current));
 }
 
 function __mreactResumeChildren(current, next) {

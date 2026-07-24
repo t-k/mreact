@@ -1174,7 +1174,7 @@ function emitMergedSpreadAttributeExpression(
     }
 
     if (attr.kind === "spread-attr") {
-      return [`Object.assign(_props, (${attr.code}) ?? {});`];
+      return [`${currentSpreadAttributesHelperName}$assign(_props, (${attr.code}) ?? {});`];
     }
 
     if (attr.kind === "event" || attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
@@ -1956,6 +1956,12 @@ function emitSpreadAttributesHelper(
     `const ${name}$aliases = ${aliases};`,
     `const ${name}$urlAttributes = new Set(${urlAttributes});`,
     `const ${name}$dangerousAttributes = new Set(${dangerousAttributes});`,
+    `function ${name}$assign(target, source) {`,
+    `  for (const _rawName of Object.keys(source)) {`,
+    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || /^on/i.test(_rawName)) continue;`,
+    `    target[_rawName] = source[_rawName];`,
+    `  }`,
+    `}`,
     `function ${name}$style(value) {`,
     `  if (value == null || value === false) return "";`,
     `  if (typeof value === "string") return value;`,
@@ -1972,10 +1978,10 @@ function emitSpreadAttributesHelper(
     `  if (props == null || props === false) return "";`,
     `  let _out = "";`,
     `  for (const _rawName of Object.keys(props)) {`,
+    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children") continue;`,
+    `    if (/^on/i.test(_rawName)) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
-    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children") continue;`,
-    `    if (/^on[A-Za-z]/.test(_rawName)) continue;`,
     `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (${name}$aliases[_rawName] ?? _rawName);`,
     `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
     `    const _booleanish = _name.startsWith("aria-") || _name.startsWith("data-") || _name === "contenteditable" || _name === "draggable" || _name === "spellcheck";`,
