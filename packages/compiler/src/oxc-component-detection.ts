@@ -298,6 +298,7 @@ export interface OxcVariableComponentDeclaration {
     bindingKind: "const" | "let" | "var";
     functionName?: string;
     compareExpression?: Record<string, unknown>;
+    compareReservedNames?: string[];
   };
 }
 
@@ -336,8 +337,41 @@ function readOxcInlineMemo(
     ...(typeof functionName === "string" ? { functionName } : {}),
     ...(compareArgument === undefined
       ? {}
-      : { compareExpression: unwrapOxcParentheses(compareArgument) }),
+      : {
+          compareExpression: unwrapOxcParentheses(compareArgument),
+          compareReservedNames: collectOxcIdentifierNames(compareArgument),
+        }),
   };
+}
+
+function collectOxcIdentifierNames(node: unknown, names = new Set<string>()): string[] {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      collectOxcIdentifierNames(child, names);
+    }
+    return Array.from(names).sort();
+  }
+
+  if (typeof node !== "object" || node === null) {
+    return Array.from(names).sort();
+  }
+
+  const object = node as Record<string, unknown>;
+
+  if (
+    (object.type === "Identifier" || object.type === "JSXIdentifier") &&
+    typeof object.name === "string"
+  ) {
+    names.add(object.name);
+  }
+
+  for (const [key, value] of Object.entries(object)) {
+    if (key !== "type" && key !== "start" && key !== "end" && key !== "loc") {
+      collectOxcIdentifierNames(value, names);
+    }
+  }
+
+  return Array.from(names).sort();
 }
 
 export function unwrapOxcComponentFunctionLikeInitializer(

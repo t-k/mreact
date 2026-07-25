@@ -1241,6 +1241,7 @@ function attachOxcInlineMemo(
         bindingKind: "const" | "let" | "var";
         functionName?: string;
         compareExpression?: Record<string, unknown>;
+        compareReservedNames?: string[];
       };
     }
   ).inlineMemo;
@@ -1258,6 +1259,8 @@ function attachOxcInlineMemo(
           compareCode: normalizeOxcExpressionCode(
             stripTypeScriptExpressionWithOxc(readSource(code, inlineMemo.compareExpression)),
           ),
+          compareHasJsx: containsOxcJsxSyntax(inlineMemo.compareExpression),
+          compareReservedNames: inlineMemo.compareReservedNames ?? [],
         }),
   });
 }

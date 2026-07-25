@@ -1176,7 +1176,7 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain("): boolean");
     expect(output.code).toContain("(previous, next) => previous.label === next.label");
     expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
-    expect(output.code).toContain("})(), (previous, next) => previous.label === next.label);");
+    expect(output.code).toContain("})(), ((previous, next) => previous.label === next.label));");
     expect(output.code.indexOf("Card.__mreactStaticBlock = true;")).toBeLessThan(
       output.code.indexOf("return Card;"),
     );
@@ -1198,7 +1198,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("return memo(same, same);");
     expect(output.code).toContain("return same;");
-    expect(output.code).toContain("})(), same);");
+    expect(output.code).toContain("})(), (same));");
   });
 
   test("keeps top-level await inline memo comparators valid", () => {
@@ -1217,6 +1217,95 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
+    expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
+  });
+
+  test("preserves grouping for sequence-expression inline memo comparators", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+      let calls = 0;
+      const compare = (previous: { label: string }, next: { label: string }) =>
+        previous.label === next.label;
+      export const Card = memo(function Card(props) {
+        return <p>{props.label}</p>;
+      }, (calls++, compare));`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
+    expect(output.code).toContain("})(), (calls++, compare));");
+  });
+
+  test("lowers JSX inside inline memo comparators to valid JavaScript", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+      export const Card = memo(function Card(props) {
+        return <p>{props.label}</p>;
+      }, (previous, next) => {
+        const marker = <span />;
+        return marker.type === "span" && previous.label === next.label;
+      });`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("<span");
+    expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
+  });
+
+  test("lowers JSX fragments inside inline memo comparators", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+      export const Card = memo(function Card(props) {
+        return <p>{props.label}</p>;
+      }, (previous, next) => {
+        const marker = <><span /></>;
+        return marker !== null && previous.label === next.label;
+      });`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("<>");
+    expect(output.code).toContain("Fragment");
+    expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
+  });
+
+  test("allocates collision-free JSX helpers for inline memo comparators", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+      const _createElement = 1;
+      const _Fragment = Symbol("fragment");
+      export const Card = memo(function Card(props) {
+        return <p>{props.label}</p>;
+      }, (previous, next) => {
+        const _createElement$1 = 2;
+        const _Fragment$1 = Symbol("local-fragment");
+        const marker = <><span /></>;
+        return marker !== _Fragment &&
+          _createElement$1 !== 0 &&
+          _Fragment$1 !== _Fragment &&
+          previous.label === next.label;
+      });`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createElement as _createElement$2");
+    expect(output.code).toContain("Fragment as _Fragment$2");
     expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
   });
 

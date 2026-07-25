@@ -9,6 +9,8 @@ import type {
   PropAliasIr,
 } from "./ir.js";
 import { getCompatInlineMemo } from "./compat-inline-memo.js";
+import { normalizeOxcExpressionCode } from "./oxc-code-utils.js";
+import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { escapeRegExp } from "./string-utils.js";
@@ -25,6 +27,7 @@ export interface EmitCompatOptions {
 
 const JSX_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-runtime";
 const JSX_DEV_RUNTIME_SOURCE = "@reckona/mreact-compat/jsx-dev-runtime";
+const COMPAT_SOURCE = "@reckona/mreact-compat";
 const REACTIVE_DOM_SOURCE = "@reckona/mreact-reactive-dom";
 
 export function emitCompat(ir: ModuleIr, options: EmitCompatOptions = {}): EmitCompatResult {
@@ -141,8 +144,14 @@ function collectComponentImportSpecifiers(
 
   for (const component of ir.components) {
     const analysis = componentAnalyses.get(component);
+    const inlineMemo = getCompatInlineMemo(component);
     const directTextBindings = analysis?.directTextBindings ?? collectDirectTextBindings(component);
     const reactiveDomBlock = analysis?.reactiveDomBlock;
+
+    if (inlineMemo?.compareHasJsx === true) {
+      specifiers.add("createElement");
+      specifiers.add("Fragment");
+    }
 
     if (reactiveDomBlock !== undefined) {
       specifiers.add("REACTIVE_STATE_BINDING_META");
@@ -264,6 +273,7 @@ function collectReactiveDomImportSpecifiers(
 
 interface CompatHelperNames {
   Fragment?: string;
+  createElement?: string;
   REACTIVE_STATE_BINDING_META?: string;
   REACTIVE_TEXT_BINDING_META?: string;
   bindEvent?: string;
@@ -357,6 +367,11 @@ function allocateHelperNames(
       continue;
     }
 
+    if (specifier === "createElement") {
+      helperNames.createElement = allocator("_createElement");
+      continue;
+    }
+
     if (specifier === "Fragment") {
       helperNames.Fragment = allocator("_Fragment");
       continue;
@@ -407,6 +422,7 @@ function collectReservedHelperNames(ir: ModuleIr): string[] {
       component.name,
       component.exportName,
       ...component.bindingNames,
+      ...(getCompatInlineMemo(component)?.compareReservedNames ?? []),
     ]),
   ];
 }
@@ -790,6 +806,12 @@ function createImportGroups(
   }
 
   for (const specifier of componentSpecifiers) {
+    if (specifier === "createElement") {
+      const localName = helperNames.createElement ?? "_createElement";
+      addImportSpecifier(groups, COMPAT_SOURCE, "createElement", localName);
+      continue;
+    }
+
     if (specifier === "Fragment") {
       const localName = helperNames.Fragment ?? "_Fragment";
       addImportSpecifier(groups, componentImportSource, "Fragment", localName);
@@ -910,7 +932,9 @@ function emitComponent(
         }function`
       : `${component.async === true ? "async " : ""}function`;
   const finalize = (code: string): string =>
-    inlineMemo === undefined ? code : emitInlineMemoComponent(component, functionName, code);
+    inlineMemo === undefined
+      ? code
+      : emitInlineMemoComponent(component, functionName, code, helperNames);
 
   if (propReactiveDomBlock !== undefined) {
     return finalize(
@@ -970,6 +994,7 @@ function emitInlineMemoComponent(
   component: ComponentIr,
   functionName: string,
   componentCode: string,
+  helperNames: CompatHelperNames,
 ): string {
   const inlineMemo = getCompatInlineMemo(component);
   if (inlineMemo === undefined) {
@@ -977,7 +1002,18 @@ function emitInlineMemoComponent(
   }
 
   const exportPrefix = component.exported === false ? "" : "export ";
-  const compareArgument = inlineMemo.compareCode === undefined ? "" : `, ${inlineMemo.compareCode}`;
+  const compareCode =
+    inlineMemo.compareCode === undefined
+      ? undefined
+      : inlineMemo.compareHasJsx === true
+        ? normalizeOxcExpressionCode(
+            transformJsxToCreateElementWithOxc(inlineMemo.compareCode, {
+              pragma: helperNames.createElement ?? "_createElement",
+              pragmaFrag: helperNames.Fragment ?? "_Fragment",
+            }),
+          )
+        : inlineMemo.compareCode;
+  const compareArgument = compareCode === undefined ? "" : `, (${compareCode})`;
   const indentedComponentCode = componentCode
     .split("\n")
     .map((line) => `  ${line}`)

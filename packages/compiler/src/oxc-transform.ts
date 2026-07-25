@@ -98,15 +98,21 @@ export function transformJsxWithOxc(source: string): string {
   return result.code.trimEnd();
 }
 
-export function transformJsxToCreateElementWithOxc(source: string): string {
+export function transformJsxToCreateElementWithOxc(
+  source: string,
+  options: {
+    pragma?: string;
+    pragmaFrag?: string;
+  } = {},
+): string {
   const result = transformSync("snippet.tsx", source, {
     lang: "tsx",
     sourceType: "module",
     target: "es2022",
     jsx: {
       runtime: "classic",
-      pragma: "createElement",
-      pragmaFrag: "Fragment",
+      pragma: options.pragma ?? "createElement",
+      pragmaFrag: options.pragmaFrag ?? "Fragment",
     },
     typescript: {
       onlyRemoveTypeImports: true,

@@ -4,6 +4,8 @@ export interface CompatInlineMemo {
   bindingKind: "const" | "let" | "var";
   functionName?: string;
   compareCode?: string;
+  compareHasJsx?: boolean;
+  compareReservedNames?: string[];
 }
 
 const inlineMemoByComponent = new WeakMap<ComponentIr, CompatInlineMemo>();
@@ -16,8 +18,6 @@ export function setCompatInlineMemo(
   return component;
 }
 
-export function getCompatInlineMemo(
-  component: ComponentIr,
-): CompatInlineMemo | undefined {
+export function getCompatInlineMemo(component: ComponentIr): CompatInlineMemo | undefined {
   return inlineMemoByComponent.get(component);
 }
