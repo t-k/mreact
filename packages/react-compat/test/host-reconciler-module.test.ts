@@ -140,7 +140,9 @@ describe("host reconciler module", () => {
       "utf8",
     );
 
-    expect(hostReconcilerSource).toContain("collectMemoInstanceKeys(runtime, memoPath)");
+    expect(hostReconcilerSource).toContain(
+      "collectMemoInstanceKeys(runtime, memoRuntimePath)",
+    );
     expect(hostReconcilerSource).toContain("readDependencyFreeMemoInstanceKey(runtime, prefix)");
   });
 
