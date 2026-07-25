@@ -1256,8 +1256,8 @@ function attachOxcInlineMemo(
     ...(inlineMemo.compareExpression === undefined
       ? {}
       : {
-          compareCode: normalizeOxcExpressionCode(
-            stripTypeScriptExpressionWithOxc(readSource(code, inlineMemo.compareExpression)),
+          compareCode: stripTypeScriptExpressionWithOxc(
+            `(${readSource(code, inlineMemo.compareExpression)})`,
           ),
           compareHasJsx: containsOxcJsxSyntax(inlineMemo.compareExpression),
           compareReservedNames: inlineMemo.compareReservedNames ?? [],

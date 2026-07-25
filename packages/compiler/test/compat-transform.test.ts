@@ -1198,7 +1198,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("return memo(same, same);");
     expect(output.code).toContain("return same;");
-    expect(output.code).toContain("})(), (same));");
+    expect(output.code).toContain("})(), same);");
   });
 
   test("keeps top-level await inline memo comparators valid", () => {
@@ -1224,11 +1224,10 @@ describe("compiler compat mode", () => {
     const output = transform({
       code: `import { memo } from "@reckona/mreact-compat";
       let calls = 0;
-      const compare = (previous: { label: string }, next: { label: string }) =>
-        previous.label === next.label;
       export const Card = memo(function Card(props) {
         return <p>{props.label}</p>;
-      }, (calls++, compare));`,
+      }, (calls++, ((previous: { label: string }, next: { label: string }): boolean =>
+        previous.label === next.label)));`,
       filename: "Card.compat.tsx",
       target: "client",
       dev: false,
@@ -1237,7 +1236,9 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
-    expect(output.code).toContain("})(), (calls++, compare));");
+    expect(output.code).not.toContain(": { label: string }");
+    expect(output.code).not.toContain("): boolean");
+    expect(output.code).toContain("})(), (calls++,");
   });
 
   test("lowers JSX inside inline memo comparators to valid JavaScript", () => {

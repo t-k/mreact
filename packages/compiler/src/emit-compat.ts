@@ -9,7 +9,6 @@ import type {
   PropAliasIr,
 } from "./ir.js";
 import { getCompatInlineMemo } from "./compat-inline-memo.js";
-import { normalizeOxcExpressionCode } from "./oxc-code-utils.js";
 import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
@@ -1006,14 +1005,19 @@ function emitInlineMemoComponent(
     inlineMemo.compareCode === undefined
       ? undefined
       : inlineMemo.compareHasJsx === true
-        ? normalizeOxcExpressionCode(
-            transformJsxToCreateElementWithOxc(inlineMemo.compareCode, {
-              pragma: helperNames.createElement ?? "_createElement",
-              pragmaFrag: helperNames.Fragment ?? "_Fragment",
-            }),
-          )
+        ? transformJsxToCreateElementWithOxc(inlineMemo.compareCode, {
+            pragma: helperNames.createElement ?? "_createElement",
+            pragmaFrag: helperNames.Fragment ?? "_Fragment",
+          })
+            .trim()
+            .replace(/;\s*$/, "")
         : inlineMemo.compareCode;
-  const compareArgument = compareCode === undefined ? "" : `, (${compareCode})`;
+  const compareArgument =
+    compareCode === undefined
+      ? ""
+      : inlineMemo.compareHasJsx === true
+        ? `, (${compareCode})`
+        : `, ${compareCode}`;
   const indentedComponentCode = componentCode
     .split("\n")
     .map((line) => `  ${line}`)
