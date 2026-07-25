@@ -118,6 +118,7 @@ interface FiberHydrationOptions extends RenderOptions {
   consumeResumeMarkers?: boolean;
   namespace?: HostNamespace;
   documentRef?: Document | CustomHostDocument;
+  runtimePathPrefix?: string;
 }
 
 const SKIP_COMMIT_PATH = "\0";
@@ -231,15 +232,17 @@ export function renderHostFiberRoot(
 ): Fiber {
   const workInProgress = createWorkInProgress(root.current, { children: element });
   const rootDocument = root.container.ownerDocument;
+  const hydrating = options.previousNodes !== undefined;
   const result = batchReactivePropCellUpdates(() =>
     reconcileHostChild(
       workInProgress,
       root.current.child,
       element,
       runtime,
-      options.previousNodes === undefined ? "0" : "",
+      hydrating ? "" : "0",
       {
         ...options,
+        ...(hydrating ? { runtimePathPrefix: "0" } : {}),
         documentRef: options.documentRef ?? rootDocument,
       },
     ),
@@ -1975,9 +1978,10 @@ function createHostFiberImpl(
         ? createWorkInProgress(current, node.props)
         : createFiber("profiler", node.props, key);
     fiber.type = node.type;
+    const profilerPath = `${path}.profiler`;
     const childResult = renderWithProfiler(
       runtime,
-      `${path}.profiler`,
+      getRuntimePath(profilerPath, options),
       node.props,
       () =>
         reconcileHostChild(
@@ -1985,7 +1989,7 @@ function createHostFiberImpl(
           current?.tag === "profiler" ? current.child : undefined,
           node.props.children as ReactCompatNode,
           runtime,
-          `${path}.profiler`,
+          profilerPath,
           options,
         ),
     );
@@ -2138,11 +2142,12 @@ function createHostFiberImpl(
         ? createWorkInProgress(current, node.props)
         : createFiber("forward-ref", node.props, key);
     fiber.type = forwardRefType;
-    const rendered = renderWithRootRuntime(runtime, path, () =>
+    const runtimePath = getRuntimePath(path, options);
+    const rendered = renderWithRootRuntime(runtime, runtimePath, () =>
       forwardRefType.render(node.props, node.ref),
       forwardRefType,
     );
-    fiber.memoizedState = getDevToolsHookState(runtime, path);
+    fiber.memoizedState = getDevToolsHookState(runtime, runtimePath);
     const childOptions = getHydrationChildOptions(options, forwardRefType.render);
     const childResult = reconcileHostChild(
       fiber,
@@ -2163,6 +2168,7 @@ function createHostFiberImpl(
 
     const memoType = node.type;
     const memoPath = `${path}.memo`;
+    const memoRuntimePath = getRuntimePath(memoPath, options);
     const previousMemoFiber =
       current?.tag === "memo" && current.type === memoType ? current : undefined;
     const initialStaticBlockMemoFiber =
@@ -2191,7 +2197,7 @@ function createHostFiberImpl(
       previousMemoState !== undefined &&
       !(
         memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
-        hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath)
+        hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoRuntimePath)
       ) &&
       !(
         memoStateNeedsEffectCheck(previousMemoState) &&
@@ -2242,7 +2248,7 @@ function createHostFiberImpl(
       fiber.child.sibling = undefined;
       bubbleHostChild(fiber, fiber.child);
     }
-    const instanceKeys = collectMemoInstanceKeys(runtime, memoPath);
+    const instanceKeys = collectMemoInstanceKeys(runtime, memoRuntimePath);
     const hasClassDescendant = hasClassComponentDescendant(fiber.child);
     fiber.memoizedState = {
       props: node.props as Record<string, unknown>,
@@ -2331,12 +2337,14 @@ function createHostFiberImpl(
     }
 
     const classType = node.type;
+    const runtimePath = getRuntimePath(path, options);
+    const classRuntimePath = `${runtimePath}.class`;
     const fiber =
       current?.tag === "class-component" && current.type === classType
         ? createWorkInProgress(current, node.props)
         : createFiber("class-component", node.props, key);
     fiber.type = classType;
-    const previousClassChildKeys = collectInstanceKeys(runtime, `${path}.class`);
+    const previousClassChildKeys = collectInstanceKeys(runtime, classRuntimePath);
     const currentClassInstance =
       current?.tag === "class-component" && current.type === classType
         ? (current.stateNode as ClassComponentInstance)
@@ -2347,7 +2355,7 @@ function createHostFiberImpl(
       classType,
       node.props,
       runtime,
-      path,
+      runtimePath,
       {
         ...(currentClassInstance === undefined
           ? {}
@@ -2355,7 +2363,7 @@ function createHostFiberImpl(
         hasDirtyDescendant: hasDirtyInstance(
           runtime,
           previousClassChildKeys,
-          `${path}.class`,
+          classRuntimePath,
         ),
         allowSkip: hasCurrentClassFiber,
       },
@@ -2418,6 +2426,7 @@ function createHostFiberImpl(
         ? createWorkInProgress(current, node.props)
         : createFiber("function-component", node.props, key);
     fiber.type = node.type;
+    const runtimePath = getRuntimePath(path, options);
 
     const canReuseSameElement =
       previousFunctionState !== undefined &&
@@ -2433,7 +2442,7 @@ function createHostFiberImpl(
       runtime.strictReplayDepth === 0 &&
       previousFunctionState !== undefined &&
       (canReuseSameElement || canReuseExternalStoreSnapshot) &&
-      !hasDirtyInstance(runtime, previousFunctionState.instanceKeys, path) &&
+      !hasDirtyInstance(runtime, previousFunctionState.instanceKeys, runtimePath) &&
       !hasUnflushedMountEffectInstance(runtime, previousFunctionState.instanceKeys) &&
       !hasPendingAsyncChild(current?.child)
     ) {
@@ -2444,11 +2453,11 @@ function createHostFiberImpl(
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }
 
-    const rendered = renderWithRootRuntime(runtime, path, () =>
+    const rendered = renderWithRootRuntime(runtime, runtimePath, () =>
       (node.type as (props: Record<string, unknown>) => ReactCompatNode)(node.props),
       node.type,
     );
-    fiber.memoizedState = getDevToolsHookState(runtime, path);
+    fiber.memoizedState = getDevToolsHookState(runtime, runtimePath);
     const childOptions = getHydrationChildOptions(options, node.type as Function);
     const childResult = reconcileHostChild(
       fiber,
@@ -2459,7 +2468,7 @@ function createHostFiberImpl(
       childOptions,
     );
     fiber.child = childResult.fiber;
-    const instanceKeys = collectInstanceKeys(runtime, path);
+    const instanceKeys = collectInstanceKeys(runtime, runtimePath);
     fiber.stateNode = {
       element: node,
       props: node.props as Record<string, unknown>,
@@ -2561,7 +2570,7 @@ function createHostComponentFiber(
     current?.tag === "host-component" &&
     current.type === node.type &&
     Object.is(hostFiberChildrenProp(current.memoizedProps), node.props.children) &&
-    !hasDirtyInstance(runtime, [], `${path}.c`) &&
+    !hasDirtyInstance(runtime, [], getRuntimePath(`${path}.c`, options)) &&
     canReuseStaticHostSubtree(current.child)
   ) {
     fiber.child = current.child;
@@ -4302,12 +4311,13 @@ function tryReuseMemoBailout(
 
   const previousMemoState = current.memoizedState as MemoFiberState | undefined;
   const memoPath = `${path}.memo`;
+  const memoRuntimePath = getRuntimePath(memoPath, options);
 
   if (
     previousMemoState === undefined ||
     (
       memoStateNeedsDirtyInstanceCheck(previousMemoState) &&
-      hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoPath)
+      hasDirtyInstance(runtime, previousMemoState.instanceKeys, memoRuntimePath)
     ) ||
     (
       memoStateNeedsEffectCheck(previousMemoState) &&
@@ -4651,6 +4661,12 @@ function getHydrationChildOptions(
 
 function getComponentName(component: Function): string {
   return component.name === "" ? "Anonymous" : component.name;
+}
+
+function getRuntimePath(path: string, options: FiberHydrationOptions): string {
+  return options.runtimePathPrefix === undefined
+    ? path
+    : joinPath(options.runtimePathPrefix, path);
 }
 
 function joinPath(path: string, segment: string): string {

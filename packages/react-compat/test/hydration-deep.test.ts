@@ -11,11 +11,49 @@ import {
   readEventHydrationManifest,
   Suspense,
   useId,
+  useState,
   useSyncExternalStore,
 } from "../src/index.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat deep hydration", () => {
+  test("preserves useState across the first hydrated update", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<button>0</button>";
+    const renders: number[] = [];
+
+    function Counter() {
+      const [count, setCount] = useState(0);
+      renders.push(count);
+      return createElement("button", { onClick: () => setCount(count + 1) }, count);
+    }
+
+    hydrateRoot(container, createElement(Counter, null));
+    container.querySelector("button")?.click();
+
+    expect(renders).toEqual([0, 1]);
+    expect(container.textContent).toBe("1");
+  });
+
+  test("preserves nested hook state across the first hydrated update", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<main><button>0</button></main>";
+
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return createElement("button", { onClick: () => setCount(count + 1) }, count);
+    }
+
+    function App() {
+      return createElement("main", null, createElement(Counter, null));
+    }
+
+    hydrateRoot(container, createElement(App, null));
+    container.querySelector("button")?.click();
+
+    expect(container.textContent).toBe("1");
+  });
+
   test("useSyncExternalStore keeps the server snapshot for the hydration pass", () => {
     const container = document.createElement("div");
     container.innerHTML = "<p>server</p>";
