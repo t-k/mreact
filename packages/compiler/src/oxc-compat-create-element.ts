@@ -1,10 +1,7 @@
 import { isEventLikePropName } from "@reckona/mreact-shared";
 import type { AttributeIr, JsxNodeIr } from "./ir.js";
 import { formatStatement } from "./oxc-bindings.js";
-import {
-  findOxcKeyCodeInChildren,
-  readOxcReturnExpressionFromStatement,
-} from "./oxc-expression-utils.js";
+import { findOxcKeyCodeInChildren } from "./oxc-expression-utils.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
 // Lowers statically analyzable react-compat createElement() call trees into
@@ -754,9 +751,9 @@ function lowerCreateElementListIfRenderer(
   scope: CompatCreateElementScope,
 ): LoweredCreateElementListRenderer | undefined {
   const ifStatement = readObject(statements[ifStatementIndex]);
-  const whenTrueExpression = readOxcReturnExpressionFromStatement(ifStatement.consequent);
-  const alternateExpression = readOxcReturnExpressionFromStatement(ifStatement.alternate);
-  const fallthroughExpression = readOxcReturnExpressionFromStatement(
+  const whenTrueExpression = readCreateElementBranchReturnExpression(ifStatement.consequent);
+  const alternateExpression = readCreateElementBranchReturnExpression(ifStatement.alternate);
+  const fallthroughExpression = readCreateElementBranchReturnExpression(
     statements[ifStatementIndex + 1],
   );
   const whenFalseExpression = alternateExpression ?? fallthroughExpression;
@@ -793,6 +790,30 @@ function lowerCreateElementListIfRenderer(
       },
     ],
   };
+}
+
+function readCreateElementBranchReturnExpression(
+  statement: unknown,
+): Record<string, unknown> | undefined {
+  const object = readObject(statement);
+
+  if (object.type === "ReturnStatement") {
+    return unwrapOxcParentheses(readObject(object.argument));
+  }
+
+  if (object.type !== "BlockStatement") {
+    return undefined;
+  }
+
+  const statements = readArray(object.body);
+  if (statements.length !== 1) {
+    return undefined;
+  }
+
+  const returnStatement = readObject(statements[0]);
+  return returnStatement.type === "ReturnStatement"
+    ? unwrapOxcParentheses(readObject(returnStatement.argument))
+    : undefined;
 }
 
 function lowerCreateElementListCall(

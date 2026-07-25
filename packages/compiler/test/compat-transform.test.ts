@@ -3,6 +3,7 @@
 import { describe, expect, test } from "vitest";
 import { createElement, createRoot } from "@reckona/mreact-compat";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { parseSync } from "oxc-parser";
 import { transform } from "../src/index.js";
 import {
   compileCompatModule,
@@ -1154,11 +1155,12 @@ describe("compiler compat mode", () => {
     const output = transform({
       code: `import { memo } from "@reckona/mreact-compat";
 
+      type CardProps = { label: string };
       export const Card = memo(
-        function Card(props) {
+        function Card(props: CardProps) {
           return <p>{props.label}</p>;
         },
-        (previous, next) => previous.label === next.label,
+        (previous: { label: string }, next: { label: string }): boolean => previous.label === next.label,
       );`,
       filename: "Card.compat.tsx",
       target: "client",
@@ -1169,13 +1171,53 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("export const Card = ");
     expect(output.code).toContain("function Card(props)");
+    expect(output.code).not.toContain("previous: { label: string }");
+    expect(output.code).not.toContain("next: { label: string }");
+    expect(output.code).not.toContain("): boolean");
     expect(output.code).toContain("(previous, next) => previous.label === next.label");
-    expect(output.code).toContain(
-      "return memo(Card, (previous, next) => previous.label === next.label);",
-    );
+    expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
+    expect(output.code).toContain("})(), (previous, next) => previous.label === next.label);");
     expect(output.code.indexOf("Card.__mreactStaticBlock = true;")).toBeLessThan(
-      output.code.indexOf("return memo(Card, (previous, next) => previous.label === next.label);"),
+      output.code.indexOf("return Card;"),
     );
+  });
+
+  test("evaluates inline memo comparators outside the generated component scope", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+      const same = () => false;
+      export const Card = memo(function same(props) {
+        return <p>{props.label}</p>;
+      }, same);`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("return memo(same, same);");
+    expect(output.code).toContain("return same;");
+    expect(output.code).toContain("})(), same);");
+  });
+
+  test("keeps top-level await inline memo comparators valid", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+      async function loadCompare() {
+        return () => false;
+      }
+      export const Card = memo(function Card(props) {
+        return <p>{props.label}</p>;
+      }, await loadCompare());`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(parseSync("Card.compat.js", output.code, { sourceType: "module" }).errors).toEqual([]);
   });
 
   test("lowers JSX inside component body statements in compat mode", async () => {

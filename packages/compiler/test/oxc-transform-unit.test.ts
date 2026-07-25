@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  stripTypeScriptExpressionWithOxc,
   stripTypeScriptWithOxc,
   transformJsxToCreateElementWithOxc,
   transformJsxWithOxc,
@@ -14,11 +15,47 @@ describe("compiler oxc-transform edge branches", () => {
   });
 
   test("stripTypeScriptWithOxc removes `import type` declarations", () => {
-    const result = stripTypeScriptWithOxc(
-      `import type { Foo } from "foo";\nexport const x = 1;`,
-    );
+    const result = stripTypeScriptWithOxc(`import type { Foo } from "foo";\nexport const x = 1;`);
     expect(result).not.toMatch(/import\s+type/);
     expect(result).toContain("export const x");
+  });
+
+  test("stripTypeScriptExpressionWithOxc removes inline object type annotations", () => {
+    const result = stripTypeScriptExpressionWithOxc(
+      "(left: { label: string }, right: { label: string }): boolean => left.label === right.label",
+    );
+
+    expect(result).toBe("(left, right) => left.label === right.label");
+  });
+
+  test.each([
+    {
+      name: "generic calls under await",
+      source: "await loadCompare<Props>()",
+      absent: ["<Props>"],
+      present: ["await loadCompare()"],
+    },
+    {
+      name: "as and satisfies expressions",
+      source: "(candidate as Compare) satisfies Compare",
+      absent: [" as Compare", " satisfies Compare"],
+      present: ["candidate"],
+    },
+    {
+      name: "function return annotations",
+      source: "function (left: Props, right: Props): boolean { return left.id === right.id; }",
+      absent: ["left: Props", "right: Props", "): boolean"],
+      present: ["function(left, right)", "return left.id === right.id;"],
+    },
+  ])("stripTypeScriptExpressionWithOxc strips $name", (sample) => {
+    const result = stripTypeScriptExpressionWithOxc(sample.source);
+
+    for (const value of sample.absent) {
+      expect(result).not.toContain(value);
+    }
+    for (const value of sample.present) {
+      expect(result).toContain(value);
+    }
   });
 
   test.each([

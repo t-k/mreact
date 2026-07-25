@@ -15,6 +15,26 @@ export function stripTypeScriptWithOxc(source: string): string {
     return cached;
   }
 
+  const stripped = transformTypeScriptWithOxc(source);
+
+  rememberStrippedTypeScript(source, stripped);
+
+  return stripped;
+}
+
+/** Removes TypeScript syntax from a standalone expression without heuristic skipping. */
+export function stripTypeScriptExpressionWithOxc(source: string): string {
+  const prefix = "const __mreactExpression = ";
+  const stripped = transformTypeScriptWithOxc(`${prefix}${source};`);
+
+  if (!stripped.startsWith(prefix)) {
+    return transformTypeScriptWithOxc(source).replace(/;\s*$/, "");
+  }
+
+  return stripped.slice(prefix.length).replace(/;\s*$/, "");
+}
+
+function transformTypeScriptWithOxc(source: string): string {
   const result = transformSync("snippet.tsx", source, {
     lang: "tsx",
     sourceType: "module",
@@ -25,11 +45,7 @@ export function stripTypeScriptWithOxc(source: string): string {
     },
   });
 
-  const stripped = result.errors.length > 0 ? source.trimEnd() : result.code.trimEnd();
-
-  rememberStrippedTypeScript(source, stripped);
-
-  return stripped;
+  return result.errors.length > 0 ? source.trimEnd() : result.code.trimEnd();
 }
 
 function rememberStrippedTypeScript(source: string, stripped: string): void {

@@ -466,6 +466,26 @@ export function App() {
     expect(output.code).toContain('createElement("li"');
   });
 
+  test("does not lower conditional-return renderers with branch-local statements", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+const rows = [{ id: "a", label: "Ada", active: true }];
+let calls = 0;
+export function App() {
+  return createElement("ul", null, rows.map((row) => {
+    if (row.active) {
+      calls += 1;
+      return createElement("li", { key: row.id }, row.label);
+    }
+    return createElement("li", { key: row.id }, "inactive");
+  }));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("calls += 1");
+    expect(output.code).toContain('createElement("li"');
+  });
+
   test("does not lower shadowed createElement bindings", () => {
     const source = `import { createElement } from "@reckona/mreact-compat";
 export default function App() {

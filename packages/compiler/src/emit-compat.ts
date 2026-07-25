@@ -984,10 +984,10 @@ function emitInlineMemoComponent(
     .join("\n");
 
   return [
-    `${exportPrefix}${inlineMemo.bindingKind} ${component.name} = (() => {`,
+    `${exportPrefix}${inlineMemo.bindingKind} ${component.name} = memo((() => {`,
     indentedComponentCode,
-    `  return memo(${functionName}${compareArgument});`,
-    `})();`,
+    `  return ${functionName};`,
+    `})()${compareArgument});`,
   ].join("\n");
 }
 

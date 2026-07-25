@@ -7,7 +7,10 @@ import {
   type CompilerModuleContext,
 } from "./compiler-module-context.js";
 import type { ClientReferenceIr, ComponentIr, ModuleIr, PropAliasIr } from "./ir.js";
-import { transformJsxToCreateElementWithOxc } from "./oxc-transform.js";
+import {
+  stripTypeScriptExpressionWithOxc,
+  transformJsxToCreateElementWithOxc,
+} from "./oxc-transform.js";
 import {
   arraysEqual,
   getOxcLocation,
@@ -1251,7 +1254,11 @@ function attachOxcInlineMemo(
     ...(inlineMemo.functionName === undefined ? {} : { functionName: inlineMemo.functionName }),
     ...(inlineMemo.compareExpression === undefined
       ? {}
-      : { compareCode: readSource(code, inlineMemo.compareExpression) }),
+      : {
+          compareCode: normalizeOxcExpressionCode(
+            stripTypeScriptExpressionWithOxc(readSource(code, inlineMemo.compareExpression)),
+          ),
+        }),
   });
 }
 
