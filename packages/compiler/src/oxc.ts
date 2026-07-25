@@ -1,6 +1,7 @@
 import { parseSync } from "oxc-parser";
 import { unsupportedTopLevelJsxInitializerDiagnostic } from "./diagnostics.js";
 import { type AnalyzeToIrInput, type AnalyzeToIrOutput } from "./internal.js";
+import { setCompatInlineMemo } from "./compat-inline-memo.js";
 import {
   createCompilerModuleContextWithOxc,
   type CompilerModuleContext,
@@ -892,7 +893,7 @@ function analyzeCompatRenderToStringWrapperRoot(
 
   const targetFunctionLike = localFunctionLikes.get(targetName);
   const lowered =
-      targetFunctionLike === undefined
+    targetFunctionLike === undefined
       ? undefined
       : analyzeCompatCreateElementFunctionRoot(
           code,
@@ -1075,30 +1076,34 @@ function analyzeOxcComponent(
     }
 
     return [
-      {
-        ...analyzeOxcFunctionLikeComponent(
-          code,
-          plainComponent.name,
-          plainComponent.initializer,
-          plainComponent.name,
-          componentNames,
-          target,
-          diagnostics,
-          bodyStatementJsx,
-          compatCreateElementNames,
-          compatRenderToStringNames,
-          compatCreateElementLocalFunctionLikes,
-          moduleRenderValueBindings,
-          compatReactNodeReturn,
-          serverOutput,
-          componentCallNames,
-          bodyLowerers,
-          reactiveDerivedFunctionNames,
-          localJsxReturnFunctionNames,
-          localJsxHelperHtmlParameters,
-        ),
-        exported: false,
-      },
+      attachOxcInlineMemo(
+        code,
+        {
+          ...analyzeOxcFunctionLikeComponent(
+            code,
+            plainComponent.name,
+            plainComponent.initializer,
+            plainComponent.name,
+            componentNames,
+            target,
+            diagnostics,
+            bodyStatementJsx,
+            compatCreateElementNames,
+            compatRenderToStringNames,
+            compatCreateElementLocalFunctionLikes,
+            moduleRenderValueBindings,
+            compatReactNodeReturn,
+            serverOutput,
+            componentCallNames,
+            bodyLowerers,
+            reactiveDerivedFunctionNames,
+            localJsxReturnFunctionNames,
+            localJsxHelperHtmlParameters,
+          ),
+          exported: false,
+        },
+        plainComponent,
+      ),
     ];
   }
 
@@ -1119,26 +1124,30 @@ function analyzeOxcComponent(
     }
 
     return [
-      analyzeOxcFunctionLikeComponent(
+      attachOxcInlineMemo(
         code,
-        variableComponent.name,
-        variableComponent.initializer,
-        variableComponent.name,
-        componentNames,
-        target,
-        diagnostics,
-        bodyStatementJsx,
-        compatCreateElementNames,
-        compatRenderToStringNames,
-        compatCreateElementLocalFunctionLikes,
-        moduleRenderValueBindings,
-        compatReactNodeReturn,
-        serverOutput,
-        componentCallNames,
-        bodyLowerers,
-        reactiveDerivedFunctionNames,
-        localJsxReturnFunctionNames,
-        localJsxHelperHtmlParameters,
+        analyzeOxcFunctionLikeComponent(
+          code,
+          variableComponent.name,
+          variableComponent.initializer,
+          variableComponent.name,
+          componentNames,
+          target,
+          diagnostics,
+          bodyStatementJsx,
+          compatCreateElementNames,
+          compatRenderToStringNames,
+          compatCreateElementLocalFunctionLikes,
+          moduleRenderValueBindings,
+          compatReactNodeReturn,
+          serverOutput,
+          componentCallNames,
+          bodyLowerers,
+          reactiveDerivedFunctionNames,
+          localJsxReturnFunctionNames,
+          localJsxHelperHtmlParameters,
+        ),
+        variableComponent,
       ),
     ];
   }
@@ -1216,6 +1225,34 @@ function lowerOxcLocalJsxHelperCallExpressionCode(
   });
 
   return `${readSource(code, readObject(expression.callee))}(${args.join(", ")})`;
+}
+
+function attachOxcInlineMemo(
+  code: string,
+  component: ComponentIr,
+  declaration: unknown,
+): ComponentIr {
+  const inlineMemo = (
+    declaration as {
+      inlineMemo?: {
+        bindingKind: "const" | "let" | "var";
+        functionName?: string;
+        compareExpression?: Record<string, unknown>;
+      };
+    }
+  ).inlineMemo;
+
+  if (inlineMemo === undefined) {
+    return component;
+  }
+
+  return setCompatInlineMemo(component, {
+    bindingKind: inlineMemo.bindingKind,
+    ...(inlineMemo.functionName === undefined ? {} : { functionName: inlineMemo.functionName }),
+    ...(inlineMemo.compareExpression === undefined
+      ? {}
+      : { compareCode: readSource(code, inlineMemo.compareExpression) }),
+  });
 }
 
 function analyzeOxcFunctionLikeComponent(

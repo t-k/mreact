@@ -2,6 +2,7 @@
 
 import { describe, expect, test } from "vitest";
 import { createElement, createRoot } from "@reckona/mreact-compat";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../src/index.js";
 import {
   compileCompatModule,
@@ -108,7 +109,7 @@ describe("compiler compat mode", () => {
     expect(output.code).toContain(
       'import { jsx as _jsx } from "@reckona/mreact-compat/jsx-runtime";',
     );
-    expect(output.code).toContain("return _jsx(\"button\"");
+    expect(output.code).toContain('return _jsx("button"');
 
     const container = await runCompatComponent(output.code);
     expect(container.innerHTML).toBe('<button class="primary">Save</button>');
@@ -130,7 +131,7 @@ describe("compiler compat mode", () => {
         specifiers: ["jsx", "jsxs"],
       },
     ]);
-    expect(output.code).toContain("return _jsxs(\"div\"");
+    expect(output.code).toContain('return _jsxs("div"');
 
     const container = await runCompatComponent(output.code);
     expect(container.innerHTML).toBe("<div><span>A</span><span>B</span></div>");
@@ -177,9 +178,7 @@ describe("compiler compat mode", () => {
     expect(output.code).toContain('type: "h1"');
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      '<section><h1 class="title">Hello</h1></section>',
-    );
+    expect(container.innerHTML).toBe('<section><h1 class="title">Hello</h1></section>');
   });
 
   test("lowers top-level JSX initializers with spread props and JSX expression children", async () => {
@@ -202,9 +201,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      '<section><ul id="list"><li>A</li><li>B</li></ul></section>',
-    );
+    expect(container.innerHTML).toBe('<section><ul id="list"><li>A</li><li>B</li></ul></section>');
   });
 
   test("accepts React-compatible non-JSX component returns in compat mode", async () => {
@@ -530,9 +527,7 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.metadata.components).toEqual([
-      { name: "LazyAbout", exportName: "default" },
-    ]);
+    expect(output.metadata.components).toEqual([{ name: "LazyAbout", exportName: "default" }]);
     expect(output.code).toContain("export default function LazyAbout()");
     expect(output.code).not.toContain("export function LazyAbout()");
   });
@@ -547,9 +542,7 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.metadata.components).toEqual([
-      { name: "DefaultExport", exportName: "default" },
-    ]);
+    expect(output.metadata.components).toEqual([{ name: "DefaultExport", exportName: "default" }]);
     expect(output.code).toContain("export default function DefaultExport()");
     expect(output.code).not.toContain("=> <div>");
 
@@ -639,9 +632,7 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      'import { useState } from "@reckona/mreact-compat";',
-    );
+    expect(output.code).toContain('import { useState } from "@reckona/mreact-compat";');
   });
 
   test("emits compiler reactive DOM blocks for compiler-proven useState text children", () => {
@@ -665,7 +656,7 @@ describe("compiler compat mode", () => {
         specifiers: ["bindText", "createTemplate"],
       },
       {
-      source: "@reckona/mreact-compat/jsx-runtime",
+        source: "@reckona/mreact-compat/jsx-runtime",
         specifiers: ["REACTIVE_STATE_BINDING_META", "createReactiveDomBlock"],
       },
     ]);
@@ -889,17 +880,19 @@ describe("compiler compat mode", () => {
       const module = compileCompatModule(outputWithSetter);
       const App = module.App as (props: Record<string, unknown>) => unknown;
       const container = document.createElement("div");
-      createRoot(container).render(createElement(App, {
-        capture(nextUpdate: () => void) {
-          update = nextUpdate;
-        },
-        renders() {
-          return renders;
-        },
-        setRenders(next: number) {
-          renders = next;
-        },
-      }));
+      createRoot(container).render(
+        createElement(App, {
+          capture(nextUpdate: () => void) {
+            update = nextUpdate;
+          },
+          renders() {
+            return renders;
+          },
+          setRenders(next: number) {
+            renders = next;
+          },
+        }),
+      );
 
       expect(container.innerHTML).toBe("<p>0</p>");
       expect(renders).toBe(1);
@@ -972,9 +965,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      "<section><span>Hello Ada</span></section>",
-    );
+    expect(container.innerHTML).toBe("<section><span>Hello Ada</span></section>");
   });
 
   test("renders non-exported internal component references in compat output", async () => {
@@ -997,9 +988,7 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain("export function Child");
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      "<section><span>Hello Ada</span></section>",
-    );
+    expect(container.innerHTML).toBe("<section><span>Hello Ada</span></section>");
   });
 
   test("lowers member-access JSX tags to value references in compat output", async () => {
@@ -1097,12 +1086,18 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("return <A");
-    await expect(runCompatComponent(output.code, "App", { kind: "a" })).resolves
-      .toHaveProperty("innerHTML", "<span>A</span>");
-    await expect(runCompatComponent(output.code, "App", { kind: "b" })).resolves
-      .toHaveProperty("innerHTML", "<span>B</span>");
-    await expect(runCompatComponent(output.code, "App", { kind: "x" })).resolves
-      .toHaveProperty("innerHTML", "<em>?</em>");
+    await expect(runCompatComponent(output.code, "App", { kind: "a" })).resolves.toHaveProperty(
+      "innerHTML",
+      "<span>A</span>",
+    );
+    await expect(runCompatComponent(output.code, "App", { kind: "b" })).resolves.toHaveProperty(
+      "innerHTML",
+      "<span>B</span>",
+    );
+    await expect(runCompatComponent(output.code, "App", { kind: "x" })).resolves.toHaveProperty(
+      "innerHTML",
+      "<em>?</em>",
+    );
   });
 
   test("lowers JSX prop values in compat output", async () => {
@@ -1155,6 +1150,34 @@ describe("compiler compat mode", () => {
     expect(container.innerHTML).toBe("<p>x</p>");
   });
 
+  test("preserves inline memo wrappers and comparators in compat output", () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact-compat";
+
+      export const Card = memo(
+        function Card(props) {
+          return <p>{props.label}</p>;
+        },
+        (previous, next) => previous.label === next.label,
+      );`,
+      filename: "Card.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("export const Card = ");
+    expect(output.code).toContain("function Card(props)");
+    expect(output.code).toContain("(previous, next) => previous.label === next.label");
+    expect(output.code).toContain(
+      "return memo(Card, (previous, next) => previous.label === next.label);",
+    );
+    expect(output.code.indexOf("Card.__mreactStaticBlock = true;")).toBeLessThan(
+      output.code.indexOf("return memo(Card, (previous, next) => previous.label === next.label);"),
+    );
+  });
+
   test("lowers JSX inside component body statements in compat mode", async () => {
     const output = transform({
       code: `export function App() {
@@ -1186,9 +1209,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      '<div id="app" class="primary">Hello</div>',
-    );
+    expect(container.innerHTML).toBe('<div id="app" class="primary">Hello</div>');
   });
 
   test("passes spread props to same-module components in compat mode", async () => {
@@ -1253,7 +1274,7 @@ describe("compiler compat mode", () => {
 
   test("emits list JSX children in compat mode", async () => {
     const output = transform({
-      code: "export function App() { const items = [\"A\", \"B\"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }",
+      code: 'export function App() { const items = ["A", "B"]; return <ul>{items.map((item, index) => <li>{index}:{item}</li>)}</ul>; }',
       filename: "App.tsx",
       target: "client",
       dev: false,
@@ -1263,9 +1284,7 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      "<ul><li>0:A</li><li>1:B</li></ul>",
-    );
+    expect(container.innerHTML).toBe("<ul><li>0:A</li><li>1:B</li></ul>");
   });
 
   test("emits block-body list JSX renderers in compat mode", async () => {
@@ -1287,9 +1306,7 @@ describe("compiler compat mode", () => {
     expect(output.code).not.toContain(": string");
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      "<ul><li>0:A</li><li>1:B</li></ul>",
-    );
+    expect(container.innerHTML).toBe("<ul><li>0:A</li><li>1:B</li></ul>");
   });
 
   test("lowers JSX inside block-body list statements in compat mode", async () => {
@@ -1384,9 +1401,83 @@ describe("compiler compat mode", () => {
     expect(output.diagnostics).toEqual([]);
 
     const container = await runCompatComponent(output.code);
-    expect(container.innerHTML).toBe(
-      '<ul><li>A</li><li class="off">B</li></ul>',
-    );
+    expect(container.innerHTML).toBe('<ul><li>A</li><li class="off">B</li></ul>');
+  });
+
+  test("hydrates keyed conditional-return map callbacks and preserves identity on reorder", async () => {
+    const code = `
+      import { memo, useState } from "@reckona/mreact-compat";
+
+      function Entry(props) {
+        return <div data-item={props.item.id}>{props.item.label}</div>;
+      }
+
+      const List = memo(function List(props) {
+        return (
+          <div data-list>
+            {props.items.map((item) => {
+              if (item.kind === "header") {
+                return <h2 key={item.id} data-item={item.id}>{item.label}</h2>;
+              }
+              return <Entry item={item} key={item.id} />;
+            })}
+          </div>
+        );
+      });
+
+      function Controller() {
+        const [items, setItems] = useState([
+          { id: "header", kind: "header", label: "Header" },
+          { id: "entry", kind: "entry", label: "Entry" },
+        ]);
+        return (
+          <section>
+            <button onClick={() => setItems([...items].reverse())}>reverse</button>
+            <List items={items} />
+          </section>
+        );
+      }
+
+      export function App() {
+        return <Controller />;
+      }
+    `;
+    const serverOutput = transform({
+      code,
+      filename: "Timeline.compat.tsx",
+      target: "server",
+      dev: false,
+      mode: "compat",
+    });
+    const clientOutput = transform({
+      code,
+      filename: "Timeline.compat.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(serverOutput.diagnostics).toEqual([]);
+    expect(clientOutput.diagnostics).toEqual([]);
+
+    const serverHtml = runCompatServerComponent(serverOutput.code);
+    expect(serverHtml).toContain("<h2>Header</h2>");
+    expect(serverHtml).toContain("<div>Entry</div>");
+
+    const container = await runCompatHydration(serverOutput.code, clientOutput.code);
+    const header = container.querySelector('[data-item="header"]');
+    const entry = container.querySelector('[data-item="entry"]');
+    expect(header?.textContent).toBe("Header");
+    expect(entry?.textContent).toBe("Entry");
+
+    container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushEffects();
+
+    const reordered = [...container.querySelectorAll("[data-item]")];
+    expect(reordered.map((node) => node.getAttribute("data-item"))).toEqual(["entry", "header"]);
+    expect(reordered[0]).toBe(entry);
+    expect(reordered[1]).toBe(header);
+    expect(clientOutput.code).toContain("{ key: (item) => (item.id) }");
   });
 
   test("emits JSX key as runtime key instead of a DOM prop in compat mode", async () => {
@@ -1407,7 +1498,7 @@ describe("compiler compat mode", () => {
 
   test("emits server html for compat mode server target", () => {
     const output = transform({
-      code: "export function App() { return <div className=\"box\">Hello</div>; }",
+      code: 'export function App() { return <div className="box">Hello</div>; }',
       filename: "App.tsx",
       target: "server",
       dev: false,
@@ -1586,9 +1677,7 @@ describe("compiler compat mode", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("<strong>");
-    expect(runCompatServerComponent(output.code)).toBe(
-      "<section><strong>Ada</strong></section>",
-    );
+    expect(runCompatServerComponent(output.code)).toBe("<section><strong>Ada</strong></section>");
   });
 
   test("drops event handlers and dynamic intrinsic attributes for compat server output", () => {
@@ -1603,10 +1692,12 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runCompatServerComponent(output.code, "App", {
-      color: "red",
-      onClick: () => undefined,
-    })).toBe("<button>Save</button>");
+    expect(
+      runCompatServerComponent(output.code, "App", {
+        color: "red",
+        onClick: () => undefined,
+      }),
+    ).toBe("<button>Save</button>");
   });
 
   test("runs hooks inside compat server render context", () => {
@@ -1712,9 +1803,7 @@ describe("compiler compat mode", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      'children: (value) => _jsx("p", { children: (value.message) })',
-    );
+    expect(output.code).toContain('children: (value) => _jsx("p", { children: (value.message) })');
     const container = await runCompatComponent(output.code);
     expect(container.textContent).toBe("dark");
   });

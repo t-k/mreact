@@ -249,7 +249,7 @@ function isOxcExportedFunctionReturningLocalJsxHelper(
 
 export function readOxcVariableComponentDeclaration(
   declaration: Record<string, unknown>,
-): { name: string; initializer: Record<string, unknown> } | undefined {
+): OxcVariableComponentDeclaration | undefined {
   if (declaration.type !== "VariableDeclaration") {
     return undefined;
   }
@@ -262,10 +262,16 @@ export function readOxcVariableComponentDeclaration(
       continue;
     }
 
-    const initializer = unwrapOxcComponentFunctionLikeInitializer(readObject(object.init));
+    const initializerExpression = readObject(object.init);
+    const initializer = unwrapOxcComponentFunctionLikeInitializer(initializerExpression);
 
     if (initializer !== undefined && hasOxcFunctionLikeComponentReturn(initializer)) {
-      return { name: id.name, initializer };
+      const inlineMemo = readOxcInlineMemo(initializerExpression, declaration.kind);
+      return {
+        name: id.name,
+        initializer,
+        ...(inlineMemo === undefined ? {} : { inlineMemo }),
+      };
     }
   }
 
@@ -274,7 +280,7 @@ export function readOxcVariableComponentDeclaration(
 
 export function readOxcPlainComponent(
   statement: unknown,
-): { name: string; initializer: Record<string, unknown> } | undefined {
+): OxcVariableComponentDeclaration | undefined {
   const object = readObject(statement);
 
   if (object.type === "FunctionDeclaration" && hasComponentReturn(object.body)) {
@@ -283,6 +289,55 @@ export function readOxcPlainComponent(
   }
 
   return readOxcVariableComponentDeclaration(object);
+}
+
+export interface OxcVariableComponentDeclaration {
+  name: string;
+  initializer: Record<string, unknown>;
+  inlineMemo?: {
+    bindingKind: "const" | "let" | "var";
+    functionName?: string;
+    compareExpression?: Record<string, unknown>;
+  };
+}
+
+function readOxcInlineMemo(
+  expression: Record<string, unknown>,
+  declarationKind: unknown,
+): OxcVariableComponentDeclaration["inlineMemo"] | undefined {
+  const unwrapped = unwrapOxcParentheses(expression);
+
+  if (
+    unwrapped.type !== "CallExpression" ||
+    !(declarationKind === "const" || declarationKind === "let" || declarationKind === "var")
+  ) {
+    return undefined;
+  }
+
+  const callee = readObject(unwrapped.callee);
+  const args = readArray(unwrapped.arguments);
+  const componentArgument = unwrapOxcParentheses(readObject(args[0]));
+  const compareArgument = args[1] === undefined ? undefined : readObject(args[1]);
+
+  if (
+    callee.type !== "Identifier" ||
+    callee.name !== "memo" ||
+    (componentArgument.type !== "ArrowFunctionExpression" &&
+      componentArgument.type !== "FunctionExpression") ||
+    args.length > 2 ||
+    compareArgument?.type === "SpreadElement"
+  ) {
+    return undefined;
+  }
+
+  const functionName = readObject(componentArgument.id).name;
+  return {
+    bindingKind: declarationKind,
+    ...(typeof functionName === "string" ? { functionName } : {}),
+    ...(compareArgument === undefined
+      ? {}
+      : { compareExpression: unwrapOxcParentheses(compareArgument) }),
+  };
 }
 
 export function unwrapOxcComponentFunctionLikeInitializer(
@@ -375,7 +430,10 @@ export function readOxcListMapComponent(
 ): { name: string; initializer: Record<string, unknown> } | undefined {
   const object = readObject(statement);
 
-  if (object.type !== "FunctionDeclaration" || !isOxcListMapReturnExpression(readObject(object.body))) {
+  if (
+    object.type !== "FunctionDeclaration" ||
+    !isOxcListMapReturnExpression(readObject(object.body))
+  ) {
     return undefined;
   }
 
@@ -473,8 +531,7 @@ function hasNestedJsxReturn(statement: Record<string, unknown>): boolean {
       readArray(readObject(switchCase).consequent).some((child) => {
         const object = readObject(child);
         return (
-          object.type === "ReturnStatement" &&
-          isOxcJsxReturnExpression(readObject(object.argument))
+          object.type === "ReturnStatement" && isOxcJsxReturnExpression(readObject(object.argument))
         );
       }),
     );
@@ -542,14 +599,8 @@ function hasNestedLocalJsxHelperCallReturn(
 
   if (statement.type === "IfStatement") {
     return (
-      hasLocalJsxHelperCallReturn(
-        { body: [statement.consequent] },
-        localJsxReturnFunctionNames,
-      ) ||
-      hasLocalJsxHelperCallReturn(
-        { body: [statement.alternate] },
-        localJsxReturnFunctionNames,
-      )
+      hasLocalJsxHelperCallReturn({ body: [statement.consequent] }, localJsxReturnFunctionNames) ||
+      hasLocalJsxHelperCallReturn({ body: [statement.alternate] }, localJsxReturnFunctionNames)
     );
   }
 
@@ -589,8 +640,7 @@ function collectReturnArguments(statement: Record<string, unknown>): Record<stri
 
 function isNullReturnArgument(argument: Record<string, unknown>): boolean {
   return (
-    argument.type === "NullLiteral" ||
-    (argument.type === "Literal" && argument.value === null)
+    argument.type === "NullLiteral" || (argument.type === "Literal" && argument.value === null)
   );
 }
 
@@ -633,10 +683,7 @@ function isOxcJsxReturnExpression(expression: Record<string, unknown>): boolean 
   }
 
   if (unwrapped.type === "LogicalExpression") {
-    return (
-      unwrapped.operator === "&&" &&
-      isOxcJsxReturnBranch(readObject(unwrapped.right))
-    );
+    return unwrapped.operator === "&&" && isOxcJsxReturnBranch(readObject(unwrapped.right));
   }
 
   if (unwrapped.type === "ConditionalExpression") {
