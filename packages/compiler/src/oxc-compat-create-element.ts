@@ -1,6 +1,10 @@
 import { isEventLikePropName } from "@reckona/mreact-shared";
 import type { AttributeIr, JsxNodeIr } from "./ir.js";
 import { formatStatement } from "./oxc-bindings.js";
+import {
+  findOxcKeyCodeInChildren,
+  readOxcReturnExpressionFromStatement,
+} from "./oxc-expression-utils.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
 // Lowers statically analyzable react-compat createElement() call trees into
@@ -112,11 +116,7 @@ const COMPAT_HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   useMap: "usemap",
 };
 
-const COMPAT_BOOLEANISH_STRING_ATTRIBUTES = new Set([
-  "contenteditable",
-  "draggable",
-  "spellcheck",
-]);
+const COMPAT_BOOLEANISH_STRING_ATTRIBUTES = new Set(["contenteditable", "draggable", "spellcheck"]);
 
 // URL-bearing attributes always emit through the dynamic path so the runtime
 // scheme guard applies; static literal lowering must not bypass it.
@@ -487,7 +487,9 @@ function lowerCreateElementCall(
     return undefined;
   }
 
-  const childArguments = args.slice(2).map((argument) => unwrapOxcParentheses(readObject(argument)));
+  const childArguments = args
+    .slice(2)
+    .map((argument) => unwrapOxcParentheses(readObject(argument)));
   const childSources =
     childArguments.length > 0
       ? childArguments
@@ -534,7 +536,11 @@ function lowerCreateElementChild(
   const literal = readStaticLiteral(child);
 
   if (literal !== undefined) {
-    if (literal.kind === "undefined" || literal.value === null || typeof literal.value === "boolean") {
+    if (
+      literal.kind === "undefined" ||
+      literal.value === null ||
+      typeof literal.value === "boolean"
+    ) {
       return [];
     }
 
@@ -689,6 +695,106 @@ function isProvablyStringExpression(
   return false;
 }
 
+interface LoweredCreateElementListRenderer {
+  children: JsxNodeIr[];
+  bodyStatements: string[];
+}
+
+function lowerCreateElementListRenderer(
+  code: string,
+  body: Record<string, unknown>,
+  scope: CompatCreateElementScope,
+): LoweredCreateElementListRenderer | undefined {
+  if (body.type !== "BlockStatement") {
+    const rendered = lowerCreateElementCall(code, body, scope);
+    return rendered === undefined || rendered.kind !== "element"
+      ? undefined
+      : { children: [rendered], bodyStatements: [] };
+  }
+
+  const statements = readArray(body.body);
+  const ifStatementIndex = statements.findIndex(
+    (statement) => readObject(statement).type === "IfStatement",
+  );
+
+  if (ifStatementIndex >= 0) {
+    return lowerCreateElementListIfRenderer(code, statements, ifStatementIndex, scope);
+  }
+
+  const returnStatementIndex = statements.findIndex(
+    (statement) => readObject(statement).type === "ReturnStatement",
+  );
+
+  if (returnStatementIndex < 0 || returnStatementIndex !== statements.length - 1) {
+    return undefined;
+  }
+
+  const bodyPrefixStatements = statements.slice(0, returnStatementIndex);
+  if (bodyPrefixStatements.some((statement) => !isSafeCreateElementListBodyStatement(statement))) {
+    return undefined;
+  }
+
+  const rendered = lowerCreateElementCall(
+    code,
+    unwrapOxcParentheses(readObject(readObject(statements[returnStatementIndex]).argument)),
+    scope,
+  );
+  return rendered === undefined || rendered.kind !== "element"
+    ? undefined
+    : {
+        children: [rendered],
+        bodyStatements: bodyPrefixStatements.map((statement) => formatStatement(code, statement)),
+      };
+}
+
+function lowerCreateElementListIfRenderer(
+  code: string,
+  statements: readonly unknown[],
+  ifStatementIndex: number,
+  scope: CompatCreateElementScope,
+): LoweredCreateElementListRenderer | undefined {
+  const ifStatement = readObject(statements[ifStatementIndex]);
+  const whenTrueExpression = readOxcReturnExpressionFromStatement(ifStatement.consequent);
+  const alternateExpression = readOxcReturnExpressionFromStatement(ifStatement.alternate);
+  const fallthroughExpression = readOxcReturnExpressionFromStatement(
+    statements[ifStatementIndex + 1],
+  );
+  const whenFalseExpression = alternateExpression ?? fallthroughExpression;
+  const lastConsumedStatementIndex =
+    alternateExpression === undefined ? ifStatementIndex + 1 : ifStatementIndex;
+
+  if (
+    whenTrueExpression === undefined ||
+    whenFalseExpression === undefined ||
+    lastConsumedStatementIndex !== statements.length - 1
+  ) {
+    return undefined;
+  }
+
+  const bodyPrefixStatements = statements.slice(0, ifStatementIndex);
+  if (bodyPrefixStatements.some((statement) => !isSafeCreateElementListBodyStatement(statement))) {
+    return undefined;
+  }
+
+  const whenTrue = lowerCreateElementDynamicBranch(code, whenTrueExpression, scope);
+  const whenFalse = lowerCreateElementDynamicBranch(code, whenFalseExpression, scope);
+  if (whenTrue === undefined || whenFalse === undefined) {
+    return undefined;
+  }
+
+  return {
+    bodyStatements: bodyPrefixStatements.map((statement) => formatStatement(code, statement)),
+    children: [
+      {
+        kind: "conditional",
+        conditionCode: readSource(code, readObject(ifStatement.test)),
+        whenTrue,
+        whenFalse,
+      },
+    ],
+  };
+}
+
 function lowerCreateElementListCall(
   code: string,
   expression: Record<string, unknown>,
@@ -744,40 +850,17 @@ function lowerCreateElementListCall(
     localFunctionLikes: scope.localFunctionLikes,
     inlinedLocalFunctions: scope.inlinedLocalFunctions,
   };
-  const body = unwrapOxcParentheses(readObject(renderer.body));
-  let bodyStatements: string[] = [];
-  let renderExpression = body;
+  const rendererBody = lowerCreateElementListRenderer(
+    code,
+    unwrapOxcParentheses(readObject(renderer.body)),
+    rendererScope,
+  );
 
-  if (body.type === "BlockStatement") {
-    const statements = readArray(body.body);
-    const returnStatementIndex = statements.findIndex(
-      (statement) => readObject(statement).type === "ReturnStatement",
-    );
-
-    if (returnStatementIndex < 0 || returnStatementIndex !== statements.length - 1) {
-      return undefined;
-    }
-
-    if (
-      statements
-        .slice(0, returnStatementIndex)
-        .some((statement) => !isSafeCreateElementListBodyStatement(statement))
-    ) {
-      return undefined;
-    }
-
-    const returnStatement = readObject(statements[returnStatementIndex]);
-    renderExpression = unwrapOxcParentheses(readObject(returnStatement.argument));
-    bodyStatements = statements
-      .slice(0, returnStatementIndex)
-      .map((statement) => formatStatement(code, statement));
-  }
-
-  const rendered = lowerCreateElementCall(code, renderExpression, rendererScope);
-
-  if (rendered === undefined || rendered.kind !== "element") {
+  if (rendererBody === undefined) {
     return undefined;
   }
+
+  const keyCode = findOxcKeyCodeInChildren(rendererBody.children);
 
   return {
     kind: "list",
@@ -785,9 +868,11 @@ function lowerCreateElementListCall(
     itemName,
     ...(indexName === undefined ? {} : { indexName }),
     ...(arrayName === undefined ? {} : { arrayName }),
-    ...(rendered.keyCode === undefined ? {} : { keyCode: rendered.keyCode }),
-    ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
-    children: [rendered],
+    ...(keyCode === undefined ? {} : { keyCode }),
+    ...(rendererBody.bodyStatements.length === 0
+      ? {}
+      : { bodyStatements: rendererBody.bodyStatements }),
+    children: rendererBody.children,
   };
 }
 

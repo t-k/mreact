@@ -123,8 +123,26 @@ export function App() {
     expect(output.code).not.toContain("createElement(");
 
     const cells = [
-      { row: 1, col: 2, kind: "a", title: 'He said "hi"', label: "L&L", bg: "red", fg: "blue", text: "Item <0>" },
-      { row: 3, col: 4, kind: "b", title: "plain", label: "aria", bg: "green", fg: "black", text: "Item & 1" },
+      {
+        row: 1,
+        col: 2,
+        kind: "a",
+        title: 'He said "hi"',
+        label: "L&L",
+        bg: "red",
+        fg: "blue",
+        text: "Item <0>",
+      },
+      {
+        row: 3,
+        col: 4,
+        kind: "b",
+        title: "plain",
+        label: "aria",
+        bg: "green",
+        fg: "black",
+        text: "Item & 1",
+      },
     ];
     const interpreted = renderToString(() =>
       createElement(
@@ -372,9 +390,12 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("createElement(");
-    expect(output.code).toContain("const label = String(i) + \":\" + row.label;");
+    expect(output.code).toContain('const label = String(i) + ":" + row.label;');
 
-    const rows = [{ id: "a", label: "Ada" }, { id: "b", label: "Babbage" }];
+    const rows = [
+      { id: "a", label: "Ada" },
+      { id: "b", label: "Babbage" },
+    ];
     const interpreted = renderToString(() =>
       createElement(
         "ul",
@@ -382,6 +403,46 @@ export function App() {
         rows.map((row, i) => {
           const label = String(i) + ":" + row.label;
           return createElement("li", { key: row.id, "data-id": row.id }, label);
+        }),
+      ),
+    );
+    expect(runCompiledWithCompatHelpers(output.code)).toBe(interpreted);
+  });
+
+  test("compiles conditional-return createElement map renderers", () => {
+    const source = `import { createElement } from "@reckona/mreact-compat";
+const rows = [
+  { id: "header", kind: "header", label: "Header" },
+  { id: "entry", kind: "entry", label: "Entry" },
+];
+export function App() {
+  return createElement("main", null, rows.map((row) => {
+    if (row.kind === "header") {
+      return createElement("h2", { key: row.id, "data-item": row.id }, row.label);
+    }
+    return createElement("div", { key: row.id, "data-item": row.id }, row.label);
+  }));
+}`;
+    const output = compile(source);
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("rows.map((row)");
+    expect(output.code).not.toContain('createElement("h2"');
+    expect(output.code).toContain('if (row.kind === "header")');
+
+    const rows = [
+      { id: "header", kind: "header", label: "Header" },
+      { id: "entry", kind: "entry", label: "Entry" },
+    ];
+    const interpreted = renderToString(() =>
+      createElement(
+        "main",
+        null,
+        rows.map((row) => {
+          if (row.kind === "header") {
+            return createElement("h2", { key: row.id, "data-item": row.id }, row.label);
+          }
+          return createElement("div", { key: row.id, "data-item": row.id }, row.label);
         }),
       ),
     );
@@ -559,5 +620,4 @@ export default function Page() {
       "<main><span>x</span></main>",
     );
   });
-
 });

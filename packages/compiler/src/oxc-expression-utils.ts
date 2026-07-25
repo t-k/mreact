@@ -38,5 +38,11 @@ export function findOxcKeyCodeInChildren(children: readonly JsxNodeIr[]): string
     return child.keyCode;
   }
 
+  if (child?.kind === "conditional") {
+    const whenTrueKey = findOxcKeyCodeInChildren(child.whenTrue);
+    const whenFalseKey = findOxcKeyCodeInChildren(child.whenFalse);
+    return whenTrueKey !== undefined && whenTrueKey === whenFalseKey ? whenTrueKey : undefined;
+  }
+
   return undefined;
 }

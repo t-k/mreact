@@ -1170,6 +1170,47 @@ export default function Page() {
       ]),
     ).toBe("row.id");
     expect(findOxcKeyCodeInChildren([{ kind: "text", value: "Ada" }])).toBeUndefined();
+
+    const keyedBranch = (keyCode?: string) => [
+      {
+        kind: "element" as const,
+        tagName: "li",
+        ...(keyCode === undefined ? {} : { keyCode }),
+        attributes: [],
+        children: [],
+      },
+    ];
+
+    expect(
+      findOxcKeyCodeInChildren([
+        {
+          kind: "conditional",
+          conditionCode: "row.header",
+          whenTrue: keyedBranch("row.id"),
+          whenFalse: keyedBranch("row.id"),
+        },
+      ]),
+    ).toBe("row.id");
+    expect(
+      findOxcKeyCodeInChildren([
+        {
+          kind: "conditional",
+          conditionCode: "row.header",
+          whenTrue: keyedBranch("row.id"),
+          whenFalse: keyedBranch("row.fallbackId"),
+        },
+      ]),
+    ).toBeUndefined();
+    expect(
+      findOxcKeyCodeInChildren([
+        {
+          kind: "conditional",
+          conditionCode: "row.header",
+          whenTrue: keyedBranch("row.id"),
+          whenFalse: keyedBranch(),
+        },
+      ]),
+    ).toBeUndefined();
   });
 
   test("lowers JSX variable and push body statements through callbacks", () => {
