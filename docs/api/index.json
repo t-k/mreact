@@ -76270,9 +76270,9 @@
 									"sources": [
 										{
 											"fileName": "oxc.ts",
-											"line": 140,
+											"line": 144,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L140"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L144"
 										}
 									],
 									"type": {
@@ -76289,9 +76289,9 @@
 									"sources": [
 										{
 											"fileName": "oxc.ts",
-											"line": 141,
+											"line": 145,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L141"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L145"
 										}
 									],
 									"type": {
@@ -76312,9 +76312,9 @@
 													"sources": [
 														{
 															"fileName": "oxc.ts",
-															"line": 142,
+															"line": 146,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L142"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L146"
 														}
 													],
 													"type": {
@@ -76334,9 +76334,9 @@
 													"sources": [
 														{
 															"fileName": "oxc.ts",
-															"line": 143,
+															"line": 147,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L143"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L147"
 														}
 													],
 													"type": {
@@ -76358,9 +76358,9 @@
 													"sources": [
 														{
 															"fileName": "oxc.ts",
-															"line": 144,
+															"line": 148,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L144"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L148"
 														}
 													],
 													"type": {
@@ -76379,9 +76379,9 @@
 													"sources": [
 														{
 															"fileName": "oxc.ts",
-															"line": 146,
+															"line": 150,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L146"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L150"
 														}
 													],
 													"type": {
@@ -76398,9 +76398,9 @@
 													"sources": [
 														{
 															"fileName": "oxc.ts",
-															"line": 145,
+															"line": 149,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L145"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L149"
 														}
 													],
 													"type": {
@@ -76437,9 +76437,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 139,
+									"line": 143,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L139"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L143"
 								}
 							]
 						},
@@ -76568,9 +76568,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 238,
+									"line": 242,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L238"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L242"
 								}
 							],
 							"signatures": [
@@ -76591,9 +76591,9 @@
 									"sources": [
 										{
 											"fileName": "oxc.ts",
-											"line": 238,
+											"line": 242,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L238"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L242"
 										}
 									],
 									"parameters": [
@@ -76667,9 +76667,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 198,
+									"line": 202,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L198"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L202"
 								}
 							],
 							"signatures": [
@@ -76690,9 +76690,9 @@
 									"sources": [
 										{
 											"fileName": "oxc.ts",
-											"line": 198,
+											"line": 202,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L198"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L202"
 										}
 									],
 									"parameters": [
@@ -76728,9 +76728,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 230,
+									"line": 234,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L230"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L234"
 								}
 							],
 							"signatures": [
@@ -76751,9 +76751,9 @@
 									"sources": [
 										{
 											"fileName": "oxc.ts",
-											"line": 230,
+											"line": 234,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L230"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L234"
 										}
 									],
 									"parameters": [
@@ -76789,9 +76789,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 102,
+									"line": 106,
 									"character": 14,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L102"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L106"
 								}
 							],
 							"target": 8799
@@ -76805,9 +76805,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 102,
+									"line": 106,
 									"character": 32,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L102"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L106"
 								}
 							],
 							"target": 8804
@@ -76821,9 +76821,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 105,
+									"line": 109,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L105"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L109"
 								}
 							],
 							"target": 8808
@@ -76837,9 +76837,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 106,
+									"line": 110,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L106"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L110"
 								}
 							],
 							"target": 8956
@@ -76853,9 +76853,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 103,
+									"line": 107,
 									"character": 14,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L103"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L107"
 								}
 							],
 							"target": 8839
@@ -76869,9 +76869,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 132,
+									"line": 136,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L132"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L136"
 								}
 							],
 							"target": 8752
@@ -76885,9 +76885,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 108,
+									"line": 112,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L108"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L112"
 								}
 							],
 							"target": 8844
@@ -76901,9 +76901,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 110,
+									"line": 114,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L110"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L114"
 								}
 							],
 							"target": 8957
@@ -76917,9 +76917,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 111,
+									"line": 115,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L111"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L115"
 								}
 							],
 							"target": 8855
@@ -76933,9 +76933,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 114,
+									"line": 118,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L114"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L118"
 								}
 							],
 							"target": 8865
@@ -76949,9 +76949,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 133,
+									"line": 137,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L133"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L137"
 								}
 							],
 							"target": 8754
@@ -76965,9 +76965,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 115,
+									"line": 119,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L115"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L119"
 								}
 							],
 							"target": 8871
@@ -76981,9 +76981,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 116,
+									"line": 120,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L116"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L120"
 								}
 							],
 							"target": 8876
@@ -76997,9 +76997,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 117,
+									"line": 121,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L117"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L121"
 								}
 							],
 							"target": 8881
@@ -77013,9 +77013,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 118,
+									"line": 122,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L118"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L122"
 								}
 							],
 							"target": 8886
@@ -77029,9 +77029,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 119,
+									"line": 123,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L119"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L123"
 								}
 							],
 							"target": 8900
@@ -77045,9 +77045,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 120,
+									"line": 124,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L120"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L124"
 								}
 							],
 							"target": 8906
@@ -77061,9 +77061,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 121,
+									"line": 125,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L121"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L125"
 								}
 							],
 							"target": 8958
@@ -77077,9 +77077,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 122,
+									"line": 126,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L122"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L126"
 								}
 							],
 							"target": 8910
@@ -77093,9 +77093,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 123,
+									"line": 127,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L123"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L127"
 								}
 							],
 							"target": 8919
@@ -77109,9 +77109,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 134,
+									"line": 138,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L134"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L138"
 								}
 							],
 							"target": 8759
@@ -77125,9 +77125,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 135,
+									"line": 139,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L135"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L139"
 								}
 							],
 							"target": 8760
@@ -77141,9 +77141,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 125,
+									"line": 129,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L125"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L129"
 								}
 							],
 							"target": 8924
@@ -77157,9 +77157,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 126,
+									"line": 130,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L126"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L130"
 								}
 							],
 							"target": 8927
@@ -77173,9 +77173,9 @@
 							"sources": [
 								{
 									"fileName": "oxc.ts",
-									"line": 127,
+									"line": 131,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L127"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/compiler/src/oxc.ts#L131"
 								}
 							],
 							"target": 8947
@@ -200658,7 +200658,7 @@
 		}
 	],
 	"packageName": "mreact",
-	"packageVersion": "0.0.197",
+	"packageVersion": "0.0.198",
 	"readme": [
 		{
 			"kind": "text",

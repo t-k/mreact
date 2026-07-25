@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.0.198 - 2026-07-25
+
+### Fixed
+
+- Fixed React-compatible SSR hydration for keyed list callbacks with conditional returns so server-rendered contents, hook state, and keyed identity remain stable through hydration and later reorders.
+- Fixed compiled inline `memo()` wrappers and custom comparator semantics, including lexical evaluation, top-level `await`, TypeScript annotations, sequence expressions, and JSX inside comparators.
+
 ## 0.0.197 - 2026-07-24
 
 ### Added
