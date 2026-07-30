@@ -19,6 +19,8 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("timeout-minutes: 180");
     expect(workflow).toContain("NODE_OPTIONS: --max-old-space-size=6144");
     expect(workflow).toContain("playwright install --with-deps chromium");
+    expect(workflow.match(/- name: Resolve hosted Chrome/gu)).toHaveLength(2);
+    expect(workflow.match(/echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=\$chrome_binary" >> "\$GITHUB_ENV"/gu)).toHaveLength(2);
     expect(workflow.match(/corepack prepare pnpm@10\.19\.0 --activate/gu)).toHaveLength(2);
     expect(workflow).toContain("benchmarks/results");
     expect(workflow).toContain("MREACT_BENCHMARK_RESULTS_DIR");

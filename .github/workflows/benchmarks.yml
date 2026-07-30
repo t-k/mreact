@@ -91,6 +91,14 @@ jobs:
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' || inputs.suite == 'js-framework' || inputs.suite == 'router' }}
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Resolve hosted Chrome
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'js-framework' }}
+        shell: bash
+        run: |
+          chrome_binary="$(command -v google-chrome)"
+          test -x "$chrome_binary"
+          echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$chrome_binary" >> "$GITHUB_ENV"
+
       - name: Build Linux native addon
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
         run: pnpm --dir packages/router-native build
