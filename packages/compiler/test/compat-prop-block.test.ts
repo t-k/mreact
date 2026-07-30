@@ -1253,4 +1253,94 @@ describe("react-compat prop reactive DOM block lowering", () => {
     }
     },
   );
+
+  test("keeps root keyed lists on the general path when another prop reads the row", async () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        function reduce(state, action) {
+          return action.type === "select" ? { ...state, selected: action.id } : state;
+        }
+
+        export function Row(props) {
+          return (
+            <tr className={props.selected ? "danger" : ""}>
+              <td>{props.label}</td>
+            </tr>
+          );
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) =>
+            previous.row === next.row &&
+            previous.label === next.label &&
+            previous.selected === next.selected,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer(reduce, {
+            rows: [{ id: 1, label: "one" }, { id: 2, label: "two" }],
+            selected: null,
+          });
+          globalThis.__derivedRowPropDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo
+              key={row.id}
+              row={row}
+              label={row.label}
+              selected={state.selected === row.id}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+
+    const previousDispatch = (
+      globalThis as unknown as {
+        __derivedRowPropDispatch?: (action: { type: string; id: number }) => void;
+      }
+    ).__derivedRowPropDispatch;
+
+    try {
+      delete (
+        globalThis as unknown as {
+          __derivedRowPropDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__derivedRowPropDispatch;
+      const container = await runCompatComponent(output.code, "Shell");
+      const dispatch = (
+        globalThis as unknown as {
+          __derivedRowPropDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__derivedRowPropDispatch;
+
+      expect(Array.from(container.querySelectorAll("td"), (cell) => cell.textContent)).toEqual([
+        "one",
+        "two",
+      ]);
+      dispatch?.({ type: "select", id: 2 });
+      expect(Array.from(container.querySelectorAll("tr"), (row) => row.className)).toEqual([
+        "",
+        "danger",
+      ]);
+    } finally {
+      (
+        globalThis as unknown as {
+          __derivedRowPropDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__derivedRowPropDispatch = previousDispatch;
+    }
+  });
 });

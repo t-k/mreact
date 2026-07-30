@@ -1733,6 +1733,23 @@ function collectRootListSelectedClass(
     return undefined;
   }
 
+  const listParameterNames = [itemName, root.indexName, root.arrayName].filter(
+    (name): name is string => name !== undefined,
+  );
+  if (
+    renderComponentNode.props.some((prop) => {
+      if (prop === itemProp || prop === selectedProp) {
+        return false;
+      }
+      return (
+        prop.kind !== "prop" ||
+        listParameterNames.some((name) => containsIdentifier(prop.code, name))
+      );
+    })
+  ) {
+    return undefined;
+  }
+
   const equality = splitStrictEquality(stripOuterParentheses(selectedProp.code.trim()));
   if (equality === undefined) {
     return undefined;
