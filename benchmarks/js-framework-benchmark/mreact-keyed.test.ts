@@ -243,6 +243,13 @@ describe("js-framework-benchmark Octane keyed fixture", () => {
     expect(main).not.toContain("requestAnimationFrame");
     expect(main).not.toContain("classList");
   });
+
+  test("replaces Node environment checks in the production browser bundle", async () => {
+    const config = await readFile(join(octaneFixtureRoot, "vite.config.ts"), "utf8");
+
+    expect(config).toContain('"process.env.NODE_ENV"');
+    expect(config).toContain('"production"');
+  });
 });
 
 describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
