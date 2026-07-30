@@ -87,7 +87,7 @@ function removeRow(id: number): void {
   rows.set(rows.get().filter((row) => row.id !== id));
 }
 
-function App(): HTMLDivElement {
+export function App(): HTMLDivElement {
   return (
     <div id="main">
       <div class="container">
@@ -123,11 +123,3 @@ function App(): HTMLDivElement {
     </div>
   );
 }
-
-const mount = document.getElementById("main");
-
-if (mount === null) {
-  throw new Error("Missing #main");
-}
-
-mount.replaceWith(App());
