@@ -239,7 +239,7 @@ describe("compiler client runtime dynamic output", () => {
     expect(output.code).toContain("__mreactAwaitData");
   });
 
-  test("imports bindList / bindText helpers required by await renderer body", () => {
+  test("imports keyed-list / bindText helpers required by await renderer body", () => {
     const output = transform({
       code: `export function App() {
         const items = Promise.resolve(["a", "b"]);
@@ -255,10 +255,12 @@ describe("compiler client runtime dynamic output", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    // bindList for the .map inside the await renderer and bindText for the
-    // {v} text node must both land in the runtime import so the generated
+    // The specialized keyed helper for the .map inside the await renderer and
+    // bindText for the {v} text node must both be imported so the generated
     // hydration code is callable.
-    expect(output.code).toMatch(/import \{[^}]*\bbindList\b/);
+    expect(output.code).toMatch(
+      /import \{[^}]*\bbindCompilerKeyedSingleNodeList\b[^}]*\} from "@reckona\/mreact-reactive-dom\/internal"/,
+    );
     expect(output.code).toMatch(/import \{[^}]*\bbindText\b/);
   });
 });
