@@ -24,6 +24,7 @@ export type { BindTextBatchOptions, BindTextOptions } from "./bind-text.js";
 // prop bindings from a single guarded effect (one subscriber, one re-run, one
 // dispose) instead of one bindText/bindProp effect per binding.
 export { effect } from "@reckona/mreact-reactive-core";
+export { selector } from "@reckona/mreact-reactive-core";
 export { createList } from "./create-list.js";
 export { createRoot } from "./root.js";
 export { createTemplate, createTemplateElement } from "./template.js";

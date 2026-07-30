@@ -1072,7 +1072,13 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("createReactiveDomBlock");
     expect(output.code).toContain("bindList");
+    expect(output.code).toContain("selector as _selector");
     expect(output.code).toContain("REACTIVE_STATE_BINDING_META");
+    expect(output.code).toContain(
+      "_selector(_stateStateBinding, { equals: (value, key) => value.selected === key })",
+    );
+    expect(output.code).toContain("get selected() { return (_selectedSelector(row.id)); }");
+    expect(output.code).toContain("_selectedSelector.dispose();");
     expect(output.code.match(/function App\(/gu)).toHaveLength(1);
 
     const previousRenders = (globalThis as unknown as { __rootListRenders?: number })

@@ -38,7 +38,7 @@ import {
   jsxs,
 } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
-import { cell, computed, effect } from "@reckona/mreact-reactive-core";
+import { cell, computed, effect, selector } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   createStringSink,
@@ -351,7 +351,7 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|effect|insertDynamic)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindDomRef|bindEvent|bindList|bindProp|bindSpreadProps|bindText|createList|createTemplate|effect|insertDynamic|selector)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -432,6 +432,10 @@ function getReactiveCoreRuntimeValue(importedName: string): unknown {
     return effect;
   }
 
+  if (importedName === "selector") {
+    return selector;
+  }
+
   throw new Error(`Unsupported reactive core runtime import: ${importedName}`);
 }
 
@@ -474,6 +478,10 @@ function getClientRuntimeValue(importedName: string): unknown {
 
   if (importedName === "effect") {
     return effect;
+  }
+
+  if (importedName === "selector") {
+    return selector;
   }
 
   throw new Error(`Unsupported client runtime import: ${importedName}`);

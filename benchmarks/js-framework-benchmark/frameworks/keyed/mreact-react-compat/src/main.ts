@@ -1,7 +1,7 @@
 // GENERATED from main.tsx by the mreact compiler in production compat mode.
 // Source of truth is main.tsx; run pnpm bench:js-framework:generate-compat after compiler changes.
 import { jsx as _jsx, REACTIVE_STATE_BINDING_META as _REACTIVE_STATE_BINDING_META, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
-import { bindEvent as _bindEvent, bindList as _bindList, effect as _effect } from "@reckona/mreact-reactive-dom";
+import { bindEvent as _bindEvent, bindList as _bindList, effect as _effect, selector as _selector } from "@reckona/mreact-reactive-dom";
 import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
 const adjectives = [
 	"pretty",
@@ -255,12 +255,13 @@ function App() {
   const _stateStateBinding = _stateStateTuple[_REACTIVE_STATE_BINDING_META];
   dispatchApp = dispatch;
   return _createReactiveDomBlock(() => {
+    const _selectedSelector = _selector(_stateStateBinding, { equals: (value, key) => value.selected === key });
     const _marker = document.createTextNode("");
     let _disposeList;
     const _setupList = () => {
       if (_disposeList !== undefined || _marker.parentNode === null) return;
       _disposeList = _bindList(_marker.parentNode, _marker, () => (_stateStateBinding.get().rows), (row) => (() => {
-  const props = { get row() { return (row); }, get selected() { return (_stateStateBinding.get().selected === row.id); } };
+  const props = { get row() { return (row); }, get selected() { return (_selectedSelector(row.id)); } };
   const _tr = document.createElement("tr");
   const _td = document.createElement("td");
   _td.className = "col-md-1";
@@ -310,6 +311,7 @@ function App() {
     };
     const _dispose = () => {
       if (_disposeList !== undefined) _disposeList();
+      _selectedSelector.dispose();
     };
     return { node: _marker, dispose: _dispose, afterCommit: _setupList };
   });

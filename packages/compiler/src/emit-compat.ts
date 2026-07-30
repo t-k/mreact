@@ -264,6 +264,9 @@ function collectReactiveDomImportSpecifiers(
       if (facts.hasEffectBinding) {
         specifiers.add("effect");
       }
+      if (analysis.rootListReactiveDomBlock.keyedSelectorProps.length > 0) {
+        specifiers.add("selector");
+      }
     }
   }
 
@@ -282,6 +285,7 @@ interface CompatHelperNames {
   bindSpreadProps?: string;
   createList?: string;
   effect?: string;
+  selector?: string;
   createReactiveDomBlock?: string;
   createTemplate?: string;
   insertDynamic?: string;
@@ -315,6 +319,13 @@ interface RootListReactiveDomBlock {
   renderComponentBlock: PropReactiveDomBlock;
   renderComponentNode: Extract<JsxNodeIr, { kind: "component" }>;
   renderRoot: JsxElementIr;
+  keyedSelectorProps: KeyedSelectorProp[];
+}
+
+interface KeyedSelectorProp {
+  propName: string;
+  stateValueCode: string;
+  keyCode: string;
 }
 
 function allocateHelperNames(
@@ -358,6 +369,11 @@ function allocateHelperNames(
 
     if (specifier === "effect") {
       helperNames.effect = allocator("_effect");
+      continue;
+    }
+
+    if (specifier === "selector") {
+      helperNames.selector = allocator("_selector");
       continue;
     }
 
@@ -798,6 +814,7 @@ function createImportGroups(
           | "bindSpreadProps"
           | "createList"
           | "effect"
+          | "selector"
           | "createTemplate"
           | "insertDynamic"
       ] ?? `_${specifier}`;
@@ -1668,7 +1685,63 @@ function getRootListReactiveDomBlock(
     renderComponentBlock,
     renderComponentNode,
     renderRoot: renderComponentBlock.root,
+    keyedSelectorProps: collectRootListKeyedSelectorProps(root, renderComponentNode, stateBinding),
   };
+}
+
+function collectRootListKeyedSelectorProps(
+  root: Extract<JsxNodeIr, { kind: "list" }>,
+  renderComponentNode: Extract<JsxNodeIr, { kind: "component" }>,
+  stateBinding: DirectStateBinding,
+): KeyedSelectorProp[] {
+  const rootKeyCode = stripOuterParentheses(root.keyCode?.trim() ?? "");
+
+  if (rootKeyCode === "") {
+    return [];
+  }
+
+  return renderComponentNode.props.flatMap((prop): KeyedSelectorProp[] => {
+    if (prop.kind !== "prop") {
+      return [];
+    }
+
+    const equality = splitStrictEquality(stripOuterParentheses(prop.code.trim()));
+
+    if (equality === undefined) {
+      return [];
+    }
+
+    const [left, right] = equality;
+    const stateValueCode = readStatePropertyAccess(left, stateBinding.stateName);
+    const reversedStateValueCode = readStatePropertyAccess(right, stateBinding.stateName);
+
+    if (stateValueCode !== undefined && stripOuterParentheses(right) === rootKeyCode) {
+      return [{ propName: prop.name, stateValueCode, keyCode: rootKeyCode }];
+    }
+    if (reversedStateValueCode !== undefined && stripOuterParentheses(left) === rootKeyCode) {
+      return [
+        { propName: prop.name, stateValueCode: reversedStateValueCode, keyCode: rootKeyCode },
+      ];
+    }
+    return [];
+  });
+}
+
+function splitStrictEquality(code: string): [string, string] | undefined {
+  const match = code.match(/^(?<left>[\s\S]+?)\s*===\s*(?<right>[\s\S]+)$/u);
+  const left = match?.groups?.left?.trim();
+  const right = match?.groups?.right?.trim();
+
+  return left === undefined || right === undefined ? undefined : [left, right];
+}
+
+function readStatePropertyAccess(code: string, stateName: string): string | undefined {
+  const normalized = stripOuterParentheses(code.trim());
+  const match = normalized.match(
+    new RegExp(`^${escapeRegex(stateName)}(?<path>(?:\\.[A-Za-z_$][\\w$]*)+)$`, "u"),
+  );
+
+  return match?.groups?.path === undefined ? undefined : `value${match.groups.path}`;
 }
 
 function readCompatRuntimeComponentExpression(
@@ -2204,6 +2277,10 @@ function emitRootListReactiveDomBlockComponent(
   const disposeListName = allocator("_disposeList");
   const setupListName = allocator("_setupList");
   const disposeName = allocator("_dispose");
+  const keyedSelectors = block.keyedSelectorProps.map((selectorProp) => ({
+    ...selectorProp,
+    localName: allocator(`_${selectorProp.propName}Selector`),
+  }));
   const listParameters = emitPropBlockListParameters(block.root);
   const itemsCode = rewriteStateBindingCode(
     block.root.itemsCode,
@@ -2220,12 +2297,22 @@ function emitRootListReactiveDomBlockComponent(
     effectName: helperNames.effect ?? "_effect",
     insertDynamic: helperNames.insertDynamic ?? "_insertDynamic",
   };
-  const renderer = emitRootListRenderer(block, listParameters, allocator, propBlockHelpers);
+  const renderer = emitRootListRenderer(
+    block,
+    listParameters,
+    allocator,
+    propBlockHelpers,
+    keyedSelectors,
+  );
 
   return [
     `${functionKeyword} ${functionName}(${parameters}) {`,
     ...body,
     `  return ${createBlock}(() => {`,
+    ...keyedSelectors.map(
+      (selectorProp) =>
+        `    const ${selectorProp.localName} = ${helperNames.selector ?? "_selector"}(${block.stateBinding.stateBindingName}, { equals: (value, key) => ${selectorProp.stateValueCode} === key });`,
+    ),
     `    const ${markerName} = document.createTextNode("");`,
     `    let ${disposeListName};`,
     `    const ${setupListName} = () => {`,
@@ -2234,6 +2321,7 @@ function emitRootListReactiveDomBlockComponent(
     `    };`,
     `    const ${disposeName} = () => {`,
     `      if (${disposeListName} !== undefined) ${disposeListName}();`,
+    ...keyedSelectors.map((selectorProp) => `      ${selectorProp.localName}.dispose();`),
     `    };`,
     `    return { node: ${markerName}, dispose: ${disposeName}, afterCommit: ${setupListName} };`,
     `  });`,
@@ -2246,8 +2334,14 @@ function emitRootListRenderer(
   parameters: string,
   allocator: (baseName: string) => string,
   helperNames: PropBlockEmitHelpers,
+  keyedSelectors: readonly (KeyedSelectorProp & { localName: string })[],
 ): string {
-  const valueExpression = emitRootListRenderComponentNode(block, allocator, helperNames);
+  const valueExpression = emitRootListRenderComponentNode(
+    block,
+    allocator,
+    helperNames,
+    keyedSelectors,
+  );
   const bodyStatements = block.root.bodyStatements ?? [];
 
   if (bodyStatements.length === 0) {
@@ -2266,6 +2360,7 @@ function emitRootListRenderComponentNode(
   block: RootListReactiveDomBlock,
   allocator: (baseName: string) => string,
   helperNames: PropBlockEmitHelpers,
+  keyedSelectors: readonly (KeyedSelectorProp & { localName: string })[],
 ): string {
   const propsName = block.renderComponentBlock.propsParam;
   const build: string[] = [];
@@ -2290,7 +2385,7 @@ function emitRootListRenderComponentNode(
 
   return [
     "(() => {",
-    `  const ${propsName} = ${emitRootListRenderProps(block)};`,
+    `  const ${propsName} = ${emitRootListRenderProps(block, keyedSelectors)};`,
     ...build.map((line) => `  ${line}`),
     ...bindingLines.map((line) => `  ${line}`),
     `  return ${rootVar};`,
@@ -2298,18 +2393,25 @@ function emitRootListRenderComponentNode(
   ].join("\n");
 }
 
-function emitRootListRenderProps(block: RootListReactiveDomBlock): string {
+function emitRootListRenderProps(
+  block: RootListReactiveDomBlock,
+  keyedSelectors: readonly (KeyedSelectorProp & { localName: string })[],
+): string {
   const entries = block.renderComponentNode.props
     .map((prop) => {
       if (prop.kind === "render-prop" || prop.kind === "spread-prop") {
         return "";
       }
 
-      const code = rewriteStateBindingCode(
-        prop.code,
-        block.stateBinding.stateName,
-        block.stateBinding.stateBindingName,
-      );
+      const keyedSelector = keyedSelectors.find((candidate) => candidate.propName === prop.name);
+      const code =
+        keyedSelector === undefined
+          ? rewriteStateBindingCode(
+              prop.code,
+              block.stateBinding.stateName,
+              block.stateBinding.stateBindingName,
+            )
+          : `${keyedSelector.localName}(${keyedSelector.keyCode})`;
       return `get ${emitPropName(prop.name)}() { return (${code}); }`;
     })
     .filter(Boolean);
