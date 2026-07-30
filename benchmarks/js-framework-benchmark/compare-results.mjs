@@ -13,7 +13,7 @@ export const CPU_CASE_IDS = [
 export const MEMORY_CASE_IDS = ["21_ready-memory", "22_run-memory", "25_run-clear-memory"];
 
 export const SIZE_CASE_ID = "42_size-compressed";
-export const REQUIRED_CASE_IDS = [...CPU_CASE_IDS, ...MEMORY_CASE_IDS, SIZE_CASE_ID];
+export const REQUIRED_CASE_IDS = [...CPU_CASE_IDS, ...MEMORY_CASE_IDS];
 const THRESHOLD_EPSILON = 1e-9;
 
 export function geometricMean(values) {
@@ -41,8 +41,15 @@ export function compareAbbaRuns(runs) {
     }
   }
 
+  const measuredCaseIds = [...REQUIRED_CASE_IDS];
+  const hasCompressedSize = Object.values(runs).every((run) =>
+    isPositiveFinite(run.metrics[SIZE_CASE_ID]),
+  );
+  if (hasCompressedSize) {
+    measuredCaseIds.push(SIZE_CASE_ID);
+  }
   const caseDeltas = Object.fromEntries(
-    REQUIRED_CASE_IDS.map((caseId) => {
+    measuredCaseIds.map((caseId) => {
       const baseline = mean(runs.baselineA.metrics[caseId], runs.baselineB.metrics[caseId]);
       const candidate = mean(runs.candidateA.metrics[caseId], runs.candidateB.metrics[caseId]);
       return [caseId, percentDelta(baseline, candidate)];
@@ -72,9 +79,10 @@ export function compareAbbaRuns(runs) {
       ),
     ),
   );
-  const compressedSizeDeltaKb =
-    mean(runs.candidateA.metrics[SIZE_CASE_ID], runs.candidateB.metrics[SIZE_CASE_ID]) -
-    mean(runs.baselineA.metrics[SIZE_CASE_ID], runs.baselineB.metrics[SIZE_CASE_ID]);
+  const compressedSizeDeltaKb = hasCompressedSize
+    ? mean(runs.candidateA.metrics[SIZE_CASE_ID], runs.candidateB.metrics[SIZE_CASE_ID]) -
+      mean(runs.baselineA.metrics[SIZE_CASE_ID], runs.baselineB.metrics[SIZE_CASE_ID])
+    : undefined;
   const repeatableCpuRegressions = CPU_CASE_IDS.filter(
     (caseId) =>
       exceedsThreshold(
@@ -128,7 +136,11 @@ export function formatComparisonMarkdown(result) {
     lines.push(
       `- Memory geometric mean delta: ${formatPercent(result.memoryGeometricMeanDeltaPercent)}`,
     );
-    lines.push(`- Compressed size delta: ${result.compressedSizeDeltaKb.toFixed(3)} kB`);
+    lines.push(
+      result.compressedSizeDeltaKb === undefined
+        ? "- Compressed size delta: not measured"
+        : `- Compressed size delta: ${result.compressedSizeDeltaKb.toFixed(3)} kB`,
+    );
     lines.push("", "| case | candidate delta |", "| --- | ---: |");
     for (const [caseId, delta] of Object.entries(result.caseDeltas)) {
       lines.push(`| ${caseId} | ${formatPercent(delta)} |`);
@@ -162,6 +174,10 @@ function inconclusive(reason) {
 
 function mean(left, right) {
   return (left + right) / 2;
+}
+
+function isPositiveFinite(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function exceedsThreshold(value, threshold) {

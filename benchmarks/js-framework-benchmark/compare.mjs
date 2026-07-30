@@ -8,6 +8,7 @@ import {
   compareAbbaRuns,
   formatComparisonMarkdown,
   REQUIRED_CASE_IDS,
+  SIZE_CASE_ID,
 } from "./compare-results.mjs";
 
 const argumentsByName = parseArguments(process.argv.slice(2));
@@ -109,7 +110,7 @@ async function readBenchmarkRun(resultDir, sha, upstreamRevision) {
   const metrics = {};
   const frameworkName = selectedFramework.split("/").at(-1);
 
-  for (const caseId of REQUIRED_CASE_IDS) {
+  for (const caseId of [...REQUIRED_CASE_IDS, SIZE_CASE_ID]) {
     const suffix = `_${caseId}.json`;
     const matches = files.filter(
       (file) =>

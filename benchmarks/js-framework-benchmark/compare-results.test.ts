@@ -148,6 +148,25 @@ describe("js-framework-benchmark ABBA comparison", () => {
     expect(result.compressedSizeDeltaKb).toBe(4);
   });
 
+  test("treats compressed size as optional when speed and memory metrics are complete", () => {
+    const runs = {
+      baselineA: run("base"),
+      candidateA: run("candidate", 0.98),
+      candidateB: run("candidate", 0.98),
+      baselineB: run("base"),
+    };
+
+    for (const value of Object.values(runs)) {
+      delete value.metrics["42_size-compressed"];
+    }
+
+    const result = compareAbbaRuns(runs);
+
+    expect(result.decision).toBe("pass");
+    expect(result.compressedSizeDeltaKb).toBeUndefined();
+    expect(result.caseDeltas).not.toHaveProperty("42_size-compressed");
+  });
+
   test("marks missing metrics or provenance mismatches inconclusive", () => {
     const missing = run("candidate");
     delete missing.metrics["07_create10k"];
