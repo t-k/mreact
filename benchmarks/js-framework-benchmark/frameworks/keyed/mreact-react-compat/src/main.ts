@@ -247,7 +247,7 @@ function Row(props) {
 }
 Row.__mreactStaticBlock = true;
 
-function App() {
+export function App() {
   const _stateStateTuple = useReducer(reduceAppState, {
 	rows: [],
 	selected: null
@@ -302,7 +302,7 @@ function App() {
       if (_text$1.data !== _v$1) _text$1.data = _v$1;
   });
   return _tr;
-})(), { key: (row) => (row.id), selectedClass: { className: "danger", project: (value) => value.selected, source: _stateStateBinding } });
+})(), { key: (row) => (row.id), selectedClass: { className: "danger", source: { get: () => _stateStateBinding.get().selected } } });
     };
     const _dispose = () => {
       if (_disposeList !== undefined) _disposeList();

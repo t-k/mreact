@@ -464,9 +464,9 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
-  test("projects a selected key from a tracked readonly source", async () => {
+  test("tracks a selected key through a readonly source wrapper", async () => {
     const state = cell<{ readonly selected: number | null }>({ selected: null });
-    const source = { get: () => state.get() };
+    const source = { get: () => state.get().selected };
     const items = cell([{ id: 1 }, { id: 2 }]);
     const parent = document.createElement("tbody");
     const marker = document.createComment("rows");
@@ -481,7 +481,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
         key: (item) => item.id,
         selectedClass: {
           className: "danger",
-          project: (value) => (value as { readonly selected: number | null }).selected,
           source,
         },
       },

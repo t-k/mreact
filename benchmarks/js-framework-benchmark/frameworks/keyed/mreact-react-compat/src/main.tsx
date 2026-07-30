@@ -239,7 +239,7 @@ const RowMemo = memo(
     previous.selected === next.selected && previous.row === next.row,
 );
 
-function App(): ReactCompatNode {
+export function App(): ReactCompatNode {
   const [state, dispatch] = useReducer(reduceAppState, { rows: [], selected: null });
 
   dispatchApp = dispatch;

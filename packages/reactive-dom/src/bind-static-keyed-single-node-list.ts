@@ -24,7 +24,6 @@ export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode
 export interface BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode extends ChildNode> {
   className: string;
   preserveInitial?: boolean;
-  project?: (value: unknown) => unknown;
   source: ReadonlyCell<unknown>;
   target?: (node: TNode, item: T, index: number, items: readonly T[]) => Element | null;
 }
@@ -1548,12 +1547,10 @@ function createSelectedClassState<T, TNode extends ChildNode>(
   recordsSource: () => Iterable<SingleNodeRecord>,
 ): SelectedClassState {
   const preserveInitial = options.preserveInitial === true;
-  const project = options.project ?? identity;
-  const readSelected = (): unknown => project(options.source.get());
   const state: SelectedClassState = {
     activeRecords: !preserveInitial,
     className: options.className,
-    current: untrack(readSelected),
+    current: untrack(() => options.source.get()),
     dispose: () => {},
     preserveInitial,
     records: new Map(),
@@ -1572,14 +1569,10 @@ function createSelectedClassState<T, TNode extends ChildNode>(
 
   state.dispose =
     subscribeCell(options.source, (next) => {
-      updateSelectedClassValue(state, project(next));
-    }) ?? effect(() => updateSelectedClassValue(state, readSelected()));
+      updateSelectedClassValue(state, next);
+    }) ?? effect(() => updateSelectedClassValue(state, options.source.get()));
 
   return state;
-}
-
-function identity(value: unknown): unknown {
-  return value;
 }
 
 function activateSelectedClassRecords(state: SelectedClassState): void {

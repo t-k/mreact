@@ -328,7 +328,7 @@ interface RootListSelectedClass {
   className: string;
   itemPropName: string;
   selectedPropName: string;
-  stateValueCode: string;
+  statePath: string;
 }
 
 function allocateHelperNames(
@@ -1714,6 +1714,9 @@ function collectRootListSelectedClass(
   if ((root.bodyStatements?.length ?? 0) > 0) {
     return undefined;
   }
+  if (renderComponentBlock.root.attributes.some((attribute) => attribute.kind === "spread-attr")) {
+    return undefined;
+  }
 
   const itemProp = renderComponentNode.props.find(
     (prop) => prop.kind === "prop" && stripOuterParentheses(prop.code.trim()) === itemName,
@@ -1735,14 +1738,14 @@ function collectRootListSelectedClass(
     return undefined;
   }
   const [left, right] = equality;
-  const stateValueCode =
+  const statePath =
     stripOuterParentheses(right) === keyCode
       ? readStateProjection(left, stateBinding.stateName)
       : stripOuterParentheses(left) === keyCode
         ? readStateProjection(right, stateBinding.stateName)
         : undefined;
 
-  if (stateValueCode === undefined) {
+  if (statePath === undefined) {
     return undefined;
   }
 
@@ -1779,7 +1782,7 @@ function collectRootListSelectedClass(
       className,
       itemPropName: itemProp.name,
       selectedPropName: selectedProp.name,
-      stateValueCode,
+      statePath,
     },
   };
 }
@@ -1796,7 +1799,7 @@ function readStateProjection(code: string, stateName: string): string | undefine
   const match = stripOuterParentheses(code.trim()).match(
     new RegExp(`^${escapeRegex(stateName)}(?<path>(?:\\.[A-Za-z_$][\\w$]*)+)$`, "u"),
   );
-  return match?.groups?.path === undefined ? undefined : `value${match.groups.path}`;
+  return match?.groups?.path;
 }
 
 function readCompatRuntimeComponentExpression(
@@ -2503,7 +2506,7 @@ function emitRootListOptions(block: RootListReactiveDomBlock, parameters: string
 
   if (block.selectedClass !== undefined) {
     optionEntries.push(
-      `selectedClass: { className: ${JSON.stringify(block.selectedClass.className)}, project: (value) => ${block.selectedClass.stateValueCode}, source: ${block.stateBinding.stateBindingName} }`,
+      `selectedClass: { className: ${JSON.stringify(block.selectedClass.className)}, source: { get: () => ${block.stateBinding.stateBindingName}.get()${block.selectedClass.statePath} } }`,
     );
   }
 

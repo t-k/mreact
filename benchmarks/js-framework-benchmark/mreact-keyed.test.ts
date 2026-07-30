@@ -65,9 +65,9 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
       "@reckona/mreact-reactive-dom",
     );
-    expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("0.0.169");
-    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
-    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.169");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("0.0.198");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.198");
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.198");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );
@@ -250,8 +250,9 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
       "@reckona/mreact-compat",
     );
-    expect(packageJson.dependencies?.["@reckona/mreact-compat"]).toBe("0.0.169");
-    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
+    expect(packageJson.dependencies?.["@reckona/mreact-compat"]).toBe("0.0.198");
+    expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.198");
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.198");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );
@@ -270,6 +271,16 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(html).toContain('class="table table-hover table-striped test-data"');
     expect(html).toContain('src="dist/main.js"');
     expect(html).not.toContain("/src/main.ts");
+  });
+
+  test("compiles the TSX source with the installed compat compiler", async () => {
+    const config = await readFile(join(reactCompatFixtureRoot, "vite.config.ts"), "utf8");
+    const source = await readFile(join(reactCompatFixtureRoot, "src", "main.tsx"), "utf8");
+
+    expect(config).toContain('entry: "src/main.tsx"');
+    expect(config).toContain('mode: "compat"');
+    expect(config).toContain("transform({");
+    expect(source).toContain("export function App(");
   });
 
   test("uses compiler-lowered reactive DOM blocks for the hot row fixture", async () => {
@@ -309,6 +320,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(generatedBody).toBe(output.code.trim());
     expect(generatedBody).toContain("bindCompilerKeyedSingleNodeList");
     expect(generatedBody).toContain("selectedClass");
+    expect(generatedBody).not.toContain("project:");
     expect(generatedBody).toContain("REACTIVE_STATE_BINDING_META");
   });
 

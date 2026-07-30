@@ -1076,8 +1076,8 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain("createReactiveDomBlock");
     expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
     expect(output.code).toContain("selectedClass: {");
-    expect(output.code).toContain("project: (value) => value.selected");
-    expect(output.code).toContain("source: _stateStateBinding");
+    expect(output.code).toContain("source: { get: () => _stateStateBinding.get().selected }");
+    expect(output.code).not.toContain("project:");
     expect(output.code.match(/const _r = \(props\.selected \? "danger" : ""\);/gu)).toHaveLength(1);
     expect(output.code).toContain("REACTIVE_STATE_BINDING_META");
     expect(output.code.match(/function App\(/gu)).toHaveLength(1);
@@ -1151,4 +1151,106 @@ describe("react-compat prop reactive DOM block lowering", () => {
       ).__rootListDispatch = previousDispatch;
     }
   });
+
+  test.each([
+    {
+      attributes: '{...props.extra} className={props.selected ? "danger" : ""}',
+      expectedInitialClass: "",
+      expectedSelectedClass: "danger",
+      name: "spread before className",
+    },
+    {
+      attributes: 'className={props.selected ? "danger" : ""} {...props.extra}',
+      expectedInitialClass: "",
+      expectedSelectedClass: "danger",
+      name: "spread after className",
+    },
+  ])(
+    "keeps root keyed list class semantics with $name",
+    async ({ attributes, expectedInitialClass, expectedSelectedClass }) => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        function reduce(state, action) {
+          return action.type === "select" ? { ...state, selected: action.id } : state;
+        }
+
+        export function Row(props) {
+          return <tr ${attributes}><td>{props.row.id}</td></tr>;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) =>
+            previous.row === next.row &&
+            previous.selected === next.selected &&
+            previous.extra === next.extra,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer(reduce, {
+            rows: [{ id: 1 }, { id: 2 }],
+            selected: null,
+          });
+          globalThis.__spreadClassDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo
+              key={row.id}
+              row={row}
+              selected={state.selected === row.id}
+              extra={{ className: "safe" }}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+
+    const previousDispatch = (
+      globalThis as unknown as {
+        __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+      }
+    ).__spreadClassDispatch;
+
+    try {
+      delete (
+        globalThis as unknown as {
+          __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__spreadClassDispatch;
+      const container = await runCompatComponent(output.code, "Shell");
+      const dispatch = (
+        globalThis as unknown as {
+          __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__spreadClassDispatch;
+
+      expect(Array.from(container.querySelectorAll("tr"), (row) => row.className)).toEqual([
+        expectedInitialClass,
+        expectedInitialClass,
+      ]);
+      dispatch?.({ type: "select", id: 2 });
+      expect(Array.from(container.querySelectorAll("tr"), (row) => row.className)).toEqual([
+        expectedInitialClass,
+        expectedSelectedClass,
+      ]);
+    } finally {
+      (
+        globalThis as unknown as {
+          __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__spreadClassDispatch = previousDispatch;
+    }
+    },
+  );
 });

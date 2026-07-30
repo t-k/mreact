@@ -14,9 +14,9 @@
     "build-prod": "vite build --mode production"
   },
   "dependencies": {
-    "@reckona/mreact-compiler": "0.0.169",
-    "@reckona/mreact-reactive-core": "0.0.169",
-    "@reckona/mreact-reactive-dom": "0.0.169"
+    "@reckona/mreact-compiler": "0.0.198",
+    "@reckona/mreact-reactive-core": "0.0.198",
+    "@reckona/mreact-reactive-dom": "0.0.198"
   },
   "devDependencies": {
     "typescript": "^7.0.2",
