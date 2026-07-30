@@ -529,7 +529,10 @@ async function prepareCheckout() {
 async function prepareLocalPackages() {
   await run("pnpm", ["build"], repoRoot);
 
-  for (const fixture of Object.keys(localFixtureDependencies)) {
+  for (const fixture of selectedLocalFixtureNames()) {
+    if (!(fixture in localFixtureDependencies)) {
+      continue;
+    }
     const fixtureDir = join(checkoutRoot, "frameworks", "keyed", fixture);
     const packageRoot = localPackageRoot(fixtureDir);
     await rm(packageRoot, { force: true, recursive: true });
@@ -635,7 +638,7 @@ function fileDependency(fromDir, toDir) {
 }
 
 async function copyLocalFixtures() {
-  for (const name of localFixtureNames) {
+  for (const name of selectedLocalFixtureNames()) {
     const target = join(checkoutRoot, "frameworks", "keyed", name);
     await rm(target, { force: true, recursive: true });
     await cp(join(fixtureRoot, name), target, {
@@ -643,6 +646,13 @@ async function copyLocalFixtures() {
       recursive: true,
     });
   }
+}
+
+function selectedLocalFixtureNames() {
+  const requested = new Set(
+    selectedFrameworks.map((framework) => framework.replace(/^keyed\//u, "")),
+  );
+  return localFixtureNames.filter((name) => requested.has(name));
 }
 
 function startServer() {
