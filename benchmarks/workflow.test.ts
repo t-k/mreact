@@ -77,7 +77,8 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("baseline-b");
     expect(workflow).toContain("bench:js-framework:compare");
     expect(workflow).toContain("MREACT_JS_FRAMEWORK_CHROME_BINARY");
-    expect(workflow).toContain('require("@playwright/test").chromium.executablePath()');
+    expect(workflow).toContain("command -v google-chrome");
+    expect(workflow).toContain('test -x "$chrome_binary"');
     expect(workflow).not.toContain("bench:js-framework:compare --\n");
     expect(workflow).toContain("if: ${{ always() }}");
     expect(workflow).toContain("compiler-keyed-comparison-${{ github.run_id }}");
