@@ -455,6 +455,24 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain("build-only rebuild path");
   });
 
+  test("propagates an explicit Chrome binary through every official browser check", async () => {
+    const runner = await readFile(
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
+      "utf8",
+    );
+
+    expect(runner).toContain("MREACT_JS_FRAMEWORK_CHROME_BINARY");
+    expect(runner).toContain("function parseChromeBinaryPath(");
+    expect(runner).toContain("Chrome binary path must be absolute");
+    expect(runner).toContain("Chrome binary does not exist");
+    expect(runner).toContain("function chromeBinaryArgs(");
+    expect(runner).toContain('"--smoketest"');
+    expect(runner).toContain('"isKeyed"');
+    expect(runner).toContain('"checkCSP"');
+    expect(runner).toContain("await runOfficialChecks();");
+    expect(runner.match(/\.\.\.chromeBinaryArgs\(\)/gu)).toHaveLength(4);
+  });
+
   test("reports selected benchmark results with rankings and diff from best", async () => {
     const runner = await readFile(
       join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),

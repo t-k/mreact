@@ -7,3 +7,5 @@ The fixtures intentionally target the standard keyed table cases: create 1,000 r
 The repository-local primitive reactivity microbenchmarks, such as source writes and computed fan-in, remain separate because they are not js-framework-benchmark cases.
 
 Set `MREACT_JS_FRAMEWORKS=keyed/octane` when only the local Octane fixture should be built and measured.
+
+Set `MREACT_JS_FRAMEWORK_CHROME_BINARY` to an absolute browser executable path when the official runner's default Chromium path is unavailable. The configured binary is used by smoke validation, keyedness validation, CSP validation, and the full benchmark run.
