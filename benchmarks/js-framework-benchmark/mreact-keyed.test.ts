@@ -426,6 +426,19 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"');
   });
 
+  test("accepts the official root lockfile peer graph without weakening nested installs", async () => {
+    const runner = await readFile(
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
+      "utf8",
+    );
+
+    expect(runner).toContain(
+      'await run("npm", ["ci", "--ignore-scripts", "--legacy-peer-deps"], checkoutRoot);',
+    );
+    expect(runner).toContain('await run("npm", ["ci"], join(checkoutRoot, "server"));');
+    expect(runner).toContain('await run("npm", ["ci"], join(checkoutRoot, "webdriver-ts"));');
+  });
+
   test("compiles the official webdriver runner after installing dependencies", async () => {
     const runner = await readFile(
       join(

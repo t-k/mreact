@@ -333,7 +333,7 @@ async function resetOfficialRunOutput() {
 }
 
 async function installOfficialDependencies() {
-  await run("npm", ["ci", "--ignore-scripts"], checkoutRoot);
+  await run("npm", ["ci", "--ignore-scripts", "--legacy-peer-deps"], checkoutRoot);
   await run("npm", ["ci"], join(checkoutRoot, "server"));
   await run("npm", ["ci"], join(checkoutRoot, "webdriver-ts"));
   await run("npm", ["run", "compile"], join(checkoutRoot, "webdriver-ts"));
