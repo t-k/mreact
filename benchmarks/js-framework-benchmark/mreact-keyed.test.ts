@@ -490,7 +490,7 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain("return defaultValue;");
   });
 
-  test("uses build-only official rebuild path for scoped benchmark iterations", async () => {
+  test("uses the build-only rebuild path before configurable official browser checks", async () => {
     const runner = await readFile(
       join(
         process.cwd(),
@@ -502,9 +502,34 @@ describe("js-framework-benchmark official runner", () => {
     );
 
     expect(runner).toContain("await rebuildSelectedFrameworks();");
-    expect(runner).toContain("selectedBenchmarks.length === 0");
     expect(runner).toContain('import { rebuildFrameworks } from "./cli/rebuild-build-single.js";');
     expect(runner).toContain("build-only rebuild path");
+    expect(runner).not.toContain(
+      'await run("npm", ["run", "rebuild", "--", "--frameworks", ...selectedFrameworks]',
+    );
+  });
+
+  test("propagates an explicit Chrome binary through every official browser check", async () => {
+    const runner = await readFile(
+      join(
+        process.cwd(),
+        "benchmarks",
+        "js-framework-benchmark",
+        "run-official.mjs",
+      ),
+      "utf8",
+    );
+
+    expect(runner).toContain("MREACT_JS_FRAMEWORK_CHROME_BINARY");
+    expect(runner).toContain("function parseChromeBinaryPath(");
+    expect(runner).toContain("Chrome binary path must be absolute");
+    expect(runner).toContain("Chrome binary does not exist");
+    expect(runner).toContain("function chromeBinaryArgs(");
+    expect(runner).toContain('"--smoketest"');
+    expect(runner).toContain('"isKeyed"');
+    expect(runner).toContain('"checkCSP"');
+    expect(runner).toContain("await runOfficialChecks();");
+    expect(runner.match(/\.\.\.chromeBinaryArgs\(\)/gu)).toHaveLength(4);
   });
 
   test("reports selected benchmark results with rankings and diff from best", async () => {

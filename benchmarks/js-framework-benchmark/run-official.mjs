@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 
@@ -275,6 +275,7 @@ const selectedFrameworks = rotateFrameworks(defaultSelectedFrameworks, framework
 const diffAnchorFramework = process.env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR ?? "react-hooks";
 
 const selectedBenchmarks = parseFrameworks(process.env.MREACT_JS_FRAMEWORK_BENCHMARKS, []);
+const chromeBinaryPath = parseChromeBinaryPath(process.env.MREACT_JS_FRAMEWORK_CHROME_BINARY);
 
 await main();
 
@@ -294,8 +295,24 @@ async function main() {
     server = startServer();
     await waitForServer();
     await rebuildSelectedFrameworks();
+    await runOfficialChecks();
     await resetOfficialRunOutput();
-    await run("npm", ["run", "bench", "--", "--runner", "playwright", "--headless", "true", ...selectedFrameworks, ...benchmarkArgs()], checkoutRoot);
+    await run(
+      "npm",
+      [
+        "run",
+        "bench",
+        "--",
+        "--runner",
+        "playwright",
+        "--headless",
+        "true",
+        ...chromeBinaryArgs(),
+        ...selectedFrameworks,
+        ...benchmarkArgs(),
+      ],
+      checkoutRoot,
+    );
   } finally {
     if (server !== undefined) {
       stopProcessGroup(server);
@@ -308,13 +325,53 @@ async function main() {
 }
 
 async function rebuildSelectedFrameworks() {
-  if (selectedBenchmarks.length === 0) {
-    await run("npm", ["run", "rebuild", "--", "--frameworks", ...selectedFrameworks], checkoutRoot);
+  console.log("Using js-framework-benchmark build-only rebuild path.");
+  await run("node", ["--input-type=module", "-e", buildOnlyRebuildScript()], checkoutRoot);
+}
+
+async function runOfficialChecks() {
+  if (selectedBenchmarks.length !== 0) {
     return;
   }
 
-  console.log("Using js-framework-benchmark build-only rebuild path for scoped benchmark run.");
-  await run("node", ["--input-type=module", "-e", buildOnlyRebuildScript()], checkoutRoot);
+  const webdriverRoot = join(checkoutRoot, "webdriver-ts");
+  await run(
+    "npm",
+    [
+      "run",
+      "bench",
+      "--",
+      "--runner",
+      "playwright",
+      "--headless",
+      "true",
+      "--smoketest",
+      "true",
+      ...chromeBinaryArgs(),
+      ...selectedFrameworks,
+    ],
+    webdriverRoot,
+  );
+  await run(
+    "npm",
+    [
+      "run",
+      "isKeyed",
+      "--",
+      "--runner",
+      "playwright",
+      "--headless",
+      "true",
+      ...chromeBinaryArgs(),
+      ...selectedFrameworks,
+    ],
+    webdriverRoot,
+  );
+  await run(
+    "npm",
+    ["run", "checkCSP", "--", "--headless", "true", ...chromeBinaryArgs(), ...selectedFrameworks],
+    webdriverRoot,
+  );
 }
 
 function buildOnlyRebuildScript() {
@@ -377,6 +434,26 @@ function parseIntegerEnv(value, defaultValue) {
   }
 
   return parsed;
+}
+
+function parseChromeBinaryPath(value) {
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+
+  const path = value.trim();
+  if (!isAbsolute(path)) {
+    throw new Error(`Chrome binary path must be absolute, received ${path}`);
+  }
+  if (!existsSync(path)) {
+    throw new Error(`Chrome binary does not exist: ${path}`);
+  }
+
+  return path;
+}
+
+function chromeBinaryArgs() {
+  return chromeBinaryPath === undefined ? [] : ["--chromeBinary", chromeBinaryPath];
 }
 
 function rotateFrameworks(frameworks, offset) {

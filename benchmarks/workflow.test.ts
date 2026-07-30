@@ -19,6 +19,15 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("timeout-minutes: 180");
     expect(workflow).toContain("NODE_OPTIONS: --max-old-space-size=6144");
     expect(workflow).toContain("playwright install --with-deps chromium");
+    expect(workflow).toContain("Resolve hosted Chrome");
+    expect(workflow).toContain(
+      "Resolve hosted Chrome\n        if: ${{ inputs.suite == 'all' || inputs.suite == 'js-framework' }}",
+    );
+    expect(workflow).toContain('chrome_binary="$(command -v google-chrome)"');
+    expect(workflow).toContain('test -x "$chrome_binary"');
+    expect(workflow).toContain(
+      'echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$chrome_binary" >> "$GITHUB_ENV"',
+    );
     expect(workflow).toContain("benchmarks/results");
     expect(workflow).toContain("MREACT_BENCHMARK_RESULTS_DIR");
     expect(workflow).toContain("js_frameworks:");
