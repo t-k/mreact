@@ -108,8 +108,8 @@ export function App(): HTMLDivElement {
         </div>
         <table class="table table-hover table-striped test-data">
           <tbody>
-            {rows.get().map((row, index, items) => (
-              <tr key={row.id} class={selected.get() === row.id ? "danger" : ""} data-index={index} data-count={items.length}>
+            {rows.get().map((row) => (
+              <tr key={row.id} class={selected.get() === row.id ? "danger" : ""}>
                 <td class="col-md-1">{row.id}</td>
                 <td class="col-md-4"><a onClick={() => selected.set(row.id)}>{row.label}</a></td>
                 <td class="col-md-1"><a onClick={() => removeRow(row.id)}><span class="glyphicon glyphicon-remove" aria-hidden="true" /></a></td>
