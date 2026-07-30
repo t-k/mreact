@@ -103,6 +103,118 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(reads).toBe(readsAfterMount);
     dispose();
   });
+
+  test("preserves keyed row properties across deterministic mixed updates", async () => {
+    type Item = { readonly id: number; readonly label: string };
+
+    let seed = 0x5eed1234;
+    const nextRandom = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed;
+    };
+    const makeItem = (id: number, revision: number): Item => ({
+      id,
+      label: `row-${id}-revision-${revision}`,
+    });
+
+    let revision = 0;
+    const items = cell<readonly Item[]>(
+      Array.from({ length: 6 }, (_, index) => makeItem(index + 1, revision)),
+    );
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    const payloads: string[] = [];
+    const renderCounts = new Map<number, number>();
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        renderCounts.set(context.item.id, (renderCounts.get(context.item.id) ?? 0) + 1);
+        const row = document.createElement("tr");
+        row.dataset.id = String(context.item.id);
+        const text = document.createTextNode("");
+        const button = document.createElement("button");
+        const describeContext = () =>
+          `${context.item.id}:${context.item.label}:${context.index}:${context.items.length}`;
+        bindText(text, describeContext);
+        bindEvent(button, "click", () => payloads.push(describeContext()));
+        row.append(text, button);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+
+    let rowsById = new Map(
+      Array.from(parent.children, (row) => [Number((row as HTMLElement).dataset.id), row]),
+    );
+
+    for (let step = 1; step <= 48; step += 1) {
+      revision += 1;
+      const previousRowsById = rowsById;
+      const next = items.get().map((item) => makeItem(item.id, revision));
+      const operation = nextRandom() % 4;
+
+      if (operation === 0) {
+        next.reverse();
+      } else if (operation === 1 && next.length > 3) {
+        next.splice(nextRandom() % next.length, 1);
+      } else if (operation === 2 && next.length < 10) {
+        const usedIds = new Set(next.map((item) => item.id));
+        const insertedId = Array.from({ length: 12 }, (_, index) => index + 1).find(
+          (id) => !usedIds.has(id),
+        );
+        if (insertedId !== undefined) {
+          next.splice(nextRandom() % (next.length + 1), 0, makeItem(insertedId, revision));
+        }
+      } else {
+        for (let index = next.length - 1; index > 0; index -= 1) {
+          const swapIndex = nextRandom() % (index + 1);
+          [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+        }
+      }
+
+      items.set(next);
+      await flushEffects();
+
+      rowsById = new Map(
+        Array.from(parent.children, (row) => [Number((row as HTMLElement).dataset.id), row]),
+      );
+      expect(Array.from(rowsById.keys())).toEqual(next.map((item) => item.id));
+      expect(parent.children).toHaveLength(next.length);
+
+      for (const [index, item] of next.entries()) {
+        const row = rowsById.get(item.id) as HTMLTableRowElement;
+        const previousRow = previousRowsById.get(item.id);
+        if (previousRow !== undefined) {
+          expect(row).toBe(previousRow);
+        }
+        expect(row.textContent).toBe(`${item.id}:${item.label}:${index}:${next.length}`);
+      }
+
+      for (const [id, previousRow] of previousRowsById) {
+        if (!rowsById.has(id)) {
+          expect(parent.contains(previousRow)).toBe(false);
+        }
+      }
+
+      const clickedIndex = nextRandom() % next.length;
+      const clickedItem = next[clickedIndex];
+      rowsById.get(clickedItem.id)?.querySelector("button")?.click();
+      expect(payloads.at(-1)).toBe(
+        `${clickedItem.id}:${clickedItem.label}:${clickedIndex}:${next.length}`,
+      );
+    }
+
+    for (const count of renderCounts.values()) {
+      expect(count).toBe(1);
+    }
+    dispose();
+  });
+
   test("creates, replaces, swaps, removes, and clears keyed single-node rows", async () => {
     const firstLabel = cell("A");
     const secondLabel = cell("B");
