@@ -1708,7 +1708,12 @@ function collectRootListSelectedClass(
   const itemName = root.itemName;
   const keyCode = stripOuterParentheses(root.keyCode?.trim() ?? "");
 
-  if (itemName === undefined || keyCode === "" || (root.bodyStatements?.length ?? 0) > 0) {
+  if (
+    itemName === undefined ||
+    keyCode === "" ||
+    !isItemPropertyKey(keyCode, itemName) ||
+    (root.bodyStatements?.length ?? 0) > 0
+  ) {
     return undefined;
   }
   if (renderComponentBlock.root.attributes.some((attribute) => attribute.kind === "spread-attr")) {
@@ -1799,6 +1804,12 @@ function collectRootListSelectedClass(
       statePath,
     },
   };
+}
+
+function isItemPropertyKey(code: string, itemName: string): boolean {
+  return new RegExp(`^${escapeRegex(itemName)}(?:\\.[A-Za-z_$][\\w$]*)+$`, "u").test(
+    stripOuterParentheses(code.trim()),
+  );
 }
 
 function splitStrictEquality(code: string): [string, string] | undefined {
