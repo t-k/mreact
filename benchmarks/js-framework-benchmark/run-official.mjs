@@ -18,6 +18,7 @@ const resultDir =
     : resultsRoot;
 const officialResultDir = join(resultDir, "js-framework-benchmark-results");
 const officialTraceDir = join(resultDir, "js-framework-benchmark-traces");
+const runMetadataPath = join(resultDir, "js-framework-benchmark-run.json");
 const useLocalPackages = parseBooleanEnv(process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES, true);
 const localPackageModeHelp =
   "Set MREACT_JS_FRAMEWORK_LOCAL_PACKAGES=0 to benchmark published npm packages.";
@@ -322,6 +323,7 @@ async function main() {
 
   await copyResults();
   await copyTraces();
+  await writeRunMetadata(currentRunMetadata());
   await writeSummary();
 }
 
@@ -678,11 +680,14 @@ async function copyTraces() {
 async function writeSummary() {
   const frameworkRows = await collectResultRows();
   const resultRows = toResultRows(frameworkRows);
+  const runMetadata =
+    (await readRunMetadata()) ?? inferRunMetadata(frameworkRows.map((row) => row.framework));
+  const summaryDiffAnchor = runMetadata.diffAnchorFramework;
   const lines = [
     "# js-framework-benchmark Results",
     "",
     "Official krausest/js-framework-benchmark keyed DOM cases run for the primitive benchmark peers that have matching upstream fixtures.",
-    useLocalPackages
+    runMetadata.useLocalPackages
       ? "The mreact fixtures use local package builds staged from this checkout, so unreleased runtime changes are included."
       : `The mreact fixtures use the published npm package versions from their package.json files. ${localPackageModeHelp}`,
     "",
@@ -692,11 +697,11 @@ async function writeSummary() {
     "| --- | --- |",
     ...frameworkMappings.map((mapping) => `| ${mapping.primitive} | ${mapping.official} |`),
     "",
-    "## Run Order",
+    "## Run Selection",
     "",
-    `Framework order offset: ${frameworkOrderOffset}`,
-    `Framework run order: ${selectedFrameworks.join(", ")}`,
-    `Fixed diff anchor: ${diffAnchorFramework}`,
+    `Framework order offset: ${runMetadata.frameworkOrderOffset ?? "unknown"}`,
+    `${runMetadata.inferred ? "Frameworks inferred from result files" : "Requested framework order"}: ${runMetadata.selectedFrameworks.join(", ")}`,
+    `Fixed diff anchor: ${summaryDiffAnchor}`,
     "",
     "## Unsupported Primitive Adapters",
     "",
@@ -709,20 +714,69 @@ async function writeSummary() {
     "",
     "Lower values are better for all js-framework-benchmark metrics reported here.",
     "",
-    ...formatJsFrameworkRankingSections(resultRows),
+    ...formatJsFrameworkRankingSections(resultRows, summaryDiffAnchor),
     "## Results",
     "",
-    `| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |`,
+    `| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(summaryDiffAnchor)} |`,
     "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ...resultRows.map((row) => {
       const bestRow = rankJsFrameworkRows(resultRows, row.caseName)[0];
-      const anchorRow = findAnchorRow(resultRows, row.caseName);
+      const anchorRow = findAnchorRow(resultRows, row.caseName, summaryDiffAnchor);
       return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${formatDiffVsBest(row, anchorRow)} |`;
     }),
     "",
   ];
 
   await writeFile(join(resultDir, "js-framework-benchmark.md"), lines.join("\n"));
+}
+
+function currentRunMetadata() {
+  return {
+    selectedFrameworks,
+    frameworkOrderOffset,
+    diffAnchorFramework,
+    useLocalPackages,
+  };
+}
+
+async function writeRunMetadata(metadata) {
+  await writeFile(runMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+}
+
+async function readRunMetadata() {
+  if (!existsSync(runMetadataPath)) {
+    return undefined;
+  }
+
+  const metadata = JSON.parse(await readFile(runMetadataPath, "utf8"));
+  if (
+    !Array.isArray(metadata.selectedFrameworks) ||
+    !metadata.selectedFrameworks.every((framework) => typeof framework === "string") ||
+    !Number.isInteger(metadata.frameworkOrderOffset) ||
+    typeof metadata.diffAnchorFramework !== "string" ||
+    typeof metadata.useLocalPackages !== "boolean"
+  ) {
+    throw new Error(`Invalid js-framework-benchmark run metadata: ${runMetadataPath}`);
+  }
+
+  return metadata;
+}
+
+function inferRunMetadata(frameworks) {
+  const inferredAnchor = frameworks.some((framework) =>
+    matchesAnchorFramework(framework, "react-hooks"),
+  )
+    ? "react-hooks"
+    : diffAnchorFramework;
+  return {
+    selectedFrameworks: frameworks,
+    frameworkOrderOffset: undefined,
+    diffAnchorFramework: inferredAnchor,
+    useLocalPackages: frameworks.some(
+      (framework) => framework.includes("mreact") && framework.includes("-local-"),
+    ),
+    inferred: true,
+  };
 }
 
 async function collectResultRows() {
@@ -779,7 +833,7 @@ function toResultRows(frameworkRows) {
   );
 }
 
-function formatJsFrameworkRankingSections(resultRows) {
+function formatJsFrameworkRankingSections(resultRows, anchorFramework) {
   const lines = [];
 
   for (const descriptor of resultMetricDescriptors) {
@@ -791,12 +845,12 @@ function formatJsFrameworkRankingSections(resultRows) {
 
     lines.push(`### ${descriptor.caseName}`, "");
     lines.push(
-      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`,
+      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(anchorFramework)} | unit |`,
     );
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
 
     const bestRow = rankedRows[0];
-    const anchorRow = findAnchorRow(resultRows, descriptor.caseName);
+    const anchorRow = findAnchorRow(resultRows, descriptor.caseName, anchorFramework);
     rankedRows.forEach((row, index) => {
       lines.push(
         `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${formatDiffVsBest(row, anchorRow)} | ${row.unit} |`,
@@ -807,7 +861,7 @@ function formatJsFrameworkRankingSections(resultRows) {
 
   if (lines.length === 0) {
     lines.push(
-      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`,
+      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(anchorFramework)} | unit |`,
     );
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
     lines.push("|  | no completed results |  |  |  |  |  |  |  |");
@@ -831,12 +885,12 @@ function rankJsFrameworkRows(resultRows, caseName) {
     });
 }
 
-function findAnchorRow(resultRows, caseName) {
+function findAnchorRow(resultRows, caseName, anchorFramework) {
   return resultRows.find(
     (row) =>
       row.caseName === caseName &&
       row.status === "completed" &&
-      matchesAnchorFramework(row.framework, diffAnchorFramework),
+      matchesAnchorFramework(row.framework, anchorFramework),
   );
 }
 

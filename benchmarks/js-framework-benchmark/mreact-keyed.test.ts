@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
@@ -39,6 +42,7 @@ const octaneFixtureRoot = join(
 );
 const runnerPath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs");
 const readmePath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "README.md");
+const execFileAsync = promisify(execFile);
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
   afterEach(() => {
@@ -187,7 +191,7 @@ describe("js-framework-benchmark official runner stability", () => {
     expect(source).toContain("MREACT_JS_FRAMEWORK_ORDER_OFFSET");
     expect(source).toContain("new Date().getUTCDate() - 1");
     expect(source).toContain("function rotateFrameworks(");
-    expect(source).toContain("Framework run order:");
+    expect(source).toContain("Requested framework order");
   });
 
   test("reports fixed-anchor deltas alongside diff vs first", async () => {
@@ -195,10 +199,56 @@ describe("js-framework-benchmark official runner stability", () => {
 
     expect(source).toContain("MREACT_JS_FRAMEWORK_DIFF_ANCHOR");
     expect(source).toContain('?? "react-hooks"');
-    expect(source).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)}");
+    expect(source).toContain("diff vs ${escapeMarkdownTableCell(summaryDiffAnchor)}");
     expect(source).toContain("function findAnchorRow(");
     expect(source).toContain("framework.startsWith(`${anchor}-v`)");
     expect(source).toContain("MREACT_JS_FRAMEWORK_SUMMARY_ONLY");
+  });
+
+  test("regenerates a summary from persisted run metadata without the original environment", async () => {
+    const resultDir = await mkdtemp(join(tmpdir(), "mreact-js-framework-summary-"));
+    const rawResultDir = join(resultDir, "js-framework-benchmark-results");
+    const env = { ...process.env };
+    delete env.MREACT_JS_FRAMEWORKS;
+    delete env.MREACT_JS_FRAMEWORK_ORDER_OFFSET;
+    delete env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR;
+    delete env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES;
+
+    try {
+      await mkdir(rawResultDir);
+      await writeFile(
+        join(resultDir, "js-framework-benchmark-run.json"),
+        `${JSON.stringify({
+          selectedFrameworks: ["keyed/octane", "keyed/react-hooks"],
+          frameworkOrderOffset: 0,
+          diffAnchorFramework: "react-hooks",
+          useLocalPackages: false,
+        })}\n`,
+      );
+
+      for (const framework of ["octane-v0.1.19-keyed", "react-hooks-v19.2.8-keyed"]) {
+        await writeFile(
+          join(rawResultDir, `${framework}_01_run1k.json`),
+          `${JSON.stringify({ values: { total: { median: 10 } } })}\n`,
+        );
+      }
+
+      await execFileAsync(process.execPath, [runnerPath], {
+        env: {
+          ...env,
+          MREACT_BENCHMARK_RESULTS_DIR: resultDir,
+          MREACT_JS_FRAMEWORK_SUMMARY_ONLY: "1",
+        },
+      });
+
+      const summary = await readFile(join(resultDir, "js-framework-benchmark.md"), "utf8");
+      expect(summary).toContain("Requested framework order: keyed/octane, keyed/react-hooks");
+      expect(summary).toContain("Fixed diff anchor: react-hooks");
+      expect(summary).toContain("published npm package versions");
+      expect(summary).not.toContain("keyed/marko, keyed/vue");
+    } finally {
+      await rm(resultDir, { force: true, recursive: true });
+    }
   });
 });
 
@@ -492,13 +542,13 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain(
       "Lower values are better for all js-framework-benchmark metrics reported here.",
     );
-    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |");
-    expect(runner).toContain("formatJsFrameworkRankingSections(resultRows)");
+    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(anchorFramework)} | unit |");
+    expect(runner).toContain("formatJsFrameworkRankingSections(resultRows, summaryDiffAnchor)");
     expect(runner).toContain("formatDiffVsBest(row, bestRow)");
     expect(runner).toContain("formatDiffVsBest(row, anchorRow)");
     expect(runner).toContain("readMetricParts(files, framework, descriptor.caseId");
     expect(runner).toContain("## Results");
-    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |");
+    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(summaryDiffAnchor)} |");
   });
 
   test("uses official js-framework-benchmark case labels in summaries", async () => {
