@@ -16,6 +16,14 @@ const fixtureRoot = join(
   "keyed",
   "mreact",
 );
+const compiledFixtureRoot = join(
+  process.cwd(),
+  "benchmarks",
+  "js-framework-benchmark",
+  "frameworks",
+  "keyed",
+  "mreact-compiled",
+);
 const reactCompatFixtureRoot = join(
   process.cwd(),
   "benchmarks",
@@ -181,6 +189,48 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
 
     await click("#clear");
     expect(rows()).toHaveLength(0);
+  });
+});
+
+describe("js-framework-benchmark compiler-generated mreact keyed fixture", () => {
+  test("uses the public compiler on ordinary keyed JSX", async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(compiledFixtureRoot, "package.json"), "utf8"),
+    ) as {
+      dependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+      "js-framework-benchmark"?: Record<string, string>;
+    };
+    const config = await readFile(join(compiledFixtureRoot, "vite.config.ts"), "utf8");
+    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
+
+    expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
+    expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
+      "@reckona/mreact-reactive-dom",
+    );
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.169");
+    expect(config).toContain('target: "client"');
+    expect(config).toContain('mode: "reactive"');
+    expect(config).toContain("transform({");
+    expect(main).toContain("rows.get().map((row, index, items) => (");
+    expect(main).toContain("<tr key={row.id}");
+    expect(main).not.toContain("bindStaticKeyedSingleNodeList");
+    expect(main).not.toContain("bindList");
+  });
+
+  test("keeps the official keyed benchmark DOM contract", async () => {
+    const html = await readFile(join(compiledFixtureRoot, "index.html"), "utf8");
+    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
+
+    expect(html).toContain('id="main"');
+    expect(html).toContain('src="dist/main.js"');
+    for (const id of ["run", "runlots", "add", "update", "clear", "swaprows"]) {
+      expect(main).toContain(`id="${id}"`);
+    }
+    expect(main).toContain('class="table table-hover table-striped test-data"');
+    expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
+    expect(main).toContain('aria-hidden="true"');
+    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
   });
 });
 
@@ -426,9 +476,10 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/mreact-react-compat-vdom"');
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
+    expect(runner).toContain('official: "keyed/mreact-compiled"');
     expect(runner).toContain('official: "keyed/octane"');
     expect(runner).toContain(
-      '["mreact", "mreact-react-compat", "mreact-react-compat-vdom", "octane"]',
+      '["mreact", "mreact-compiled", "mreact-react-compat", "mreact-react-compat-vdom", "octane"]',
     );
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
