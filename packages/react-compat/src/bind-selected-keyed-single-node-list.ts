@@ -86,7 +86,7 @@ export function bindSelectedKeyedSingleNodeList<T, TNode extends ChildNode>(
     }
 
     const availableContexts = new Map(contextsByKey);
-    const nextContexts = new Array<InternalSelectedKeyedRowContext>(currentItems.length);
+    const nextContexts: InternalSelectedKeyedRowContext[] = [];
     const nextContextsByKey = new Map<unknown, InternalSelectedKeyedRowContext>();
 
     for (let index = 0; index < currentItems.length; index += 1) {
@@ -97,7 +97,7 @@ export function bindSelectedKeyedSingleNodeList<T, TNode extends ChildNode>(
 
       availableContexts.delete(key);
       updateSelectedKeyedRowContext(context, item, index, currentItems);
-      nextContexts[index] = context;
+      nextContexts.push(context);
       nextContextsByKey.set(key, context);
     }
 

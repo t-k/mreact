@@ -38,6 +38,7 @@ import {
   jsxs,
 } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
+import { bindSelectedKeyedSingleNodeList } from "@reckona/mreact-compat/internal";
 import { cell, computed, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
@@ -205,6 +206,7 @@ export function compileCompatModule(code: string): CompatComponentExports {
   const runnableCode = stripFunctionExports(stripImports(code));
   const runtimeEntries = [
     ...extractCompatRuntimeEntries(code),
+    ...extractCompatInternalRuntimeEntries(code),
     ...extractClientRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
@@ -214,6 +216,34 @@ export function compileCompatModule(code: string): CompatComponentExports {
     ...runtimeEntries.map((entry) => entry.localName),
     `${runnableCode}\nreturn { ${returnEntries} };`,
   )(...runtimeEntries.map((entry) => entry.value)) as CompatComponentExports;
+}
+
+function extractCompatInternalRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-compat\/internal";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>bindSelectedKeyedSingleNodeList)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported compat internal runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName ?? match.groups.importedName,
+      value: bindSelectedKeyedSingleNodeList,
+    };
+  });
 }
 
 function compileCompatServerModule(code: string): CompatComponentExports {

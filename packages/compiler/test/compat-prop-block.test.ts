@@ -3,6 +3,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
+import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../src/index.js";
 import { runCompatComponent } from "./helpers.js";
 
@@ -1031,6 +1032,9 @@ describe("react-compat prop reactive DOM block lowering", () => {
           if (action.type === "remove") {
             return { ...state, rows: state.rows.filter((row) => row.id !== action.id) };
           }
+          if (action.type === "update") {
+            return { ...state, rows: state.rows.map((row) => row.id === action.id ? { ...row, label: row.label + "!" } : row) };
+          }
           return state;
         }
 
@@ -1045,7 +1049,7 @@ describe("react-compat prop reactive DOM block lowering", () => {
 
         const RowMemo = memo(Row, (previous, next) => previous.row === next.row && previous.selected === next.selected);
 
-        export function App() {
+        function App() {
           globalThis.__rootListRenders = (globalThis.__rootListRenders ?? 0) + 1;
           const [state, dispatch] = useReducer(reduce, { rows: initialRows, selected: null });
           globalThis.__rootListDispatch = dispatch;
@@ -1065,7 +1069,10 @@ describe("react-compat prop reactive DOM block lowering", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("createReactiveDomBlock");
-    expect(output.code).toContain("bindList");
+    expect(output.code).toContain("bindSelectedKeyedSingleNodeList");
+    expect(output.code).toContain("selectedClass: {");
+    expect(output.code).toContain("selected: () => _stateStateBinding.get().selected");
+    expect(output.code.match(/const _r = \(props\.selected \? "danger" : ""\);/gu)).toHaveLength(1);
     expect(output.code).toContain("REACTIVE_STATE_BINDING_META");
 
     const previousRenders = (globalThis as unknown as { __rootListRenders?: number })
@@ -1096,23 +1103,38 @@ describe("react-compat prop reactive DOM block lowering", () => {
         Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
       ).toEqual(["1one", "2two", "3three"]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
+      const secondRow = container.querySelectorAll("tr")[1];
 
       dispatch?.({ type: "select", id: 2 });
+      await flushEffects();
       expect(
         Array.from(container.querySelectorAll("tr")).map((row) => row.className),
       ).toEqual(["", "danger", ""]);
+      expect(container.querySelectorAll("tr")[1]).toBe(secondRow);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
-      dispatch?.({ type: "swap" });
+      dispatch?.({ type: "update", id: 2 });
+      await flushEffects();
       expect(
         Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["2two", "1one", "3three"]);
+      ).toEqual(["1one", "2two!", "3three"]);
+      expect(container.querySelectorAll("tr")[1]).toBe(secondRow);
+
+      dispatch?.({ type: "swap" });
+      await flushEffects();
+      expect(
+        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
+      ).toEqual(["2two!", "1one", "3three"]);
+      expect(container.querySelectorAll("tr")[0]).toBe(secondRow);
+      expect(secondRow?.className).toBe("danger");
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
       dispatch?.({ type: "remove", id: 2 });
+      await flushEffects();
       expect(
         Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
       ).toEqual(["1one", "3three"]);
+      expect(secondRow?.isConnected).toBe(false);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
     } finally {
       (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders =
@@ -1123,5 +1145,192 @@ describe("react-compat prop reactive DOM block lowering", () => {
         }
       ).__rootListDispatch = previousDispatch;
     }
+  });
+
+  test.each([
+    {
+      attributes: '{...props.extra} className={props.selected ? "danger" : ""}',
+      name: "spread before className",
+    },
+    {
+      attributes: 'className={props.selected ? "danger" : ""} {...props.extra}',
+      name: "spread after className",
+    },
+  ])("keeps root keyed list class semantics with $name", async ({ attributes }) => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        function reduce(state, action) {
+          return action.type === "select" ? { ...state, selected: action.id } : state;
+        }
+
+        export function Row(props) {
+          return <tr ${attributes}><td>{props.row.id}</td></tr>;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) =>
+            previous.row === next.row &&
+            previous.selected === next.selected &&
+            previous.extra === next.extra,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer(reduce, {
+            rows: [{ id: 1 }, { id: 2 }],
+            selected: null,
+          });
+          globalThis.__spreadClassDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo
+              key={row.id}
+              row={row}
+              selected={state.selected === row.id}
+              extra={{ className: "safe" }}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
+
+    const previousDispatch = (
+      globalThis as unknown as {
+        __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+      }
+    ).__spreadClassDispatch;
+
+    try {
+      delete (
+        globalThis as unknown as {
+          __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__spreadClassDispatch;
+      const container = await runCompatComponent(output.code, "Shell");
+      const dispatch = (
+        globalThis as unknown as {
+          __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__spreadClassDispatch;
+
+      expect(Array.from(container.querySelectorAll("tr"), (row) => row.className)).toEqual([
+        "",
+        "",
+      ]);
+      dispatch?.({ type: "select", id: 2 });
+      expect(Array.from(container.querySelectorAll("tr"), (row) => row.className)).toEqual([
+        "",
+        "danger",
+      ]);
+    } finally {
+      (
+        globalThis as unknown as {
+          __spreadClassDispatch?: (action: { type: string; id: number }) => void;
+        }
+      ).__spreadClassDispatch = previousDispatch;
+    }
+  });
+
+  test("keeps root keyed lists on the general path when another prop reads the row", () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr className={props.selected ? "danger" : ""}><td>{props.label}</td></tr>;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) =>
+            previous.row === next.row &&
+            previous.label === next.label &&
+            previous.selected === next.selected,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer((current) => current, {
+            rows: [{ id: 1, label: "one" }],
+            selected: null,
+          });
+          globalThis.__derivedRowPropDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo
+              key={row.id}
+              row={row}
+              label={row.label}
+              selected={state.selected === row.id}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
+  });
+
+  test("recognizes dollar-prefixed list parameters in selected-class safety checks", () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr className={props.selected ? "danger" : ""}><td>{props.label}</td></tr>;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) =>
+            previous.row === next.row &&
+            previous.label === next.label &&
+            previous.selected === next.selected,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer((current) => current, {
+            rows: [{ id: 1, label: "one" }],
+            selected: null,
+          });
+          globalThis.__dollarRowDispatch = dispatch;
+          return state.rows.map(($row) => (
+            <RowMemo
+              key={$row.id}
+              row={$row}
+              label={$row.label}
+              selected={state.selected === $row.id}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
   });
 });
