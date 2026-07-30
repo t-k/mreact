@@ -67,6 +67,8 @@ export interface BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode exte
     // (undocumented)
     preserveInitial?: boolean;
     // (undocumented)
+    project?: (value: unknown) => unknown;
+    // (undocumented)
     source: ReadonlyCell<unknown>;
     // (undocumented)
     target?: (node: TNode, item: T, index: number, items: readonly T[]) => Element | null;
