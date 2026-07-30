@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import {
@@ -24,6 +24,7 @@ const runSpecs = [
 ];
 
 try {
+  await mkdir(dirname(outputRoot), { recursive: true });
   await mkdir(outputRoot, { recursive: false });
   const sourceShas = {
     baseline: await gitRevision(baselineRoot),
