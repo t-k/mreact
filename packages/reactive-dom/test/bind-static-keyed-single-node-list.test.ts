@@ -125,6 +125,8 @@ describe("bindStaticKeyedSingleNodeList", () => {
     const marker = document.createComment("rows");
     const payloads: string[] = [];
     const renderCounts = new Map<number, number>();
+    const expectedRenderCounts = new Map<number, number>();
+    const operationCounts = [0, 0, 0, 0];
     parent.append(marker);
 
     const dispose = bindCompilerKeyedSingleNodeList(
@@ -151,12 +153,16 @@ describe("bindStaticKeyedSingleNodeList", () => {
     let rowsById = new Map(
       Array.from(parent.children, (row) => [Number((row as HTMLElement).dataset.id), row]),
     );
+    for (const id of rowsById.keys()) {
+      expectedRenderCounts.set(id, 1);
+    }
 
     for (let step = 1; step <= 48; step += 1) {
       revision += 1;
       const previousRowsById = rowsById;
       const next = items.get().map((item) => makeItem(item.id, revision));
-      const operation = nextRandom() % 4;
+      const operation = (step - 1) % 4;
+      operationCounts[operation] += 1;
 
       if (operation === 0) {
         next.reverse();
@@ -174,6 +180,12 @@ describe("bindStaticKeyedSingleNodeList", () => {
         for (let index = next.length - 1; index > 0; index -= 1) {
           const swapIndex = nextRandom() % (index + 1);
           [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+        }
+      }
+
+      for (const item of next) {
+        if (!previousRowsById.has(item.id)) {
+          expectedRenderCounts.set(item.id, (expectedRenderCounts.get(item.id) ?? 0) + 1);
         }
       }
 
@@ -209,9 +221,8 @@ describe("bindStaticKeyedSingleNodeList", () => {
       );
     }
 
-    for (const count of renderCounts.values()) {
-      expect(count).toBe(1);
-    }
+    expect(operationCounts).toEqual([12, 12, 12, 12]);
+    expect(renderCounts).toEqual(expectedRenderCounts);
     dispose();
   });
 
