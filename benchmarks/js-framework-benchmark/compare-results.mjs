@@ -13,8 +13,6 @@ export const CPU_CASE_IDS = [
 export const MEMORY_CASE_IDS = [
   "21_ready-memory",
   "22_run-memory",
-  "23_update5-memory",
-  "24_run5-memory",
   "25_run-clear-memory",
 ];
 

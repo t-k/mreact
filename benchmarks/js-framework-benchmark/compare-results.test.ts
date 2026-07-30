@@ -21,8 +21,6 @@ const cpuCases = [
 const memoryCases = [
   "21_ready-memory",
   "22_run-memory",
-  "23_update5-memory",
-  "24_run5-memory",
   "25_run-clear-memory",
 ];
 
@@ -52,6 +50,22 @@ describe("js-framework-benchmark ABBA comparison", () => {
     expect(result.cpuGeometricMeanDeltaPercent).toBeCloseTo(-4, 6);
     expect(result.memoryGeometricMeanDeltaPercent).toBeCloseTo(-4, 6);
     expect(result.compressedSizeDeltaKb).toBeCloseTo(-0.4, 6);
+  });
+
+  test("accepts the current official memory benchmark set", () => {
+    const runs = {
+      baselineA: run("base"),
+      candidateA: run("candidate", 0.96),
+      candidateB: run("candidate", 0.96),
+      baselineB: run("base"),
+    };
+
+    for (const value of Object.values(runs)) {
+      delete value.metrics["23_update5-memory"];
+      delete value.metrics["24_run5-memory"];
+    }
+
+    expect(compareAbbaRuns(runs).decision).toBe("pass");
   });
 
   test("rejects CPU or memory regressions at the approved gates", () => {
