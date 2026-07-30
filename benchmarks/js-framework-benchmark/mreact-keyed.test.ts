@@ -307,7 +307,8 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
 
     expect(output.diagnostics.filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
     expect(generatedBody).toBe(output.code.trim());
-    expect(generatedBody).toContain("bindList");
+    expect(generatedBody).toContain("bindCompilerKeyedSingleNodeList");
+    expect(generatedBody).toContain("selectedClass");
     expect(generatedBody).toContain("REACTIVE_STATE_BINDING_META");
   });
 

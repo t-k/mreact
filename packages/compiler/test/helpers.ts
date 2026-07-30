@@ -210,6 +210,7 @@ export function compileCompatModule(code: string): CompatComponentExports {
   const runtimeEntries = [
     ...extractCompatRuntimeEntries(code),
     ...extractClientRuntimeEntries(code),
+    ...extractClientInternalRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
   const returnEntries = exports

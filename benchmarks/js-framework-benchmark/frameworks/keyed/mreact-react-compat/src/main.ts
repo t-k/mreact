@@ -1,7 +1,8 @@
 // GENERATED from main.tsx by the mreact compiler in production compat mode.
 // Source of truth is main.tsx; run pnpm bench:js-framework:generate-compat after compiler changes.
 import { jsx as _jsx, REACTIVE_STATE_BINDING_META as _REACTIVE_STATE_BINDING_META, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
-import { bindEvent as _bindEvent, bindList as _bindList, effect as _effect } from "@reckona/mreact-reactive-dom";
+import { bindCompilerKeyedSingleNodeList as _bindCompilerKeyedSingleNodeList } from "@reckona/mreact-reactive-dom/internal";
+import { bindEvent as _bindEvent, effect as _effect } from "@reckona/mreact-reactive-dom";
 import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
 const adjectives = [
 	"pretty",
@@ -259,8 +260,8 @@ function App() {
     let _disposeList;
     const _setupList = () => {
       if (_disposeList !== undefined || _marker.parentNode === null) return;
-      _disposeList = _bindList(_marker.parentNode, _marker, () => (_stateStateBinding.get().rows), (row) => (() => {
-  const props = { get row() { return (row); }, get selected() { return (_stateStateBinding.get().selected === row.id); } };
+      _disposeList = _bindCompilerKeyedSingleNodeList(_marker.parentNode, _marker, () => (_stateStateBinding.get().rows), (_rowContext) => (() => {
+  const props = { get row() { return (_rowContext.item); } };
   const _tr = document.createElement("tr");
   const _td = document.createElement("td");
   _td.className = "col-md-1";
@@ -293,20 +294,15 @@ function App() {
     return (removeRow(props.row.id));
   });
   const _disposeEffect = _effect(() => {
-        const _r = (props.selected ? "danger" : "");
+        const _r = (props.row.id);
       const _v = _r == null ? "" : String(_r);
-      if (_tr.className !== _v) _tr.className = _v;
-  });
-  const _disposeEffect$1 = _effect(() => {
-        const _r$1 = (props.row.id);
+      if (_text.data !== _v) _text.data = _v;
+        const _r$1 = (props.row.label);
       const _v$1 = _r$1 == null ? "" : String(_r$1);
-      if (_text.data !== _v$1) _text.data = _v$1;
-        const _r$2 = (props.row.label);
-      const _v$2 = _r$2 == null ? "" : String(_r$2);
-      if (_text$1.data !== _v$2) _text$1.data = _v$2;
+      if (_text$1.data !== _v$1) _text$1.data = _v$1;
   });
   return _tr;
-})(), { key: (row) => (row.id) });
+})(), { key: (row) => (row.id), selectedClass: { className: "danger", project: (value) => value.selected, source: _stateStateBinding } });
     };
     const _dispose = () => {
       if (_disposeList !== undefined) _disposeList();

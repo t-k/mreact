@@ -1037,6 +1037,9 @@ describe("react-compat prop reactive DOM block lowering", () => {
           if (action.type === "remove") {
             return { ...state, rows: state.rows.filter((row) => row.id !== action.id) };
           }
+          if (action.type === "update") {
+            return { ...state, rows: state.rows.map((row) => row.id === action.id ? { ...row, label: row.label + "!" } : row) };
+          }
           return state;
         }
 
@@ -1071,7 +1074,11 @@ describe("react-compat prop reactive DOM block lowering", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("createReactiveDomBlock");
-    expect(output.code).toContain("bindList");
+    expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
+    expect(output.code).toContain("selectedClass: {");
+    expect(output.code).toContain("project: (value) => value.selected");
+    expect(output.code).toContain("source: _stateStateBinding");
+    expect(output.code.match(/const _r = \(props\.selected \? "danger" : ""\);/gu)).toHaveLength(1);
     expect(output.code).toContain("REACTIVE_STATE_BINDING_META");
     expect(output.code.match(/function App\(/gu)).toHaveLength(1);
 
@@ -1114,9 +1121,16 @@ describe("react-compat prop reactive DOM block lowering", () => {
       ]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
+      dispatch?.({ type: "update", id: 2 });
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "1one",
+        "2two!",
+        "3three",
+      ]);
+
       dispatch?.({ type: "swap" });
       expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
-        "2two",
+        "2two!",
         "1one",
         "3three",
       ]);

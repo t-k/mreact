@@ -464,6 +464,40 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("projects a selected key from a tracked readonly source", async () => {
+    const state = cell<{ readonly selected: number | null }>({ selected: null });
+    const source = { get: () => state.get() };
+    const items = cell([{ id: 1 }, { id: 2 }]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      () => document.createElement("tr"),
+      {
+        key: (item) => item.id,
+        selectedClass: {
+          className: "danger",
+          project: (value) => (value as { readonly selected: number | null }).selected,
+          source,
+        },
+      },
+    );
+
+    state.set({ selected: 2 });
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.className)).toEqual(["", "danger"]);
+
+    state.set({ selected: 1 });
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.className)).toEqual(["danger", ""]);
+
+    dispose();
+  });
+
   test("promotes delegated row events by default without detached fallback listeners", () => {
     const items = cell([1, 2]);
     const parent = document.createElement("tbody");
