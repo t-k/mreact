@@ -48,6 +48,35 @@ describe("compiler runtime smoke", () => {
     delete (globalThis as typeof globalThis & { __compilerKeyedPayload?: string })
       .__compilerKeyedPayload;
   });
+  test("keeps event parameter defaults that capture the row on the generic path", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1 }]);
+        export function App() {
+          return <table><tbody>{rows.get().map((row) => (
+            <tr key={row.id}>
+              <td><button id="select" onClick={(event, current = row) => globalThis.__compilerDefaultPayload = current.id}>Select</button></td>
+            </tr>
+          ))}</tbody></table>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+    const node = await runClientComponent(output.code);
+
+    (node as HTMLElement).querySelector<HTMLButtonElement>("#select")?.click();
+    expect(
+      (globalThis as typeof globalThis & { __compilerDefaultPayload?: number })
+        .__compilerDefaultPayload,
+    ).toBe(1);
+    delete (globalThis as typeof globalThis & { __compilerDefaultPayload?: number })
+      .__compilerDefaultPayload;
+  });
   test("emitted static component can be imported and returns a DOM node", () => {
     const output = transform({
       code: 'export function App() { return <div id="app">Hello</div>; }',

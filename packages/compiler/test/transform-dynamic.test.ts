@@ -136,6 +136,10 @@ describe("compiler dynamic JSX transform", () => {
     ["spread", "<tr key={row.id} {...row.props} />"],
     ["event handler identifier", "<tr key={row.id} onClick={save} />"],
     [
+      "event handler default parameter",
+      "<tr key={row.id} onClick={(event, current = row) => globalThis.__selected = current.id} />",
+    ],
+    [
       "conditional event handler",
       '<tr key={row.id} onClick={row.active ? () => globalThis.__selected = "active" : () => globalThis.__selected = "inactive"} />',
     ],

@@ -30,6 +30,7 @@ import {
 import {
   analyzeOxcAttribute,
   findOxcJsxAttributeCode,
+  isStableOxcKeyedEventAttribute,
   readOxcJsxTagName,
 } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
@@ -710,7 +711,7 @@ function isCompiledSingleNodeTree(node: JsxNodeIr): boolean {
     if (attribute.kind === "spread-attr" || attribute.kind === "dom-ref") {
       return false;
     }
-    if (attribute.kind === "event" && !attribute.stableForKeyedReuse) {
+    if (attribute.kind === "event" && !isStableOxcKeyedEventAttribute(attribute)) {
       return false;
     }
   }

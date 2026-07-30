@@ -736,15 +736,7 @@ export default function Page() {
         "client",
         diagnostics,
       ),
-    ).toEqual([
-      {
-        kind: "event",
-        name: "onClick",
-        eventName: "click",
-        code: "save",
-        stableForKeyedReuse: false,
-      },
-    ]);
+    ).toEqual([{ kind: "event", name: "onClick", eventName: "click", code: "save" }]);
     expect(
       analyzeOxcAttribute(
         code,
@@ -771,15 +763,7 @@ export default function Page() {
         "client",
         diagnostics,
       ),
-    ).toEqual([
-      {
-        kind: "event",
-        name: "onclick",
-        eventName: "click",
-        code: "save",
-        stableForKeyedReuse: false,
-      },
-    ]);
+    ).toEqual([{ kind: "event", name: "onclick", eventName: "click", code: "save" }]);
     expect(diagnostics).toEqual([]);
   });
 

@@ -5,8 +5,20 @@ import {
   unsupportedRefAttributeDiagnostic,
   unsupportedServerEventHandlerDiagnostic,
 } from "./diagnostics.js";
-import { getOxcLocation, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
+import {
+  getOxcLocation,
+  readArray,
+  readObject,
+  readSource,
+  unwrapOxcParentheses,
+} from "./oxc-node-utils.js";
 import type { CompileTarget, Diagnostic } from "./types.js";
+
+const stableKeyedEventAttributes = new WeakSet<object>();
+
+export function isStableOxcKeyedEventAttribute(attribute: AttributeIr): boolean {
+  return attribute.kind === "event" && stableKeyedEventAttributes.has(attribute);
+}
 
 export function readOxcJsxTagName(node: Record<string, unknown>): string {
   if (typeof node.name === "string") {
@@ -77,20 +89,25 @@ export function analyzeOxcAttribute(
     }
 
     const expression = readObject(value.expression);
-    const expressionCode = options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
+    const expressionCode =
+      options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
     const unwrappedExpression = unwrapOxcParentheses(expression);
     const stableForKeyedReuse =
-      unwrappedExpression.type === "ArrowFunctionExpression" ||
-      unwrappedExpression.type === "FunctionExpression";
-    return [
-      {
-        kind: "event",
-        name,
-        eventName: name.slice(2).toLowerCase(),
-        code: expressionCode,
-        stableForKeyedReuse,
-      },
-    ];
+      (unwrappedExpression.type === "ArrowFunctionExpression" ||
+        unwrappedExpression.type === "FunctionExpression") &&
+      readArray(unwrappedExpression.params).every(
+        (parameter) => readObject(parameter).type === "Identifier",
+      );
+    const eventAttribute: AttributeIr = {
+      kind: "event",
+      name,
+      eventName: name.slice(2).toLowerCase(),
+      code: expressionCode,
+    };
+    if (stableForKeyedReuse) {
+      stableKeyedEventAttributes.add(eventAttribute);
+    }
+    return [eventAttribute];
   }
 
   if (value.type === "Literal") {
@@ -99,7 +116,8 @@ export function analyzeOxcAttribute(
 
   if (value.type === "JSXExpressionContainer") {
     const expression = readObject(value.expression);
-    const expressionCode = options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
+    const expressionCode =
+      options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
 
     return [{ kind: "dynamic-attr", name, code: expressionCode }];
   }

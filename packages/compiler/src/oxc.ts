@@ -109,6 +109,7 @@ export type {
   AsyncBoundaryIr,
   AttributeIr,
   ClientReferenceIr,
+  CompiledSingleNodeListIr,
   ComponentIr,
   ComponentNamedPropIr,
   ComponentPropIr,

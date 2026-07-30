@@ -192,7 +192,6 @@ export interface EventAttributeIr {
   name: string;
   eventName: string;
   code: string;
-  stableForKeyedReuse: boolean;
 }
 
 /** Represents a spread attribute expression on an intrinsic element. */

@@ -2547,6 +2547,7 @@ function readOptionalObject(value: unknown): Record<string, unknown> | undefined
 export type {
   AsyncBoundaryIr,
   AttributeIr,
+  CompiledSingleNodeListIr,
   ComponentIr,
   ComponentPropIr,
   ComponentRefIr,
