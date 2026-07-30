@@ -18,6 +18,7 @@
     "bench:primitive": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/run.ts",
     "bench:primitive-browser": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive-browser/run.ts",
     "bench:js-framework": "node benchmarks/js-framework-benchmark/run-official.mjs",
+    "bench:js-framework:compare": "node benchmarks/js-framework-benchmark/compare.mjs",
     "bench:html-escape": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/html-escape.ts",
     "bench:request-fastpaths": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/primitive/request-fastpaths.ts",
     "bench:non-router": "NODE_ENV=production pnpm build && NODE_ENV=production tsx benchmarks/non-router/run.ts",

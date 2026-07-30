@@ -23,6 +23,15 @@ on:
         description: Optional js-framework-benchmark ids, for example "01_run1k 03_update10th1k_x16 04_select1k 05_swap1k 07_create10k"
         required: false
         type: string
+      compare_ref:
+        description: Optional baseline ref for a keyed-list ABBA comparison
+        required: false
+        type: string
+      compare_framework:
+        description: Framework id for an ABBA comparison
+        required: false
+        type: string
+        default: keyed/mreact-react-compat
 
 permissions:
   actions: write
@@ -34,6 +43,7 @@ concurrency:
 
 jobs:
   benchmark:
+    if: ${{ inputs.compare_ref == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
@@ -49,7 +59,7 @@ jobs:
           package-manager-cache: false
 
       - name: Enable Corepack
-        run: corepack enable
+        run: corepack enable && corepack prepare pnpm@10.19.0 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -80,6 +90,14 @@ jobs:
       - name: Install Playwright Chromium
         if: ${{ inputs.suite == 'all' || inputs.suite == 'primitive-browser' || inputs.suite == 'js-framework' || inputs.suite == 'router' }}
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Resolve hosted Chrome
+        if: ${{ inputs.suite == 'all' || inputs.suite == 'js-framework' }}
+        shell: bash
+        run: |
+          chrome_binary="$(command -v google-chrome)"
+          test -x "$chrome_binary"
+          echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$chrome_binary" >> "$GITHUB_ENV"
 
       - name: Build Linux native addon
         if: ${{ inputs.suite == 'all' || inputs.suite == 'router' }}
@@ -173,3 +191,68 @@ jobs:
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "HEAD:$GITHUB_REF_NAME"
           gh workflow run docs-pages.yml --ref "$GITHUB_REF_NAME"
+
+  compare-js-framework:
+    if: ${{ inputs.compare_ref != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v6
+        with:
+          path: candidate
+
+      - name: Checkout baseline
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.compare_ref }}
+          path: baseline
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable Corepack
+        run: corepack enable && corepack prepare pnpm@10.19.0 --activate
+
+      - name: Install candidate dependencies
+        run: pnpm --dir candidate install --frozen-lockfile
+
+      - name: Install baseline dependencies
+        run: pnpm --dir baseline install --frozen-lockfile
+
+      - name: Resolve hosted Chrome
+        shell: bash
+        run: |
+          chrome_binary="$(command -v google-chrome)"
+          test -x "$chrome_binary"
+          echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$chrome_binary" >> "$GITHUB_ENV"
+
+      - name: Run ABBA baseline-a candidate-a candidate-b baseline-b
+        run: >-
+          pnpm --dir candidate bench:js-framework:compare
+          --baseline-root "$GITHUB_WORKSPACE/baseline"
+          --candidate-root "$GITHUB_WORKSPACE/candidate"
+          --output "$GITHUB_WORKSPACE/candidate/benchmarks/results/compiler-keyed-comparison-${{ github.run_id }}"
+          --framework "${{ inputs.compare_framework }}"
+          --cases "${{ inputs.js_benchmarks }}"
+
+      - name: Write comparison summary
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          summary="$GITHUB_WORKSPACE/candidate/benchmarks/results/compiler-keyed-comparison-${{ github.run_id }}/comparison.md"
+          if [ -f "$summary" ]; then
+            cat "$summary" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload compiler keyed comparison
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiler-keyed-comparison-${{ github.run_id }}
+          path: candidate/benchmarks/results/compiler-keyed-comparison-${{ github.run_id }}

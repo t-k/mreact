@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 
@@ -12,15 +12,14 @@ const checkoutRoot = resolve(
     join(tmpdir(), `mreact-js-framework-benchmark-${process.pid}`),
 );
 const resultsRoot = process.env.MREACT_BENCHMARK_RESULTS_DIR;
-const resultDir = resultsRoot === undefined
-  ? join(repoRoot, "benchmarks", "results", "local-js-framework")
-  : resultsRoot;
+const resultDir =
+  resultsRoot === undefined
+    ? join(repoRoot, "benchmarks", "results", "local-js-framework")
+    : resultsRoot;
 const officialResultDir = join(resultDir, "js-framework-benchmark-results");
 const officialTraceDir = join(resultDir, "js-framework-benchmark-traces");
-const useLocalPackages = parseBooleanEnv(
-  process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES,
-  true,
-);
+const runMetadataPath = join(resultDir, "js-framework-benchmark-run.json");
+const useLocalPackages = parseBooleanEnv(process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES, true);
 const localPackageModeHelp =
   "Set MREACT_JS_FRAMEWORK_LOCAL_PACKAGES=0 to benchmark published npm packages.";
 
@@ -41,6 +40,11 @@ const localPackageSpecs = [
     target: "mreact-reactive-dom",
   },
   {
+    name: "@reckona/mreact-compiler",
+    source: join(repoRoot, "packages", "compiler"),
+    target: "mreact-compiler",
+  },
+  {
     name: "@reckona/mreact-compat",
     source: join(repoRoot, "packages", "react-compat"),
     target: "mreact-compat",
@@ -50,18 +54,26 @@ const localPackageSpecs = [
 const localPackageByName = new Map(localPackageSpecs.map((spec) => [spec.name, spec]));
 
 const localFixtureDependencies = {
-  "mreact": [
+  mreact: ["@reckona/mreact-reactive-core", "@reckona/mreact-reactive-dom"],
+  "mreact-compiled": [
+    "@reckona/mreact-compiler",
     "@reckona/mreact-reactive-core",
     "@reckona/mreact-reactive-dom",
   ],
   "mreact-react-compat": [
+    "@reckona/mreact-compiler",
     "@reckona/mreact-reactive-dom",
     "@reckona/mreact-compat",
   ],
-  "mreact-react-compat-vdom": [
-    "@reckona/mreact-compat",
-  ],
+  "mreact-react-compat-vdom": ["@reckona/mreact-compat"],
 };
+const localFixtureNames = [
+  "mreact",
+  "mreact-compiled",
+  "mreact-react-compat",
+  "mreact-react-compat-vdom",
+  "octane",
+];
 
 const frameworkMappings = [
   {
@@ -99,6 +111,14 @@ const frameworkMappings = [
   {
     primitive: "mreact",
     official: "keyed/mreact",
+  },
+  {
+    primitive: "mreact compiled",
+    official: "keyed/mreact-compiled",
+  },
+  {
+    primitive: "octane",
+    official: "keyed/octane",
   },
 ];
 
@@ -275,12 +295,19 @@ const selectedFrameworks = rotateFrameworks(defaultSelectedFrameworks, framework
 const diffAnchorFramework = process.env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR ?? "react-hooks";
 
 const selectedBenchmarks = parseFrameworks(process.env.MREACT_JS_FRAMEWORK_BENCHMARKS, []);
+const chromeBinaryPath = parseChromeBinaryPath(process.env.MREACT_JS_FRAMEWORK_CHROME_BINARY);
+const summaryOnly = parseBooleanEnv(process.env.MREACT_JS_FRAMEWORK_SUMMARY_ONLY, false);
 
-await main();
+if (summaryOnly) {
+  await mkdir(resultDir, { recursive: true });
+  await writeSummary();
+} else {
+  await main();
+}
 
 async function main() {
   await prepareCheckout();
-  await copyMreactFixtures();
+  await copyLocalFixtures();
   if (useLocalPackages) {
     await prepareLocalPackages();
   }
@@ -294,8 +321,24 @@ async function main() {
     server = startServer();
     await waitForServer();
     await rebuildSelectedFrameworks();
+    await runOfficialChecks();
     await resetOfficialRunOutput();
-    await run("npm", ["run", "bench", "--", "--runner", "playwright", "--headless", "true", ...selectedFrameworks, ...benchmarkArgs()], checkoutRoot);
+    await run(
+      "npm",
+      [
+        "run",
+        "bench",
+        "--",
+        "--runner",
+        "playwright",
+        "--headless",
+        "true",
+        ...chromeBinaryArgs(),
+        ...selectedFrameworks,
+        ...benchmarkArgs(),
+      ],
+      checkoutRoot,
+    );
   } finally {
     if (server !== undefined) {
       stopProcessGroup(server);
@@ -304,17 +347,58 @@ async function main() {
 
   await copyResults();
   await copyTraces();
+  await writeRunMetadata(currentRunMetadata());
   await writeSummary();
 }
 
 async function rebuildSelectedFrameworks() {
-  if (selectedBenchmarks.length === 0) {
-    await run("npm", ["run", "rebuild", "--", "--frameworks", ...selectedFrameworks], checkoutRoot);
+  console.log("Using js-framework-benchmark build-only rebuild path.");
+  await run("node", ["--input-type=module", "-e", buildOnlyRebuildScript()], checkoutRoot);
+}
+
+async function runOfficialChecks() {
+  if (selectedBenchmarks.length !== 0) {
     return;
   }
 
-  console.log("Using js-framework-benchmark build-only rebuild path for scoped benchmark run.");
-  await run("node", ["--input-type=module", "-e", buildOnlyRebuildScript()], checkoutRoot);
+  const webdriverRoot = join(checkoutRoot, "webdriver-ts");
+  await run(
+    "npm",
+    [
+      "run",
+      "bench",
+      "--",
+      "--runner",
+      "playwright",
+      "--headless",
+      "true",
+      "--smoketest",
+      "true",
+      ...chromeBinaryArgs(),
+      ...selectedFrameworks,
+    ],
+    webdriverRoot,
+  );
+  await run(
+    "npm",
+    [
+      "run",
+      "isKeyed",
+      "--",
+      "--runner",
+      "playwright",
+      "--headless",
+      "true",
+      ...chromeBinaryArgs(),
+      ...selectedFrameworks,
+    ],
+    webdriverRoot,
+  );
+  await run(
+    "npm",
+    ["run", "checkCSP", "--", "--headless", "true", ...chromeBinaryArgs(), ...selectedFrameworks],
+    webdriverRoot,
+  );
 }
 
 function buildOnlyRebuildScript() {
@@ -333,7 +417,7 @@ async function resetOfficialRunOutput() {
 }
 
 async function installOfficialDependencies() {
-  await run("npm", ["ci", "--ignore-scripts"], checkoutRoot);
+  await run("npm", ["ci", "--ignore-scripts", "--legacy-peer-deps"], checkoutRoot);
   await run("npm", ["ci"], join(checkoutRoot, "server"));
   await run("npm", ["ci"], join(checkoutRoot, "webdriver-ts"));
   await run("npm", ["run", "compile"], join(checkoutRoot, "webdriver-ts"));
@@ -379,6 +463,26 @@ function parseIntegerEnv(value, defaultValue) {
   return parsed;
 }
 
+function parseChromeBinaryPath(value) {
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+
+  const path = value.trim();
+  if (!isAbsolute(path)) {
+    throw new Error(`Chrome binary path must be absolute, received ${path}`);
+  }
+  if (!existsSync(path)) {
+    throw new Error(`Chrome binary does not exist: ${path}`);
+  }
+
+  return path;
+}
+
+function chromeBinaryArgs() {
+  return chromeBinaryPath === undefined ? [] : ["--chromeBinary", chromeBinaryPath];
+}
+
 function rotateFrameworks(frameworks, offset) {
   if (frameworks.length === 0) {
     return frameworks;
@@ -389,7 +493,12 @@ function rotateFrameworks(frameworks, offset) {
 }
 
 function matchesAnchorFramework(framework, anchor) {
-  return framework === anchor || framework.endsWith(`/${anchor}`) || framework.endsWith(anchor);
+  return (
+    framework === anchor ||
+    framework.startsWith(`${anchor}-v`) ||
+    framework.endsWith(`/${anchor}`) ||
+    framework.endsWith(anchor)
+  );
 }
 
 function benchmarkArgs() {
@@ -404,12 +513,16 @@ async function prepareCheckout() {
   if (!existsSync(join(checkoutRoot, "package.json"))) {
     await rm(checkoutRoot, { force: true, recursive: true });
     await mkdir(checkoutRoot, { recursive: true });
-    await run("git", [
-      "clone",
-      "--depth=1",
-      "https://github.com/krausest/js-framework-benchmark.git",
-      checkoutRoot,
-    ], repoRoot);
+    await run(
+      "git",
+      [
+        "clone",
+        "--depth=1",
+        "https://github.com/krausest/js-framework-benchmark.git",
+        checkoutRoot,
+      ],
+      repoRoot,
+    );
   }
 }
 
@@ -480,7 +593,10 @@ async function applyLocalFixtureDependencies(fixtureDir, packageRoot, dependenci
     if (localPackage === undefined) {
       throw new Error(`Missing local package staging config for ${dependency}`);
     }
-    packageJson.dependencies[dependency] = fileDependency(fixtureDir, localPackageDir(packageRoot, localPackage));
+    packageJson.dependencies[dependency] = fileDependency(
+      fixtureDir,
+      localPackageDir(packageRoot, localPackage),
+    );
   }
 
   await applyLocalFixtureVersion(packageJson, packageRoot, dependencies[dependencies.length - 1]);
@@ -518,9 +634,11 @@ function fileDependency(fromDir, toDir) {
   return `file:${relativePath.startsWith(".") ? relativePath : `./${relativePath}`}`;
 }
 
-async function copyMreactFixtures() {
-  for (const name of ["mreact", "mreact-react-compat", "mreact-react-compat-vdom"]) {
-    await cp(join(fixtureRoot, name), join(checkoutRoot, "frameworks", "keyed", name), {
+async function copyLocalFixtures() {
+  for (const name of localFixtureNames) {
+    const target = join(checkoutRoot, "frameworks", "keyed", name);
+    await rm(target, { force: true, recursive: true });
+    await cp(join(fixtureRoot, name), target, {
       force: true,
       recursive: true,
     });
@@ -588,11 +706,14 @@ async function copyTraces() {
 async function writeSummary() {
   const frameworkRows = await collectResultRows();
   const resultRows = toResultRows(frameworkRows);
+  const runMetadata =
+    (await readRunMetadata()) ?? inferRunMetadata(frameworkRows.map((row) => row.framework));
+  const summaryDiffAnchor = runMetadata.diffAnchorFramework;
   const lines = [
     "# js-framework-benchmark Results",
     "",
     "Official krausest/js-framework-benchmark keyed DOM cases run for the primitive benchmark peers that have matching upstream fixtures.",
-    useLocalPackages
+    runMetadata.useLocalPackages
       ? "The mreact fixtures use local package builds staged from this checkout, so unreleased runtime changes are included."
       : `The mreact fixtures use the published npm package versions from their package.json files. ${localPackageModeHelp}`,
     "",
@@ -602,11 +723,11 @@ async function writeSummary() {
     "| --- | --- |",
     ...frameworkMappings.map((mapping) => `| ${mapping.primitive} | ${mapping.official} |`),
     "",
-    "## Run Order",
+    "## Run Selection",
     "",
-    `Framework order offset: ${frameworkOrderOffset}`,
-    `Framework run order: ${selectedFrameworks.join(", ")}`,
-    `Fixed diff anchor: ${diffAnchorFramework}`,
+    `Framework order offset: ${runMetadata.frameworkOrderOffset ?? "unknown"}`,
+    `${runMetadata.inferred ? "Frameworks inferred from result files" : "Requested framework order"}: ${runMetadata.selectedFrameworks.join(", ")}`,
+    `Fixed diff anchor: ${summaryDiffAnchor}`,
     "",
     "## Unsupported Primitive Adapters",
     "",
@@ -619,20 +740,69 @@ async function writeSummary() {
     "",
     "Lower values are better for all js-framework-benchmark metrics reported here.",
     "",
-    ...formatJsFrameworkRankingSections(resultRows),
+    ...formatJsFrameworkRankingSections(resultRows, summaryDiffAnchor),
     "## Results",
     "",
-    `| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |`,
+    `| suite | framework | case | status | metric | unit | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(summaryDiffAnchor)} |`,
     "| --- | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ...resultRows.map((row) => {
       const bestRow = rankJsFrameworkRows(resultRows, row.caseName)[0];
-      const anchorRow = findAnchorRow(resultRows, row.caseName);
+      const anchorRow = findAnchorRow(resultRows, row.caseName, summaryDiffAnchor);
       return `| js-framework-benchmark | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${row.status} | ${row.metric} | ${row.unit} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${formatDiffVsBest(row, anchorRow)} |`;
     }),
     "",
   ];
 
   await writeFile(join(resultDir, "js-framework-benchmark.md"), lines.join("\n"));
+}
+
+function currentRunMetadata() {
+  return {
+    selectedFrameworks,
+    frameworkOrderOffset,
+    diffAnchorFramework,
+    useLocalPackages,
+  };
+}
+
+async function writeRunMetadata(metadata) {
+  await writeFile(runMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+}
+
+async function readRunMetadata() {
+  if (!existsSync(runMetadataPath)) {
+    return undefined;
+  }
+
+  const metadata = JSON.parse(await readFile(runMetadataPath, "utf8"));
+  if (
+    !Array.isArray(metadata.selectedFrameworks) ||
+    !metadata.selectedFrameworks.every((framework) => typeof framework === "string") ||
+    !Number.isInteger(metadata.frameworkOrderOffset) ||
+    typeof metadata.diffAnchorFramework !== "string" ||
+    typeof metadata.useLocalPackages !== "boolean"
+  ) {
+    throw new Error(`Invalid js-framework-benchmark run metadata: ${runMetadataPath}`);
+  }
+
+  return metadata;
+}
+
+function inferRunMetadata(frameworks) {
+  const inferredAnchor = frameworks.some((framework) =>
+    matchesAnchorFramework(framework, "react-hooks"),
+  )
+    ? "react-hooks"
+    : diffAnchorFramework;
+  return {
+    selectedFrameworks: frameworks,
+    frameworkOrderOffset: undefined,
+    diffAnchorFramework: inferredAnchor,
+    useLocalPackages: frameworks.some(
+      (framework) => framework.includes("mreact") && framework.includes("-local-"),
+    ),
+    inferred: true,
+  };
 }
 
 async function collectResultRows() {
@@ -689,7 +859,7 @@ function toResultRows(frameworkRows) {
   );
 }
 
-function formatJsFrameworkRankingSections(resultRows) {
+function formatJsFrameworkRankingSections(resultRows, anchorFramework) {
   const lines = [];
 
   for (const descriptor of resultMetricDescriptors) {
@@ -700,11 +870,13 @@ function formatJsFrameworkRankingSections(resultRows) {
     }
 
     lines.push(`### ${descriptor.caseName}`, "");
-    lines.push(`| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`);
+    lines.push(
+      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(anchorFramework)} | unit |`,
+    );
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
 
     const bestRow = rankedRows[0];
-    const anchorRow = findAnchorRow(resultRows, descriptor.caseName);
+    const anchorRow = findAnchorRow(resultRows, descriptor.caseName, anchorFramework);
     rankedRows.forEach((row, index) => {
       lines.push(
         `| ${index + 1} | ${formatFrameworkCell(row.framework)} | ${escapeMarkdownTableCell(row.caseName)} | ${format(row.value)} | ${format(row.script)} | ${format(row.paint)} | ${formatDiffVsBest(row, bestRow)} | ${formatDiffVsBest(row, anchorRow)} | ${row.unit} |`,
@@ -714,7 +886,9 @@ function formatJsFrameworkRankingSections(resultRows) {
   }
 
   if (lines.length === 0) {
-    lines.push(`| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`);
+    lines.push(
+      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(anchorFramework)} | unit |`,
+    );
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
     lines.push("|  | no completed results |  |  |  |  |  |  |  |");
     lines.push("");
@@ -737,12 +911,12 @@ function rankJsFrameworkRows(resultRows, caseName) {
     });
 }
 
-function findAnchorRow(resultRows, caseName) {
+function findAnchorRow(resultRows, caseName, anchorFramework) {
   return resultRows.find(
     (row) =>
       row.caseName === caseName &&
       row.status === "completed" &&
-      matchesAnchorFramework(row.framework, diffAnchorFramework),
+      matchesAnchorFramework(row.framework, anchorFramework),
   );
 }
 
@@ -768,7 +942,9 @@ function formatDiffVsBest(row, bestRow) {
 function formatPercent(value) {
   const rounded = Math.round(value * 100) / 100;
   const sign = rounded > 0 ? "+" : "";
-  return `${sign}${String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}%`;
+  return `${sign}${String(rounded)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "")}%`;
 }
 
 function escapeMarkdownTableCell(value) {
