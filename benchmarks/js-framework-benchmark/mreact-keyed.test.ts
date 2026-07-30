@@ -3,6 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { transform } from "../../packages/compiler/src/index.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 const fixtureRoot = join(
@@ -237,6 +238,8 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("return _createReactiveDomBlock((props) =>");
     expect(main).toContain("document.createElement(\"tr\")");
     expect(main).toContain("bindEvent");
+    expect(main).toContain("bindSelectedKeyedSingleNodeList");
+    expect(main).toContain("selectedClass");
     expect(main).toContain('const _disposeEvent = _bindEvent(_a, "click", (event) => {');
     expect(main).toContain("return (selectRow(props.row.id));");
     expect(main).toContain("return (removeRow(props.row.id));");
@@ -245,6 +248,92 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
       'const _disposeEvent = typeof _h === "function" ? _bindEvent',
     );
     expect(main.slice(main.indexOf("function Row"))).not.toContain("addEventListener");
+  });
+
+  test("keeps checked output identical to the current public compat compiler", async () => {
+    const source = await readFile(join(reactCompatFixtureRoot, "src", "main.tsx"), "utf8");
+    const generated = await readFile(join(reactCompatFixtureRoot, "src", "main.ts"), "utf8");
+    const output = transform({
+      code: source,
+      filename: "main.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    const generatedBody = generated.slice(generated.indexOf("import ")).trim();
+
+    expect(output.diagnostics.filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
+    expect(generatedBody).toBe(output.code.trim());
+    expect(generatedBody).toContain("bindSelectedKeyedSingleNodeList");
+    expect(generatedBody).toContain("selectedClass");
+    expect(generatedBody).toContain("REACTIVE_STATE_BINDING_META");
+  });
+
+  test("runs the official keyed table actions with stable keyed row identity", async () => {
+    document.body.innerHTML = [
+      '<button id="run"></button>',
+      '<button id="runlots"></button>',
+      '<button id="add"></button>',
+      '<button id="update"></button>',
+      '<button id="clear"></button>',
+      '<button id="swaprows"></button>',
+      '<table><tbody id="tbody"></tbody></table>',
+    ].join("");
+    vi.resetModules();
+
+    await import("./frameworks/keyed/mreact-react-compat/src/main.ts");
+
+    const click = async (target: string | HTMLElement): Promise<void> => {
+      const element =
+        typeof target === "string" ? document.querySelector<HTMLElement>(target) : target;
+
+      if (element === null) {
+        throw new Error(`Missing ${target}`);
+      }
+
+      element.click();
+      await flushEffects();
+    };
+    const rows = (): HTMLTableRowElement[] =>
+      Array.from(document.querySelectorAll<HTMLTableRowElement>("#tbody tr"));
+    const rowLabel = (row: HTMLTableRowElement): string => row.cells[1]?.textContent ?? "";
+
+    await click("#run");
+    expect(rows()).toHaveLength(1_000);
+    const firstRow = rows()[0] as HTMLTableRowElement;
+    const secondRow = rows()[1] as HTMLTableRowElement;
+    const nineHundredNinetyNinthRow = rows()[998] as HTMLTableRowElement;
+    const firstLabel = rowLabel(firstRow);
+    const secondLabel = rowLabel(secondRow);
+
+    await click("#update");
+    expect(rows()[0]).toBe(firstRow);
+    expect(rowLabel(firstRow)).toBe(`${firstLabel} !!!`);
+    expect(rowLabel(secondRow)).toBe(secondLabel);
+
+    await click(secondRow.cells[1]?.querySelector("a") as HTMLAnchorElement);
+    expect(secondRow.className).toBe("danger");
+
+    await click("#swaprows");
+    expect(rows()[1]).toBe(nineHundredNinetyNinthRow);
+    expect(rows()[998]).toBe(secondRow);
+    expect(secondRow.className).toBe("danger");
+
+    await click(secondRow.cells[2]?.querySelector("a") as HTMLAnchorElement);
+    expect(rows()).toHaveLength(999);
+    expect(secondRow.isConnected).toBe(false);
+
+    await click("#add");
+    expect(rows()).toHaveLength(1_999);
+    const retainedRow = rows()[0] as HTMLTableRowElement;
+    await click("#clear");
+    expect(rows()).toHaveLength(0);
+    expect(retainedRow.isConnected).toBe(false);
+
+    await click("#runlots");
+    expect(rows()).toHaveLength(10_000);
+    await click("#clear");
+    expect(rows()).toHaveLength(0);
   });
 
   test("keeps a plain VDOM react-compatible fixture beside the lowered fixture", async () => {
