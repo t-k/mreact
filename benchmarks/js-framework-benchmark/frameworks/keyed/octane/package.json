@@ -1,0 +1,29 @@
+{
+  "name": "js-framework-benchmark-octane",
+  "version": "1.0.0",
+  "homepage": "https://github.com/octanejs/octane",
+  "license": "MIT",
+  "author": "Takuto Wada",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/octanejs/octane.git"
+  },
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build-prod": "vite build --mode production"
+  },
+  "dependencies": {
+    "octane": "0.1.19"
+  },
+  "devDependencies": {
+    "@octanejs/vite-plugin": "0.1.19",
+    "typescript": "6.0.2",
+    "vite": "8.1.4"
+  },
+  "js-framework-benchmark": {
+    "frameworkVersionFromPackage": "octane",
+    "frameworkHomeURL": "https://github.com/octanejs/octane",
+    "language": "TypeScript"
+  }
+}

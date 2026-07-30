@@ -29,7 +29,16 @@ const reactCompatVdomFixtureRoot = join(
   "keyed",
   "mreact-react-compat-vdom",
 );
+const octaneFixtureRoot = join(
+  process.cwd(),
+  "benchmarks",
+  "js-framework-benchmark",
+  "frameworks",
+  "keyed",
+  "octane",
+);
 const runnerPath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs");
+const readmePath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "README.md");
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
   afterEach(() => {
@@ -73,7 +82,7 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
 
     expect(main).toContain("batch(() =>");
-    expect(main).toContain('row.label.set(`${row.label.get()} !!!`)');
+    expect(main).toContain("row.label.set(`${row.label.get()} !!!`)");
     expect(main).not.toContain("row.label.set((label)");
     expect(main).toContain("if (selected.get() !== null)");
     expect(main).toContain("rows.findIndex((row) => row.id === id)");
@@ -86,8 +95,10 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).not.toContain('data-action="remove"');
     expect(main).toContain("const idText = idCell.firstChild as Text;");
     expect(main).toContain("const labelText = selectLink.firstChild as Text;");
-    expect(main).toContain("function getRowId(rowElement: HTMLTableRowElement): number | undefined");
-    expect(main).toContain("Number.parseInt(idCell?.textContent ?? \"\", 10)");
+    expect(main).toContain(
+      "function getRowId(rowElement: HTMLTableRowElement): number | undefined",
+    );
+    expect(main).toContain('Number.parseInt(idCell?.textContent ?? "", 10)');
     expect(main).toContain("bindStaticKeyedSingleNodeList(");
     expect(main).toContain("deferEventPromotion: false");
     expect(main).toContain("selectedClass: {");
@@ -102,7 +113,7 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     expect(main).not.toContain('itemMode: "static"');
     expect(main).not.toContain("data.set(data.get().map");
     expect(main).not.toContain("selected.get() === row.id");
-    expect(main).not.toContain("bindProp(tr, \"className\"");
+    expect(main).not.toContain('bindProp(tr, "className"');
     expect(main).not.toContain("bindSelectorClass(");
     expect(main).not.toContain("bindEvent(selectLink");
     expect(main).not.toContain("bindEvent(removeLink");
@@ -189,6 +200,51 @@ describe("js-framework-benchmark official runner stability", () => {
   });
 });
 
+describe("js-framework-benchmark Octane keyed fixture", () => {
+  test("declares exact Octane metadata and the official production build", async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(octaneFixtureRoot, "package.json"), "utf8"),
+    ) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+      scripts?: Record<string, string>;
+      "js-framework-benchmark"?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
+    expect(packageJson.dependencies?.octane).toBe("0.1.19");
+    expect(packageJson.devDependencies?.["@octanejs/vite-plugin"]).toBe("0.1.19");
+    expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe("octane");
+    expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
+      "https://github.com/octanejs/octane",
+    );
+  });
+
+  test("renders the official keyed table shape from Octane state", async () => {
+    const html = await readFile(join(octaneFixtureRoot, "index.html"), "utf8");
+    const main = await readFile(join(octaneFixtureRoot, "src", "main.tsrx"), "utf8");
+
+    expect(html).toContain('id="main"');
+    expect(html).toContain('src="dist/main.js"');
+    expect(html).not.toContain("/src/main.tsrx");
+    expect(main).toContain('id="run"');
+    expect(main).toContain('id="runlots"');
+    expect(main).toContain('id="add"');
+    expect(main).toContain('id="update"');
+    expect(main).toContain('id="clear"');
+    expect(main).toContain('id="swaprows"');
+    expect(main).toContain('class="table table-hover table-striped test-data"');
+    expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
+    expect(main).toContain('aria-hidden="true"');
+    expect(main).toContain("@for (const row of rows; key row.id)");
+    expect(main).toContain("const [selected, setSelected] = useState<number | null>(null)");
+    expect(main).toContain("let nextId = 1");
+    expect(main).toContain("setRows((current) => [...current, ...buildData(1_000)])");
+    expect(main).not.toContain("requestAnimationFrame");
+    expect(main).not.toContain("classList");
+  });
+});
+
 describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
   test("declares react-compat metadata and build command expected by js-framework-benchmark", async () => {
     const packageJson = JSON.parse(
@@ -235,15 +291,13 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("previous.selected === next.selected && previous.row === next.row");
     expect(main).toContain('RowMemo.__mreactMemoCompareProps = ["selected", "row"];');
     expect(main).toContain("return _createReactiveDomBlock((props) =>");
-    expect(main).toContain("document.createElement(\"tr\")");
+    expect(main).toContain('document.createElement("tr")');
     expect(main).toContain("bindEvent");
     expect(main).toContain('const _disposeEvent = _bindEvent(_a, "click", (event) => {');
     expect(main).toContain("return (selectRow(props.row.id));");
     expect(main).toContain("return (removeRow(props.row.id));");
     expect(main).not.toContain("const _h = (() => selectRow(props.row.id));");
-    expect(main).not.toContain(
-      'const _disposeEvent = typeof _h === "function" ? _bindEvent',
-    );
+    expect(main).not.toContain('const _disposeEvent = typeof _h === "function" ? _bindEvent');
     expect(main.slice(main.indexOf("function Row"))).not.toContain("addEventListener");
   });
 
@@ -283,7 +337,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
 
     expect(main).toContain("const next = rows.slice(0);");
     expect(main).toContain("for (let index = 0; index < next.length; index += 10)");
-    expect(main).toContain('next[index] = { id: row.id, label: `${row.label} !!!` };');
+    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
     expect(main).not.toContain("return rows.map((row, index)");
   });
 });
@@ -300,12 +354,7 @@ describe("js-framework-benchmark mreact keyed production build", () => {
 describe("js-framework-benchmark official runner", () => {
   test("maps primitive benchmark peers to upstream keyed DOM fixtures when available", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -318,19 +367,25 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/mreact-react-compat-vdom"');
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
+    expect(runner).toContain('official: "keyed/octane"');
+    expect(runner).toContain(
+      '["mreact", "mreact-react-compat", "mreact-react-compat-vdom", "octane"]',
+    );
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");
   });
 
+  test("documents the repository-local Octane comparison fixture", async () => {
+    const readme = await readFile(readmePath, "utf8");
+
+    expect(readme).toContain("Octane 0.1.19 keyed fixture");
+    expect(readme).toContain("MREACT_JS_FRAMEWORKS=keyed/octane");
+  });
+
   test("skips Playwright browser downloads during official dependency installation", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -339,12 +394,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("compiles the official webdriver runner after installing dependencies", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -355,12 +405,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("uses local mreact package builds by default for unreleased benchmark changes", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -369,18 +414,15 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain("await prepareLocalPackages();");
     expect(runner).toContain("await applyLocalFixtureDependencies(fixtureDir");
     expect(runner).toContain('return join(fixtureDir, "mreact-local-packages");');
-    expect(runner).toContain('benchmarkData.frameworkVersion = `${versionPackageJson.version}-local`;');
+    expect(runner).toContain(
+      "benchmarkData.frameworkVersion = `${versionPackageJson.version}-local`;",
+    );
     expect(runner).toContain("delete benchmarkData.frameworkVersionFromPackage;");
   });
 
   test("can opt out of local package builds for published npm comparisons", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -390,12 +432,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("uses build-only official rebuild path for scoped benchmark iterations", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -407,12 +444,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("reports selected benchmark results with rankings and diff from best", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -420,27 +452,18 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain(
       "Lower values are better for all js-framework-benchmark metrics reported here.",
     );
-    expect(runner).toContain(
-      "diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |",
-    );
+    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |");
     expect(runner).toContain("formatJsFrameworkRankingSections(resultRows)");
     expect(runner).toContain("formatDiffVsBest(row, bestRow)");
     expect(runner).toContain("formatDiffVsBest(row, anchorRow)");
     expect(runner).toContain("readMetricParts(files, framework, descriptor.caseId");
     expect(runner).toContain("## Results");
-    expect(runner).toContain(
-      "diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |",
-    );
+    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |");
   });
 
   test("uses official js-framework-benchmark case labels in summaries", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -465,16 +488,13 @@ describe("js-framework-benchmark official runner", () => {
 
   test("copies official Chrome traces next to the js-framework results", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
-    expect(runner).toContain("const officialTraceDir = join(resultDir, \"js-framework-benchmark-traces\");");
+    expect(runner).toContain(
+      'const officialTraceDir = join(resultDir, "js-framework-benchmark-traces");',
+    );
     expect(runner).toContain("await copyTraces();");
     expect(runner).toContain("Chrome trace files are stored");
   });
