@@ -57,7 +57,7 @@ function escapeHtmlBatch(values: readonly unknown[]): string[] {
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
-      .replaceAll("\"", "&quot;"),
+      .replaceAll('"', "&quot;"),
   );
 }
 
@@ -77,10 +77,10 @@ export async function runClientComponent(code: string): Promise<Node> {
 
 export function compileClientModule(code: string): ComponentExports {
   const exports = extractFunctionExports(code);
-  const runnableCode = stripTypeScriptWithOxc(
-    stripFunctionExports(stripImports(code)),
-  );
-  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
+  const runnableCode = stripTypeScriptWithOxc(stripFunctionExports(stripImports(code)));
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
   const runtimeEntries = [
     ...extractClientRuntimeEntries(code),
     ...extractReactiveCoreRuntimeEntries(code),
@@ -103,7 +103,9 @@ export function runServerComponent(
 ): string {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
-  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
   const module = new Function(`${runnableCode}\nreturn { ${returnEntries} };`)() as Record<
     string,
     (props?: Record<string, unknown>) => string
@@ -210,7 +212,9 @@ export function compileCompatModule(code: string): CompatComponentExports {
     ...extractClientRuntimeEntries(code),
     ...extractReactCompatRuntimeEntries(code),
   ];
-  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -250,7 +254,9 @@ function compileCompatServerModule(code: string): CompatComponentExports {
   const exports = extractFunctionExports(code);
   const runnableCode = stripFunctionExports(stripImports(code));
   const runtimeEntries = extractReactCompatRuntimeEntries(code);
-  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -270,7 +276,9 @@ function compileServerStreamModule(code: string): StreamComponentExports {
     ...extractReactCompatRuntimeEntries(code),
     ...extractNativeEscapeRuntimeEntries(code),
   ];
-  const returnEntries = exports.map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`).join(", ");
+  const returnEntries = exports
+    .map((entry) => `${JSON.stringify(entry.exportName)}: ${entry.localName}`)
+    .join(", ");
 
   return new Function(
     ...runtimeEntries.map((entry) => entry.localName),
@@ -278,9 +286,7 @@ function compileServerStreamModule(code: string): StreamComponentExports {
   )(...runtimeEntries.map((entry) => entry.value)) as StreamComponentExports;
 }
 
-function extractNativeEscapeRuntimeEntries(
-  code: string,
-): { localName: string; value: unknown }[] {
+function extractNativeEscapeRuntimeEntries(code: string): { localName: string; value: unknown }[] {
   const importMatch = code.match(
     /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-router\/(?:internal\/)?native-escape";/m,
   );

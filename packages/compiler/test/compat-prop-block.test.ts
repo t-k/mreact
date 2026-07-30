@@ -9,7 +9,10 @@ import { runCompatComponent } from "./helpers.js";
 
 describe("react-compat prop reactive DOM block lowering", () => {
   test("resolves static prop block component names without a fixed-point loop", () => {
-    const source = readFileSync(join(process.cwd(), "packages/compiler/src/emit-compat.ts"), "utf8");
+    const source = readFileSync(
+      join(process.cwd(), "packages/compiler/src/emit-compat.ts"),
+      "utf8",
+    );
     const start = source.indexOf("function collectStaticPropBlockComponentNames");
     const end = source.indexOf("interface StaticPropBlockComponentCandidate", start);
     const implementation = source.slice(start, end);
@@ -328,19 +331,16 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain("bindList");
 
     const container = await runCompatComponent(output.code);
-    expect(Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent)).toEqual([
-      "a",
-      "Ada",
-      "Babbage",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent),
+    ).toEqual(["a", "Ada", "Babbage"]);
 
     container.querySelector<HTMLButtonElement>("#switch")?.click();
 
     expect(container.querySelector("#header")).toBeNull();
-    expect(Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent)).toEqual([
-      "Byron",
-      "Curie",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent),
+    ).toEqual(["Byron", "Curie"]);
   });
 
   test("lowers node-valued children props through dynamic insertion", async () => {
@@ -641,12 +641,16 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.diagnostics).toEqual([]);
 
     const calls: string[] = [];
-    const previous = (globalThis as unknown as {
-      __recordNestedEffect?: (id: string, suffix: string) => string;
-    }).__recordNestedEffect;
-    (globalThis as unknown as {
-      __recordNestedEffect?: (id: string, suffix: string) => string;
-    }).__recordNestedEffect = (id, suffix) => {
+    const previous = (
+      globalThis as unknown as {
+        __recordNestedEffect?: (id: string, suffix: string) => string;
+      }
+    ).__recordNestedEffect;
+    (
+      globalThis as unknown as {
+        __recordNestedEffect?: (id: string, suffix: string) => string;
+      }
+    ).__recordNestedEffect = (id, suffix) => {
       calls.push(`${id}:${suffix}`);
       return `${id}-${suffix}`;
     };
@@ -663,9 +667,11 @@ describe("react-compat prop reactive DOM block lowering", () => {
       expect(calls).not.toContain("a:c");
       expect(calls).toContain("b:c");
     } finally {
-      (globalThis as unknown as {
-        __recordNestedEffect?: (id: string, suffix: string) => string;
-      }).__recordNestedEffect = previous;
+      (
+        globalThis as unknown as {
+          __recordNestedEffect?: (id: string, suffix: string) => string;
+        }
+      ).__recordNestedEffect = previous;
     }
   });
 
@@ -1099,46 +1105,54 @@ describe("react-compat prop reactive DOM block lowering", () => {
       ).__rootListDispatch;
 
       expect(dispatch).toBeTypeOf("function");
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["1one", "2two", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "1one",
+        "2two",
+        "3three",
+      ]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
       const secondRow = container.querySelectorAll("tr")[1];
 
       dispatch?.({ type: "select", id: 2 });
       await flushEffects();
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.className),
-      ).toEqual(["", "danger", ""]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.className)).toEqual([
+        "",
+        "danger",
+        "",
+      ]);
       expect(container.querySelectorAll("tr")[1]).toBe(secondRow);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
       dispatch?.({ type: "update", id: 2 });
       await flushEffects();
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["1one", "2two!", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "1one",
+        "2two!",
+        "3three",
+      ]);
       expect(container.querySelectorAll("tr")[1]).toBe(secondRow);
 
       dispatch?.({ type: "swap" });
       await flushEffects();
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["2two!", "1one", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "2two!",
+        "1one",
+        "3three",
+      ]);
       expect(container.querySelectorAll("tr")[0]).toBe(secondRow);
       expect(secondRow?.className).toBe("danger");
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
       dispatch?.({ type: "remove", id: 2 });
       await flushEffects();
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["1one", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "1one",
+        "3three",
+      ]);
       expect(secondRow?.isConnected).toBe(false);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
     } finally {
-      (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders =
-        previousRenders;
+      (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders = previousRenders;
       (
         globalThis as unknown as {
           __rootListDispatch?: (action: { type: string; id?: number }) => void;
@@ -1332,5 +1346,219 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("bindList");
     expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
+  });
+
+  test.each([
+    {
+      classExpression: 'props.selected ? "danger" : "safe"',
+      extraProp: "",
+      expectsList: true,
+      name: "a non-empty unselected class",
+      parameters: "row",
+      rowTail: "",
+      selectedExpression: "state.selected === row.id",
+    },
+    {
+      classExpression: 'props.selected ? "danger selected" : ""',
+      extraProp: "",
+      expectsList: true,
+      name: "a multi-token selected class",
+      parameters: "row",
+      rowTail: "",
+      selectedExpression: "state.selected === row.id",
+    },
+    {
+      classExpression: 'props.selected ? "danger" : ""',
+      extraProp: "",
+      expectsList: true,
+      name: "another selected prop read",
+      parameters: "row",
+      rowTail: '<td>{props.selected ? "yes" : "no"}</td>',
+      selectedExpression: "state.selected === row.id",
+    },
+    {
+      classExpression: 'props.selected ? "danger" : ""',
+      extraProp: "label={row.label}",
+      expectsList: true,
+      name: "an item-derived prop",
+      parameters: "row",
+      rowTail: "<td>{props.label}</td>",
+      selectedExpression: "state.selected === row.id",
+    },
+    {
+      classExpression: 'props.selected ? "danger" : ""',
+      extraProp: "position={index}",
+      expectsList: false,
+      name: "an index-derived prop",
+      parameters: "row, index",
+      rowTail: "<td>{props.position}</td>",
+      selectedExpression: "state.selected === row.id",
+    },
+    {
+      classExpression: 'props.selected ? "danger" : ""',
+      extraProp: "count={rows.length}",
+      expectsList: false,
+      name: "an array-derived prop",
+      parameters: "row, index, rows",
+      rowTail: "<td>{props.count}</td>",
+      selectedExpression: "state.selected === row.id",
+    },
+    {
+      classExpression: 'props.selected ? "danger" : ""',
+      extraProp: "",
+      expectsList: true,
+      name: "a non-direct state projection",
+      parameters: "row",
+      rowTail: "",
+      selectedExpression: "selectedId(state) === row.id",
+    },
+  ])(
+    "keeps selected keyed lists on the general path with $name",
+    ({ classExpression, expectsList, extraProp, parameters, rowTail, selectedExpression }) => {
+      const output = transform({
+        code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+          function selectedId(value) {
+            return value.selected;
+          }
+
+          function reduce(state) {
+            return state;
+          }
+
+          export function Row(props) {
+            return <tr className={${classExpression}}><td>{props.row.id}</td>${rowTail}</tr>;
+          }
+
+          const RowMemo = memo(
+            Row,
+            (previous, next) => previous.row === next.row && previous.selected === next.selected,
+          );
+
+          function App() {
+            const [state, dispatch] = useReducer(reduce, {
+              rows: [{ id: 1, label: "one" }],
+              selected: null,
+            });
+            globalThis.__unsafeSelectedListDispatch = dispatch;
+            return state.rows.map((${parameters}) => (
+              <RowMemo
+                key={row.id}
+                row={row}
+                selected={${selectedExpression}}
+                ${extraProp}
+              />
+            ));
+          }
+
+          export function Shell() {
+            return <App />;
+          }`,
+        filename: "App.tsx",
+        target: "client",
+        dev: false,
+        mode: "compat",
+      });
+
+      expect(output.diagnostics).toEqual([]);
+      if (expectsList) {
+        expect(output.code).toContain("bindList");
+      }
+      expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
+    },
+  );
+
+  test.each([
+    {
+      list: "state.rows.map(({ id }) => <RowMemo key={id} row={{ id }} selected={state.selected === id} />)",
+      name: "a destructured item parameter",
+    },
+    {
+      list: "state.rows.map((row = state.rows[0]) => <RowMemo key={row.id} row={row} selected={state.selected === row.id} />)",
+      name: "a defaulted item parameter",
+    },
+    {
+      list: "state.rows.map((...values) => <RowMemo key={values[0].id} row={values[0]} selected={state.selected === values[0].id} />)",
+      name: "a rest parameter",
+    },
+  ])("does not specialize selected keyed lists with $name", ({ list }) => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr className={props.selected ? "danger" : ""}><td>{props.row.id}</td></tr>;
+        }
+
+        function reduce(state) {
+          return state;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) => previous.row === next.row && previous.selected === next.selected,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer(reduce, {
+            rows: [{ id: 1 }],
+            selected: null,
+          });
+          globalThis.__parameterFallbackDispatch = dispatch;
+          return ${list};
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
+  });
+
+  test("specializes reversed selected-key equality", () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr className={props.selected ? "danger" : ""}><td>{props.row.id}</td></tr>;
+        }
+
+        function reduce(state) {
+          return state;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) => previous.row === next.row && previous.selected === next.selected,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer(reduce, {
+            rows: [{ id: 1 }],
+            selected: null,
+          });
+          globalThis.__reversedSelectedDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo key={row.id} row={row} selected={row.id === state.selected} />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindSelectedKeyedSingleNodeList");
+    expect(output.code).toContain("selected: () => _stateStateBinding.get().selected");
   });
 });

@@ -341,9 +341,7 @@ function allocateHelperNames(
 
   for (const specifier of [...specifiers, ...reactiveDomSpecifiers]) {
     if (specifier === "bindSelectedKeyedSingleNodeList") {
-      helperNames.bindSelectedKeyedSingleNodeList = allocator(
-        "_bindSelectedKeyedSingleNodeList",
-      );
+      helperNames.bindSelectedKeyedSingleNodeList = allocator("_bindSelectedKeyedSingleNodeList");
       continue;
     }
 
@@ -2351,8 +2349,7 @@ function emitRootListReactiveDomBlockComponent(
   const setupListName = allocator("_setupList");
   const disposeName = allocator("_dispose");
   const listParameters = emitPropBlockListParameters(block.root);
-  const contextName =
-    block.selectedClass === undefined ? undefined : allocator("_rowContext");
+  const contextName = block.selectedClass === undefined ? undefined : allocator("_rowContext");
   const itemsCode = rewriteStateBindingCode(
     block.root.itemsCode,
     block.stateBinding.stateName,
@@ -2467,10 +2464,7 @@ function emitRootListRenderComponentNode(
   ].join("\n");
 }
 
-function emitRootListRenderProps(
-  block: RootListReactiveDomBlock,
-  contextName?: string,
-): string {
+function emitRootListRenderProps(block: RootListReactiveDomBlock, contextName?: string): string {
   const entries = block.renderComponentNode.props
     .map((prop) => {
       if (prop.kind === "render-prop" || prop.kind === "spread-prop") {

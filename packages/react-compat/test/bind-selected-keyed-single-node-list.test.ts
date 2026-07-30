@@ -37,10 +37,7 @@ describe("bindSelectedKeyedSingleNodeList", () => {
         const text = document.createTextNode("");
         const input = document.createElement("input");
         const button = document.createElement("button");
-        bindText(
-          text,
-          () => `${context.item.label}:${context.index}:${context.items.length}`,
-        );
+        bindText(text, () => `${context.item.label}:${context.index}:${context.items.length}`);
         bindEvent(button, "click", () => {
           payloads.push(`${context.item.label}:${context.index}:${context.items.length}`);
         });

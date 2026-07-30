@@ -4,10 +4,7 @@ import {
   trackSource,
   type Source,
 } from "@reckona/mreact-reactive-core/internal";
-import {
-  bindStaticKeyedSingleNodeList,
-  type Dispose,
-} from "@reckona/mreact-reactive-dom";
+import { bindStaticKeyedSingleNodeList, type Dispose } from "@reckona/mreact-reactive-dom";
 
 /** Internal row state used by compat compiler-generated keyed renderers. */
 export interface SelectedKeyedRowContext<T> {
