@@ -217,7 +217,7 @@ jobs:
 
       - name: Run ABBA baseline-a candidate-a candidate-b baseline-b
         run: >-
-          pnpm --dir candidate bench:js-framework:compare --
+          pnpm --dir candidate bench:js-framework:compare
           --baseline-root "$GITHUB_WORKSPACE/baseline"
           --candidate-root "$GITHUB_WORKSPACE/candidate"
           --output "$GITHUB_WORKSPACE/candidate/benchmarks/results/compiler-keyed-comparison-${{ github.run_id }}"

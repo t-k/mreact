@@ -75,6 +75,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("candidate-b");
     expect(workflow).toContain("baseline-b");
     expect(workflow).toContain("bench:js-framework:compare");
+    expect(workflow).not.toContain("bench:js-framework:compare --\n");
     expect(workflow).toContain("if: ${{ always() }}");
     expect(workflow).toContain("compiler-keyed-comparison-${{ github.run_id }}");
   });
