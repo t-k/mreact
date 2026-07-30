@@ -1343,4 +1343,50 @@ describe("react-compat prop reactive DOM block lowering", () => {
       ).__derivedRowPropDispatch = previousDispatch;
     }
   });
+
+  test("recognizes dollar-prefixed list parameters in selected-class safety checks", () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr className={props.selected ? "danger" : ""}><td>{props.label}</td></tr>;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) =>
+            previous.row === next.row &&
+            previous.label === next.label &&
+            previous.selected === next.selected,
+        );
+
+        function App() {
+          const [state, dispatch] = useReducer((current) => current, {
+            rows: [{ id: 1, label: "one" }],
+            selected: null,
+          });
+          globalThis.__dollarRowDispatch = dispatch;
+          return state.rows.map(($row) => (
+            <RowMemo
+              key={$row.id}
+              row={$row}
+              label={$row.label}
+              selected={state.selected === $row.id}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+  });
 });

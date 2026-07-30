@@ -3563,7 +3563,7 @@ function isIdentifierPart(char: string): boolean {
 }
 
 function containsIdentifier(code: string, name: string): boolean {
-  return new RegExp(`(^|[^A-Za-z_$\\d])${name}([^A-Za-z_$\\d]|$)`).test(code);
+  return new RegExp(`(^|[^A-Za-z_$\\d])${escapeRegex(name)}([^A-Za-z_$\\d]|$)`).test(code);
 }
 
 function isDirectTextBindingSafeBodyStatement(statement: string): boolean {
