@@ -215,6 +215,12 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --dir candidate exec playwright install --with-deps chromium
 
+      - name: Resolve Playwright Chromium
+        shell: bash
+        run: |
+          chrome_binary="$(pnpm --dir candidate exec node -e 'process.stdout.write(require("@playwright/test").chromium.executablePath())')"
+          echo "MREACT_JS_FRAMEWORK_CHROME_BINARY=$chrome_binary" >> "$GITHUB_ENV"
+
       - name: Run ABBA baseline-a candidate-a candidate-b baseline-b
         run: >-
           pnpm --dir candidate bench:js-framework:compare
