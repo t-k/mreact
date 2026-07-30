@@ -7,3 +7,8 @@ export {
   runWithCacheScope,
   type CacheScope,
 } from "./hooks.js";
+export { bindSelectedKeyedSingleNodeList } from "./bind-selected-keyed-single-node-list.js";
+export type {
+  BindSelectedKeyedSingleNodeListOptions,
+  SelectedKeyedRowContext,
+} from "./bind-selected-keyed-single-node-list.js";
