@@ -218,8 +218,10 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     expect(main).not.toContain("mount.replaceWith(App())");
     expect(entry).toContain('import { App } from "./main";');
     expect(entry).toContain("mount.replaceWith(App())");
-    expect(main).toContain("rows.get().map((row, index, items) => (");
+    expect(main).toContain("rows.get().map((row) => (");
     expect(main).toContain("<tr key={row.id}");
+    expect(main).not.toContain("data-index");
+    expect(main).not.toContain("data-count");
     expect(main).not.toContain("bindStaticKeyedSingleNodeList");
     expect(main).not.toContain("bindList");
   });
