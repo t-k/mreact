@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
+import { transform } from "../../packages/compiler/src/index.js";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 const fixtureRoot = join(
@@ -49,15 +50,11 @@ const octaneFixtureRoot = join(
   "octane",
 );
 const runnerPath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs");
+const comparePath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "compare.mjs");
 const readmePath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "README.md");
 const execFileAsync = promisify(execFile);
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-    vi.resetModules();
-  });
-
   test("declares the metadata and build command expected by js-framework-benchmark", async () => {
     const packageJson = JSON.parse(await readFile(join(fixtureRoot, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
@@ -70,168 +67,39 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     );
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("0.0.169");
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.169");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );
   });
 
-  test("keeps official action button ids and table target shape", async () => {
-    const html = await readFile(join(fixtureRoot, "index.html"), "utf8");
+  test("is the sole compiler-generated native keyed fixture", async () => {
+    const config = await readFile(join(fixtureRoot, "vite.config.ts"), "utf8");
+    const main = await readFile(join(fixtureRoot, "src", "main.tsx"), "utf8");
+    const entry = await readFile(join(fixtureRoot, "src", "index.ts"), "utf8");
 
-    expect(html).toContain('id="main"');
-    expect(html).toContain('id="run"');
-    expect(html).toContain('id="runlots"');
-    expect(html).toContain('id="add"');
-    expect(html).toContain('id="update"');
-    expect(html).toContain('id="clear"');
-    expect(html).toContain('id="swaprows"');
-    expect(html).toContain('class="table table-hover table-striped test-data"');
-    expect(html).toContain('src="dist/main.js"');
-    expect(html).not.toContain("/src/main.ts");
-  });
-
-  test("updates row labels through keyed row state instead of replacing the data array", async () => {
-    const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
-
-    expect(main).toContain("batch(() =>");
-    expect(main).toContain("row.label.set(`${row.label.get()} !!!`)");
-    expect(main).not.toContain("row.label.set((label)");
-    expect(main).toContain("if (selected.get() !== null)");
-    expect(main).toContain("rows.findIndex((row) => row.id === id)");
-    expect(main).toContain("const next = new Array<Row>(rows.length - 1)");
-    expect(main).toContain("return next");
-    expect(main).toContain("createTemplateElement");
-    expect(main).toContain("const createRowTemplate = createTemplateElement<HTMLTableRowElement>(");
-    expect(main).toContain('class="col-md-1"> </td>');
-    expect(main).not.toContain('data-action="select"');
-    expect(main).not.toContain('data-action="remove"');
-    expect(main).toContain("const idText = idCell.firstChild as Text;");
-    expect(main).toContain("const labelText = selectLink.firstChild as Text;");
-    expect(main).toContain(
-      "function getRowId(rowElement: HTMLTableRowElement): number | undefined",
-    );
-    expect(main).toContain('Number.parseInt(idCell?.textContent ?? "", 10)');
-    expect(main).toContain("bindStaticKeyedSingleNodeList(");
-    expect(main).toContain("deferEventPromotion: false");
-    expect(main).toContain("selectedClass: {");
-    expect(main).toContain('className: "danger"');
-    expect(main).toContain("preserveInitial: true");
-    expect(main).toContain("source: selected");
-    expect(main).toContain('bindEvent(tbody, "click", handleRowClick);');
-    expect(main).toContain('target.closest<HTMLAnchorElement>("a")');
-    expect(main).toContain('classList.contains("glyphicon-remove")');
-    expect(main).toContain("key: (row) => row.id");
-    expect(main).not.toContain("bindList(");
-    expect(main).not.toContain('itemMode: "static"');
-    expect(main).not.toContain("data.set(data.get().map");
-    expect(main).not.toContain("selected.get() === row.id");
-    expect(main).not.toContain('bindProp(tr, "className"');
-    expect(main).not.toContain("bindSelectorClass(");
-    expect(main).not.toContain("bindEvent(selectLink");
-    expect(main).not.toContain("bindEvent(removeLink");
-    expect(main).not.toContain("rowElements");
-    expect(main).not.toContain("previousSelectedRow");
-    expect(main).not.toContain(".className =");
-    expect(main).not.toContain("new WeakMap<HTMLTableRowElement, number>()");
-    expect(main).not.toContain("rowIdProperty");
-    expect(main).not.toContain("document.createTextNode(String(row.id))");
-  });
-
-  test("runs official keyed table actions through delegated row events", async () => {
-    document.body.innerHTML = [
-      '<div id="main">',
-      '<button id="run"></button>',
-      '<button id="runlots"></button>',
-      '<button id="add"></button>',
-      '<button id="update"></button>',
-      '<button id="clear"></button>',
-      '<button id="swaprows"></button>',
-      '<table><tbody id="tbody"></tbody></table>',
-      "</div>",
-    ].join("");
-    vi.resetModules();
-
-    await import("./frameworks/keyed/mreact/src/main.ts");
-
-    const click = async (selector: string): Promise<void> => {
-      const element = document.querySelector<HTMLElement>(selector);
-
-      if (element === null) {
-        throw new Error(`Missing ${selector}`);
-      }
-
-      element.click();
-      await flushEffects();
-    };
-    const rows = (): HTMLTableRowElement[] =>
-      Array.from(document.querySelectorAll<HTMLTableRowElement>("#tbody tr"));
-    const rowId = (row: HTMLTableRowElement): string => row.cells[0]?.textContent ?? "";
-    const rowLabel = (row: HTMLTableRowElement): string => row.cells[1]?.textContent ?? "";
-
-    await click("#run");
-    expect(rows()).toHaveLength(1_000);
-    expect(rowId(rows()[0] as HTMLTableRowElement)).toBe("1");
-
-    const firstLabel = rowLabel(rows()[0] as HTMLTableRowElement);
-    await click("#update");
-    expect(rowLabel(rows()[0] as HTMLTableRowElement)).toBe(`${firstLabel} !!!`);
-
-    await click("#tbody tr:nth-child(2) td:nth-child(2) a");
-    expect(rows()[1]?.className).toBe("danger");
-
-    await click("#swaprows");
-    expect(rowId(rows()[998] as HTMLTableRowElement)).toBe("2");
-    expect(rows()[998]?.className).toBe("danger");
-
-    await click("#tbody tr:nth-child(999) td:nth-child(3) a");
-    expect(rows()).toHaveLength(999);
-    expect(rows().some((row) => rowId(row) === "2")).toBe(false);
-
-    await click("#clear");
-    expect(rows()).toHaveLength(0);
-  });
-});
-
-describe("js-framework-benchmark compiler-generated mreact keyed fixture", () => {
-  test("uses the public compiler on ordinary keyed JSX", async () => {
-    const packageJson = JSON.parse(
-      await readFile(join(compiledFixtureRoot, "package.json"), "utf8"),
-    ) as {
-      dependencies?: Record<string, string>;
-      scripts?: Record<string, string>;
-      "js-framework-benchmark"?: Record<string, string>;
-    };
-    const config = await readFile(join(compiledFixtureRoot, "vite.config.ts"), "utf8");
-    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
-    const entry = await readFile(join(compiledFixtureRoot, "src", "index.ts"), "utf8");
-
-    expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
-    expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
-      "@reckona/mreact-reactive-dom",
-    );
-    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.169");
     expect(config).toContain('target: "client"');
     expect(config).toContain('mode: "reactive"');
     expect(config).toContain("transform({");
-    expect(config).toContain('entry: "src/index.ts"');
-    expect(main).toContain("export function App()");
-    expect(main).not.toContain("mount.replaceWith(App())");
-    expect(entry).toContain('import { App } from "./main";');
-    expect(entry).toContain("mount.replaceWith(App())");
     expect(main).toContain("rows.get().map((row) => (");
     expect(main).toContain("<tr key={row.id}");
-    expect(main).not.toContain("data-index");
-    expect(main).not.toContain("data-count");
-    expect(main).not.toContain("bindStaticKeyedSingleNodeList");
-    expect(main).not.toContain("bindList");
+    expect(entry).toContain('import { App } from "./main";');
+    await expect(readFile(join(fixtureRoot, "src", "main.ts"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(readFile(join(compiledFixtureRoot, "package.json"), "utf8")).rejects.toMatchObject(
+      { code: "ENOENT" },
+    );
   });
 
-  test("keeps the official keyed benchmark DOM contract", async () => {
-    const html = await readFile(join(compiledFixtureRoot, "index.html"), "utf8");
-    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
+  test("keeps the official keyed benchmark DOM contract in ordinary JSX", async () => {
+    const html = await readFile(join(fixtureRoot, "index.html"), "utf8");
+    const main = await readFile(join(fixtureRoot, "src", "main.tsx"), "utf8");
 
     expect(html).toContain('id="main"');
     expect(html).toContain('src="dist/main.js"');
+    expect(html).not.toContain("/src/main.ts");
+    expect(main).toContain("export function App()");
     for (const id of ["run", "runlots", "add", "update", "clear", "swaprows"]) {
       expect(main).toContain(`id="${id}"`);
     }
@@ -239,6 +107,8 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
     expect(main).toContain('aria-hidden="true"');
     expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
+    expect(main).not.toContain("bindStaticKeyedSingleNodeList");
+    expect(main).not.toContain("bindList");
   });
 });
 
@@ -363,6 +233,11 @@ describe("js-framework-benchmark Octane keyed fixture", () => {
 });
 
 describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    vi.resetModules();
+  });
+
   test("declares react-compat metadata and build command expected by js-framework-benchmark", async () => {
     const packageJson = JSON.parse(
       await readFile(join(reactCompatFixtureRoot, "package.json"), "utf8"),
@@ -416,6 +291,91 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).not.toContain("const _h = (() => selectRow(props.row.id));");
     expect(main).not.toContain('const _disposeEvent = typeof _h === "function" ? _bindEvent');
     expect(main.slice(main.indexOf("function Row"))).not.toContain("addEventListener");
+  });
+
+  test("keeps checked output identical to the current public compat compiler", async () => {
+    const source = await readFile(join(reactCompatFixtureRoot, "src", "main.tsx"), "utf8");
+    const generated = await readFile(join(reactCompatFixtureRoot, "src", "main.ts"), "utf8");
+    const output = transform({
+      code: source,
+      filename: "main.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+    const generatedBody = generated.slice(generated.indexOf("import ")).trim();
+
+    expect(output.diagnostics.filter((diagnostic) => diagnostic.level === "error")).toEqual([]);
+    expect(generatedBody).toBe(output.code.trim());
+    expect(generatedBody).toContain("bindList");
+    expect(generatedBody).toContain("REACTIVE_STATE_BINDING_META");
+  });
+
+  test("runs the official keyed table actions with stable keyed row identity", async () => {
+    document.body.innerHTML = [
+      '<button id="run"></button>',
+      '<button id="runlots"></button>',
+      '<button id="add"></button>',
+      '<button id="update"></button>',
+      '<button id="clear"></button>',
+      '<button id="swaprows"></button>',
+      '<table><tbody id="tbody"></tbody></table>',
+    ].join("");
+    vi.resetModules();
+
+    await import("./frameworks/keyed/mreact-react-compat/src/main.ts");
+
+    const click = async (target: string | HTMLElement): Promise<void> => {
+      const element =
+        typeof target === "string" ? document.querySelector<HTMLElement>(target) : target;
+
+      if (element === null) {
+        throw new Error(`Missing ${target}`);
+      }
+
+      element.click();
+      await flushEffects();
+    };
+    const rows = (): HTMLTableRowElement[] =>
+      Array.from(document.querySelectorAll<HTMLTableRowElement>("#tbody tr"));
+    const rowLabel = (row: HTMLTableRowElement): string => row.cells[1]?.textContent ?? "";
+
+    await click("#run");
+    expect(rows()).toHaveLength(1_000);
+    const firstRow = rows()[0] as HTMLTableRowElement;
+    const secondRow = rows()[1] as HTMLTableRowElement;
+    const nineHundredNinetyNinthRow = rows()[998] as HTMLTableRowElement;
+    const firstLabel = rowLabel(firstRow);
+    const secondLabel = rowLabel(secondRow);
+
+    await click("#update");
+    expect(rows()[0]).toBe(firstRow);
+    expect(rowLabel(firstRow)).toBe(`${firstLabel} !!!`);
+    expect(rowLabel(secondRow)).toBe(secondLabel);
+
+    await click(secondRow.cells[1]?.querySelector("a") as HTMLAnchorElement);
+    expect(secondRow.className).toBe("danger");
+
+    await click("#swaprows");
+    expect(rows()[1]).toBe(nineHundredNinetyNinthRow);
+    expect(rows()[998]).toBe(secondRow);
+    expect(secondRow.className).toBe("danger");
+
+    await click(secondRow.cells[2]?.querySelector("a") as HTMLAnchorElement);
+    expect(rows()).toHaveLength(999);
+    expect(secondRow.isConnected).toBe(false);
+
+    await click("#add");
+    expect(rows()).toHaveLength(1_999);
+    const retainedRow = rows()[0] as HTMLTableRowElement;
+    await click("#clear");
+    expect(rows()).toHaveLength(0);
+    expect(retainedRow.isConnected).toBe(false);
+
+    await click("#runlots");
+    expect(rows()).toHaveLength(10_000);
+    await click("#clear");
+    expect(rows()).toHaveLength(0);
   });
 
   test("keeps a plain VDOM react-compatible fixture beside the lowered fixture", async () => {
@@ -484,14 +444,24 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/mreact-react-compat-vdom"');
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
-    expect(runner).toContain('official: "keyed/mreact-compiled"');
     expect(runner).toContain('official: "keyed/octane"');
     expect(runner).toContain(
-      '["mreact", "mreact-compiled", "mreact-react-compat", "mreact-react-compat-vdom", "octane"]',
+      '["mreact", "mreact-react-compat", "mreact-react-compat-vdom", "octane"]',
     );
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");
+  });
+
+  test("uses mreact as the sole native fixture and supports generic ABBA framework selection", async () => {
+    const runner = await readFile(runnerPath, "utf8");
+    const compare = await readFile(comparePath, "utf8");
+
+    expect(runner).not.toContain("mreact-compiled");
+    expect(compare).toContain('argumentsByName.get("framework") ?? "keyed/mreact"');
+    expect(compare).toContain("selectedFramework: selectedFramework");
+    expect(compare).toContain("MREACT_JS_FRAMEWORKS: selectedFramework");
+    expect(compare).not.toContain("mreact-compiled");
   });
 
   test("documents the repository-local Octane comparison fixture", async () => {

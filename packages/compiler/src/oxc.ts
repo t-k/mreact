@@ -386,6 +386,8 @@ function analyzeOxcToIr(
 
     if (
       isOxcJsxComponentStatement(statement, localJsxReturnFunctionNames) ||
+      (options?.compatReactNodeReturn === true &&
+        readOxcListMapComponent(statement) !== undefined) ||
       isCompatCreateElementComponentStatement(
         code,
         statement,
@@ -397,12 +399,8 @@ function analyzeOxcToIr(
       ) ||
       (options?.compatReactNodeReturn === true && isOxcExportedFunctionLike(statement))
     ) {
-      const declaration = readObject(readObject(statement).declaration);
-
-      if (declaration.type === "VariableDeclaration") {
-        for (const bindingName of collectBindingNames(declaration)) {
-          moduleBindingNames.add(bindingName);
-        }
+      for (const bindingName of collectBindingNames(statement)) {
+        moduleBindingNames.add(bindingName);
       }
       continue;
     } else {

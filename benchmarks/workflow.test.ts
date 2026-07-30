@@ -25,6 +25,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("js_frameworks:");
     expect(workflow).toContain("js_benchmarks:");
     expect(workflow).toContain("compare_ref:");
+    expect(workflow).toContain("compare_framework:");
     expect(workflow).toContain("MREACT_JS_FRAMEWORKS: ${{ inputs.js_frameworks }}");
     expect(workflow).toContain("MREACT_JS_FRAMEWORK_BENCHMARKS: ${{ inputs.js_benchmarks }}");
     expect(workflow).toContain("BENCH_CASES:");
@@ -60,7 +61,7 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).not.toContain("request-fastpaths");
   });
 
-  test("runs compiler keyed-list comparisons in ABBA order without committing results", async () => {
+  test("runs selected keyed-list comparisons in ABBA order without committing results", async () => {
     const workflow = await readFile(
       join(process.cwd(), ".github", "workflows", "benchmarks.yml"),
       "utf8",
@@ -76,12 +77,14 @@ describe("benchmark GitHub workflow", () => {
     expect(workflow).toContain("candidate-b");
     expect(workflow).toContain("baseline-b");
     expect(workflow).toContain("bench:js-framework:compare");
+    expect(workflow).toContain('--framework "${{ inputs.compare_framework }}"');
     expect(workflow).toContain("MREACT_JS_FRAMEWORK_CHROME_BINARY");
     expect(workflow).toContain("command -v google-chrome");
     expect(workflow).toContain('test -x "$chrome_binary"');
     expect(workflow).not.toContain("bench:js-framework:compare --\n");
     expect(workflow).toContain("if: ${{ always() }}");
     expect(workflow).toContain("compiler-keyed-comparison-${{ github.run_id }}");
+    expect(workflow).not.toContain("mreact-compiled");
   });
 
   test("keeps docs-site required benchmark reports aligned with the all suite", async () => {

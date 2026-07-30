@@ -24,9 +24,14 @@ on:
         required: false
         type: string
       compare_ref:
-        description: Optional baseline ref for a compiler keyed-list ABBA comparison
+        description: Optional baseline ref for a keyed-list ABBA comparison
         required: false
         type: string
+      compare_framework:
+        description: Framework id for an ABBA comparison
+        required: false
+        type: string
+        default: keyed/mreact-react-compat
 
 permissions:
   actions: write
@@ -225,6 +230,7 @@ jobs:
           --baseline-root "$GITHUB_WORKSPACE/baseline"
           --candidate-root "$GITHUB_WORKSPACE/candidate"
           --output "$GITHUB_WORKSPACE/candidate/benchmarks/results/compiler-keyed-comparison-${{ github.run_id }}"
+          --framework "${{ inputs.compare_framework }}"
           --cases "${{ inputs.js_benchmarks }}"
 
       - name: Write comparison summary

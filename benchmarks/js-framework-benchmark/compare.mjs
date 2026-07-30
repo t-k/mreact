@@ -14,6 +14,7 @@ const argumentsByName = parseArguments(process.argv.slice(2));
 const baselineRoot = requireDirectoryArgument(argumentsByName, "baseline-root");
 const candidateRoot = requireDirectoryArgument(argumentsByName, "candidate-root");
 const outputRoot = requireNewOutputArgument(argumentsByName, "output");
+const selectedFramework = argumentsByName.get("framework") ?? "keyed/mreact";
 const selectedBenchmarks = argumentsByName.get("cases") ?? "";
 const upstreamRoot = await mkdtemp(join(tmpdir(), "mreact-js-framework-abba-"));
 const runSpecs = [
@@ -64,7 +65,7 @@ try {
   const comparison = compareAbbaRuns(runs);
   const manifest = {
     order: runSpecs.map((spec) => spec.name),
-    selectedFramework: "keyed/mreact-compiled",
+    selectedFramework: selectedFramework,
     selectedBenchmarks: selectedBenchmarks.split(/[,\s]+/u).filter(Boolean),
     baselineSha: sourceShas.baseline,
     candidateSha: sourceShas.candidate,
@@ -96,7 +97,7 @@ async function runBenchmark(spec, cases, root) {
     ...process.env,
     MREACT_BENCHMARK_RESULTS_DIR: resultDir,
     MREACT_JS_FRAMEWORK_BENCHMARK_DIR: spec.upstreamRoot,
-    MREACT_JS_FRAMEWORKS: "keyed/mreact-compiled",
+    MREACT_JS_FRAMEWORKS: selectedFramework,
     MREACT_JS_FRAMEWORK_BENCHMARKS: cases,
     MREACT_JS_FRAMEWORK_ORDER_OFFSET: "0",
   });
@@ -106,11 +107,15 @@ async function readBenchmarkRun(resultDir, sha, upstreamRevision) {
   const rawDir = join(resultDir, "js-framework-benchmark-results");
   const files = await readdir(rawDir);
   const metrics = {};
+  const frameworkName = selectedFramework.split("/").at(-1);
 
   for (const caseId of REQUIRED_CASE_IDS) {
     const suffix = `_${caseId}.json`;
     const matches = files.filter(
-      (file) => file.includes("mreact-compiled") && file.endsWith(suffix),
+      (file) =>
+        frameworkName !== undefined &&
+        file.startsWith(`${frameworkName}-`) &&
+        file.endsWith(suffix),
     );
 
     if (matches.length !== 1) {

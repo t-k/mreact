@@ -8,7 +8,10 @@ import { runCompatComponent } from "./helpers.js";
 
 describe("react-compat prop reactive DOM block lowering", () => {
   test("resolves static prop block component names without a fixed-point loop", () => {
-    const source = readFileSync(join(process.cwd(), "packages/compiler/src/emit-compat.ts"), "utf8");
+    const source = readFileSync(
+      join(process.cwd(), "packages/compiler/src/emit-compat.ts"),
+      "utf8",
+    );
     const start = source.indexOf("function collectStaticPropBlockComponentNames");
     const end = source.indexOf("interface StaticPropBlockComponentCandidate", start);
     const implementation = source.slice(start, end);
@@ -327,19 +330,16 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain("bindList");
 
     const container = await runCompatComponent(output.code);
-    expect(Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent)).toEqual([
-      "a",
-      "Ada",
-      "Babbage",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent),
+    ).toEqual(["a", "Ada", "Babbage"]);
 
     container.querySelector<HTMLButtonElement>("#switch")?.click();
 
     expect(container.querySelector("#header")).toBeNull();
-    expect(Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent)).toEqual([
-      "Byron",
-      "Curie",
-    ]);
+    expect(
+      Array.from(container.querySelectorAll("#rows li")).map((node) => node.textContent),
+    ).toEqual(["Byron", "Curie"]);
   });
 
   test("lowers node-valued children props through dynamic insertion", async () => {
@@ -640,12 +640,16 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.diagnostics).toEqual([]);
 
     const calls: string[] = [];
-    const previous = (globalThis as unknown as {
-      __recordNestedEffect?: (id: string, suffix: string) => string;
-    }).__recordNestedEffect;
-    (globalThis as unknown as {
-      __recordNestedEffect?: (id: string, suffix: string) => string;
-    }).__recordNestedEffect = (id, suffix) => {
+    const previous = (
+      globalThis as unknown as {
+        __recordNestedEffect?: (id: string, suffix: string) => string;
+      }
+    ).__recordNestedEffect;
+    (
+      globalThis as unknown as {
+        __recordNestedEffect?: (id: string, suffix: string) => string;
+      }
+    ).__recordNestedEffect = (id, suffix) => {
       calls.push(`${id}:${suffix}`);
       return `${id}-${suffix}`;
     };
@@ -662,9 +666,11 @@ describe("react-compat prop reactive DOM block lowering", () => {
       expect(calls).not.toContain("a:c");
       expect(calls).toContain("b:c");
     } finally {
-      (globalThis as unknown as {
-        __recordNestedEffect?: (id: string, suffix: string) => string;
-      }).__recordNestedEffect = previous;
+      (
+        globalThis as unknown as {
+          __recordNestedEffect?: (id: string, suffix: string) => string;
+        }
+      ).__recordNestedEffect = previous;
     }
   });
 
@@ -1045,7 +1051,7 @@ describe("react-compat prop reactive DOM block lowering", () => {
 
         const RowMemo = memo(Row, (previous, next) => previous.row === next.row && previous.selected === next.selected);
 
-        export function App() {
+        function App() {
           globalThis.__rootListRenders = (globalThis.__rootListRenders ?? 0) + 1;
           const [state, dispatch] = useReducer(reduce, { rows: initialRows, selected: null });
           globalThis.__rootListDispatch = dispatch;
@@ -1067,6 +1073,7 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).toContain("createReactiveDomBlock");
     expect(output.code).toContain("bindList");
     expect(output.code).toContain("REACTIVE_STATE_BINDING_META");
+    expect(output.code.match(/function App\(/gu)).toHaveLength(1);
 
     const previousRenders = (globalThis as unknown as { __rootListRenders?: number })
       .__rootListRenders;
@@ -1092,31 +1099,37 @@ describe("react-compat prop reactive DOM block lowering", () => {
       ).__rootListDispatch;
 
       expect(dispatch).toBeTypeOf("function");
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["1one", "2two", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "1one",
+        "2two",
+        "3three",
+      ]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
       dispatch?.({ type: "select", id: 2 });
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.className),
-      ).toEqual(["", "danger", ""]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.className)).toEqual([
+        "",
+        "danger",
+        "",
+      ]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
       dispatch?.({ type: "swap" });
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["2two", "1one", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "2two",
+        "1one",
+        "3three",
+      ]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
 
       dispatch?.({ type: "remove", id: 2 });
-      expect(
-        Array.from(container.querySelectorAll("tr")).map((row) => row.textContent),
-      ).toEqual(["1one", "3three"]);
+      expect(Array.from(container.querySelectorAll("tr")).map((row) => row.textContent)).toEqual([
+        "1one",
+        "3three",
+      ]);
       expect((globalThis as unknown as { __rootListRenders?: number }).__rootListRenders).toBe(1);
     } finally {
-      (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders =
-        previousRenders;
+      (globalThis as unknown as { __rootListRenders?: number }).__rootListRenders = previousRenders;
       (
         globalThis as unknown as {
           __rootListDispatch?: (action: { type: string; id?: number }) => void;

@@ -1,8 +1,7 @@
-// GENERATED from main.tsx by the mreact compiler (compat mode, Option C).
-// Source of truth is main.tsx; regenerate, do not hand-edit. Phase 3 experiment.
-
-import { jsx as _jsx, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
-import { bindEvent as _bindEvent, effect as _effect } from "@reckona/mreact-reactive-dom";
+// GENERATED from main.tsx by the mreact compiler in production compat mode.
+// Source of truth is main.tsx; run pnpm bench:js-framework:generate-compat after compiler changes.
+import { jsx as _jsx, REACTIVE_STATE_BINDING_META as _REACTIVE_STATE_BINDING_META, createReactiveDomBlock as _createReactiveDomBlock } from "@reckona/mreact-compat/jsx-runtime";
+import { bindEvent as _bindEvent, bindList as _bindList, effect as _effect } from "@reckona/mreact-reactive-dom";
 import { createRoot, flushSync, memo, useReducer } from "@reckona/mreact-compat";
 const adjectives = [
 	"pretty",
@@ -179,17 +178,6 @@ function requireElement(id) {
 }
 const RowMemo = memo(Row, (previous, next) => previous.selected === next.selected && previous.row === next.row);
 RowMemo.__mreactMemoCompareProps = ["selected", "row"];
-function App() {
-	const [state, dispatch] = useReducer(reduceAppState, {
-		rows: [],
-		selected: null
-	});
-	dispatchApp = dispatch;
-	return state.rows.map((row) => /* @__PURE__ */ _jsx(RowMemo, {
-		row,
-		selected: state.selected === row.id
-	}, row.id));
-}
 const root = createRoot(requireElement("tbody"));
 flushSync(() => {
 	root.render(/* @__PURE__ */ _jsx(App, {}));
@@ -235,25 +223,94 @@ function Row(props) {
       return (removeRow(props.row.id));
     });
     const _disposeEffect = _effect(() => {
-      const _r = (props.selected ? "danger" : "");
+          const _r = (props.selected ? "danger" : "");
       const _v = _r == null ? "" : String(_r);
       if (_tr.className !== _v) _tr.className = _v;
     });
     const _disposeEffect$1 = _effect(() => {
-      const _r$1 = (props.row.id);
+          const _r$1 = (props.row.id);
       const _v$1 = _r$1 == null ? "" : String(_r$1);
       if (_text.data !== _v$1) _text.data = _v$1;
-      const _r$2 = (props.row.label);
+          const _r$2 = (props.row.label);
       const _v$2 = _r$2 == null ? "" : String(_r$2);
       if (_text$1.data !== _v$2) _text$1.data = _v$2;
     });
     const _dispose = () => {
-      _disposeEffect();
-      _disposeEffect$1();
       _disposeEvent();
       _disposeEvent$1();
+      _disposeEffect();
+      _disposeEffect$1();
     };
     return { node: _tr, dispose: _dispose };
   }, props);
 }
 Row.__mreactStaticBlock = true;
+
+function App() {
+  const _stateStateTuple = useReducer(reduceAppState, {
+	rows: [],
+	selected: null
+});
+  const [state, dispatch] = _stateStateTuple;
+  const _stateStateBinding = _stateStateTuple[_REACTIVE_STATE_BINDING_META];
+  dispatchApp = dispatch;
+  return _createReactiveDomBlock(() => {
+    const _marker = document.createTextNode("");
+    let _disposeList;
+    const _setupList = () => {
+      if (_disposeList !== undefined || _marker.parentNode === null) return;
+      _disposeList = _bindList(_marker.parentNode, _marker, () => (_stateStateBinding.get().rows), (row) => (() => {
+  const props = { get row() { return (row); }, get selected() { return (_stateStateBinding.get().selected === row.id); } };
+  const _tr = document.createElement("tr");
+  const _td = document.createElement("td");
+  _td.className = "col-md-1";
+  const _text = document.createTextNode("");
+  _td.appendChild(_text);
+  _tr.appendChild(_td);
+  const _td$1 = document.createElement("td");
+  _td$1.className = "col-md-4";
+  const _a = document.createElement("a");
+  const _text$1 = document.createTextNode("");
+  _a.appendChild(_text$1);
+  _td$1.appendChild(_a);
+  _tr.appendChild(_td$1);
+  const _td$2 = document.createElement("td");
+  _td$2.className = "col-md-1";
+  const _a$1 = document.createElement("a");
+  const _span = document.createElement("span");
+  _span.setAttribute("aria-hidden", "true");
+  _span.className = "glyphicon glyphicon-remove";
+  _a$1.appendChild(_span);
+  _td$2.appendChild(_a$1);
+  _tr.appendChild(_td$2);
+  const _td$3 = document.createElement("td");
+  _td$3.className = "col-md-6";
+  _tr.appendChild(_td$3);
+  const _disposeEvent = _bindEvent(_a, "click", (event) => {
+    return (selectRow(props.row.id));
+  });
+  const _disposeEvent$1 = _bindEvent(_a$1, "click", (event$1) => {
+    return (removeRow(props.row.id));
+  });
+  const _disposeEffect = _effect(() => {
+        const _r = (props.selected ? "danger" : "");
+      const _v = _r == null ? "" : String(_r);
+      if (_tr.className !== _v) _tr.className = _v;
+  });
+  const _disposeEffect$1 = _effect(() => {
+        const _r$1 = (props.row.id);
+      const _v$1 = _r$1 == null ? "" : String(_r$1);
+      if (_text.data !== _v$1) _text.data = _v$1;
+        const _r$2 = (props.row.label);
+      const _v$2 = _r$2 == null ? "" : String(_r$2);
+      if (_text$1.data !== _v$2) _text$1.data = _v$2;
+  });
+  return _tr;
+})(), { key: (row) => (row.id) });
+    };
+    const _dispose = () => {
+      if (_disposeList !== undefined) _disposeList();
+    };
+    return { node: _marker, dispose: _dispose, afterCommit: _setupList };
+  });
+}

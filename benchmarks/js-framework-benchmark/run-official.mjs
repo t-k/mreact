@@ -54,8 +54,7 @@ const localPackageSpecs = [
 const localPackageByName = new Map(localPackageSpecs.map((spec) => [spec.name, spec]));
 
 const localFixtureDependencies = {
-  mreact: ["@reckona/mreact-reactive-core", "@reckona/mreact-reactive-dom"],
-  "mreact-compiled": [
+  mreact: [
     "@reckona/mreact-compiler",
     "@reckona/mreact-reactive-core",
     "@reckona/mreact-reactive-dom",
@@ -63,7 +62,7 @@ const localFixtureDependencies = {
   "mreact-react-compat": ["@reckona/mreact-reactive-dom", "@reckona/mreact-compat"],
   "mreact-react-compat-vdom": ["@reckona/mreact-compat"],
 };
-const localFixtureNames = ["mreact", "mreact-compiled", "mreact-react-compat", "mreact-react-compat-vdom", "octane"];
+const localFixtureNames = ["mreact", "mreact-react-compat", "mreact-react-compat-vdom", "octane"];
 
 const frameworkMappings = [
   {
@@ -101,10 +100,6 @@ const frameworkMappings = [
   {
     primitive: "mreact",
     official: "keyed/mreact",
-  },
-  {
-    primitive: "mreact compiled",
-    official: "keyed/mreact-compiled",
   },
   {
     primitive: "octane",

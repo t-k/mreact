@@ -10,14 +10,11 @@ export const CPU_CASE_IDS = [
   "09_clear1k_x8",
 ];
 
-export const MEMORY_CASE_IDS = [
-  "21_ready-memory",
-  "22_run-memory",
-  "25_run-clear-memory",
-];
+export const MEMORY_CASE_IDS = ["21_ready-memory", "22_run-memory", "25_run-clear-memory"];
 
 export const SIZE_CASE_ID = "42_size-compressed";
 export const REQUIRED_CASE_IDS = [...CPU_CASE_IDS, ...MEMORY_CASE_IDS, SIZE_CASE_ID];
+const THRESHOLD_EPSILON = 1e-9;
 
 export function geometricMean(values) {
   return Math.exp(values.reduce((sum, value) => sum + Math.log(value), 0) / values.length);
@@ -80,15 +77,21 @@ export function compareAbbaRuns(runs) {
     mean(runs.baselineA.metrics[SIZE_CASE_ID], runs.baselineB.metrics[SIZE_CASE_ID]);
   const repeatableCpuRegressions = CPU_CASE_IDS.filter(
     (caseId) =>
-      percentDelta(runs.baselineA.metrics[caseId], runs.candidateA.metrics[caseId]) > 5 &&
-      percentDelta(runs.baselineB.metrics[caseId], runs.candidateB.metrics[caseId]) > 5,
+      exceedsThreshold(
+        percentDelta(runs.baselineA.metrics[caseId], runs.candidateA.metrics[caseId]),
+        5,
+      ) &&
+      exceedsThreshold(
+        percentDelta(runs.baselineB.metrics[caseId], runs.candidateB.metrics[caseId]),
+        5,
+      ),
   );
   const reasons = [];
 
-  if (cpuGeometricMeanDeltaPercent > 3) {
+  if (exceedsThreshold(cpuGeometricMeanDeltaPercent, 3)) {
     reasons.push(`CPU geometric mean regressed ${formatPercent(cpuGeometricMeanDeltaPercent)}.`);
   }
-  if (memoryGeometricMeanDeltaPercent > 3) {
+  if (exceedsThreshold(memoryGeometricMeanDeltaPercent, 3)) {
     reasons.push(
       `Memory geometric mean regressed ${formatPercent(memoryGeometricMeanDeltaPercent)}.`,
     );
@@ -159,6 +162,10 @@ function inconclusive(reason) {
 
 function mean(left, right) {
   return (left + right) / 2;
+}
+
+function exceedsThreshold(value, threshold) {
+  return value - threshold > THRESHOLD_EPSILON;
 }
 
 function formatPercent(value) {
