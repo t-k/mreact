@@ -625,7 +625,9 @@ function fileDependency(fromDir, toDir) {
 
 async function copyLocalFixtures() {
   for (const name of localFixtureNames) {
-    await cp(join(fixtureRoot, name), join(checkoutRoot, "frameworks", "keyed", name), {
+    const target = join(checkoutRoot, "frameworks", "keyed", name);
+    await rm(target, { force: true, recursive: true });
+    await cp(join(fixtureRoot, name), target, {
       force: true,
       recursive: true,
     });

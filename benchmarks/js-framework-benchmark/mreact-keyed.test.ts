@@ -113,6 +113,14 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
 });
 
 describe("js-framework-benchmark official runner stability", () => {
+  test("replaces local fixture directories between repeated ABBA runs", async () => {
+    const source = await readFile(runnerPath, "utf8");
+
+    expect(source).toMatch(
+      /async function copyLocalFixtures\(\)[\s\S]*?const target = join\(checkoutRoot,[\s\S]*?await rm\(target, \{ force: true, recursive: true \}\);[\s\S]*?await cp\([^;]*?target,/u,
+    );
+  });
+
   test("rotates and records framework order to reduce run-order drift", async () => {
     const source = await readFile(runnerPath, "utf8");
 
