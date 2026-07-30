@@ -54,7 +54,7 @@ jobs:
           package-manager-cache: false
 
       - name: Enable Corepack
-        run: corepack enable
+        run: corepack enable && corepack prepare pnpm@10.19.0 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -204,7 +204,7 @@ jobs:
           package-manager-cache: false
 
       - name: Enable Corepack
-        run: corepack enable
+        run: corepack enable && corepack prepare pnpm@10.19.0 --activate
 
       - name: Install candidate dependencies
         run: pnpm --dir candidate install --frozen-lockfile
