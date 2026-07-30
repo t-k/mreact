@@ -197,6 +197,8 @@ describe("js-framework-benchmark official runner stability", () => {
     expect(source).toContain('?? "react-hooks"');
     expect(source).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)}");
     expect(source).toContain("function findAnchorRow(");
+    expect(source).toContain("framework.startsWith(`${anchor}-v`)");
+    expect(source).toContain("MREACT_JS_FRAMEWORK_SUMMARY_ONLY");
   });
 });
 

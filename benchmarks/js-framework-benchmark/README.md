@@ -9,3 +9,5 @@ The repository-local primitive reactivity microbenchmarks, such as source writes
 Set `MREACT_JS_FRAMEWORKS=keyed/octane` when only the local Octane fixture should be built and measured.
 
 Set `MREACT_JS_FRAMEWORK_CHROME_BINARY` to an absolute browser executable path when the official runner's default Chromium path is unavailable. The configured binary is used by smoke validation, keyedness validation, CSP validation, and the full benchmark run.
+
+Set `MREACT_JS_FRAMEWORK_SUMMARY_ONLY=1` to regenerate the Markdown summary from raw JSON already stored in `MREACT_BENCHMARK_RESULTS_DIR` without rebuilding or rerunning browser benchmarks.

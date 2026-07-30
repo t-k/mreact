@@ -271,8 +271,14 @@ const diffAnchorFramework = process.env.MREACT_JS_FRAMEWORK_DIFF_ANCHOR ?? "reac
 
 const selectedBenchmarks = parseFrameworks(process.env.MREACT_JS_FRAMEWORK_BENCHMARKS, []);
 const chromeBinaryPath = parseChromeBinaryPath(process.env.MREACT_JS_FRAMEWORK_CHROME_BINARY);
+const summaryOnly = parseBooleanEnv(process.env.MREACT_JS_FRAMEWORK_SUMMARY_ONLY, false);
 
-await main();
+if (summaryOnly) {
+  await mkdir(resultDir, { recursive: true });
+  await writeSummary();
+} else {
+  await main();
+}
 
 async function main() {
   await prepareCheckout();
@@ -461,7 +467,12 @@ function rotateFrameworks(frameworks, offset) {
 }
 
 function matchesAnchorFramework(framework, anchor) {
-  return framework === anchor || framework.endsWith(`/${anchor}`) || framework.endsWith(anchor);
+  return (
+    framework === anchor ||
+    framework.startsWith(`${anchor}-v`) ||
+    framework.endsWith(`/${anchor}`) ||
+    framework.endsWith(anchor)
+  );
 }
 
 function benchmarkArgs() {
