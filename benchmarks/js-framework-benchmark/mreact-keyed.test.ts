@@ -55,6 +55,11 @@ const readmePath = join(process.cwd(), "benchmarks", "js-framework-benchmark", "
 const execFileAsync = promisify(execFile);
 
 describe("js-framework-benchmark mreact keyed fixture", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+    vi.resetModules();
+  });
+
   test("declares the metadata and build command expected by js-framework-benchmark", async () => {
     const packageJson = JSON.parse(await readFile(join(fixtureRoot, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
@@ -67,48 +72,102 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     );
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("0.0.198");
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.198");
-    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.198");
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBeUndefined();
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/t-k/mreact",
     );
   });
 
-  test("is the sole compiler-generated native keyed fixture", async () => {
-    const config = await readFile(join(fixtureRoot, "vite.config.ts"), "utf8");
-    const main = await readFile(join(fixtureRoot, "src", "main.tsx"), "utf8");
-    const entry = await readFile(join(fixtureRoot, "src", "index.ts"), "utf8");
+  test("keeps official action button ids and table target shape", async () => {
+    const html = await readFile(join(fixtureRoot, "index.html"), "utf8");
 
-    expect(config).toContain('target: "client"');
+    expect(html).toContain('id="main"');
+    expect(html).toContain('id="run"');
+    expect(html).toContain('id="runlots"');
+    expect(html).toContain('id="add"');
+    expect(html).toContain('id="update"');
+    expect(html).toContain('id="clear"');
+    expect(html).toContain('id="swaprows"');
+    expect(html).toContain('class="table table-hover table-striped test-data"');
+    expect(html).toContain('src="dist/main.js"');
+    expect(html).not.toContain("/src/main.ts");
+  });
+
+  test("retains the proven hand-written keyed hot path", async () => {
+    const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
+
+    expect(main).toContain("row.label.set(`${row.label.get()} !!!`)");
+    expect(main).toContain("bindStaticKeyedSingleNodeList(");
+    expect(main).toContain("deferEventPromotion: false");
+    expect(main).toContain("selectedClass: {");
+    expect(main).toContain('bindEvent(tbody, "click", handleRowClick);');
+    expect(main).toContain("key: (row) => row.id");
+    expect(main).not.toContain("bindList");
+    await expect(readFile(join(fixtureRoot, "src", "main.tsx"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  test("runs official keyed table actions through delegated row events", async () => {
+    document.body.innerHTML = [
+      '<div id="main">',
+      '<button id="run"></button>',
+      '<button id="runlots"></button>',
+      '<button id="add"></button>',
+      '<button id="update"></button>',
+      '<button id="clear"></button>',
+      '<button id="swaprows"></button>',
+      '<table><tbody id="tbody"></tbody></table>',
+      "</div>",
+    ].join("");
+    vi.resetModules();
+
+    await import("./frameworks/keyed/mreact/src/main.ts");
+
+    const click = async (selector: string): Promise<void> => {
+      const element = document.querySelector<HTMLElement>(selector);
+
+      if (element === null) {
+        throw new Error(`Missing ${selector}`);
+      }
+
+      element.click();
+      await flushEffects();
+    };
+    const rows = (): HTMLTableRowElement[] =>
+      Array.from(document.querySelectorAll<HTMLTableRowElement>("#tbody tr"));
+    const rowId = (row: HTMLTableRowElement): string => row.cells[0]?.textContent ?? "";
+
+    await click("#run");
+    expect(rows()).toHaveLength(1_000);
+    expect(rowId(rows()[0] as HTMLTableRowElement)).toBe("1");
+    await click("#tbody tr:nth-child(2) td:nth-child(2) a");
+    expect(rows()[1]?.className).toBe("danger");
+    await click("#swaprows");
+    expect(rowId(rows()[998] as HTMLTableRowElement)).toBe("2");
+    await click("#tbody tr:nth-child(999) td:nth-child(3) a");
+    expect(rows()).toHaveLength(999);
+    await click("#clear");
+    expect(rows()).toHaveLength(0);
+  });
+});
+
+describe("js-framework-benchmark compiler-generated mreact keyed fixture", () => {
+  test("keeps the public compiler path as a separate comparison fixture", async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(compiledFixtureRoot, "package.json"), "utf8"),
+    ) as { dependencies?: Record<string, string> };
+    const config = await readFile(join(compiledFixtureRoot, "vite.config.ts"), "utf8");
+    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
+    const entry = await readFile(join(compiledFixtureRoot, "src", "index.ts"), "utf8");
+
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.198");
     expect(config).toContain('mode: "reactive"');
     expect(config).toContain("transform({");
     expect(main).toContain("rows.get().map((row) => (");
     expect(main).toContain("<tr key={row.id}");
     expect(entry).toContain('import { App } from "./main";');
-    await expect(readFile(join(fixtureRoot, "src", "main.ts"), "utf8")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
-    await expect(readFile(join(compiledFixtureRoot, "package.json"), "utf8")).rejects.toMatchObject(
-      { code: "ENOENT" },
-    );
-  });
-
-  test("keeps the official keyed benchmark DOM contract in ordinary JSX", async () => {
-    const html = await readFile(join(fixtureRoot, "index.html"), "utf8");
-    const main = await readFile(join(fixtureRoot, "src", "main.tsx"), "utf8");
-
-    expect(html).toContain('id="main"');
-    expect(html).toContain('src="dist/main.js"');
-    expect(html).not.toContain("/src/main.ts");
-    expect(main).toContain("export function App()");
-    for (const id of ["run", "runlots", "add", "update", "clear", "swaprows"]) {
-      expect(main).toContain(`id="${id}"`);
-    }
-    expect(main).toContain('class="table table-hover table-striped test-data"');
-    expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
-    expect(main).toContain('aria-hidden="true"');
-    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
     expect(main).not.toContain("bindStaticKeyedSingleNodeList");
-    expect(main).not.toContain("bindList");
   });
 });
 
@@ -467,23 +526,29 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
     expect(runner).toContain('official: "keyed/octane"');
-    expect(runner).toContain(
-      '["mreact", "mreact-react-compat", "mreact-react-compat-vdom", "octane"]',
-    );
+    expect(runner).toContain('official: "keyed/mreact-compiled"');
+    for (const fixture of [
+      '"mreact"',
+      '"mreact-compiled"',
+      '"mreact-react-compat"',
+      '"mreact-react-compat-vdom"',
+      '"octane"',
+    ]) {
+      expect(runner).toContain(fixture);
+    }
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");
   });
 
-  test("uses mreact as the sole native fixture and supports generic ABBA framework selection", async () => {
+  test("supports separate native ceiling and compiler fixtures in generic ABBA selection", async () => {
     const runner = await readFile(runnerPath, "utf8");
     const compare = await readFile(comparePath, "utf8");
 
-    expect(runner).not.toContain("mreact-compiled");
+    expect(runner).toContain("mreact-compiled");
     expect(compare).toContain('argumentsByName.get("framework") ?? "keyed/mreact"');
     expect(compare).toContain("selectedFramework: selectedFramework");
     expect(compare).toContain("MREACT_JS_FRAMEWORKS: selectedFramework");
-    expect(compare).not.toContain("mreact-compiled");
   });
 
   test("documents the repository-local Octane comparison fixture", async () => {

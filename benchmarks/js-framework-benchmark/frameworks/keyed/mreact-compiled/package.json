@@ -1,5 +1,5 @@
 {
-  "name": "js-framework-benchmark-mreact",
+  "name": "js-framework-benchmark-mreact-compiled",
   "version": "1.0.0",
   "homepage": "https://github.com/t-k/mreact",
   "license": "MIT",
@@ -9,11 +9,12 @@
     "url": "https://github.com/t-k/mreact.git"
   },
   "type": "module",
-  "main": "dist/assets/index.js",
+  "main": "dist/main.js",
   "scripts": {
     "build-prod": "vite build --mode production"
   },
   "dependencies": {
+    "@reckona/mreact-compiler": "0.0.198",
     "@reckona/mreact-reactive-core": "0.0.198",
     "@reckona/mreact-reactive-dom": "0.0.198"
   },

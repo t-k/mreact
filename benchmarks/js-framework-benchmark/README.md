@@ -2,7 +2,7 @@
 
 This directory contains the Mreact keyed implementations and an Octane 0.1.19 keyed fixture prepared for krausest/js-framework-benchmark. The repository runner copies the local fixtures into an official checkout, runs its normal install and build flow, and measures them with the official webdriver runner.
 
-`keyed/mreact` measures the normal public compiler path from ordinary cell-backed JSX. Optimization candidates are judged by comparing this standard fixture against itself before and after the change.
+`keyed/mreact` retains the measured hand-written reactive DOM implementation as the primary native fixture. `keyed/mreact-compiled` measures the normal public compiler path from ordinary cell-backed JSX and remains available as a separate comparison until it matches the primary fixture without a material CPU or memory regression.
 
 The fixtures intentionally target the standard keyed table cases: create 1,000 rows, create 10,000 rows, append 1,000 rows, update every 10th row, select a row, remove a row, swap rows, and clear rows. Those DOM-list cases should use the official harness for public cross-framework comparisons once the upstream PR is accepted.
 
