@@ -5,8 +5,81 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
+import {
+  bindCompilerKeyedSingleNodeList,
+  readCompilerKeyedRowIndex,
+  readCompilerKeyedRowItem,
+  readCompilerKeyedRowItems,
+} from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("keeps compiler row identity while updating item, index, items, and events", async () => {
+    const items = cell<readonly { readonly id: number; readonly label: string }[]>([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    const payloads: string[] = [];
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const tr = document.createElement("tr");
+        const text = document.createTextNode("");
+        const input = document.createElement("input");
+        const button = document.createElement("button");
+        bindText(
+          text,
+          () =>
+            `${readCompilerKeyedRowItem(context).label}:${readCompilerKeyedRowIndex(context)}:${readCompilerKeyedRowItems(context).length}`,
+        );
+        bindEvent(button, "click", () => {
+          payloads.push(
+            `${readCompilerKeyedRowItem(context).label}:${readCompilerKeyedRowIndex(context)}:${readCompilerKeyedRowItems(context).length}`,
+          );
+        });
+        tr.append(text, input, button);
+        return tr;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+
+    const firstRow = parent.children[0] as HTMLTableRowElement;
+    const firstInput = firstRow.querySelector("input") as HTMLInputElement;
+    firstInput.value = "edited";
+    firstInput.focus();
+
+    items.set([
+      { id: 1, label: "A!" },
+      { id: 2, label: "B" },
+    ]);
+    await flushEffects();
+    expect(parent.children[0]).toBe(firstRow);
+    expect(firstRow.textContent).toBe("A!:0:2");
+    expect(firstInput.value).toBe("edited");
+    expect(document.activeElement).toBe(firstInput);
+
+    items.set([
+      { id: 2, label: "B" },
+      { id: 1, label: "A!" },
+    ]);
+    await flushEffects();
+    expect(parent.children[1]).toBe(firstRow);
+    expect(firstRow.textContent).toBe("A!:1:2");
+    firstRow.querySelector("button")?.click();
+    expect(payloads).toEqual(["A!:1:2"]);
+
+    dispose();
+    firstRow.querySelector("button")?.click();
+    expect(payloads).toEqual(["A!:1:2"]);
+    parent.remove();
+  });
   test("creates, replaces, swaps, removes, and clears keyed single-node rows", async () => {
     const firstLabel = cell("A");
     const secondLabel = cell("B");
@@ -464,9 +537,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     ]);
     await flushEffects();
 
-    expect(parent.innerHTML).toBe(
-      "<tr>A</tr><tr>B</tr><tr>C</tr><tr>D</tr><!--rows-->",
-    );
+    expect(parent.innerHTML).toBe("<tr>A</tr><tr>B</tr><tr>C</tr><tr>D</tr><!--rows-->");
     expect(parent.children[0]).toBe(firstRow);
     expect(parent.children[1]).toBe(secondRow);
     expect(appendedNodes).toEqual([]);
