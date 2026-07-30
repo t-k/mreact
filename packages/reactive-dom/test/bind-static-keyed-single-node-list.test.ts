@@ -5,12 +5,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
-import {
-  bindCompilerKeyedSingleNodeList,
-  readCompilerKeyedRowIndex,
-  readCompilerKeyedRowItem,
-  readCompilerKeyedRowItems,
-} from "../src/internal.js";
+import { bindCompilerKeyedSingleNodeList } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
   test("keeps compiler row identity while updating item, index, items, and events", async () => {
@@ -33,15 +28,9 @@ describe("bindStaticKeyedSingleNodeList", () => {
         const text = document.createTextNode("");
         const input = document.createElement("input");
         const button = document.createElement("button");
-        bindText(
-          text,
-          () =>
-            `${readCompilerKeyedRowItem(context).label}:${readCompilerKeyedRowIndex(context)}:${readCompilerKeyedRowItems(context).length}`,
-        );
+        bindText(text, () => `${context.item.label}:${context.index}:${context.items.length}`);
         bindEvent(button, "click", () => {
-          payloads.push(
-            `${readCompilerKeyedRowItem(context).label}:${readCompilerKeyedRowIndex(context)}:${readCompilerKeyedRowItems(context).length}`,
-          );
+          payloads.push(`${context.item.label}:${context.index}:${context.items.length}`);
         });
         tr.append(text, input, button);
         return tr;
@@ -79,6 +68,40 @@ describe("bindStaticKeyedSingleNodeList", () => {
     firstRow.querySelector("button")?.click();
     expect(payloads).toEqual(["A!:1:2"]);
     parent.remove();
+  });
+
+  test("does not notify item-only compiler rows for an unused array identity change", async () => {
+    const first = { id: 1, label: "A" };
+    const items = cell<readonly (typeof first)[]>([first]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let reads = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        const text = document.createTextNode("");
+        bindText(text, () => {
+          reads += 1;
+          return context.item.label;
+        });
+        row.append(text);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+    const readsAfterMount = reads;
+
+    items.set(items.get().slice());
+    await flushEffects();
+
+    expect(reads).toBe(readsAfterMount);
+    dispose();
   });
   test("creates, replaces, swaps, removes, and clears keyed single-node rows", async () => {
     const firstLabel = cell("A");

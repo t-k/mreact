@@ -1,9 +1,4 @@
-import type {
-  ComponentPropIr,
-  ComponentIr,
-  JsxNodeIr,
-  ModuleIr,
-} from "./ir.js";
+import type { ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
@@ -19,9 +14,14 @@ export function emitClient(
   options: { dev?: boolean; filename?: string } = {},
 ): EmitResult {
   const imports = collectImports(ir);
-  const helperNames = allocateRuntimeHelperNames(ir, imports[0]?.specifiers ?? []);
-  const importLine =
-    imports[0]?.specifiers.length === 0 ? "" : emitRuntimeImportLine(imports, helperNames);
+  const helperNames = allocateRuntimeHelperNames(
+    ir,
+    imports.flatMap((entry) => entry.specifiers),
+  );
+  const importLines = imports
+    .filter((entry) => entry.specifiers.length > 0)
+    .map((entry) => emitRuntimeImportLine(entry, helperNames))
+    .join("\n");
   const userImports = emitUserImports(ir);
   const moduleStatements = emitModuleStatements(ir);
   const moduleAllocator = createNameAllocator([]);
@@ -29,22 +29,18 @@ export function emitClient(
     ? moduleAllocator("__mreactClientBoundary", ir.moduleBindingNames)
     : undefined;
   const clientBoundaryHelper =
-    clientBoundaryHelperName === undefined ? "" : emitClientBoundaryHelper(clientBoundaryHelperName);
+    clientBoundaryHelperName === undefined
+      ? ""
+      : emitClientBoundaryHelper(clientBoundaryHelperName);
   const components = ir.components
     .map((component) =>
-      emitComponent(
-        component,
-        moduleAllocator,
-        helperNames,
-        clientBoundaryHelperName,
-        options,
-      ),
+      emitComponent(component, moduleAllocator, helperNames, clientBoundaryHelperName, options),
     )
     .join("\n\n")
     .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef);
 
   return {
-    code: `${[importLine, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
+    code: `${[importLines, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
     imports,
   };
 }
@@ -58,7 +54,8 @@ type RuntimeHelperName =
   | "bindText"
   | "createList"
   | "createTemplate"
-  | "insertDynamic";
+  | "insertDynamic"
+  | "bindCompilerKeyedSingleNodeList";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
 
@@ -86,6 +83,7 @@ function allocateRuntimeHelperNames(
     createList: "createList",
     createTemplate: "createTemplate",
     insertDynamic: "insertDynamic",
+    bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
   };
 
   for (const specifier of specifiers) {
@@ -97,10 +95,10 @@ function allocateRuntimeHelperNames(
 }
 
 function emitRuntimeImportLine(
-  imports: RuntimeImport[],
+  runtimeImport: RuntimeImport,
   helperNames: RuntimeHelperNames,
 ): string {
-  const specifiers = imports[0]?.specifiers ?? ["createTemplate"];
+  const specifiers = runtimeImport.specifiers;
   const importedNames = specifiers.map((specifier) => {
     const helper = specifier as RuntimeHelperName;
     const localName = helperNames[helper];
@@ -108,7 +106,7 @@ function emitRuntimeImportLine(
     return localName === specifier ? specifier : `${specifier} as ${localName}`;
   });
 
-  return `import { ${importedNames.join(", ")} } from "@reckona/mreact-reactive-dom";`;
+  return `import { ${importedNames.join(", ")} } from ${JSON.stringify(runtimeImport.source)};`;
 }
 
 function emitUserImports(ir: ModuleIr): string {
@@ -125,6 +123,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   }
 
   const specifiers = new Set<string>(["createTemplate"]);
+  const internalSpecifiers = new Set<string>();
 
   if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
     specifiers.add("bindDomRef");
@@ -133,9 +132,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   for (const component of ir.components) {
     visit(component.root, (node) => {
       if (node.kind === "expr") {
-        specifiers.add(
-          node.renderMode === "dynamic" ? "insertDynamic" : "bindText",
-        );
+        specifiers.add(node.renderMode === "dynamic" ? "insertDynamic" : "bindText");
       }
 
       if (node.kind === "conditional") {
@@ -143,7 +140,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       }
 
       if (node.kind === "list") {
-        specifiers.add("bindList");
+        if (node.compiledSingleNode === undefined) {
+          specifiers.add("bindList");
+        } else {
+          internalSpecifiers.add("bindCompilerKeyedSingleNodeList");
+        }
       }
 
       if (node.kind === "element") {
@@ -172,12 +173,19 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     }
   }
 
-  return [
+  const imports: RuntimeImport[] = [
     {
       source: "@reckona/mreact-reactive-dom",
       specifiers: Array.from(specifiers).sort(),
     },
   ];
+  if (internalSpecifiers.size > 0) {
+    imports.push({
+      source: "@reckona/mreact-reactive-dom/internal",
+      specifiers: Array.from(internalSpecifiers).sort(),
+    });
+  }
+  return imports;
 }
 
 function componentUsesCreateList(node: JsxNodeIr): boolean {
@@ -253,11 +261,9 @@ function renderValueNodeUsesCreateList(node: JsxNodeIr): boolean {
 
 function componentCallUsesCreateList(node: Extract<JsxNodeIr, { kind: "component" }>): boolean {
   return (
-    node.props.some((prop) =>
-      prop.kind === "render-prop" &&
-      renderValueChildrenUseCreateList(prop.children),
-    ) ||
-    renderValueChildrenUseCreateList(node.children)
+    node.props.some(
+      (prop) => prop.kind === "render-prop" && renderValueChildrenUseCreateList(prop.children),
+    ) || renderValueChildrenUseCreateList(node.children)
   );
 }
 
@@ -308,10 +314,7 @@ function emitComponent(
   clientBoundaryHelperName: string | undefined,
   options: { dev?: boolean; filename?: string },
 ): string {
-  const templateName = moduleAllocator(
-    "_tmpl_" + component.name,
-    component.bindingNames,
-  );
+  const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
   const allocator = createNameAllocator([...component.bindingNames, templateName]);
   const body = component.bodyStatements.map((statement) => `  ${statement}`);
   const parameters = component.parameters.join(", ");
@@ -442,23 +445,13 @@ interface EmitSetupState {
 }
 
 function emitDebugOptions(debugLabel: string | undefined): string {
-  return debugLabel === undefined
-    ? ""
-    : `, { debugLabel: ${JSON.stringify(debugLabel)} }`;
+  return debugLabel === undefined ? "" : `, { debugLabel: ${JSON.stringify(debugLabel)} }`;
 }
 
-function emitSetup(
-  node: JsxNodeIr,
-  path: string,
-  state: EmitSetupState,
-): string {
+function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string {
   const lines: string[] = [];
 
-  if (
-    node.kind !== "element" &&
-    node.kind !== "fragment" &&
-    node.kind !== "component"
-  ) {
+  if (node.kind !== "element" && node.kind !== "fragment" && node.kind !== "component") {
     return "";
   }
 
@@ -496,15 +489,11 @@ function emitSetup(
       }
 
       if (attr.kind === "spread-attr") {
-        lines.push(
-          `  ${state.helperNames.bindSpreadProps}(${path}, () => (${attr.code}));`,
-        );
+        lines.push(`  ${state.helperNames.bindSpreadProps}(${path}, () => (${attr.code}));`);
       }
 
       if (attr.kind === "event") {
-        lines.push(
-          `  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`,
-        );
+        lines.push(`  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`);
       }
     }
   }
@@ -531,12 +520,10 @@ function emitSetup(
 
     const childPath =
       stableChildrenName === undefined ||
-      (
-        child.kind !== "component" &&
+      (child.kind !== "component" &&
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
-        !sawStaticText
-      )
+        !sawStaticText)
         ? `${path}.childNodes[${childIndex}]`
         : `${stableChildrenName}[${childIndex}]`;
 
@@ -553,9 +540,7 @@ function emitSetup(
       state.textIndex += 1;
       lines.push(`  const ${textVar} = document.createTextNode("");`);
       lines.push(`  ${childPath}.replaceWith(${textVar});`);
-      lines.push(
-        `  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`,
-      );
+      lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
       childIndex += 1;
       continue;
     }
@@ -576,18 +561,24 @@ function emitSetup(
         optionEntries.push(`key: (${parameters}) => (${child.keyCode})`);
       }
 
-      if (
-        child.keyCode !== undefined &&
-        listReadsNestedItemObject(child, child.itemName)
-      ) {
+      if (child.keyCode !== undefined && listReadsNestedItemObject(child, child.itemName)) {
         optionEntries.push("nestedObjectFallback: true");
       }
 
-      const options =
-        optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
-      lines.push(
-        `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
-      );
+      const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
+      if (child.compiledSingleNode === undefined) {
+        lines.push(
+          `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
+        );
+      } else {
+        const templateName = state.allocateName("_keyedTemplate");
+        lines.push(
+          `  const ${templateName} = ${state.helperNames.createTemplate}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
+        );
+        lines.push(
+          `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state)}${options});`,
+        );
+      }
       childIndex += 1;
       continue;
     }
@@ -622,10 +613,7 @@ function hasLiveChildListMutation(children: readonly JsxNodeIr[]): boolean {
   return children.some(usesLiveInsertionAnchor);
 }
 
-function emitRenderValueExpression(
-  children: JsxNodeIr[],
-  state: EmitSetupState,
-): string {
+function emitRenderValueExpression(children: JsxNodeIr[], state: EmitSetupState): string {
   if (children.length === 0) {
     return "null";
   }
@@ -634,9 +622,7 @@ function emitRenderValueExpression(
     return emitNodeRenderValueExpression(children[0] as JsxNodeIr, state);
   }
 
-  return `[${children
-    .map((child) => emitNodeRenderValueExpression(child, state))
-    .join(", ")}]`;
+  return `[${children.map((child) => emitNodeRenderValueExpression(child, state)).join(", ")}]`;
 }
 
 function emitAsyncBoundarySetup(
@@ -671,10 +657,7 @@ function emitAsyncBoundarySetup(
   ].join("\n");
 }
 
-function emitNodeRenderValueExpression(
-  node: JsxNodeIr,
-  state: EmitSetupState,
-): string {
+function emitNodeRenderValueExpression(node: JsxNodeIr, state: EmitSetupState): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
   }
@@ -771,20 +754,37 @@ function emitListRenderer(
   return `(${parameters}) => {\n${node.bodyStatements.map((statement) => `    ${statement}`).join("\n")}\n    return ${valueExpression};\n  }`;
 }
 
-function emitListOptions(
+function emitCompilerKeyedSingleNodeRenderer(
   node: Extract<JsxNodeIr, { kind: "list" }>,
-  parameters: string,
+  templateName: string,
+  state: EmitSetupState,
 ): string {
+  const root = node.compiledSingleNode?.root;
+  if (root === undefined) {
+    throw new Error("Missing compiled single-node root.");
+  }
+  const fragmentName = state.allocateName("_keyedFragment");
+  const rootName = state.allocateName("_keyedRoot");
+  const setup = emitSetup(root, rootName, state);
+  const setupLines = setup === "" ? [] : setup.split("\n");
+  return [
+    `(${node.itemName}) => {`,
+    `  const ${fragmentName} = ${templateName}();`,
+    `  const ${rootName} = ${fragmentName}.firstChild;`,
+    ...setupLines,
+    `  return ${rootName};`,
+    "}",
+  ].join("\n");
+}
+
+function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>, parameters: string): string {
   const optionEntries: string[] = [];
 
   if (node.keyCode !== undefined) {
     optionEntries.push(`key: (${parameters}) => (${node.keyCode})`);
   }
 
-  if (
-    node.keyCode !== undefined &&
-    listReadsNestedItemObject(node, node.itemName)
-  ) {
+  if (node.keyCode !== undefined && listReadsNestedItemObject(node, node.itemName)) {
     optionEntries.push("nestedObjectFallback: true");
   }
 
@@ -859,9 +859,7 @@ function shouldEmitReactiveComponentPropGetter(code: string): boolean {
   return !/^\s*(?:async\s*)?(?:function\b|(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>)/.test(code);
 }
 
-function createNameAllocator(
-  reservedNames: readonly string[],
-): NameAllocator {
+function createNameAllocator(reservedNames: readonly string[]): NameAllocator {
   const usedNames = new Set(reservedNames);
 
   return (baseName: string, extraReservedNames: readonly string[] = []): string => {
@@ -883,10 +881,7 @@ function isCompatClientReferenceModuleId(moduleId: string): boolean {
   return /\.compat(?:\.mreact)?(?:\.[cm]?[jt]sx?)?$/.test(moduleId);
 }
 
-type NameAllocator = (
-  baseName: string,
-  extraReservedNames?: readonly string[],
-) => string;
+type NameAllocator = (baseName: string, extraReservedNames?: readonly string[]) => string;
 
 function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   fn(node);

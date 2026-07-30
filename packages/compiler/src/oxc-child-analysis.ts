@@ -79,12 +79,7 @@ export function analyzeOxcJsxNode(
   if (node.type === "JSXFragment") {
     return {
       kind: "fragment",
-      children: analyzeOxcChildren(
-        code,
-        readArray(node.children),
-        context,
-        bodyStatementJsx,
-      ),
+      children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
     };
   }
 
@@ -117,12 +112,7 @@ export function analyzeOxcJsxNode(
           }),
         )
         .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
-      children: analyzeOxcChildren(
-        code,
-        readArray(node.children),
-        context,
-        bodyStatementJsx,
-      ),
+      children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
     } satisfies JsxElementIr;
   }
 
@@ -145,12 +135,7 @@ export function analyzeOxcJsxNode(
         childBodyStatementJsx,
       );
     const consumerRenderProp = tagName.endsWith(".Consumer")
-      ? readOxcConsumerRenderProp(
-          code,
-          readArray(node.children),
-          analyzeJsxNode,
-          bodyStatementJsx,
-        )
+      ? readOxcConsumerRenderProp(code, readArray(node.children), analyzeJsxNode, bodyStatementJsx)
       : undefined;
     const componentLoc = getOxcLocation(code, openingElement.name);
 
@@ -209,10 +194,7 @@ export function analyzeOxcJsxNode(
   } satisfies JsxElementIr;
 }
 
-function isOxcRuntimeComponentBinding(
-  tagName: string,
-  context: OxcChildAnalysisContext,
-): boolean {
+function isOxcRuntimeComponentBinding(tagName: string, context: OxcChildAnalysisContext): boolean {
   if (!/^[A-Z]/.test(tagName)) {
     return false;
   }
@@ -374,7 +356,9 @@ export function analyzeOxcExpressionChild(
       return [];
     }
 
-    context.diagnostics.push(invalidJsxExpressionDiagnostic(getOxcLocation(code, expression), "text"));
+    context.diagnostics.push(
+      invalidJsxExpressionDiagnostic(getOxcLocation(code, expression), "text"),
+    );
     return [];
   }
 
@@ -472,7 +456,7 @@ export function analyzeOxcExpressionChild(
       : undefined;
   const componentCallNamesForRenderMode =
     context.target === "server" && context.serverOutput === "stream"
-      ? context.componentCallNames ?? context.componentNames
+      ? (context.componentCallNames ?? context.componentNames)
       : context.componentNames;
   const sameModuleComponentCall =
     sameModuleComponentStreamCall !== undefined ||
@@ -489,17 +473,18 @@ export function analyzeOxcExpressionChild(
       )
     : undefined;
   const isKnownRenderValue = isOxcRenderValueExpression(expression) || sameModuleComponentCall;
-  const renderMode = sameModuleComponentStreamCall !== undefined
-    ? ("stream-node" as const)
-    : isKnownRenderValue
-      ? bodyStatementJsx === "server-string"
-        ? ("html" as const)
-        : ("dynamic" as const)
-    : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
-      ? ("html" as const)
-      : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
-        ? ("dynamic" as const)
-        : undefined;
+  const renderMode =
+    sameModuleComponentStreamCall !== undefined
+      ? ("stream-node" as const)
+      : isKnownRenderValue
+        ? bodyStatementJsx === "server-string"
+          ? ("html" as const)
+          : ("dynamic" as const)
+        : loweredNestedJsx !== undefined && bodyStatementJsx === "server-string"
+          ? ("html" as const)
+          : loweredNestedJsx !== undefined && bodyStatementJsx === "dom-node"
+            ? ("dynamic" as const)
+            : undefined;
 
   return [
     {
@@ -527,7 +512,9 @@ function readOxcReactiveExpressionCode(
   const unwrappedExpression = unwrapOxcParentheses(expression);
 
   if (unwrappedExpression.type === "Identifier" && typeof unwrappedExpression.name === "string") {
-    return context.reactiveAliasBindings?.get(unwrappedExpression.name) ?? readSource(code, expression);
+    return (
+      context.reactiveAliasBindings?.get(unwrappedExpression.name) ?? readSource(code, expression)
+    );
   }
 
   return (
@@ -636,6 +623,17 @@ function analyzeOxcListExpression(
 
   const { children, bodyStatements } = rendererBody;
   const keyCode = findOxcKeyCodeInChildren(children);
+  const compiledSingleNode = analyzeCompiledSingleNodeList(
+    code,
+    renderer,
+    rendererContext,
+    rendererBody,
+    bodyStatementJsx,
+    keyCode,
+    itemName,
+    typeof indexName === "string" ? indexName : undefined,
+    typeof arrayName === "string" ? arrayName : undefined,
+  );
 
   return {
     kind: "list",
@@ -649,7 +647,80 @@ function analyzeOxcListExpression(
     ...(keyCode === undefined ? {} : { keyCode }),
     ...(bodyStatements.length === 0 ? {} : { bodyStatements }),
     children,
+    ...(compiledSingleNode === undefined ? {} : { compiledSingleNode }),
   };
+}
+
+function analyzeCompiledSingleNodeList(
+  code: string,
+  renderer: Record<string, unknown>,
+  rendererContext: OxcChildAnalysisContext,
+  rendererBody: { children: JsxNodeIr[]; bodyStatements: string[] },
+  bodyStatementJsx: OxcBodyStatementJsxMode,
+  keyCode: string | undefined,
+  itemName: string,
+  indexName: string | undefined,
+  arrayName: string | undefined,
+): { root: JsxElementIr } | undefined {
+  if (
+    keyCode === undefined ||
+    rendererBody.bodyStatements.length !== 0 ||
+    rendererBody.children.length !== 1 ||
+    rendererBody.children[0]?.kind !== "element" ||
+    !isCompiledSingleNodeTree(rendererBody.children[0])
+  ) {
+    return undefined;
+  }
+
+  const bindings = new Map(rendererContext.reactiveAliasBindings);
+  bindings.set(itemName, `${itemName}.item`);
+  if (indexName !== undefined) {
+    bindings.set(indexName, `${itemName}.index`);
+  }
+  if (arrayName !== undefined) {
+    bindings.set(arrayName, `${itemName}.items`);
+  }
+  const compiledBody = analyzeOxcListRenderer(
+    code,
+    renderer,
+    { ...rendererContext, reactiveAliasBindings: bindings },
+    bodyStatementJsx,
+  );
+  const root = compiledBody?.children[0];
+
+  return compiledBody?.bodyStatements.length === 0 && root?.kind === "element"
+    ? { root }
+    : undefined;
+}
+
+function isCompiledSingleNodeTree(node: JsxNodeIr): boolean {
+  if (node.kind === "text") {
+    return true;
+  }
+
+  if (node.kind === "expr") {
+    return node.renderMode !== "dynamic";
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  for (const attribute of node.attributes) {
+    if (attribute.kind === "spread-attr" || attribute.kind === "dom-ref") {
+      return false;
+    }
+    if (
+      attribute.kind === "event" &&
+      !attribute.code.includes("=>") &&
+      !/^function\b/u.test(attribute.code) &&
+      !/^[A-Za-z_$][\w$]*$/u.test(attribute.code)
+    ) {
+      return false;
+    }
+  }
+
+  return node.children.every(isCompiledSingleNodeTree);
 }
 
 function analyzeOxcListRenderer(

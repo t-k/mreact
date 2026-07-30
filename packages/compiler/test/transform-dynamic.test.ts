@@ -93,4 +93,85 @@ describe("compiler dynamic JSX transform", () => {
     );
     expect(output.code).toContain("bindList");
   });
+
+  test("emits the compiler keyed helper for a safe single intrinsic root", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A" }]);
+          return <tbody>{rows.get().map((row, index, items) => (
+            <tr key={row.id} data-index={index} data-count={items.length}>
+              <td>{row.label}</td>
+              <td><button onClick={() => globalThis.__selected = row.id}>Select</button></td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.metadata.imports).toContainEqual({
+      source: "@reckona/mreact-reactive-dom/internal",
+      specifiers: ["bindCompilerKeyedSingleNodeList"],
+    });
+    expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
+    expect(output.code).toContain("row.item).label");
+    expect(output.code).toContain("row.index)");
+    expect(output.code).toContain("row.items).length");
+    expect(output.code).toContain('const _keyedTemplate = createTemplate("<tr');
+    expect(output.code.indexOf("const _keyedTemplate")).toBeLessThan(
+      output.code.lastIndexOf("bindCompilerKeyedSingleNodeList("),
+    );
+    expect(output.code).not.toContain("bindList");
+  });
+
+  test.each([
+    ["fragment", "<><tr key={row.id} /><tr /></>"],
+    ["component", "<Row key={row.id} row={row} />"],
+    ["conditional", "row.active ? <tr key={row.id} /> : null"],
+    ["nested list", "<tr key={row.id}>{row.children.map((child) => <td>{child}</td>)}</tr>"],
+    ["spread", "<tr key={row.id} {...row.props} />"],
+    ["no key", "<tr>{row.label}</tr>"],
+  ])("keeps %s keyed list shapes on bindList", (_name, renderer) => {
+    const output = transform({
+      code: `function Row(props) { return <tr><td>{props.row.label}</td></tr>; }
+        export function App() {
+          const rows = cell([]);
+          return <tbody>{rows.get().map((row) => (${renderer}))}</tbody>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+  });
+
+  test("rewrites shorthand row reads without changing raw key or shadowed event parameters", () => {
+    const output = transform({
+      code: `export function App() {
+        const rows = cell([{ id: 1, label: "A" }]);
+        return <tbody>{rows.get().map((row) => (
+          <tr key={row.id}>
+            <td>{row.label}</td>
+            <td><button onClick={() => globalThis.__row = { row }}>Capture</button></td>
+            <td><button onClick={(row) => globalThis.__event = row.type}>Event</button></td>
+          </tr>
+        ))}</tbody>;
+      }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("{ row: (row.item) }");
+    expect(output.code).toContain("(row) => globalThis.__event = row.type");
+    expect(output.code).toContain("{ key: (row) => (row.id) }");
+    expect(output.code).not.toContain("{ key: (row) => ((row.item).id) }");
+  });
 });

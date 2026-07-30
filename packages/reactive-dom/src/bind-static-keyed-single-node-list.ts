@@ -36,7 +36,7 @@ export type SingleNodeRenderer<T, TNode extends ChildNode> = (
 ) => TNode;
 
 interface SingleNodeRecord {
-  compilerContext?: CompilerKeyedRowContext<unknown> | undefined;
+  compilerContext?: InternalCompilerKeyedRowContext | undefined;
   currentIndex?: number | undefined;
   currentItem: unknown;
   currentItems?: readonly unknown[] | undefined;
@@ -48,10 +48,9 @@ interface SingleNodeRecord {
 
 /** Internal row state used by compiler-generated keyed single-node renderers. */
 export interface CompilerKeyedRowContext<T> {
-  index: number;
-  item: T;
-  items: readonly T[];
-  source?: Source | undefined;
+  readonly index: number;
+  readonly item: T;
+  readonly items: readonly T[];
 }
 
 /** Internal renderer contract used only by compiler-generated output. */
@@ -59,7 +58,39 @@ export type CompilerKeyedSingleNodeRenderer<T, TNode extends ChildNode> = (
   context: CompilerKeyedRowContext<T>,
 ) => TNode;
 
-const compilerRowContexts = new WeakMap<ChildNode, CompilerKeyedRowContext<unknown>>();
+const compilerRowIndex = Symbol("compilerRowIndex");
+const compilerRowItem = Symbol("compilerRowItem");
+const compilerRowItems = Symbol("compilerRowItems");
+const compilerRowReads = Symbol("compilerRowReads");
+const compilerRowSource = Symbol("compilerRowSource");
+type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
+  [compilerRowIndex]: number;
+  [compilerRowItem]: unknown;
+  [compilerRowItems]: readonly unknown[];
+  [compilerRowReads]: number;
+  [compilerRowSource]?: Source | undefined;
+};
+const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
+  get index(): number {
+    const context = this as InternalCompilerKeyedRowContext;
+    context[compilerRowReads] |= 2;
+    trackSource(ensureCompilerRowSource(context));
+    return context[compilerRowIndex];
+  },
+  get item(): unknown {
+    const context = this as InternalCompilerKeyedRowContext;
+    context[compilerRowReads] |= 1;
+    trackSource(ensureCompilerRowSource(context));
+    return context[compilerRowItem];
+  },
+  get items(): readonly unknown[] {
+    const context = this as InternalCompilerKeyedRowContext;
+    context[compilerRowReads] |= 4;
+    trackSource(ensureCompilerRowSource(context));
+    return context[compilerRowItems];
+  },
+};
+const compilerRowContexts = new WeakMap<ChildNode, InternalCompilerKeyedRowContext>();
 
 type RemovedSingleNodeRecords =
   | {
@@ -378,39 +409,21 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     marker,
     items,
     (item, index, currentItems) => {
-      const context: CompilerKeyedRowContext<T> = {
-        index,
-        item,
-        items: currentItems,
-      };
-      const node = renderItem(context);
-      compilerRowContexts.set(node, context as CompilerKeyedRowContext<unknown>);
+      const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
+      context[compilerRowIndex] = index;
+      context[compilerRowItem] = item;
+      context[compilerRowItems] = currentItems;
+      context[compilerRowReads] = 0;
+      const node = renderItem(context as CompilerKeyedRowContext<T>);
+      compilerRowContexts.set(node, context);
       return node;
     },
     options,
   );
 }
 
-/** Reads and reactively tracks the current item in a compiler row context. */
-export function readCompilerKeyedRowItem<T>(context: CompilerKeyedRowContext<T>): T {
-  trackSource(ensureCompilerRowSource(context));
-  return context.item;
-}
-
-/** Reads and reactively tracks the current index in a compiler row context. */
-export function readCompilerKeyedRowIndex(context: CompilerKeyedRowContext<unknown>): number {
-  trackSource(ensureCompilerRowSource(context));
-  return context.index;
-}
-
-/** Reads and reactively tracks the current items array in a compiler row context. */
-export function readCompilerKeyedRowItems<T>(context: CompilerKeyedRowContext<T>): readonly T[] {
-  trackSource(ensureCompilerRowSource(context));
-  return context.items;
-}
-
-function ensureCompilerRowSource(context: CompilerKeyedRowContext<unknown>): Source {
-  return (context.source ??= { subscribers: null });
+function ensureCompilerRowSource(context: InternalCompilerKeyedRowContext): Source {
+  return (context[compilerRowSource] ??= { subscribers: null });
 }
 
 function uniqueSingleNodeKeyedItems<T>(
@@ -980,18 +993,19 @@ function updateSingleNodeRecord(
   const compilerContext = record.compilerContext;
 
   if (compilerContext !== undefined) {
+    const reads = compilerContext[compilerRowReads];
     const changed =
-      !Object.is(compilerContext.item, nextItem) ||
-      compilerContext.index !== nextIndex ||
-      compilerContext.items !== nextItems;
-    compilerContext.item = nextItem;
-    compilerContext.index = nextIndex;
-    compilerContext.items = nextItems;
+      ((reads & 1) !== 0 && !Object.is(compilerContext[compilerRowItem], nextItem)) ||
+      ((reads & 2) !== 0 && compilerContext[compilerRowIndex] !== nextIndex) ||
+      ((reads & 4) !== 0 && compilerContext[compilerRowItems] !== nextItems);
+    compilerContext[compilerRowItem] = nextItem;
+    compilerContext[compilerRowIndex] = nextIndex;
+    compilerContext[compilerRowItems] = nextItems;
     record.currentItem = nextItem;
     record.currentIndex = nextIndex;
     record.currentItems = nextItems;
 
-    const source = compilerContext.source;
+    const source = compilerContext[compilerRowSource];
     if (changed && source !== undefined && source.subscribers !== null) {
       notifySubscribers(source);
     }
