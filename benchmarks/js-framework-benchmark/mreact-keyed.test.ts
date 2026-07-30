@@ -203,6 +203,7 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     };
     const config = await readFile(join(compiledFixtureRoot, "vite.config.ts"), "utf8");
     const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
+    const entry = await readFile(join(compiledFixtureRoot, "src", "index.ts"), "utf8");
 
     expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
@@ -212,6 +213,11 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     expect(config).toContain('target: "client"');
     expect(config).toContain('mode: "reactive"');
     expect(config).toContain("transform({");
+    expect(config).toContain('entry: "src/index.ts"');
+    expect(main).toContain("export function App()");
+    expect(main).not.toContain("mount.replaceWith(App())");
+    expect(entry).toContain('import { App } from "./main";');
+    expect(entry).toContain("mount.replaceWith(App())");
     expect(main).toContain("rows.get().map((row, index, items) => (");
     expect(main).toContain("<tr key={row.id}");
     expect(main).not.toContain("bindStaticKeyedSingleNodeList");

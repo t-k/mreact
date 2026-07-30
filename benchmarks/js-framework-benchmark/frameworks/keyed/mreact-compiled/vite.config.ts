@@ -37,7 +37,7 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     lib: {
-      entry: "src/main.tsx",
+      entry: "src/index.ts",
       fileName: () => "main.js",
       formats: ["es"],
     },
