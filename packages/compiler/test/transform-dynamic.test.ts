@@ -134,6 +134,11 @@ describe("compiler dynamic JSX transform", () => {
     ["conditional", "row.active ? <tr key={row.id} /> : null"],
     ["nested list", "<tr key={row.id}>{row.children.map((child) => <td>{child}</td>)}</tr>"],
     ["spread", "<tr key={row.id} {...row.props} />"],
+    ["event handler identifier", "<tr key={row.id} onClick={save} />"],
+    [
+      "conditional event handler",
+      '<tr key={row.id} onClick={row.active ? () => globalThis.__selected = "active" : () => globalThis.__selected = "inactive"} />',
+    ],
     ["no key", "<tr>{row.label}</tr>"],
   ])("keeps %s keyed list shapes on bindList", (_name, renderer) => {
     const output = transform({

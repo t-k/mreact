@@ -710,12 +710,7 @@ function isCompiledSingleNodeTree(node: JsxNodeIr): boolean {
     if (attribute.kind === "spread-attr" || attribute.kind === "dom-ref") {
       return false;
     }
-    if (
-      attribute.kind === "event" &&
-      !attribute.code.includes("=>") &&
-      !/^function\b/u.test(attribute.code) &&
-      !/^[A-Za-z_$][\w$]*$/u.test(attribute.code)
-    ) {
+    if (attribute.kind === "event" && !attribute.stableForKeyedReuse) {
       return false;
     }
   }

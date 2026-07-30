@@ -78,12 +78,17 @@ export function analyzeOxcAttribute(
 
     const expression = readObject(value.expression);
     const expressionCode = options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
+    const unwrappedExpression = unwrapOxcParentheses(expression);
+    const stableForKeyedReuse =
+      unwrappedExpression.type === "ArrowFunctionExpression" ||
+      unwrappedExpression.type === "FunctionExpression";
     return [
       {
         kind: "event",
         name,
         eventName: name.slice(2).toLowerCase(),
         code: expressionCode,
+        stableForKeyedReuse,
       },
     ];
   }
