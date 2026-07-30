@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@octanejs/vite-plugin": "0.1.19",
+    "terser": "5.46.0",
     "typescript": "6.0.2",
     "vite": "8.1.4"
   },

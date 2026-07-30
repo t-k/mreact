@@ -194,6 +194,7 @@ describe("js-framework-benchmark Octane keyed fixture", () => {
     expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
     expect(packageJson.dependencies?.octane).toBe("0.1.19");
     expect(packageJson.devDependencies?.["@octanejs/vite-plugin"]).toBe("0.1.19");
+    expect(packageJson.devDependencies?.terser).toBe("5.46.0");
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe("octane");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
       "https://github.com/octanejs/octane",
