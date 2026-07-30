@@ -1302,6 +1302,52 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
   });
 
+  test("keeps state-dependent key expressions on the general path", () => {
+    const output = transform({
+      code: `import { memo, useReducer } from "@reckona/mreact-compat";
+
+        export function Row(props) {
+          return <tr className={props.selected ? "danger" : ""}><td>{props.row.id}</td></tr>;
+        }
+
+        const RowMemo = memo(
+          Row,
+          (previous, next) => previous.row === next.row && previous.selected === next.selected,
+        );
+
+        function reduce(state, action) {
+          return action.type === "offset" ? { ...state, offset: action.value } : state;
+        }
+
+        function App() {
+          const [state, dispatch] = useReducer(reduce, {
+            rows: [{ id: 1 }],
+            offset: 0,
+            selected: null,
+          });
+          globalThis.__stateDependentKeyDispatch = dispatch;
+          return state.rows.map((row) => (
+            <RowMemo
+              key={row.id + state.offset}
+              row={row}
+              selected={state.selected === row.id + state.offset}
+            />
+          ));
+        }
+
+        export function Shell() {
+          return <App />;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+      mode: "compat",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("bindSelectedKeyedSingleNodeList");
+  });
+
   test("recognizes dollar-prefixed list parameters in selected-class safety checks", () => {
     const output = transform({
       code: `import { memo, useReducer } from "@reckona/mreact-compat";

@@ -28,6 +28,7 @@ const contextItems = Symbol("contextItems");
 const contextKey = Symbol("contextKey");
 const contextReads = Symbol("contextReads");
 const contextSource = Symbol("contextSource");
+const noStrictEqualityMatch = Symbol("noStrictEqualityMatch");
 
 interface InternalSelectedKeyedRowContext extends SelectedKeyedRowContext<unknown> {
   [contextIndex]: number;
@@ -70,9 +71,9 @@ export function bindSelectedKeyedSingleNodeList<T, TNode extends ChildNode>(
   let contextsByKey = new Map<unknown, InternalSelectedKeyedRowContext>();
   let previousItems: readonly T[] | undefined;
   let previousContexts: readonly InternalSelectedKeyedRowContext[] = [];
-  const selected = cell(untrack(options.selectedClass.selected));
+  const selected = cell(normalizeStrictEqualitySelection(untrack(options.selectedClass.selected)));
   const disposeSelected = effect(() => {
-    selected.set(options.selectedClass.selected());
+    selected.set(normalizeStrictEqualitySelection(options.selectedClass.selected()));
   });
 
   const readContexts = (): readonly InternalSelectedKeyedRowContext[] => {
@@ -88,7 +89,7 @@ export function bindSelectedKeyedSingleNodeList<T, TNode extends ChildNode>(
 
     for (let index = 0; index < currentItems.length; index += 1) {
       const item = currentItems[index] as T;
-      const key = options.key(item, index, currentItems);
+      const key = normalizeStrictEqualityKey(options.key(item, index, currentItems));
       const context =
         availableContexts.get(key) ?? createSelectedKeyedRowContext(key, item, index, currentItems);
 
@@ -130,6 +131,16 @@ export function bindSelectedKeyedSingleNodeList<T, TNode extends ChildNode>(
     disposeSelected();
     throw error;
   }
+}
+
+function normalizeStrictEqualityKey(value: unknown): unknown {
+  return typeof value === "number" && value === 0 ? 0 : value;
+}
+
+function normalizeStrictEqualitySelection(value: unknown): unknown {
+  return typeof value === "number" && Number.isNaN(value)
+    ? noStrictEqualityMatch
+    : normalizeStrictEqualityKey(value);
 }
 
 function createSelectedKeyedRowContext<T>(

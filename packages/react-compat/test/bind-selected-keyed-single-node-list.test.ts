@@ -100,4 +100,41 @@ describe("bindSelectedKeyedSingleNodeList", () => {
     secondRow.querySelector("button")?.click();
     expect(payloads).toEqual(["A!:1:2"]);
   });
+
+  test("preserves strict equality for NaN and signed zero selection keys", async () => {
+    const state = cell<{
+      readonly rows: readonly { readonly id: number }[];
+      readonly selected: number;
+    }>({
+      rows: [{ id: -0 }, { id: Number.NaN }],
+      selected: +0,
+    });
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindSelectedKeyedSingleNodeList(
+      parent,
+      marker,
+      () => state.get().rows,
+      () => document.createElement("tr"),
+      {
+        key: (item) => item.id,
+        selectedClass: {
+          className: "danger",
+          selected: () => state.get().selected,
+        },
+      },
+    );
+    await flushEffects();
+
+    expect(Array.from(parent.children, (row) => row.className)).toEqual(["danger", ""]);
+
+    state.set({ rows: state.get().rows, selected: Number.NaN });
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.className)).toEqual(["", ""]);
+
+    dispose();
+  });
 });
