@@ -1063,6 +1063,27 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(createRecordSource).toContain("deferEventPromotion");
   });
 
+  test("stores compiler row state only in its compiler context", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    const createRecordStart = source.indexOf("function createSingleNodeRecord");
+    const updateRecordStart = source.indexOf("function updateSingleNodeRecord");
+    const updateRecordEnd = source.indexOf(
+      "if (!isObjectLike(record.currentItem)",
+      updateRecordStart,
+    );
+    const createRecordSource = source.slice(createRecordStart, updateRecordStart);
+    const updateRecordSource = source.slice(updateRecordStart, updateRecordEnd);
+
+    expect(source).not.toContain("compilerRowContexts");
+    expect(createRecordSource).toContain("[activeCompilerRowContext]");
+    expect(updateRecordSource).not.toContain("record.currentItem = nextItem");
+    expect(updateRecordSource).not.toContain("record.currentIndex = nextIndex");
+    expect(updateRecordSource).not.toContain("record.currentItems = nextItems");
+  });
+
   test("creates scoped render node results without per-row object spread", async () => {
     const source = await readFile("packages/reactive-dom/src/render-scope.ts", "utf8");
     const helperStart = source.indexOf("export function createScopedRenderNodeScope");

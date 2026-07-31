@@ -61,7 +61,7 @@ export type SingleNodeRenderer<T, TNode extends ChildNode> = (
 interface SingleNodeRecord {
   compilerContext?: InternalCompilerKeyedRowContext | undefined;
   currentIndex?: number | undefined;
-  currentItem: unknown;
+  currentItem?: unknown;
   currentItems?: readonly unknown[] | undefined;
   key: unknown;
   node: ChildNode;
@@ -117,8 +117,6 @@ const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
     return context[compilerRowItems];
   },
 };
-const compilerRowContexts = new WeakMap<ChildNode, InternalCompilerKeyedRowContext>();
-
 type RemovedSingleNodeRecords =
   | {
       records: Map<unknown, SingleNodeRecord>;
@@ -474,7 +472,6 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       context[compilerRowItems] = currentItems;
       context[compilerRowReads] = 0;
       const node = renderItem(context as CompilerKeyedRowContext<T>);
-      compilerRowContexts.set(node, context);
       (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
       if (markRecordsForHydration) {
         markDynamicNode(node);
@@ -634,23 +631,21 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
     untrack(() => createScopedRenderNodeScope(() => renderItem(item, index, items)));
 
   const record: SingleNodeRecord & { promoteEvents?: () => void } = {
-    currentItem: item,
     key,
     node: scoped.node,
   };
-  const compilerContext = compilerRowContexts.get(scoped.node);
+  const compilerContext = (scoped.node as CompilerKeyedRowNode)[activeCompilerRowContext];
 
   if (compilerContext !== undefined) {
-    compilerRowContexts.delete(scoped.node);
     record.compilerContext = compilerContext;
-  }
-
-  if (renderArity >= 2) {
-    record.currentIndex = index;
-  }
-
-  if (renderArity >= 3) {
-    record.currentItems = items;
+  } else {
+    record.currentItem = item;
+    if (renderArity >= 2) {
+      record.currentIndex = index;
+    }
+    if (renderArity >= 3) {
+      record.currentItems = items;
+    }
   }
 
   if (scoped.scope !== undefined) {
@@ -1064,9 +1059,6 @@ function updateSingleNodeRecord(
     compilerContext[compilerRowItem] = nextItem;
     compilerContext[compilerRowIndex] = nextIndex;
     compilerContext[compilerRowItems] = nextItems;
-    record.currentItem = nextItem;
-    record.currentIndex = nextIndex;
-    record.currentItems = nextItems;
 
     const source = compilerContext[compilerRowSource];
     if (changed && source !== undefined && source.subscribers !== null) {
