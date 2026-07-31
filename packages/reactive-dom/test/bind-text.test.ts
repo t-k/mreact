@@ -142,6 +142,19 @@ describe("bindText", () => {
     expect(directBranch).toContain("node.data = normalizeText(nextValue)");
   });
 
+  test("direct readonly cell binding shares its DOM writer across subscriptions", async () => {
+    const source = await readFile(
+      join(process.cwd(), "packages", "reactive-dom", "src", "bind-text.ts"),
+      "utf8",
+    );
+    const directBranchStart = source.indexOf('if (typeof value !== "function")');
+    const directReturnStart = source.indexOf("return registerIdempotentDispose(directDispose)");
+    const directBranch = source.slice(directBranchStart, directReturnStart);
+
+    expect(directBranch).toContain("subscribeCellWithContext(value, node, writeText)");
+    expect(directBranch).not.toContain("(nextValue) =>");
+  });
+
 
   test("bindTextBatch updates many text nodes through one scheduled effect", async () => {
     const scheduled: Array<() => void> = [];
