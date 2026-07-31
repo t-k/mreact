@@ -1,5 +1,10 @@
 import { effect, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core";
-import { subscribeCell } from "@reckona/mreact-reactive-core/internal";
+import {
+  notifySubscribers,
+  subscribeCell,
+  trackSource,
+  type Source,
+} from "@reckona/mreact-reactive-core/internal";
 import {
   withBatchedDelegatedRootReleases,
   withDeferredDelegatedEventPromotions,
@@ -16,19 +21,11 @@ export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode
   selectedClass?: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>;
 }
 
-export interface BindStaticKeyedSingleNodeListSelectedClassOptions<
-  T,
-  TNode extends ChildNode,
-> {
+export interface BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode extends ChildNode> {
   className: string;
   preserveInitial?: boolean;
   source: ReadonlyCell<unknown>;
-  target?: (
-    node: TNode,
-    item: T,
-    index: number,
-    items: readonly T[],
-  ) => Element | null;
+  target?: (node: TNode, item: T, index: number, items: readonly T[]) => Element | null;
 }
 
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
@@ -39,6 +36,7 @@ export type SingleNodeRenderer<T, TNode extends ChildNode> = (
 ) => TNode;
 
 interface SingleNodeRecord {
+  compilerContext?: InternalCompilerKeyedRowContext | undefined;
   currentIndex?: number | undefined;
   currentItem: unknown;
   currentItems?: readonly unknown[] | undefined;
@@ -47,6 +45,52 @@ interface SingleNodeRecord {
   selectedClassElement?: Element | undefined;
   scope?: DomScope | undefined;
 }
+
+/** Internal row state used by compiler-generated keyed single-node renderers. */
+export interface CompilerKeyedRowContext<T> {
+  readonly index: number;
+  readonly item: T;
+  readonly items: readonly T[];
+}
+
+/** Internal renderer contract used only by compiler-generated output. */
+export type CompilerKeyedSingleNodeRenderer<T, TNode extends ChildNode> = (
+  context: CompilerKeyedRowContext<T>,
+) => TNode;
+
+const compilerRowIndex = Symbol("compilerRowIndex");
+const compilerRowItem = Symbol("compilerRowItem");
+const compilerRowItems = Symbol("compilerRowItems");
+const compilerRowReads = Symbol("compilerRowReads");
+const compilerRowSource = Symbol("compilerRowSource");
+type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
+  [compilerRowIndex]: number;
+  [compilerRowItem]: unknown;
+  [compilerRowItems]: readonly unknown[];
+  [compilerRowReads]: number;
+  [compilerRowSource]?: Source | undefined;
+};
+const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
+  get index(): number {
+    const context = this as InternalCompilerKeyedRowContext;
+    context[compilerRowReads] |= 2;
+    trackSource(ensureCompilerRowSource(context));
+    return context[compilerRowIndex];
+  },
+  get item(): unknown {
+    const context = this as InternalCompilerKeyedRowContext;
+    context[compilerRowReads] |= 1;
+    trackSource(ensureCompilerRowSource(context));
+    return context[compilerRowItem];
+  },
+  get items(): readonly unknown[] {
+    const context = this as InternalCompilerKeyedRowContext;
+    context[compilerRowReads] |= 4;
+    trackSource(ensureCompilerRowSource(context));
+    return context[compilerRowItems];
+  },
+};
+const compilerRowContexts = new WeakMap<ChildNode, InternalCompilerKeyedRowContext>();
 
 type RemovedSingleNodeRecords =
   | {
@@ -171,11 +215,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       : undefined;
 
     if (fastRemovedRecords !== undefined) {
-      removeChangedSingleNodeRecords(
-        fastRemovedRecords,
-        selectedClassState,
-        deferEventPromotion,
-      );
+      removeChangedSingleNodeRecords(fastRemovedRecords, selectedClassState, deferEventPromotion);
       records = fastRemovedRecords.records;
       ownsParent = true;
       return;
@@ -265,11 +305,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       : undefined;
 
     if (removedRecords !== undefined) {
-      removeChangedSingleNodeRecords(
-        removedRecords,
-        selectedClassState,
-        deferEventPromotion,
-      );
+      removeChangedSingleNodeRecords(removedRecords, selectedClassState, deferEventPromotion);
       records = removedRecords.records;
       ownsParent = true;
       return;
@@ -358,6 +394,36 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     removeRecordNodes(records.values(), deferEventPromotion);
     records = new Map();
   });
+}
+
+/** Binds compiler-generated keyed rows through mutable per-row context. */
+export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
+  parent: ParentNode,
+  marker: ChildNode,
+  items: () => readonly T[],
+  renderItem: CompilerKeyedSingleNodeRenderer<T, TNode>,
+  options: BindStaticKeyedSingleNodeListOptions<T, TNode>,
+): Dispose {
+  return bindStaticKeyedSingleNodeList(
+    parent,
+    marker,
+    items,
+    (item, index, currentItems) => {
+      const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
+      context[compilerRowIndex] = index;
+      context[compilerRowItem] = item;
+      context[compilerRowItems] = currentItems;
+      context[compilerRowReads] = 0;
+      const node = renderItem(context as CompilerKeyedRowContext<T>);
+      compilerRowContexts.set(node, context);
+      return node;
+    },
+    options,
+  );
+}
+
+function ensureCompilerRowSource(context: InternalCompilerKeyedRowContext): Source {
+  return (context[compilerRowSource] ??= { subscribers: null });
 }
 
 function uniqueSingleNodeKeyedItems<T>(
@@ -509,6 +575,12 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
     key,
     node: scoped.node,
   };
+  const compilerContext = compilerRowContexts.get(scoped.node);
+
+  if (compilerContext !== undefined) {
+    compilerRowContexts.delete(scoped.node);
+    record.compilerContext = compilerContext;
+  }
 
   if (renderArity >= 2) {
     record.currentIndex = index;
@@ -630,10 +702,7 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
   for (let index = previousSize; index < currentItems.length; index += 1) {
     const itemKey = key(currentItems[index] as T, index, currentItems);
 
-    if (
-      records.has(itemKey) ||
-      seenAppendedKeys?.has(itemKey) === true
-    ) {
+    if (records.has(itemKey) || seenAppendedKeys?.has(itemKey) === true) {
       return undefined;
     }
 
@@ -724,10 +793,7 @@ function tryRemoveSingleNodeItems<T>(
     }
   }
 
-  if (
-    index !== currentItems.length ||
-    (staleRecord === undefined && staleRecords === undefined)
-  ) {
+  if (index !== currentItems.length || (staleRecord === undefined && staleRecords === undefined)) {
     return undefined;
   }
 
@@ -924,6 +990,28 @@ function updateSingleNodeRecord(
   nextIndex: number,
   nextItems: readonly unknown[],
 ): boolean {
+  const compilerContext = record.compilerContext;
+
+  if (compilerContext !== undefined) {
+    const reads = compilerContext[compilerRowReads];
+    const changed =
+      ((reads & 1) !== 0 && !Object.is(compilerContext[compilerRowItem], nextItem)) ||
+      ((reads & 2) !== 0 && compilerContext[compilerRowIndex] !== nextIndex) ||
+      ((reads & 4) !== 0 && compilerContext[compilerRowItems] !== nextItems);
+    compilerContext[compilerRowItem] = nextItem;
+    compilerContext[compilerRowIndex] = nextIndex;
+    compilerContext[compilerRowItems] = nextItems;
+    record.currentItem = nextItem;
+    record.currentIndex = nextIndex;
+    record.currentItems = nextItems;
+
+    const source = compilerContext[compilerRowSource];
+    if (changed && source !== undefined && source.subscribers !== null) {
+      notifySubscribers(source);
+    }
+    return true;
+  }
+
   if (!isObjectLike(record.currentItem) && !Object.is(record.currentItem, nextItem)) {
     return false;
   }
@@ -954,7 +1042,9 @@ function canKeepSingleNodeRecordWithoutUpdate(
   record: SingleNodeRecord,
   renderArity: number,
 ): boolean {
-  return renderArity < 2 && isObjectLike(record.currentItem);
+  return (
+    record.compilerContext === undefined && renderArity < 2 && isObjectLike(record.currentItem)
+  );
 }
 
 function areKeysDisjoint(
@@ -1278,10 +1368,7 @@ function removeChangedSingleNodeRecords(
   removeRecordNodes(removed.staleRecords, batchDelegatedRootReleases);
 }
 
-function removeRecordNode(
-  record: SingleNodeRecord,
-  batchDelegatedRootReleases: boolean,
-): void {
+function removeRecordNode(record: SingleNodeRecord, batchDelegatedRootReleases: boolean): void {
   let firstError: unknown;
   const removeRecord = () => {
     try {
@@ -1502,10 +1589,7 @@ function activateSelectedClassRecords(state: SelectedClassState): void {
   }
 }
 
-function updateSelectedClassValue(
-  state: SelectedClassState,
-  next: unknown,
-): void {
+function updateSelectedClassValue(state: SelectedClassState, next: unknown): void {
   if (Object.is(state.current, next)) {
     return;
   }
@@ -1573,9 +1657,7 @@ function refreshSelectedClassRecord(
   }
 }
 
-function shouldRefreshSelectedClassRecords(
-  state: SelectedClassState | undefined,
-): boolean {
+function shouldRefreshSelectedClassRecords(state: SelectedClassState | undefined): boolean {
   return state !== undefined && !state.preserveInitial;
 }
 
@@ -1583,11 +1665,7 @@ function unregisterSelectedClassRecord(
   state: SelectedClassState | undefined,
   record: SingleNodeRecord | undefined,
 ): void {
-  if (
-    state === undefined ||
-    !state.activeRecords ||
-    record?.selectedClassElement === undefined
-  ) {
+  if (state === undefined || !state.activeRecords || record?.selectedClassElement === undefined) {
     return;
   }
 

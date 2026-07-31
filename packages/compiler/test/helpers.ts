@@ -50,6 +50,7 @@ import {
   renderReactSuspenseOutOfOrderBoundary,
 } from "@reckona/mreact-server";
 import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
+import { bindCompilerKeyedSingleNodeList } from "../../reactive-dom/src/internal.js";
 
 function escapeHtmlBatch(values: readonly unknown[]): string[] {
   return values.map((value) =>
@@ -83,6 +84,7 @@ export function compileClientModule(code: string): ComponentExports {
     .join(", ");
   const runtimeEntries = [
     ...extractClientRuntimeEntries(code),
+    ...extractClientInternalRuntimeEntries(code),
     ...extractReactiveCoreRuntimeEntries(code),
   ];
 
@@ -389,6 +391,34 @@ function extractClientRuntimeEntries(code: string): { localName: string; value: 
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value: getClientRuntimeValue(match.groups.importedName),
+    };
+  });
+}
+
+function extractClientInternalRuntimeEntries(
+  code: string,
+): { localName: string; value: unknown }[] {
+  const importMatch = code.match(
+    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-dom\/internal";/m,
+  );
+  const specifiers = importMatch?.groups?.specifiers;
+
+  if (specifiers === undefined) {
+    return [];
+  }
+
+  return specifiers.split(", ").map((specifier) => {
+    const match = specifier.match(
+      /^(?<importedName>bindCompilerKeyedSingleNodeList)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+    );
+
+    if (match?.groups === undefined) {
+      throw new Error(`Unsupported client internal runtime import: ${specifier}`);
+    }
+
+    return {
+      localName: match.groups.localName ?? match.groups.importedName,
+      value: bindCompilerKeyedSingleNodeList,
     };
   });
 }

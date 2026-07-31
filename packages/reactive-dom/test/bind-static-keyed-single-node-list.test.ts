@@ -5,8 +5,227 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
+import { bindCompilerKeyedSingleNodeList } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("keeps compiler row identity while updating item, index, items, and events", async () => {
+    const items = cell<readonly { readonly id: number; readonly label: string }[]>([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    const payloads: string[] = [];
+    parent.append(marker);
+    document.body.append(parent);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const tr = document.createElement("tr");
+        const text = document.createTextNode("");
+        const input = document.createElement("input");
+        const button = document.createElement("button");
+        bindText(text, () => `${context.item.label}:${context.index}:${context.items.length}`);
+        bindEvent(button, "click", () => {
+          payloads.push(`${context.item.label}:${context.index}:${context.items.length}`);
+        });
+        tr.append(text, input, button);
+        return tr;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+
+    const firstRow = parent.children[0] as HTMLTableRowElement;
+    const firstInput = firstRow.querySelector("input") as HTMLInputElement;
+    firstInput.value = "edited";
+    firstInput.focus();
+
+    items.set([
+      { id: 1, label: "A!" },
+      { id: 2, label: "B" },
+    ]);
+    await flushEffects();
+    expect(parent.children[0]).toBe(firstRow);
+    expect(firstRow.textContent).toBe("A!:0:2");
+    expect(firstInput.value).toBe("edited");
+    expect(document.activeElement).toBe(firstInput);
+
+    items.set([
+      { id: 2, label: "B" },
+      { id: 1, label: "A!" },
+    ]);
+    await flushEffects();
+    expect(parent.children[1]).toBe(firstRow);
+    expect(firstRow.textContent).toBe("A!:1:2");
+    firstRow.querySelector("button")?.click();
+    expect(payloads).toEqual(["A!:1:2"]);
+
+    dispose();
+    firstRow.querySelector("button")?.click();
+    expect(payloads).toEqual(["A!:1:2"]);
+    parent.remove();
+  });
+
+  test("does not notify item-only compiler rows for an unused array identity change", async () => {
+    const first = { id: 1, label: "A" };
+    const items = cell<readonly (typeof first)[]>([first]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let reads = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        const text = document.createTextNode("");
+        bindText(text, () => {
+          reads += 1;
+          return context.item.label;
+        });
+        row.append(text);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+    const readsAfterMount = reads;
+
+    items.set(items.get().slice());
+    await flushEffects();
+
+    expect(reads).toBe(readsAfterMount);
+    dispose();
+  });
+
+  test("preserves keyed row properties across deterministic mixed updates", async () => {
+    type Item = { readonly id: number; readonly label: string };
+
+    let seed = 0x5eed1234;
+    const nextRandom = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed;
+    };
+    const makeItem = (id: number, revision: number): Item => ({
+      id,
+      label: `row-${id}-revision-${revision}`,
+    });
+
+    let revision = 0;
+    const items = cell<readonly Item[]>(
+      Array.from({ length: 6 }, (_, index) => makeItem(index + 1, revision)),
+    );
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    const payloads: string[] = [];
+    const renderCounts = new Map<number, number>();
+    const expectedRenderCounts = new Map<number, number>();
+    const operationCounts = [0, 0, 0, 0];
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        renderCounts.set(context.item.id, (renderCounts.get(context.item.id) ?? 0) + 1);
+        const row = document.createElement("tr");
+        row.dataset.id = String(context.item.id);
+        const text = document.createTextNode("");
+        const button = document.createElement("button");
+        const describeContext = () =>
+          `${context.item.id}:${context.item.label}:${context.index}:${context.items.length}`;
+        bindText(text, describeContext);
+        bindEvent(button, "click", () => payloads.push(describeContext()));
+        row.append(text, button);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+    await flushEffects();
+
+    let rowsById = new Map(
+      Array.from(parent.children, (row) => [Number((row as HTMLElement).dataset.id), row]),
+    );
+    for (const id of rowsById.keys()) {
+      expectedRenderCounts.set(id, 1);
+    }
+
+    for (let step = 1; step <= 48; step += 1) {
+      revision += 1;
+      const previousRowsById = rowsById;
+      const next = items.get().map((item) => makeItem(item.id, revision));
+      const operation = (step - 1) % 4;
+      operationCounts[operation] += 1;
+
+      if (operation === 0) {
+        next.reverse();
+      } else if (operation === 1 && next.length > 3) {
+        next.splice(nextRandom() % next.length, 1);
+      } else if (operation === 2 && next.length < 10) {
+        const usedIds = new Set(next.map((item) => item.id));
+        const insertedId = Array.from({ length: 12 }, (_, index) => index + 1).find(
+          (id) => !usedIds.has(id),
+        );
+        if (insertedId !== undefined) {
+          next.splice(nextRandom() % (next.length + 1), 0, makeItem(insertedId, revision));
+        }
+      } else {
+        for (let index = next.length - 1; index > 0; index -= 1) {
+          const swapIndex = nextRandom() % (index + 1);
+          [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+        }
+      }
+
+      for (const item of next) {
+        if (!previousRowsById.has(item.id)) {
+          expectedRenderCounts.set(item.id, (expectedRenderCounts.get(item.id) ?? 0) + 1);
+        }
+      }
+
+      items.set(next);
+      await flushEffects();
+
+      rowsById = new Map(
+        Array.from(parent.children, (row) => [Number((row as HTMLElement).dataset.id), row]),
+      );
+      expect(Array.from(rowsById.keys())).toEqual(next.map((item) => item.id));
+      expect(parent.children).toHaveLength(next.length);
+
+      for (const [index, item] of next.entries()) {
+        const row = rowsById.get(item.id) as HTMLTableRowElement;
+        const previousRow = previousRowsById.get(item.id);
+        if (previousRow !== undefined) {
+          expect(row).toBe(previousRow);
+        }
+        expect(row.textContent).toBe(`${item.id}:${item.label}:${index}:${next.length}`);
+      }
+
+      for (const [id, previousRow] of previousRowsById) {
+        if (!rowsById.has(id)) {
+          expect(parent.contains(previousRow)).toBe(false);
+        }
+      }
+
+      const clickedIndex = nextRandom() % next.length;
+      const clickedItem = next[clickedIndex];
+      rowsById.get(clickedItem.id)?.querySelector("button")?.click();
+      expect(payloads.at(-1)).toBe(
+        `${clickedItem.id}:${clickedItem.label}:${clickedIndex}:${next.length}`,
+      );
+    }
+
+    expect(operationCounts).toEqual([12, 12, 12, 12]);
+    expect(renderCounts).toEqual(expectedRenderCounts);
+    dispose();
+  });
+
   test("creates, replaces, swaps, removes, and clears keyed single-node rows", async () => {
     const firstLabel = cell("A");
     const secondLabel = cell("B");
@@ -464,9 +683,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     ]);
     await flushEffects();
 
-    expect(parent.innerHTML).toBe(
-      "<tr>A</tr><tr>B</tr><tr>C</tr><tr>D</tr><!--rows-->",
-    );
+    expect(parent.innerHTML).toBe("<tr>A</tr><tr>B</tr><tr>C</tr><tr>D</tr><!--rows-->");
     expect(parent.children[0]).toBe(firstRow);
     expect(parent.children[1]).toBe(secondRow);
     expect(appendedNodes).toEqual([]);

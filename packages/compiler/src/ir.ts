@@ -118,6 +118,12 @@ export interface ListIr {
   keyCode?: string;
   bodyStatements?: string[];
   children: JsxNodeIr[];
+  compiledSingleNode?: CompiledSingleNodeListIr;
+}
+
+/** Describes a conservatively eligible compiler keyed single-node list. */
+export interface CompiledSingleNodeListIr {
+  root: JsxElementIr;
 }
 
 /** Represents static text emitted from JSX. */

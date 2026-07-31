@@ -6,6 +6,77 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("compiled keyed rows retain DOM while item, index, items, and events stay current", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1, label: "A" }, { id: 2, label: "B" }]);
+        export function App() {
+          return <main>
+            <button id="replace" onClick={() => rows.set([{ id: 1, label: "A!" }, { id: 2, label: "B" }])}>Replace</button>
+            <button id="swap" onClick={() => rows.set([rows.get()[1], rows.get()[0]])}>Swap</button>
+            <table><tbody>{rows.get().map((row, index, items) => (
+              <tr key={row.id} data-index={index}>
+                <td>{row.label}:{index}:{items.length}</td>
+                <td><button onClick={() => globalThis.__compilerKeyedPayload = row.label + ":" + index + ":" + items.length}>Select</button></td>
+              </tr>
+            ))}</tbody></table>
+          </main>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = await runClientComponent(output.code);
+    const firstRow = (node as HTMLElement).querySelector("tbody tr") as HTMLTableRowElement;
+
+    (node as HTMLElement).querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect((node as HTMLElement).querySelector("tbody tr")).toBe(firstRow);
+    expect(firstRow.textContent).toContain("A!:0:2");
+
+    (node as HTMLElement).querySelector<HTMLButtonElement>("#swap")?.click();
+    await flushEffects();
+    expect((node as HTMLElement).querySelectorAll("tbody tr")[1]).toBe(firstRow);
+    expect(firstRow.textContent).toContain("A!:1:2");
+    firstRow.querySelector("button")?.click();
+    expect(
+      (globalThis as typeof globalThis & { __compilerKeyedPayload?: string })
+        .__compilerKeyedPayload,
+    ).toBe("A!:1:2");
+    delete (globalThis as typeof globalThis & { __compilerKeyedPayload?: string })
+      .__compilerKeyedPayload;
+  });
+  test("keeps event parameter defaults that capture the row on the generic path", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1 }]);
+        export function App() {
+          return <table><tbody>{rows.get().map((row) => (
+            <tr key={row.id}>
+              <td><button id="select" onClick={(event, current = row) => globalThis.__compilerDefaultPayload = current.id}>Select</button></td>
+            </tr>
+          ))}</tbody></table>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+    const node = await runClientComponent(output.code);
+
+    (node as HTMLElement).querySelector<HTMLButtonElement>("#select")?.click();
+    expect(
+      (globalThis as typeof globalThis & { __compilerDefaultPayload?: number })
+        .__compilerDefaultPayload,
+    ).toBe(1);
+    delete (globalThis as typeof globalThis & { __compilerDefaultPayload?: number })
+      .__compilerDefaultPayload;
+  });
   test("emitted static component can be imported and returns a DOM node", () => {
     const output = transform({
       code: 'export function App() { return <div id="app">Hello</div>; }',

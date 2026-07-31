@@ -101,6 +101,12 @@ export interface ClientReferenceIr {
 }
 
 // @public
+export interface CompiledSingleNodeListIr {
+    // (undocumented)
+    root: JsxElementIr;
+}
+
+// @public
 export interface CompilerModuleContext {
     // (undocumented)
     code: string;
@@ -292,6 +298,8 @@ export interface ListIr {
     bodyStatements?: string[];
     // (undocumented)
     children: JsxNodeIr[];
+    // (undocumented)
+    compiledSingleNode?: CompiledSingleNodeListIr;
     // (undocumented)
     indexName?: string;
     // (undocumented)
