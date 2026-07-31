@@ -153,7 +153,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   const selectedClassState: SelectedClassState | undefined =
     selectedClass === undefined
       ? undefined
-      : createSelectedClassState(selectedClass, () => records);
+      : createSelectedClassState(selectedClass, () => records.values());
   const compilerEvents = (
     options as BindStaticKeyedSingleNodeListOptions<T, TNode> & {
       compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
@@ -1587,8 +1587,8 @@ interface SelectedClassState {
   dispose: Dispose;
   matches: (selected: unknown, key: unknown) => boolean;
   preserveInitial: boolean;
-  records: Map<unknown, Element> | undefined;
-  recordsSource: () => ReadonlyMap<unknown, SingleNodeRecord>;
+  records: Map<unknown, Element>;
+  recordsSource: () => Iterable<SingleNodeRecord>;
   sameSelection: (previous: unknown, next: unknown) => boolean;
   target?: (
     node: ChildNode,
@@ -1601,7 +1601,7 @@ interface SelectedClassState {
 
 function createSelectedClassState<T, TNode extends ChildNode>(
   options: InternalSelectedClassOptions<T, TNode>,
-  recordsSource: () => ReadonlyMap<unknown, SingleNodeRecord>,
+  recordsSource: () => Iterable<SingleNodeRecord>,
 ): SelectedClassState {
   const preserveInitial = options.preserveInitial === true;
   const compilerMode = options.compilerMode === "strict-replace";
@@ -1611,7 +1611,7 @@ function createSelectedClassState<T, TNode extends ChildNode>(
     dispose: () => {},
     matches: compilerMode ? (selected, key) => selected === key : Object.is,
     preserveInitial,
-    records: compilerMode ? undefined : new Map(),
+    records: new Map(),
     recordsSource,
     sameSelection: compilerMode
       ? (previous, next) =>
@@ -1658,15 +1658,10 @@ function activateSelectedClassRecords(state: SelectedClassState): void {
   }
 
   state.activeRecords = true;
-  const selectedRecords = state.records;
 
-  if (selectedRecords === undefined) {
-    return;
-  }
-
-  for (const record of state.recordsSource().values()) {
+  for (const record of state.recordsSource()) {
     if (record.selectedClassElement !== undefined) {
-      selectedRecords.set(record.key, record.selectedClassElement);
+      state.records.set(record.key, record.selectedClassElement);
     }
   }
 }
@@ -1677,22 +1672,15 @@ function updateSelectedClassValue(state: SelectedClassState, next: unknown): voi
   }
 
   activateSelectedClassRecords(state);
-  const previousElement = selectedClassElement(state, state.current);
+  const previousElement = state.records.get(state.current);
   if (previousElement !== undefined && state.matches(state.current, state.current)) {
     state.write(previousElement, false);
   }
   state.current = next;
-  const nextElement = selectedClassElement(state, next);
+  const nextElement = state.records.get(next);
   if (nextElement !== undefined && state.matches(next, next)) {
     state.write(nextElement, true);
   }
-}
-
-function selectedClassElement(state: SelectedClassState, key: unknown): Element | undefined {
-  const selectedRecords = state.records;
-  return selectedRecords === undefined
-    ? state.recordsSource().get(key)?.selectedClassElement
-    : selectedRecords.get(key);
 }
 
 function registerSelectedClassRecord<T, TNode extends ChildNode>(
@@ -1720,7 +1708,7 @@ function registerSelectedClassRecord<T, TNode extends ChildNode>(
     return;
   }
 
-  state.records?.set(record.key, element);
+  state.records.set(record.key, element);
 
   if (state.preserveInitial) {
     return;
@@ -1756,7 +1744,7 @@ function unregisterSelectedClassRecord(
     return;
   }
 
-  if (state.records?.get(record.key) === record.selectedClassElement) {
+  if (state.records.get(record.key) === record.selectedClassElement) {
     state.records.delete(record.key);
   }
 }
@@ -1776,6 +1764,6 @@ function unregisterSelectedClassRecords(
 
 function clearSelectedClassRecords(state: SelectedClassState | undefined): void {
   if (state?.activeRecords === true) {
-    state.records?.clear();
+    state.records.clear();
   }
 }
