@@ -117,6 +117,12 @@ describe("compiler dynamic JSX transform", () => {
       source: "@reckona/mreact-reactive-dom/internal",
       specifiers: ["bindCompilerKeyedSingleNodeList", "markCompilerKeyedEventSlot"],
     });
+    expect(output.metadata.imports).toContainEqual(
+      expect.objectContaining({
+        source: "@reckona/mreact-reactive-dom",
+        specifiers: expect.arrayContaining(["createTemplate", "createTemplateElement"]),
+      }),
+    );
     expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
     expect(output.code).toContain("compilerEvents:");
     expect(output.code).toContain("markCompilerKeyedEventSlot(");
@@ -124,7 +130,9 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("row.item).label");
     expect(output.code).toContain("row.index)");
     expect(output.code).toContain("row.items).length");
-    expect(output.code).toContain('const _keyedTemplate = createTemplate("<tr');
+    expect(output.code).toContain('const _keyedTemplate = createTemplateElement("<tr');
+    expect(output.code).toContain("const _keyedRoot = _keyedTemplate();");
+    expect(output.code).not.toContain("_keyedFragment");
     expect(output.code.indexOf("const _keyedTemplate")).toBeLessThan(
       output.code.lastIndexOf("bindCompilerKeyedSingleNodeList("),
     );
@@ -368,7 +376,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain(
       'compilerSelectedClass: { className: "danger", source: selected }',
     );
-    expect(output.code).toContain('createTemplate("<tr class=\\"\\"');
+    expect(output.code).toContain('createTemplateElement("<tr class=\\"\\"');
     expect(output.code).not.toContain('bindProp(_keyedRoot, "class"');
   });
 

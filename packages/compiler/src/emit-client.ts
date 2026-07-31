@@ -54,6 +54,7 @@ type RuntimeHelperName =
   | "bindText"
   | "createList"
   | "createTemplate"
+  | "createTemplateElement"
   | "insertDynamic"
   | "bindCompilerKeyedSingleNodeList"
   | "markCompilerKeyedEventSlot";
@@ -83,6 +84,7 @@ function allocateRuntimeHelperNames(
     bindText: "bindText",
     createList: "createList",
     createTemplate: "createTemplate",
+    createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
     markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
@@ -149,6 +151,7 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.compiledSingleNode === undefined) {
           specifiers.add("bindList");
         } else {
+          specifiers.add("createTemplateElement");
           internalSpecifiers.add("bindCompilerKeyedSingleNodeList");
         }
       }
@@ -617,7 +620,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       } else {
         const templateName = state.allocateName("_keyedTemplate");
         lines.push(
-          `  const ${templateName} = ${state.helperNames.createTemplate}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
+          `  const ${templateName} = ${state.helperNames.createTemplateElement}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
         );
         lines.push(
           `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state)}${options});`,
@@ -807,7 +810,6 @@ function emitCompilerKeyedSingleNodeRenderer(
   if (root === undefined) {
     throw new Error("Missing compiled single-node root.");
   }
-  const fragmentName = state.allocateName("_keyedFragment");
   const rootName = state.allocateName("_keyedRoot");
   const setup = emitSetup(root, rootName, {
     ...state,
@@ -816,8 +818,7 @@ function emitCompilerKeyedSingleNodeRenderer(
   const setupLines = setup === "" ? [] : setup.split("\n");
   return [
     `(${node.itemName}) => {`,
-    `  const ${fragmentName} = ${templateName}();`,
-    `  const ${rootName} = ${fragmentName}.firstChild;`,
+    `  const ${rootName} = ${templateName}();`,
     ...setupLines,
     `  return ${rootName};`,
     "}",
