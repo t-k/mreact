@@ -26,7 +26,7 @@ const EFFECT_COMPUTATION_METHODS = {
 } satisfies Pick<ReactiveComputation, "markDirty" | "run" | "dispose">;
 
 /** Runs a reactive side effect and returns a disposer. */
-export function effect(fn: EffectFn): () => void {
+export function effect(fn: () => void | (() => void)): () => void {
   return createEffect(fn);
 }
 

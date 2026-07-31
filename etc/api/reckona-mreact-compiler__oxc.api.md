@@ -282,7 +282,7 @@ export interface ExprIr {
     // (undocumented)
     kind: "expr";
     // (undocumented)
-    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text";
+    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-text";
 }
 
 // @public
