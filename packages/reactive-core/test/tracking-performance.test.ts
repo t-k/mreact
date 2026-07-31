@@ -3,10 +3,7 @@ import { describe, expect, test } from "vitest";
 
 describe("reactive-core tracking hot path", () => {
   test("checks the ordered dependency fast path before same-pass duplicate tracking", async () => {
-    const source = await readFile(
-      new URL("../src/tracking.ts", import.meta.url),
-      "utf8",
-    );
+    const source = await readFile(new URL("../src/tracking.ts", import.meta.url), "utf8");
 
     const orderedFastPath = source.indexOf("orderedDeps[orderedIndex] === source");
     const duplicateCheck = source.indexOf(
@@ -30,5 +27,14 @@ describe("reactive-core tracking hot path", () => {
     expect(computed).not.toMatch(/\btrackSource\(source\)\s*\{/);
     expect(effect).not.toMatch(/\btrackSource\(source\)\s*\{/);
     expect(tracking).toContain("trackIncrementalSource(source, tracker)");
+  });
+
+  test("shares effect computation methods across instances", async () => {
+    const source = await readFile(new URL("../src/effect.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("const EFFECT_COMPUTATION_METHODS");
+    expect(source).not.toContain("markDirty() {");
+    expect(source).not.toContain("run() {");
+    expect(source).not.toContain("dispose() {");
   });
 });
