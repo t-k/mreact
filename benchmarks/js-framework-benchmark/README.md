@@ -2,6 +2,8 @@
 
 This directory contains the Mreact keyed implementations prepared for krausest/js-framework-benchmark. Copy `frameworks/keyed/mreact` and `frameworks/keyed/mreact-react-compat` into a checkout of `krausest/js-framework-benchmark`, run that repository's normal install/build flow, and benchmark them with the official webdriver runner.
 
+`keyed/mreact-compiled` measures the normal public compiler path from ordinary cell-backed JSX. The hand-written `keyed/mreact` fixture remains a direct primitive ceiling comparison; optimization candidates are judged by comparing the compiled fixture against itself before and after the change.
+
 The fixtures intentionally target the standard keyed table cases: create 1,000 rows, create 10,000 rows, append 1,000 rows, update every 10th row, select a row, remove a row, swap rows, and clear rows. Those DOM-list cases should use the official harness for public cross-framework comparisons once the upstream PR is accepted.
 
 The repository-local primitive reactivity microbenchmarks, such as source writes and computed fan-in, remain separate because they are not js-framework-benchmark cases.

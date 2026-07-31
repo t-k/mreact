@@ -41,6 +41,11 @@ const localPackageSpecs = [
     target: "mreact-reactive-dom",
   },
   {
+    name: "@reckona/mreact-compiler",
+    source: join(repoRoot, "packages", "compiler"),
+    target: "mreact-compiler",
+  },
+  {
     name: "@reckona/mreact-compat",
     source: join(repoRoot, "packages", "react-compat"),
     target: "mreact-compat",
@@ -50,7 +55,12 @@ const localPackageSpecs = [
 const localPackageByName = new Map(localPackageSpecs.map((spec) => [spec.name, spec]));
 
 const localFixtureDependencies = {
-  "mreact": [
+  mreact: [
+    "@reckona/mreact-reactive-core",
+    "@reckona/mreact-reactive-dom",
+  ],
+  "mreact-compiled": [
+    "@reckona/mreact-compiler",
     "@reckona/mreact-reactive-core",
     "@reckona/mreact-reactive-dom",
   ],
@@ -99,6 +109,10 @@ const frameworkMappings = [
   {
     primitive: "mreact",
     official: "keyed/mreact",
+  },
+  {
+    primitive: "mreact compiled",
+    official: "keyed/mreact-compiled",
   },
 ];
 
