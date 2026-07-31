@@ -22,10 +22,7 @@ function trackSourceDirect(source: Source, tracker: ReactiveComputation): void {
   tracker.deps.add(source);
 }
 
-export function addSourceSubscriber(
-  source: Source,
-  computation: ReactiveComputation,
-): void {
+export function addSourceSubscriber(source: Source, computation: ReactiveComputation): void {
   const subscribers = source.subscribers;
 
   if (subscribers === null) {
@@ -37,10 +34,7 @@ export function addSourceSubscriber(
   }
 }
 
-export function removeSourceSubscriber(
-  source: Source,
-  computation: ReactiveComputation,
-): boolean {
+export function removeSourceSubscriber(source: Source, computation: ReactiveComputation): boolean {
   const subscribers = source.subscribers;
 
   if (subscribers === computation) {
@@ -67,6 +61,19 @@ export function sourceSubscriberCount(source: Source): number {
 }
 
 export function cleanupDeps(computation: ReactiveComputation): void {
+  if (computation.deps.size === 1) {
+    const dep = computation.deps.values().next().value as Source;
+
+    if (removeSourceSubscriber(dep, computation) && dep.trackedBy === computation) {
+      dep.trackedBy = undefined;
+      dep.trackedVersion = undefined;
+    }
+
+    computation.deps.clear();
+    computation.orderedDeps = undefined;
+    return;
+  }
+
   for (const dep of computation.deps) {
     if (!removeSourceSubscriber(dep, computation)) {
       continue;
@@ -98,10 +105,7 @@ export function nextTrackingVersionFor(computation: ReactiveComputation): number
   return 1;
 }
 
-export function trackIncrementalSource(
-  source: Source,
-  computation: ReactiveComputation,
-): void {
+export function trackIncrementalSource(source: Source, computation: ReactiveComputation): void {
   const trackingVersion = computation.trackingVersion;
 
   if (trackingVersion === undefined) {
@@ -141,10 +145,7 @@ export function trackIncrementalSource(
   computation.trackingCount = computation.trackingCount! + 1;
   computation.trackingTouchedDeps?.push(source);
 
-  if (
-    alreadyTrackedByComputation ||
-    (computation.deps.size > 0 && computation.deps.has(source))
-  ) {
+  if (alreadyTrackedByComputation || (computation.deps.size > 0 && computation.deps.has(source))) {
     return;
   }
 
@@ -256,8 +257,7 @@ export function notifySubscribers(source: Source): void {
   runtimeState.notificationDepth += 1;
 
   try {
-    const singleSubscriber =
-      subscribers.size === 1 ? subscribers.values().next().value : undefined;
+    const singleSubscriber = subscribers.size === 1 ? subscribers.values().next().value : undefined;
 
     if (singleSubscriber !== undefined) {
       if (!singleSubscriber.disposed && !singleSubscriber.queued) {
@@ -288,11 +288,7 @@ export function flushPendingComputed(): void {
   runtimeState.flushingComputed = true;
 
   try {
-    for (
-      let iteration = 0;
-      runtimeState.pendingComputed.size > 0;
-      iteration += 1
-    ) {
+    for (let iteration = 0; runtimeState.pendingComputed.size > 0; iteration += 1) {
       if (iteration >= maxPendingComputedFlushIterations) {
         runtimeState.pendingComputed.clear();
         throw new Error(
@@ -336,7 +332,5 @@ function orderedComputations(
     previousId = computation.id;
   }
 
-  return monotonic || ordered.length < 2
-    ? ordered
-    : ordered.sort((a, b) => a.id - b.id);
+  return monotonic || ordered.length < 2 ? ordered : ordered.sort((a, b) => a.id - b.id);
 }

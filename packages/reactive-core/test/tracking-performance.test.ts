@@ -37,4 +37,14 @@ describe("reactive-core tracking hot path", () => {
     expect(source).not.toContain("run() {");
     expect(source).not.toContain("dispose() {");
   });
+
+  test("uses a direct teardown path for one tracked dependency", async () => {
+    const source = await readFile(new URL("../src/tracking.ts", import.meta.url), "utf8");
+
+    const singletonBranch = source.indexOf("if (computation.deps.size === 1)");
+    const genericLoop = source.indexOf("for (const dep of computation.deps)");
+
+    expect(singletonBranch).toBeGreaterThanOrEqual(0);
+    expect(genericLoop).toBeGreaterThan(singletonBranch);
+  });
 });

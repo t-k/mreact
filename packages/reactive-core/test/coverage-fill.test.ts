@@ -235,9 +235,7 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
 
   test("cell subscription dispose only deletes pending queued subscriptions", () => {
     const source = cell(0);
-    const originalDelete = runtimeState.pendingComputed.delete.bind(
-      runtimeState.pendingComputed,
-    );
+    const originalDelete = runtimeState.pendingComputed.delete.bind(runtimeState.pendingComputed);
     let pendingDeletes = 0;
 
     runtimeState.pendingComputed.delete = ((value) => {
@@ -259,6 +257,39 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     } finally {
       runtimeState.pendingComputed.delete = originalDelete;
       resetSchedulerStateForTesting();
+    }
+  });
+
+  test("effect disposal never probes the computed pending queue", () => {
+    const source = cell(0);
+    const originalDelete = runtimeState.pendingComputed.delete.bind(runtimeState.pendingComputed);
+    const restoreScheduler = setScheduler({
+      schedule() {},
+    });
+    let pendingDeletes = 0;
+
+    runtimeState.pendingComputed.delete = ((value) => {
+      pendingDeletes += 1;
+      return originalDelete(value);
+    }) as typeof runtimeState.pendingComputed.delete;
+
+    try {
+      const disposeClean = effect(() => {
+        source.get();
+      });
+      disposeClean();
+
+      const disposeQueued = effect(() => {
+        source.get();
+      });
+      source.set(1);
+      disposeQueued();
+
+      expect(pendingDeletes).toBe(0);
+    } finally {
+      runtimeState.pendingComputed.delete = originalDelete;
+      resetSchedulerStateForTesting();
+      restoreScheduler();
     }
   });
 

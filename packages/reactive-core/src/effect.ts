@@ -56,7 +56,6 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
   } catch (error) {
     computation.disposed = true;
     computation.queued = false;
-    runtimeState.pendingComputed.delete(computation);
     cleanupDeps(computation);
 
     if (computation.cleanup !== undefined) {
@@ -135,7 +134,6 @@ function effectDispose(this: ReactiveComputation): void {
 
   computation.disposed = true;
   computation.queued = false;
-  runtimeState.pendingComputed.delete(computation);
   cleanupDeps(computation);
 
   if (computation.cleanup !== undefined) {
