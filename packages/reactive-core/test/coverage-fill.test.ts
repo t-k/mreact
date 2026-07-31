@@ -275,7 +275,9 @@ describe("reactive-core: coverage fill for the remaining branches", () => {
     const source = await readFile("packages/reactive-core/src/cell-subscription.ts", "utf8");
 
     expect(source).toContain("interface CellValueSource");
-    expect(source).toContain("subscription.listener(subscription.source.value)");
+    expect(source).toContain(
+      "subscription.listener(subscription.context, subscription.source.value)",
+    );
     expect(source).not.toContain("subscription.cell.get()");
   });
 

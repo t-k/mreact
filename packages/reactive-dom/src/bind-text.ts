@@ -1,6 +1,6 @@
 import { effect, untrack } from "@reckona/mreact-reactive-core";
 import type { ReadonlyCell } from "@reckona/mreact-reactive-core";
-import { subscribeCell } from "@reckona/mreact-reactive-core/internal";
+import { subscribeCellWithContext } from "@reckona/mreact-reactive-core/internal";
 import { registerDispose, registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
@@ -26,6 +26,10 @@ function normalizeText(value: unknown): string {
   return value == null ? "" : String(value);
 }
 
+function writeText(node: Text, value: unknown): void {
+  node.data = normalizeText(value);
+}
+
 /** Binds a text node to a reactive value. */
 export function bindText(
   node: Text,
@@ -37,9 +41,7 @@ export function bindText(
   reactiveText.__mreactReactiveText = true;
 
   if (typeof value !== "function") {
-    const directDispose = subscribeCell(value, (nextValue) => {
-      node.data = normalizeText(nextValue);
-    });
+    const directDispose = subscribeCellWithContext(value, node, writeText);
 
     if (directDispose !== undefined) {
       if (options?.preserveInitial !== true) {
