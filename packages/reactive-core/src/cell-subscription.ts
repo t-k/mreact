@@ -8,9 +8,8 @@ interface CellValueSource<T> extends Source {
   value: T;
 }
 
-interface CellSubscription<T, TContext> extends Omit<ReactiveComputation, "deps"> {
-  context: TContext;
-  listener: (context: TContext, value: T) => void;
+interface CellSubscription<T> extends Omit<ReactiveComputation, "deps"> {
+  listener: (value: T) => void;
   source: CellValueSource<T>;
 }
 
@@ -24,22 +23,13 @@ export function subscribeCell<T>(
   cell: ReadonlyCell<T>,
   listener: (value: T) => void,
 ): (() => void) | undefined {
-  return subscribeCellWithContext(cell, listener, callCellListener);
-}
-
-export function subscribeCellWithContext<T, TContext>(
-  cell: ReadonlyCell<T>,
-  context: TContext,
-  listener: (context: TContext, value: T) => void,
-): (() => void) | undefined {
   const source = getCellSource(cell) as CellValueSource<T> | undefined;
 
   if (source === undefined) {
     return undefined;
   }
 
-  const computation: CellSubscription<T, TContext> = {
-    context,
+  const computation: CellSubscription<T> = {
     dispose: CELL_SUBSCRIPTION_COMPUTATION_METHODS.dispose,
     disposed: false,
     id: runtimeState.nextComputationId,
@@ -56,26 +46,22 @@ export function subscribeCellWithContext<T, TContext>(
   return () => computation.dispose();
 }
 
-function callCellListener<T>(listener: (value: T) => void, value: T): void {
-  listener(value);
-}
-
 function cellSubscriptionMarkDirty(this: ReactiveComputation): void {
   queueComputation(this);
 }
 
 function cellSubscriptionRun(this: ReactiveComputation): void {
-  const subscription = this as unknown as CellSubscription<unknown, unknown>;
+  const subscription = this as unknown as CellSubscription<unknown>;
 
   if (subscription.disposed) {
     return;
   }
 
-  subscription.listener(subscription.context, subscription.source.value);
+  subscription.listener(subscription.source.value);
 }
 
 function cellSubscriptionDispose(this: ReactiveComputation): void {
-  const subscription = this as unknown as CellSubscription<unknown, unknown>;
+  const subscription = this as unknown as CellSubscription<unknown>;
 
   if (subscription.disposed) {
     return;
@@ -104,7 +90,7 @@ function cellSubscriptionDispose(this: ReactiveComputation): void {
 
 function removeCellSubscriptionSourceSubscriber(
   source: Source,
-  subscription: CellSubscription<unknown, unknown>,
+  subscription: CellSubscription<unknown>,
 ): void {
   const subscribers = source.subscribers;
   const computation = subscription as unknown as ReactiveComputation;

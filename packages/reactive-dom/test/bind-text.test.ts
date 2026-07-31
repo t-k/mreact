@@ -122,9 +122,7 @@ describe("bindText", () => {
       "utf8",
     );
     const directBranchStart = source.indexOf('if (typeof value !== "function")');
-    const subscribeCellStart = source.indexOf(
-      "const directDispose = subscribeCellWithContext",
-    );
+    const subscribeCellStart = source.indexOf("const directDispose = subscribeCell");
     const readValueStart = source.indexOf("const readValue");
 
     expect(readValueStart).toBeGreaterThan(subscribeCellStart);
@@ -136,15 +134,12 @@ describe("bindText", () => {
       join(process.cwd(), "packages", "reactive-dom", "src", "bind-text.ts"),
       "utf8",
     );
-    const subscribeCellStart = source.indexOf(
-      "const directDispose = subscribeCellWithContext",
-    );
+    const subscribeCellStart = source.indexOf("const directDispose = subscribeCell");
     const directReturnStart = source.indexOf("return registerIdempotentDispose(directDispose)");
     const directBranch = source.slice(subscribeCellStart, directReturnStart);
 
     expect(directBranch).not.toContain("shouldWrite");
-    expect(source).toContain("function writeText(node: Text, value: unknown)");
-    expect(source).toContain("node.data = normalizeText(value)");
+    expect(directBranch).toContain("node.data = normalizeText(nextValue)");
   });
 
   test("direct readonly cell binding shares its DOM writer across subscriptions", async () => {
