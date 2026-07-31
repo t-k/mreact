@@ -1022,6 +1022,16 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("if (!state.activeRecords)");
   });
 
+  test("reuses compiler keyed records for strict selected-class lookup", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+
+    expect(source).toContain("records: compilerMode ? undefined : new Map()");
+    expect(source).toContain("state.recordsSource().get(key)");
+  });
+
   test("skips delegated release batching and promotion walks when event promotion is disabled", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
