@@ -110,6 +110,8 @@ export type {
   AttributeIr,
   ClientReferenceIr,
   CompiledSingleNodeListIr,
+  CompilerKeyedEventProgramIr,
+  CompilerSelectedClassIr,
   ComponentIr,
   ComponentNamedPropIr,
   ComponentPropIr,

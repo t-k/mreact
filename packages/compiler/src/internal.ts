@@ -2548,6 +2548,8 @@ export type {
   AsyncBoundaryIr,
   AttributeIr,
   CompiledSingleNodeListIr,
+  CompilerKeyedEventProgramIr,
+  CompilerSelectedClassIr,
   ComponentIr,
   ComponentPropIr,
   ComponentRefIr,

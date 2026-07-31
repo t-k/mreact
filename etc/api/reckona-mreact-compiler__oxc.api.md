@@ -103,7 +103,19 @@ export interface ClientReferenceIr {
 // @public
 export interface CompiledSingleNodeListIr {
     // (undocumented)
+    eventPrograms?: CompilerKeyedEventProgramIr[];
+    // (undocumented)
     root: JsxElementIr;
+    // (undocumented)
+    selectedClass?: CompilerSelectedClassIr;
+}
+
+// @public
+export interface CompilerKeyedEventProgramIr {
+    // (undocumented)
+    eventName: string;
+    // (undocumented)
+    handlers: string[];
 }
 
 // @public
@@ -116,6 +128,14 @@ export interface CompilerModuleContext {
     parseErrors: readonly unknown[];
     // (undocumented)
     program: unknown;
+}
+
+// @public
+export interface CompilerSelectedClassIr {
+    // (undocumented)
+    className: string;
+    // (undocumented)
+    sourceCode: string;
 }
 
 // @public
@@ -246,6 +266,8 @@ export interface EventAttributeIr {
     // (undocumented)
     code: string;
     // (undocumented)
+    compilerKeyedSlot?: number;
+    // (undocumented)
     eventName: string;
     // (undocumented)
     kind: "event";
@@ -260,7 +282,7 @@ export interface ExprIr {
     // (undocumented)
     kind: "expr";
     // (undocumented)
-    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child";
+    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text";
 }
 
 // @public
