@@ -132,7 +132,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   for (const component of ir.components) {
     visit(component.root, (node) => {
       if (node.kind === "expr") {
-        specifiers.add(node.renderMode === "dynamic" ? "insertDynamic" : "bindText");
+        if (node.renderMode === "dynamic") {
+          specifiers.add("insertDynamic");
+        } else if (node.renderMode !== "compiler-keyed-initial-text") {
+          specifiers.add("bindText");
+        }
       }
 
       if (node.kind === "conditional") {
@@ -537,10 +541,23 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       }
 
       const textVar = state.allocateName(`_text_${state.textIndex}`);
+      const initialTextValueVar =
+        child.renderMode === "compiler-keyed-initial-text"
+          ? state.allocateName(`_textValue_${state.textIndex}`)
+          : undefined;
       state.textIndex += 1;
-      lines.push(`  const ${textVar} = document.createTextNode("");`);
+      if (initialTextValueVar === undefined) {
+        lines.push(`  const ${textVar} = document.createTextNode("");`);
+      } else {
+        lines.push(`  const ${initialTextValueVar} = (${child.code});`);
+        lines.push(
+          `  const ${textVar} = document.createTextNode(typeof ${initialTextValueVar} === "string" ? ${initialTextValueVar} : ${initialTextValueVar} == null ? "" : String(${initialTextValueVar}));`,
+        );
+      }
       lines.push(`  ${childPath}.replaceWith(${textVar});`);
-      lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
+      if (child.renderMode !== "compiler-keyed-initial-text") {
+        lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
+      }
       childIndex += 1;
       continue;
     }

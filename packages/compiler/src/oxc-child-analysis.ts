@@ -689,9 +689,50 @@ function analyzeCompiledSingleNodeList(
   );
   const root = compiledBody?.children[0];
 
-  return compiledBody?.bodyStatements.length === 0 && root?.kind === "element"
-    ? { root }
-    : undefined;
+  if (compiledBody?.bodyStatements.length !== 0 || root?.kind !== "element") {
+    return undefined;
+  }
+
+  if (isDirectCompilerKeyText(keyCode, itemName)) {
+    markCompilerKeyedInitialText(rendererBody.children[0] as JsxElementIr, root, keyCode);
+  }
+
+  return { root };
+}
+
+function isDirectCompilerKeyText(keyCode: string, itemName: string): boolean {
+  if (!keyCode.startsWith(`${itemName}.`)) {
+    return false;
+  }
+
+  return /^[A-Za-z_$][\w$]*$/.test(keyCode.slice(itemName.length + 1));
+}
+
+function markCompilerKeyedInitialText(
+  sourceNode: JsxNodeIr,
+  compiledNode: JsxNodeIr,
+  keyCode: string,
+): void {
+  if (sourceNode.kind === "expr" && compiledNode.kind === "expr") {
+    if (sourceNode.code === keyCode) {
+      sourceNode.renderMode = "compiler-keyed-initial-text";
+      compiledNode.renderMode = "compiler-keyed-initial-text";
+    }
+    return;
+  }
+
+  if (sourceNode.kind !== "element" || compiledNode.kind !== "element") {
+    return;
+  }
+
+  const childCount = Math.min(sourceNode.children.length, compiledNode.children.length);
+  for (let index = 0; index < childCount; index += 1) {
+    markCompilerKeyedInitialText(
+      sourceNode.children[index] as JsxNodeIr,
+      compiledNode.children[index] as JsxNodeIr,
+      keyCode,
+    );
+  }
 }
 
 function isCompiledSingleNodeTree(node: JsxNodeIr): boolean {

@@ -128,6 +128,119 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("bindList");
   });
 
+  test("directly initializes key-equivalent text in compiler keyed rows", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A" }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}>
+              <td>{row.id}</td>
+              <td>{row.label}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
+    expect(output.code).toMatch(/document\.createTextNode\([\s\S]*row\.item[\s\S]*\.id/);
+    expect(output.code).toContain("row.item).label");
+  });
+
+  test("keeps non-key-equivalent keyed row text on reactive bindings", () => {
+    const output = transform({
+      code: `
+        function readId(row) {
+          return row.id;
+        }
+
+        export function App() {
+          const selected = cell(1);
+          const rows = cell([{ id: 1, meta: { id: 1 } }]);
+          return <tbody>{rows.get().map((row, index) => (
+            <tr key={row.id}>
+              <td>{row.id}</td>
+              <td>{row.meta.id}</td>
+              <td>{readId(row)}</td>
+              <td>{index}</td>
+              <td>{selected.get()}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code.match(/\bbindText\(/g)).toHaveLength(4);
+  });
+
+  test.each([
+    ["nested key", "row.meta.id"],
+    ["computed key", 'row["id"]'],
+    ["optional key", "row?.id"],
+    ["index key", "index"],
+    ["external key", "selected.get()"],
+  ])("does not directly initialize %s text", (_name, expression) => {
+    const output = transform({
+      code: `
+        function readId(row) {
+          return row.id;
+        }
+
+        export function App() {
+          const selected = cell(1);
+          const rows = cell([{ id: 1, meta: { id: 1 } }]);
+          return <tbody>{rows.get().map((row, index) => (
+            <tr key={${expression}}>
+              <td>{${expression}}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
+    expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
+  });
+
+  test("keeps call-based keyed text on the generic list path", () => {
+    const output = transform({
+      code: `
+        function readId(row) {
+          return row.id;
+        }
+
+        export function App() {
+          const rows = cell([{ id: 1 }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={readId(row)}>
+              <td>{readId(row)}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+  });
+
   test.each([
     ["fragment", "<><tr key={row.id} /><tr /></>"],
     ["component", "<Row key={row.id} row={row} />"],
@@ -183,5 +296,4 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("{ key: (row) => (row.id) }");
     expect(output.code).not.toContain("{ key: (row) => ((row.item).id) }");
   });
-
 });

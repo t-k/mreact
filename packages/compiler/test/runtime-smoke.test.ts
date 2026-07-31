@@ -6,6 +6,47 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("compiler keyed rows keep directly initialized key text current across record reuse", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1, label: "A" }]);
+        export function App() {
+          return <main>
+            <button id="replace" onClick={() => rows.set([{ id: 1, label: "B" }])}>Replace</button>
+            <button id="change-key" onClick={() => rows.set([{ id: 2, label: "C" }])}>Change key</button>
+            <table><tbody>{rows.get().map((row) => (
+              <tr key={row.id}>
+                <td class="id">{row.id}</td>
+                <td class="label">{row.label}</td>
+              </tr>
+            ))}</tbody></table>
+          </main>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const firstRow = node.querySelector("tbody tr") as HTMLTableRowElement;
+
+    expect(firstRow.querySelector(".id")?.textContent).toBe("1");
+    node.querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect(node.querySelector("tbody tr")).toBe(firstRow);
+    expect(firstRow.querySelector(".id")?.textContent).toBe("1");
+    expect(firstRow.querySelector(".label")?.textContent).toBe("B");
+
+    node.querySelector<HTMLButtonElement>("#change-key")?.click();
+    await flushEffects();
+    const nextRow = node.querySelector("tbody tr") as HTMLTableRowElement;
+    expect(nextRow).not.toBe(firstRow);
+    expect(nextRow.querySelector(".id")?.textContent).toBe("2");
+    expect(nextRow.querySelector(".label")?.textContent).toBe("C");
+  });
+
   test("compiled keyed rows retain DOM while item, index, items, and events stay current", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

@@ -136,7 +136,13 @@ export interface TextIr {
 export interface ExprIr {
   kind: "expr";
   code: string;
-  renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child";
+  renderMode?:
+    | "dynamic"
+    | "html"
+    | "react-node"
+    | "stream-node"
+    | "compat-child"
+    | "compiler-keyed-initial-text";
 }
 
 /** Represents an async boundary lowered from an Await-style JSX construct. */
