@@ -7,7 +7,7 @@
     "imports": [
       {
         "source": "@reckona/mreact-reactive-dom",
-        "specifiers": ["bindText", "createTemplate"]
+        "specifiers": ["bindText", "createTemplate", "createTemplateElement"]
       },
       {
         "source": "@reckona/mreact-reactive-dom/internal",
