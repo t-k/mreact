@@ -165,6 +165,32 @@ describe("effect", () => {
     expect(calls).toEqual([0]);
   });
 
+  test("disposes the current dependency after switching between single sources", async () => {
+    const useFirst = cell(true);
+    const first = cell(1);
+    const second = cell(2);
+    let runs = 0;
+    const dispose = effect(() => {
+      runs += 1;
+      if (useFirst.get()) {
+        first.get();
+      } else {
+        second.get();
+      }
+    });
+
+    useFirst.set(false);
+    await flushEffects();
+    expect(runs).toBe(2);
+
+    dispose();
+    first.set(3);
+    second.set(4);
+    await flushEffects();
+
+    expect(runs).toBe(2);
+  });
+
   test("continues flushing queued effects after one effect throws", async () => {
     const scheduled: Array<() => void> = [];
     const restoreScheduler = setScheduler({

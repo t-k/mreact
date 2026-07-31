@@ -47,4 +47,11 @@ describe("reactive-core tracking hot path", () => {
     expect(singletonBranch).toBeGreaterThanOrEqual(0);
     expect(genericLoop).toBeGreaterThan(singletonBranch);
   });
+
+  test("caches an effect's single dependency for teardown", async () => {
+    const source = await readFile(new URL("../src/effect.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("singleDependency");
+    expect(source).toContain("cleanupDeps(computation, computation.singleDependency)");
+  });
 });
