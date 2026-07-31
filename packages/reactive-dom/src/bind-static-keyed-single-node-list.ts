@@ -517,7 +517,7 @@ function createSingleNodeRecordsWithFragment<T, TNode extends ChildNode>(
 
 function createSingleNodeRecordsFromKeysWithFragment<T, TNode extends ChildNode>(
   parent: ParentNode,
-  keys: readonly unknown[],
+  keys: ReadonlySet<unknown>,
   items: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
@@ -527,10 +527,11 @@ function createSingleNodeRecordsFromKeysWithFragment<T, TNode extends ChildNode>
   const records = new Map<unknown, SingleNodeRecord>();
   const fragment = document.createDocumentFragment();
 
-  for (let index = 0; index < keys.length; index += 1) {
+  let index = 0;
+  for (const itemKey of keys) {
     const record = createSingleNodeRecord(
       parent,
-      keys[index],
+      itemKey,
       items[index] as T,
       index,
       items,
@@ -540,8 +541,9 @@ function createSingleNodeRecordsFromKeysWithFragment<T, TNode extends ChildNode>
       selectedClassState,
     );
 
-    records.set(keys[index], record);
+    records.set(itemKey, record);
     fragment.appendChild(record.node);
+    index += 1;
   }
 
   return { fragment, records };
@@ -613,20 +615,16 @@ function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): Map<unknown, SingleNodeRecord> | undefined {
-  const length = currentItems.length;
-  // oxlint-disable-next-line unicorn/no-new-array -- keys are filled sequentially and reused while creating records.
-  const keys = new Array<unknown>(length);
-  const seenKeys = new Set<unknown>();
+  const keys = new Set<unknown>();
 
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < currentItems.length; index += 1) {
     const itemKey = key(currentItems[index] as T, index, currentItems);
 
-    if (seenKeys.has(itemKey) || records.has(itemKey)) {
+    if (keys.has(itemKey) || records.has(itemKey)) {
       return undefined;
     }
 
-    seenKeys.add(itemKey);
-    keys[index] = itemKey;
+    keys.add(itemKey);
   }
 
   const next = createSingleNodeRecordsFromKeysWithFragment(
