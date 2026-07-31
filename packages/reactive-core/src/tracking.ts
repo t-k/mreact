@@ -60,12 +60,9 @@ export function sourceSubscriberCount(source: Source): number {
   return subscribers === null ? 0 : subscribers instanceof Set ? subscribers.size : 1;
 }
 
-export function cleanupDeps(
-  computation: ReactiveComputation,
-  singleDependency?: Source,
-): void {
+export function cleanupDeps(computation: ReactiveComputation): void {
   if (computation.deps.size === 1) {
-    const dep = singleDependency ?? (computation.deps.values().next().value as Source);
+    const dep = computation.deps.values().next().value as Source;
 
     if (removeSourceSubscriber(dep, computation) && dep.trackedBy === computation) {
       dep.trackedBy = undefined;

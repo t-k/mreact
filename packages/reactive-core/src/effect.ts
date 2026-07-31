@@ -4,7 +4,7 @@ import {
   prepareReactiveEffectRunDevtoolsEvent,
 } from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
-import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
+import { runtimeState, type ReactiveComputation } from "./state.js";
 import { cleanupDeps, cleanupUntrackedDeps, nextTrackingVersionFor } from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
@@ -17,7 +17,6 @@ type EffectFn = () => void | (() => void);
 interface EffectComputation extends ReactiveComputation {
   cleanup: (() => void) | undefined;
   fn: EffectFn;
-  singleDependency: Source | undefined;
 }
 
 const EFFECT_COMPUTATION_METHODS = {
@@ -48,7 +47,6 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
     markDirty: EFFECT_COMPUTATION_METHODS.markDirty,
     queued: false,
     run: EFFECT_COMPUTATION_METHODS.run,
-    singleDependency: undefined,
   };
 
   runtimeState.nextComputationId += 1;
@@ -58,7 +56,7 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
   } catch (error) {
     computation.disposed = true;
     computation.queued = false;
-    cleanupDeps(computation, computation.singleDependency);
+    cleanupDeps(computation);
 
     if (computation.cleanup !== undefined) {
       const currentCleanup = computation.cleanup;
@@ -136,7 +134,7 @@ function effectDispose(this: ReactiveComputation): void {
 
   computation.disposed = true;
   computation.queued = false;
-  cleanupDeps(computation, computation.singleDependency);
+  cleanupDeps(computation);
 
   if (computation.cleanup !== undefined) {
     const currentCleanup = computation.cleanup;
@@ -146,7 +144,7 @@ function effectDispose(this: ReactiveComputation): void {
 }
 
 function finishIncrementalTracking(
-  computation: EffectComputation,
+  computation: ReactiveComputation,
   previousDepsSize: number,
   trackingVersion: number,
 ): void {
@@ -157,14 +155,6 @@ function finishIncrementalTracking(
 
   if (previousDepsSize > 0 && (trackedCount !== previousDepsSize || addedDepsCount > 0)) {
     cleanupUntrackedDeps(computation, trackingVersion);
-  }
-
-  if (computation.deps.size !== 1) {
-    computation.singleDependency = undefined;
-  } else if (addedDeps !== undefined && !Array.isArray(addedDeps)) {
-    computation.singleDependency = addedDeps;
-  } else if (computation.singleDependency === undefined || Array.isArray(addedDeps)) {
-    computation.singleDependency = computation.deps.values().next().value as Source;
   }
 
   computation.trackingAddedDeps = undefined;
