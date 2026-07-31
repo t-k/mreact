@@ -15,20 +15,26 @@ export interface CompilerKeyedEventProgram<T> {
   dispatch: CompilerKeyedEventDispatcher<T>;
 }
 
-type CompilerKeyedEventSlots = Map<string, number>;
-
-const compilerKeyedEventSlots = new WeakMap<Element, CompilerKeyedEventSlots>();
+const compilerKeyedEventType = Symbol("compilerKeyedEventType");
+const compilerKeyedEventSlot = Symbol("compilerKeyedEventSlot");
+const compilerKeyedExtraEventSlots = Symbol("compilerKeyedExtraEventSlots");
+type CompilerKeyedEventElement = Element & {
+  [compilerKeyedEventType]?: string;
+  [compilerKeyedEventSlot]?: number;
+  [compilerKeyedExtraEventSlots]?: Map<string, number>;
+};
 
 /** Marks a row element with a compiler-owned event slot without adding a listener. */
 export function markCompilerKeyedEventSlot(element: Element, type: string, slot: number): void {
-  let slots = compilerKeyedEventSlots.get(element);
+  const target = element as CompilerKeyedEventElement;
 
-  if (slots === undefined) {
-    slots = new Map();
-    compilerKeyedEventSlots.set(element, slots);
+  if (target[compilerKeyedEventType] === undefined || target[compilerKeyedEventType] === type) {
+    target[compilerKeyedEventType] = type;
+    target[compilerKeyedEventSlot] = slot;
+    return;
   }
 
-  slots.set(type, slot);
+  (target[compilerKeyedExtraEventSlots] ??= new Map()).set(type, slot);
 }
 
 export function setupCompilerKeyedEvents<T>(
@@ -81,7 +87,7 @@ function dispatchCompilerKeyedEvent<T>(
       continue;
     }
 
-    const slot = compilerKeyedEventSlots.get(target)?.get(program.type);
+    const slot = readCompilerKeyedEventSlot(target, program.type);
     if (slot === undefined) {
       continue;
     }
@@ -96,6 +102,13 @@ function dispatchCompilerKeyedEvent<T>(
       break;
     }
   }
+}
+
+function readCompilerKeyedEventSlot(element: Element, type: string): number | undefined {
+  const target = element as CompilerKeyedEventElement;
+  return target[compilerKeyedEventType] === type
+    ? target[compilerKeyedEventSlot]
+    : target[compilerKeyedExtraEventSlots]?.get(type);
 }
 
 function findCompilerKeyedRowContext<T>(

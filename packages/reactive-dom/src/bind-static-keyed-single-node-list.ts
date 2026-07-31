@@ -86,12 +86,16 @@ const compilerRowItem = Symbol("compilerRowItem");
 const compilerRowItems = Symbol("compilerRowItems");
 const compilerRowReads = Symbol("compilerRowReads");
 const compilerRowSource = Symbol("compilerRowSource");
+const activeCompilerRowContext = Symbol("activeCompilerRowContext");
 type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowIndex]: number;
   [compilerRowItem]: unknown;
   [compilerRowItems]: readonly unknown[];
   [compilerRowReads]: number;
   [compilerRowSource]?: Source | undefined;
+};
+type CompilerKeyedRowNode = Node & {
+  [activeCompilerRowContext]?: InternalCompilerKeyedRowContext;
 };
 const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
   get index(): number {
@@ -114,7 +118,6 @@ const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
   },
 };
 const compilerRowContexts = new WeakMap<ChildNode, InternalCompilerKeyedRowContext>();
-const activeCompilerRowContexts = new WeakMap<Node, InternalCompilerKeyedRowContext>();
 
 type RemovedSingleNodeRecords =
   | {
@@ -419,7 +422,10 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   const disposeCompilerEvents = setupCompilerKeyedEvents(
     parent,
     compilerEvents ?? [],
-    (node) => activeCompilerRowContexts.get(node) as CompilerKeyedRowContext<T> | undefined,
+    (node) =>
+      (node as CompilerKeyedRowNode)[activeCompilerRowContext] as
+        | CompilerKeyedRowContext<T>
+        | undefined,
   );
 
   return registerDispose(() => {
@@ -469,7 +475,7 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       context[compilerRowReads] = 0;
       const node = renderItem(context as CompilerKeyedRowContext<T>);
       compilerRowContexts.set(node, context);
-      activeCompilerRowContexts.set(node, context);
+      (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
       if (markRecordsForHydration) {
         markDynamicNode(node);
       }
