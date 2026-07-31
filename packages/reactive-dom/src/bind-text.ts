@@ -1,6 +1,10 @@
 import { effect, untrack } from "@reckona/mreact-reactive-core";
 import type { ReadonlyCell } from "@reckona/mreact-reactive-core";
-import { subscribeCell } from "@reckona/mreact-reactive-core/internal";
+import {
+  subscribeAdaptiveSource,
+  subscribeCell,
+  type Source,
+} from "@reckona/mreact-reactive-core/internal";
 import { registerDispose, registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
@@ -64,6 +68,22 @@ export function bindText(
   });
 
   return registerIdempotentDispose(dispose);
+}
+
+/** @internal Binds compiler-owned text to a source while preserving additional dependencies. */
+export function bindTextWithAdaptiveSource(
+  node: Text,
+  source: Source,
+  readValue: () => unknown,
+): Dispose {
+  const reactiveText = node as Text & { __mreactReactiveText?: true };
+  reactiveText.__mreactReactiveText = true;
+
+  return registerIdempotentDispose(
+    subscribeAdaptiveSource(source, () => {
+      node.data = normalizeText(readValue());
+    }),
+  );
 }
 
 /** Binds multiple text nodes to the same reactive value. */

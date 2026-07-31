@@ -28,7 +28,8 @@ describe("compiler runtime smoke", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
+    expect(output.code).not.toContain("bindText(");
+    expect(output.code.match(/\bbindCompilerKeyedText\(/g)).toHaveLength(1);
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const firstRow = node.querySelector("tbody tr") as HTMLTableRowElement;
 
@@ -45,6 +46,48 @@ describe("compiler runtime smoke", () => {
     expect(nextRow).not.toBe(firstRow);
     expect(nextRow.querySelector(".id")?.textContent).toBe("2");
     expect(nextRow.querySelector(".label")?.textContent).toBe("C");
+  });
+
+  test("compiler keyed text preserves getter dependencies across row replacement", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const suffix = cell("!");
+        const plain = { id: 1, label: "plain" };
+        const reactive = {
+          id: 1,
+          get label() {
+            return "getter" + suffix.get();
+          },
+        };
+        const rows = cell([plain]);
+        export function App() {
+          return <main>
+            <button id="replace" onClick={() => rows.set([reactive])}>Replace</button>
+            <button id="suffix" onClick={() => suffix.set("?")}>Suffix</button>
+            <table><tbody>{rows.get().map((row) => (
+              <tr key={row.id}><td class="label">{row.label}</td></tr>
+            ))}</tbody></table>
+          </main>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindCompilerKeyedText(");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("tbody tr");
+
+    expect(row?.textContent).toBe("plain");
+    node.querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect(node.querySelector("tbody tr")).toBe(row);
+    expect(row?.textContent).toBe("getter!");
+
+    node.querySelector<HTMLButtonElement>("#suffix")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("getter?");
   });
 
   test("compiled keyed rows retain DOM while item, index, items, and events stay current", async () => {

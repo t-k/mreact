@@ -53,6 +53,7 @@ import {
 import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
 import {
   bindCompilerKeyedSingleNodeList,
+  bindCompilerKeyedText,
   markCompilerKeyedEventSlot,
 } from "../../reactive-dom/src/internal.js";
 
@@ -413,7 +414,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedSingleNodeList|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -425,7 +426,9 @@ function extractClientInternalRuntimeEntries(
       value:
         match.groups.importedName === "markCompilerKeyedEventSlot"
           ? markCompilerKeyedEventSlot
-          : bindCompilerKeyedSingleNodeList,
+          : match.groups.importedName === "bindCompilerKeyedText"
+            ? bindCompilerKeyedText
+            : bindCompilerKeyedSingleNodeList,
     };
   });
 }

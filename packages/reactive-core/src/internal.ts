@@ -3,6 +3,8 @@ export type { Scheduler } from "./scheduler.js";
 /** Cleanup scope helpers used by reactive DOM and tests. */
 export { registerCleanup, withCleanupScope } from "./cleanup-scope.js";
 export { effectWithDebugLabel } from "./effect.js";
+/** Compact adaptive subscription used by compiler-owned source bindings. */
+export { subscribeAdaptiveSource } from "./adaptive-source-subscription.js";
 /** Scheduler controls used by reactive-core tests and integrations. */
 export { flushQueuedComputations, schedulePendingFlush, setScheduler } from "./scheduler.js";
 /** Computed flush helper used by batched reactive updates. */

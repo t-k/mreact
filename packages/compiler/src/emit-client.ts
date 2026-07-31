@@ -57,6 +57,7 @@ type RuntimeHelperName =
   | "createTemplateElement"
   | "insertDynamic"
   | "bindCompilerKeyedSingleNodeList"
+  | "bindCompilerKeyedText"
   | "markCompilerKeyedEventSlot";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
@@ -87,6 +88,7 @@ function allocateRuntimeHelperNames(
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
+    bindCompilerKeyedText: "bindCompilerKeyedText",
     markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
   };
 
@@ -138,6 +140,8 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       if (node.kind === "expr") {
         if (node.renderMode === "dynamic") {
           specifiers.add("insertDynamic");
+        } else if (node.renderMode === "compiler-keyed-text") {
+          internalSpecifiers.add("bindCompilerKeyedText");
         } else if (node.renderMode !== "compiler-keyed-initial-text") {
           specifiers.add("bindText");
         }
@@ -479,6 +483,7 @@ interface EmitSetupState {
   clientBoundaryHelperName?: string | undefined;
   debugLabel?: string | undefined;
   compilerKeyedEventSlots?: boolean | undefined;
+  compilerKeyedRowContext?: string | undefined;
 }
 
 function emitDebugOptions(debugLabel: string | undefined): string {
@@ -608,7 +613,14 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           `  ${textVar}.data = typeof ${initialTextValueVar} === "string" ? ${initialTextValueVar} : ${initialTextValueVar} == null ? "" : String(${initialTextValueVar});`,
         );
       }
-      if (child.renderMode !== "compiler-keyed-initial-text") {
+      if (child.renderMode === "compiler-keyed-text") {
+        if (state.compilerKeyedRowContext === undefined) {
+          throw new Error("Missing compiler keyed row context for optimized text.");
+        }
+        lines.push(
+          `  ${state.helperNames.bindCompilerKeyedText}(${state.compilerKeyedRowContext}, ${textVar}, () => (${child.code}));`,
+        );
+      } else if (child.renderMode !== "compiler-keyed-initial-text") {
         lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
       }
       childIndex += 1;
@@ -849,6 +861,7 @@ function emitCompilerKeyedSingleNodeRenderer(
   const setup = emitSetup(root, rootName, {
     ...state,
     compilerKeyedEventSlots: node.compiledSingleNode?.eventPrograms !== undefined,
+    compilerKeyedRowContext: node.itemName,
   });
   const setupLines = setup === "" ? [] : setup.split("\n");
   return [

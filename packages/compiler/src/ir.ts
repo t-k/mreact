@@ -156,7 +156,8 @@ export interface ExprIr {
     | "react-node"
     | "stream-node"
     | "compat-child"
-    | "compiler-keyed-initial-text";
+    | "compiler-keyed-initial-text"
+    | "compiler-keyed-text";
 }
 
 /** Represents an async boundary lowered from an Await-style JSX construct. */

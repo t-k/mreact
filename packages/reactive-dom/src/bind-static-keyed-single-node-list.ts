@@ -15,6 +15,7 @@ import {
 } from "./compiler-keyed-events.js";
 import { isDynamicHydrationEnabled, markDynamicNode } from "./dynamic-node.js";
 import { createScopedRenderNodeScope } from "./render-scope.js";
+import { bindTextWithAdaptiveSource } from "./bind-text.js";
 import { registerDispose } from "./scope.js";
 import type { DomScope } from "./scope.js";
 import type { Dispose } from "./types.js";
@@ -484,6 +485,16 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
 
 function ensureCompilerRowSource(context: InternalCompilerKeyedRowContext): Source {
   return (context[compilerRowSource] ??= { subscribers: null });
+}
+
+/** Internal text binding used only by compiler-generated keyed row renderers. */
+export function bindCompilerKeyedText<T>(
+  context: CompilerKeyedRowContext<T>,
+  node: Text,
+  readValue: () => unknown,
+): Dispose {
+  const internalContext = context as InternalCompilerKeyedRowContext;
+  return bindTextWithAdaptiveSource(node, ensureCompilerRowSource(internalContext), readValue);
 }
 
 function uniqueSingleNodeKeyedItems<T>(

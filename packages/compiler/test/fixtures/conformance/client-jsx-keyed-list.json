@@ -7,11 +7,11 @@
     "imports": [
       {
         "source": "@reckona/mreact-reactive-dom",
-        "specifiers": ["bindText", "createTemplate", "createTemplateElement"]
+        "specifiers": ["createTemplate", "createTemplateElement"]
       },
       {
         "source": "@reckona/mreact-reactive-dom/internal",
-        "specifiers": ["bindCompilerKeyedSingleNodeList"]
+        "specifiers": ["bindCompilerKeyedSingleNodeList", "bindCompilerKeyedText"]
       }
     ],
     "client": {

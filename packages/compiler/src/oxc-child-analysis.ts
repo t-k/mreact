@@ -748,12 +748,46 @@ function analyzeCompiledSingleNodeList(
   if (isDirectCompilerKeyText(keyCode, itemName)) {
     markCompilerKeyedInitialText(sourceRoot, root, keyCode);
   }
+  markCompilerKeyedText(sourceRoot, root, keyCode, itemName);
 
   return {
     root,
     ...(eventPrograms === undefined ? {} : { eventPrograms }),
     ...(selectedClass === undefined ? {} : { selectedClass }),
   };
+}
+
+function markCompilerKeyedText(
+  sourceNode: JsxNodeIr,
+  compiledNode: JsxNodeIr,
+  keyCode: string,
+  itemName: string,
+): void {
+  if (sourceNode.kind === "expr" && compiledNode.kind === "expr") {
+    if (
+      sourceNode.code !== keyCode &&
+      sourceNode.code.startsWith(`${itemName}.`) &&
+      /^[A-Za-z_$][\w$]*$/.test(sourceNode.code.slice(itemName.length + 1))
+    ) {
+      sourceNode.renderMode = "compiler-keyed-text";
+      compiledNode.renderMode = "compiler-keyed-text";
+    }
+    return;
+  }
+
+  if (sourceNode.kind !== "element" || compiledNode.kind !== "element") {
+    return;
+  }
+
+  const childCount = Math.min(sourceNode.children.length, compiledNode.children.length);
+  for (let index = 0; index < childCount; index += 1) {
+    markCompilerKeyedText(
+      sourceNode.children[index] as JsxNodeIr,
+      compiledNode.children[index] as JsxNodeIr,
+      keyCode,
+      itemName,
+    );
+  }
 }
 
 const compilerDelegatedEventTypes = new Set([

@@ -20,7 +20,7 @@ describe("compiler dynamic JSX transform", () => {
       source: "@reckona/mreact-reactive-dom",
       specifiers: ["bindEvent", "bindProp", "bindText", "createTemplate"],
     });
-    expect(output.code).toContain("bindText(");
+    expect(output.code).toMatch(/\b(?:bindText|insertDynamic)\(/);
     expect(output.code).toContain("bindProp(");
     expect(output.code).toContain("bindEvent(");
     expect(output.code).toContain("count.get()");
@@ -113,10 +113,16 @@ describe("compiler dynamic JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.metadata.imports).toContainEqual({
-      source: "@reckona/mreact-reactive-dom/internal",
-      specifiers: ["bindCompilerKeyedSingleNodeList", "markCompilerKeyedEventSlot"],
-    });
+    expect(output.metadata.imports).toContainEqual(
+      expect.objectContaining({
+        source: "@reckona/mreact-reactive-dom/internal",
+        specifiers: expect.arrayContaining([
+          "bindCompilerKeyedSingleNodeList",
+          "bindCompilerKeyedText",
+          "markCompilerKeyedEventSlot",
+        ]),
+      }),
+    );
     expect(output.metadata.imports).toContainEqual(
       expect.objectContaining({
         source: "@reckona/mreact-reactive-dom",
@@ -204,12 +210,44 @@ describe("compiler dynamic JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
+    expect(output.code).not.toContain("bindText(");
+    expect(output.code.match(/\bbindCompilerKeyedText\(/g)).toHaveLength(1);
     expect(output.code).toContain('createTemplateElement("<tr><td> </td><td> </td></tr>")');
     expect(output.code).not.toContain("document.createTextNode");
     expect(output.code).not.toContain(".replaceWith(");
     expect(output.code).toMatch(/_text_0\.data = [\s\S]*row\.item[\s\S]*\.id/);
     expect(output.code).toContain("row.item).label");
+  });
+
+  test.each([
+    ["nested property", "row.meta.label"],
+    ["computed property", 'row["label"]'],
+    ["optional property", "row?.label"],
+    ["call expression", "readLabel(row)"],
+  ])("keeps %s keyed text on bindText", (_name, expression) => {
+    const output = transform({
+      code: `
+        function readLabel(row) {
+          return row.label;
+        }
+
+        export function App() {
+          const rows = cell([{ id: 1, label: "A", meta: { label: "A" } }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}>
+              <td>{${expression}}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(/\b(?:bindText|insertDynamic)\(/);
+    expect(output.code).not.toContain("bindCompilerKeyedText(");
   });
 
   test("keeps dynamic render expressions on comment insertion markers", () => {
