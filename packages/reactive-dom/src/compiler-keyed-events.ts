@@ -1,4 +1,5 @@
 import type { CompilerKeyedRowContext } from "./bind-static-keyed-single-node-list.js";
+import { bindEvent } from "./bind-event.js";
 import type { Dispose } from "./types.js";
 
 /** Compiler-owned dispatcher for one delegated event type in a keyed row list. */
@@ -51,20 +52,23 @@ export function setupCompilerKeyedEvents<T>(
   }
 
   const eventParent = parent as ParentNode & EventTarget;
-  const listeners: Array<{ listener: EventListener; type: string }> = [];
+  const disposers: Dispose[] = [];
   const programsByType = new Map(programs.map((program) => [program.type, program]));
 
   for (const [type, program] of programsByType) {
     const listener: EventListener = (event) => {
       dispatchCompilerKeyedEvent(parent, program, event, resolveContext);
     };
-    eventParent.addEventListener(type, listener);
-    listeners.push({ listener, type });
+    disposers.push(
+      bindEvent(eventParent as HTMLElement, type as keyof HTMLElementEventMap, listener, {
+        direct: true,
+      }),
+    );
   }
 
   return () => {
-    for (const { listener, type } of listeners) {
-      eventParent.removeEventListener(type, listener);
+    for (const dispose of disposers) {
+      dispose();
     }
   };
 }
