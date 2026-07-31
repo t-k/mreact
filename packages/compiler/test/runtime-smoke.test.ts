@@ -191,6 +191,40 @@ describe("compiler runtime smoke", () => {
     expect(secondRow?.getAttribute("class")).toBe("");
   });
 
+  test("compiler keyed selected classes track structural readonly cell wrappers", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1 }, { id: 2 }]);
+        const rawSelected = cell(null);
+        const selected = { get: () => rawSelected.get() };
+        export function App() {
+          return <main>
+            <button id="select-two" onClick={() => rawSelected.set(2)}>Select two</button>
+            <table><tbody>{rows.get().map((row) => (
+              <tr key={row.id} class={selected.get() === row.id ? "danger" : ""}>
+                <td>{row.id}</td>
+              </tr>
+            ))}</tbody></table>
+          </main>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'compilerSelectedClass: { className: "danger", source: selected }',
+    );
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const [firstRow, secondRow] = Array.from(node.querySelectorAll("tbody tr"));
+
+    node.querySelector<HTMLButtonElement>("#select-two")?.click();
+    await flushEffects();
+    expect(firstRow?.getAttribute("class")).toBe("");
+    expect(secondRow?.getAttribute("class")).toBe("danger");
+  });
+
   test("keeps event parameter defaults that capture the row on the generic path", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

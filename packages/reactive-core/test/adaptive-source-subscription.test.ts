@@ -55,4 +55,19 @@ describe("subscribeAdaptiveSource", () => {
 
     dispose();
   });
+
+  test("does not run a queued listener after disposal", async () => {
+    const source: Source = { subscribers: null };
+    const values: string[] = [];
+    const dispose = subscribeAdaptiveSource(source, () => {
+      trackSource(source);
+      values.push("run");
+    });
+
+    notifySubscribers(source);
+    dispose();
+    await flushEffects();
+
+    expect(values).toEqual(["run"]);
+  });
 });

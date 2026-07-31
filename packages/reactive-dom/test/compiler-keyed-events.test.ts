@@ -116,4 +116,47 @@ describe("compiler keyed events", () => {
     expect(calls).toEqual([0]);
     dispose();
   });
+
+  test("isolates delegated events between compiler keyed lists sharing one parent", () => {
+    const parent = document.createElement("main");
+    const firstMarker = document.createComment("first");
+    const secondMarker = document.createComment("second");
+    parent.append(firstMarker, secondMarker);
+    document.body.append(parent);
+    const calls: string[] = [];
+
+    const bindList = (name: string, marker: Comment, id: number) =>
+      bindCompilerKeyedSingleNodeList(
+        parent,
+        marker,
+        () => [{ id, label: name }],
+        () => {
+          const row = document.createElement("section");
+          const button = document.createElement("button");
+          markCompilerKeyedEventSlot(button, "click", 0);
+          row.append(button);
+          return row;
+        },
+        {
+          key: (row) => row.id,
+          compilerEvents: [
+            {
+              type: "click",
+              dispatch: (_slot, row) => {
+                calls.push(`${name}:${row.item.label}`);
+              },
+            },
+          ],
+        },
+      );
+
+    const disposeFirst = bindList("A", firstMarker, 1);
+    const disposeSecond = bindList("B", secondMarker, 2);
+
+    parent.querySelectorAll("button")[1]?.click();
+    expect(calls).toEqual(["B:B"]);
+
+    disposeSecond();
+    disposeFirst();
+  });
 });

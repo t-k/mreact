@@ -52,6 +52,12 @@ interface InternalSelectedClassOptions<
   compilerMode?: "strict-replace";
 }
 
+interface InternalStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode>
+  extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
+  compilerEventOwner?: object;
+  compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
+}
+
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
 export type SingleNodeRenderer<T, TNode extends ChildNode> = (
   item: T,
@@ -87,6 +93,7 @@ const compilerRowItem = Symbol("compilerRowItem");
 const compilerRowItems = Symbol("compilerRowItems");
 const compilerRowReads = Symbol("compilerRowReads");
 const compilerRowSource = Symbol("compilerRowSource");
+const compilerRowEventOwner = Symbol("compilerRowEventOwner");
 const activeCompilerRowContext = Symbol("activeCompilerRowContext");
 type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowIndex]: number;
@@ -94,6 +101,7 @@ type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowItems]: readonly unknown[];
   [compilerRowReads]: number;
   [compilerRowSource]?: Source | undefined;
+  [compilerRowEventOwner]?: object | undefined;
 };
 type CompilerKeyedRowNode = Node & {
   [activeCompilerRowContext]?: InternalCompilerKeyedRowContext;
@@ -155,11 +163,9 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     selectedClass === undefined
       ? undefined
       : createSelectedClassState(selectedClass, () => records.values());
-  const compilerEvents = (
-    options as BindStaticKeyedSingleNodeListOptions<T, TNode> & {
-      compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
-    }
-  ).compilerEvents;
+  const internalOptions = options as InternalStaticKeyedSingleNodeListOptions<T, TNode>;
+  const compilerEvents = internalOptions.compilerEvents;
+  const compilerEventOwner = internalOptions.compilerEventOwner;
 
   const dispose = effect(() => {
     const currentItems = items();
@@ -421,10 +427,14 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   const disposeCompilerEvents = setupCompilerKeyedEvents(
     parent,
     compilerEvents ?? [],
-    (node) =>
-      (node as CompilerKeyedRowNode)[activeCompilerRowContext] as
-        | CompilerKeyedRowContext<T>
-        | undefined,
+    (node) => {
+      const context = (node as CompilerKeyedRowNode)[activeCompilerRowContext];
+      return context !== undefined &&
+        (compilerEventOwner === undefined ||
+          context[compilerRowEventOwner] === compilerEventOwner)
+        ? (context as CompilerKeyedRowContext<T>)
+        : undefined;
+    },
   );
 
   return registerDispose(() => {
@@ -447,16 +457,19 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
 ): Dispose {
   const markRecordsForHydration = isDynamicHydrationEnabled();
   const compilerSelectedClass = options.compilerSelectedClass;
-  const listOptions: BindStaticKeyedSingleNodeListOptions<T, TNode> =
-    compilerSelectedClass === undefined
-      ? options
+  const compilerEventOwner = options.compilerEvents === undefined ? undefined : {};
+  const listOptions: InternalStaticKeyedSingleNodeListOptions<T, TNode> = {
+    ...options,
+    ...(compilerEventOwner === undefined ? {} : { compilerEventOwner }),
+    ...(compilerSelectedClass === undefined
+      ? {}
       : {
-          ...options,
           selectedClass: {
             ...compilerSelectedClass,
             compilerMode: "strict-replace",
           } as InternalSelectedClassOptions<T, TNode>,
-        };
+        }),
+  };
 
   if (markRecordsForHydration) {
     markDynamicNode(marker);
@@ -472,6 +485,9 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       context[compilerRowItem] = item;
       context[compilerRowItems] = currentItems;
       context[compilerRowReads] = 0;
+      if (compilerEventOwner !== undefined) {
+        context[compilerRowEventOwner] = compilerEventOwner;
+      }
       const node = renderItem(context as CompilerKeyedRowContext<T>);
       (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
       if (markRecordsForHydration) {
@@ -1655,10 +1671,14 @@ function createSelectedClassState<T, TNode extends ChildNode>(
         }),
   };
 
+  const directDispose = subscribeCell(options.source, (next) => {
+    updateSelectedClassValue(state, next);
+  });
   state.dispose =
-    subscribeCell(options.source, (next) => {
-      updateSelectedClassValue(state, next);
-    }) ?? (() => {});
+    directDispose ??
+    effect(() => {
+      updateSelectedClassValue(state, options.source.get());
+    });
 
   return state;
 }
