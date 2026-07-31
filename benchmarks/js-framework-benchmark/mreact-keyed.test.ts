@@ -466,6 +466,11 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
     expect(runner).toContain('official: "keyed/mreact-compiled"');
+    const copyFixtures = runner.slice(
+      runner.indexOf("async function copyMreactFixtures"),
+      runner.indexOf("function startServer"),
+    );
+    expect(copyFixtures).toContain('"mreact-compiled"');
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");

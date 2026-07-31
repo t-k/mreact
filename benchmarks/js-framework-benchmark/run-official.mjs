@@ -610,7 +610,12 @@ function fileDependency(fromDir, toDir) {
 }
 
 async function copyMreactFixtures() {
-  for (const name of ["mreact", "mreact-react-compat", "mreact-react-compat-vdom"]) {
+  for (const name of [
+    "mreact",
+    "mreact-compiled",
+    "mreact-react-compat",
+    "mreact-react-compat-vdom",
+  ]) {
     await cp(join(fixtureRoot, name), join(checkoutRoot, "frameworks", "keyed", name), {
       force: true,
       recursive: true,
