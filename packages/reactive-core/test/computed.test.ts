@@ -100,10 +100,7 @@ describe("computed", () => {
     let pushCalls = 0;
 
     try {
-      Array.prototype.push = function countedPush<T>(
-        this: T[],
-        ...items: T[]
-      ): number {
+      Array.prototype.push = function countedPush<T>(this: T[], ...items: T[]): number {
         pushCalls += 1;
         return originalPush.apply(this, items);
       };
@@ -135,11 +132,7 @@ describe("computed", () => {
 
     try {
       Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "subscribers" in value
-        ) {
+        if (typeof value === "object" && value !== null && "subscribers" in value) {
           sourceHasCalls += 1;
         }
 
@@ -168,11 +161,7 @@ describe("computed", () => {
 
     try {
       Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "subscribers" in value
-        ) {
+        if (typeof value === "object" && value !== null && "subscribers" in value) {
           sourceHasCalls += 1;
         }
 
@@ -223,8 +212,7 @@ describe("computed", () => {
     const third = cell(0);
     let capturedComputation: ReactiveComputation | undefined;
     const total = computed(() => {
-      capturedComputation =
-        (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      capturedComputation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
       return first.get() + second.get() + third.get();
     });
 
@@ -241,6 +229,31 @@ describe("computed", () => {
 
     expect(total.get()).toBe(6);
     expect(deps.map((dep) => dep.trackedVersion)).toEqual(trackedVersions);
+  });
+
+  test("promotes and demotes compact dependency storage as the dependency set changes", () => {
+    const first = cell(1);
+    const second = cell(10);
+    let includeSecond = false;
+    let capturedComputation: ReactiveComputation | undefined;
+    const total = computed(() => {
+      capturedComputation = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      return first.get() + (includeSecond ? second.get() : 0);
+    });
+
+    expect(total.get()).toBe(1);
+    expect(capturedComputation?.deps).not.toBeInstanceOf(Set);
+
+    includeSecond = true;
+    first.set(2);
+    expect(total.get()).toBe(12);
+    expect(capturedComputation?.deps).toBeInstanceOf(Set);
+
+    includeSecond = false;
+    first.set(3);
+    expect(total.get()).toBe(3);
+    expect(capturedComputation?.deps).not.toBeInstanceOf(Set);
+    expect(capturedComputation?.deps).toBeTruthy();
   });
 
   test("nested computed reruns preserve direct dependencies read before the nested read", () => {
@@ -301,10 +314,9 @@ describe("computed", () => {
 
   test("uses a custom equality comparator to skip downstream notifications", async () => {
     const source = cell({ id: 1, label: "first" });
-    const selected = computed(
-      () => ({ id: source.get().id }),
-      { equals: (previous, next) => previous.id === next.id },
-    );
+    const selected = computed(() => ({ id: source.get().id }), {
+      equals: (previous, next) => previous.id === next.id,
+    });
     const calls: Array<{ id: number }> = [];
 
     effect(() => {
@@ -353,9 +365,7 @@ describe("computed", () => {
     const includeSecond = cell(true);
     const first = cell(1);
     const second = cell(10);
-    const value = computed(() =>
-      includeSecond.get() ? first.get() + second.get() : first.get(),
-    );
+    const value = computed(() => (includeSecond.get() ? first.get() + second.get() : first.get()));
 
     expect(value.get()).toBe(11);
     includeSecond.set(false);

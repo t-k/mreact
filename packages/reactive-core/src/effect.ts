@@ -5,7 +5,12 @@ import {
 } from "./devtools.js";
 import { registerCleanup } from "./cleanup-scope.js";
 import { runtimeState, type ReactiveComputation } from "./state.js";
-import { cleanupDeps, cleanupUntrackedDeps, nextTrackingVersionFor } from "./tracking.js";
+import {
+  cleanupDeps,
+  cleanupUntrackedDeps,
+  computationDependencyCount,
+  nextTrackingVersionFor,
+} from "./tracking.js";
 
 declare const __MREACT_CLIENT_DEVTOOLS__: boolean | undefined;
 
@@ -41,7 +46,7 @@ function createEffect(fn: EffectFn, debugLabel?: string): () => void {
     dispose: EFFECT_COMPUTATION_METHODS.dispose,
     id: runtimeState.nextComputationId,
     ...(debugLabel === undefined ? {} : { debugLabel }),
-    deps: new Set(),
+    deps: null,
     disposed: false,
     fn,
     markDirty: EFFECT_COMPUTATION_METHODS.markDirty,
@@ -92,7 +97,7 @@ function effectRun(this: ReactiveComputation): void {
     computation.cleanup = undefined;
   }
 
-  const previousDepsSize = computation.deps.size;
+  const previousDepsSize = computationDependencyCount(computation);
   const nextTrackingVersion = nextTrackingVersionFor(computation);
 
   computation.trackingAddedDeps = undefined;

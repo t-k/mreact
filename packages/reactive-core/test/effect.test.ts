@@ -81,6 +81,72 @@ describe("effect", () => {
     expect(touchedDepsAllocated).toBe(false);
   });
 
+  test("stores one dependency directly, promotes on a second, and demotes after shrink", async () => {
+    const first = cell(0);
+    const second = cell(0);
+    let includeSecond = false;
+    let captured: ReactiveComputation | undefined;
+
+    const dispose = effect(() => {
+      captured = (runtimeState.activeTracker as ReactiveComputation | null) ?? undefined;
+      first.get();
+      first.get();
+      if (includeSecond) {
+        second.get();
+      }
+    });
+
+    expect(captured?.deps).not.toBeInstanceOf(Set);
+    expect(captured?.deps).toBeTruthy();
+
+    includeSecond = true;
+    first.set(1);
+    await flushEffects();
+
+    expect(captured?.deps).toBeInstanceOf(Set);
+    if (!(captured?.deps instanceof Set)) {
+      throw new Error("expected promoted dependency Set");
+    }
+    expect(captured.deps.size).toBe(2);
+
+    includeSecond = false;
+    first.set(2);
+    await flushEffects();
+
+    expect(captured?.deps).not.toBeInstanceOf(Set);
+    expect(captured?.deps).toBeTruthy();
+
+    dispose();
+    expect(captured?.deps).toBeNull();
+  });
+
+  test("tracks reactive dependencies hidden behind getters and Proxy traps", async () => {
+    const external = cell("Ada");
+    const calls: string[] = [];
+    const row = new Proxy(
+      {
+        get label(): string {
+          return external.get();
+        },
+      },
+      {
+        get(target, property, receiver) {
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+
+    const dispose = effect(() => {
+      calls.push(row.label);
+    });
+
+    external.set("Babbage");
+    await flushEffects();
+    dispose();
+
+    expect(calls).toEqual(["Ada", "Babbage"]);
+  });
+
   test("initial run does not probe cleanup touched dependency set", () => {
     const count = cell(0);
     const originalHas = Set.prototype.has;
@@ -88,11 +154,7 @@ describe("effect", () => {
 
     try {
       Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "subscribers" in value
-        ) {
+        if (typeof value === "object" && value !== null && "subscribers" in value) {
           sourceHasCalls += 1;
         }
 

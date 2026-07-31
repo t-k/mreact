@@ -5,6 +5,7 @@ import {
   cleanupAddedDeps,
   cleanupDeps,
   cleanupUntrackedDeps,
+  computationDependencyCount,
   nextTrackingVersionFor,
   notifySubscribers,
   preserveIncrementalTracking,
@@ -36,7 +37,7 @@ export function computed<T>(
 
   const computation: ReactiveComputation = {
     id: runtimeState.nextComputationId,
-    deps: new Set(),
+    deps: null,
     disposed: false,
     queued: false,
     markDirty() {
@@ -108,13 +109,12 @@ export function computed<T>(
     }
 
     const previousTracker = runtimeState.activeTracker;
-    const previousDepsSize = computation.deps.size;
+    const previousDepsSize = computationDependencyCount(computation);
     const nextTrackingVersion = nextTrackingVersionFor(computation);
 
     computation.trackingAddedDeps = undefined;
     computation.trackingCount = 0;
-    computation.trackingOrderedIndex =
-      computation.orderedDeps === undefined ? undefined : 0;
+    computation.trackingOrderedIndex = computation.orderedDeps === undefined ? undefined : 0;
     computation.trackingOrderedMismatch = false;
     computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
@@ -142,11 +142,7 @@ export function computed<T>(
         cleanupUntrackedDeps(computation, nextTrackingVersion);
       }
 
-      if (
-        orderedMismatch !== true &&
-        trackedCount === previousDepsSize &&
-        addedDepsCount === 0
-      ) {
+      if (orderedMismatch !== true && trackedCount === previousDepsSize && addedDepsCount === 0) {
         // Keep the previous stable order.
       } else if (
         previousDepsSize === 0 &&
