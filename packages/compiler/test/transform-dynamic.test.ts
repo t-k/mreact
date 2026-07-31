@@ -205,8 +205,29 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
-    expect(output.code).toMatch(/document\.createTextNode\([\s\S]*row\.item[\s\S]*\.id/);
+    expect(output.code).toContain('createTemplateElement("<tr><td> </td><td> </td></tr>")');
+    expect(output.code).not.toContain("document.createTextNode");
+    expect(output.code).not.toContain(".replaceWith(");
+    expect(output.code).toMatch(/_text_0\.data = [\s\S]*row\.item[\s\S]*\.id/);
     expect(output.code).toContain("row.item).label");
+  });
+
+  test("keeps dynamic render expressions on comment insertion markers", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const visible = cell(true);
+          return <div>{visible.get() ? <span>A</span> : null}</div>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('createTemplate("<div><!----></div>")');
+    expect(output.code).toContain("insertDynamic(");
   });
 
   test("keeps non-key-equivalent keyed row text on reactive bindings", () => {

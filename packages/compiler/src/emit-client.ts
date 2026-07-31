@@ -429,7 +429,7 @@ function renderStaticHtml(node: JsxNodeIr): string {
   }
 
   if (node.kind === "fragment") {
-    return node.children.map(renderStaticHtml).join("");
+    return renderStaticChildren(node.children);
   }
 
   if (node.kind === "component") {
@@ -444,9 +444,32 @@ function renderStaticHtml(node: JsxNodeIr): string {
     .filter((attr) => attr.kind === "static-attr")
     .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
     .join("");
-  const children = node.children.map(renderStaticHtml).join("");
+  const children = renderStaticChildren(node.children);
 
   return `<${node.tagName}${attrs}>${children}</${node.tagName}>`;
+}
+
+function renderStaticChildren(children: readonly JsxNodeIr[]): string {
+  return children
+    .map((child, index) =>
+      canReuseTemplateTextNode(children, index) ? " " : renderStaticHtml(child),
+    )
+    .join("");
+}
+
+function canReuseTemplateTextNode(children: readonly JsxNodeIr[], index: number): boolean {
+  const child = children[index];
+  if (child?.kind !== "expr" || child.renderMode === "dynamic") {
+    return false;
+  }
+
+  return (
+    !isMergeableTemplateText(children[index - 1]) && !isMergeableTemplateText(children[index + 1])
+  );
+}
+
+function isMergeableTemplateText(node: JsxNodeIr | undefined): boolean {
+  return node?.kind === "text" || (node?.kind === "expr" && node.renderMode !== "dynamic");
 }
 
 interface EmitSetupState {
@@ -533,7 +556,8 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   let sawStaticText = false;
   let sawComponentMutation = false;
 
-  for (const child of children) {
+  for (let sourceChildIndex = 0; sourceChildIndex < children.length; sourceChildIndex += 1) {
+    const child = children[sourceChildIndex] as JsxNodeIr;
     if (child.kind === "text") {
       sawStaticText = true;
       childIndex += 1;
@@ -563,8 +587,11 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         child.renderMode === "compiler-keyed-initial-text"
           ? state.allocateName(`_textValue_${state.textIndex}`)
           : undefined;
+      const reuseTemplateTextNode = canReuseTemplateTextNode(children, sourceChildIndex);
       state.textIndex += 1;
-      if (initialTextValueVar === undefined) {
+      if (reuseTemplateTextNode) {
+        lines.push(`  const ${textVar} = ${childPath};`);
+      } else if (initialTextValueVar === undefined) {
         lines.push(`  const ${textVar} = document.createTextNode("");`);
       } else {
         lines.push(`  const ${initialTextValueVar} = (${child.code});`);
@@ -572,7 +599,15 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           `  const ${textVar} = document.createTextNode(typeof ${initialTextValueVar} === "string" ? ${initialTextValueVar} : ${initialTextValueVar} == null ? "" : String(${initialTextValueVar}));`,
         );
       }
-      lines.push(`  ${childPath}.replaceWith(${textVar});`);
+      if (!reuseTemplateTextNode) {
+        lines.push(`  ${childPath}.replaceWith(${textVar});`);
+      }
+      if (reuseTemplateTextNode && initialTextValueVar !== undefined) {
+        lines.push(`  const ${initialTextValueVar} = (${child.code});`);
+        lines.push(
+          `  ${textVar}.data = typeof ${initialTextValueVar} === "string" ? ${initialTextValueVar} : ${initialTextValueVar} == null ? "" : String(${initialTextValueVar});`,
+        );
+      }
       if (child.renderMode !== "compiler-keyed-initial-text") {
         lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
       }
