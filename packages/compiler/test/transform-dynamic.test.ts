@@ -115,9 +115,12 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.imports).toContainEqual({
       source: "@reckona/mreact-reactive-dom/internal",
-      specifiers: ["bindCompilerKeyedSingleNodeList"],
+      specifiers: ["bindCompilerKeyedSingleNodeList", "markCompilerKeyedEventSlot"],
     });
     expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
+    expect(output.code).toContain("compilerEvents:");
+    expect(output.code).toContain("markCompilerKeyedEventSlot(");
+    expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
     expect(output.code).toContain("row.item).label");
     expect(output.code).toContain("row.index)");
     expect(output.code).toContain("row.items).length");
@@ -126,6 +129,52 @@ describe("compiler dynamic JSX transform", () => {
       output.code.lastIndexOf("bindCompilerKeyedSingleNodeList("),
     );
     expect(output.code).not.toContain("bindList");
+  });
+
+  test("keeps row events on bindEvent when the keyed list parent is a fragment", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1 }]);
+          return <>{rows.get().map((row) => (
+            <button key={row.id} onClick={() => globalThis.__selected = row.id}>Select</button>
+          ))}</>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("compilerEvents:");
+    expect(output.code).not.toContain("markCompilerKeyedEventSlot(");
+    expect(output.code).toContain("bindEvent(");
+  });
+
+  test("specializes delegated row events while preserving non-delegated event bindings", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1 }]);
+          return <section>{rows.get().map((row) => (
+            <button
+              key={row.id}
+              onClick={() => globalThis.__selected = row.id}
+              onMouseEnter={() => globalThis.__hovered = row.id}
+            >Select</button>
+          ))}</section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('type: "click"');
+    expect(output.code).toContain('markCompilerKeyedEventSlot(_keyedRoot, "click", 0)');
+    expect(output.code).toContain('bindEvent(_keyedRoot, "mouseenter"');
   });
 
   test("directly initializes key-equivalent text in compiler keyed rows", () => {
@@ -293,7 +342,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("{ row: (row.item) }");
     expect(output.code).toContain("(row) => globalThis.__event = row.type");
-    expect(output.code).toContain("{ key: (row) => (row.id) }");
+    expect(output.code).toContain("key: (row) => (row.id)");
     expect(output.code).not.toContain("{ key: (row) => ((row.item).id) }");
   });
 

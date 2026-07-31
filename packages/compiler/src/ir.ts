@@ -124,7 +124,14 @@ export interface ListIr {
 /** Describes a conservatively eligible compiler keyed single-node list. */
 export interface CompiledSingleNodeListIr {
   root: JsxElementIr;
+  eventPrograms?: CompilerKeyedEventProgramIr[];
   selectedClass?: CompilerSelectedClassIr;
+}
+
+/** Describes one list-owned delegated event program and its row slots. */
+export interface CompilerKeyedEventProgramIr {
+  eventName: string;
+  handlers: string[];
 }
 
 /** Describes an exact whole-class selection expression owned by a keyed list. */
@@ -205,6 +212,7 @@ export interface EventAttributeIr {
   name: string;
   eventName: string;
   code: string;
+  compilerKeyedSlot?: number;
 }
 
 /** Represents a spread attribute expression on an intrinsic element. */

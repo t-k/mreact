@@ -50,7 +50,10 @@ import {
   renderReactSuspenseOutOfOrderBoundary,
 } from "@reckona/mreact-server";
 import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
-import { bindCompilerKeyedSingleNodeList } from "../../reactive-dom/src/internal.js";
+import {
+  bindCompilerKeyedSingleNodeList,
+  markCompilerKeyedEventSlot,
+} from "../../reactive-dom/src/internal.js";
 
 function escapeHtmlBatch(values: readonly unknown[]): string[] {
   return values.map((value) =>
@@ -409,7 +412,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedSingleNodeList)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedSingleNodeList|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -418,7 +421,10 @@ function extractClientInternalRuntimeEntries(
 
     return {
       localName: match.groups.localName ?? match.groups.importedName,
-      value: bindCompilerKeyedSingleNodeList,
+      value:
+        match.groups.importedName === "markCompilerKeyedEventSlot"
+          ? markCompilerKeyedEventSlot
+          : bindCompilerKeyedSingleNodeList,
     };
   });
 }

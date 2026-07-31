@@ -58,7 +58,7 @@ describe("compiler runtime smoke", () => {
             <table><tbody>{rows.get().map((row, index, items) => (
               <tr key={row.id} data-index={index}>
                 <td>{row.label}:{index}:{items.length}</td>
-                <td><button onClick={() => globalThis.__compilerKeyedPayload = row.label + ":" + index + ":" + items.length}>Select</button></td>
+                <td><button onClick={(event) => globalThis.__compilerKeyedPayload = row.label + ":" + index + ":" + items.length + ":" + event.currentTarget.tagName}>Select</button></td>
               </tr>
             ))}</tbody></table>
           </main>;
@@ -69,6 +69,9 @@ describe("compiler runtime smoke", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("compilerEvents:");
+    expect(output.code.match(/markCompilerKeyedEventSlot\(/g)).toHaveLength(1);
+    expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
     const node = await runClientComponent(output.code);
     const firstRow = (node as HTMLElement).querySelector("tbody tr") as HTMLTableRowElement;
 
@@ -85,7 +88,7 @@ describe("compiler runtime smoke", () => {
     expect(
       (globalThis as typeof globalThis & { __compilerKeyedPayload?: string })
         .__compilerKeyedPayload,
-    ).toBe("A!:1:2");
+    ).toBe("A!:1:2:BUTTON");
     delete (globalThis as typeof globalThis & { __compilerKeyedPayload?: string })
       .__compilerKeyedPayload;
   });

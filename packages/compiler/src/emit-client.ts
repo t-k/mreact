@@ -55,7 +55,8 @@ type RuntimeHelperName =
   | "createList"
   | "createTemplate"
   | "insertDynamic"
-  | "bindCompilerKeyedSingleNodeList";
+  | "bindCompilerKeyedSingleNodeList"
+  | "markCompilerKeyedEventSlot";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
 
@@ -84,6 +85,7 @@ function allocateRuntimeHelperNames(
     createTemplate: "createTemplate",
     insertDynamic: "insertDynamic",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
+    markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
   };
 
   for (const specifier of specifiers) {
@@ -166,7 +168,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
           }
 
           if (attr.kind === "event") {
-            specifiers.add("bindEvent");
+            if (attr.compilerKeyedSlot === undefined) {
+              specifiers.add("bindEvent");
+            } else {
+              internalSpecifiers.add("markCompilerKeyedEventSlot");
+            }
           }
         }
       }
@@ -446,6 +452,7 @@ interface EmitSetupState {
   helperNames: RuntimeHelperNames;
   clientBoundaryHelperName?: string | undefined;
   debugLabel?: string | undefined;
+  compilerKeyedEventSlots?: boolean | undefined;
 }
 
 function emitDebugOptions(debugLabel: string | undefined): string {
@@ -497,7 +504,15 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       }
 
       if (attr.kind === "event") {
-        lines.push(`  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`);
+        if (state.compilerKeyedEventSlots && attr.compilerKeyedSlot !== undefined) {
+          lines.push(
+            `  ${state.helperNames.markCompilerKeyedEventSlot}(${path}, "${attr.eventName}", ${attr.compilerKeyedSlot});`,
+          );
+        } else {
+          lines.push(
+            `  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`,
+          );
+        }
       }
     }
   }
@@ -586,6 +601,12 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         optionEntries.push(
           `compilerSelectedClass: { className: ${JSON.stringify(child.compiledSingleNode.selectedClass.className)}, source: ${child.compiledSingleNode.selectedClass.sourceCode} }`,
         );
+      }
+      if (child.compiledSingleNode?.eventPrograms !== undefined) {
+        optionEntries.push(
+          `compilerEvents: ${emitCompilerKeyedEventPrograms(child.compiledSingleNode.eventPrograms, child.itemName)}`,
+        );
+        optionEntries.push("deferEventPromotion: false");
       }
 
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
@@ -788,7 +809,10 @@ function emitCompilerKeyedSingleNodeRenderer(
   }
   const fragmentName = state.allocateName("_keyedFragment");
   const rootName = state.allocateName("_keyedRoot");
-  const setup = emitSetup(root, rootName, state);
+  const setup = emitSetup(root, rootName, {
+    ...state,
+    compilerKeyedEventSlots: node.compiledSingleNode?.eventPrograms !== undefined,
+  });
   const setupLines = setup === "" ? [] : setup.split("\n");
   return [
     `(${node.itemName}) => {`,
@@ -798,6 +822,26 @@ function emitCompilerKeyedSingleNodeRenderer(
     `  return ${rootName};`,
     "}",
   ].join("\n");
+}
+
+function emitCompilerKeyedEventPrograms(
+  programs: NonNullable<
+    Extract<JsxNodeIr, { kind: "list" }>["compiledSingleNode"]
+  >["eventPrograms"],
+  rowName: string,
+): string {
+  if (programs === undefined) {
+    return "[]";
+  }
+
+  return `[${programs
+    .map(
+      (program) =>
+        `{ type: ${JSON.stringify(program.eventName)}, dispatch: (slot, ${rowName}, event, currentTarget) => { switch (slot) { ${program.handlers
+          .map((handler, slot) => `case ${slot}: return (${handler}).call(currentTarget, event);`)
+          .join(" ")} } } }`,
+    )
+    .join(", ")}]`;
 }
 
 function emitListOptions(node: Extract<JsxNodeIr, { kind: "list" }>, parameters: string): string {
@@ -916,8 +960,12 @@ function visit(node: JsxNodeIr, fn: (node: JsxNodeIr) => void): void {
   }
 
   if (node.kind === "list") {
-    for (const child of node.children) {
-      visit(child, fn);
+    if (node.compiledSingleNode === undefined) {
+      for (const child of node.children) {
+        visit(child, fn);
+      }
+    } else {
+      visit(node.compiledSingleNode.root, fn);
     }
   }
 

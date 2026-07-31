@@ -4,7 +4,14 @@ import {
   unsupportedComponentReferenceDiagnostic,
   unsupportedJsxSpreadChildDiagnostic,
 } from "./diagnostics.js";
-import type { AsyncBoundaryIr, CompilerSelectedClassIr, JsxElementIr, JsxNodeIr } from "./ir.js";
+import type {
+  AsyncBoundaryIr,
+  CompiledSingleNodeListIr,
+  CompilerKeyedEventProgramIr,
+  CompilerSelectedClassIr,
+  JsxElementIr,
+  JsxNodeIr,
+} from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import {
   detectUnserializableAwaitValueReason,
@@ -61,6 +68,7 @@ export interface OxcChildAnalysisContext {
   bodyStatementJsx?: OxcBodyStatementJsxMode;
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>;
   componentConstBindings?: ReadonlySet<string>;
+  compilerKeyedEventParent?: boolean;
   reactiveAliasBindings?: ReadonlyMap<string, string>;
   bodyLowerers: OxcBodyLowerers;
   lowerNestedJsxExpression: (
@@ -82,7 +90,12 @@ export function analyzeOxcJsxNode(
   if (node.type === "JSXFragment") {
     return {
       kind: "fragment",
-      children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
+      children: analyzeOxcChildren(
+        code,
+        readArray(node.children),
+        { ...context, compilerKeyedEventParent: false },
+        bodyStatementJsx,
+      ),
     };
   }
 
@@ -95,7 +108,13 @@ export function analyzeOxcJsxNode(
   const attributes = readArray(openingElement.attributes);
 
   if (tagName === "Await") {
-    return analyzeOxcAsyncBoundary(code, node, attributes, context, bodyStatementJsx);
+    return analyzeOxcAsyncBoundary(
+      code,
+      node,
+      attributes,
+      { ...context, compilerKeyedEventParent: false },
+      bodyStatementJsx,
+    );
   }
 
   if (tagName === "Slot") {
@@ -115,7 +134,12 @@ export function analyzeOxcJsxNode(
           }),
         )
         .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
-      children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
+      children: analyzeOxcChildren(
+        code,
+        readArray(node.children),
+        { ...context, compilerKeyedEventParent: true },
+        bodyStatementJsx,
+      ),
     } satisfies JsxElementIr;
   }
 
@@ -134,7 +158,7 @@ export function analyzeOxcJsxNode(
       analyzeOxcJsxNode(
         code,
         child,
-        shadowOxcReactiveAliases(context, shadowNames),
+        shadowOxcReactiveAliases({ ...context, compilerKeyedEventParent: false }, shadowNames),
         childBodyStatementJsx,
       );
     const consumerRenderProp = tagName.endsWith(".Consumer")
@@ -159,7 +183,12 @@ export function analyzeOxcJsxNode(
         .concat(consumerRenderProp === undefined ? [] : [consumerRenderProp]),
       children:
         consumerRenderProp === undefined
-          ? analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx)
+          ? analyzeOxcChildren(
+              code,
+              readArray(node.children),
+              { ...context, compilerKeyedEventParent: false },
+              bodyStatementJsx,
+            )
           : [],
     };
   }
@@ -193,7 +222,12 @@ export function analyzeOxcJsxNode(
         }),
       )
       .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
-    children: analyzeOxcChildren(code, readArray(node.children), context, bodyStatementJsx),
+    children: analyzeOxcChildren(
+      code,
+      readArray(node.children),
+      { ...context, compilerKeyedEventParent: true },
+      bodyStatementJsx,
+    ),
   } satisfies JsxElementIr;
 }
 
@@ -664,7 +698,7 @@ function analyzeCompiledSingleNodeList(
   itemName: string,
   indexName: string | undefined,
   arrayName: string | undefined,
-): { root: JsxElementIr } | undefined {
+): CompiledSingleNodeListIr | undefined {
   if (
     keyCode === undefined ||
     rendererBody.bodyStatements.length !== 0 ||
@@ -706,6 +740,10 @@ function analyzeCompiledSingleNodeList(
     replaceCompilerSelectedClassAttribute(sourceRoot);
     replaceCompilerSelectedClassAttribute(root);
   }
+  const eventPrograms =
+    rendererContext.compilerKeyedEventParent === true
+      ? analyzeCompilerKeyedEventPrograms(root)
+      : undefined;
 
   if (isDirectCompilerKeyText(keyCode, itemName)) {
     markCompilerKeyedInitialText(sourceRoot, root, keyCode);
@@ -713,8 +751,62 @@ function analyzeCompiledSingleNodeList(
 
   return {
     root,
+    ...(eventPrograms === undefined ? {} : { eventPrograms }),
     ...(selectedClass === undefined ? {} : { selectedClass }),
   };
+}
+
+const compilerDelegatedEventTypes = new Set([
+  "change",
+  "click",
+  "input",
+  "keydown",
+  "keyup",
+  "pointerdown",
+  "pointermove",
+  "pointerup",
+  "submit",
+]);
+
+function analyzeCompilerKeyedEventPrograms(
+  root: JsxElementIr,
+): CompilerKeyedEventProgramIr[] | undefined {
+  const programs = new Map<string, CompilerKeyedEventProgramIr>();
+
+  visitCompilerKeyedElements(root, (element) => {
+    for (const attribute of element.attributes) {
+      if (
+        attribute.kind !== "event" ||
+        !compilerDelegatedEventTypes.has(attribute.eventName) ||
+        !isStableOxcKeyedEventAttribute(attribute)
+      ) {
+        continue;
+      }
+
+      let program = programs.get(attribute.eventName);
+      if (program === undefined) {
+        program = { eventName: attribute.eventName, handlers: [] };
+        programs.set(attribute.eventName, program);
+      }
+      attribute.compilerKeyedSlot = program.handlers.length;
+      program.handlers.push(attribute.code);
+    }
+  });
+
+  return programs.size === 0 ? undefined : Array.from(programs.values());
+}
+
+function visitCompilerKeyedElements(
+  element: JsxElementIr,
+  visit: (element: JsxElementIr) => void,
+): void {
+  visit(element);
+
+  for (const child of element.children) {
+    if (child.kind === "element") {
+      visitCompilerKeyedElements(child, visit);
+    }
+  }
 }
 
 function analyzeCompilerSelectedClass(
