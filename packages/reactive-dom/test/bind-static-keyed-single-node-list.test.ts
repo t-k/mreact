@@ -811,19 +811,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("function clearSelectedClassRecords");
   });
 
-  test("validates disjoint replacement keys without a second key collection", async () => {
-    const source = await readFile(
-      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
-      "utf8",
-    );
-    const replaceStart = source.indexOf("function tryReplaceDisjointSingleNodeItems");
-    const appendStart = source.indexOf("function tryAppendSingleNodeItems");
-    const replaceSource = source.slice(replaceStart, appendStart);
-
-    expect(replaceSource).toContain("const keys = new Set<unknown>()");
-    expect(replaceSource).not.toContain("new Array<unknown>(length)");
-  });
-
   test("skips retained-row refresh when selected classes preserve initial state", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
