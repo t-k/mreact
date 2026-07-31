@@ -4,7 +4,7 @@ import {
   unsupportedComponentReferenceDiagnostic,
   unsupportedJsxSpreadChildDiagnostic,
 } from "./diagnostics.js";
-import type { AsyncBoundaryIr, JsxElementIr, JsxNodeIr } from "./ir.js";
+import type { AsyncBoundaryIr, CompilerSelectedClassIr, JsxElementIr, JsxNodeIr } from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
 import {
   detectUnserializableAwaitValueReason,
@@ -31,6 +31,7 @@ import {
   analyzeOxcAttribute,
   findOxcJsxAttributeCode,
   isStableOxcKeyedEventAttribute,
+  readOxcDynamicAttributeExpression,
   readOxcJsxTagName,
 } from "./oxc-jsx-attributes.js";
 import { normalizeOxcJsxText } from "./oxc-jsx-text.js";
@@ -59,6 +60,7 @@ export interface OxcChildAnalysisContext {
   diagnostics: Diagnostic[];
   bodyStatementJsx?: OxcBodyStatementJsxMode;
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>;
+  componentConstBindings?: ReadonlySet<string>;
   reactiveAliasBindings?: ReadonlyMap<string, string>;
   bodyLowerers: OxcBodyLowerers;
   lowerNestedJsxExpression: (
@@ -693,11 +695,114 @@ function analyzeCompiledSingleNodeList(
     return undefined;
   }
 
-  if (isDirectCompilerKeyText(keyCode, itemName)) {
-    markCompilerKeyedInitialText(rendererBody.children[0] as JsxElementIr, root, keyCode);
+  const sourceRoot = rendererBody.children[0] as JsxElementIr;
+  const selectedClass = analyzeCompilerSelectedClass(
+    code,
+    sourceRoot,
+    keyCode,
+    rendererContext.componentConstBindings,
+  );
+  if (selectedClass !== undefined) {
+    replaceCompilerSelectedClassAttribute(sourceRoot);
+    replaceCompilerSelectedClassAttribute(root);
   }
 
-  return { root };
+  if (isDirectCompilerKeyText(keyCode, itemName)) {
+    markCompilerKeyedInitialText(sourceRoot, root, keyCode);
+  }
+
+  return {
+    root,
+    ...(selectedClass === undefined ? {} : { selectedClass }),
+  };
+}
+
+function analyzeCompilerSelectedClass(
+  code: string,
+  root: JsxElementIr,
+  keyCode: string,
+  constBindings: ReadonlySet<string> | undefined,
+): CompilerSelectedClassIr | undefined {
+  const attribute = root.attributes.find(
+    (candidate) =>
+      candidate.kind === "dynamic-attr" &&
+      (candidate.name === "class" || candidate.name === "className"),
+  );
+  if (attribute === undefined) {
+    return undefined;
+  }
+
+  const expression = readOxcDynamicAttributeExpression(attribute);
+  const conditional = expression === undefined ? undefined : unwrapOxcParentheses(expression);
+  if (conditional?.type !== "ConditionalExpression") {
+    return undefined;
+  }
+
+  const consequent = unwrapOxcParentheses(readObject(conditional.consequent));
+  const alternate = unwrapOxcParentheses(readObject(conditional.alternate));
+  if (
+    consequent.type !== "Literal" ||
+    typeof consequent.value !== "string" ||
+    consequent.value === "" ||
+    alternate.type !== "Literal" ||
+    alternate.value !== ""
+  ) {
+    return undefined;
+  }
+
+  const comparison = unwrapOxcParentheses(readObject(conditional.test));
+  if (comparison.type !== "BinaryExpression" || comparison.operator !== "===") {
+    return undefined;
+  }
+
+  const left = unwrapOxcParentheses(readObject(comparison.left));
+  const right = unwrapOxcParentheses(readObject(comparison.right));
+  const leftCode = readSource(code, left);
+  const rightCode = readSource(code, right);
+  const selectedExpression =
+    leftCode === keyCode ? right : rightCode === keyCode ? left : undefined;
+  if (selectedExpression === undefined) {
+    return undefined;
+  }
+
+  const sourceCode = readCompilerSelectedSource(selectedExpression, constBindings);
+  return sourceCode === undefined ? undefined : { className: consequent.value, sourceCode };
+}
+
+function readCompilerSelectedSource(
+  expression: Record<string, unknown>,
+  constBindings: ReadonlySet<string> | undefined,
+): string | undefined {
+  if (expression.type !== "CallExpression" || readArray(expression.arguments).length !== 0) {
+    return undefined;
+  }
+
+  const callee = readObject(expression.callee);
+  if (callee.type !== "MemberExpression" || callee.computed === true || callee.optional === true) {
+    return undefined;
+  }
+
+  const object = unwrapOxcParentheses(readObject(callee.object));
+  const property = readObject(callee.property);
+  if (
+    object.type !== "Identifier" ||
+    property.name !== "get" ||
+    typeof object.name !== "string" ||
+    constBindings?.has(object.name) !== true
+  ) {
+    return undefined;
+  }
+
+  return object.name;
+}
+
+function replaceCompilerSelectedClassAttribute(root: JsxElementIr): void {
+  root.attributes = root.attributes.map((attribute) =>
+    attribute.kind === "dynamic-attr" &&
+    (attribute.name === "class" || attribute.name === "className")
+      ? { kind: "static-attr", name: "class", value: "" }
+      : attribute,
+  );
 }
 
 function isDirectCompilerKeyText(keyCode: string, itemName: string): boolean {

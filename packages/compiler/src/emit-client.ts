@@ -582,6 +582,12 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         optionEntries.push("nestedObjectFallback: true");
       }
 
+      if (child.compiledSingleNode?.selectedClass !== undefined) {
+        optionEntries.push(
+          `compilerSelectedClass: { className: ${JSON.stringify(child.compiledSingleNode.selectedClass.className)}, source: ${child.compiledSingleNode.selectedClass.sourceCode} }`,
+        );
+      }
+
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       if (child.compiledSingleNode === undefined) {
         lines.push(

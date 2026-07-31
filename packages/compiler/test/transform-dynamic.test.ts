@@ -296,4 +296,59 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("{ key: (row) => (row.id) }");
     expect(output.code).not.toContain("{ key: (row) => ((row.item).id) }");
   });
+
+  test("emits compiler selected class metadata for an exact keyed row class", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const selected = cell(null);
+          const rows = cell([{ id: 1 }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id} class={selected.get() === row.id ? "danger" : ""}>
+              <td>{row.id}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'compilerSelectedClass: { className: "danger", source: selected }',
+    );
+    expect(output.code).toContain('createTemplate("<tr class=\\"\\"');
+    expect(output.code).not.toContain('bindProp(_keyedRoot, "class"');
+  });
+
+  test.each([
+    ["mutable selected source", "let", 'selected.get() === row.id ? "danger" : ""'],
+    ["different row key", "const", 'selected.get() === row.other ? "danger" : ""'],
+    ["non-empty false branch", "const", 'selected.get() === row.id ? "danger" : "safe"'],
+    ["dynamic selected token", "const", 'selected.get() === row.id ? active.get() : ""'],
+  ])("keeps %s class on bindProp", (_name, bindingKind, classExpression) => {
+    const output = transform({
+      code: `
+        export function App() {
+          ${bindingKind} selected = cell(null);
+          const active = cell("danger");
+          const rows = cell([{ id: 1, other: 1 }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id} class={${classExpression}}>
+              <td>{row.id}</td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("compilerSelectedClass");
+    expect(output.code).toContain('bindProp(_keyedRoot, "class"');
+  });
 });

@@ -89,6 +89,62 @@ describe("compiler runtime smoke", () => {
     delete (globalThis as typeof globalThis & { __compilerKeyedPayload?: string })
       .__compilerKeyedPayload;
   });
+
+  test("compiler keyed selected classes update at list scope while retaining rows", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1, label: "A" }, { id: 2, label: "B" }]);
+        const selected = cell(null);
+        export function App() {
+          return <main>
+            <button id="select-two" onClick={() => selected.set(2)}>Select two</button>
+            <button id="select-two-again" onClick={() => selected.set(2)}>Select two again</button>
+            <button id="clear" onClick={() => selected.set(null)}>Clear</button>
+            <button id="swap" onClick={() => rows.set([rows.get()[1], rows.get()[0]])}>Swap</button>
+            <table><tbody>{rows.get().map((row) => (
+              <tr key={row.id} class={selected.get() === row.id ? "danger" : ""}>
+                <td>{row.label}</td>
+              </tr>
+            ))}</tbody></table>
+          </main>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain(
+      'compilerSelectedClass: { className: "danger", source: selected }',
+    );
+    expect(output.code).not.toContain('bindProp(_keyedRoot, "class"');
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const [firstRow, secondRow] = Array.from(node.querySelectorAll("tbody tr"));
+
+    expect(firstRow?.getAttribute("class")).toBe("");
+    expect(secondRow?.getAttribute("class")).toBe("");
+
+    node.querySelector<HTMLButtonElement>("#select-two")?.click();
+    await flushEffects();
+    expect(firstRow?.getAttribute("class")).toBe("");
+    expect(secondRow?.getAttribute("class")).toBe("danger");
+
+    node.querySelector<HTMLButtonElement>("#select-two-again")?.click();
+    await flushEffects();
+    expect(secondRow?.getAttribute("class")).toBe("danger");
+
+    node.querySelector<HTMLButtonElement>("#swap")?.click();
+    await flushEffects();
+    expect(node.querySelectorAll("tbody tr")[0]).toBe(secondRow);
+    expect(node.querySelectorAll("tbody tr")[1]).toBe(firstRow);
+    expect(secondRow?.getAttribute("class")).toBe("danger");
+
+    node.querySelector<HTMLButtonElement>("#clear")?.click();
+    await flushEffects();
+    expect(firstRow?.getAttribute("class")).toBe("");
+    expect(secondRow?.getAttribute("class")).toBe("");
+  });
+
   test("keeps event parameter defaults that capture the row on the generic path", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

@@ -180,6 +180,7 @@ function createOxcChildAnalysisContext(
   diagnostics: Diagnostic[],
   bodyStatementJsx?: OxcBodyStatementJsxMode,
   componentBodyBindings?: ReadonlyMap<string, Record<string, unknown>>,
+  componentConstBindings?: ReadonlySet<string>,
   reactiveAliasBindings?: ReadonlyMap<string, string>,
   serverOutput?: AnalyzeModuleOptions["serverOutput"],
   componentCallNames?: Set<string>,
@@ -193,6 +194,7 @@ function createOxcChildAnalysisContext(
     diagnostics,
     ...(bodyStatementJsx === undefined ? {} : { bodyStatementJsx }),
     ...(componentBodyBindings === undefined ? {} : { componentBodyBindings }),
+    ...(componentConstBindings === undefined ? {} : { componentConstBindings }),
     ...(reactiveAliasBindings === undefined ? {} : { reactiveAliasBindings }),
     bodyLowerers,
     lowerNestedJsxExpression: lowerOxcNestedJsxExpression,
@@ -366,6 +368,7 @@ function analyzeOxcToIr(
       : new Map<string, Set<number>>();
   const bodyLowerers = createOxcBodyLowerers(compatRuntimeImports);
   const moduleRenderValueBindings = collectOxcBodyJsxBindingNames(body);
+  const moduleConstBindings = collectOxcConstBindingNames(body);
   const reactiveDerivedFunctionNames = collectOxcReactiveDerivedFunctionNames(body);
 
   for (const statement of body) {
@@ -469,6 +472,7 @@ function analyzeOxcToIr(
       compatCreateElementLocalFunctionLikes,
       compatRenderToStringLowerableTargets,
       moduleRenderValueBindings,
+      moduleConstBindings,
       options?.compatReactNodeReturn === true,
       options?.serverOutput,
       componentCallNames,
@@ -1003,6 +1007,7 @@ function analyzeOxcComponent(
   compatCreateElementLocalFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
   compatRenderToStringLowerableTargets: ReadonlySet<string>,
   moduleRenderValueBindings: Set<string>,
+  moduleConstBindings: ReadonlySet<string>,
   compatReactNodeReturn: boolean,
   serverOutput: AnalyzeModuleOptions["serverOutput"],
   componentCallNames: Set<string> | undefined,
@@ -1046,6 +1051,7 @@ function analyzeOxcComponent(
         compatRenderToStringNames,
         compatCreateElementLocalFunctionLikes,
         moduleRenderValueBindings,
+        moduleConstBindings,
         compatReactNodeReturn,
         serverOutput,
         componentCallNames,
@@ -1096,6 +1102,7 @@ function analyzeOxcComponent(
             compatRenderToStringNames,
             compatCreateElementLocalFunctionLikes,
             moduleRenderValueBindings,
+            moduleConstBindings,
             compatReactNodeReturn,
             serverOutput,
             componentCallNames,
@@ -1143,6 +1150,7 @@ function analyzeOxcComponent(
           compatRenderToStringNames,
           compatCreateElementLocalFunctionLikes,
           moduleRenderValueBindings,
+          moduleConstBindings,
           compatReactNodeReturn,
           serverOutput,
           componentCallNames,
@@ -1192,6 +1200,7 @@ function analyzeOxcComponent(
       compatRenderToStringNames,
       compatCreateElementLocalFunctionLikes,
       moduleRenderValueBindings,
+      moduleConstBindings,
       compatReactNodeReturn,
       serverOutput,
       componentCallNames,
@@ -1279,6 +1288,7 @@ function analyzeOxcFunctionLikeComponent(
   compatRenderToStringNames: ReadonlySet<string>,
   compatCreateElementLocalFunctionLikes: ReadonlyMap<string, Record<string, unknown>>,
   moduleRenderValueBindings: Set<string>,
+  moduleConstBindings: ReadonlySet<string>,
   compatReactNodeReturn: boolean,
   serverOutput: AnalyzeModuleOptions["serverOutput"],
   componentCallNames: Set<string> | undefined,
@@ -1340,6 +1350,12 @@ function analyzeOxcFunctionLikeComponent(
         ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
     );
   const componentBodyBindings = collectOxcVariableInitializers(body);
+  const componentConstBindings = new Set([
+    ...[...moduleConstBindings].filter(
+      (binding) => !componentBodyBindings.has(binding) && !parameters.includes(binding),
+    ),
+    ...collectOxcConstBindingNames(body),
+  ]);
   const reactiveAliasBindings = collectOxcReactiveReadAliases(
     code,
     body,
@@ -1351,6 +1367,7 @@ function analyzeOxcFunctionLikeComponent(
     diagnostics,
     bodyStatementJsx,
     componentBodyBindings,
+    componentConstBindings,
     reactiveAliasBindings,
     serverOutput,
     componentCallNames,
@@ -1451,6 +1468,28 @@ function analyzeOxcFunctionLikeComponent(
     ],
     root,
   };
+}
+
+function collectOxcConstBindingNames(bodyStatements: readonly unknown[]): Set<string> {
+  const bindings = new Set<string>();
+
+  for (const statement of bodyStatements) {
+    const object = readObject(statement);
+    const declaration =
+      object.type === "ExportNamedDeclaration" ? readObject(object.declaration) : object;
+    if (declaration.type !== "VariableDeclaration" || declaration.kind !== "const") {
+      continue;
+    }
+
+    for (const declarator of readArray(declaration.declarations)) {
+      const identifier = readObject(readObject(declarator).id);
+      if (identifier.type === "Identifier" && typeof identifier.name === "string") {
+        bindings.add(identifier.name);
+      }
+    }
+  }
+
+  return bindings;
 }
 
 function readPlainObjectParameterPropAliases(params: unknown): PropAliasIr[] | undefined {

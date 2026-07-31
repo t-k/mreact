@@ -1,4 +1,4 @@
-import type { AttributeIr } from "./ir.js";
+import type { AttributeIr, DynamicAttributeIr } from "./ir.js";
 import { isEventLikePropName } from "@reckona/mreact-shared";
 import {
   invalidDomRefAttributeDiagnostic,
@@ -15,9 +15,16 @@ import {
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 const stableKeyedEventAttributes = new WeakSet<object>();
+const dynamicAttributeExpressions = new WeakMap<DynamicAttributeIr, Record<string, unknown>>();
 
 export function isStableOxcKeyedEventAttribute(attribute: AttributeIr): boolean {
   return attribute.kind === "event" && stableKeyedEventAttributes.has(attribute);
+}
+
+export function readOxcDynamicAttributeExpression(
+  attribute: AttributeIr,
+): Record<string, unknown> | undefined {
+  return attribute.kind === "dynamic-attr" ? dynamicAttributeExpressions.get(attribute) : undefined;
 }
 
 export function readOxcJsxTagName(node: Record<string, unknown>): string {
@@ -118,8 +125,14 @@ export function analyzeOxcAttribute(
     const expression = readObject(value.expression);
     const expressionCode =
       options.resolveExpressionCode?.(expression) ?? readSource(code, expression);
+    const attribute: DynamicAttributeIr = {
+      kind: "dynamic-attr",
+      name,
+      code: expressionCode,
+    };
+    dynamicAttributeExpressions.set(attribute, expression);
 
-    return [{ kind: "dynamic-attr", name, code: expressionCode }];
+    return [attribute];
   }
 
   return [{ kind: "static-attr", name, value: "" }];

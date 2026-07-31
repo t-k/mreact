@@ -124,6 +124,13 @@ export interface ListIr {
 /** Describes a conservatively eligible compiler keyed single-node list. */
 export interface CompiledSingleNodeListIr {
   root: JsxElementIr;
+  selectedClass?: CompilerSelectedClassIr;
+}
+
+/** Describes an exact whole-class selection expression owned by a keyed list. */
+export interface CompilerSelectedClassIr {
+  className: string;
+  sourceCode: string;
 }
 
 /** Represents static text emitted from JSX. */
