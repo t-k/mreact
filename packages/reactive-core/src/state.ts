@@ -20,7 +20,7 @@ export interface Source {
 export interface ReactiveComputation {
   readonly id: number;
   readonly debugLabel?: string | undefined;
-  deps: Source | Set<Source> | null;
+  deps: Set<Source>;
   orderedDeps?: Source[] | undefined;
   trackingAddedDeps?: Source[] | undefined;
   trackingCount?: number | undefined;

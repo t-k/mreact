@@ -37,11 +37,4 @@ describe("reactive-core tracking hot path", () => {
     expect(source).not.toContain("run() {");
     expect(source).not.toContain("dispose() {");
   });
-
-  test("does not allocate a dependency Set for an effect before tracking a second source", async () => {
-    const source = await readFile(new URL("../src/effect.ts", import.meta.url), "utf8");
-
-    expect(source).toContain("deps: null");
-    expect(source).not.toContain("deps: new Set()");
-  });
 });
