@@ -9,6 +9,10 @@ import {
   withBatchedDelegatedRootReleases,
   withDeferredDelegatedEventPromotions,
 } from "./bind-event.js";
+import {
+  setupCompilerKeyedEvents,
+  type CompilerKeyedEventProgram,
+} from "./compiler-keyed-events.js";
 import { isDynamicHydrationEnabled, markDynamicNode } from "./dynamic-node.js";
 import { createScopedRenderNodeScope } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
@@ -33,6 +37,7 @@ export interface BindCompilerKeyedSingleNodeListOptions<
   T,
   TNode extends ChildNode = ChildNode,
 > extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
+  compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
   compilerSelectedClass?: {
     className: string;
     source: ReadonlyCell<unknown>;
@@ -109,6 +114,7 @@ const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
   },
 };
 const compilerRowContexts = new WeakMap<ChildNode, InternalCompilerKeyedRowContext>();
+const activeCompilerRowContexts = new WeakMap<Node, InternalCompilerKeyedRowContext>();
 
 type RemovedSingleNodeRecords =
   | {
@@ -147,6 +153,11 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     selectedClass === undefined
       ? undefined
       : createSelectedClassState(selectedClass, () => records.values());
+  const compilerEvents = (
+    options as BindStaticKeyedSingleNodeListOptions<T, TNode> & {
+      compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
+    }
+  ).compilerEvents;
 
   const dispose = effect(() => {
     const currentItems = items();
@@ -405,8 +416,15 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       insertionParent.childNodes.length === records.size + 1 && marker.nextSibling === null;
   });
 
+  const disposeCompilerEvents = setupCompilerKeyedEvents(
+    parent,
+    compilerEvents ?? [],
+    (node) => activeCompilerRowContexts.get(node) as CompilerKeyedRowContext<T> | undefined,
+  );
+
   return registerDispose(() => {
     dispose();
+    disposeCompilerEvents();
     selectedClassState?.dispose();
     unregisterSelectedClassRecords(selectedClassState, records.values());
     removeRecordNodes(records.values(), deferEventPromotion);
@@ -451,6 +469,7 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       context[compilerRowReads] = 0;
       const node = renderItem(context as CompilerKeyedRowContext<T>);
       compilerRowContexts.set(node, context);
+      activeCompilerRowContexts.set(node, context);
       if (markRecordsForHydration) {
         markDynamicNode(node);
       }
