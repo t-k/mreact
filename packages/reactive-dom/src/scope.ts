@@ -1,6 +1,7 @@
 import type { Dispose } from "./types.js";
 
 export interface DomScope {
+  cleanupOwnedDispose?: Dispose | undefined;
   disposers?: Dispose[] | undefined;
   disposed: boolean;
 }
@@ -56,8 +57,23 @@ export function registerIdempotentDispose(dispose: Dispose): Dispose {
     return dispose;
   }
 
+  if (scope.cleanupOwnedDispose === dispose) {
+    return dispose;
+  }
+
   (scope.disposers ??= []).push(dispose);
   return dispose;
+}
+
+export function registerCleanupDispose(dispose: Dispose): void {
+  const scope = activeScope;
+
+  if (scope === null || scope.disposed) {
+    return;
+  }
+
+  registerDispose(dispose);
+  scope.cleanupOwnedDispose = dispose;
 }
 
 export function disposeScope(scope: DomScope): void {
@@ -74,6 +90,7 @@ export function disposeScope(scope: DomScope): void {
   }
 
   scope.disposers = undefined;
+  scope.cleanupOwnedDispose = undefined;
 
   if (disposers.length === 1) {
     disposers[0]!();

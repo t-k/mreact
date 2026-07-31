@@ -4,7 +4,7 @@ import {
   createScope,
   disposeScope,
   hasScopeDisposers,
-  registerDispose,
+  registerCleanupDispose,
   withScope,
   type DomScope,
 } from "./scope.js";
@@ -23,7 +23,7 @@ export function createScopedRenderNodes(render: () => RenderValue): ScopedRender
   try {
     const nodes = withScope(scope, () =>
       withCleanupScope((dispose) => {
-        registerDispose(dispose);
+        registerCleanupDispose(dispose);
       }, () => normalizeRenderValue(render())),
     );
 
@@ -45,7 +45,7 @@ export function createScopedRenderNode<TNode extends ChildNode>(
   try {
     const node = withScope(scope, () =>
       withCleanupScope((dispose) => {
-        registerDispose(dispose);
+        registerCleanupDispose(dispose);
       }, render),
     );
 
@@ -67,7 +67,7 @@ export function createScopedRenderNodeScope<TNode extends ChildNode>(
   try {
     const node = withScope(scope, () =>
       withCleanupScope((dispose) => {
-        registerDispose(dispose);
+        registerCleanupDispose(dispose);
       }, render),
     );
     const result: { node: TNode; scope?: DomScope | undefined } = { node };

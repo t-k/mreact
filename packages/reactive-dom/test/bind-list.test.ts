@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindList, bindText } from "../src/index.js";
+import { createScopedRenderNodeScope } from "../src/render-scope.js";
 import {
   createScope,
   disposeScope,
@@ -15,6 +16,38 @@ import {
 } from "../src/scope.js";
 
 describe("bindList", () => {
+  test("owns a function-backed text binding once in a render scope", async () => {
+    const value = cell("A");
+    let disposeBinding: (() => void) | undefined;
+    const scoped = createScopedRenderNodeScope(() => {
+      const text = document.createTextNode("");
+      disposeBinding = bindText(text, () => value.get());
+      return text;
+    });
+
+    expect(scoped.scope?.disposers).toHaveLength(1);
+    expect(scoped.node.data).toBe("A");
+
+    disposeBinding?.();
+    disposeScope(scoped.scope!);
+    value.set("B");
+    await flushEffects();
+
+    expect(scoped.node.data).toBe("A");
+  });
+
+  test("keeps one direct-cell text disposer in a render scope", () => {
+    const value = cell("A");
+    const scoped = createScopedRenderNodeScope(() => {
+      const text = document.createTextNode("");
+      bindText(text, value);
+      return text;
+    });
+
+    expect(scoped.scope?.disposers).toHaveLength(1);
+    disposeScope(scoped.scope!);
+  });
+
   test("can register known-idempotent disposers without wrapper allocation", () => {
     const scope = createScope();
     let calls = 0;
