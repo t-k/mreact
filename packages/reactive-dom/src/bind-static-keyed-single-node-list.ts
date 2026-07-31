@@ -9,6 +9,7 @@ import {
   withBatchedDelegatedRootReleases,
   withDeferredDelegatedEventPromotions,
 } from "./bind-event.js";
+import { isDynamicHydrationEnabled, markDynamicNode } from "./dynamic-node.js";
 import { createScopedRenderNodeScope } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { DomScope } from "./scope.js";
@@ -404,6 +405,12 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
   renderItem: CompilerKeyedSingleNodeRenderer<T, TNode>,
   options: BindStaticKeyedSingleNodeListOptions<T, TNode>,
 ): Dispose {
+  const markRecordsForHydration = isDynamicHydrationEnabled();
+
+  if (markRecordsForHydration) {
+    markDynamicNode(marker);
+  }
+
   return bindStaticKeyedSingleNodeList(
     parent,
     marker,
@@ -416,6 +423,9 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       context[compilerRowReads] = 0;
       const node = renderItem(context as CompilerKeyedRowContext<T>);
       compilerRowContexts.set(node, context);
+      if (markRecordsForHydration) {
+        markDynamicNode(node);
+      }
       return node;
     },
     options,
