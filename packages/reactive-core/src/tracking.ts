@@ -151,7 +151,14 @@ export function trackIncrementalSource(source: Source, computation: ReactiveComp
 
   addSourceSubscriber(source, computation);
   computation.deps.add(source);
-  (computation.trackingAddedDeps ??= []).push(source);
+  const addedDeps = computation.trackingAddedDeps;
+  if (addedDeps === undefined) {
+    computation.trackingAddedDeps = source;
+  } else if (Array.isArray(addedDeps)) {
+    addedDeps.push(source);
+  } else {
+    computation.trackingAddedDeps = [addedDeps, source];
+  }
 }
 
 export function preserveIncrementalTracking(computation: ReactiveComputation): void {
@@ -209,18 +216,26 @@ export function cleanupAddedDeps(computation: ReactiveComputation): void {
     return;
   }
 
-  for (const dep of addedDeps) {
-    if (!removeSourceSubscriber(dep, computation)) {
-      continue;
+  if (Array.isArray(addedDeps)) {
+    for (const dep of addedDeps) {
+      cleanupAddedDependency(dep, computation);
     }
-
-    if (dep.trackedBy === computation) {
-      dep.trackedBy = undefined;
-      dep.trackedVersion = undefined;
-    }
-
-    computation.deps.delete(dep);
+  } else {
+    cleanupAddedDependency(addedDeps, computation);
   }
+}
+
+function cleanupAddedDependency(dep: Source, computation: ReactiveComputation): void {
+  if (!removeSourceSubscriber(dep, computation)) {
+    return;
+  }
+
+  if (dep.trackedBy === computation) {
+    dep.trackedBy = undefined;
+    dep.trackedVersion = undefined;
+  }
+
+  computation.deps.delete(dep);
 }
 
 export function notifySubscribers(source: Source): void {

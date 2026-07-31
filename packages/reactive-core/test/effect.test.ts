@@ -64,6 +64,33 @@ describe("effect", () => {
     expect(addedDepsAllocated).toBe(false);
   });
 
+  test("stores the first newly tracked dependency without allocating an array", () => {
+    const first = cell(0);
+    const second = cell(0);
+    let firstAddedDeps: unknown;
+    let secondAddedDeps: unknown;
+
+    const disposeFirst = effect(() => {
+      first.get();
+      firstAddedDeps = (runtimeState.activeTracker as ReactiveComputation | null)
+        ?.trackingAddedDeps;
+    });
+    const disposeSecond = effect(() => {
+      first.get();
+      second.get();
+      secondAddedDeps = (runtimeState.activeTracker as ReactiveComputation | null)
+        ?.trackingAddedDeps;
+    });
+
+    disposeFirst();
+    disposeSecond();
+
+    expect(firstAddedDeps).toBeTruthy();
+    expect(firstAddedDeps).not.toBeInstanceOf(Array);
+    expect(secondAddedDeps).toBeInstanceOf(Array);
+    expect(secondAddedDeps).toHaveLength(2);
+  });
+
   test("does not allocate touched dependency tracking for stable effect dependencies", async () => {
     const count = cell(0);
     let touchedDepsAllocated = false;
@@ -88,11 +115,7 @@ describe("effect", () => {
 
     try {
       Set.prototype.has = function countedHas<T>(this: Set<T>, value: T): boolean {
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          "subscribers" in value
-        ) {
+        if (typeof value === "object" && value !== null && "subscribers" in value) {
           sourceHasCalls += 1;
         }
 

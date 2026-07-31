@@ -113,8 +113,7 @@ export function computed<T>(
 
     computation.trackingAddedDeps = undefined;
     computation.trackingCount = 0;
-    computation.trackingOrderedIndex =
-      computation.orderedDeps === undefined ? undefined : 0;
+    computation.trackingOrderedIndex = computation.orderedDeps === undefined ? undefined : 0;
     computation.trackingOrderedMismatch = false;
     computation.trackingVersion = nextTrackingVersion;
     runtimeState.activeTracker = computation;
@@ -122,9 +121,10 @@ export function computed<T>(
     try {
       const nextValue = fn();
 
-      const addedDeps = computation.trackingAddedDeps as Source[] | undefined;
+      const addedDeps = computation.trackingAddedDeps as ReactiveComputation["trackingAddedDeps"];
       const trackedCount = computation.trackingCount ?? 0;
-      const addedDepsCount = addedDeps?.length ?? 0;
+      const addedDepsCount =
+        addedDeps === undefined ? 0 : Array.isArray(addedDeps) ? addedDeps.length : 1;
       const orderedMismatch = computation.trackingOrderedMismatch as boolean | undefined;
 
       if (previousDepsSize > 0 && (trackedCount !== previousDepsSize || addedDepsCount > 0)) {
@@ -142,18 +142,14 @@ export function computed<T>(
         cleanupUntrackedDeps(computation, nextTrackingVersion);
       }
 
-      if (
-        orderedMismatch !== true &&
-        trackedCount === previousDepsSize &&
-        addedDepsCount === 0
-      ) {
+      if (orderedMismatch !== true && trackedCount === previousDepsSize && addedDepsCount === 0) {
         // Keep the previous stable order.
       } else if (
         previousDepsSize === 0 &&
         addedDeps !== undefined &&
-        trackedCount === addedDeps.length
+        trackedCount === addedDepsCount
       ) {
-        computation.orderedDeps = addedDeps;
+        computation.orderedDeps = Array.isArray(addedDeps) ? addedDeps : [addedDeps];
       } else {
         computation.orderedDeps = undefined;
       }

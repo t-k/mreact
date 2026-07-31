@@ -22,7 +22,7 @@ export interface ReactiveComputation {
   readonly debugLabel?: string | undefined;
   deps: Set<Source>;
   orderedDeps?: Source[] | undefined;
-  trackingAddedDeps?: Source[] | undefined;
+  trackingAddedDeps?: Source | Source[] | undefined;
   trackingCount?: number | undefined;
   trackingOrderedIndex?: number | undefined;
   trackingOrderedMismatch?: boolean | undefined;
