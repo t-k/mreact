@@ -93,4 +93,43 @@ describe("compiler dynamic JSX transform", () => {
     );
     expect(output.code).toContain("bindList");
   });
+
+  test("emits the compiler keyed helper for a safe single intrinsic root", () => {
+    const output = transform({
+      code: `
+        export function Rows(props) {
+          return <tbody>{props.rows.map((row) => <tr key={row.id}><td>{row.label}</td></tr>)}</tbody>;
+        }
+      `,
+      filename: "Rows.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
+    expect(output.code).not.toContain("bindList(");
+  });
+
+  test.each([
+    ["identifier", "onClick={handleRow}"],
+    ["conditional", "onClick={enabled ? () => select(row.id) : undefined}"],
+    ["default parameter", "onClick={(event = currentEvent) => select(row.id)}"],
+    ["index capture", "onClick={() => select(index)}"],
+  ])("keeps %s keyed handlers on the generic list path", (_name, handler) => {
+    const output = transform({
+      code: `
+        export function Rows(props) {
+          return <tbody>{props.rows.map((row, index) => <tr key={row.id} ${handler}><td>{row.label}</td></tr>)}</tbody>;
+        }
+      `,
+      filename: "Rows.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindList(");
+    expect(output.code).not.toContain("bindCompilerKeyedSingleNodeList");
+  });
 });
