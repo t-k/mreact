@@ -8,6 +8,96 @@ import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index
 import { bindCompilerKeyedSingleNodeList } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("keeps compiler keyed records live after dynamic-range hydration adopts them", async () => {
+    type Item = { readonly id: number; readonly label: string };
+    type DynamicNode = Node & {
+      __mreactDynamicNode?: true;
+      __mreactReactiveText?: true;
+    };
+    const hydrationGlobal = globalThis as typeof globalThis & {
+      __mreactHydratingDynamicRanges?: boolean;
+    };
+    const items = cell<readonly Item[]>([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    const generatedParent = document.createElement("tbody");
+    const generatedMarker = document.createComment("rows");
+    generatedParent.append(generatedMarker);
+
+    hydrationGlobal.__mreactHydratingDynamicRanges = true;
+    const dispose = bindCompilerKeyedSingleNodeList(
+      generatedParent,
+      generatedMarker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        row.dataset.id = String(context.item.id);
+        const cellNode = document.createElement("td");
+        const text = document.createTextNode("");
+        bindText(text, () => context.item.label);
+        cellNode.append(text);
+        row.append(cellNode);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+    delete hydrationGlobal.__mreactHydratingDynamicRanges;
+    await flushEffects();
+
+    const generatedChildren = Array.from(generatedParent.childNodes) as DynamicNode[];
+    expect(generatedChildren.every((node) => node.__mreactDynamicNode === true)).toBe(true);
+
+    const serverParent = document.createElement("tbody");
+    serverParent.innerHTML =
+      '<tr data-id="1"><td>A</td></tr><tr data-id="2"><td>B</td></tr><!--rows-->';
+    const resumeChildren = (current: Node, next: Node): void => {
+      const nextChildren = Array.from(next.childNodes) as DynamicNode[];
+
+      for (let index = 0; index < nextChildren.length; index += 1) {
+        const currentChild = current.childNodes[index];
+        const nextChild = nextChildren[index] as DynamicNode;
+
+        if (currentChild === undefined) {
+          current.appendChild(nextChild);
+        } else if (
+          nextChild.__mreactDynamicNode === true ||
+          (nextChild.__mreactReactiveText === true &&
+            currentChild.nodeType === Node.TEXT_NODE &&
+            nextChild.nodeType === Node.TEXT_NODE)
+        ) {
+          currentChild.replaceWith(nextChild);
+        } else {
+          resumeChildren(currentChild, nextChild);
+        }
+      }
+    };
+    resumeChildren(serverParent, generatedParent);
+
+    const firstRow = serverParent.children[0];
+    const secondRow = serverParent.children[1];
+    items.set([
+      { id: 2, label: "B!" },
+      { id: 1, label: "A!" },
+    ]);
+    await flushEffects();
+
+    expect(Array.from(serverParent.children, (row) => row.getAttribute("data-id"))).toEqual([
+      "2",
+      "1",
+    ]);
+    expect(serverParent.children[0]).toBe(secondRow);
+    expect(serverParent.children[1]).toBe(firstRow);
+    expect(serverParent.textContent).toBe("B!A!");
+
+    items.set([{ id: 2, label: "B!!" }]);
+    await flushEffects();
+    expect(serverParent.children).toHaveLength(1);
+    expect(serverParent.textContent).toBe("B!!");
+
+    dispose();
+  });
+
   test("keeps compiler row identity while updating item, index, items, and events", async () => {
     const items = cell<readonly { readonly id: number; readonly label: string }[]>([
       { id: 1, label: "A" },
