@@ -554,6 +554,106 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("compiler selected class replaces the whole class with strict key equality", async () => {
+    const selected = cell<unknown>(null);
+    const items = cell([
+      { id: Number.NaN, label: "NaN" },
+      { id: 0, label: "Zero" },
+      { id: 1, label: "One" },
+    ]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let classWrites = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        const setAttribute = row.setAttribute.bind(row);
+        row.setAttribute = ((name, value) => {
+          if (name === "class") {
+            classWrites += 1;
+          }
+          setAttribute(name, value);
+        }) as typeof row.setAttribute;
+        row.textContent = context.item.label;
+        return row;
+      },
+      {
+        key: (item) => item.id,
+        compilerSelectedClass: {
+          className: "danger",
+          source: selected,
+        },
+      },
+    );
+
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual(["", "", ""]);
+
+    classWrites = 0;
+    selected.set(Number.NaN);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual(["", "", ""]);
+    expect(classWrites).toBe(0);
+
+    selected.set(-0);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
+      "",
+      "danger",
+      "",
+    ]);
+
+    classWrites = 0;
+    selected.set(1);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
+      "",
+      "",
+      "danger",
+    ]);
+    expect(classWrites).toBe(2);
+
+    classWrites = 0;
+    selected.set(1);
+    await flushEffects();
+    expect(classWrites).toBe(0);
+
+    const oneRow = parent.children[2];
+    items.set([
+      { id: 1, label: "One!" },
+      { id: 0, label: "Zero!" },
+      { id: Number.NaN, label: "NaN!" },
+    ]);
+    await flushEffects();
+    expect(parent.children[0]).toBe(oneRow);
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
+      "danger",
+      "",
+      "",
+    ]);
+
+    parent.children[0]?.setAttribute("class", "outside");
+    classWrites = 0;
+    selected.set(0);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
+      "",
+      "danger",
+      "",
+    ]);
+    expect(classWrites).toBe(2);
+
+    dispose();
+    classWrites = 0;
+    selected.set(1);
+    await flushEffects();
+    expect(classWrites).toBe(0);
+  });
+
   test("promotes delegated row events by default without detached fallback listeners", () => {
     const items = cell([1, 2]);
     const parent = document.createElement("tbody");

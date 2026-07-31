@@ -29,6 +29,23 @@ export interface BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode exte
   target?: (node: TNode, item: T, index: number, items: readonly T[]) => Element | null;
 }
 
+export interface BindCompilerKeyedSingleNodeListOptions<
+  T,
+  TNode extends ChildNode = ChildNode,
+> extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
+  compilerSelectedClass?: {
+    className: string;
+    source: ReadonlyCell<unknown>;
+  };
+}
+
+interface InternalSelectedClassOptions<
+  T,
+  TNode extends ChildNode,
+> extends BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode> {
+  compilerMode?: "strict-replace";
+}
+
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
 export type SingleNodeRenderer<T, TNode extends ChildNode> = (
   item: T,
@@ -403,9 +420,20 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
   marker: ChildNode,
   items: () => readonly T[],
   renderItem: CompilerKeyedSingleNodeRenderer<T, TNode>,
-  options: BindStaticKeyedSingleNodeListOptions<T, TNode>,
+  options: BindCompilerKeyedSingleNodeListOptions<T, TNode>,
 ): Dispose {
   const markRecordsForHydration = isDynamicHydrationEnabled();
+  const compilerSelectedClass = options.compilerSelectedClass;
+  const listOptions: BindStaticKeyedSingleNodeListOptions<T, TNode> =
+    compilerSelectedClass === undefined
+      ? options
+      : {
+          ...options,
+          selectedClass: {
+            ...compilerSelectedClass,
+            compilerMode: "strict-replace",
+          } as InternalSelectedClassOptions<T, TNode>,
+        };
 
   if (markRecordsForHydration) {
     markDynamicNode(marker);
@@ -428,7 +456,7 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       }
       return node;
     },
-    options,
+    listOptions,
   );
 }
 
@@ -1538,33 +1566,55 @@ function promoteRecordEvents(records: Iterable<SingleNodeRecord>): void {
 
 interface SelectedClassState {
   activeRecords: boolean;
-  className: string;
   current: unknown;
   dispose: Dispose;
+  matches: (selected: unknown, key: unknown) => boolean;
   preserveInitial: boolean;
   records: Map<unknown, Element>;
   recordsSource: () => Iterable<SingleNodeRecord>;
+  sameSelection: (previous: unknown, next: unknown) => boolean;
   target?: (
     node: ChildNode,
     item: unknown,
     index: number,
     items: readonly unknown[],
   ) => Element | null;
+  write: (element: Element, selected: boolean) => void;
 }
 
 function createSelectedClassState<T, TNode extends ChildNode>(
-  options: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>,
+  options: InternalSelectedClassOptions<T, TNode>,
   recordsSource: () => Iterable<SingleNodeRecord>,
 ): SelectedClassState {
   const preserveInitial = options.preserveInitial === true;
+  const compilerMode = options.compilerMode === "strict-replace";
   const state: SelectedClassState = {
     activeRecords: !preserveInitial,
-    className: options.className,
     current: untrack(() => options.source.get()),
     dispose: () => {},
+    matches: compilerMode ? (selected, key) => selected === key : Object.is,
     preserveInitial,
     records: new Map(),
     recordsSource,
+    sameSelection: compilerMode
+      ? (previous, next) =>
+          previous === next ||
+          (typeof previous === "number" &&
+            typeof next === "number" &&
+            Number.isNaN(previous) &&
+            Number.isNaN(next))
+      : Object.is,
+    write: compilerMode
+      ? (element, selected) => {
+          element.setAttribute("class", selected ? options.className : "");
+        }
+      : (element, selected) => {
+          if (selected) {
+            element.classList.add(options.className);
+          } else {
+            element.classList.remove(options.className);
+          }
+        },
     ...(options.target === undefined
       ? {}
       : {
@@ -1600,14 +1650,20 @@ function activateSelectedClassRecords(state: SelectedClassState): void {
 }
 
 function updateSelectedClassValue(state: SelectedClassState, next: unknown): void {
-  if (Object.is(state.current, next)) {
+  if (state.sameSelection(state.current, next)) {
     return;
   }
 
   activateSelectedClassRecords(state);
-  state.records.get(state.current)?.classList.remove(state.className);
+  const previousElement = state.records.get(state.current);
+  if (previousElement !== undefined && state.matches(state.current, state.current)) {
+    state.write(previousElement, false);
+  }
   state.current = next;
-  state.records.get(next)?.classList.add(state.className);
+  const nextElement = state.records.get(next);
+  if (nextElement !== undefined && state.matches(next, next)) {
+    state.write(nextElement, true);
+  }
 }
 
 function registerSelectedClassRecord<T, TNode extends ChildNode>(
@@ -1641,11 +1697,7 @@ function registerSelectedClassRecord<T, TNode extends ChildNode>(
     return;
   }
 
-  if (Object.is(state.current, record.key)) {
-    element.classList.add(state.className);
-  } else {
-    element.classList.remove(state.className);
-  }
+  state.write(element, state.matches(state.current, record.key));
 }
 
 function refreshSelectedClassRecord(
@@ -1660,11 +1712,7 @@ function refreshSelectedClassRecord(
     return;
   }
 
-  if (Object.is(state.current, record.key)) {
-    record.selectedClassElement.classList.add(state.className);
-  } else {
-    record.selectedClassElement.classList.remove(state.className);
-  }
+  state.write(record.selectedClassElement, state.matches(state.current, record.key));
 }
 
 function shouldRefreshSelectedClassRecords(state: SelectedClassState | undefined): boolean {
