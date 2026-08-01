@@ -36,7 +36,7 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: true,
-    minify: "esbuild",
+    minify: "oxc",
     lib: {
       entry: "src/index.ts",
       fileName: () => "main.js",
