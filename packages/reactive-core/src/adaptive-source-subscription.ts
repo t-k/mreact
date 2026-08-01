@@ -1,7 +1,7 @@
 import { registerCleanup } from "./cleanup-scope.js";
 import { queueComputation } from "./scheduler.js";
 import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
-import { cleanupDeps, removeSourceSubscriber } from "./tracking.js";
+import { cleanupDeps, lazyDependencies, removeSourceSubscriber } from "./tracking.js";
 
 /** Compact reactive listener that can also be invalidated by its owner. */
 export interface RefreshableSubscription {
@@ -88,7 +88,8 @@ function adaptiveSourceSubscriptionRun(this: ReactiveComputation): void {
   }
 
   const previousTracker = runtimeState.activeTracker;
-  const nextDependencies = new Set<Source>();
+  const nextDependencies =
+    subscription.source === undefined ? lazyDependencies : new Set<Source>();
   subscription.deps = nextDependencies;
   runtimeState.activeTracker = subscription;
 
