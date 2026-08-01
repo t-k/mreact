@@ -1793,7 +1793,7 @@ function unregisterSelectedClassRecords(
   state: SelectedClassState | undefined,
   records: Iterable<SingleNodeRecord>,
 ): void {
-  if (state === undefined) {
+  if (state === undefined || !state.activeRecords) {
     return;
   }
 

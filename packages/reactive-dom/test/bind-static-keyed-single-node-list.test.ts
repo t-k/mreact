@@ -1108,6 +1108,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("function activateSelectedClassRecords");
     expect(source).toContain("activeRecords: !preserveInitial");
     expect(source).toContain("if (!state.activeRecords)");
+    expect(source).toContain("if (state === undefined || !state.activeRecords)");
   });
 
   test("skips delegated release batching and promotion walks when event promotion is disabled", async () => {
