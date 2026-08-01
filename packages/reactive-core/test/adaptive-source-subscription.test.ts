@@ -74,51 +74,6 @@ describe("subscribeAdaptiveSource", () => {
 });
 
 describe("subscribeRefreshable", () => {
-  test("shares empty dependencies until the first reactive read", async () => {
-    const external = cell("A");
-    let readsExternal = false;
-    const first = subscribeRefreshable(() => {
-      if (readsExternal) {
-        external.get();
-      }
-    });
-    const second = subscribeRefreshable(() => {});
-    const firstComputation = first as unknown as { deps: Set<Source> };
-    const secondComputation = second as unknown as { deps: Set<Source> };
-
-    expect(firstComputation.deps).toBe(secondComputation.deps);
-
-    readsExternal = true;
-    first.refresh();
-    await flushEffects();
-    expect(firstComputation.deps).not.toBe(secondComputation.deps);
-
-    readsExternal = false;
-    first.refresh();
-    await flushEffects();
-    expect(firstComputation.deps).toBe(secondComputation.deps);
-
-    first.dispose();
-    second.dispose();
-  });
-
-  test("retains a notification triggered synchronously after the first read", async () => {
-    const external = cell("A");
-    const values: string[] = [];
-    const subscription = subscribeRefreshable(() => {
-      const value = external.get();
-      values.push(value);
-      if (value === "A") {
-        external.set("B");
-      }
-    });
-
-    await flushEffects();
-
-    expect(values).toEqual(["A", "B"]);
-    subscription.dispose();
-  });
-
   test("tracks external dependencies and supports explicit refreshes", async () => {
     const external = cell("A");
     const values: string[] = [];

@@ -2,21 +2,6 @@ import { runtimeState, type ReactiveComputation, type Source } from "./state.js"
 
 const maxPendingComputedFlushIterations = 100;
 
-export const lazyDependencies = new Set<Source>();
-lazyDependencies.add = promoteLazyDependency;
-
-function promoteLazyDependency(source: Source): Set<Source> {
-  const tracker = runtimeState.activeTracker;
-
-  if (tracker === null || tracker.disposed || tracker.deps !== lazyDependencies) {
-    return lazyDependencies;
-  }
-
-  const dependencies = new Set([source]);
-  tracker.deps = dependencies;
-  return dependencies;
-}
-
 export function trackSource(source: Source): void {
   const tracker = runtimeState.activeTracker;
 
@@ -33,8 +18,8 @@ export function trackSource(source: Source): void {
 }
 
 function trackSourceDirect(source: Source, tracker: ReactiveComputation): void {
-  tracker.deps.add(source);
   addSourceSubscriber(source, tracker);
+  tracker.deps.add(source);
 }
 
 export function addSourceSubscriber(source: Source, computation: ReactiveComputation): void {
