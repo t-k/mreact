@@ -993,6 +993,8 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source.indexOf("trySwapSingleNodeItems(")).toBeLessThan(
       source.indexOf("const keyedItems = uniqueSingleNodeKeyedItems("),
     );
+    expect(source).toContain("new Array<SingleNodeRecord>(currentItems.length)");
+    expect(source).not.toContain("bufferedRecords");
   });
 
   test("detects single-node row swaps without a second full key scan", async () => {
@@ -1025,8 +1027,28 @@ describe("bindStaticKeyedSingleNodeList", () => {
 
     keyCalls = 0;
     const nextRows = initialRows.slice();
+    const rowsBeforeSwap = Array.from(parent.children);
+    const insertedNodes: Node[] = [];
+    let replacements = 0;
+    let removals = 0;
+    const insertBefore = parent.insertBefore.bind(parent);
+    const replaceChildren = parent.replaceChildren.bind(parent);
+    const removeChild = parent.removeChild.bind(parent);
     const secondRow = nextRows[1] as (typeof initialRows)[number];
     const nineHundredNinetyNinthRow = nextRows[998] as (typeof initialRows)[number];
+
+    parent.insertBefore = ((node, child) => {
+      insertedNodes.push(node);
+      return insertBefore(node, child);
+    }) as typeof parent.insertBefore;
+    parent.replaceChildren = ((...nodes) => {
+      replacements += 1;
+      return replaceChildren(...nodes);
+    }) as typeof parent.replaceChildren;
+    parent.removeChild = ((node) => {
+      removals += 1;
+      return removeChild(node);
+    }) as typeof parent.removeChild;
 
     nextRows[1] = nineHundredNinetyNinthRow;
     nextRows[998] = secondRow;
@@ -1036,6 +1058,11 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(keyCalls).toBeLessThanOrEqual(initialRows.length + 1);
     expect(parent.children[1]?.textContent).toBe("999");
     expect(parent.children[998]?.textContent).toBe("2");
+    expect(parent.children[1]).toBe(rowsBeforeSwap[998]);
+    expect(parent.children[998]).toBe(rowsBeforeSwap[1]);
+    expect(insertedNodes).toHaveLength(2);
+    expect(replacements).toBe(0);
+    expect(removals).toBe(0);
 
     dispose();
   });

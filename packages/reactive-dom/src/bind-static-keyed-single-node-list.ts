@@ -948,8 +948,8 @@ function trySwapSingleNodeItems<T>(
   }
 
   const previousRecords = records[Symbol.iterator]();
-  const orderedRecords: SingleNodeRecord[] = [];
-  let bufferedRecords: SingleNodeRecord[] | undefined;
+  // oxlint-disable-next-line unicorn/no-new-array -- this hot path fills every slot while avoiding a second swap buffer.
+  const orderedRecords = new Array<SingleNodeRecord>(currentItems.length);
   let firstIndex = -1;
   let secondIndex = -1;
   let firstPreviousKey: unknown;
@@ -971,11 +971,7 @@ function trySwapSingleNodeItems<T>(
     const record = previousRecord.value[1];
 
     if (Object.is(previousKey, nextKey)) {
-      if (firstIndex === -1 || secondIndex !== -1) {
-        orderedRecords.push(record);
-      } else {
-        (bufferedRecords as SingleNodeRecord[]).push(record);
-      }
+      orderedRecords[index] = record;
       continue;
     }
 
@@ -984,7 +980,6 @@ function trySwapSingleNodeItems<T>(
       firstPreviousKey = previousKey;
       firstNextKey = nextKey;
       firstRecord = record;
-      bufferedRecords = [];
     } else if (secondIndex === -1) {
       secondIndex = index;
       secondPreviousKey = previousKey;
@@ -998,11 +993,8 @@ function trySwapSingleNodeItems<T>(
         return undefined;
       }
 
-      orderedRecords.push(secondRecord);
-      for (const bufferedRecord of bufferedRecords as SingleNodeRecord[]) {
-        orderedRecords.push(bufferedRecord);
-      }
-      orderedRecords.push(firstRecord as SingleNodeRecord);
+      orderedRecords[firstIndex] = secondRecord;
+      orderedRecords[secondIndex] = firstRecord as SingleNodeRecord;
     } else {
       return undefined;
     }
@@ -1032,7 +1024,6 @@ function trySwapSingleNodeItems<T>(
 
   if (
     secondIndex === -1 ||
-    orderedRecords.length !== currentItems.length ||
     firstRecord === undefined ||
     secondRecord === undefined
   ) {
