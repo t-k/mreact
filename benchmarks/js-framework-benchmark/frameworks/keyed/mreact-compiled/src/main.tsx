@@ -1,4 +1,4 @@
-import { batch, cell } from "@reckona/mreact-reactive-core";
+import { batch, cell, type Cell } from "@reckona/mreact-reactive-core";
 
 const adjectives = ["pretty", "large", "big", "small", "tall", "short", "long", "handsome", "plain", "quaint", "clean", "elegant", "easy", "angry", "crazy", "helpful", "mushy", "odd", "unsightly", "adorable", "important", "inexpensive", "cheap", "expensive", "fancy"];
 const colors = ["red", "yellow", "blue", "green", "pink", "brown", "purple", "brown", "white", "black", "orange"];
@@ -6,7 +6,7 @@ const nouns = ["table", "chair", "house", "bbq", "desk", "car", "pony", "cookie"
 
 interface RowData {
   readonly id: number;
-  readonly label: string;
+  readonly label: Cell<string>;
 }
 
 let nextId = 1;
@@ -23,7 +23,9 @@ function buildData(count: number): RowData[] {
   for (let index = 0; index < count; index += 1) {
     data[index] = {
       id: nextId,
-      label: `${adjectives[random(adjectives.length)]} ${colors[random(colors.length)]} ${nouns[random(nouns.length)]}`,
+      label: cell(
+        `${adjectives[random(adjectives.length)]} ${colors[random(colors.length)]} ${nouns[random(nouns.length)]}`,
+      ),
     };
     nextId += 1;
   }
@@ -43,17 +45,13 @@ function addRows(): void {
 }
 
 function updateRows(): void {
-  const next = rows.get().slice();
+  batch(() => {
+    const current = rows.get();
 
-  for (let index = 0; index < next.length; index += 10) {
-    const row = next[index];
-
-    if (row !== undefined) {
-      next[index] = { id: row.id, label: `${row.label} !!!` };
+    for (let index = 0; index < current.length; index += 10) {
+      current[index]?.label.set((label) => `${label} !!!`);
     }
-  }
-
-  rows.set(next);
+  });
 }
 
 function clearRows(): void {
@@ -111,7 +109,7 @@ export function App(): HTMLDivElement {
             {rows.get().map((row) => (
               <tr key={row.id} class={selected.get() === row.id ? "danger" : ""}>
                 <td class="col-md-1">{row.id}</td>
-                <td class="col-md-4"><a onClick={() => selected.set(row.id)}>{row.label}</a></td>
+                <td class="col-md-4"><a onClick={() => selected.set(row.id)}>{row.label.get()}</a></td>
                 <td class="col-md-1"><a onClick={() => removeRow(row.id)}><span class="glyphicon glyphicon-remove" aria-hidden="true" /></a></td>
                 <td class="col-md-6" />
               </tr>
