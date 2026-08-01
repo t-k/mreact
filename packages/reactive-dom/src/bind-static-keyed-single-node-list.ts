@@ -958,15 +958,13 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
   }
 
   const appendFragment = document.createDocumentFragment();
-  const appendedRecords = appendedKeys as SingleNodeRecord[];
-  let appendedRecordCount = 0;
+  const appendedRecords: SingleNodeRecord[] = [];
 
   try {
     for (let index = previousSize; index < currentItems.length; index += 1) {
-      const appendedIndex = index - previousSize;
       const record = createSingleNodeRecord(
         parent,
-        appendedRecords[appendedIndex],
+        appendedKeys[index - previousSize],
         currentItems[index] as T,
         index,
         currentItems,
@@ -976,25 +974,17 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
         selectedClassState,
       );
 
-      appendedRecords[appendedIndex] = record;
-      appendedRecordCount += 1;
+      appendedRecords.push(record);
       appendFragment.appendChild(record.node);
     }
   } catch (error) {
-    unregisterSelectedClassRecords(
-      selectedClassState,
-      singleNodeRecordPrefix(appendedRecords, appendedRecordCount),
-    );
-    disposeRecordValues(
-      singleNodeRecordPrefix(appendedRecords, appendedRecordCount),
-      deferEventPromotion,
-    );
+    unregisterSelectedClassRecords(selectedClassState, appendedRecords);
+    disposeRecordValues(appendedRecords, deferEventPromotion);
     throw error;
   }
 
   for (let index = 0; index < appendedRecords.length; index += 1) {
-    const record = appendedRecords[index] as SingleNodeRecord;
-    records.set(record.key, record);
+    records.set(appendedKeys[index], appendedRecords[index] as SingleNodeRecord);
   }
 
   parent.insertBefore(appendFragment, marker);
@@ -1002,15 +992,6 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
     promoteRecordEvents(appendedRecords);
   }
   return records;
-}
-
-function* singleNodeRecordPrefix(
-  records: readonly SingleNodeRecord[],
-  length: number,
-): IterableIterator<SingleNodeRecord> {
-  for (let index = 0; index < length; index += 1) {
-    yield records[index] as SingleNodeRecord;
-  }
 }
 
 function tryRemoveSingleNodeItems<T>(

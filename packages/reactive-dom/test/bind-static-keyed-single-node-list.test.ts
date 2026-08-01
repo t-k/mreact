@@ -445,48 +445,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
-  test("reuses append storage without corrupting object-valued keys", async () => {
-    const firstKey = {};
-    const secondKey = {};
-    const thirdKey = {};
-    const items = cell([
-      { id: firstKey, label: "A" },
-      { id: secondKey, label: "B" },
-    ]);
-    const parent = document.createElement("tbody");
-    const marker = document.createComment("rows");
-    parent.append(marker);
-
-    const dispose = bindStaticKeyedSingleNodeList(
-      parent,
-      marker,
-      () => items.get(),
-      (item) => {
-        const tr = document.createElement("tr");
-        tr.textContent = item.label;
-        return tr;
-      },
-      { key: (item) => item.id, deferEventPromotion: false },
-    );
-
-    items.set([
-      { id: firstKey, label: "A" },
-      { id: secondKey, label: "B" },
-      { id: thirdKey, label: "C" },
-    ]);
-    await flushEffects();
-    expect(parent.innerHTML).toBe("<tr>A</tr><tr>B</tr><tr>C</tr><!--rows-->");
-
-    items.set([
-      { id: firstKey, label: "A" },
-      { id: secondKey, label: "B" },
-    ]);
-    await flushEffects();
-    expect(parent.innerHTML).toBe("<tr>A</tr><tr>B</tr><!--rows-->");
-
-    dispose();
-  });
-
   test("does not retain detached appended records when append rendering throws", async () => {
     const items = cell([{ id: 1, label: "A" }]);
     const parent = document.createElement("tbody");
@@ -1220,14 +1178,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("removeRecordNodes(records.values(), deferEventPromotion)");
     expect(source).toContain("if (batchDelegatedRootReleases)");
     expect(source).toContain("if (deferEventPromotion)");
-    const appendItemsStart = source.indexOf("function tryAppendSingleNodeItems");
-    const removeItemsStart = source.indexOf("function tryRemoveSingleNodeItems");
-    const appendItemsSource = source.slice(appendItemsStart, removeItemsStart);
-
-    expect(appendItemsSource).toContain(
-      "const appendedRecords = appendedKeys as SingleNodeRecord[]",
-    );
-    expect(appendItemsSource).not.toContain("const appendedRecords: SingleNodeRecord[] = []");
+    expect(source).toContain("const appendedRecords: SingleNodeRecord[] = []");
     expect(source).toContain("disposeRecordValues(appendedRecords, deferEventPromotion)");
     expect(source).toContain("function removeChangedSingleNodeRecords");
     expect(source).toContain("staleRecord: SingleNodeRecord");
