@@ -117,21 +117,26 @@ type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
 type CompilerKeyedRowNode = Node & {
   [activeCompilerRowContext]?: InternalCompilerKeyedRowContext;
 };
-const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
+const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> & {
+  readonly compilerContext: InternalCompilerKeyedRowContext;
+} = {
+  get compilerContext(): InternalCompilerKeyedRowContext {
+    return this as unknown as InternalCompilerKeyedRowContext;
+  },
   get index(): number {
-    const context = this as InternalCompilerKeyedRowContext;
+    const context = this as unknown as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 2;
     trackCompilerRowContext(context);
     return context[compilerRowIndex];
   },
   get item(): unknown {
-    const context = this as InternalCompilerKeyedRowContext;
+    const context = this as unknown as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 1;
     trackCompilerRowContext(context);
     return context[compilerRowItem];
   },
   get items(): readonly unknown[] {
-    const context = this as InternalCompilerKeyedRowContext;
+    const context = this as unknown as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 4;
     trackCompilerRowContext(context);
     return context[compilerRowItems];
@@ -697,15 +702,15 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
     deferred?.value ??
     untrack(() => createScopedRenderNodeScope(() => renderItem(item, index, items)));
 
-  const record: SingleNodeRecord & { promoteEvents?: () => void } = {
-    key,
-    node: scoped.node,
-  };
   const compilerContext = (scoped.node as CompilerKeyedRowNode)[activeCompilerRowContext];
+  let record: SingleNodeRecord & { promoteEvents?: () => void };
 
   if (compilerContext !== undefined) {
-    record.compilerContext = compilerContext;
+    record = compilerContext as InternalCompilerKeyedRowContext & SingleNodeRecord;
+    record.key = key;
+    record.node = scoped.node;
   } else {
+    record = { key, node: scoped.node };
     record.currentItem = item;
     if (renderArity >= 2) {
       record.currentIndex = index;
