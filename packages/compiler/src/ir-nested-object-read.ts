@@ -60,7 +60,9 @@ function nodeReadsNestedItemObject(node: JsxNodeIr, itemName: string): boolean {
         node.children.some((child) => nodeReadsNestedItemObject(child, itemName))
       );
     case "expr":
-      return codeReadsNestedItemObject(node.code, itemName);
+      return node.renderMode === "compiler-keyed-cell-text"
+        ? false
+        : codeReadsNestedItemObject(node.code, itemName);
     case "async-boundary":
       return (
         codeReadsNestedItemObject(node.valueCode, itemName) ||

@@ -245,6 +245,28 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain('bindCompilerKeyedPropertyText(row, _text_1, "label")');
   });
 
+  test("binds direct keyed row cell properties without a generated reader closure", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: cell("A") }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}><td>{row.label.get()}</td></tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain('bindCompilerKeyedCellText(row, _text_0, "label")');
+    expect(output.code).toContain("compilerOwnsTextCleanup: true");
+    expect(output.code).not.toContain("nestedObjectFallback: true");
+    expect(output.code).not.toContain("() => ((row.item).label.get())");
+  });
+
   test.each([
     ["nested property", "row.meta.label"],
     ["computed property", 'row["label"]'],

@@ -1,5 +1,6 @@
 export { bindCapturedEvent } from "./bind-event.js";
 export {
+  bindCompilerKeyedCellText,
   bindCompilerKeyedPropertyText,
   bindCompilerKeyedSingleNodeList,
   bindCompilerKeyedText,

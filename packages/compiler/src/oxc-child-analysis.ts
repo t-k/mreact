@@ -748,6 +748,7 @@ function analyzeCompiledSingleNodeList(
   if (isDirectCompilerKeyText(keyCode, itemName)) {
     markCompilerKeyedInitialText(sourceRoot, root, keyCode);
   }
+  markCompilerKeyedCellText(sourceRoot, root, itemName);
   markCompilerKeyedText(sourceRoot, root, keyCode, itemName);
   const ownsTextCleanup = compilerOwnsSingleNodeTextCleanup(root);
 
@@ -767,6 +768,7 @@ function compilerOwnsSingleNodeTextCleanup(node: JsxNodeIr): boolean {
   if (node.kind === "expr") {
     return (
       node.renderMode === "compiler-keyed-initial-text" ||
+      node.renderMode === "compiler-keyed-cell-text" ||
       node.renderMode === "compiler-keyed-text"
     );
   }
@@ -785,6 +787,42 @@ function compilerOwnsSingleNodeTextCleanup(node: JsxNodeIr): boolean {
   }
 
   return node.children.every(compilerOwnsSingleNodeTextCleanup);
+}
+
+function markCompilerKeyedCellText(
+  sourceNode: JsxNodeIr,
+  compiledNode: JsxNodeIr,
+  itemName: string,
+): void {
+  if (sourceNode.kind === "expr" && compiledNode.kind === "expr") {
+    const prefix = `${itemName}.`;
+    const suffix = ".get()";
+
+    if (sourceNode.code.startsWith(prefix) && sourceNode.code.endsWith(suffix)) {
+      const property = sourceNode.code.slice(prefix.length, -suffix.length);
+
+      if (/^[A-Za-z_$][\w$]*$/.test(property)) {
+        sourceNode.renderMode = "compiler-keyed-cell-text";
+        sourceNode.compilerKeyedProperty = property;
+        compiledNode.renderMode = "compiler-keyed-cell-text";
+        compiledNode.compilerKeyedProperty = property;
+      }
+    }
+    return;
+  }
+
+  if (sourceNode.kind !== "element" || compiledNode.kind !== "element") {
+    return;
+  }
+
+  const childCount = Math.min(sourceNode.children.length, compiledNode.children.length);
+  for (let index = 0; index < childCount; index += 1) {
+    markCompilerKeyedCellText(
+      sourceNode.children[index] as JsxNodeIr,
+      compiledNode.children[index] as JsxNodeIr,
+      itemName,
+    );
+  }
 }
 
 function markCompilerKeyedText(

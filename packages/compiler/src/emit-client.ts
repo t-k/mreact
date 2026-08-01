@@ -56,6 +56,7 @@ type RuntimeHelperName =
   | "createTemplate"
   | "createTemplateElement"
   | "insertDynamic"
+  | "bindCompilerKeyedCellText"
   | "bindCompilerKeyedSingleNodeList"
   | "bindCompilerKeyedPropertyText"
   | "bindCompilerKeyedText"
@@ -88,6 +89,7 @@ function allocateRuntimeHelperNames(
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
+    bindCompilerKeyedCellText: "bindCompilerKeyedCellText",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
     bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
     bindCompilerKeyedText: "bindCompilerKeyedText",
@@ -142,6 +144,8 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       if (node.kind === "expr") {
         if (node.renderMode === "dynamic") {
           specifiers.add("insertDynamic");
+        } else if (node.renderMode === "compiler-keyed-cell-text") {
+          internalSpecifiers.add("bindCompilerKeyedCellText");
         } else if (node.renderMode === "compiler-keyed-text") {
           internalSpecifiers.add(
             node.compilerKeyedProperty === undefined
@@ -619,7 +623,17 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           `  ${textVar}.data = typeof ${initialTextValueVar} === "string" ? ${initialTextValueVar} : ${initialTextValueVar} == null ? "" : String(${initialTextValueVar});`,
         );
       }
-      if (child.renderMode === "compiler-keyed-text") {
+      if (child.renderMode === "compiler-keyed-cell-text") {
+        if (
+          state.compilerKeyedRowContext === undefined ||
+          child.compilerKeyedProperty === undefined
+        ) {
+          throw new Error("Missing compiler keyed row context for optimized cell text.");
+        }
+        lines.push(
+          `  ${state.helperNames.bindCompilerKeyedCellText}(${state.compilerKeyedRowContext}, ${textVar}, ${JSON.stringify(child.compilerKeyedProperty)});`,
+        );
+      } else if (child.renderMode === "compiler-keyed-text") {
         if (state.compilerKeyedRowContext === undefined) {
           throw new Error("Missing compiler keyed row context for optimized text.");
         }

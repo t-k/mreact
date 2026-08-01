@@ -159,6 +159,7 @@ export interface ExprIr {
     | "stream-node"
     | "compat-child"
     | "compiler-keyed-initial-text"
+    | "compiler-keyed-cell-text"
     | "compiler-keyed-text";
 }
 

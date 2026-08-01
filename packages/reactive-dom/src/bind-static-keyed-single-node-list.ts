@@ -617,6 +617,44 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
   return registerIdempotentDispose(() => subscription.dispose());
 }
 
+/** Internal Cell-property text binding used by compiler-generated keyed rows. */
+export function bindCompilerKeyedCellText<T, K extends keyof T>(
+  context: CompilerKeyedRowContext<T>,
+  node: Text,
+  property: K,
+): Dispose {
+  const internalContext = context as InternalCompilerKeyedRowContext;
+  const reactiveText = node as Text & { __mreactReactiveText?: true };
+  reactiveText.__mreactReactiveText = true;
+
+  const subscription = subscribeRefreshable(() => {
+    const previousContext = activeCompilerTextContext;
+    activeCompilerTextContext = internalContext;
+
+    try {
+      const value = context.item[property] as ReadonlyCell<unknown>;
+      node.data = normalizeText(value.get());
+    } finally {
+      activeCompilerTextContext = previousContext;
+    }
+  });
+  const subscriptions = internalContext[compilerRowTextSubscriptions];
+
+  if (subscriptions === undefined) {
+    internalContext[compilerRowTextSubscriptions] = subscription;
+  } else if (Array.isArray(subscriptions)) {
+    subscriptions.push(subscription);
+  } else {
+    internalContext[compilerRowTextSubscriptions] = [subscriptions, subscription];
+  }
+
+  if (internalContext[compilerRowOwnsTextCleanup] === true) {
+    return noopCompilerTextDispose;
+  }
+
+  return registerIdempotentDispose(() => subscription.dispose());
+}
+
 function uniqueSingleNodeKeyedItems<T>(
   items: readonly T[],
   key: (item: T, index: number, items: readonly T[]) => unknown,

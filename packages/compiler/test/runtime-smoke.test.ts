@@ -6,6 +6,60 @@ import { transform } from "../src/index.js";
 import { compileClientComponent, runClientComponent } from "./helpers.js";
 
 describe("compiler runtime smoke", () => {
+  test("compiler keyed cell text retargets same-key rows and detaches old cells", async () => {
+    const output = transform({
+      code: `
+        import { cell } from "@reckona/mreact-reactive-core";
+        const oldLabel = cell("A");
+        const nextLabel = cell("B");
+        const rows = cell([{ id: 1, label: oldLabel }]);
+        export function App() {
+          return <main>
+            <button id="old" onClick={() => oldLabel.set("old")}>Old</button>
+            <button id="replace" onClick={() => rows.set([{ id: 1, label: nextLabel }])}>Replace</button>
+            <button id="next" onClick={() => nextLabel.set("next")}>Next</button>
+            <button id="clear" onClick={() => rows.set([])}>Clear</button>
+            <table><tbody>{rows.get().map((row) => (
+              <tr key={row.id}><td>{row.label.get()}</td></tr>
+            ))}</tbody></table>
+          </main>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("bindCompilerKeyedCellText(");
+    expect(output.code).toContain("compilerOwnsTextCleanup: true");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("tbody tr");
+
+    expect(row?.textContent).toBe("A");
+    node.querySelector<HTMLButtonElement>("#old")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("old");
+
+    node.querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect(node.querySelector("tbody tr")).toBe(row);
+    expect(row?.textContent).toBe("B");
+
+    node.querySelector<HTMLButtonElement>("#old")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("B");
+    node.querySelector<HTMLButtonElement>("#next")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("next");
+
+    node.querySelector<HTMLButtonElement>("#clear")?.click();
+    await flushEffects();
+    node.querySelector<HTMLButtonElement>("#next")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("next");
+  });
+
   test("compiler keyed rows keep directly initialized key text current across record reuse", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

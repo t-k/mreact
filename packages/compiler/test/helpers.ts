@@ -52,6 +52,7 @@ import {
 } from "@reckona/mreact-server";
 import { stripTypeScriptWithOxc } from "../src/oxc-transform.js";
 import {
+  bindCompilerKeyedCellText,
   bindCompilerKeyedPropertyText,
   bindCompilerKeyedSingleNodeList,
   bindCompilerKeyedText,
@@ -415,7 +416,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -427,6 +428,8 @@ function extractClientInternalRuntimeEntries(
       value:
         match.groups.importedName === "markCompilerKeyedEventSlot"
           ? markCompilerKeyedEventSlot
+          : match.groups.importedName === "bindCompilerKeyedCellText"
+            ? bindCompilerKeyedCellText
           : match.groups.importedName === "bindCompilerKeyedPropertyText"
             ? bindCompilerKeyedPropertyText
           : match.groups.importedName === "bindCompilerKeyedText"
