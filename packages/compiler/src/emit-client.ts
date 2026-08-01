@@ -598,7 +598,6 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       ? emitChildPath(
           currentPath,
           childIndex,
-          children.length,
           state.compilerKeyedRowContext !== undefined && stableChildrenName === undefined,
         )
         : `${stableChildrenName}[${childIndex}]`;
@@ -779,20 +778,13 @@ function shouldCacheCompilerKeyedElementPath(
 function emitChildPath(
   parentPath: string,
   index: number,
-  childCount: number,
   useSiblingPath: boolean,
 ): string {
   if (!useSiblingPath) {
     return `${parentPath}.childNodes[${index}]`;
   }
 
-  const previousSiblingCount = childCount - index - 1;
-
-  if (index <= previousSiblingCount) {
-    return `${parentPath}.firstChild${".nextSibling".repeat(index)}`;
-  }
-
-  return `${parentPath}.lastChild${".previousSibling".repeat(previousSiblingCount)}`;
+  return `${parentPath}.firstChild${".nextSibling".repeat(index)}`;
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
