@@ -1182,6 +1182,11 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("disposeRecordValues(appendedRecords, deferEventPromotion)");
     expect(source).toContain("function removeChangedSingleNodeRecords");
     expect(source).toContain("staleRecord: SingleNodeRecord");
+    const removeRecordStart = source.indexOf("function removeRecordNode");
+    const removeRecordsStart = source.indexOf("function removeRecordNodes");
+    const removeRecordSource = source.slice(removeRecordStart, removeRecordsStart);
+
+    expect(removeRecordSource).not.toContain("const removeRecord = () =>");
   });
 
   test("uses a local scope dispose fast path for single-node records", async () => {

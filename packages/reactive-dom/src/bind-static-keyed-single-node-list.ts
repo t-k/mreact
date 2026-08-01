@@ -1653,7 +1653,18 @@ function removeChangedSingleNodeRecords(
 
 function removeRecordNode(record: SingleNodeRecord, batchDelegatedRootReleases: boolean): void {
   let firstError: unknown;
-  const removeRecord = () => {
+
+  if (batchDelegatedRootReleases) {
+    withBatchedDelegatedRootReleases(() => {
+      try {
+        disposeSingleNodeRecord(record);
+      } catch (error) {
+        firstError = error;
+      }
+
+      record.node.parentNode?.removeChild(record.node);
+    });
+  } else {
     try {
       disposeSingleNodeRecord(record);
     } catch (error) {
@@ -1661,12 +1672,6 @@ function removeRecordNode(record: SingleNodeRecord, batchDelegatedRootReleases: 
     }
 
     record.node.parentNode?.removeChild(record.node);
-  };
-
-  if (batchDelegatedRootReleases) {
-    withBatchedDelegatedRootReleases(removeRecord);
-  } else {
-    removeRecord();
   }
 
   if (firstError !== undefined) {
