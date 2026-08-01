@@ -18,19 +18,9 @@ interface AdaptiveSourceSubscription extends ReactiveComputation, RefreshableSub
   source?: Source | undefined;
 }
 
-interface AdaptiveValueSubscription extends ReactiveComputation, RefreshableSubscription {
-  listener: (value: unknown) => void;
-  value: unknown;
-}
-
 const emptyDependencies = new Set<Source>();
 let deferredListener: (() => void) | undefined;
-let deferredValueListener: ((value: unknown) => void) | undefined;
-let deferredValue: unknown;
-let deferredSubscription:
-  | AdaptiveSourceSubscription
-  | AdaptiveValueSubscription
-  | undefined;
+let deferredSubscription: AdaptiveSourceSubscription | undefined;
 
 class DeferredDependencySet extends Set<Source> {
   override add(source: Source): this {
@@ -60,15 +50,6 @@ const ADAPTIVE_SOURCE_SUBSCRIPTION_METHODS = {
   AdaptiveSourceSubscription,
   "dispose" | "markDirty" | "refresh" | "run"
 >;
-const ADAPTIVE_VALUE_SUBSCRIPTION_METHODS = {
-  dispose: adaptiveSourceSubscriptionDispose,
-  markDirty: adaptiveSourceSubscriptionMarkDirty,
-  refresh: adaptiveSourceSubscriptionMarkDirty,
-  run: adaptiveValueSubscriptionRun,
-} satisfies Pick<
-  AdaptiveValueSubscription,
-  "dispose" | "markDirty" | "refresh" | "run"
->;
 
 /**
  * Tracks a source-backed read while retaining the compact direct-subscription
@@ -92,12 +73,8 @@ export function subscribeRefreshableIfTracked(
 ): RefreshableSubscription | undefined {
   const previousTracker = runtimeState.activeTracker;
   const previousListener = deferredListener;
-  const previousValueListener = deferredValueListener;
-  const previousValue = deferredValue;
   const previousSubscription = deferredSubscription;
   deferredListener = listener;
-  deferredValueListener = undefined;
-  deferredValue = undefined;
   deferredSubscription = undefined;
   runtimeState.activeTracker = deferredReactiveTracker;
 
@@ -105,7 +82,7 @@ export function subscribeRefreshableIfTracked(
     listener();
     return deferredSubscription;
   } catch (error) {
-    const subscription = deferredSubscription as ReactiveComputation | undefined;
+    const subscription = deferredSubscription as AdaptiveSourceSubscription | undefined;
     if (subscription !== undefined) {
       subscription.disposed = true;
       cleanupDeps(subscription);
@@ -114,60 +91,18 @@ export function subscribeRefreshableIfTracked(
   } finally {
     runtimeState.activeTracker = previousTracker;
     deferredListener = previousListener;
-    deferredValueListener = previousValueListener;
-    deferredValue = previousValue;
-    deferredSubscription = previousSubscription;
-  }
-}
-
-/** Runs a shared listener with a value and subscribes only when it reads a Source. */
-export function subscribeRefreshableValueIfTracked<T>(
-  listener: (value: T) => void,
-  value: T,
-): RefreshableSubscription | undefined {
-  const previousTracker = runtimeState.activeTracker;
-  const previousListener = deferredListener;
-  const previousValueListener = deferredValueListener;
-  const previousValue = deferredValue;
-  const previousSubscription = deferredSubscription;
-  deferredListener = undefined;
-  deferredValueListener = listener as (value: unknown) => void;
-  deferredValue = value;
-  deferredSubscription = undefined;
-  runtimeState.activeTracker = deferredReactiveTracker;
-
-  try {
-    listener(value);
-    return deferredSubscription;
-  } catch (error) {
-    const subscription = deferredSubscription as ReactiveComputation | undefined;
-    if (subscription !== undefined) {
-      subscription.disposed = true;
-      cleanupDeps(subscription);
-    }
-    throw error;
-  } finally {
-    runtimeState.activeTracker = previousTracker;
-    deferredListener = previousListener;
-    deferredValueListener = previousValueListener;
-    deferredValue = previousValue;
     deferredSubscription = previousSubscription;
   }
 }
 
 function activateDeferredSubscription(source: Source): void {
   const listener = deferredListener;
-  const valueListener = deferredValueListener;
-  let subscription: AdaptiveSourceSubscription | AdaptiveValueSubscription;
 
-  if (listener !== undefined) {
-    subscription = createAdaptiveSourceSubscription(listener, undefined, false);
-  } else if (valueListener !== undefined) {
-    subscription = createAdaptiveValueSubscription(valueListener, deferredValue);
-  } else {
+  if (listener === undefined) {
     return;
   }
 
+  const subscription = createAdaptiveSourceSubscription(listener, undefined, false);
   deferredSubscription = subscription;
   replaceDeferredSourceSubscriber(source, subscription);
   subscription.deps.add(source);
@@ -176,7 +111,7 @@ function activateDeferredSubscription(source: Source): void {
 
 function replaceDeferredSourceSubscriber(
   source: Source,
-  subscription: ReactiveComputation,
+  subscription: AdaptiveSourceSubscription,
 ): void {
   const subscribers = source.subscribers;
 
@@ -191,26 +126,6 @@ function replaceDeferredSourceSubscriber(
   }
 
   addSourceSubscriber(source, subscription);
-}
-
-function createAdaptiveValueSubscription(
-  listener: (value: unknown) => void,
-  value: unknown,
-): AdaptiveValueSubscription {
-  const subscription: AdaptiveValueSubscription = {
-    deps: new Set<Source>(),
-    dispose: ADAPTIVE_VALUE_SUBSCRIPTION_METHODS.dispose,
-    disposed: false,
-    id: runtimeState.nextComputationId,
-    listener,
-    markDirty: ADAPTIVE_VALUE_SUBSCRIPTION_METHODS.markDirty,
-    queued: false,
-    refresh: ADAPTIVE_VALUE_SUBSCRIPTION_METHODS.refresh,
-    run: ADAPTIVE_VALUE_SUBSCRIPTION_METHODS.run,
-    value,
-  };
-  runtimeState.nextComputationId += 1;
-  return subscription;
 }
 
 function createAdaptiveSourceSubscription(
@@ -284,28 +199,6 @@ function adaptiveSourceSubscriptionRun(this: ReactiveComputation): void {
       nextDependencies.clear();
       subscription.deps = emptyDependencies;
     }
-  }
-}
-
-function adaptiveValueSubscriptionRun(this: ReactiveComputation): void {
-  const subscription = this as AdaptiveValueSubscription;
-
-  if (subscription.disposed) {
-    return;
-  }
-
-  if (subscription.deps.size > 0) {
-    cleanupDeps(subscription);
-  }
-
-  const previousTracker = runtimeState.activeTracker;
-  subscription.deps = new Set<Source>();
-  runtimeState.activeTracker = subscription;
-
-  try {
-    subscription.listener(subscription.value);
-  } finally {
-    runtimeState.activeTracker = previousTracker;
   }
 }
 

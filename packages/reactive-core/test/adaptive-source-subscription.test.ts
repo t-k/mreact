@@ -5,8 +5,6 @@ import {
   subscribeAdaptiveSource,
   subscribeRefreshable,
   subscribeRefreshableIfTracked,
-  subscribeRefreshableValueIfTracked,
-  setScheduler,
   trackSource,
   type Source,
 } from "../src/internal.js";
@@ -132,136 +130,6 @@ describe("subscribeRefreshable", () => {
 
     expect(values).toEqual(["static"]);
     expect(subscription).toBeUndefined();
-  });
-
-  test("passes a value to a shared listener without subscribing when no source is read", () => {
-    const values: string[] = [];
-    const listener = (value: string): void => {
-      values.push(value);
-    };
-    const subscription = subscribeRefreshableValueIfTracked(listener, "static");
-
-    expect(values).toEqual(["static"]);
-    expect(subscription).toBeUndefined();
-  });
-
-  test("retains a shared listener value after deferred promotion", async () => {
-    const external = cell("A");
-    const values: string[] = [];
-    const state = { external, prefix: "value" };
-    const listener = (value: typeof state): void => {
-      values.push(`${value.prefix}:${value.external.get()}`);
-    };
-    const subscription = subscribeRefreshableValueIfTracked(listener, state);
-
-    external.set("B");
-    await flushEffects();
-    expect(values).toEqual(["value:A", "value:B"]);
-    subscription?.dispose();
-  });
-
-  test("promotes a value listener beside an existing subscriber", async () => {
-    const external = cell("A");
-    const existingValues: string[] = [];
-    const deferredValues: string[] = [];
-    const existing = subscribeRefreshable(() => {
-      existingValues.push(external.get());
-    });
-    const deferred = subscribeRefreshableValueIfTracked(
-      (prefix: string) => {
-        deferredValues.push(`${prefix}:${external.get()}`);
-      },
-      "value",
-    );
-
-    external.set("B");
-    await flushEffects();
-    expect(existingValues).toEqual(["A", "B"]);
-    expect(deferredValues).toEqual(["value:A", "value:B"]);
-
-    deferred?.dispose();
-    existing.dispose();
-  });
-
-  test("restores an outer callback probe after a nested value probe", async () => {
-    const outerSource = cell("outer-a");
-    const innerSource = cell("inner-a");
-    const outerValues: string[] = [];
-    const innerValues: string[] = [];
-    let innerSubscription: ReturnType<typeof subscribeRefreshableValueIfTracked>;
-    const outerSubscription = subscribeRefreshableIfTracked(() => {
-      if (innerSubscription === undefined) {
-        innerSubscription = subscribeRefreshableValueIfTracked(
-          (prefix: string) => {
-            innerValues.push(`${prefix}:${innerSource.get()}`);
-          },
-          "inner",
-        );
-      }
-      outerValues.push(outerSource.get());
-    });
-
-    outerSource.set("outer-b");
-    innerSource.set("inner-b");
-    await flushEffects();
-    expect(outerValues).toEqual(["outer-a", "outer-b"]);
-    expect(innerValues).toEqual(["inner:inner-a", "inner:inner-b"]);
-
-    outerSubscription?.dispose();
-    innerSubscription?.dispose();
-  });
-
-  test("restores a promoted outer value probe after a nested callback probe", async () => {
-    const outerSource = cell("outer-a");
-    const innerSource = cell("inner-a");
-    const outerValues: string[] = [];
-    const innerValues: string[] = [];
-    let innerSubscription: ReturnType<typeof subscribeRefreshableIfTracked>;
-    const outerSubscription = subscribeRefreshableValueIfTracked(
-      (prefix: string) => {
-        outerValues.push(`${prefix}:${outerSource.get()}`);
-        if (innerSubscription === undefined) {
-          innerSubscription = subscribeRefreshableIfTracked(() => {
-            innerValues.push(innerSource.get());
-          });
-        }
-      },
-      "outer",
-    );
-
-    outerSource.set("outer-b");
-    innerSource.set("inner-b");
-    await flushEffects();
-    expect(outerValues).toEqual(["outer:outer-a", "outer:outer-b"]);
-    expect(innerValues).toEqual(["inner-a", "inner-b"]);
-
-    outerSubscription?.dispose();
-    innerSubscription?.dispose();
-  });
-
-  test("runs a promoted value listener with a synchronous scheduler", () => {
-    const restoreScheduler = setScheduler({
-      schedule(flush) {
-        flush();
-      },
-    });
-
-    try {
-      const external = cell("A");
-      const values: string[] = [];
-      const subscription = subscribeRefreshableValueIfTracked(
-        (prefix: string) => {
-          values.push(`${prefix}:${external.get()}`);
-        },
-        "value",
-      );
-
-      external.set("B");
-      expect(values).toEqual(["value:A", "value:B"]);
-      subscription?.dispose();
-    } finally {
-      restoreScheduler();
-    }
   });
 
   test("promotes to a refreshable subscription on the first source read", async () => {
@@ -391,39 +259,6 @@ describe("subscribeRefreshable", () => {
         throw new Error("listener failed");
       }),
     ).toThrow("listener failed");
-
-    expect(first.subscribers).toBeNull();
-    expect(second.subscribers).toBeNull();
-    expect(firstNoSubscribers).toBe(1);
-    expect(secondNoSubscribers).toBe(1);
-  });
-
-  test("cleans every value-probe dependency when its initial listener throws", () => {
-    let firstNoSubscribers = 0;
-    let secondNoSubscribers = 0;
-    const first: Source = {
-      onNoSubscribers: () => {
-        firstNoSubscribers += 1;
-      },
-      subscribers: null,
-    };
-    const second: Source = {
-      onNoSubscribers: () => {
-        secondNoSubscribers += 1;
-      },
-      subscribers: null,
-    };
-
-    expect(() =>
-      subscribeRefreshableValueIfTracked(
-        (message: string) => {
-          trackSource(first);
-          trackSource(second);
-          throw new Error(message);
-        },
-        "value listener failed",
-      ),
-    ).toThrow("value listener failed");
 
     expect(first.subscribers).toBeNull();
     expect(second.subscribers).toBeNull();
