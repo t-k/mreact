@@ -1614,7 +1614,6 @@ interface SelectedClassState {
   dispose: Dispose;
   matches: (selected: unknown, key: unknown) => boolean;
   preserveInitial: boolean;
-  refreshRetainedRecords: boolean;
   records: Map<unknown, Element>;
   recordsSource: () => Iterable<SingleNodeRecord>;
   sameSelection: (previous: unknown, next: unknown) => boolean;
@@ -1639,7 +1638,6 @@ function createSelectedClassState<T, TNode extends ChildNode>(
     dispose: () => {},
     matches: compilerMode ? (selected, key) => selected === key : Object.is,
     preserveInitial,
-    refreshRetainedRecords: !compilerMode && !preserveInitial,
     records: new Map(),
     recordsSource,
     sameSelection: compilerMode
@@ -1766,7 +1764,7 @@ function refreshSelectedClassRecord(
 }
 
 function shouldRefreshSelectedClassRecords(state: SelectedClassState | undefined): boolean {
-  return state?.refreshRetainedRecords === true;
+  return state !== undefined && !state.preserveInitial;
 }
 
 function unregisterSelectedClassRecord(

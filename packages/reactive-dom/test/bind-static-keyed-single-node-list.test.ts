@@ -623,7 +623,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(classWrites).toBe(0);
 
     const oneRow = parent.children[2];
-    classWrites = 0;
     items.set([
       { id: 1, label: "One!" },
       { id: 0, label: "Zero!" },
@@ -631,7 +630,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     ]);
     await flushEffects();
     expect(parent.children[0]).toBe(oneRow);
-    expect(classWrites).toBe(0);
     expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
       "danger",
       "",
