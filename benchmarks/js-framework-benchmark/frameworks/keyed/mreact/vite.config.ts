@@ -7,12 +7,8 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     minify: "oxc",
-    lib: {
-      entry: "src/main.ts",
-      fileName: () => "main.js",
-      formats: ["es"],
-    },
-    rollupOptions: {
+    rolldownOptions: {
+      input: "src/main.ts",
       output: {
         entryFileNames: "main.js",
       },

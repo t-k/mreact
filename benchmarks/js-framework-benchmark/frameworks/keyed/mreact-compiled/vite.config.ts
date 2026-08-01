@@ -37,12 +37,8 @@ export default defineConfig({
   build: {
     emptyOutDir: true,
     minify: "oxc",
-    lib: {
-      entry: "src/index.ts",
-      fileName: () => "main.js",
-      formats: ["es"],
-    },
-    rollupOptions: {
+    rolldownOptions: {
+      input: "src/index.ts",
       output: {
         entryFileNames: "main.js",
       },

@@ -199,8 +199,10 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     expect(config).toContain('target: "client"');
     expect(config).toContain('mode: "reactive"');
     expect(config).toContain("transform({");
-    expect(config).toContain('entry: "src/index.ts"');
     expect(config).toContain('minify: "oxc"');
+    expect(config).toContain('input: "src/index.ts"');
+    expect(config).toContain("rolldownOptions:");
+    expect(config).not.toContain("lib:");
     expect(main).toContain("export function App()");
     expect(main).not.toContain("mount.replaceWith(App())");
     expect(entry).toContain('import { App } from "./main";');
@@ -443,6 +445,9 @@ describe("js-framework-benchmark mreact keyed production build", () => {
     expect(config).toContain("__MREACT_CLIENT_DEVTOOLS__");
     expect(config).toContain('"false"');
     expect(config).toContain('minify: "oxc"');
+    expect(config).toContain('input: "src/main.ts"');
+    expect(config).toContain("rolldownOptions:");
+    expect(config).not.toContain("lib:");
   });
 });
 
