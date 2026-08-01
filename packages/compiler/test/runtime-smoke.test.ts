@@ -1624,7 +1624,7 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      "{ key: (item) => (item.id), compilerOwnsTextCleanup: true, compilerRowReadMask: 1 }",
+      "{ key: (item) => (item.id), compilerOwnsTextCleanup: true }",
     );
 
     const node = await runClientComponent(output.code);
