@@ -25,7 +25,7 @@ describe("bindList", () => {
       return text;
     });
 
-    expect(scoped.scope?.disposers).toHaveLength(1);
+    expect(scoped.scope?.disposers).toBeTypeOf("function");
     expect(scoped.node.data).toBe("A");
 
     disposeBinding?.();
@@ -44,7 +44,7 @@ describe("bindList", () => {
       return text;
     });
 
-    expect(scoped.scope?.disposers).toHaveLength(1);
+    expect(scoped.scope?.disposers).toBeTypeOf("function");
     disposeScope(scoped.scope!);
   });
 

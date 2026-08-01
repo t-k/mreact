@@ -2,7 +2,7 @@ import type { Dispose } from "./types.js";
 
 export interface DomScope {
   cleanupOwnedDispose?: Dispose | undefined;
-  disposers?: Dispose[] | undefined;
+  disposers?: Dispose | Dispose[] | undefined;
   disposed: boolean;
 }
 
@@ -26,7 +26,8 @@ export function createScope(): DomScope {
 }
 
 export function hasScopeDisposers(scope: DomScope): boolean {
-  return scope.disposers !== undefined && scope.disposers.length > 0;
+  const disposers = scope.disposers;
+  return disposers !== undefined && (!Array.isArray(disposers) || disposers.length > 0);
 }
 
 export function registerDispose(dispose: Dispose): Dispose {
@@ -46,7 +47,14 @@ export function registerDispose(dispose: Dispose): Dispose {
     dispose();
   };
 
-  (scope.disposers ??= []).push(wrapped);
+  const disposers = scope.disposers;
+  if (disposers === undefined) {
+    scope.disposers = wrapped;
+  } else if (Array.isArray(disposers)) {
+    disposers.push(wrapped);
+  } else {
+    scope.disposers = [disposers, wrapped];
+  }
   return wrapped;
 }
 
@@ -61,7 +69,14 @@ export function registerIdempotentDispose(dispose: Dispose): Dispose {
     return dispose;
   }
 
-  (scope.disposers ??= []).push(dispose);
+  const disposers = scope.disposers;
+  if (disposers === undefined) {
+    scope.disposers = dispose;
+  } else if (Array.isArray(disposers)) {
+    disposers.push(dispose);
+  } else {
+    scope.disposers = [disposers, dispose];
+  }
   return dispose;
 }
 
@@ -85,15 +100,15 @@ export function disposeScope(scope: DomScope): void {
 
   const disposers = scope.disposers;
 
-  if (disposers === undefined || disposers.length === 0) {
+  if (disposers === undefined || (Array.isArray(disposers) && disposers.length === 0)) {
     return;
   }
 
   scope.disposers = undefined;
   scope.cleanupOwnedDispose = undefined;
 
-  if (disposers.length === 1) {
-    disposers[0]!();
+  if (typeof disposers === "function") {
+    disposers();
     return;
   }
 

@@ -1575,14 +1575,14 @@ function disposeSingleNodeRecordScope(scope: DomScope): void {
 
   const disposers = scope.disposers;
 
-  if (disposers === undefined || disposers.length === 0) {
+  if (disposers === undefined || (Array.isArray(disposers) && disposers.length === 0)) {
     return;
   }
 
   scope.disposers = undefined;
 
-  if (disposers.length === 1) {
-    disposers[0]!();
+  if (typeof disposers === "function") {
+    disposers();
     return;
   }
 

@@ -242,6 +242,18 @@ describe("reactive-dom scope: edge branches", () => {
     expect(events).toEqual(["second-registered", "first-registered"]);
   });
 
+  test("stores one disposer directly and promotes only the second registration", () => {
+    const scope = createScope();
+    const first = () => {};
+    const second = () => {};
+
+    withScope(scope, () => registerDispose(first));
+    expect(scope.disposers).toBeTypeOf("function");
+
+    withScope(scope, () => registerDispose(second));
+    expect(scope.disposers).toHaveLength(2);
+  });
+
   test("disposeScope re-throws the first error after running every disposer", () => {
     const events: string[] = [];
     const scope = createScope();
@@ -273,7 +285,7 @@ describe("reactive-dom scope: edge branches", () => {
   test("disposeScope keeps a fast path for a single registered disposer", async () => {
     const source = await readFile("packages/reactive-dom/src/scope.ts", "utf8");
 
-    expect(source).toContain("disposers.length === 1");
+    expect(source).toContain('typeof disposers === "function"');
   });
 
   test("disposeScope with no registered disposers does not allocate a disposer array", () => {

@@ -1045,7 +1045,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     );
 
     expect(source).toContain("function disposeSingleNodeRecordScope");
-    expect(source).toContain("disposers.length === 1");
+    expect(source).toContain('typeof disposers === "function"');
   });
 
   test("creates single-node records without per-record object spread", async () => {
