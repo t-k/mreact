@@ -126,7 +126,6 @@ export interface CompiledSingleNodeListIr {
   root: JsxElementIr;
   eventPrograms?: CompilerKeyedEventProgramIr[];
   ownsTextCleanup?: true;
-  rowReadMask?: number;
   selectedClass?: CompilerSelectedClassIr;
 }
 

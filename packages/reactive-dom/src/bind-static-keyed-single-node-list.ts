@@ -43,7 +43,6 @@ export interface BindCompilerKeyedSingleNodeListOptions<
 > extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
   compilerOwnsTextCleanup?: true;
-  compilerRowReadMask?: number;
   compilerSelectedClass?: {
     className: string;
     initialClassValue?: "";
@@ -102,7 +101,6 @@ const compilerRowReads = Symbol("compilerRowReads");
 const compilerRowSource = Symbol("compilerRowSource");
 const compilerRowTextSubscriptions = Symbol("compilerRowTextSubscriptions");
 const compilerRowOwnsTextCleanup = Symbol("compilerRowOwnsTextCleanup");
-const compilerRowHasStaticReads = Symbol("compilerRowHasStaticReads");
 const compilerRowEventOwner = Symbol("compilerRowEventOwner");
 const activeCompilerRowContext = Symbol("activeCompilerRowContext");
 const compilerOwnsTextCleanupRenderer = Symbol("compilerOwnsTextCleanupRenderer");
@@ -119,7 +117,6 @@ type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
     | RefreshableSubscription[]
     | undefined;
   [compilerRowOwnsTextCleanup]?: true | undefined;
-  [compilerRowHasStaticReads]?: true | undefined;
   [compilerRowEventOwner]?: object | undefined;
 };
 type CompilerKeyedRowNode = Node & {
@@ -502,23 +499,11 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     index,
     currentItems,
   ) => {
-    const staticReadMask = options.compilerRowReadMask;
-    const context =
-      staticReadMask === undefined
-        ? (Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext)
-        : ({
-            index,
-            item,
-            items: currentItems,
-            [compilerRowHasStaticReads]: true,
-            [compilerRowReads]: staticReadMask,
-          } as InternalCompilerKeyedRowContext);
-    if (staticReadMask === undefined) {
-      context[compilerRowIndex] = index;
-      context[compilerRowItem] = item;
-      context[compilerRowItems] = currentItems;
-      context[compilerRowReads] = 0;
-    }
+    const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
+    context[compilerRowIndex] = index;
+    context[compilerRowItem] = item;
+    context[compilerRowItems] = currentItems;
+    context[compilerRowReads] = 0;
     if (options.compilerOwnsTextCleanup === true) {
       context[compilerRowOwnsTextCleanup] = true;
     }
@@ -1209,32 +1194,13 @@ function updateSingleNodeRecord(
 
   if (compilerContext !== undefined) {
     const reads = compilerContext[compilerRowReads];
-    const hasStaticReads = compilerContext[compilerRowHasStaticReads] === true;
-    const currentItem = hasStaticReads ? compilerContext.item : compilerContext[compilerRowItem];
-    const currentIndex = hasStaticReads
-      ? compilerContext.index
-      : compilerContext[compilerRowIndex];
-    const currentItems = hasStaticReads
-      ? compilerContext.items
-      : compilerContext[compilerRowItems];
     const changed =
-      ((reads & 1) !== 0 && !Object.is(currentItem, nextItem)) ||
-      ((reads & 2) !== 0 && currentIndex !== nextIndex) ||
-      ((reads & 4) !== 0 && currentItems !== nextItems);
-    if (hasStaticReads) {
-      const writableContext = compilerContext as unknown as {
-        index: number;
-        item: unknown;
-        items: readonly unknown[];
-      };
-      writableContext.item = nextItem;
-      writableContext.index = nextIndex;
-      writableContext.items = nextItems;
-    } else {
-      compilerContext[compilerRowItem] = nextItem;
-      compilerContext[compilerRowIndex] = nextIndex;
-      compilerContext[compilerRowItems] = nextItems;
-    }
+      ((reads & 1) !== 0 && !Object.is(compilerContext[compilerRowItem], nextItem)) ||
+      ((reads & 2) !== 0 && compilerContext[compilerRowIndex] !== nextIndex) ||
+      ((reads & 4) !== 0 && compilerContext[compilerRowItems] !== nextItems);
+    compilerContext[compilerRowItem] = nextItem;
+    compilerContext[compilerRowIndex] = nextIndex;
+    compilerContext[compilerRowItems] = nextItems;
 
     if (changed) {
       refreshCompilerRowTextSubscriptions(compilerContext);

@@ -130,7 +130,6 @@ describe("compiler dynamic JSX transform", () => {
     );
     expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
     expect(output.code).toContain("compilerEvents:");
-    expect(output.code).not.toContain("compilerRowReadMask:");
     expect(output.code).not.toContain("markCompilerKeyedEventSlot(");
     expect(output.code).toContain("const _keyedEventSlot = Symbol();");
     expect(output.code.match(/\[_keyedEventSlot\] =/g)).toHaveLength(1);
@@ -244,30 +243,6 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain(".replaceWith(");
     expect(output.code).toMatch(/_textValue_0 = [\s\S]*row\.item[\s\S]*\.id/);
     expect(output.code).toContain('bindCompilerKeyedPropertyText(row, _text_1, "label")');
-    expect(output.code).toContain("compilerRowReadMask: 1");
-  });
-
-  test("emits a complete static compiler row read mask for stable delegated events", () => {
-    const output = transform({
-      code: `
-        export function App() {
-          const rows = cell([{ id: 1, label: "A" }]);
-          return <tbody>{rows.get().map((row, index, items) => (
-            <tr key={row.id}>
-              <td>{row.label}</td>
-              <td><button onClick={() => globalThis.__selected = [row.id, index, items.length]}>Select</button></td>
-            </tr>
-          ))}</tbody>;
-        }
-      `,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("compilerOwnsTextCleanup: true");
-    expect(output.code).toContain("compilerRowReadMask: 7");
   });
 
   test.each([
