@@ -104,37 +104,6 @@ describe("compiler runtime smoke", () => {
     expect(nextRow.querySelector(".label")?.textContent).toBe("C");
   });
 
-  test("compiler keyed sibling paths preserve mixed text and same-key updates", async () => {
-    const output = transform({
-      code: `import { cell } from "@reckona/mreact-reactive-core";
-        const rows = cell([{ id: 1, label: "A" }]);
-        export function App() {
-          return <main>
-            <button id="replace" onClick={() => rows.set([{ id: 1, label: "B" }])}>Replace</button>
-            <section>{rows.get().map((row) => (
-              <div key={row.id}>prefix<span>{row.label}</span>suffix</div>
-            ))}</section>
-          </main>;
-        }`,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      "const _text_0 = _keyedRoot.firstChild.nextSibling.firstChild;",
-    );
-    const node = (await runClientComponent(output.code)) as HTMLElement;
-    const row = node.querySelector("section div") as HTMLDivElement;
-    expect(row.textContent).toBe("prefixAsuffix");
-
-    node.querySelector<HTMLButtonElement>("#replace")?.click();
-    await flushEffects();
-    expect(node.querySelector("section div")).toBe(row);
-    expect(row.textContent).toBe("prefixBsuffix");
-  });
-
   test("compiler keyed text preserves getter dependencies across row replacement", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

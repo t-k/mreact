@@ -588,19 +588,13 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
-    const usesLiveChildPath =
+    const childPath =
       stableChildrenName === undefined ||
       (child.kind !== "component" &&
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
-        !sawStaticText);
-    const childPath = usesLiveChildPath
-      ? emitChildPath(
-          currentPath,
-          childIndex,
-          children.length,
-          state.compilerKeyedRowContext !== undefined && stableChildrenName === undefined,
-        )
+        !sawStaticText)
+        ? `${currentPath}.childNodes[${childIndex}]`
         : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
@@ -750,12 +744,7 @@ function shouldCacheCompilerKeyedElementPath(
   path: string,
   state: EmitSetupState,
 ): boolean {
-  if (
-    state.compilerKeyedRowContext === undefined ||
-    (!path.includes(".childNodes[") &&
-      !path.includes(".firstChild") &&
-      !path.includes(".lastChild"))
-  ) {
+  if (state.compilerKeyedRowContext === undefined || !path.includes(".childNodes[")) {
     return false;
   }
 
@@ -774,25 +763,6 @@ function shouldCacheCompilerKeyedElementPath(
   }
 
   return pathUses > 1;
-}
-
-function emitChildPath(
-  parentPath: string,
-  index: number,
-  childCount: number,
-  useSiblingPath: boolean,
-): string {
-  if (!useSiblingPath) {
-    return `${parentPath}.childNodes[${index}]`;
-  }
-
-  const previousSiblingCount = childCount - index - 1;
-
-  if (index <= previousSiblingCount) {
-    return `${parentPath}.firstChild${".nextSibling".repeat(index)}`;
-  }
-
-  return `${parentPath}.lastChild${".previousSibling".repeat(previousSiblingCount)}`;
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
