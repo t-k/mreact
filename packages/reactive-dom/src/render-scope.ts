@@ -22,9 +22,7 @@ export function createScopedRenderNodes(render: () => RenderValue): ScopedRender
 
   try {
     const nodes = withScope(scope, () =>
-      withCleanupScope((dispose) => {
-        registerCleanupDispose(dispose);
-      }, () => normalizeRenderValue(render())),
+      withCleanupScope(registerCleanupDispose, () => normalizeRenderValue(render())),
     );
 
     return {
@@ -43,11 +41,7 @@ export function createScopedRenderNode<TNode extends ChildNode>(
   const scope = createScope();
 
   try {
-    const node = withScope(scope, () =>
-      withCleanupScope((dispose) => {
-        registerCleanupDispose(dispose);
-      }, render),
-    );
+    const node = withScope(scope, () => withCleanupScope(registerCleanupDispose, render));
 
     return {
       dispose: hasScopeDisposers(scope) ? () => disposeScope(scope) : noopDispose,
@@ -65,11 +59,7 @@ export function createScopedRenderNodeScope<TNode extends ChildNode>(
   const scope = createScope();
 
   try {
-    const node = withScope(scope, () =>
-      withCleanupScope((dispose) => {
-        registerCleanupDispose(dispose);
-      }, render),
-    );
+    const node = withScope(scope, () => withCleanupScope(registerCleanupDispose, render));
     const result: { node: TNode; scope?: DomScope | undefined } = { node };
 
     if (hasScopeDisposers(scope)) {

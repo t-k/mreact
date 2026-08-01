@@ -1091,4 +1091,11 @@ describe("bindStaticKeyedSingleNodeList", () => {
 
     expect(helperSource).not.toContain("...");
   });
+
+  test("reuses the cleanup owner across scoped renders", async () => {
+    const source = await readFile("packages/reactive-dom/src/render-scope.ts", "utf8");
+
+    expect(source).toContain("withCleanupScope(registerCleanupDispose");
+    expect(source).not.toContain("withCleanupScope((dispose) =>");
+  });
 });
