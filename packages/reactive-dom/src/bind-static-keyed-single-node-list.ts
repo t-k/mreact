@@ -1396,9 +1396,6 @@ function refreshCompilerStaticPropertyText(
 function disposeCompilerRowTextSubscriptions(context: InternalCompilerKeyedRowContext): void {
   const subscriptions = context[compilerRowTextSubscriptions];
   context[compilerRowTextSubscriptions] = undefined;
-  context[compilerRowStaticPropertyTextNode] = undefined;
-  context[compilerRowStaticPropertyTextKey] = undefined;
-  context[compilerRowStaticPropertyTexts] = undefined;
 
   if (subscriptions === undefined) {
     return;
