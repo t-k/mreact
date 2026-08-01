@@ -6,6 +6,7 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: true,
+    minify: "esbuild",
     lib: {
       entry: "src/main.ts",
       fileName: () => "main.js",
