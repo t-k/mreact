@@ -177,8 +177,6 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
           if (attr.kind === "event") {
             if (attr.compilerKeyedSlot === undefined) {
               specifiers.add("bindEvent");
-            } else {
-              internalSpecifiers.add("markCompilerKeyedEventSlot");
             }
           }
         }
@@ -482,7 +480,7 @@ interface EmitSetupState {
   helperNames: RuntimeHelperNames;
   clientBoundaryHelperName?: string | undefined;
   debugLabel?: string | undefined;
-  compilerKeyedEventSlots?: boolean | undefined;
+  compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedRowContext?: string | undefined;
 }
 
@@ -535,10 +533,12 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       }
 
       if (attr.kind === "event") {
-        if (state.compilerKeyedEventSlots && attr.compilerKeyedSlot !== undefined) {
-          lines.push(
-            `  ${state.helperNames.markCompilerKeyedEventSlot}(${path}, "${attr.eventName}", ${attr.compilerKeyedSlot});`,
-          );
+        if (state.compilerKeyedEventSlotKeys && attr.compilerKeyedSlot !== undefined) {
+          const slotKey = state.compilerKeyedEventSlotKeys.get(attr.eventName);
+          if (slotKey === undefined) {
+            throw new Error(`Missing compiler keyed event slot for ${attr.eventName}.`);
+          }
+          lines.push(`  ${path}[${slotKey}] = ${attr.compilerKeyedSlot};`);
         } else {
           lines.push(
             `  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`,
@@ -638,6 +638,14 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     if (child.kind === "list") {
       const parameters = emitListParameters(child);
       const optionEntries: string[] = [];
+      const eventPrograms = child.compiledSingleNode?.eventPrograms;
+      const eventSlotKeys = eventPrograms?.map(() => state.allocateName("_keyedEventSlot"));
+
+      if (eventSlotKeys !== undefined) {
+        for (const slotKey of eventSlotKeys) {
+          lines.push(`  const ${slotKey} = Symbol();`);
+        }
+      }
 
       if (child.keyCode !== undefined) {
         optionEntries.push(`key: (${parameters}) => (${child.keyCode})`);
@@ -652,9 +660,9 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           `compilerSelectedClass: { className: ${JSON.stringify(child.compiledSingleNode.selectedClass.className)}, initialClassValue: "", source: ${child.compiledSingleNode.selectedClass.sourceCode} }`,
         );
       }
-      if (child.compiledSingleNode?.eventPrograms !== undefined) {
+      if (eventPrograms !== undefined && eventSlotKeys !== undefined) {
         optionEntries.push(
-          `compilerEvents: ${emitCompilerKeyedEventPrograms(child.compiledSingleNode.eventPrograms, child.itemName)}`,
+          `compilerEvents: ${emitCompilerKeyedEventPrograms(eventPrograms, child.itemName, eventSlotKeys)}`,
         );
         optionEntries.push("deferEventPromotion: false");
       }
@@ -670,7 +678,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           `  const ${templateName} = ${state.helperNames.createTemplateElement}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
         );
         lines.push(
-          `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state)}${options});`,
+          `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state, eventSlotKeys)}${options});`,
         );
       }
       childIndex += 1;
@@ -878,15 +886,25 @@ function emitCompilerKeyedSingleNodeRenderer(
   node: Extract<JsxNodeIr, { kind: "list" }>,
   templateName: string,
   state: EmitSetupState,
+  eventSlotKeys: readonly string[] | undefined,
 ): string {
   const root = node.compiledSingleNode?.root;
   if (root === undefined) {
     throw new Error("Missing compiled single-node root.");
   }
   const rootName = state.allocateName("_keyedRoot");
+  const eventPrograms = node.compiledSingleNode?.eventPrograms;
   const setup = emitSetup(root, rootName, {
     ...state,
-    compilerKeyedEventSlots: node.compiledSingleNode?.eventPrograms !== undefined,
+    compilerKeyedEventSlotKeys:
+      eventPrograms === undefined || eventSlotKeys === undefined
+        ? undefined
+        : new Map(
+            eventPrograms.map((program, index) => [
+              program.eventName,
+              eventSlotKeys[index] as string,
+            ]),
+          ),
     compilerKeyedRowContext: node.itemName,
   });
   const setupLines = setup === "" ? [] : setup.split("\n");
@@ -904,6 +922,7 @@ function emitCompilerKeyedEventPrograms(
     Extract<JsxNodeIr, { kind: "list" }>["compiledSingleNode"]
   >["eventPrograms"],
   rowName: string,
+  eventSlotKeys: readonly string[],
 ): string {
   if (programs === undefined) {
     return "[]";
@@ -911,8 +930,8 @@ function emitCompilerKeyedEventPrograms(
 
   return `[${programs
     .map(
-      (program) =>
-        `{ type: ${JSON.stringify(program.eventName)}, dispatch: (slot, ${rowName}, event, currentTarget) => { switch (slot) { ${program.handlers
+      (program, programIndex) =>
+        `{ type: ${JSON.stringify(program.eventName)}, slotKey: ${eventSlotKeys[programIndex]}, dispatch: (slot, ${rowName}, event, currentTarget) => { switch (slot) { ${program.handlers
           .map((handler, slot) => `case ${slot}: return (${handler}).call(currentTarget, event);`)
           .join(" ")} } } }`,
     )

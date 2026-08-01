@@ -119,7 +119,6 @@ describe("compiler dynamic JSX transform", () => {
         specifiers: expect.arrayContaining([
           "bindCompilerKeyedSingleNodeList",
           "bindCompilerKeyedText",
-          "markCompilerKeyedEventSlot",
         ]),
       }),
     );
@@ -131,7 +130,10 @@ describe("compiler dynamic JSX transform", () => {
     );
     expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
     expect(output.code).toContain("compilerEvents:");
-    expect(output.code).toContain("markCompilerKeyedEventSlot(");
+    expect(output.code).not.toContain("markCompilerKeyedEventSlot(");
+    expect(output.code).toContain("const _keyedEventSlot = Symbol();");
+    expect(output.code.match(/\[_keyedEventSlot\] =/g)).toHaveLength(1);
+    expect(output.code).toContain("slotKey: _keyedEventSlot");
     expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
     expect(output.code).toContain("row.item).label");
     expect(output.code).toContain("row.index)");
@@ -207,7 +209,10 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain('type: "click"');
-    expect(output.code).toContain('markCompilerKeyedEventSlot(_keyedRoot, "click", 0)');
+    expect(output.code).not.toContain("markCompilerKeyedEventSlot(");
+    expect(output.code).toContain("const _keyedEventSlot = Symbol();");
+    expect(output.code).toContain("_keyedRoot[_keyedEventSlot] = 0");
+    expect(output.code).toContain("slotKey: _keyedEventSlot");
     expect(output.code).toContain('bindEvent(_keyedRoot, "mouseenter"');
   });
 

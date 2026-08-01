@@ -13,6 +13,7 @@ export type CompilerKeyedEventDispatcher<T> = (
 /** Compiler-owned event program shared by every row in one keyed list. */
 export interface CompilerKeyedEventProgram<T> {
   type: string;
+  slotKey?: symbol;
   dispatch: CompilerKeyedEventDispatcher<T>;
 }
 
@@ -91,7 +92,7 @@ function dispatchCompilerKeyedEvent<T>(
       continue;
     }
 
-    const slot = readCompilerKeyedEventSlot(target, program.type);
+    const slot = readCompilerKeyedEventSlot(target, program);
     if (slot === undefined) {
       continue;
     }
@@ -108,11 +109,19 @@ function dispatchCompilerKeyedEvent<T>(
   }
 }
 
-function readCompilerKeyedEventSlot(element: Element, type: string): number | undefined {
+function readCompilerKeyedEventSlot<T>(
+  element: Element,
+  program: CompilerKeyedEventProgram<T>,
+): number | undefined {
+  if (program.slotKey !== undefined) {
+    const slot = (element as unknown as Record<symbol, unknown>)[program.slotKey];
+    return typeof slot === "number" ? slot : undefined;
+  }
+
   const target = element as CompilerKeyedEventElement;
-  return target[compilerKeyedEventType] === type
+  return target[compilerKeyedEventType] === program.type
     ? target[compilerKeyedEventSlot]
-    : target[compilerKeyedExtraEventSlots]?.get(type);
+    : target[compilerKeyedExtraEventSlots]?.get(program.type);
 }
 
 function findCompilerKeyedRowContext<T>(

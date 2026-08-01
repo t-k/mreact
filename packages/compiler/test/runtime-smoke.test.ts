@@ -113,7 +113,8 @@ describe("compiler runtime smoke", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("compilerEvents:");
-    expect(output.code.match(/markCompilerKeyedEventSlot\(/g)).toHaveLength(1);
+    expect(output.code).not.toContain("markCompilerKeyedEventSlot(");
+    expect(output.code.match(/\[_keyedEventSlot\] =/g)).toHaveLength(1);
     expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
     const node = await runClientComponent(output.code);
     const firstRow = (node as HTMLElement).querySelector("tbody tr") as HTMLTableRowElement;

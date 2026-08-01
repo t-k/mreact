@@ -11,6 +11,58 @@ interface Row {
 }
 
 describe("compiler keyed events", () => {
+  test("uses program-owned slots after targets move and keeps event types separate", () => {
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("");
+    parent.append(marker);
+    document.body.append(parent);
+    const clickSlot = Symbol("clickSlot");
+    const keydownSlot = Symbol("keydownSlot");
+    const calls: string[] = [];
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => [{ id: 1 }],
+      () => {
+        const tr = document.createElement("tr");
+        const before = document.createElement("td");
+        const button = document.createElement("button") as HTMLButtonElement & {
+          [clickSlot]: number;
+          [keydownSlot]: number;
+        };
+        button[clickSlot] = 0;
+        button[keydownSlot] = 1;
+        tr.append(before, button);
+        return tr;
+      },
+      {
+        key: (row) => row.id,
+        compilerEvents: [
+          {
+            type: "click",
+            slotKey: clickSlot,
+            dispatch: (slot) => calls.push(`click:${slot}`),
+          },
+          {
+            type: "keydown",
+            slotKey: keydownSlot,
+            dispatch: (slot) => calls.push(`keydown:${slot}`),
+          },
+        ],
+      },
+    );
+
+    const row = parent.querySelector("tr");
+    const button = parent.querySelector("button");
+    row?.prepend(button as HTMLButtonElement);
+    button?.click();
+    button?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true }));
+
+    expect(calls).toEqual(["click:0", "keydown:1"]);
+    dispose();
+  });
+
   test("delegates row slots through one parent listener with current row context", async () => {
     const parent = document.createElement("tbody");
     const marker = document.createComment("");
