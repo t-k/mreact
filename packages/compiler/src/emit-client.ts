@@ -526,20 +526,29 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     return lines.join("\n");
   }
 
+  const currentPath =
+    node.kind === "element" && shouldCacheCompilerKeyedElementPath(node, path, state)
+      ? state.allocateName("_keyedElement")
+      : path;
+
+  if (currentPath !== path) {
+    lines.push(`  const ${currentPath} = ${path};`);
+  }
+
   if (node.kind === "element") {
     for (const attr of node.attributes) {
       if (attr.kind === "dynamic-attr") {
         lines.push(
-          `  ${state.helperNames.bindProp}(${path}, "${attr.name}", () => (${attr.code}));`,
+          `  ${state.helperNames.bindProp}(${currentPath}, "${attr.name}", () => (${attr.code}));`,
         );
       }
 
       if (attr.kind === "dom-ref") {
-        lines.push(`  ${state.helperNames.bindDomRef}(${path}, ${attr.code});`);
+        lines.push(`  ${state.helperNames.bindDomRef}(${currentPath}, ${attr.code});`);
       }
 
       if (attr.kind === "spread-attr") {
-        lines.push(`  ${state.helperNames.bindSpreadProps}(${path}, () => (${attr.code}));`);
+        lines.push(`  ${state.helperNames.bindSpreadProps}(${currentPath}, () => (${attr.code}));`);
       }
 
       if (attr.kind === "event") {
@@ -548,10 +557,10 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           if (slotKey === undefined) {
             throw new Error(`Missing compiler keyed event slot for ${attr.eventName}.`);
           }
-          lines.push(`  ${path}[${slotKey}] = ${attr.compilerKeyedSlot};`);
+          lines.push(`  ${currentPath}[${slotKey}] = ${attr.compilerKeyedSlot};`);
         } else {
           lines.push(
-            `  ${state.helperNames.bindEvent}(${path}, "${attr.eventName}", ${attr.code});`,
+            `  ${state.helperNames.bindEvent}(${currentPath}, "${attr.eventName}", ${attr.code});`,
           );
         }
       }
@@ -565,7 +574,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   let childIndex = 0;
 
   if (stableChildrenName !== undefined) {
-    lines.push(`  const ${stableChildrenName} = Array.from(${path}.childNodes);`);
+    lines.push(`  const ${stableChildrenName} = Array.from(${currentPath}.childNodes);`);
   }
 
   let sawStaticText = false;
@@ -585,13 +594,13 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
         !sawStaticText)
-        ? `${path}.childNodes[${childIndex}]`
+        ? `${currentPath}.childNodes[${childIndex}]`
         : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
         lines.push(
-          `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => (${child.code})${emitDebugOptions(state.debugLabel)});`,
+          `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => (${child.code})${emitDebugOptions(state.debugLabel)});`,
         );
         childIndex += 1;
         continue;
@@ -655,7 +664,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
     if (child.kind === "conditional") {
       lines.push(
-        `  ${state.helperNames.insertDynamic}(${path}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDebugOptions(state.debugLabel)});`,
+          `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDebugOptions(state.debugLabel)});`,
       );
       childIndex += 1;
       continue;
@@ -699,7 +708,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       if (child.compiledSingleNode === undefined) {
         lines.push(
-          `  ${state.helperNames.bindList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
+          `  ${state.helperNames.bindList}(${currentPath}, ${childPath}, () => (${child.itemsCode}), ${emitListRenderer(child, parameters, state)}${options});`,
         );
       } else {
         const templateName = state.allocateName("_keyedTemplate");
@@ -707,7 +716,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           `  const ${templateName} = ${state.helperNames.createTemplateElement}(${JSON.stringify(renderStaticHtml(child.compiledSingleNode.root))});`,
         );
         lines.push(
-          `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${path}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state, eventSlotKeys)}${options});`,
+          `  ${state.helperNames.bindCompilerKeyedSingleNodeList}(${currentPath}, ${childPath}, () => (${child.itemsCode}), ${emitCompilerKeyedSingleNodeRenderer(child, templateName, state, eventSlotKeys)}${options});`,
         );
       }
       childIndex += 1;
@@ -728,6 +737,32 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function shouldCacheCompilerKeyedElementPath(
+  node: Extract<JsxNodeIr, { kind: "element" }>,
+  path: string,
+  state: EmitSetupState,
+): boolean {
+  if (state.compilerKeyedRowContext === undefined || !path.includes(".childNodes[")) {
+    return false;
+  }
+
+  let pathUses = 0;
+
+  for (const attr of node.attributes) {
+    if (attr.kind === "event" && attr.compilerKeyedSlot !== undefined) {
+      pathUses += 1;
+    }
+  }
+
+  for (const child of node.children) {
+    if (child.kind === "expr" && child.renderMode !== "dynamic") {
+      pathUses += 1;
+    }
+  }
+
+  return pathUses > 1;
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {

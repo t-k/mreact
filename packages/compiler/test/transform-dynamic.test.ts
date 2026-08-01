@@ -148,6 +148,30 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("bindList");
   });
 
+  test("reuses a compiler keyed event element for its direct text binding", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A" }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}>
+              <td><a onClick={() => globalThis.__selected = row.id}>{row.label}</a></td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[0\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.childNodes\[0\];/u,
+    );
+    expect(output.code.match(/_keyedRoot\.childNodes\[0\]\.childNodes\[0\]/gu)).toHaveLength(1);
+  });
+
   test("archives child nodes when static text precedes a live keyed anchor", () => {
     const output = transform({
       code: `
