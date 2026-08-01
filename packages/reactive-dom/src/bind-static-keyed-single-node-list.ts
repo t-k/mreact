@@ -602,7 +602,7 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
     activeCompilerTextContext = internalContext;
 
     try {
-      node.data = normalizeText(readCompilerRowProperty(internalContext, property));
+      node.data = normalizeText(context.item[property]);
     } finally {
       activeCompilerTextContext = previousContext;
     }
@@ -642,14 +642,6 @@ function registerCompilerStaticPropertyText(
   context[compilerRowStaticPropertyTextNode] = undefined;
   context[compilerRowStaticPropertyTextKey] = undefined;
   bindings.push(node, property);
-}
-
-function readCompilerRowProperty(
-  context: InternalCompilerKeyedRowContext,
-  property: PropertyKey,
-): unknown {
-  context[compilerRowReads] |= 1;
-  return (context[compilerRowItem] as Record<PropertyKey, unknown>)[property];
 }
 
 function registerCompilerRowTextSubscription(
@@ -1392,7 +1384,9 @@ function refreshCompilerStaticPropertyText(
     activeCompilerTextContext = context;
 
     try {
-      node.data = normalizeText(readCompilerRowProperty(context, property));
+      node.data = normalizeText(
+        (context.item as Record<PropertyKey, unknown>)[property],
+      );
     } finally {
       activeCompilerTextContext = previousContext;
     }
