@@ -8,6 +8,44 @@ import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index
 import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("renders compiler-owned rows untracked without an invocation closure", async () => {
+    const external = cell("A");
+    const items = cell([{ id: 1 }]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let renders = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      () => {
+        renders += 1;
+        const row = document.createElement("tr");
+        row.textContent = external.get();
+        return row;
+      },
+      { key: (item) => item.id, compilerOwnsTextCleanup: true },
+    );
+
+    external.set("B");
+    await flushEffects();
+    expect(renders).toBe(1);
+    expect(parent.firstElementChild?.textContent).toBe("A");
+
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    expect(source).toContain("renderCompilerOwnedSingleNodeUntracked(");
+    expect(source).not.toContain(
+      "node = deferred?.value ?? untrack(() => renderItem(item, index, items));",
+    );
+
+    dispose();
+  });
+
   test("compiler-owned text cleanup disposes subscriptions when row rendering throws", async () => {
     const external = cell("A");
     const parent = document.createElement("tbody");
