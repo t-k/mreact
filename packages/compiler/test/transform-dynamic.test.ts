@@ -146,6 +146,8 @@ describe("compiler dynamic JSX transform", () => {
       output.code.lastIndexOf("bindCompilerKeyedSingleNodeList("),
     );
     expect(output.code).not.toContain("bindList");
+    expect(output.code).toContain("const _text_0 = _keyedRoot.firstChild.firstChild;");
+    expect(output.code).toContain("_keyedRoot.lastChild.firstChild[_keyedEventSlot] = 0;");
   });
 
   test("reuses a compiler keyed event element for its direct text binding", () => {
@@ -167,9 +169,9 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[0\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.childNodes\[0\];/u,
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.firstChild\.firstChild;\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.firstChild;/u,
     );
-    expect(output.code.match(/_keyedRoot\.childNodes\[0\]\.childNodes\[0\]/gu)).toHaveLength(1);
+    expect(output.code.match(/_keyedRoot\.firstChild\.firstChild/gu)).toHaveLength(1);
   });
 
   test("archives child nodes when static text precedes a live keyed anchor", () => {
