@@ -666,6 +666,9 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         );
         optionEntries.push("deferEventPromotion: false");
       }
+      if (child.compiledSingleNode?.ownsTextCleanup === true) {
+        optionEntries.push("compilerOwnsTextCleanup: true");
+      }
 
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       if (child.compiledSingleNode === undefined) {

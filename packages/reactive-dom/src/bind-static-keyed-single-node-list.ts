@@ -42,6 +42,7 @@ export interface BindCompilerKeyedSingleNodeListOptions<
   TNode extends ChildNode = ChildNode,
 > extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
+  compilerOwnsTextCleanup?: true;
   compilerSelectedClass?: {
     className: string;
     initialClassValue?: "";
@@ -99,8 +100,11 @@ const compilerRowItems = Symbol("compilerRowItems");
 const compilerRowReads = Symbol("compilerRowReads");
 const compilerRowSource = Symbol("compilerRowSource");
 const compilerRowTextSubscriptions = Symbol("compilerRowTextSubscriptions");
+const compilerRowOwnsTextCleanup = Symbol("compilerRowOwnsTextCleanup");
 const compilerRowEventOwner = Symbol("compilerRowEventOwner");
 const activeCompilerRowContext = Symbol("activeCompilerRowContext");
+const compilerOwnsTextCleanupRenderer = Symbol("compilerOwnsTextCleanupRenderer");
+const noopCompilerTextDispose: Dispose = () => {};
 let activeCompilerTextContext: InternalCompilerKeyedRowContext | undefined;
 type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowIndex]: number;
@@ -112,10 +116,14 @@ type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
     | RefreshableSubscription
     | RefreshableSubscription[]
     | undefined;
+  [compilerRowOwnsTextCleanup]?: true | undefined;
   [compilerRowEventOwner]?: object | undefined;
 };
 type CompilerKeyedRowNode = Node & {
   [activeCompilerRowContext]?: InternalCompilerKeyedRowContext;
+};
+type InternalSingleNodeRenderer<T, TNode extends ChildNode> = SingleNodeRenderer<T, TNode> & {
+  [compilerOwnsTextCleanupRenderer]?: true | undefined;
 };
 const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
   get index(): number {
@@ -486,28 +494,43 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     markDynamicNode(marker);
   }
 
-  return bindStaticKeyedSingleNodeList(
-    parent,
-    marker,
-    items,
-    (item, index, currentItems) => {
-      const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
-      context[compilerRowIndex] = index;
-      context[compilerRowItem] = item;
-      context[compilerRowItems] = currentItems;
-      context[compilerRowReads] = 0;
-      if (compilerEventOwner !== undefined) {
-        context[compilerRowEventOwner] = compilerEventOwner;
+  const compilerRenderer: InternalSingleNodeRenderer<T, TNode> = (
+    item,
+    index,
+    currentItems,
+  ) => {
+    const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
+    context[compilerRowIndex] = index;
+    context[compilerRowItem] = item;
+    context[compilerRowItems] = currentItems;
+    context[compilerRowReads] = 0;
+    if (options.compilerOwnsTextCleanup === true) {
+      context[compilerRowOwnsTextCleanup] = true;
+    }
+    if (compilerEventOwner !== undefined) {
+      context[compilerRowEventOwner] = compilerEventOwner;
+    }
+    let node: TNode;
+    try {
+      node = renderItem(context as CompilerKeyedRowContext<T>);
+    } catch (error) {
+      if (options.compilerOwnsTextCleanup === true) {
+        disposeCompilerRowTextSubscriptions(context);
       }
-      const node = renderItem(context as CompilerKeyedRowContext<T>);
-      (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
-      if (markRecordsForHydration) {
-        markDynamicNode(node);
-      }
-      return node;
-    },
-    listOptions,
-  );
+      throw error;
+    }
+    (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
+    if (markRecordsForHydration) {
+      markDynamicNode(node);
+    }
+    return node;
+  };
+
+  if (options.compilerOwnsTextCleanup === true) {
+    compilerRenderer[compilerOwnsTextCleanupRenderer] = true;
+  }
+
+  return bindStaticKeyedSingleNodeList(parent, marker, items, compilerRenderer, listOptions);
 }
 
 function ensureCompilerRowSource(context: InternalCompilerKeyedRowContext): Source {
@@ -548,6 +571,10 @@ export function bindCompilerKeyedText<T>(
     subscriptions.push(subscription);
   } else {
     internalContext[compilerRowTextSubscriptions] = [subscriptions, subscription];
+  }
+
+  if (internalContext[compilerRowOwnsTextCleanup] === true) {
+    return noopCompilerTextDispose;
   }
 
   return registerIdempotentDispose(() => subscription.dispose());
@@ -685,23 +712,43 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): SingleNodeRecord {
-  const deferred =
-    deferEventPromotion && parent.isConnected === true
-      ? untrack(() =>
-          withDeferredDelegatedEventPromotions(() =>
-            createScopedRenderNodeScope(() => renderItem(item, index, items)),
-          ),
-        )
-      : undefined;
-  const scoped =
-    deferred?.value ??
-    untrack(() => createScopedRenderNodeScope(() => renderItem(item, index, items)));
+  const compilerOwnsTextCleanup =
+    (renderItem as InternalSingleNodeRenderer<T, TNode>)[compilerOwnsTextCleanupRenderer] === true;
+  let node: TNode;
+  let scope: DomScope | undefined;
+  let promoteEvents: (() => void) | undefined;
+
+  if (compilerOwnsTextCleanup) {
+    const deferred =
+      deferEventPromotion && parent.isConnected === true
+        ? untrack(() =>
+            withDeferredDelegatedEventPromotions(() => renderItem(item, index, items)),
+          )
+        : undefined;
+    node = deferred?.value ?? untrack(() => renderItem(item, index, items));
+    promoteEvents = deferred?.promote;
+  } else {
+    const deferred =
+      deferEventPromotion && parent.isConnected === true
+        ? untrack(() =>
+            withDeferredDelegatedEventPromotions(() =>
+              createScopedRenderNodeScope(() => renderItem(item, index, items)),
+            ),
+          )
+        : undefined;
+    const scoped =
+      deferred?.value ??
+      untrack(() => createScopedRenderNodeScope(() => renderItem(item, index, items)));
+    node = scoped.node;
+    scope = scoped.scope;
+    promoteEvents = deferred?.promote;
+  }
 
   const record: SingleNodeRecord & { promoteEvents?: () => void } = {
     key,
-    node: scoped.node,
+    node,
   };
-  const compilerContext = (scoped.node as CompilerKeyedRowNode)[activeCompilerRowContext];
+  const compilerContext = (node as CompilerKeyedRowNode)[activeCompilerRowContext];
 
   if (compilerContext !== undefined) {
     record.compilerContext = compilerContext;
@@ -715,12 +762,12 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
     }
   }
 
-  if (scoped.scope !== undefined) {
-    record.scope = scoped.scope;
+  if (scope !== undefined) {
+    record.scope = scope;
   }
 
-  if (deferred?.promote !== undefined) {
-    record.promoteEvents = deferred.promote;
+  if (promoteEvents !== undefined) {
+    record.promoteEvents = promoteEvents;
   }
 
   registerSelectedClassRecord(selectedClassState, record, item, index, items);
@@ -1168,6 +1215,33 @@ function refreshCompilerRowTextSubscriptions(context: InternalCompilerKeyedRowCo
   }
 }
 
+function disposeCompilerRowTextSubscriptions(context: InternalCompilerKeyedRowContext): void {
+  const subscriptions = context[compilerRowTextSubscriptions];
+  context[compilerRowTextSubscriptions] = undefined;
+
+  if (subscriptions === undefined) {
+    return;
+  }
+
+  if (!Array.isArray(subscriptions)) {
+    subscriptions.dispose();
+    return;
+  }
+
+  let firstError: unknown;
+  for (let index = subscriptions.length - 1; index >= 0; index -= 1) {
+    try {
+      subscriptions[index]!.dispose();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+
+  if (firstError !== undefined) {
+    throw firstError;
+  }
+}
+
 function isObjectLike(value: unknown): value is object {
   return typeof value === "object" && value !== null;
 }
@@ -1533,11 +1607,7 @@ function removeRecordNodes(
   const removeRecords = () => {
     for (const record of records) {
       try {
-        const scope = record.scope;
-        if (scope !== undefined) {
-          record.scope = undefined;
-          disposeSingleNodeRecordScope(scope);
-        }
+        disposeSingleNodeRecord(record);
       } catch (error) {
         firstError ??= error;
       }
@@ -1565,11 +1635,7 @@ function disposeRecordValues(
   const disposeRecordScopes = () => {
     for (const record of records) {
       try {
-        const scope = record.scope;
-        if (scope !== undefined) {
-          record.scope = undefined;
-          disposeSingleNodeRecordScope(scope);
-        }
+        disposeSingleNodeRecord(record);
       } catch (error) {
         firstError ??= error;
       }
@@ -1592,29 +1658,44 @@ function disposeRecords(
   if (batchDelegatedRootReleases) {
     withBatchedDelegatedRootReleases(() => {
       for (const record of records) {
-        const scope = record.scope;
-        if (scope !== undefined) {
-          record.scope = undefined;
-          disposeSingleNodeRecordScope(scope);
-        }
+        disposeSingleNodeRecord(record);
       }
     });
     return;
   }
 
   for (const record of records) {
-    const scope = record.scope;
-    if (scope !== undefined) {
-      record.scope = undefined;
-      disposeSingleNodeRecordScope(scope);
-    }
+    disposeSingleNodeRecord(record);
   }
 }
 
 function disposeSingleNodeRecord(record: SingleNodeRecord | undefined): void {
-  if (record?.scope !== undefined) {
-    disposeSingleNodeRecordScope(record.scope);
+  if (record === undefined) {
+    return;
+  }
+
+  let firstError: unknown;
+  const compilerContext = record.compilerContext;
+  if (compilerContext?.[compilerRowOwnsTextCleanup] === true) {
+    try {
+      disposeCompilerRowTextSubscriptions(compilerContext);
+    } catch (error) {
+      firstError = error;
+    }
+  }
+
+  const scope = record.scope;
+  if (scope !== undefined) {
     record.scope = undefined;
+    try {
+      disposeSingleNodeRecordScope(scope);
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+
+  if (firstError !== undefined) {
+    throw firstError;
   }
 }
 

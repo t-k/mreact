@@ -5,9 +5,39 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
-import { bindCompilerKeyedSingleNodeList } from "../src/internal.js";
+import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("compiler-owned text cleanup disposes subscriptions when row rendering throws", async () => {
+    const external = cell("A");
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let reads = 0;
+    parent.append(marker);
+
+    expect(() =>
+      bindCompilerKeyedSingleNodeList(
+        parent,
+        marker,
+        () => [{ id: 1 }],
+        (context) => {
+          const text = document.createTextNode("");
+          bindCompilerKeyedText(context, text, () => {
+            reads += 1;
+            return external.get();
+          });
+          throw new Error("render failed");
+        },
+        { key: (item) => item.id, compilerOwnsTextCleanup: true },
+      ),
+    ).toThrow("render failed");
+    expect(reads).toBe(1);
+    external.set("B");
+    await flushEffects();
+    expect(reads).toBe(1);
+    expect(parent.innerHTML).toBe("<!--rows-->");
+  });
+
   test("keeps compiler keyed records live after dynamic-range hydration adopts them", async () => {
     type Item = { readonly id: number; readonly label: string };
     type DynamicNode = Node & {

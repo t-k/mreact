@@ -749,12 +749,42 @@ function analyzeCompiledSingleNodeList(
     markCompilerKeyedInitialText(sourceRoot, root, keyCode);
   }
   markCompilerKeyedText(sourceRoot, root, keyCode, itemName);
+  const ownsTextCleanup = compilerOwnsSingleNodeTextCleanup(root);
 
   return {
     root,
     ...(eventPrograms === undefined ? {} : { eventPrograms }),
+    ...(ownsTextCleanup ? { ownsTextCleanup: true as const } : {}),
     ...(selectedClass === undefined ? {} : { selectedClass }),
   };
+}
+
+function compilerOwnsSingleNodeTextCleanup(node: JsxNodeIr): boolean {
+  if (node.kind === "text") {
+    return true;
+  }
+
+  if (node.kind === "expr") {
+    return (
+      node.renderMode === "compiler-keyed-initial-text" ||
+      node.renderMode === "compiler-keyed-text"
+    );
+  }
+
+  if (node.kind !== "element") {
+    return false;
+  }
+
+  for (const attribute of node.attributes) {
+    if (
+      attribute.kind !== "static-attr" &&
+      (attribute.kind !== "event" || attribute.compilerKeyedSlot === undefined)
+    ) {
+      return false;
+    }
+  }
+
+  return node.children.every(compilerOwnsSingleNodeTextCleanup);
 }
 
 function markCompilerKeyedText(

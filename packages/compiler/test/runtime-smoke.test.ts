@@ -30,6 +30,7 @@ describe("compiler runtime smoke", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("bindText(");
     expect(output.code.match(/\bbindCompilerKeyedText\(/g)).toHaveLength(1);
+    expect(output.code).toContain("compilerOwnsTextCleanup: true");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const firstRow = node.querySelector("tbody tr") as HTMLTableRowElement;
 
@@ -63,6 +64,7 @@ describe("compiler runtime smoke", () => {
         export function App() {
           return <main>
             <button id="replace" onClick={() => rows.set([reactive])}>Replace</button>
+            <button id="clear" onClick={() => rows.set([])}>Clear</button>
             <button id="suffix" onClick={() => suffix.set("?")}>Suffix</button>
             <table><tbody>{rows.get().map((row) => (
               <tr key={row.id}><td class="label">{row.label}</td></tr>
@@ -76,6 +78,7 @@ describe("compiler runtime smoke", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("bindCompilerKeyedText(");
+    expect(output.code).toContain("compilerOwnsTextCleanup: true");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const row = node.querySelector("tbody tr");
 
@@ -85,6 +88,12 @@ describe("compiler runtime smoke", () => {
     expect(node.querySelector("tbody tr")).toBe(row);
     expect(row?.textContent).toBe("getter!");
 
+    node.querySelector<HTMLButtonElement>("#suffix")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("getter?");
+
+    node.querySelector<HTMLButtonElement>("#clear")?.click();
+    await flushEffects();
     node.querySelector<HTMLButtonElement>("#suffix")?.click();
     await flushEffects();
     expect(row?.textContent).toBe("getter?");
@@ -113,6 +122,7 @@ describe("compiler runtime smoke", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("compilerEvents:");
+    expect(output.code).not.toContain("compilerOwnsTextCleanup: true");
     expect(output.code).not.toContain("markCompilerKeyedEventSlot(");
     expect(output.code.match(/\[_keyedEventSlot\] =/g)).toHaveLength(1);
     expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
@@ -1558,7 +1568,9 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("{ key: (item) => (item.id) }");
+    expect(output.code).toContain(
+      "{ key: (item) => (item.id), compilerOwnsTextCleanup: true }",
+    );
 
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe("<ul><li>A</li><!----></ul>");
