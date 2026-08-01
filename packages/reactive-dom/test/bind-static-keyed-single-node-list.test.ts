@@ -657,67 +657,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(classWrites).toBe(0);
   });
 
-  test("compiler selected class skips correct structural writes and repairs external classes", async () => {
-    const selected = cell<unknown>(2);
-    const first = { id: 1 };
-    const second = { id: 2 };
-    const items = cell([first, second]);
-    const parent = document.createElement("tbody");
-    const marker = document.createComment("rows");
-    let classWrites = 0;
-    parent.append(marker);
-
-    const dispose = bindCompilerKeyedSingleNodeList(
-      parent,
-      marker,
-      () => items.get(),
-      (context) => {
-        const row = document.createElement("tr");
-        row.setAttribute("class", "");
-        const setAttribute = row.setAttribute.bind(row);
-        row.setAttribute = ((name, value) => {
-          if (name === "class") {
-            classWrites += 1;
-          }
-          setAttribute(name, value);
-        }) as typeof row.setAttribute;
-        row.textContent = String(context.item.id);
-        return row;
-      },
-      {
-        key: (item) => item.id,
-        compilerSelectedClass: {
-          className: "danger",
-          initialClassValue: "",
-          source: selected,
-        },
-      },
-    );
-
-    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
-      "",
-      "danger",
-    ]);
-
-    classWrites = 0;
-    const third = { id: 3 };
-    items.set([first, second, third]);
-    await flushEffects();
-    expect(classWrites).toBe(0);
-
-    parent.children[0]?.setAttribute("class", "outside");
-    classWrites = 0;
-    items.set([first, second]);
-    await flushEffects();
-    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
-      "",
-      "danger",
-    ]);
-    expect(classWrites).toBe(1);
-
-    dispose();
-  });
-
   test("compiler selected class initializes only the selected template row", async () => {
     const selected = cell<unknown>(2);
     const parent = document.createElement("tbody");

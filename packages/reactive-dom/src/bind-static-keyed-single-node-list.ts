@@ -1704,10 +1704,7 @@ function createSelectedClassState<T, TNode extends ChildNode>(
     skipInitialUnselectedWrite: compilerMode && options.initialClassValue === "",
     write: compilerMode
       ? (element, selected) => {
-          const className = selected ? options.className : "";
-          if (element.getAttribute("class") !== className) {
-            element.setAttribute("class", className);
-          }
+          element.setAttribute("class", selected ? options.className : "");
         }
       : (element, selected) => {
           if (selected) {
