@@ -227,9 +227,7 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     expect(main).toContain('class="table table-hover table-striped test-data"');
     expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
     expect(main).toContain('aria-hidden="true"');
-    expect(main).toContain("readonly label: Cell<string>;");
-    expect(main).toContain("current[index]?.label.set((label) => `${label} !!!`);");
-    expect(main).toContain("{row.label.get()}");
+    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
   });
 });
 
