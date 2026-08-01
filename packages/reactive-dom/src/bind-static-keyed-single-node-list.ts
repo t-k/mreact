@@ -44,6 +44,7 @@ export interface BindCompilerKeyedSingleNodeListOptions<
 > extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
   compilerOwnsTextCleanup?: true;
+  compilerRowReadMask?: number;
   compilerSelectedClass?: {
     className: string;
     initialClassValue?: "";
@@ -148,6 +149,23 @@ const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
   get items(): readonly unknown[] {
     const context = this as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 4;
+    trackCompilerRowContext(context);
+    return context[compilerRowItems];
+  },
+};
+const compilerStaticRowContextPrototype: CompilerKeyedRowContext<unknown> = {
+  get index(): number {
+    const context = this as InternalCompilerKeyedRowContext;
+    trackCompilerRowContext(context);
+    return context[compilerRowIndex];
+  },
+  get item(): unknown {
+    const context = this as InternalCompilerKeyedRowContext;
+    trackCompilerRowContext(context);
+    return context[compilerRowItem];
+  },
+  get items(): readonly unknown[] {
+    const context = this as InternalCompilerKeyedRowContext;
     trackCompilerRowContext(context);
     return context[compilerRowItems];
   },
@@ -484,6 +502,11 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
   const markRecordsForHydration = isDynamicHydrationEnabled();
   const compilerSelectedClass = options.compilerSelectedClass;
   const compilerEventOwner = options.compilerEvents === undefined ? undefined : {};
+  const initialCompilerRowReads = options.compilerRowReadMask;
+  const rowContextPrototype =
+    initialCompilerRowReads === undefined
+      ? compilerRowContextPrototype
+      : compilerStaticRowContextPrototype;
   const listOptions: InternalStaticKeyedSingleNodeListOptions<T, TNode> = {
     ...options,
     ...(compilerEventOwner === undefined ? {} : { compilerEventOwner }),
@@ -506,11 +529,11 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     index,
     currentItems,
   ) => {
-    const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
+    const context = Object.create(rowContextPrototype) as InternalCompilerKeyedRowContext;
     context[compilerRowIndex] = index;
     context[compilerRowItem] = item;
     context[compilerRowItems] = currentItems;
-    context[compilerRowReads] = 0;
+    context[compilerRowReads] = initialCompilerRowReads ?? 0;
     if (options.compilerOwnsTextCleanup === true) {
       context[compilerRowOwnsTextCleanup] = true;
     }

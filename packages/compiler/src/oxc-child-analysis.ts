@@ -751,13 +751,32 @@ function analyzeCompiledSingleNodeList(
   markCompilerKeyedCellText(sourceRoot, root, itemName);
   markCompilerKeyedText(sourceRoot, root, keyCode, itemName);
   const ownsTextCleanup = compilerOwnsSingleNodeTextCleanup(root);
+  const rowReadMask = ownsTextCleanup ? compilerSingleNodeRowReadMask(root, itemName) : undefined;
 
   return {
     root,
     ...(eventPrograms === undefined ? {} : { eventPrograms }),
     ...(ownsTextCleanup ? { ownsTextCleanup: true as const } : {}),
+    ...(rowReadMask === undefined ? {} : { rowReadMask }),
     ...(selectedClass === undefined ? {} : { selectedClass }),
   };
+}
+
+function compilerSingleNodeRowReadMask(root: JsxElementIr, itemName: string): number {
+  const serializedRoot = JSON.stringify(root);
+  let mask = 0;
+
+  if (serializedRoot.includes(`${itemName}.item`)) {
+    mask |= 1;
+  }
+  if (serializedRoot.includes(`${itemName}.index`)) {
+    mask |= 2;
+  }
+  if (serializedRoot.includes(`${itemName}.items`)) {
+    mask |= 4;
+  }
+
+  return mask;
 }
 
 function compilerOwnsSingleNodeTextCleanup(node: JsxNodeIr): boolean {

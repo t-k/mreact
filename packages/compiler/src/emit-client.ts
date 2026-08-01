@@ -704,6 +704,9 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       if (child.compiledSingleNode?.ownsTextCleanup === true) {
         optionEntries.push("compilerOwnsTextCleanup: true");
       }
+      if (child.compiledSingleNode?.rowReadMask !== undefined) {
+        optionEntries.push(`compilerRowReadMask: ${child.compiledSingleNode.rowReadMask}`);
+      }
 
       const options = optionEntries.length === 0 ? "" : `, { ${optionEntries.join(", ")} }`;
       if (child.compiledSingleNode === undefined) {
