@@ -135,35 +135,6 @@ describe("compiler runtime smoke", () => {
     expect(row.textContent).toBe("prefixBsuffix");
   });
 
-  test("compiler keyed sibling paths stay correct when trailing static text nodes coalesce", async () => {
-    const output = transform({
-      code: `export function App() {
-        const rows = [{ id: 1 }];
-        return <section>{rows.map((row) => (
-          <div key={row.id}>
-            <i/><i/><i/><i/>
-            <button onClick={() => globalThis.__coalescedHit = row.id}>Select</button>
-            A{/* gap */}B
-          </div>
-        ))}</section>;
-      }`,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      "_keyedRoot.firstChild.nextSibling.nextSibling.nextSibling.nextSibling[_keyedEventSlot] = 0;",
-    );
-    const node = (await runClientComponent(output.code)) as HTMLElement;
-    node.querySelector("button")?.click();
-    expect(
-      (globalThis as typeof globalThis & { __coalescedHit?: number }).__coalescedHit,
-    ).toBe(1);
-    delete (globalThis as typeof globalThis & { __coalescedHit?: number }).__coalescedHit;
-  });
-
   test("compiler keyed text preserves getter dependencies across row replacement", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

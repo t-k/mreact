@@ -147,9 +147,7 @@ describe("compiler dynamic JSX transform", () => {
     );
     expect(output.code).not.toContain("bindList");
     expect(output.code).toContain("const _text_0 = _keyedRoot.firstChild.firstChild;");
-    expect(output.code).toContain(
-      "_keyedRoot.firstChild.nextSibling.firstChild[_keyedEventSlot] = 0;",
-    );
+    expect(output.code).toContain("_keyedRoot.lastChild.firstChild[_keyedEventSlot] = 0;");
   });
 
   test("reuses a compiler keyed event element for its direct text binding", () => {
