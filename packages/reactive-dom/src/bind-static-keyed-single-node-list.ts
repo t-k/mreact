@@ -842,9 +842,7 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
             withDeferredDelegatedEventPromotions(() => renderItem(item, index, items)),
           )
         : undefined;
-    node =
-      deferred?.value ??
-      renderCompilerOwnedSingleNodeUntracked(renderItem, item, index, items);
+    node = deferred?.value ?? untrack(() => renderItem(item, index, items));
     promoteEvents = deferred?.promote;
   } else {
     const deferred =
@@ -891,22 +889,6 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
 
   registerSelectedClassRecord(selectedClassState, record, item, index, items);
   return record;
-}
-
-function renderCompilerOwnedSingleNodeUntracked<T, TNode extends ChildNode>(
-  renderItem: SingleNodeRenderer<T, TNode>,
-  item: T,
-  index: number,
-  items: readonly T[],
-): TNode {
-  const previousTracker = runtimeState.activeTracker;
-  runtimeState.activeTracker = null;
-
-  try {
-    return renderItem(item, index, items);
-  } finally {
-    runtimeState.activeTracker = previousTracker;
-  }
 }
 
 function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
