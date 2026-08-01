@@ -57,6 +57,7 @@ type RuntimeHelperName =
   | "createTemplateElement"
   | "insertDynamic"
   | "bindCompilerKeyedSingleNodeList"
+  | "bindCompilerKeyedPropertyText"
   | "bindCompilerKeyedText"
   | "markCompilerKeyedEventSlot";
 
@@ -88,6 +89,7 @@ function allocateRuntimeHelperNames(
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
+    bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
     bindCompilerKeyedText: "bindCompilerKeyedText",
     markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
   };
@@ -141,7 +143,11 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
         if (node.renderMode === "dynamic") {
           specifiers.add("insertDynamic");
         } else if (node.renderMode === "compiler-keyed-text") {
-          internalSpecifiers.add("bindCompilerKeyedText");
+          internalSpecifiers.add(
+            node.compilerKeyedProperty === undefined
+              ? "bindCompilerKeyedText"
+              : "bindCompilerKeyedPropertyText",
+          );
         } else if (node.renderMode !== "compiler-keyed-initial-text") {
           specifiers.add("bindText");
         }
@@ -617,9 +623,15 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         if (state.compilerKeyedRowContext === undefined) {
           throw new Error("Missing compiler keyed row context for optimized text.");
         }
-        lines.push(
-          `  ${state.helperNames.bindCompilerKeyedText}(${state.compilerKeyedRowContext}, ${textVar}, () => (${child.code}));`,
-        );
+        if (child.compilerKeyedProperty === undefined) {
+          lines.push(
+            `  ${state.helperNames.bindCompilerKeyedText}(${state.compilerKeyedRowContext}, ${textVar}, () => (${child.code}));`,
+          );
+        } else {
+          lines.push(
+            `  ${state.helperNames.bindCompilerKeyedPropertyText}(${state.compilerKeyedRowContext}, ${textVar}, ${JSON.stringify(child.compilerKeyedProperty)});`,
+          );
+        }
       } else if (child.renderMode !== "compiler-keyed-initial-text") {
         lines.push(`  ${state.helperNames.bindText}(${textVar}, () => (${child.code}));`);
       }

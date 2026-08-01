@@ -1,5 +1,6 @@
 export { bindCapturedEvent } from "./bind-event.js";
 export {
+  bindCompilerKeyedPropertyText,
   bindCompilerKeyedSingleNodeList,
   bindCompilerKeyedText,
 } from "./bind-static-keyed-single-node-list.js";

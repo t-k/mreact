@@ -118,7 +118,7 @@ describe("compiler dynamic JSX transform", () => {
         source: "@reckona/mreact-reactive-dom/internal",
         specifiers: expect.arrayContaining([
           "bindCompilerKeyedSingleNodeList",
-          "bindCompilerKeyedText",
+          "bindCompilerKeyedPropertyText",
         ]),
       }),
     );
@@ -135,7 +135,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code.match(/\[_keyedEventSlot\] =/g)).toHaveLength(1);
     expect(output.code).toContain("slotKey: _keyedEventSlot");
     expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
-    expect(output.code).toContain("row.item).label");
+    expect(output.code).toContain('bindCompilerKeyedPropertyText(row, _text_0, "label")');
     expect(output.code).toContain("row.index)");
     expect(output.code).toContain("row.items).length");
     expect(output.code).toContain('const _keyedTemplate = createTemplateElement("<tr');
@@ -236,12 +236,13 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("bindText(");
-    expect(output.code.match(/\bbindCompilerKeyedText\(/g)).toHaveLength(1);
+    expect(output.code.match(/\bbindCompilerKeyedPropertyText\(/g)).toHaveLength(1);
+    expect(output.code).not.toContain("() => ((row.item).label)");
     expect(output.code).toContain('createTemplateElement("<tr><td> </td><td> </td></tr>")');
     expect(output.code).not.toContain("document.createTextNode");
     expect(output.code).not.toContain(".replaceWith(");
-    expect(output.code).toMatch(/_text_0\.data = [\s\S]*row\.item[\s\S]*\.id/);
-    expect(output.code).toContain("row.item).label");
+    expect(output.code).toMatch(/_textValue_0 = [\s\S]*row\.item[\s\S]*\.id/);
+    expect(output.code).toContain('bindCompilerKeyedPropertyText(row, _text_1, "label")');
   });
 
   test.each([

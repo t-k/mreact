@@ -29,7 +29,8 @@ describe("compiler runtime smoke", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).not.toContain("bindText(");
-    expect(output.code.match(/\bbindCompilerKeyedText\(/g)).toHaveLength(1);
+    expect(output.code.match(/\bbindCompilerKeyedPropertyText\(/g)).toHaveLength(1);
+    expect(output.code).not.toContain("() => ((item.item).label)");
     expect(output.code).toContain("compilerOwnsTextCleanup: true");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const firstRow = node.querySelector("tbody tr") as HTMLTableRowElement;
@@ -77,7 +78,7 @@ describe("compiler runtime smoke", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("bindCompilerKeyedText(");
+    expect(output.code).toContain("bindCompilerKeyedPropertyText(");
     expect(output.code).toContain("compilerOwnsTextCleanup: true");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const row = node.querySelector("tbody tr");

@@ -799,8 +799,11 @@ function markCompilerKeyedText(
       sourceNode.code.startsWith(`${itemName}.`) &&
       /^[A-Za-z_$][\w$]*$/.test(sourceNode.code.slice(itemName.length + 1))
     ) {
+      const property = sourceNode.code.slice(itemName.length + 1);
       sourceNode.renderMode = "compiler-keyed-text";
+      sourceNode.compilerKeyedProperty = property;
       compiledNode.renderMode = "compiler-keyed-text";
+      compiledNode.compilerKeyedProperty = property;
     }
     return;
   }

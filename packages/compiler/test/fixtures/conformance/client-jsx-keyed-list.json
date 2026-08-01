@@ -11,7 +11,7 @@
       },
       {
         "source": "@reckona/mreact-reactive-dom/internal",
-        "specifiers": ["bindCompilerKeyedSingleNodeList", "bindCompilerKeyedText"]
+        "specifiers": ["bindCompilerKeyedPropertyText", "bindCompilerKeyedSingleNodeList"]
       }
     ],
     "client": {
