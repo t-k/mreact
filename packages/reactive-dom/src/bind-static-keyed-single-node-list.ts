@@ -1,8 +1,11 @@
 import { effect, untrack, type ReadonlyCell } from "@reckona/mreact-reactive-core";
 import {
   notifySubscribers,
+  runtimeState,
   subscribeCell,
+  subscribeRefreshable,
   trackSource,
+  type RefreshableSubscription,
   type Source,
 } from "@reckona/mreact-reactive-core/internal";
 import {
@@ -15,8 +18,8 @@ import {
 } from "./compiler-keyed-events.js";
 import { isDynamicHydrationEnabled, markDynamicNode } from "./dynamic-node.js";
 import { createScopedRenderNodeScope } from "./render-scope.js";
-import { bindTextWithAdaptiveSource } from "./bind-text.js";
-import { registerDispose } from "./scope.js";
+import { normalizeText } from "./bind-text.js";
+import { registerDispose, registerIdempotentDispose } from "./scope.js";
 import type { DomScope } from "./scope.js";
 import type { Dispose } from "./types.js";
 
@@ -95,14 +98,20 @@ const compilerRowItem = Symbol("compilerRowItem");
 const compilerRowItems = Symbol("compilerRowItems");
 const compilerRowReads = Symbol("compilerRowReads");
 const compilerRowSource = Symbol("compilerRowSource");
+const compilerRowTextSubscriptions = Symbol("compilerRowTextSubscriptions");
 const compilerRowEventOwner = Symbol("compilerRowEventOwner");
 const activeCompilerRowContext = Symbol("activeCompilerRowContext");
+let activeCompilerTextContext: InternalCompilerKeyedRowContext | undefined;
 type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowIndex]: number;
   [compilerRowItem]: unknown;
   [compilerRowItems]: readonly unknown[];
   [compilerRowReads]: number;
   [compilerRowSource]?: Source | undefined;
+  [compilerRowTextSubscriptions]?:
+    | RefreshableSubscription
+    | RefreshableSubscription[]
+    | undefined;
   [compilerRowEventOwner]?: object | undefined;
 };
 type CompilerKeyedRowNode = Node & {
@@ -112,19 +121,19 @@ const compilerRowContextPrototype: CompilerKeyedRowContext<unknown> = {
   get index(): number {
     const context = this as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 2;
-    trackSource(ensureCompilerRowSource(context));
+    trackCompilerRowContext(context);
     return context[compilerRowIndex];
   },
   get item(): unknown {
     const context = this as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 1;
-    trackSource(ensureCompilerRowSource(context));
+    trackCompilerRowContext(context);
     return context[compilerRowItem];
   },
   get items(): readonly unknown[] {
     const context = this as InternalCompilerKeyedRowContext;
     context[compilerRowReads] |= 4;
-    trackSource(ensureCompilerRowSource(context));
+    trackCompilerRowContext(context);
     return context[compilerRowItems];
   },
 };
@@ -505,6 +514,12 @@ function ensureCompilerRowSource(context: InternalCompilerKeyedRowContext): Sour
   return (context[compilerRowSource] ??= { subscribers: null });
 }
 
+function trackCompilerRowContext(context: InternalCompilerKeyedRowContext): void {
+  if (activeCompilerTextContext !== context && runtimeState.activeTracker !== null) {
+    trackSource(ensureCompilerRowSource(context));
+  }
+}
+
 /** Internal text binding used only by compiler-generated keyed row renderers. */
 export function bindCompilerKeyedText<T>(
   context: CompilerKeyedRowContext<T>,
@@ -512,7 +527,30 @@ export function bindCompilerKeyedText<T>(
   readValue: () => unknown,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
-  return bindTextWithAdaptiveSource(node, ensureCompilerRowSource(internalContext), readValue);
+  const reactiveText = node as Text & { __mreactReactiveText?: true };
+  reactiveText.__mreactReactiveText = true;
+
+  const subscription = subscribeRefreshable(() => {
+    const previousContext = activeCompilerTextContext;
+    activeCompilerTextContext = internalContext;
+
+    try {
+      node.data = normalizeText(readValue());
+    } finally {
+      activeCompilerTextContext = previousContext;
+    }
+  });
+  const subscriptions = internalContext[compilerRowTextSubscriptions];
+
+  if (subscriptions === undefined) {
+    internalContext[compilerRowTextSubscriptions] = subscription;
+  } else if (Array.isArray(subscriptions)) {
+    subscriptions.push(subscription);
+  } else {
+    internalContext[compilerRowTextSubscriptions] = [subscriptions, subscription];
+  }
+
+  return registerIdempotentDispose(() => subscription.dispose());
 }
 
 function uniqueSingleNodeKeyedItems<T>(
@@ -1089,6 +1127,10 @@ function updateSingleNodeRecord(
     compilerContext[compilerRowIndex] = nextIndex;
     compilerContext[compilerRowItems] = nextItems;
 
+    if (changed) {
+      refreshCompilerRowTextSubscriptions(compilerContext);
+    }
+
     const source = compilerContext[compilerRowSource];
     if (changed && source !== undefined && source.subscribers !== null) {
       notifySubscribers(source);
@@ -1116,6 +1158,23 @@ function updateSingleNodeRecord(
     record.currentItems = nextItems;
   }
   return true;
+}
+
+function refreshCompilerRowTextSubscriptions(context: InternalCompilerKeyedRowContext): void {
+  const subscriptions = context[compilerRowTextSubscriptions];
+
+  if (subscriptions === undefined) {
+    return;
+  }
+
+  if (!Array.isArray(subscriptions)) {
+    subscriptions.refresh();
+    return;
+  }
+
+  for (let index = 0; index < subscriptions.length; index += 1) {
+    subscriptions[index]!.refresh();
+  }
 }
 
 function isObjectLike(value: unknown): value is object {

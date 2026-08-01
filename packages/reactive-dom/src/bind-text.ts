@@ -22,7 +22,8 @@ function writeTextBatch(nodes: readonly Text[], text: string): void {
   }
 }
 
-function normalizeText(value: unknown): string {
+/** @internal Normalizes a dynamic text value for a DOM Text node. */
+export function normalizeText(value: unknown): string {
   if (typeof value === "string") {
     return value;
   }
