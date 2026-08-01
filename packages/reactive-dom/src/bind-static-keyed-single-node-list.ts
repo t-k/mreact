@@ -589,16 +589,10 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
   const internalContext = context as InternalCompilerKeyedRowContext;
   const reactiveText = node as Text & { __mreactReactiveText?: true };
   reactiveText.__mreactReactiveText = true;
+  internalContext[compilerRowReads] |= 1;
 
   const subscription = subscribeRefreshable(() => {
-    const previousContext = activeCompilerTextContext;
-    activeCompilerTextContext = internalContext;
-
-    try {
-      node.data = normalizeText(context.item[property]);
-    } finally {
-      activeCompilerTextContext = previousContext;
-    }
+    node.data = normalizeText((internalContext[compilerRowItem] as T)[property]);
   });
   const subscriptions = internalContext[compilerRowTextSubscriptions];
 
