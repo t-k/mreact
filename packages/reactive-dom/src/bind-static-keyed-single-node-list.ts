@@ -4,7 +4,7 @@ import {
   runtimeState,
   subscribeCell,
   subscribeRefreshable,
-  subscribeRefreshableIfTracked,
+  subscribeRefreshableValueIfTracked,
   trackSource,
   type RefreshableSubscription,
   type Source,
@@ -104,6 +104,8 @@ const compilerRowTextSubscriptions = Symbol("compilerRowTextSubscriptions");
 const compilerRowStaticPropertyTextNode = Symbol("compilerRowStaticPropertyTextNode");
 const compilerRowStaticPropertyTextKey = Symbol("compilerRowStaticPropertyTextKey");
 const compilerRowStaticPropertyTexts = Symbol("compilerRowStaticPropertyTexts");
+const compilerStaticPropertyTextContext = Symbol("compilerStaticPropertyTextContext");
+const compilerStaticPropertyTextKey = Symbol("compilerStaticPropertyTextKey");
 const compilerRowOwnsTextCleanup = Symbol("compilerRowOwnsTextCleanup");
 const compilerRowEventOwner = Symbol("compilerRowEventOwner");
 const activeCompilerRowContext = Symbol("activeCompilerRowContext");
@@ -128,6 +130,10 @@ type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
 };
 type CompilerKeyedRowNode = Node & {
   [activeCompilerRowContext]?: InternalCompilerKeyedRowContext;
+};
+type CompilerStaticPropertyTextNode = Text & {
+  [compilerStaticPropertyTextContext]: InternalCompilerKeyedRowContext;
+  [compilerStaticPropertyTextKey]: PropertyKey;
 };
 type InternalSingleNodeRenderer<T, TNode extends ChildNode> = SingleNodeRenderer<T, TNode> & {
   [compilerOwnsTextCleanupRenderer]?: true | undefined;
@@ -597,16 +603,13 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
   const reactiveText = node as Text & { __mreactReactiveText?: true };
   reactiveText.__mreactReactiveText = true;
 
-  const subscription = subscribeRefreshableIfTracked(() => {
-    const previousContext = activeCompilerTextContext;
-    activeCompilerTextContext = internalContext;
-
-    try {
-      node.data = normalizeText(context.item[property]);
-    } finally {
-      activeCompilerTextContext = previousContext;
-    }
-  });
+  const propertyNode = node as CompilerStaticPropertyTextNode;
+  propertyNode[compilerStaticPropertyTextContext] = internalContext;
+  propertyNode[compilerStaticPropertyTextKey] = property;
+  const subscription = subscribeRefreshableValueIfTracked(
+    updateCompilerStaticPropertyText,
+    propertyNode,
+  );
 
   if (subscription === undefined) {
     registerCompilerStaticPropertyText(internalContext, node, property);
@@ -1379,18 +1382,25 @@ function refreshCompilerStaticPropertyText(
   node: Text,
   property: PropertyKey,
 ): RefreshableSubscription | undefined {
-  return subscribeRefreshableIfTracked(() => {
-    const previousContext = activeCompilerTextContext;
-    activeCompilerTextContext = context;
+  const propertyNode = node as CompilerStaticPropertyTextNode;
+  propertyNode[compilerStaticPropertyTextContext] = context;
+  propertyNode[compilerStaticPropertyTextKey] = property;
+  return subscribeRefreshableValueIfTracked(updateCompilerStaticPropertyText, propertyNode);
+}
 
-    try {
-      node.data = normalizeText(
-        (context.item as Record<PropertyKey, unknown>)[property],
-      );
-    } finally {
-      activeCompilerTextContext = previousContext;
-    }
-  });
+function updateCompilerStaticPropertyText(node: CompilerStaticPropertyTextNode): void {
+  const context = node[compilerStaticPropertyTextContext];
+  const property = node[compilerStaticPropertyTextKey];
+  const previousContext = activeCompilerTextContext;
+  activeCompilerTextContext = context;
+
+  try {
+    node.data = normalizeText(
+      (context.item as Record<PropertyKey, unknown>)[property],
+    );
+  } finally {
+    activeCompilerTextContext = previousContext;
+  }
 }
 
 function disposeCompilerRowTextSubscriptions(context: InternalCompilerKeyedRowContext): void {

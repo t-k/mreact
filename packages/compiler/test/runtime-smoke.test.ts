@@ -119,6 +119,7 @@ describe("compiler runtime smoke", () => {
         export function App() {
           return <main>
             <button id="replace" onClick={() => rows.set([reactive])}>Replace</button>
+            <button id="plain" onClick={() => rows.set([{ id: 1, label: "plain again" }])}>Plain</button>
             <button id="clear" onClick={() => rows.set([])}>Clear</button>
             <button id="suffix" onClick={() => suffix.set("?")}>Suffix</button>
             <table><tbody>{rows.get().map((row) => (
@@ -147,11 +148,20 @@ describe("compiler runtime smoke", () => {
     await flushEffects();
     expect(row?.textContent).toBe("getter?");
 
+    node.querySelector<HTMLButtonElement>("#plain")?.click();
+    await flushEffects();
+    expect(node.querySelector("tbody tr")).toBe(row);
+    expect(row?.textContent).toBe("plain again");
+
+    node.querySelector<HTMLButtonElement>("#suffix")?.click();
+    await flushEffects();
+    expect(row?.textContent).toBe("plain again");
+
     node.querySelector<HTMLButtonElement>("#clear")?.click();
     await flushEffects();
     node.querySelector<HTMLButtonElement>("#suffix")?.click();
     await flushEffects();
-    expect(row?.textContent).toBe("getter?");
+    expect(row?.textContent).toBe("plain again");
   });
 
   test("compiled keyed rows retain DOM while item, index, items, and events stay current", async () => {
