@@ -549,7 +549,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   }
 
   const children = node.children;
-  const stableChildrenName = hasLiveChildListMutation(children)
+  const stableChildrenName = needsStableChildrenSnapshot(children)
     ? state.allocateName("_children")
     : undefined;
   let childIndex = 0;
@@ -705,6 +705,32 @@ function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
 
 function hasLiveChildListMutation(children: readonly JsxNodeIr[]): boolean {
   return children.some(usesLiveInsertionAnchor);
+}
+
+function needsStableChildrenSnapshot(children: readonly JsxNodeIr[]): boolean {
+  if (!hasLiveChildListMutation(children)) {
+    return false;
+  }
+
+  let sawStaticText = false;
+
+  for (const child of children) {
+    if (child.kind === "text") {
+      sawStaticText = true;
+      continue;
+    }
+
+    const usesDirectLivePath =
+      child.kind !== "component" &&
+      usesLiveInsertionAnchor(child) &&
+      !sawStaticText;
+
+    if (!usesDirectLivePath) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function emitRenderValueExpression(children: JsxNodeIr[], state: EmitSetupState): string {

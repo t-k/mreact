@@ -139,10 +139,30 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain('const _keyedTemplate = createTemplateElement("<tr');
     expect(output.code).toContain("const _keyedRoot = _keyedTemplate();");
     expect(output.code).not.toContain("_keyedFragment");
+    expect(output.code).not.toContain("Array.from(_root.childNodes)");
     expect(output.code.indexOf("const _keyedTemplate")).toBeLessThan(
       output.code.lastIndexOf("bindCompilerKeyedSingleNodeList("),
     );
     expect(output.code).not.toContain("bindList");
+  });
+
+  test("archives child nodes when static text precedes a live keyed anchor", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A" }]);
+          return <tbody>prefix{rows.get().map((row) => (
+            <tr key={row.id}><td>{row.label}</td></tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("Array.from(_root.childNodes)");
   });
 
   test("keeps row events on bindEvent when the keyed list parent is a fragment", () => {
