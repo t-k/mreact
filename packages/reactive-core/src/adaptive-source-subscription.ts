@@ -56,7 +56,7 @@ function createAdaptiveSourceSubscription(
     queued: false,
     refresh: ADAPTIVE_SOURCE_SUBSCRIPTION_METHODS.refresh,
     run: ADAPTIVE_SOURCE_SUBSCRIPTION_METHODS.run,
-    ...(source === undefined ? {} : { source }),
+    source,
   };
 
   runtimeState.nextComputationId += 1;
