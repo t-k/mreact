@@ -111043,9 +111043,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 62,
+									"line": 64,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L62"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L64"
 								}
 							],
 							"typeParameters": [
@@ -112053,9 +112053,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 148,
+									"line": 150,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L148"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L150"
 								}
 							],
 							"signatures": [
@@ -112076,9 +112076,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 148,
+											"line": 150,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L148"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L150"
 										}
 									],
 									"typeParameters": [
@@ -114134,9 +114134,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 81,
+											"line": 83,
 											"character": 11,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L81"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L83"
 										}
 									],
 									"type": {
@@ -114155,9 +114155,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 82,
+											"line": 84,
 											"character": 11,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L82"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L84"
 										}
 									],
 									"type": {
@@ -114180,9 +114180,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 83,
+											"line": 85,
 											"character": 11,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L83"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L85"
 										}
 									],
 									"type": {
@@ -114215,9 +114215,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 80,
+									"line": 82,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L80"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L82"
 								}
 							],
 							"typeParameters": [
@@ -114371,9 +114371,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 87,
+									"line": 89,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L87"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L89"
 								}
 							],
 							"typeParameters": [
@@ -114558,9 +114558,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 451,
+									"line": 453,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L451"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L453"
 								}
 							],
 							"signatures": [
@@ -114581,9 +114581,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 451,
+											"line": 453,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L451"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L453"
 										}
 									],
 									"typeParameters": [
@@ -114768,9 +114768,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-									"line": 507,
+									"line": 509,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L507"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L509"
 								}
 							],
 							"signatures": [
@@ -114791,9 +114791,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/bind-static-keyed-single-node-list.ts",
-											"line": 507,
+											"line": 509,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L507"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/bind-static-keyed-single-node-list.ts#L509"
 										}
 									],
 									"typeParameters": [
