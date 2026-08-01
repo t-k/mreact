@@ -572,6 +572,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
       () => items.get(),
       (context) => {
         const row = document.createElement("tr");
+        row.setAttribute("class", "");
         const setAttribute = row.setAttribute.bind(row);
         row.setAttribute = ((name, value) => {
           if (name === "class") {
@@ -586,12 +587,14 @@ describe("bindStaticKeyedSingleNodeList", () => {
         key: (item) => item.id,
         compilerSelectedClass: {
           className: "danger",
+          initialClassValue: "",
           source: selected,
         },
       },
     );
 
     expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual(["", "", ""]);
+    expect(classWrites).toBe(0);
 
     classWrites = 0;
     selected.set(Number.NaN);
@@ -652,6 +655,91 @@ describe("bindStaticKeyedSingleNodeList", () => {
     selected.set(1);
     await flushEffects();
     expect(classWrites).toBe(0);
+  });
+
+  test("compiler selected class initializes only the selected template row", async () => {
+    const selected = cell<unknown>(2);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let classWrites = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => [{ id: 1 }, { id: 2 }],
+      () => {
+        const row = document.createElement("tr");
+        row.setAttribute("class", "");
+        const setAttribute = row.setAttribute.bind(row);
+        row.setAttribute = ((name, value) => {
+          if (name === "class") {
+            classWrites += 1;
+          }
+          setAttribute(name, value);
+        }) as typeof row.setAttribute;
+        return row;
+      },
+      {
+        key: (item) => item.id,
+        compilerSelectedClass: {
+          className: "danger",
+          initialClassValue: "",
+          source: selected,
+        },
+      },
+    );
+
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
+      "",
+      "danger",
+    ]);
+    expect(classWrites).toBe(1);
+
+    classWrites = 0;
+    selected.set(null);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual(["", ""]);
+    expect(classWrites).toBe(1);
+
+    dispose();
+  });
+
+  test("compiler selected class initializes direct renderer rows without baseline metadata", () => {
+    const selected = cell<unknown>(null);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let classWrites = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => [{ id: 1 }, { id: 2 }],
+      () => {
+        const row = document.createElement("tr");
+        const setAttribute = row.setAttribute.bind(row);
+        row.setAttribute = ((name, value) => {
+          if (name === "class") {
+            classWrites += 1;
+          }
+          setAttribute(name, value);
+        }) as typeof row.setAttribute;
+        return row;
+      },
+      {
+        key: (item) => item.id,
+        compilerSelectedClass: {
+          className: "danger",
+          source: selected,
+        },
+      },
+    );
+
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual(["", ""]);
+    expect(classWrites).toBe(2);
+
+    dispose();
   });
 
   test("promotes delegated row events by default without detached fallback listeners", () => {

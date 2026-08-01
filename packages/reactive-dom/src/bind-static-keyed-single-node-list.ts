@@ -41,6 +41,7 @@ export interface BindCompilerKeyedSingleNodeListOptions<
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
   compilerSelectedClass?: {
     className: string;
+    initialClassValue?: "";
     source: ReadonlyCell<unknown>;
   };
 }
@@ -50,6 +51,7 @@ interface InternalSelectedClassOptions<
   TNode extends ChildNode,
 > extends BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode> {
   compilerMode?: "strict-replace";
+  initialClassValue?: "";
 }
 
 interface InternalStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode>
@@ -1617,6 +1619,7 @@ interface SelectedClassState {
   records: Map<unknown, Element>;
   recordsSource: () => Iterable<SingleNodeRecord>;
   sameSelection: (previous: unknown, next: unknown) => boolean;
+  skipInitialUnselectedWrite: boolean;
   target?: (
     node: ChildNode,
     item: unknown,
@@ -1648,6 +1651,7 @@ function createSelectedClassState<T, TNode extends ChildNode>(
             Number.isNaN(previous) &&
             Number.isNaN(next))
       : Object.is,
+    skipInitialUnselectedWrite: compilerMode && options.initialClassValue === "",
     write: compilerMode
       ? (element, selected) => {
           element.setAttribute("class", selected ? options.className : "");
@@ -1745,7 +1749,12 @@ function registerSelectedClassRecord<T, TNode extends ChildNode>(
     return;
   }
 
-  state.write(element, state.matches(state.current, record.key));
+  const selected = state.matches(state.current, record.key);
+  if (!selected && state.skipInitialUnselectedWrite) {
+    return;
+  }
+
+  state.write(element, selected);
 }
 
 function refreshSelectedClassRecord(

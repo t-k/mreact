@@ -433,7 +433,7 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'compilerSelectedClass: { className: "danger", source: selected }',
+      'compilerSelectedClass: { className: "danger", initialClassValue: "", source: selected }',
     );
     expect(output.code).toContain('createTemplateElement("<tr class=\\"\\"');
     expect(output.code).not.toContain('bindProp(_keyedRoot, "class"');

@@ -649,7 +649,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
       if (child.compiledSingleNode?.selectedClass !== undefined) {
         optionEntries.push(
-          `compilerSelectedClass: { className: ${JSON.stringify(child.compiledSingleNode.selectedClass.className)}, source: ${child.compiledSingleNode.selectedClass.sourceCode} }`,
+          `compilerSelectedClass: { className: ${JSON.stringify(child.compiledSingleNode.selectedClass.className)}, initialClassValue: "", source: ${child.compiledSingleNode.selectedClass.sourceCode} }`,
         );
       }
       if (child.compiledSingleNode?.eventPrograms !== undefined) {

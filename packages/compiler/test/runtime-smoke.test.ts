@@ -161,7 +161,7 @@ describe("compiler runtime smoke", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'compilerSelectedClass: { className: "danger", source: selected }',
+      'compilerSelectedClass: { className: "danger", initialClassValue: "", source: selected }',
     );
     expect(output.code).not.toContain('bindProp(_keyedRoot, "class"');
     const node = (await runClientComponent(output.code)) as HTMLElement;
@@ -214,7 +214,7 @@ describe("compiler runtime smoke", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain(
-      'compilerSelectedClass: { className: "danger", source: selected }',
+      'compilerSelectedClass: { className: "danger", initialClassValue: "", source: selected }',
     );
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const [firstRow, secondRow] = Array.from(node.querySelectorAll("tbody tr"));
