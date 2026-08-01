@@ -122,7 +122,7 @@ describe("bindText", () => {
       "utf8",
     );
     const directBranchStart = source.indexOf('if (typeof value !== "function")');
-    const subscribeCellStart = source.indexOf("const directDispose = subscribeCellValue");
+    const subscribeCellStart = source.indexOf("const directDispose = subscribeCell");
     const readValueStart = source.indexOf("const readValue");
 
     expect(readValueStart).toBeGreaterThan(subscribeCellStart);
@@ -134,13 +134,12 @@ describe("bindText", () => {
       join(process.cwd(), "packages", "reactive-dom", "src", "bind-text.ts"),
       "utf8",
     );
-    const subscribeCellStart = source.indexOf("const directDispose = subscribeCellValue");
+    const subscribeCellStart = source.indexOf("const directDispose = subscribeCell");
     const directReturnStart = source.indexOf("return registerIdempotentDispose(directDispose)");
     const directBranch = source.slice(subscribeCellStart, directReturnStart);
 
     expect(directBranch).not.toContain("shouldWrite");
-    expect(directBranch).toContain("writeTextNode");
-    expect(directBranch).not.toContain("(nextValue) =>");
+    expect(directBranch).toContain("node.data = normalizeText(nextValue)");
   });
 
 

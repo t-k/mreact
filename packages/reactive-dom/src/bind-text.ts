@@ -2,7 +2,7 @@ import { effect, untrack } from "@reckona/mreact-reactive-core";
 import type { ReadonlyCell } from "@reckona/mreact-reactive-core";
 import {
   subscribeAdaptiveSource,
-  subscribeCellValue,
+  subscribeCell,
   type Source,
 } from "@reckona/mreact-reactive-core/internal";
 import { registerDispose, registerIdempotentDispose } from "./scope.js";
@@ -20,10 +20,6 @@ function writeTextBatch(nodes: readonly Text[], text: string): void {
   for (let index = 0; index < nodes.length; index += 1) {
     (nodes[index] as Text).data = text;
   }
-}
-
-function writeTextNode(node: Text, value: unknown): void {
-  node.data = normalizeText(value);
 }
 
 /** @internal Normalizes a dynamic text value for a DOM Text node. */
@@ -46,7 +42,9 @@ export function bindText(
   reactiveText.__mreactReactiveText = true;
 
   if (typeof value !== "function") {
-    const directDispose = subscribeCellValue(value, writeTextNode, node);
+    const directDispose = subscribeCell(value, (nextValue) => {
+      node.data = normalizeText(nextValue);
+    });
 
     if (directDispose !== undefined) {
       if (options?.preserveInitial !== true) {
