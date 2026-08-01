@@ -1,12 +1,11 @@
 import { registerCleanup } from "./cleanup-scope.js";
 import { queueComputation } from "./scheduler.js";
+import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
 import {
-  deferredReactiveTracker,
-  runtimeState,
-  type ReactiveComputation,
-  type Source,
-} from "./state.js";
-import { cleanupDeps, removeSourceSubscriber, trackSource } from "./tracking.js";
+  addSourceSubscriber,
+  cleanupDeps,
+  removeSourceSubscriber,
+} from "./tracking.js";
 
 /** Compact reactive listener that can also be invalidated by its owner. */
 export interface RefreshableSubscription {
@@ -22,6 +21,25 @@ interface AdaptiveSourceSubscription extends ReactiveComputation, RefreshableSub
 const emptyDependencies = new Set<Source>();
 let deferredListener: (() => void) | undefined;
 let deferredSubscription: AdaptiveSourceSubscription | undefined;
+
+class DeferredDependencySet extends Set<Source> {
+  override add(source: Source): this {
+    activateDeferredSubscription(source);
+    return this;
+  }
+}
+
+const deferredReactiveTracker: ReactiveComputation = {
+  deps: new DeferredDependencySet(),
+  dispose: noopDeferredTrackerMethod,
+  disposed: false,
+  id: -1,
+  markDirty: noopDeferredTrackerMethod,
+  queued: false,
+  run: noopDeferredTrackerMethod,
+};
+
+function noopDeferredTrackerMethod(): void {}
 
 const ADAPTIVE_SOURCE_SUBSCRIPTION_METHODS = {
   dispose: adaptiveSourceSubscriptionDispose,
@@ -54,12 +72,10 @@ export function subscribeRefreshableIfTracked(
   listener: () => void,
 ): RefreshableSubscription | undefined {
   const previousTracker = runtimeState.activeTracker;
-  const previousActivate = deferredReactiveTracker.activate;
   const previousListener = deferredListener;
   const previousSubscription = deferredSubscription;
   deferredListener = listener;
   deferredSubscription = undefined;
-  deferredReactiveTracker.activate = activateDeferredSubscription;
   runtimeState.activeTracker = deferredReactiveTracker;
 
   try {
@@ -74,7 +90,6 @@ export function subscribeRefreshableIfTracked(
     throw error;
   } finally {
     runtimeState.activeTracker = previousTracker;
-    deferredReactiveTracker.activate = previousActivate;
     deferredListener = previousListener;
     deferredSubscription = previousSubscription;
   }
@@ -89,8 +104,28 @@ function activateDeferredSubscription(source: Source): void {
 
   const subscription = createAdaptiveSourceSubscription(listener, undefined, false);
   deferredSubscription = subscription;
+  replaceDeferredSourceSubscriber(source, subscription);
+  subscription.deps.add(source);
   runtimeState.activeTracker = subscription;
-  trackSource(source);
+}
+
+function replaceDeferredSourceSubscriber(
+  source: Source,
+  subscription: AdaptiveSourceSubscription,
+): void {
+  const subscribers = source.subscribers;
+
+  if (subscribers === deferredReactiveTracker) {
+    source.subscribers = subscription;
+    return;
+  }
+
+  if (subscribers instanceof Set && subscribers.delete(deferredReactiveTracker)) {
+    subscribers.add(subscription);
+    return;
+  }
+
+  addSourceSubscriber(source, subscription);
 }
 
 function createAdaptiveSourceSubscription(

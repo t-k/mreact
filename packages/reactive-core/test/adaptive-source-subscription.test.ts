@@ -150,6 +150,75 @@ describe("subscribeRefreshable", () => {
     expect(values).toEqual(["A", "B"]);
   });
 
+  test("promotes beside an existing subscriber without disturbing it", async () => {
+    const external = cell("A");
+    const existingValues: string[] = [];
+    const deferredValues: string[] = [];
+    const existing = subscribeRefreshable(() => {
+      existingValues.push(external.get());
+    });
+    const deferred = subscribeRefreshableIfTracked(() => {
+      deferredValues.push(external.get());
+    });
+
+    external.set("B");
+    await flushEffects();
+    expect(existingValues).toEqual(["A", "B"]);
+    expect(deferredValues).toEqual(["A", "B"]);
+
+    deferred?.dispose();
+    external.set("C");
+    await flushEffects();
+    expect(existingValues).toEqual(["A", "B", "C"]);
+    expect(deferredValues).toEqual(["A", "B"]);
+    existing.dispose();
+  });
+
+  test("does not report a temporary no-subscriber transition while promoting", () => {
+    let noSubscribers = 0;
+    const source: Source = {
+      onNoSubscribers: () => {
+        noSubscribers += 1;
+      },
+      subscribers: null,
+    };
+    const subscription = subscribeRefreshableIfTracked(() => {
+      trackSource(source);
+    });
+
+    expect(noSubscribers).toBe(0);
+    subscription?.dispose();
+    expect(noSubscribers).toBe(1);
+    expect(source.subscribers).toBeNull();
+  });
+
+  test("keeps nested deferred tracking isolated", async () => {
+    const outerSource = cell("outer-a");
+    const innerSource = cell("inner-a");
+    const outerValues: string[] = [];
+    const innerValues: string[] = [];
+    let innerSubscription: ReturnType<typeof subscribeRefreshableIfTracked>;
+    let nestedCreated = false;
+    const outerSubscription = subscribeRefreshableIfTracked(() => {
+      if (!nestedCreated) {
+        nestedCreated = true;
+        innerSubscription = subscribeRefreshableIfTracked(() => {
+          innerValues.push(innerSource.get());
+        });
+      }
+      outerValues.push(outerSource.get());
+    });
+
+    outerSource.set("outer-b");
+    innerSource.set("inner-b");
+    await flushEffects();
+    expect(outerValues).toEqual(["outer-a", "outer-b"]);
+    expect(innerValues).toEqual(["inner-a", "inner-b"]);
+
+    outerSubscription?.dispose();
+    innerSubscription?.dispose();
+  });
+
   test("cleans a promoted subscription when its initial listener throws", async () => {
     const external = cell("A");
     let runs = 0;
@@ -165,5 +234,35 @@ describe("subscribeRefreshable", () => {
     external.set("B");
     await flushEffects();
     expect(runs).toBe(1);
+  });
+
+  test("cleans every promoted dependency when its initial listener throws", () => {
+    let firstNoSubscribers = 0;
+    let secondNoSubscribers = 0;
+    const first: Source = {
+      onNoSubscribers: () => {
+        firstNoSubscribers += 1;
+      },
+      subscribers: null,
+    };
+    const second: Source = {
+      onNoSubscribers: () => {
+        secondNoSubscribers += 1;
+      },
+      subscribers: null,
+    };
+
+    expect(() =>
+      subscribeRefreshableIfTracked(() => {
+        trackSource(first);
+        trackSource(second);
+        throw new Error("listener failed");
+      }),
+    ).toThrow("listener failed");
+
+    expect(first.subscribers).toBeNull();
+    expect(second.subscribers).toBeNull();
+    expect(firstNoSubscribers).toBe(1);
+    expect(secondNoSubscribers).toBe(1);
   });
 });
