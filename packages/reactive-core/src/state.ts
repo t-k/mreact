@@ -35,6 +35,24 @@ export interface ReactiveComputation {
   dispose(): void;
 }
 
+export interface DeferredReactiveTracker extends ReactiveComputation {
+  activate: ((source: Source) => void) | undefined;
+}
+
+const deferredTrackerDependencies = new Set<Source>();
+const noopDeferredTrackerMethod = (): void => {};
+
+export const deferredReactiveTracker: DeferredReactiveTracker = {
+  activate: undefined,
+  deps: deferredTrackerDependencies,
+  dispose: noopDeferredTrackerMethod,
+  disposed: false,
+  id: -1,
+  markDirty: noopDeferredTrackerMethod,
+  queued: false,
+  run: noopDeferredTrackerMethod,
+};
+
 export type Tracker = ReactiveComputation | null;
 
 export const runtimeState: {

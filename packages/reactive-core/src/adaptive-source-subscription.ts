@@ -1,7 +1,12 @@
 import { registerCleanup } from "./cleanup-scope.js";
 import { queueComputation } from "./scheduler.js";
-import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
-import { cleanupDeps, removeSourceSubscriber } from "./tracking.js";
+import {
+  deferredReactiveTracker,
+  runtimeState,
+  type ReactiveComputation,
+  type Source,
+} from "./state.js";
+import { cleanupDeps, removeSourceSubscriber, trackSource } from "./tracking.js";
 
 /** Compact reactive listener that can also be invalidated by its owner. */
 export interface RefreshableSubscription {
@@ -15,6 +20,8 @@ interface AdaptiveSourceSubscription extends ReactiveComputation, RefreshableSub
 }
 
 const emptyDependencies = new Set<Source>();
+let deferredListener: (() => void) | undefined;
+let deferredSubscription: AdaptiveSourceSubscription | undefined;
 
 const ADAPTIVE_SOURCE_SUBSCRIPTION_METHODS = {
   dispose: adaptiveSourceSubscriptionDispose,
@@ -42,12 +49,57 @@ export function subscribeRefreshable(listener: () => void): RefreshableSubscript
   return createAdaptiveSourceSubscription(listener);
 }
 
+/** Runs a listener immediately and allocates a subscription only when it reads a Source. */
+export function subscribeRefreshableIfTracked(
+  listener: () => void,
+): RefreshableSubscription | undefined {
+  const previousTracker = runtimeState.activeTracker;
+  const previousActivate = deferredReactiveTracker.activate;
+  const previousListener = deferredListener;
+  const previousSubscription = deferredSubscription;
+  deferredListener = listener;
+  deferredSubscription = undefined;
+  deferredReactiveTracker.activate = activateDeferredSubscription;
+  runtimeState.activeTracker = deferredReactiveTracker;
+
+  try {
+    listener();
+    return deferredSubscription;
+  } catch (error) {
+    const subscription = deferredSubscription as AdaptiveSourceSubscription | undefined;
+    if (subscription !== undefined) {
+      subscription.disposed = true;
+      cleanupDeps(subscription);
+    }
+    throw error;
+  } finally {
+    runtimeState.activeTracker = previousTracker;
+    deferredReactiveTracker.activate = previousActivate;
+    deferredListener = previousListener;
+    deferredSubscription = previousSubscription;
+  }
+}
+
+function activateDeferredSubscription(source: Source): void {
+  const listener = deferredListener;
+
+  if (listener === undefined) {
+    return;
+  }
+
+  const subscription = createAdaptiveSourceSubscription(listener, undefined, false);
+  deferredSubscription = subscription;
+  runtimeState.activeTracker = subscription;
+  trackSource(source);
+}
+
 function createAdaptiveSourceSubscription(
   listener: () => void,
   source?: Source,
+  runImmediately = true,
 ): AdaptiveSourceSubscription {
   const subscription: AdaptiveSourceSubscription = {
-    deps: emptyDependencies,
+    deps: runImmediately ? emptyDependencies : new Set<Source>(),
     dispose: ADAPTIVE_SOURCE_SUBSCRIPTION_METHODS.dispose,
     disposed: false,
     id: runtimeState.nextComputationId,
@@ -60,6 +112,10 @@ function createAdaptiveSourceSubscription(
   };
 
   runtimeState.nextComputationId += 1;
+
+  if (!runImmediately) {
+    return subscription;
+  }
 
   try {
     subscription.run();

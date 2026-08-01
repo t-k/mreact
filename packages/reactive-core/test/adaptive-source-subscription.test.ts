@@ -4,6 +4,7 @@ import {
   notifySubscribers,
   subscribeAdaptiveSource,
   subscribeRefreshable,
+  subscribeRefreshableIfTracked,
   trackSource,
   type Source,
 } from "../src/internal.js";
@@ -119,5 +120,50 @@ describe("subscribeRefreshable", () => {
     await flushEffects();
 
     expect(values).toEqual(["run"]);
+  });
+
+  test("does not allocate a refreshable subscription when no source is read", () => {
+    const values: string[] = [];
+    const subscription = subscribeRefreshableIfTracked(() => {
+      values.push("static");
+    });
+
+    expect(values).toEqual(["static"]);
+    expect(subscription).toBeUndefined();
+  });
+
+  test("promotes to a refreshable subscription on the first source read", async () => {
+    const external = cell("A");
+    const values: string[] = [];
+    const subscription = subscribeRefreshableIfTracked(() => {
+      values.push(external.get());
+    });
+
+    expect(subscription).toBeDefined();
+    external.set("B");
+    await flushEffects();
+    expect(values).toEqual(["A", "B"]);
+
+    subscription?.dispose();
+    external.set("C");
+    await flushEffects();
+    expect(values).toEqual(["A", "B"]);
+  });
+
+  test("cleans a promoted subscription when its initial listener throws", async () => {
+    const external = cell("A");
+    let runs = 0;
+
+    expect(() =>
+      subscribeRefreshableIfTracked(() => {
+        runs += 1;
+        external.get();
+        throw new Error("listener failed");
+      }),
+    ).toThrow("listener failed");
+
+    external.set("B");
+    await flushEffects();
+    expect(runs).toBe(1);
   });
 });

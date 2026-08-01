@@ -7,6 +7,7 @@ export { effectWithDebugLabel } from "./effect.js";
 export {
   subscribeAdaptiveSource,
   subscribeRefreshable,
+  subscribeRefreshableIfTracked,
   type RefreshableSubscription,
 } from "./adaptive-source-subscription.js";
 /** Scheduler controls used by reactive-core tests and integrations. */

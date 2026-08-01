@@ -1,4 +1,9 @@
-import { runtimeState, type ReactiveComputation, type Source } from "./state.js";
+import {
+  deferredReactiveTracker,
+  runtimeState,
+  type ReactiveComputation,
+  type Source,
+} from "./state.js";
 
 const maxPendingComputedFlushIterations = 100;
 
@@ -6,6 +11,11 @@ export function trackSource(source: Source): void {
   const tracker = runtimeState.activeTracker;
 
   if (tracker === null || tracker.disposed) {
+    return;
+  }
+
+  if (tracker === deferredReactiveTracker) {
+    deferredReactiveTracker.activate?.(source);
     return;
   }
 
