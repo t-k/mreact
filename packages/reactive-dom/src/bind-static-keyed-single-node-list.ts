@@ -499,13 +499,11 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     index,
     currentItems,
   ) => {
-    const context = {
-      __proto__: compilerRowContextPrototype,
-      [compilerRowIndex]: index,
-      [compilerRowItem]: item,
-      [compilerRowItems]: currentItems,
-      [compilerRowReads]: 0,
-    } as unknown as InternalCompilerKeyedRowContext;
+    const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
+    context[compilerRowIndex] = index;
+    context[compilerRowItem] = item;
+    context[compilerRowItems] = currentItems;
+    context[compilerRowReads] = 0;
     if (options.compilerOwnsTextCleanup === true) {
       context[compilerRowOwnsTextCleanup] = true;
     }
