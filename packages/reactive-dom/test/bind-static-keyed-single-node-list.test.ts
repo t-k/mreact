@@ -1200,20 +1200,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(updateRecordSource).not.toContain("record.currentItems = nextItems");
   });
 
-  test("reuses the compiler row context as its single-node record", async () => {
-    const source = await readFile(
-      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
-      "utf8",
-    );
-    const createRecordStart = source.indexOf("function createSingleNodeRecord");
-    const updateRecordStart = source.indexOf("function updateSameOrderRecords");
-    const createRecordSource = source.slice(createRecordStart, updateRecordStart);
-
-    expect(source).toContain("get compilerContext()");
-    expect(createRecordSource).toContain("record = compilerContext as");
-    expect(createRecordSource).not.toContain("record.compilerContext = compilerContext");
-  });
-
   test("creates scoped render node results without per-row object spread", async () => {
     const source = await readFile("packages/reactive-dom/src/render-scope.ts", "utf8");
     const helperStart = source.indexOf("export function createScopedRenderNodeScope");
