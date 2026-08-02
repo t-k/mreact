@@ -392,6 +392,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       );
 
       const disposeError = disposeRecordValues(records.values(), deferEventPromotion);
+      unregisterSelectedClassRecords(selectedClassState, records.values());
       insertionParent.replaceChildren(next.fragment, marker);
       if (deferEventPromotion) {
         promoteRecordEvents(next.records.values());
