@@ -5,6 +5,7 @@ import {
   subscribeAdaptiveSource,
   subscribeRefreshable,
   subscribeRefreshableIfTracked,
+  subscribeRefreshableIfTrackedLazy,
   trackSource,
   type Source,
 } from "../src/internal.js";
@@ -130,6 +131,108 @@ describe("subscribeRefreshable", () => {
 
     expect(values).toEqual(["static"]);
     expect(subscription).toBeUndefined();
+  });
+
+  test("does not create a lazy refresh listener when no source is read", () => {
+    const values: string[] = [];
+    let factories = 0;
+    const subscription = subscribeRefreshableIfTrackedLazy(
+      () => {
+        values.push("static");
+      },
+      () => {
+        factories += 1;
+        return () => {
+          values.push("refresh");
+        };
+      },
+    );
+
+    expect(values).toEqual(["static"]);
+    expect(factories).toBe(0);
+    expect(subscription).toBeUndefined();
+  });
+
+  test("creates a lazy refresh listener only after a source is read", async () => {
+    const external = cell("A");
+    const values: string[] = [];
+    let factories = 0;
+    const subscription = subscribeRefreshableIfTrackedLazy(
+      () => {
+        values.push(`probe:${external.get()}`);
+      },
+      () => {
+        factories += 1;
+        return () => {
+          values.push(`refresh:${external.get()}`);
+        };
+      },
+    );
+
+    expect(factories).toBe(1);
+    expect(values).toEqual(["probe:A"]);
+    external.set("B");
+    await flushEffects();
+    expect(values).toEqual(["probe:A", "refresh:B"]);
+
+    subscription?.dispose();
+  });
+
+  test("keeps nested lazy refresh factories isolated", async () => {
+    const outerSource = cell("outer-a");
+    const innerSource = cell("inner-a");
+    const values: string[] = [];
+    let innerSubscription: ReturnType<typeof subscribeRefreshableIfTrackedLazy>;
+    let createdInner = false;
+    const outerSubscription = subscribeRefreshableIfTrackedLazy(
+      () => {
+        if (!createdInner) {
+          createdInner = true;
+          innerSubscription = subscribeRefreshableIfTrackedLazy(
+            () => {
+              innerSource.get();
+            },
+            () => () => {
+              values.push(`inner:${innerSource.get()}`);
+            },
+          );
+        }
+        outerSource.get();
+      },
+      () => () => {
+        values.push(`outer:${outerSource.get()}`);
+      },
+    );
+
+    outerSource.set("outer-b");
+    innerSource.set("inner-b");
+    await flushEffects();
+    expect(values).toEqual(["outer:outer-b", "inner:inner-b"]);
+
+    outerSubscription?.dispose();
+    innerSubscription?.dispose();
+  });
+
+  test("cleans a promoted lazy refresh listener when the probe throws", async () => {
+    const external = cell("A");
+    let refreshes = 0;
+
+    expect(() =>
+      subscribeRefreshableIfTrackedLazy(
+        () => {
+          external.get();
+          throw new Error("probe failed");
+        },
+        () => () => {
+          refreshes += 1;
+          external.get();
+        },
+      ),
+    ).toThrow("probe failed");
+
+    external.set("B");
+    await flushEffects();
+    expect(refreshes).toBe(0);
   });
 
   test("promotes to a refreshable subscription on the first source read", async () => {
