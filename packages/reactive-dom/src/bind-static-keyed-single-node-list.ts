@@ -192,6 +192,10 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   const internalOptions = options as InternalStaticKeyedSingleNodeListOptions<T, TNode>;
   const compilerEvents = internalOptions.compilerEvents;
   const compilerEventOwner = internalOptions.compilerEventOwner;
+  const compilerOwnsRows =
+    (renderItem as InternalSingleNodeRenderer<T, TNode>)[
+      compilerOwnsTextCleanupRenderer
+    ] === true;
 
   const dispose = effect(() => {
     const currentItems = items();
@@ -285,15 +289,25 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     }
 
     const fastSwappedRecords = ownsCurrentParent
-      ? trySwapSingleNodeItems(
-          insertionParent,
-          marker,
-          records,
-          currentItems,
-          options.key,
-          renderArity,
-          selectedClassState,
-        )
+      ? compilerOwnsRows
+        ? trySwapCompilerSingleNodeItems(
+            insertionParent,
+            marker,
+            records,
+            currentItems,
+            options.key,
+            renderArity,
+            selectedClassState,
+          )
+        : trySwapSingleNodeItems(
+            insertionParent,
+            marker,
+            records,
+            currentItems,
+            options.key,
+            renderArity,
+            selectedClassState,
+          )
       : undefined;
 
     if (fastSwappedRecords !== undefined) {
@@ -1096,6 +1110,127 @@ function tryRemoveSingleNodeItems<T>(
   }
 
   return { records, staleRecords };
+}
+
+function trySwapCompilerSingleNodeItems<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, SingleNodeRecord>,
+  currentItems: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderArity: number,
+  selectedClassState: SelectedClassState | undefined,
+): Map<unknown, SingleNodeRecord> | undefined {
+  if (currentItems.length !== records.size || currentItems.length < 2) {
+    return undefined;
+  }
+
+  const previousRecords = records[Symbol.iterator]();
+  let firstIndex = -1;
+  let secondIndex = -1;
+  let firstPreviousKey: unknown;
+  let secondPreviousKey: unknown;
+  let firstNextKey: unknown;
+  let secondNextKey: unknown;
+  let firstRecord: SingleNodeRecord | undefined;
+  let secondRecord: SingleNodeRecord | undefined;
+
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const previousRecord = previousRecords.next();
+
+    if (previousRecord.done) {
+      return undefined;
+    }
+
+    const nextKey = key(currentItems[index] as T, index, currentItems);
+    const previousKey = previousRecord.value[0];
+
+    if (Object.is(previousKey, nextKey)) {
+      continue;
+    }
+
+    if (firstIndex === -1) {
+      firstIndex = index;
+      firstPreviousKey = previousKey;
+      firstNextKey = nextKey;
+      firstRecord = previousRecord.value[1];
+    } else if (secondIndex === -1) {
+      secondIndex = index;
+      secondPreviousKey = previousKey;
+      secondNextKey = nextKey;
+      secondRecord = previousRecord.value[1];
+
+      if (
+        !Object.is(firstPreviousKey, secondNextKey) ||
+        !Object.is(secondPreviousKey, firstNextKey)
+      ) {
+        return undefined;
+      }
+    } else {
+      return undefined;
+    }
+  }
+
+  if (firstIndex !== -1 && secondIndex === -1) {
+    return undefined;
+  }
+
+  const nextRecords = firstIndex === -1 ? records : new Map<unknown, SingleNodeRecord>();
+  const recordsInPreviousOrder = records.values();
+  const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+  let secondAnchor: ChildNode = marker;
+
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const previousRecord = recordsInPreviousOrder.next();
+
+    if (previousRecord.done) {
+      return undefined;
+    }
+
+    const record =
+      index === firstIndex
+        ? (secondRecord as SingleNodeRecord)
+        : index === secondIndex
+          ? (firstRecord as SingleNodeRecord)
+          : previousRecord.value;
+
+    if (
+      !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
+      !updateSingleNodeRecord(
+        record,
+        renderArity,
+        currentItems[index],
+        index,
+        currentItems,
+      )
+    ) {
+      return undefined;
+    }
+
+    if (refreshSelectedClasses) {
+      refreshSelectedClassRecord(selectedClassState, record);
+    }
+
+    if (firstIndex !== -1) {
+      nextRecords.set(record.key, record);
+
+      if (index === secondIndex + 1) {
+        secondAnchor = record.node;
+      }
+    }
+  }
+
+  if (firstIndex === -1) {
+    return records;
+  }
+
+  return moveSwappedSingleNodeRecords(
+    parent,
+    nextRecords,
+    secondRecord,
+    firstRecord,
+    secondAnchor,
+  );
 }
 
 function trySwapSingleNodeItems<T>(
