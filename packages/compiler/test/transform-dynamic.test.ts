@@ -148,52 +148,6 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("bindList");
   });
 
-  test("inlines safe zero-parameter expression arrows in compiler keyed event programs", () => {
-    const output = transform({
-      code: `
-        export function App() {
-          const rows = cell([{ id: 1 }]);
-          return <tbody>{rows.get().map((row) => (
-            <tr key={row.id}>
-              <td><button onClick={() => globalThis.__selected = row.id}>Select</button></td>
-            </tr>
-          ))}</tbody>;
-        }
-      `,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("case 0: return globalThis.__selected = (row.item).id;");
-    expect(output.code).not.toContain("(() => globalThis.__selected = row.id).call(");
-  });
-
-  test("keeps the callable fallback for event arrows that are not safe to inline", () => {
-    const output = transform({
-      code: `
-        export function App() {
-          const rows = cell([{ id: 1 }]);
-          return <tbody>{rows.get().map((row) => (
-            <tr key={row.id}>
-              <td><button onClick={async () => row.id}>Async</button></td>
-              <td><button onClick={(event) => event.type + row.id}>Param</button></td>
-              <td><button onClick={() => { globalThis.__selected = row.id; }}>Block</button></td>
-              <td><button onClick={function () { return row.id; }}>Function</button></td>
-            </tr>
-          ))}</tbody>;
-        }
-      `,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code.match(/\.call\(currentTarget, event\)/g)).toHaveLength(4);
-  });
-
   test("reuses a compiler keyed event element for its direct text binding", () => {
     const output = transform({
       code: `

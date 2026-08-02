@@ -1,4 +1,4 @@
-import type { AttributeIr, DynamicAttributeIr, EventAttributeIr } from "./ir.js";
+import type { AttributeIr, DynamicAttributeIr } from "./ir.js";
 import { isEventLikePropName } from "@reckona/mreact-shared";
 import {
   invalidDomRefAttributeDiagnostic,
@@ -15,17 +15,10 @@ import {
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 const stableKeyedEventAttributes = new WeakSet<object>();
-const inlineKeyedEventExpressions = new WeakMap<EventAttributeIr, string>();
 const dynamicAttributeExpressions = new WeakMap<DynamicAttributeIr, Record<string, unknown>>();
 
 export function isStableOxcKeyedEventAttribute(attribute: AttributeIr): boolean {
   return attribute.kind === "event" && stableKeyedEventAttributes.has(attribute);
-}
-
-export function readOxcInlineKeyedEventExpression(
-  attribute: AttributeIr,
-): string | undefined {
-  return attribute.kind === "event" ? inlineKeyedEventExpressions.get(attribute) : undefined;
 }
 
 export function readOxcDynamicAttributeExpression(
@@ -120,20 +113,6 @@ export function analyzeOxcAttribute(
     };
     if (stableForKeyedReuse) {
       stableKeyedEventAttributes.add(eventAttribute);
-    }
-    const body = readObject(unwrappedExpression.body);
-    if (
-      unwrappedExpression.type === "ArrowFunctionExpression" &&
-      unwrappedExpression.async !== true &&
-      readArray(unwrappedExpression.params).length === 0 &&
-      body.type !== "BlockStatement" &&
-      body.type !== "JSXElement" &&
-      body.type !== "JSXFragment"
-    ) {
-      inlineKeyedEventExpressions.set(
-        eventAttribute,
-        options.resolveExpressionCode?.(body) ?? readSource(code, body),
-      );
     }
     return [eventAttribute];
   }

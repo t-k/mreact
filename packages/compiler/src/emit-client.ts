@@ -996,11 +996,7 @@ function emitCompilerKeyedEventPrograms(
     .map(
       (program, programIndex) =>
         `{ type: ${JSON.stringify(program.eventName)}, slotKey: ${eventSlotKeys[programIndex]}, dispatch: (slot, ${rowName}, event, currentTarget) => { switch (slot) { ${program.handlers
-          .map((handler, slot) =>
-            handler.inlineExpression === undefined
-              ? `case ${slot}: return (${handler.code}).call(currentTarget, event);`
-              : `case ${slot}: return ${handler.inlineExpression};`,
-          )
+          .map((handler, slot) => `case ${slot}: return (${handler}).call(currentTarget, event);`)
           .join(" ")} } } }`,
     )
     .join(", ")}]`;

@@ -202,45 +202,6 @@ describe("compiler runtime smoke", () => {
       .__compilerKeyedPayload;
   });
 
-  test("inlined compiler keyed events use the latest row after replacement and movement", async () => {
-    const output = transform({
-      code: `import { cell } from "@reckona/mreact-reactive-core";
-        const rows = cell([{ id: 1, label: "A" }, { id: 2, label: "B" }]);
-        export function App() {
-          return <main>
-            <button id="replace" onClick={() => rows.set([{ id: 1, label: "A!" }, rows.get()[1]])}>Replace</button>
-            <button id="swap" onClick={() => rows.set([rows.get()[1], rows.get()[0]])}>Swap</button>
-            <table><tbody>{rows.get().map((row) => (
-              <tr key={row.id}><td>{row.label}</td><td><button onClick={() => globalThis.__compilerInlinePayload = row.label}>Select</button></td></tr>
-            ))}</tbody></table>
-          </main>;
-        }`,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      "case 0: return globalThis.__compilerInlinePayload = (row.item).label;",
-    );
-    const node = (await runClientComponent(output.code)) as HTMLElement;
-    const firstRow = node.querySelector("tbody tr") as HTMLTableRowElement;
-
-    node.querySelector<HTMLButtonElement>("#replace")?.click();
-    await flushEffects();
-    node.querySelector<HTMLButtonElement>("#swap")?.click();
-    await flushEffects();
-    expect(node.querySelectorAll("tbody tr")[1]).toBe(firstRow);
-    firstRow.querySelector("button")?.click();
-    expect(
-      (globalThis as typeof globalThis & { __compilerInlinePayload?: string })
-        .__compilerInlinePayload,
-    ).toBe("A!");
-    delete (globalThis as typeof globalThis & { __compilerInlinePayload?: string })
-      .__compilerInlinePayload;
-  });
-
   test("compiler keyed selected classes update at list scope while retaining rows", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

@@ -132,13 +132,7 @@ export interface CompiledSingleNodeListIr {
 /** Describes one list-owned delegated event program and its row slots. */
 export interface CompilerKeyedEventProgramIr {
   eventName: string;
-  handlers: CompilerKeyedEventHandlerIr[];
-}
-
-/** Describes one safely shared compiler keyed event handler. */
-export interface CompilerKeyedEventHandlerIr {
-  code: string;
-  inlineExpression?: string;
+  handlers: string[];
 }
 
 /** Describes an exact whole-class selection expression owned by a keyed list. */
