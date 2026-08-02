@@ -556,12 +556,7 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     if (compilerEventOwner !== undefined) {
       context[compilerRowEventOwner] = compilerEventOwner;
     }
-    let node: TNode;
-    try {
-      node = renderItem(context as CompilerKeyedRowContext<T>);
-    } catch (error) {
-      throw error;
-    }
+    const node = renderItem(context as CompilerKeyedRowContext<T>);
     (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
     if (markRecordsForHydration) {
       markDynamicNode(node);
