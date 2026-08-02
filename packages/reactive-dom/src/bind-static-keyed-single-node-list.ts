@@ -4,7 +4,7 @@ import {
   runtimeState,
   subscribeCell,
   subscribeRefreshable,
-  subscribeRefreshableIfTrackedLazy,
+  subscribeRefreshableIfTracked,
   trackSource,
   type RefreshableSubscription,
   type Source,
@@ -110,9 +110,6 @@ const activeCompilerRowContext = Symbol("activeCompilerRowContext");
 const compilerOwnsTextCleanupRenderer = Symbol("compilerOwnsTextCleanupRenderer");
 const noopCompilerTextDispose: Dispose = () => {};
 let activeCompilerTextContext: InternalCompilerKeyedRowContext | undefined;
-let activeCompilerPropertyTextContext: InternalCompilerKeyedRowContext | undefined;
-let activeCompilerPropertyTextNode: Text | undefined;
-let activeCompilerPropertyTextKey: PropertyKey | undefined;
 type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowIndex]: number;
   [compilerRowItem]: unknown;
@@ -600,7 +597,16 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
   const reactiveText = node as Text & { __mreactReactiveText?: true };
   reactiveText.__mreactReactiveText = true;
 
-  const subscription = subscribeCompilerPropertyTextProbe(internalContext, node, property);
+  const subscription = subscribeRefreshableIfTracked(() => {
+    const previousContext = activeCompilerTextContext;
+    activeCompilerTextContext = internalContext;
+
+    try {
+      node.data = normalizeText(context.item[property]);
+    } finally {
+      activeCompilerTextContext = previousContext;
+    }
+  });
 
   if (subscription === undefined) {
     registerCompilerStaticPropertyText(internalContext, node, property);
@@ -636,64 +642,6 @@ function registerCompilerStaticPropertyText(
   context[compilerRowStaticPropertyTextNode] = undefined;
   context[compilerRowStaticPropertyTextKey] = undefined;
   bindings.push(node, property);
-}
-
-function subscribeCompilerPropertyTextProbe(
-  context: InternalCompilerKeyedRowContext,
-  node: Text,
-  property: PropertyKey,
-): RefreshableSubscription | undefined {
-  const previousContext = activeCompilerPropertyTextContext;
-  const previousNode = activeCompilerPropertyTextNode;
-  const previousProperty = activeCompilerPropertyTextKey;
-  activeCompilerPropertyTextContext = context;
-  activeCompilerPropertyTextNode = node;
-  activeCompilerPropertyTextKey = property;
-
-  try {
-    return subscribeRefreshableIfTrackedLazy(
-      probeActiveCompilerPropertyText,
-      createActiveCompilerPropertyTextListener,
-    );
-  } finally {
-    activeCompilerPropertyTextContext = previousContext;
-    activeCompilerPropertyTextNode = previousNode;
-    activeCompilerPropertyTextKey = previousProperty;
-  }
-}
-
-function probeActiveCompilerPropertyText(): void {
-  writeCompilerPropertyText(
-    activeCompilerPropertyTextContext as InternalCompilerKeyedRowContext,
-    activeCompilerPropertyTextNode as Text,
-    activeCompilerPropertyTextKey as PropertyKey,
-  );
-}
-
-function createActiveCompilerPropertyTextListener(): () => void {
-  const context = activeCompilerPropertyTextContext as InternalCompilerKeyedRowContext;
-  const node = activeCompilerPropertyTextNode as Text;
-  const property = activeCompilerPropertyTextKey as PropertyKey;
-  return () => {
-    writeCompilerPropertyText(context, node, property);
-  };
-}
-
-function writeCompilerPropertyText(
-  context: InternalCompilerKeyedRowContext,
-  node: Text,
-  property: PropertyKey,
-): void {
-  const previousContext = activeCompilerTextContext;
-  activeCompilerTextContext = context;
-
-  try {
-    node.data = normalizeText(
-      (context.item as Record<PropertyKey, unknown>)[property],
-    );
-  } finally {
-    activeCompilerTextContext = previousContext;
-  }
 }
 
 function registerCompilerRowTextSubscription(
@@ -1431,7 +1379,18 @@ function refreshCompilerStaticPropertyText(
   node: Text,
   property: PropertyKey,
 ): RefreshableSubscription | undefined {
-  return subscribeCompilerPropertyTextProbe(context, node, property);
+  return subscribeRefreshableIfTracked(() => {
+    const previousContext = activeCompilerTextContext;
+    activeCompilerTextContext = context;
+
+    try {
+      node.data = normalizeText(
+        (context.item as Record<PropertyKey, unknown>)[property],
+      );
+    } finally {
+      activeCompilerTextContext = previousContext;
+    }
+  });
 }
 
 function disposeCompilerRowTextSubscriptions(context: InternalCompilerKeyedRowContext): void {

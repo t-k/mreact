@@ -21,8 +21,6 @@ interface AdaptiveSourceSubscription extends ReactiveComputation, RefreshableSub
 const emptyDependencies = new Set<Source>();
 let deferredListener: (() => void) | undefined;
 let deferredSubscription: AdaptiveSourceSubscription | undefined;
-let deferredLazyListenerFactory: (() => () => void) | undefined;
-let deferredLazySubscription: AdaptiveSourceSubscription | undefined;
 
 class DeferredDependencySet extends Set<Source> {
   override add(source: Source): this {
@@ -31,25 +29,8 @@ class DeferredDependencySet extends Set<Source> {
   }
 }
 
-class DeferredLazyDependencySet extends Set<Source> {
-  override add(source: Source): this {
-    activateDeferredLazySubscription(source);
-    return this;
-  }
-}
-
 const deferredReactiveTracker: ReactiveComputation = {
   deps: new DeferredDependencySet(),
-  dispose: noopDeferredTrackerMethod,
-  disposed: false,
-  id: -1,
-  markDirty: noopDeferredTrackerMethod,
-  queued: false,
-  run: noopDeferredTrackerMethod,
-};
-
-const deferredLazyReactiveTracker: ReactiveComputation = {
-  deps: new DeferredLazyDependencySet(),
   dispose: noopDeferredTrackerMethod,
   disposed: false,
   id: -1,
@@ -114,35 +95,6 @@ export function subscribeRefreshableIfTracked(
   }
 }
 
-/** Runs a probe immediately and creates its retained listener only after a Source is read. */
-export function subscribeRefreshableIfTrackedLazy(
-  probe: () => void,
-  createListener: () => () => void,
-): RefreshableSubscription | undefined {
-  const previousTracker = runtimeState.activeTracker;
-  const previousFactory = deferredLazyListenerFactory;
-  const previousSubscription = deferredLazySubscription;
-  deferredLazyListenerFactory = createListener;
-  deferredLazySubscription = undefined;
-  runtimeState.activeTracker = deferredLazyReactiveTracker;
-
-  try {
-    probe();
-    return deferredLazySubscription;
-  } catch (error) {
-    const subscription = deferredLazySubscription as AdaptiveSourceSubscription | undefined;
-    if (subscription !== undefined) {
-      subscription.disposed = true;
-      cleanupDeps(subscription);
-    }
-    throw error;
-  } finally {
-    runtimeState.activeTracker = previousTracker;
-    deferredLazyListenerFactory = previousFactory;
-    deferredLazySubscription = previousSubscription;
-  }
-}
-
 function activateDeferredSubscription(source: Source): void {
   const listener = deferredListener;
 
@@ -153,39 +105,6 @@ function activateDeferredSubscription(source: Source): void {
   const subscription = createAdaptiveSourceSubscription(listener, undefined, false);
   deferredSubscription = subscription;
   replaceDeferredSourceSubscriber(source, subscription);
-  subscription.deps.add(source);
-  runtimeState.activeTracker = subscription;
-}
-
-function activateDeferredLazySubscription(source: Source): void {
-  const createListener = deferredLazyListenerFactory;
-
-  if (createListener === undefined) {
-    return;
-  }
-
-  let listener: () => void;
-
-  try {
-    listener = createListener();
-  } catch (error) {
-    const failedTracker = runtimeState.activeTracker;
-    runtimeState.activeTracker = null;
-
-    try {
-      removeSourceSubscriber(source, deferredLazyReactiveTracker);
-    } catch {
-      // Preserve the listener factory failure after best-effort tracker cleanup.
-    } finally {
-      runtimeState.activeTracker = failedTracker;
-    }
-
-    throw error;
-  }
-
-  const subscription = createAdaptiveSourceSubscription(listener, undefined, false);
-  deferredLazySubscription = subscription;
-  replaceDeferredLazySourceSubscriber(source, subscription);
   subscription.deps.add(source);
   runtimeState.activeTracker = subscription;
 }
@@ -202,25 +121,6 @@ function replaceDeferredSourceSubscriber(
   }
 
   if (subscribers instanceof Set && subscribers.delete(deferredReactiveTracker)) {
-    subscribers.add(subscription);
-    return;
-  }
-
-  addSourceSubscriber(source, subscription);
-}
-
-function replaceDeferredLazySourceSubscriber(
-  source: Source,
-  subscription: AdaptiveSourceSubscription,
-): void {
-  const subscribers = source.subscribers;
-
-  if (subscribers === deferredLazyReactiveTracker) {
-    source.subscribers = subscription;
-    return;
-  }
-
-  if (subscribers instanceof Set && subscribers.delete(deferredLazyReactiveTracker)) {
     subscribers.add(subscription);
     return;
   }
