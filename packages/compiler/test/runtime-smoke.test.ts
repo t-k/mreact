@@ -104,6 +104,38 @@ describe("compiler runtime smoke", () => {
     expect(nextRow.querySelector(".label")?.textContent).toBe("C");
   });
 
+  test("compiler keyed element paths preserve mixed text, events, and same-key updates", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        const rows = cell([{ id: 1, label: "A" }]);
+        export function App() {
+          return <main>
+            <button id="replace" onClick={() => rows.set([{ id: 1, label: "B" }])}>Replace</button>
+            <section>{rows.get().map((row) => (
+              <div key={row.id}>prefix<span>{row.id}</span>middle<a onClick={() => globalThis.__selected = row.id}>{row.label}</a>suffix</div>
+            ))}</section>
+          </main>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_keyedRoot.firstElementChild");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const row = node.querySelector("section div") as HTMLDivElement;
+    const link = row.querySelector("a") as HTMLAnchorElement;
+    expect(row.textContent).toBe("prefix1middleAsuffix");
+
+    link.click();
+    expect((globalThis as { __selected?: number }).__selected).toBe(1);
+    node.querySelector<HTMLButtonElement>("#replace")?.click();
+    await flushEffects();
+    expect(node.querySelector("section div")).toBe(row);
+    expect(row.textContent).toBe("prefix1middleBsuffix");
+  });
+
   test("compiler keyed text preserves getter dependencies across row replacement", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

@@ -492,6 +492,7 @@ interface EmitSetupState {
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedRowContext?: string | undefined;
+  compilerKeyedElementPaths?: boolean | undefined;
 }
 
 function emitDebugOptions(debugLabel: string | undefined): string {
@@ -572,6 +573,8 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     ? state.allocateName("_children")
     : undefined;
   let childIndex = 0;
+  let elementIndex = 0;
+  let canUseElementSiblingPath = state.compilerKeyedElementPaths === true;
 
   if (stableChildrenName !== undefined) {
     lines.push(`  const ${stableChildrenName} = Array.from(${currentPath}.childNodes);`);
@@ -588,14 +591,26 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
-    const childPath =
+    const childElementIndex = elementIndex;
+    if (child.kind === "element") {
+      elementIndex += 1;
+    }
+
+    const usesLiveChildPath =
       stableChildrenName === undefined ||
       (child.kind !== "component" &&
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
-        !sawStaticText)
-        ? `${currentPath}.childNodes[${childIndex}]`
-        : `${stableChildrenName}[${childIndex}]`;
+        !sawStaticText);
+    const childPath = usesLiveChildPath
+      ? canUseElementSiblingPath && child.kind === "element"
+        ? `${currentPath}.firstElementChild${".nextElementSibling".repeat(childElementIndex)}`
+        : `${currentPath}.childNodes[${childIndex}]`
+      : `${stableChildrenName}[${childIndex}]`;
+
+    if (compilerKeyedSetupMayRunUserCode(child)) {
+      canUseElementSiblingPath = false;
+    }
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
@@ -744,7 +759,10 @@ function shouldCacheCompilerKeyedElementPath(
   path: string,
   state: EmitSetupState,
 ): boolean {
-  if (state.compilerKeyedRowContext === undefined || !path.includes(".childNodes[")) {
+  if (
+    state.compilerKeyedRowContext === undefined ||
+    (!path.includes(".childNodes[") && !path.includes(".firstElementChild"))
+  ) {
     return false;
   }
 
@@ -763,6 +781,27 @@ function shouldCacheCompilerKeyedElementPath(
   }
 
   return pathUses > 1;
+}
+
+function compilerKeyedSetupMayRunUserCode(node: JsxNodeIr): boolean {
+  if (node.kind === "text") {
+    return false;
+  }
+
+  if (node.kind !== "element") {
+    return true;
+  }
+
+  for (const attr of node.attributes) {
+    if (
+      attr.kind !== "static-attr" &&
+      (attr.kind !== "event" || attr.compilerKeyedSlot === undefined)
+    ) {
+      return true;
+    }
+  }
+
+  return node.children.some(compilerKeyedSetupMayRunUserCode);
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
@@ -970,6 +1009,7 @@ function emitCompilerKeyedSingleNodeRenderer(
             ]),
           ),
     compilerKeyedRowContext: node.itemName,
+    compilerKeyedElementPaths: node.compiledSingleNode?.ownsTextCleanup === true,
   });
   const setupLines = setup === "" ? [] : setup.split("\n");
   return [

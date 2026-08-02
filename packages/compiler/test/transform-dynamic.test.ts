@@ -192,8 +192,9 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("_keyedRoot.firstElementChild.childNodes[0]");
     expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedRoot\.firstElementChild\.nextElementSibling\.firstElementChild;/u,
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[3\]\.firstElementChild;/u,
     );
+    expect(output.code).not.toContain("_keyedRoot.firstElementChild.nextElementSibling");
   });
 
   test("keeps live child paths for compiler rows with user-controlled setup", () => {
