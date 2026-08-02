@@ -267,7 +267,6 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain(".replaceWith(");
     expect(output.code).toMatch(/_textValue_0 = [\s\S]*row\.item[\s\S]*\.id/);
     expect(output.code).toContain('bindCompilerKeyedPropertyText(row, _text_1, "label")');
-    expect(output.code).toContain('compilerKeyProperty: "id"');
   });
 
   test("binds direct keyed row cell properties without a generated reader closure", () => {
@@ -402,7 +401,6 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("bindCompilerKeyedSingleNodeList");
     expect(output.code.match(/\bbindText\(/g)).toHaveLength(1);
-    expect(output.code).not.toContain("compilerKeyProperty:");
   });
 
   test("keeps call-based keyed text on the generic list path", () => {

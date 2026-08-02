@@ -745,8 +745,7 @@ function analyzeCompiledSingleNodeList(
       ? analyzeCompilerKeyedEventPrograms(root)
       : undefined;
 
-  const keyProperty = readDirectCompilerKeyProperty(keyCode, itemName);
-  if (keyProperty !== undefined) {
+  if (isDirectCompilerKeyText(keyCode, itemName)) {
     markCompilerKeyedInitialText(sourceRoot, root, keyCode);
   }
   markCompilerKeyedCellText(sourceRoot, root, itemName);
@@ -756,7 +755,6 @@ function analyzeCompiledSingleNodeList(
   return {
     root,
     ...(eventPrograms === undefined ? {} : { eventPrograms }),
-    ...(keyProperty === undefined ? {} : { keyProperty }),
     ...(ownsTextCleanup ? { ownsTextCleanup: true as const } : {}),
     ...(selectedClass === undefined ? {} : { selectedClass }),
   };
@@ -1004,16 +1002,12 @@ function replaceCompilerSelectedClassAttribute(root: JsxElementIr): void {
   );
 }
 
-function readDirectCompilerKeyProperty(
-  keyCode: string,
-  itemName: string,
-): string | undefined {
+function isDirectCompilerKeyText(keyCode: string, itemName: string): boolean {
   if (!keyCode.startsWith(`${itemName}.`)) {
-    return undefined;
+    return false;
   }
 
-  const property = keyCode.slice(itemName.length + 1);
-  return /^[A-Za-z_$][\w$]*$/.test(property) ? property : undefined;
+  return /^[A-Za-z_$][\w$]*$/.test(keyCode.slice(itemName.length + 1));
 }
 
 function markCompilerKeyedInitialText(

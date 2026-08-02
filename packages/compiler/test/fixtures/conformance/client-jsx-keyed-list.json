@@ -19,6 +19,6 @@
       "textContent": "AB",
       "attributes": {}
     },
-    "codeContains": ["{ key: (item) => (item.id), compilerKeyProperty: \"id\", compilerOwnsTextCleanup: true }"]
+    "codeContains": ["{ key: (item) => (item.id), compilerOwnsTextCleanup: true }"]
   }
 }

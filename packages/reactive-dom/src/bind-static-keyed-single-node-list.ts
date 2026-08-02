@@ -43,8 +43,6 @@ export interface BindCompilerKeyedSingleNodeListOptions<
   TNode extends ChildNode = ChildNode,
 > extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
-  /** @internal Exact direct property used by compiler-generated key expressions. */
-  compilerKeyProperty?: keyof T;
   compilerOwnsTextCleanup?: true;
   compilerSelectedClass?: {
     className: string;
@@ -65,7 +63,6 @@ interface InternalStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode>
   extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
   compilerEventOwner?: object;
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
-  compilerKeyProperty?: keyof T;
 }
 
 type ListParentNode = ParentNode & Node & { replaceChildren(...nodes: Node[]): void };
@@ -195,7 +192,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   const internalOptions = options as InternalStaticKeyedSingleNodeListOptions<T, TNode>;
   const compilerEvents = internalOptions.compilerEvents;
   const compilerEventOwner = internalOptions.compilerEventOwner;
-  const compilerKeyProperty = internalOptions.compilerKeyProperty;
 
   const dispose = effect(() => {
     const currentItems = items();
@@ -238,7 +234,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
             records,
             currentItems,
             options.key,
-            compilerKeyProperty,
             renderItem,
             renderArity,
             deferEventPromotion,
@@ -902,7 +897,6 @@ function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
   records: Map<unknown, SingleNodeRecord>,
   currentItems: readonly T[],
   key: (item: T, index: number, items: readonly T[]) => unknown,
-  compilerKeyProperty: keyof T | undefined,
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
   deferEventPromotion: boolean,
@@ -913,28 +907,15 @@ function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
   const keys = new Array<unknown>(length);
   const seenKeys = new Set<unknown>();
 
-  if (compilerKeyProperty === undefined) {
-    for (let index = 0; index < length; index += 1) {
-      const itemKey = key(currentItems[index] as T, index, currentItems);
+  for (let index = 0; index < length; index += 1) {
+    const itemKey = key(currentItems[index] as T, index, currentItems);
 
-      if (seenKeys.has(itemKey) || records.has(itemKey)) {
-        return undefined;
-      }
-
-      seenKeys.add(itemKey);
-      keys[index] = itemKey;
+    if (seenKeys.has(itemKey) || records.has(itemKey)) {
+      return undefined;
     }
-  } else {
-    for (let index = 0; index < length; index += 1) {
-      const itemKey = (currentItems[index] as T)[compilerKeyProperty];
 
-      if (seenKeys.has(itemKey) || records.has(itemKey)) {
-        return undefined;
-      }
-
-      seenKeys.add(itemKey);
-      keys[index] = itemKey;
-    }
+    seenKeys.add(itemKey);
+    keys[index] = itemKey;
   }
 
   const next = createSingleNodeRecordsFromKeysWithFragment(
