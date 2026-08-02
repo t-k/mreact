@@ -167,9 +167,53 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[0\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.childNodes\[0\];/u,
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.firstElementChild\.firstElementChild;\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.childNodes\[0\];/u,
     );
-    expect(output.code.match(/_keyedRoot\.childNodes\[0\]\.childNodes\[0\]/gu)).toHaveLength(1);
+    expect(output.code.match(/_keyedRoot\.firstElementChild\.firstElementChild/gu)).toHaveLength(
+      1,
+    );
+  });
+
+  test("uses element sibling paths for compiler-owned rows with mixed text", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A" }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}>prefix<td>{row.id}</td>middle<td><a onClick={() => globalThis.__selected = row.id}>{row.label}</a></td></tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_keyedRoot.firstElementChild.childNodes[0]");
+    expect(output.code).toMatch(
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.firstElementChild\.nextElementSibling\.firstElementChild;/u,
+    );
+  });
+
+  test("keeps live child paths for compiler rows with user-controlled setup", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A", title: "row" }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}><td title={row.title}>{row.label}</td><td>Static</td></tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("_keyedRoot.childNodes[0]");
+    expect(output.code).not.toContain("_keyedRoot.firstElementChild");
   });
 
   test("archives child nodes when static text precedes a live keyed anchor", () => {
