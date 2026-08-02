@@ -210,11 +210,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     const currentItems = items();
     const insertionParent = marker.parentNode as ListParentNode | null;
 
-    if (pendingCompilerSwap !== undefined && (insertionParent === null || currentItems.length === 0)) {
-      records = materializeCompilerSingleNodeSwap(records, pendingCompilerSwap);
-      pendingCompilerSwap = undefined;
-    }
-
     if (insertionParent === null) {
       clearSelectedClassRecords(selectedClassState);
       removeRecordNodes(records.values(), deferEventPromotion);
@@ -254,7 +249,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
           currentItems,
           options.key,
           renderArity,
-          selectedClassState,
         )
       ) {
         pendingCompilerSwap = undefined;
@@ -510,10 +504,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     dispose();
     disposeCompilerEvents();
     selectedClassState?.dispose();
-    if (pendingCompilerSwap !== undefined) {
-      records = materializeCompilerSingleNodeSwap(records, pendingCompilerSwap);
-      pendingCompilerSwap = undefined;
-    }
     unregisterSelectedClassRecords(selectedClassState, records.values());
     removeRecordNodes(records.values(), deferEventPromotion);
     records = new Map();
@@ -1283,9 +1273,6 @@ function trySwapSingleNodeItems<T>(
       if (!updateSingleNodeRecord(record, renderArity, currentItems[index], index, currentItems)) {
         return undefined;
       }
-      if (selectedClassState !== undefined) {
-        refreshSelectedClassRecord(selectedClassState, record);
-      }
     }
 
     const secondAnchor = secondRecord.node.nextSibling ?? marker;
@@ -1336,7 +1323,6 @@ function tryRestoreCompilerSingleNodeSwap<T>(
   currentItems: readonly T[],
   key: (item: T, index: number, items: readonly T[]) => unknown,
   renderArity: number,
-  selectedClassState: SelectedClassState | undefined,
 ): boolean {
   if (currentItems.length !== records.size) {
     return false;
@@ -1367,9 +1353,6 @@ function tryRestoreCompilerSingleNodeSwap<T>(
       )
     ) {
       return false;
-    }
-    if (selectedClassState !== undefined) {
-      refreshSelectedClassRecord(selectedClassState, currentRecord.value);
     }
   }
 
