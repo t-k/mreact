@@ -491,6 +491,7 @@ interface EmitSetupState {
   clientBoundaryHelperName?: string | undefined;
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
+  compilerKeyedElementPath?: string | undefined;
   compilerKeyedRowContext?: string | undefined;
 }
 
@@ -744,7 +745,13 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
+    const previousCompilerKeyedElementPath = state.compilerKeyedElementPath;
+    state.compilerKeyedElementPath =
+      state.compilerKeyedRowContext !== undefined && usesLiveChildPath
+        ? childPath
+        : undefined;
     lines.push(emitSetup(child, childPath, state));
+    state.compilerKeyedElementPath = previousCompilerKeyedElementPath;
     if (child.kind === "component") {
       sawComponentMutation = true;
     }
@@ -761,7 +768,7 @@ function shouldCacheCompilerKeyedElementPath(
 ): boolean {
   if (
     state.compilerKeyedRowContext === undefined ||
-    (!path.includes(".childNodes[") && !path.includes(".firstChild"))
+    state.compilerKeyedElementPath !== path
   ) {
     return false;
   }
