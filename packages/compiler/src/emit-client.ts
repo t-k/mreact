@@ -571,10 +571,18 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   const stableChildrenName = needsStableChildrenSnapshot(children)
     ? state.allocateName("_children")
     : undefined;
+  const liveChildrenName =
+    stableChildrenName === undefined &&
+    state.compilerKeyedRowContext !== undefined &&
+    needsCompilerKeyedLiveChildrenAlias(children)
+      ? state.allocateName("_keyedChildren")
+      : undefined;
   let childIndex = 0;
 
   if (stableChildrenName !== undefined) {
     lines.push(`  const ${stableChildrenName} = Array.from(${currentPath}.childNodes);`);
+  } else if (liveChildrenName !== undefined) {
+    lines.push(`  const ${liveChildrenName} = ${currentPath}.childNodes;`);
   }
 
   let sawStaticText = false;
@@ -588,13 +596,20 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
-    const childPath =
+    const usesLiveChildPath =
       stableChildrenName === undefined ||
       (child.kind !== "component" &&
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
-        !sawStaticText)
-        ? `${currentPath}.childNodes[${childIndex}]`
+        !sawStaticText);
+    const childPath = usesLiveChildPath
+      ? liveChildrenName !== undefined
+        ? `${liveChildrenName}[${childIndex}]`
+        : state.compilerKeyedRowContext !== undefined &&
+            stableChildrenName === undefined &&
+            childIndex === 0
+          ? `${currentPath}.firstChild`
+          : `${currentPath}.childNodes[${childIndex}]`
         : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
@@ -744,7 +759,10 @@ function shouldCacheCompilerKeyedElementPath(
   path: string,
   state: EmitSetupState,
 ): boolean {
-  if (state.compilerKeyedRowContext === undefined || !path.includes(".childNodes[")) {
+  if (
+    state.compilerKeyedRowContext === undefined ||
+    (!path.includes(".childNodes[") && !path.includes(".firstChild"))
+  ) {
     return false;
   }
 
@@ -763,6 +781,40 @@ function shouldCacheCompilerKeyedElementPath(
   }
 
   return pathUses > 1;
+}
+
+function needsCompilerKeyedLiveChildrenAlias(children: readonly JsxNodeIr[]): boolean {
+  let setupChildCount = 0;
+
+  for (const child of children) {
+    if (compilerKeyedNodeHasSetup(child)) {
+      setupChildCount += 1;
+      if (setupChildCount > 1) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function compilerKeyedNodeHasSetup(node: JsxNodeIr): boolean {
+  if (node.kind === "text") {
+    return false;
+  }
+
+  if (node.kind === "element") {
+    return (
+      node.attributes.some((attribute) => attribute.kind !== "static-attr") ||
+      node.children.some(compilerKeyedNodeHasSetup)
+    );
+  }
+
+  if (node.kind === "fragment") {
+    return node.children.some(compilerKeyedNodeHasSetup);
+  }
+
+  return true;
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
