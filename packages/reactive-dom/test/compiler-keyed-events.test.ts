@@ -211,4 +211,41 @@ describe("compiler keyed events", () => {
     disposeSecond();
     disposeFirst();
   });
+
+  test("dispatches facade-free compiler programs without defining event.currentTarget", () => {
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    document.body.append(parent);
+    let hadOwnCurrentTarget: boolean | undefined;
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => [{ id: 1 }],
+      () => {
+        const row = document.createElement("tr");
+        const button = document.createElement("button");
+        markCompilerKeyedEventSlot(button, "click", 0);
+        row.append(button);
+        return row;
+      },
+      {
+        key: (row) => row.id,
+        compilerEvents: [
+          {
+            type: "click",
+            needsCurrentTargetFacade: false,
+            dispatch: (_slot, _row, event) => {
+              hadOwnCurrentTarget = Object.hasOwn(event, "currentTarget");
+            },
+          },
+        ],
+      },
+    );
+
+    parent.querySelector("button")?.click();
+    expect(hadOwnCurrentTarget).toBe(false);
+    dispose();
+  });
 });

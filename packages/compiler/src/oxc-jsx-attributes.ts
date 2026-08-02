@@ -15,10 +15,15 @@ import {
 import type { CompileTarget, Diagnostic } from "./types.js";
 
 const stableKeyedEventAttributes = new WeakSet<object>();
+const currentTargetFreeKeyedEventAttributes = new WeakSet<object>();
 const dynamicAttributeExpressions = new WeakMap<DynamicAttributeIr, Record<string, unknown>>();
 
 export function isStableOxcKeyedEventAttribute(attribute: AttributeIr): boolean {
   return attribute.kind === "event" && stableKeyedEventAttributes.has(attribute);
+}
+
+export function isCurrentTargetFreeOxcKeyedEventAttribute(attribute: AttributeIr): boolean {
+  return attribute.kind === "event" && currentTargetFreeKeyedEventAttributes.has(attribute);
 }
 
 export function readOxcDynamicAttributeExpression(
@@ -113,6 +118,12 @@ export function analyzeOxcAttribute(
     };
     if (stableForKeyedReuse) {
       stableKeyedEventAttributes.add(eventAttribute);
+    }
+    if (
+      unwrappedExpression.type === "ArrowFunctionExpression" &&
+      readArray(unwrappedExpression.params).length === 0
+    ) {
+      currentTargetFreeKeyedEventAttributes.add(eventAttribute);
     }
     return [eventAttribute];
   }
