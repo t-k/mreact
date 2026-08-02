@@ -6,6 +6,7 @@ import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
 import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
+import { registerDispose } from "../src/scope.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
   test("compiler-owned text cleanup disposes subscriptions when row rendering throws", async () => {
@@ -1097,7 +1098,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
-  test("defers compiler swap map materialization across a reverse swap", async () => {
+  test("materializes deferred compiler swap order before an append", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
       "utf8",
@@ -1134,18 +1135,52 @@ describe("bindStaticKeyedSingleNodeList", () => {
     [swapped[1], swapped[8]] = [swapped[8]!, swapped[1]!];
     items.set(swapped);
     await flushEffects();
-    items.set(initialRows.slice());
-    await flushEffects();
-    items.set([...initialRows, { id: 11 }]);
+    items.set([...swapped, { id: 11 }]);
     await flushEffects();
 
     expect(Array.from(parent.children, (row) => row.textContent)).toEqual(
-      Array.from({ length: 11 }, (_, index) => String(index + 1)),
+      [...swapped.map((item) => String(item.id)), "11"],
     );
     dispose();
   });
 
-  test("moves compiler selected classes without rewriting unchanged class values", async () => {
+  test("disposes deferred compiler swaps in current logical row order", async () => {
+    const run = async (clear: boolean): Promise<number[]> => {
+      const initialRows = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+      const items = cell(initialRows);
+      const parent = document.createElement("tbody");
+      const marker = document.createComment("rows");
+      const disposed: number[] = [];
+      parent.append(marker);
+      const dispose = bindCompilerKeyedSingleNodeList(
+        parent,
+        marker,
+        () => items.get(),
+        (context) => {
+          const id = context.item.id;
+          registerDispose(() => disposed.push(id));
+          return document.createElement("tr");
+        },
+        { key: (item) => item.id },
+      );
+
+      items.set([initialRows[0]!, initialRows[3]!, initialRows[2]!, initialRows[1]!]);
+      await flushEffects();
+      if (clear) {
+        items.set([]);
+        await flushEffects();
+        dispose();
+      } else {
+        dispose();
+      }
+      return disposed;
+    };
+
+    await expect(run(false)).resolves.toEqual([1, 4, 3, 2]);
+    await expect(run(true)).resolves.toEqual([1, 4, 3, 2]);
+  });
+
+  test("repairs compiler selected classes while deferring swap map materialization", async () => {
     const selected = cell<unknown>(2);
     const items = cell([{ id: 1 }, { id: 2 }, { id: 3 }]);
     const parent = document.createElement("tbody");
@@ -1187,14 +1222,26 @@ describe("bindStaticKeyedSingleNodeList", () => {
       "danger",
       "",
     ]);
-    expect(classWrites).toBe(0);
+    expect(classWrites).toBe(3);
 
+    parent.children[2]?.setAttribute("class", "outside");
+    classWrites = 0;
+    items.set([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.className)).toEqual([
+      "",
+      "danger",
+      "",
+    ]);
+    expect(classWrites).toBe(3);
+
+    classWrites = 0;
     selected.set(3);
     await flushEffects();
     expect(Array.from(parent.children, (row) => row.className)).toEqual([
+      "",
+      "",
       "danger",
-      "",
-      "",
     ]);
     expect(classWrites).toBe(2);
     dispose();
