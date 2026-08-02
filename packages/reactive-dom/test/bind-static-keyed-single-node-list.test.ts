@@ -5,7 +5,11 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
-import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
+import {
+  bindCompilerKeyedPropertyText,
+  bindCompilerKeyedSingleNodeList,
+  bindCompilerKeyedText,
+} from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
   test("compiler-owned text cleanup disposes subscriptions when row rendering throws", async () => {
@@ -124,6 +128,54 @@ describe("bindStaticKeyedSingleNodeList", () => {
     await flushEffects();
     expect(serverParent.children).toHaveLength(1);
     expect(serverParent.textContent).toBe("B!!");
+
+    dispose();
+  });
+
+  test("compiler keyed property text relies on the dynamic row marker during hydration", async () => {
+    type Item = { readonly id: number; readonly label: string };
+    type DynamicNode = Node & {
+      __mreactDynamicNode?: true;
+      __mreactReactiveText?: true;
+    };
+    const hydrationGlobal = globalThis as typeof globalThis & {
+      __mreactHydratingDynamicRanges?: boolean;
+    };
+    const items = cell<readonly Item[]>([{ id: 1, label: "A" }]);
+    const generatedParent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    generatedParent.append(marker);
+
+    hydrationGlobal.__mreactHydratingDynamicRanges = true;
+    const dispose = bindCompilerKeyedSingleNodeList(
+      generatedParent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        const cellNode = document.createElement("td");
+        const text = document.createTextNode("");
+        bindCompilerKeyedPropertyText(context, text, "label");
+        cellNode.append(text);
+        row.append(cellNode);
+        return row;
+      },
+      { key: (item) => item.id, compilerOwnsTextCleanup: true },
+    );
+    delete hydrationGlobal.__mreactHydratingDynamicRanges;
+    await flushEffects();
+
+    const generatedRow = generatedParent.firstChild as DynamicNode;
+    const generatedText = generatedRow.firstChild?.firstChild as DynamicNode;
+    expect(generatedRow.__mreactDynamicNode).toBe(true);
+    expect(generatedText.__mreactReactiveText).toBeUndefined();
+
+    const serverParent = document.createElement("tbody");
+    serverParent.innerHTML = "<tr><td>A</td></tr>";
+    serverParent.firstChild?.replaceWith(generatedRow);
+    items.set([{ id: 1, label: "B" }]);
+    await flushEffects();
+    expect(serverParent.textContent).toBe("B");
 
     dispose();
   });
