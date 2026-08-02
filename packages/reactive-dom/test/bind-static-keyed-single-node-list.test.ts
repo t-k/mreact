@@ -1027,6 +1027,19 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).not.toContain("bufferedRecords");
   });
 
+  test("keeps compiler same-order and swap detection free of a row buffer", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    const compilerSwapStart = source.indexOf("function trySwapCompilerSingleNodeItems");
+    const genericSwapStart = source.indexOf("function trySwapSingleNodeItems");
+
+    expect(compilerSwapStart).toBeGreaterThan(-1);
+    expect(genericSwapStart).toBeGreaterThan(compilerSwapStart);
+    expect(source.slice(compilerSwapStart, genericSwapStart)).not.toContain("orderedRecords");
+  });
+
   test("detects single-node row swaps without a second full key scan", async () => {
     const initialRows = Array.from({ length: 1_000 }, (_, index) => ({
       id: index + 1,
