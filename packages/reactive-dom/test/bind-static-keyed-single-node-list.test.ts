@@ -1097,6 +1097,109 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("defers compiler swap map materialization across a reverse swap", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    const sparseSwapStart = source.indexOf("if (orderedRecords === undefined)");
+    const genericSwapStart = source.indexOf(
+      "const nextRecords = new Map<unknown, SingleNodeRecord>();",
+      sparseSwapStart,
+    );
+    const sparseSwapSource = source.slice(sparseSwapStart, genericSwapStart);
+
+    expect(sparseSwapStart).toBeGreaterThan(-1);
+    expect(sparseSwapSource).not.toContain("new Map");
+    expect(sparseSwapSource).not.toContain("new Array");
+
+    const initialRows = Array.from({ length: 10 }, (_, index) => ({ id: index + 1 }));
+    const items = cell(initialRows);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        row.textContent = String(context.item.id);
+        return row;
+      },
+      { key: (item) => item.id },
+    );
+
+    const swapped = initialRows.slice();
+    [swapped[1], swapped[8]] = [swapped[8]!, swapped[1]!];
+    items.set(swapped);
+    await flushEffects();
+    items.set(initialRows.slice());
+    await flushEffects();
+    items.set([...initialRows, { id: 11 }]);
+    await flushEffects();
+
+    expect(Array.from(parent.children, (row) => row.textContent)).toEqual(
+      Array.from({ length: 11 }, (_, index) => String(index + 1)),
+    );
+    dispose();
+  });
+
+  test("moves compiler selected classes without rewriting unchanged class values", async () => {
+    const selected = cell<unknown>(2);
+    const items = cell([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let classWrites = 0;
+    parent.append(marker);
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        row.setAttribute("class", "");
+        const setAttribute = row.setAttribute.bind(row);
+        row.setAttribute = ((name, value) => {
+          if (name === "class") {
+            classWrites += 1;
+          }
+          setAttribute(name, value);
+        }) as typeof row.setAttribute;
+        row.textContent = String(context.item.id);
+        return row;
+      },
+      {
+        key: (item) => item.id,
+        compilerSelectedClass: {
+          className: "danger",
+          initialClassValue: "",
+          source: selected,
+        },
+      },
+    );
+
+    classWrites = 0;
+    items.set([{ id: 3 }, { id: 2 }, { id: 1 }]);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.className)).toEqual([
+      "",
+      "danger",
+      "",
+    ]);
+    expect(classWrites).toBe(0);
+
+    selected.set(3);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.className)).toEqual([
+      "danger",
+      "",
+      "",
+    ]);
+    expect(classWrites).toBe(2);
+    dispose();
+  });
+
   test("keeps same-order single-node rows without a second full key scan", async () => {
     const initialRows = Array.from({ length: 1_000 }, (_, index) => ({
       id: index + 1,

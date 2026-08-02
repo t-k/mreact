@@ -170,6 +170,18 @@ interface SingleNodeKeyedItems<T> {
   keys: readonly unknown[];
 }
 
+interface PendingCompilerSingleNodeSwap {
+  firstIndex: number;
+  firstRecord: SingleNodeRecord;
+  secondIndex: number;
+  secondRecord: SingleNodeRecord;
+}
+
+interface SingleNodeSwapResult {
+  pendingCompilerSwap?: PendingCompilerSingleNodeSwap;
+  records: Map<unknown, SingleNodeRecord>;
+}
+
 /** Binds a static keyed list where each item renders exactly one DOM node. */
 export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   parent: ParentNode,
@@ -179,6 +191,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   options: BindStaticKeyedSingleNodeListOptions<T, TNode>,
 ): Dispose {
   let records = new Map<unknown, SingleNodeRecord>();
+  let pendingCompilerSwap: PendingCompilerSingleNodeSwap | undefined;
   let ownsParent = false;
   const deferEventPromotion = options.deferEventPromotion !== false;
   const renderArity = renderItem.length;
@@ -201,6 +214,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       clearSelectedClassRecords(selectedClassState);
       removeRecordNodes(records.values(), deferEventPromotion);
       records = new Map();
+      pendingCompilerSwap = undefined;
       ownsParent = false;
       return;
     }
@@ -219,8 +233,30 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
         removeRecordNodes(records.values(), deferEventPromotion);
       }
       records = new Map();
+      pendingCompilerSwap = undefined;
       ownsParent = marker.nextSibling === null && insertionParent.childNodes.length === 1;
       return;
+    }
+
+    if (pendingCompilerSwap !== undefined) {
+      if (
+        ownsCurrentParent &&
+        tryRestoreCompilerSingleNodeSwap(
+          insertionParent,
+          marker,
+          records,
+          pendingCompilerSwap,
+          currentItems,
+          options.key,
+          renderArity,
+        )
+      ) {
+        pendingCompilerSwap = undefined;
+        return;
+      }
+
+      records = materializeCompilerSingleNodeSwap(records, pendingCompilerSwap);
+      pendingCompilerSwap = undefined;
     }
 
     const fastReplacementRecords =
@@ -297,7 +333,8 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       : undefined;
 
     if (fastSwappedRecords !== undefined) {
-      records = fastSwappedRecords;
+      records = fastSwappedRecords.records;
+      pendingCompilerSwap = fastSwappedRecords.pendingCompilerSwap;
       ownsParent = true;
       return;
     }
@@ -470,6 +507,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
     unregisterSelectedClassRecords(selectedClassState, records.values());
     removeRecordNodes(records.values(), deferEventPromotion);
     records = new Map();
+    pendingCompilerSwap = undefined;
   });
 }
 
@@ -1106,14 +1144,23 @@ function trySwapSingleNodeItems<T>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
   renderArity: number,
   selectedClassState: SelectedClassState | undefined,
-): Map<unknown, SingleNodeRecord> | undefined {
+): SingleNodeSwapResult | undefined {
   if (currentItems.length !== records.size || currentItems.length < 2) {
     return undefined;
   }
 
   const previousRecords = records[Symbol.iterator]();
-  // oxlint-disable-next-line unicorn/no-new-array -- this hot path fills every slot while avoiding a second swap buffer.
-  const orderedRecords = new Array<SingleNodeRecord>(currentItems.length);
+  const firstRecordEntry = previousRecords.next();
+  if (firstRecordEntry.done) {
+    return undefined;
+  }
+  const deferCompilerSwapOrder =
+    firstRecordEntry.value[1].compilerContext !== undefined &&
+    (selectedClassState === undefined || selectedClassState.compilerMode);
+  // oxlint-disable-next-line unicorn/no-new-array -- the generic hot path fills every slot while avoiding a second swap buffer.
+  const orderedRecords = deferCompilerSwapOrder
+    ? undefined
+    : new Array<SingleNodeRecord>(currentItems.length);
   let firstIndex = -1;
   let secondIndex = -1;
   let firstPreviousKey: unknown;
@@ -1124,7 +1171,7 @@ function trySwapSingleNodeItems<T>(
   let secondRecord: SingleNodeRecord | undefined;
 
   for (let index = 0; index < currentItems.length; index += 1) {
-    const previousRecord = previousRecords.next();
+    const previousRecord = index === 0 ? firstRecordEntry : previousRecords.next();
 
     if (previousRecord.done) {
       return undefined;
@@ -1134,8 +1181,14 @@ function trySwapSingleNodeItems<T>(
     const previousKey = previousRecord.value[0];
     const record = previousRecord.value[1];
 
+    if (deferCompilerSwapOrder && record.compilerContext === undefined) {
+      return undefined;
+    }
+
     if (Object.is(previousKey, nextKey)) {
-      orderedRecords[index] = record;
+      if (orderedRecords !== undefined) {
+        orderedRecords[index] = record;
+      }
       continue;
     }
 
@@ -1157,8 +1210,10 @@ function trySwapSingleNodeItems<T>(
         return undefined;
       }
 
-      orderedRecords[firstIndex] = secondRecord;
-      orderedRecords[secondIndex] = firstRecord as SingleNodeRecord;
+      if (orderedRecords !== undefined) {
+        orderedRecords[firstIndex] = secondRecord;
+        orderedRecords[secondIndex] = firstRecord as SingleNodeRecord;
+      }
     } else {
       return undefined;
     }
@@ -1166,10 +1221,16 @@ function trySwapSingleNodeItems<T>(
 
   if (firstIndex === -1) {
     const refreshSelectedClasses = shouldRefreshSelectedClassRecords(selectedClassState);
+    const sameOrderRecords =
+      orderedRecords === undefined ? records.values() : orderedRecords[Symbol.iterator]();
 
     for (let index = 0; index < currentItems.length; index += 1) {
       const item = currentItems[index] as T;
-      const record = orderedRecords[index] as SingleNodeRecord;
+      const nextRecord = sameOrderRecords.next();
+      if (nextRecord.done) {
+        return undefined;
+      }
+      const record = nextRecord.value;
 
       if (
         !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
@@ -1183,7 +1244,7 @@ function trySwapSingleNodeItems<T>(
       }
     }
 
-    return records;
+    return { records };
   }
 
   if (
@@ -1192,6 +1253,34 @@ function trySwapSingleNodeItems<T>(
     secondRecord === undefined
   ) {
     return undefined;
+  }
+
+  if (orderedRecords === undefined) {
+    const currentRecords = records.values();
+
+    for (let index = 0; index < currentItems.length; index += 1) {
+      const currentRecord = currentRecords.next();
+      if (currentRecord.done) {
+        return undefined;
+      }
+      const record =
+        index === firstIndex
+          ? secondRecord
+          : index === secondIndex
+            ? firstRecord
+            : currentRecord.value;
+
+      if (!updateSingleNodeRecord(record, renderArity, currentItems[index], index, currentItems)) {
+        return undefined;
+      }
+    }
+
+    const secondAnchor = secondRecord.node.nextSibling ?? marker;
+    moveSwappedSingleNodeRecords(parent, records, secondRecord, firstRecord, secondAnchor);
+    return {
+      records,
+      pendingCompilerSwap: { firstIndex, firstRecord, secondIndex, secondRecord },
+    };
   }
 
   const nextRecords = new Map<unknown, SingleNodeRecord>();
@@ -1216,7 +1305,88 @@ function trySwapSingleNodeItems<T>(
 
   const secondAnchor = orderedRecords[secondIndex + 1]?.node ?? marker;
 
-  return moveSwappedSingleNodeRecords(parent, nextRecords, secondRecord, firstRecord, secondAnchor);
+  const swappedRecords = moveSwappedSingleNodeRecords(
+    parent,
+    nextRecords,
+    secondRecord,
+    firstRecord,
+    secondAnchor,
+  );
+  return swappedRecords === undefined ? undefined : { records: swappedRecords };
+}
+
+function tryRestoreCompilerSingleNodeSwap<T>(
+  parent: ParentNode,
+  marker: ChildNode,
+  records: Map<unknown, SingleNodeRecord>,
+  pendingSwap: PendingCompilerSingleNodeSwap,
+  currentItems: readonly T[],
+  key: (item: T, index: number, items: readonly T[]) => unknown,
+  renderArity: number,
+): boolean {
+  if (currentItems.length !== records.size) {
+    return false;
+  }
+
+  const previousRecords = records[Symbol.iterator]();
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const previousRecord = previousRecords.next();
+    if (
+      previousRecord.done ||
+      !Object.is(previousRecord.value[0], key(currentItems[index] as T, index, currentItems))
+    ) {
+      return false;
+    }
+  }
+
+  const currentRecords = records.values();
+  for (let index = 0; index < currentItems.length; index += 1) {
+    const currentRecord = currentRecords.next();
+    if (
+      currentRecord.done ||
+      !updateSingleNodeRecord(
+        currentRecord.value,
+        renderArity,
+        currentItems[index],
+        index,
+        currentItems,
+      )
+    ) {
+      return false;
+    }
+  }
+
+  const secondAnchor = pendingSwap.firstRecord.node.nextSibling ?? marker;
+  return (
+    moveSwappedSingleNodeRecords(
+      parent,
+      records,
+      pendingSwap.firstRecord,
+      pendingSwap.secondRecord,
+      secondAnchor,
+    ) !== undefined
+  );
+}
+
+function materializeCompilerSingleNodeSwap(
+  records: Map<unknown, SingleNodeRecord>,
+  pendingSwap: PendingCompilerSingleNodeSwap,
+): Map<unknown, SingleNodeRecord> {
+  const nextRecords = new Map<unknown, SingleNodeRecord>();
+  let index = 0;
+
+  for (const record of records.values()) {
+    const orderedRecord =
+      index === pendingSwap.firstIndex
+        ? pendingSwap.secondRecord
+        : index === pendingSwap.secondIndex
+          ? pendingSwap.firstRecord
+          : record;
+    nextRecords.set(orderedRecord.key, orderedRecord);
+    index += 1;
+  }
+
+  return nextRecords;
 }
 
 function updateSameOrderRecords<T>(
@@ -1921,6 +2091,7 @@ function promoteRecordEvents(records: Iterable<SingleNodeRecord>): void {
 
 interface SelectedClassState {
   activeRecords: boolean;
+  compilerMode: boolean;
   current: unknown;
   dispose: Dispose;
   matches: (selected: unknown, key: unknown) => boolean;
@@ -1946,6 +2117,7 @@ function createSelectedClassState<T, TNode extends ChildNode>(
   const compilerMode = options.compilerMode === "strict-replace";
   const state: SelectedClassState = {
     activeRecords: !preserveInitial,
+    compilerMode,
     current: untrack(() => options.source.get()),
     dispose: () => {},
     matches: compilerMode ? (selected, key) => selected === key : Object.is,
