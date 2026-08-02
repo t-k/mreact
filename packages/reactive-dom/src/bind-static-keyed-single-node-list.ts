@@ -1921,6 +1921,8 @@ function promoteRecordEvents(records: Iterable<SingleNodeRecord>): void {
 
 interface SelectedClassState {
   activeRecords: boolean;
+  className: string;
+  compilerMode: boolean;
   current: unknown;
   dispose: Dispose;
   matches: (selected: unknown, key: unknown) => boolean;
@@ -1946,6 +1948,8 @@ function createSelectedClassState<T, TNode extends ChildNode>(
   const compilerMode = options.compilerMode === "strict-replace";
   const state: SelectedClassState = {
     activeRecords: !preserveInitial,
+    className: options.className,
+    compilerMode,
     current: untrack(() => options.source.get()),
     dispose: () => {},
     matches: compilerMode ? (selected, key) => selected === key : Object.is,
@@ -2003,6 +2007,13 @@ function activateSelectedClassRecords(state: SelectedClassState): void {
 
   state.activeRecords = true;
 
+  if (state.compilerMode) {
+    for (const record of state.recordsSource()) {
+      state.records.set(record.key, record.node as Element);
+    }
+    return;
+  }
+
   for (const record of state.recordsSource()) {
     if (record.selectedClassElement !== undefined) {
       state.records.set(record.key, record.selectedClassElement);
@@ -2011,6 +2022,11 @@ function activateSelectedClassRecords(state: SelectedClassState): void {
 }
 
 function updateSelectedClassValue(state: SelectedClassState, next: unknown): void {
+  if (state.compilerMode) {
+    updateCompilerSelectedClassValue(state, next);
+    return;
+  }
+
   if (state.sameSelection(state.current, next)) {
     return;
   }
@@ -2027,6 +2043,30 @@ function updateSelectedClassValue(state: SelectedClassState, next: unknown): voi
   }
 }
 
+function updateCompilerSelectedClassValue(state: SelectedClassState, next: unknown): void {
+  const previous = state.current;
+
+  if (
+    previous === next ||
+    (typeof previous === "number" &&
+      typeof next === "number" &&
+      Number.isNaN(previous) &&
+      Number.isNaN(next))
+  ) {
+    return;
+  }
+
+  const previousElement = state.records.get(previous);
+  if (previousElement !== undefined && previous === previous) {
+    previousElement.setAttribute("class", "");
+  }
+  state.current = next;
+  const nextElement = state.records.get(next);
+  if (nextElement !== undefined && next === next) {
+    nextElement.setAttribute("class", state.className);
+  }
+}
+
 function registerSelectedClassRecord<T, TNode extends ChildNode>(
   state: SelectedClassState | undefined,
   record: SingleNodeRecord,
@@ -2035,6 +2075,11 @@ function registerSelectedClassRecord<T, TNode extends ChildNode>(
   items: readonly T[],
 ): void {
   if (state === undefined) {
+    return;
+  }
+
+  if (state.compilerMode) {
+    registerCompilerSelectedClassRecord(state, record);
     return;
   }
 
@@ -2066,11 +2111,48 @@ function registerSelectedClassRecord<T, TNode extends ChildNode>(
   state.write(element, selected);
 }
 
+function registerCompilerSelectedClassRecord(
+  state: SelectedClassState,
+  record: SingleNodeRecord,
+): void {
+  const element = record.node as Element;
+
+  if (state.activeRecords) {
+    state.records.set(record.key, element);
+  }
+
+  const selected = state.current === record.key;
+  if (!selected && state.skipInitialUnselectedWrite) {
+    return;
+  }
+
+  element.setAttribute("class", selected ? state.className : "");
+}
+
+function refreshCompilerSelectedClassRecord(
+  state: SelectedClassState,
+  record: SingleNodeRecord,
+): void {
+  (record.node as Element).setAttribute(
+    "class",
+    state.current === record.key ? state.className : "",
+  );
+}
+
 function refreshSelectedClassRecord(
   state: SelectedClassState | undefined,
   record: SingleNodeRecord,
 ): void {
-  if (state === undefined || record.selectedClassElement === undefined) {
+  if (state === undefined) {
+    return;
+  }
+
+  if (state.compilerMode) {
+    refreshCompilerSelectedClassRecord(state, record);
+    return;
+  }
+
+  if (record.selectedClassElement === undefined) {
     return;
   }
 
@@ -2089,7 +2171,18 @@ function unregisterSelectedClassRecord(
   state: SelectedClassState | undefined,
   record: SingleNodeRecord | undefined,
 ): void {
-  if (state === undefined || !state.activeRecords || record?.selectedClassElement === undefined) {
+  if (state === undefined || !state.activeRecords || record === undefined) {
+    return;
+  }
+
+  if (state.compilerMode) {
+    if (state.records.get(record.key) === record.node) {
+      state.records.delete(record.key);
+    }
+    return;
+  }
+
+  if (record.selectedClassElement === undefined) {
     return;
   }
 
