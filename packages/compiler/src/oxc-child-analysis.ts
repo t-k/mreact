@@ -38,6 +38,7 @@ import {
   analyzeOxcAttribute,
   findOxcJsxAttributeCode,
   isStableOxcKeyedEventAttribute,
+  readOxcInlineKeyedEventExpression,
   readOxcDynamicAttributeExpression,
   readOxcJsxTagName,
 } from "./oxc-jsx-attributes.js";
@@ -894,7 +895,11 @@ function analyzeCompilerKeyedEventPrograms(
         programs.set(attribute.eventName, program);
       }
       attribute.compilerKeyedSlot = program.handlers.length;
-      program.handlers.push(attribute.code);
+      const inlineExpression = readOxcInlineKeyedEventExpression(attribute);
+      program.handlers.push({
+        code: attribute.code,
+        ...(inlineExpression === undefined ? {} : { inlineExpression }),
+      });
     }
   });
 
