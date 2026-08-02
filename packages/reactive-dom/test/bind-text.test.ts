@@ -139,7 +139,9 @@ describe("bindText", () => {
     const directBranch = source.slice(subscribeCellStart, directReturnStart);
 
     expect(directBranch).not.toContain("shouldWrite");
-    expect(directBranch).toContain("node.data = normalizeText(nextValue)");
+    expect(directBranch).toContain('typeof nextValue === "string"');
+    expect(directBranch).toContain("? nextValue");
+    expect(directBranch).toContain(": normalizeText(nextValue)");
   });
 
 
