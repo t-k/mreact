@@ -149,7 +149,8 @@ describe("compiler runtime smoke", () => {
           customElements.define("mreact-element-path-host", ElementPathHost);
         }
         const row = {
-          get id() {
+          key: 1,
+          get trigger() {
             const prefix = globalThis.__elementPathHost?.firstChild;
             if (prefix?.nodeType === Node.TEXT_NODE) {
               prefix.replaceWith(document.createElement("i"));
@@ -161,9 +162,9 @@ describe("compiler runtime smoke", () => {
         const rows = cell([row]);
         export function App() {
           return <section>{rows.get().map((item) => (
-            <div key={item.id}>
-              <span>{item.id}</span>
-              <mreact-element-path-host>prefix<button onClick={() => globalThis.__selected = item.id}>{item.label}</button></mreact-element-path-host>
+            <div key={item.key}>
+              <span>{item.trigger}</span>
+              <mreact-element-path-host>prefix<button onClick={() => globalThis.__selected = item.key}>{item.label}</button></mreact-element-path-host>
             </div>
           ))}</section>;
         }`,
