@@ -207,7 +207,7 @@ describe("subscribeRefreshable", () => {
     outerSource.set("outer-b");
     innerSource.set("inner-b");
     await flushEffects();
-    expect(values).toEqual(["outer:outer-b", "inner:inner-b"]);
+    expect(values).toEqual(["inner:inner-b", "outer:outer-b"]);
 
     outerSubscription?.dispose();
     innerSubscription?.dispose();
@@ -233,6 +233,23 @@ describe("subscribeRefreshable", () => {
     external.set("B");
     await flushEffects();
     expect(refreshes).toBe(0);
+  });
+
+  test("removes the deferred tracker when the lazy listener factory throws", () => {
+    const source: Source = { subscribers: null };
+
+    expect(() =>
+      subscribeRefreshableIfTrackedLazy(
+        () => {
+          trackSource(source);
+        },
+        () => {
+          throw new Error("factory failed");
+        },
+      ),
+    ).toThrow("factory failed");
+
+    expect(source.subscribers).toBeNull();
   });
 
   test("promotes to a refreshable subscription on the first source read", async () => {

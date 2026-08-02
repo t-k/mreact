@@ -5,7 +5,11 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
-import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
+import {
+  bindCompilerKeyedPropertyText,
+  bindCompilerKeyedSingleNodeList,
+  bindCompilerKeyedText,
+} from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
   test("compiler-owned text cleanup disposes subscriptions when row rendering throws", async () => {
@@ -36,6 +40,69 @@ describe("bindStaticKeyedSingleNodeList", () => {
     await flushEffects();
     expect(reads).toBe(1);
     expect(parent.innerHTML).toBe("<!--rows-->");
+  });
+
+  test("keeps reentrant compiler property text probes isolated", async () => {
+    const outerValue = cell("outer-a");
+    const innerValue = cell("inner-a");
+    const innerParent = document.createElement("div");
+    const innerMarker = document.createComment("inner");
+    const outerParent = document.createElement("div");
+    const outerMarker = document.createComment("outer");
+    let innerDispose: (() => void) | undefined;
+    innerParent.append(innerMarker);
+    outerParent.append(outerMarker);
+
+    const innerItem = {
+      id: 1,
+      get label(): string {
+        return innerValue.get();
+      },
+    };
+    const outerItem = {
+      id: 1,
+      get label(): string {
+        innerDispose ??= bindCompilerKeyedSingleNodeList(
+          innerParent,
+          innerMarker,
+          () => [innerItem],
+          (context) => {
+            const node = document.createElement("span");
+            const text = document.createTextNode("");
+            bindCompilerKeyedPropertyText(context, text, "label");
+            node.append(text);
+            return node;
+          },
+          { key: (item) => item.id, compilerOwnsTextCleanup: true },
+        );
+        return outerValue.get();
+      },
+    };
+    const outerDispose = bindCompilerKeyedSingleNodeList(
+      outerParent,
+      outerMarker,
+      () => [outerItem],
+      (context) => {
+        const node = document.createElement("span");
+        const text = document.createTextNode("");
+        bindCompilerKeyedPropertyText(context, text, "label");
+        node.append(text);
+        return node;
+      },
+      { key: (item) => item.id, compilerOwnsTextCleanup: true },
+    );
+    await flushEffects();
+
+    expect(outerParent.firstChild?.textContent).toBe("outer-a");
+    expect(innerParent.firstChild?.textContent).toBe("inner-a");
+    outerValue.set("outer-b");
+    innerValue.set("inner-b");
+    await flushEffects();
+    expect(outerParent.firstChild?.textContent).toBe("outer-b");
+    expect(innerParent.firstChild?.textContent).toBe("inner-b");
+
+    outerDispose();
+    innerDispose?.();
   });
 
   test("keeps compiler keyed records live after dynamic-range hydration adopts them", async () => {
