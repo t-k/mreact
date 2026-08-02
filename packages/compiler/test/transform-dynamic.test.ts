@@ -192,7 +192,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("_keyedRoot.firstElementChild.childNodes[0]");
     expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[3\]\.firstElementChild;/u,
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[3\]\.childNodes\[0\];/u,
     );
     expect(output.code).not.toContain("_keyedRoot.firstElementChild.nextElementSibling");
   });

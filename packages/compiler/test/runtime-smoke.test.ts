@@ -136,6 +136,50 @@ describe("compiler runtime smoke", () => {
     expect(row.textContent).toBe("prefix1middleBsuffix");
   });
 
+  test("compiler keyed element paths stay disabled below a sibling reached after user code", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        class ElementPathHost extends HTMLElement {
+          constructor() {
+            super();
+            globalThis.__elementPathHost = this;
+          }
+        }
+        if (customElements.get("mreact-element-path-host") === undefined) {
+          customElements.define("mreact-element-path-host", ElementPathHost);
+        }
+        const row = {
+          get id() {
+            const prefix = globalThis.__elementPathHost?.firstChild;
+            if (prefix?.nodeType === Node.TEXT_NODE) {
+              prefix.replaceWith(document.createElement("i"));
+            }
+            return 1;
+          },
+          label: "A",
+        };
+        const rows = cell([row]);
+        export function App() {
+          return <section>{rows.get().map((item) => (
+            <div key={item.id}>
+              <span>{item.id}</span>
+              <mreact-element-path-host>prefix<button onClick={() => globalThis.__selected = item.id}>{item.label}</button></mreact-element-path-host>
+            </div>
+          ))}</section>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const button = node.querySelector("button") as HTMLButtonElement;
+    expect(button.textContent).toBe("A");
+    button.click();
+    expect((globalThis as { __selected?: number }).__selected).toBe(1);
+  });
+
   test("compiler keyed text preserves getter dependencies across row replacement", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

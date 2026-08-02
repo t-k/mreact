@@ -596,6 +596,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       elementIndex += 1;
     }
 
+    const childElementPathsEnabled = canUseElementSiblingPath;
     const usesLiveChildPath =
       stableChildrenName === undefined ||
       (child.kind !== "component" &&
@@ -603,7 +604,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
         usesLiveInsertionAnchor(child) &&
         !sawStaticText);
     const childPath = usesLiveChildPath
-      ? canUseElementSiblingPath && child.kind === "element"
+      ? childElementPathsEnabled && child.kind === "element"
         ? `${currentPath}.firstElementChild${".nextElementSibling".repeat(childElementIndex)}`
         : `${currentPath}.childNodes[${childIndex}]`
       : `${stableChildrenName}[${childIndex}]`;
@@ -744,7 +745,14 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
-    lines.push(emitSetup(child, childPath, state));
+    lines.push(
+      emitSetupWithCompilerKeyedElementPaths(
+        child,
+        childPath,
+        state,
+        childElementPathsEnabled,
+      ),
+    );
     if (child.kind === "component") {
       sawComponentMutation = true;
     }
@@ -752,6 +760,21 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function emitSetupWithCompilerKeyedElementPaths(
+  node: JsxNodeIr,
+  path: string,
+  state: EmitSetupState,
+  enabled: boolean,
+): string {
+  const previous = state.compilerKeyedElementPaths;
+  state.compilerKeyedElementPaths = enabled;
+  try {
+    return emitSetup(node, path, state);
+  } finally {
+    state.compilerKeyedElementPaths = previous;
+  }
 }
 
 function shouldCacheCompilerKeyedElementPath(
