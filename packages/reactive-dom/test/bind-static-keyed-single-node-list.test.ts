@@ -1192,16 +1192,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("function clearSelectedClassRecords");
   });
 
-  test("creates compiler-owned records through a direct row factory", async () => {
-    const source = await readFile(
-      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
-      "utf8",
-    );
-
-    expect(source).toContain("compilerRowRecordFactory");
-    expect(source).toContain("createCompilerOwnedSingleNodeRecord");
-  });
-
   test("skips retained-row refresh when selected classes preserve initial state", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
