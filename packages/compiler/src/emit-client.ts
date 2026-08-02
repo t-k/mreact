@@ -589,13 +589,19 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     }
 
     const childPath =
-      stableChildrenName === undefined ||
-      (child.kind !== "component" &&
-        !sawComponentMutation &&
-        usesLiveInsertionAnchor(child) &&
-        !sawStaticText)
-        ? `${currentPath}.childNodes[${childIndex}]`
-        : `${stableChildrenName}[${childIndex}]`;
+      stableChildrenName === undefined &&
+      state.compilerKeyedRowContext !== undefined &&
+      child.kind === "expr" &&
+      child.renderMode !== "dynamic" &&
+      childIndex === 0
+        ? `${currentPath}.firstChild`
+        : stableChildrenName === undefined ||
+            (child.kind !== "component" &&
+              !sawComponentMutation &&
+              usesLiveInsertionAnchor(child) &&
+              !sawStaticText)
+          ? `${currentPath}.childNodes[${childIndex}]`
+          : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {

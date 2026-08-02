@@ -167,7 +167,7 @@ describe("compiler dynamic JSX transform", () => {
 
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[0\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.childNodes\[0\];/u,
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[0\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_0 = \k<element>\.firstChild;/u,
     );
     expect(output.code.match(/_keyedRoot\.childNodes\[0\]\.childNodes\[0\]/gu)).toHaveLength(1);
   });
