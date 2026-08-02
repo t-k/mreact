@@ -1274,6 +1274,14 @@ function updateSingleNodeRecord(
 
   if (compilerContext !== undefined) {
     const reads = compilerContext[compilerRowReads];
+    if (
+      (reads & 4) === 0 &&
+      Object.is(compilerContext[compilerRowItem], nextItem) &&
+      compilerContext[compilerRowIndex] === nextIndex
+    ) {
+      compilerContext[compilerRowItems] = nextItems;
+      return true;
+    }
     const changed =
       ((reads & 1) !== 0 && !Object.is(compilerContext[compilerRowItem], nextItem)) ||
       ((reads & 2) !== 0 && compilerContext[compilerRowIndex] !== nextIndex) ||
