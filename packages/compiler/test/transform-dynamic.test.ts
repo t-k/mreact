@@ -172,6 +172,32 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code.match(/_keyedRoot\.childNodes\[0\]\.childNodes\[0\]/gu)).toHaveLength(1);
   });
 
+  test("reads leading compiler keyed text nodes without materializing childNodes", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A" }]);
+          return <tbody>{rows.get().map((row) => (
+            <tr key={row.id}>
+              <td>{row.id}</td>
+              <td><a onClick={() => globalThis.__selected = row.id}>{row.label}</a></td>
+            </tr>
+          ))}</tbody>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const _text_0 = _keyedRoot.childNodes[0].firstChild;");
+    expect(output.code).toMatch(
+      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[1\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_1 = \k<element>\.firstChild;/u,
+    );
+    expect(output.code).not.toContain("_keyedRoot.childNodes[0].childNodes[0]");
+  });
+
   test("archives child nodes when static text precedes a live keyed anchor", () => {
     const output = transform({
       code: `
