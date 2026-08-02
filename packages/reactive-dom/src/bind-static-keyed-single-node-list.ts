@@ -557,8 +557,6 @@ export function bindCompilerKeyedText<T>(
   readValue: () => unknown,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
-  const reactiveText = node as Text & { __mreactReactiveText?: true };
-  reactiveText.__mreactReactiveText = true;
 
   const subscription = subscribeRefreshable(() => {
     const previousContext = activeCompilerTextContext;
@@ -594,8 +592,6 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
   property: K,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
-  const reactiveText = node as Text & { __mreactReactiveText?: true };
-  reactiveText.__mreactReactiveText = true;
 
   const subscription = subscribeRefreshableIfTracked(() => {
     const previousContext = activeCompilerTextContext;
@@ -666,8 +662,6 @@ export function bindCompilerKeyedCellText<T, K extends keyof T>(
   property: K,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
-  const reactiveText = node as Text & { __mreactReactiveText?: true };
-  reactiveText.__mreactReactiveText = true;
 
   const subscription = subscribeRefreshable(() => {
     const previousContext = activeCompilerTextContext;
