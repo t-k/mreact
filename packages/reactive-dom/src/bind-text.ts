@@ -43,8 +43,7 @@ export function bindText(
 
   if (typeof value !== "function") {
     const directDispose = subscribeCell(value, (nextValue) => {
-      node.data =
-        typeof nextValue === "string" ? nextValue : normalizeText(nextValue);
+      node.data = normalizeText(nextValue);
     });
 
     if (directDispose !== undefined) {
