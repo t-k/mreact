@@ -615,6 +615,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
       },
       {
         key: (item) => item.id,
+        compilerOwnsTextCleanup: true,
         compilerSelectedClass: {
           className: "danger",
           initialClassValue: "",
@@ -1038,6 +1039,87 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(compilerSwapStart).toBeGreaterThan(-1);
     expect(genericSwapStart).toBeGreaterThan(compilerSwapStart);
     expect(source.slice(compilerSwapStart, genericSwapStart)).not.toContain("orderedRecords");
+  });
+
+  test("keeps compiler row context and selection current through zero-buffer updates", async () => {
+    const initialRows = Array.from({ length: 6 }, (_, index) => ({
+      id: index + 1,
+      label: String.fromCharCode(65 + index),
+    }));
+    const items = cell(initialRows);
+    const selected = cell<unknown>(2);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    let keyCalls = 0;
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        const text = document.createTextNode("");
+        bindCompilerKeyedText(
+          context,
+          text,
+          () => `${context.item.label}:${context.index}:${context.items.length}`,
+        );
+        row.append(text);
+        return row;
+      },
+      {
+        key: (item) => {
+          keyCalls += 1;
+          return item.id;
+        },
+        compilerOwnsTextCleanup: true,
+        compilerSelectedClass: {
+          className: "danger",
+          initialClassValue: "",
+          source: selected,
+        },
+      },
+    );
+    const initialNodes = Array.from(parent.children);
+
+    keyCalls = 0;
+    initialNodes[1]?.setAttribute("class", "outside");
+    items.set(initialRows.slice());
+    await flushEffects();
+    expect(keyCalls).toBeLessThanOrEqual(initialRows.length + 1);
+    expect(parent.children[1]?.getAttribute("class")).toBe("danger");
+
+    keyCalls = 0;
+    const swappedRows = initialRows.slice();
+    [swappedRows[1], swappedRows[4]] = [
+      swappedRows[4] as (typeof initialRows)[number],
+      swappedRows[1] as (typeof initialRows)[number],
+    ];
+    items.set(swappedRows);
+    await flushEffects();
+    expect(keyCalls).toBeLessThanOrEqual(initialRows.length + 1);
+    expect(parent.children[1]).toBe(initialNodes[4]);
+    expect(parent.children[4]).toBe(initialNodes[1]);
+    expect(parent.children[1]?.textContent).toBe("E:1:6");
+    expect(parent.children[4]?.textContent).toBe("B:4:6");
+    expect(parent.children[4]?.getAttribute("class")).toBe("danger");
+
+    const rotatedRows = [
+      swappedRows[2] as (typeof initialRows)[number],
+      swappedRows[0] as (typeof initialRows)[number],
+      swappedRows[1] as (typeof initialRows)[number],
+      ...swappedRows.slice(3),
+    ];
+    items.set(rotatedRows);
+    await flushEffects();
+    expect(Array.from(parent.children, (row) => row.textContent)).toEqual(
+      rotatedRows.map((row, index) => `${row.label}:${index}:6`),
+    );
+    expect(parent.children[0]).toBe(initialNodes[2]);
+    expect(parent.children[2]).toBe(initialNodes[4]);
+
+    dispose();
   });
 
   test("detects single-node row swaps without a second full key scan", async () => {
