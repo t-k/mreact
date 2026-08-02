@@ -190,6 +190,47 @@ describe("bindStaticKeyedSingleNodeList", () => {
     parent.remove();
   });
 
+  test("reads direct compiler key properties without invoking the key callback on initial create", () => {
+    let keyCalls = 0;
+    let propertyReads = 0;
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const rows = [1, 2, 3].map(
+      (id) =>
+        new Proxy(
+          { id },
+          {
+            get(target, property, receiver) {
+              if (property === "id") {
+                propertyReads += 1;
+              }
+              return Reflect.get(target, property, receiver);
+            },
+          },
+        ),
+    );
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => rows,
+      () => document.createElement("tr"),
+      {
+        key: (item) => {
+          keyCalls += 1;
+          return item.id;
+        },
+        compilerKeyProperty: "id",
+      },
+    );
+
+    expect(keyCalls).toBe(0);
+    expect(propertyReads).toBe(rows.length);
+    expect(parent.children).toHaveLength(rows.length);
+    dispose();
+  });
+
   test("does not notify item-only compiler rows for an unused array identity change", async () => {
     const first = { id: 1, label: "A" };
     const items = cell<readonly (typeof first)[]>([first]);
