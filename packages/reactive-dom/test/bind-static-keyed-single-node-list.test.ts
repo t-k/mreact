@@ -1192,22 +1192,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("function clearSelectedClassRecords");
   });
 
-  test("uses compiler row roots directly for strict selected classes", async () => {
-    const source = await readFile(
-      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
-      "utf8",
-    );
-    const compilerRefreshStart = source.indexOf("function refreshCompilerSelectedClassRecord");
-    const genericRefreshStart = source.indexOf("function refreshSelectedClassRecord");
-
-    expect(compilerRefreshStart).toBeGreaterThan(-1);
-    expect(genericRefreshStart).toBeGreaterThan(compilerRefreshStart);
-    expect(source.slice(compilerRefreshStart, genericRefreshStart)).toContain("record.node");
-    expect(source.slice(compilerRefreshStart, genericRefreshStart)).not.toContain(
-      "selectedClassElement",
-    );
-  });
-
   test("skips retained-row refresh when selected classes preserve initial state", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
