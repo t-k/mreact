@@ -1059,6 +1059,20 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).not.toContain("const staleKeys");
   });
 
+  test("scans removable rows without materializing map entry pairs", async () => {
+    const source = await readFile(
+      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
+      "utf8",
+    );
+    const removeStart = source.indexOf("function tryRemoveSingleNodeItems");
+    const swapStart = source.indexOf("function trySwapSingleNodeItems", removeStart);
+    const removeSource = source.slice(removeStart, swapStart);
+
+    expect(removeSource).toContain("const previousKeys = records.keys();");
+    expect(removeSource).toContain("const previousRecords = records.values();");
+    expect(removeSource).not.toContain("for (const [previousKey, record] of records)");
+  });
+
   test("checks simple swaps before building the generic keyed item set", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",

@@ -1052,13 +1052,24 @@ function tryRemoveSingleNodeItems<T>(
   let index = 0;
   let staleRecord: SingleNodeRecord | undefined;
   let staleRecords: SingleNodeRecord[] | undefined;
+  const previousKeys = records.keys();
+  const previousRecords = records.values();
 
-  for (const [previousKey, record] of records) {
+  for (;;) {
+    const previousKey = previousKeys.next();
+    const previousRecord = previousRecords.next();
+
+    if (previousKey.done || previousRecord.done) {
+      break;
+    }
+
+    const record = previousRecord.value;
+
     if (index < currentItems.length) {
       const item = currentItems[index] as T;
       const itemKey = key(item, index, currentItems);
 
-      if (Object.is(previousKey, itemKey)) {
+      if (Object.is(previousKey.value, itemKey)) {
         if (
           !canKeepSingleNodeRecordWithoutUpdate(record, renderArity) &&
           !updateSingleNodeRecord(record, renderArity, item, index, currentItems)
