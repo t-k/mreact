@@ -492,7 +492,6 @@ interface EmitSetupState {
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedRowContext?: string | undefined;
-  compilerKeyedElementPaths?: boolean | undefined;
 }
 
 function emitDebugOptions(debugLabel: string | undefined): string {
@@ -573,8 +572,6 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     ? state.allocateName("_children")
     : undefined;
   let childIndex = 0;
-  let elementIndex = 0;
-  let canUseElementSiblingPath = state.compilerKeyedElementPaths === true;
 
   if (stableChildrenName !== undefined) {
     lines.push(`  const ${stableChildrenName} = Array.from(${currentPath}.childNodes);`);
@@ -591,27 +588,14 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
-    const childElementIndex = elementIndex;
-    if (child.kind === "element") {
-      elementIndex += 1;
-    }
-
-    const childElementPathsEnabled = canUseElementSiblingPath;
-    const usesLiveChildPath =
+    const childPath =
       stableChildrenName === undefined ||
       (child.kind !== "component" &&
         !sawComponentMutation &&
         usesLiveInsertionAnchor(child) &&
-        !sawStaticText);
-    const childPath = usesLiveChildPath
-      ? childElementPathsEnabled && child.kind === "element"
-        ? `${currentPath}.firstElementChild${".nextElementSibling".repeat(childElementIndex)}`
-        : `${currentPath}.childNodes[${childIndex}]`
-      : `${stableChildrenName}[${childIndex}]`;
-
-    if (compilerKeyedSetupMayRunUserCode(child)) {
-      canUseElementSiblingPath = false;
-    }
+        !sawStaticText)
+        ? `${currentPath}.childNodes[${childIndex}]`
+        : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
@@ -745,14 +729,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
       continue;
     }
 
-    lines.push(
-      emitSetupWithCompilerKeyedElementPaths(
-        child,
-        childPath,
-        state,
-        childElementPathsEnabled,
-      ),
-    );
+    lines.push(emitSetup(child, childPath, state));
     if (child.kind === "component") {
       sawComponentMutation = true;
     }
@@ -762,30 +739,12 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   return lines.filter(Boolean).join("\n");
 }
 
-function emitSetupWithCompilerKeyedElementPaths(
-  node: JsxNodeIr,
-  path: string,
-  state: EmitSetupState,
-  enabled: boolean,
-): string {
-  const previous = state.compilerKeyedElementPaths;
-  state.compilerKeyedElementPaths = enabled;
-  try {
-    return emitSetup(node, path, state);
-  } finally {
-    state.compilerKeyedElementPaths = previous;
-  }
-}
-
 function shouldCacheCompilerKeyedElementPath(
   node: Extract<JsxNodeIr, { kind: "element" }>,
   path: string,
   state: EmitSetupState,
 ): boolean {
-  if (
-    state.compilerKeyedRowContext === undefined ||
-    (!path.includes(".childNodes[") && !path.includes(".firstElementChild"))
-  ) {
+  if (state.compilerKeyedRowContext === undefined || !path.includes(".childNodes[")) {
     return false;
   }
 
@@ -804,27 +763,6 @@ function shouldCacheCompilerKeyedElementPath(
   }
 
   return pathUses > 1;
-}
-
-function compilerKeyedSetupMayRunUserCode(node: JsxNodeIr): boolean {
-  if (node.kind === "text") {
-    return false;
-  }
-
-  if (node.kind !== "element") {
-    return true;
-  }
-
-  for (const attr of node.attributes) {
-    if (
-      attr.kind !== "static-attr" &&
-      (attr.kind !== "event" || attr.compilerKeyedSlot === undefined)
-    ) {
-      return true;
-    }
-  }
-
-  return node.children.some(compilerKeyedSetupMayRunUserCode);
 }
 
 function usesLiveInsertionAnchor(child: JsxNodeIr): boolean {
@@ -1032,7 +970,6 @@ function emitCompilerKeyedSingleNodeRenderer(
             ]),
           ),
     compilerKeyedRowContext: node.itemName,
-    compilerKeyedElementPaths: node.compiledSingleNode?.ownsTextCleanup === true,
   });
   const setupLines = setup === "" ? [] : setup.split("\n");
   return [
