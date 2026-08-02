@@ -735,6 +735,52 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
+  test("compiler selected class releases stale rows after duplicate-key replacement", async () => {
+    const selected = cell<unknown>(null);
+    const items = cell([
+      { id: 1, label: "A" },
+      { id: 2, label: "B" },
+    ]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        row.setAttribute("class", "");
+        row.textContent = context.item.label;
+        return row;
+      },
+      {
+        key: (item) => item.id,
+        compilerSelectedClass: {
+          className: "danger",
+          initialClassValue: "",
+          source: selected,
+        },
+      },
+    );
+    const staleRow = parent.children[0] as Element;
+
+    items.set([
+      { id: 3, label: "C1" },
+      { id: 3, label: "C2" },
+      { id: 4, label: "D" },
+    ]);
+    await flushEffects();
+    expect(staleRow.isConnected).toBe(false);
+
+    selected.set(1);
+    await flushEffects();
+    expect(staleRow.getAttribute("class")).toBe("");
+
+    dispose();
+  });
+
   test("compiler selected class initializes direct renderer rows without baseline metadata", () => {
     const selected = cell<unknown>(null);
     const parent = document.createElement("tbody");
