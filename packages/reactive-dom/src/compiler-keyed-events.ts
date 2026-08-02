@@ -14,7 +14,6 @@ export type CompilerKeyedEventDispatcher<T> = (
 export interface CompilerKeyedEventProgram<T> {
   type: string;
   slotKey?: symbol;
-  needsCurrentTargetFacade?: false;
   dispatch: CompilerKeyedEventDispatcher<T>;
 }
 
@@ -103,11 +102,7 @@ function dispatchCompilerKeyedEvent<T>(
       continue;
     }
 
-    if (program.needsCurrentTargetFacade === false) {
-      program.dispatch(slot, context, event, target);
-    } else {
-      callCompilerKeyedEvent(program, slot, context, event, target);
-    }
+    callCompilerKeyedEvent(program, slot, context, event, target);
     if (event.cancelBubble) {
       break;
     }

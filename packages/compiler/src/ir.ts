@@ -133,7 +133,6 @@ export interface CompiledSingleNodeListIr {
 export interface CompilerKeyedEventProgramIr {
   eventName: string;
   handlers: string[];
-  needsCurrentTargetFacade: boolean;
 }
 
 /** Describes an exact whole-class selection expression owned by a keyed list. */

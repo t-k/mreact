@@ -38,7 +38,6 @@ import {
   analyzeOxcAttribute,
   findOxcJsxAttributeCode,
   isStableOxcKeyedEventAttribute,
-  isCurrentTargetFreeOxcKeyedEventAttribute,
   readOxcDynamicAttributeExpression,
   readOxcJsxTagName,
 } from "./oxc-jsx-attributes.js";
@@ -891,18 +890,11 @@ function analyzeCompilerKeyedEventPrograms(
 
       let program = programs.get(attribute.eventName);
       if (program === undefined) {
-        program = {
-          eventName: attribute.eventName,
-          handlers: [],
-          needsCurrentTargetFacade: false,
-        };
+        program = { eventName: attribute.eventName, handlers: [] };
         programs.set(attribute.eventName, program);
       }
       attribute.compilerKeyedSlot = program.handlers.length;
       program.handlers.push(attribute.code);
-      if (!isCurrentTargetFreeOxcKeyedEventAttribute(attribute)) {
-        program.needsCurrentTargetFacade = true;
-      }
     }
   });
 

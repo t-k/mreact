@@ -134,7 +134,6 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).toContain("const _keyedEventSlot = Symbol();");
     expect(output.code.match(/\[_keyedEventSlot\] =/g)).toHaveLength(1);
     expect(output.code).toContain("slotKey: _keyedEventSlot");
-    expect(output.code).toContain("needsCurrentTargetFacade: false");
     expect(output.code).not.toContain('bindEvent(_keyedRoot.childNodes[1].childNodes[0], "click"');
     expect(output.code).toContain('bindCompilerKeyedPropertyText(row, _text_0, "label")');
     expect(output.code).toContain("row.index)");
@@ -147,25 +146,6 @@ describe("compiler dynamic JSX transform", () => {
       output.code.lastIndexOf("bindCompilerKeyedSingleNodeList("),
     );
     expect(output.code).not.toContain("bindList");
-  });
-
-  test("retains the compiler keyed currentTarget facade when an event parameter is present", () => {
-    const output = transform({
-      code: `
-        export function App() {
-          const rows = cell([{ id: 1 }]);
-          return <tbody>{rows.get().map((row) => (
-            <tr key={row.id}><td><button onClick={(event) => globalThis.__type = event.type + row.id}>Select</button></td></tr>
-          ))}</tbody>;
-        }
-      `,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).not.toContain("needsCurrentTargetFacade: false");
   });
 
   test("reuses a compiler keyed event element for its direct text binding", () => {
