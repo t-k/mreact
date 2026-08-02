@@ -176,7 +176,7 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("const _keyedChildren");
   });
 
-  test("reads leading compiler keyed text nodes without materializing childNodes", () => {
+  test("reads leading compiler keyed text nodes from the shared child collection", () => {
     const output = transform({
       code: `
         export function App() {
@@ -195,11 +195,36 @@ describe("compiler dynamic JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("const _text_0 = _keyedRoot.childNodes[0].firstChild;");
+    expect(output.code).toContain("const _keyedChildren = _keyedRoot.childNodes;");
+    expect(output.code).toContain("const _text_0 = _keyedChildren[0].firstChild;");
     expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedRoot\.childNodes\[1\]\.childNodes\[0\];\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_1 = \k<element>\.firstChild;/u,
+      /const (?<element>_keyedElement\w*) = _keyedChildren\[1\]\.firstChild;\s*\k<element>\[_keyedEventSlot\] = 0;\s*const _text_1 = \k<element>\.firstChild;/u,
     );
     expect(output.code).not.toContain("_keyedRoot.childNodes[0].childNodes[0]");
+  });
+
+  test("keeps element path CSE when the parent uses a live child collection", () => {
+    const output = transform({
+      code: `
+        export function App() {
+          const rows = cell([{ id: 1, label: "A", value: "x", other: "B" }]);
+          return <section>{rows.get().map((row) => (
+            <div key={row.id}>
+              <span>{row.other}</span>
+              <x-row value={row.value} onClick={() => globalThis.__selected = row.id}>{row.label}</x-row>
+            </div>
+          ))}</section>;
+        }
+      `,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toMatch(
+      /const (?<element>_keyedElement\w*) = _keyedChildren\[1\];\s*bindProp\(\k<element>, "value"[\s\S]*?\k<element>\[_keyedEventSlot\] = 0;\s*const _text_1 = \k<element>\.firstChild;/u,
+    );
   });
 
   test("archives child nodes when static text precedes a live keyed anchor", () => {
