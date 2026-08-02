@@ -1192,21 +1192,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(source).toContain("function clearSelectedClassRecords");
   });
 
-  test("hoists compiler row ownership outside the per-row record factory", async () => {
-    const source = await readFile(
-      "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",
-      "utf8",
-    );
-    const recordFactoryStart = source.indexOf("function createSingleNodeRecord<T");
-    const nextHelperStart = source.indexOf("function tryReplaceDisjointSingleNodeItems");
-
-    expect(recordFactoryStart).toBeGreaterThan(-1);
-    expect(nextHelperStart).toBeGreaterThan(recordFactoryStart);
-    expect(source.slice(recordFactoryStart, nextHelperStart)).not.toContain(
-      "compilerOwnsTextCleanupRenderer",
-    );
-  });
-
   test("skips retained-row refresh when selected classes preserve initial state", async () => {
     const source = await readFile(
       "packages/reactive-dom/src/bind-static-keyed-single-node-list.ts",

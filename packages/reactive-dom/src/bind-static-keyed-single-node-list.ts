@@ -182,10 +182,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   let ownsParent = false;
   const deferEventPromotion = options.deferEventPromotion !== false;
   const renderArity = renderItem.length;
-  const compilerOwnsTextCleanup =
-    (renderItem as InternalSingleNodeRenderer<T, TNode>)[
-      compilerOwnsTextCleanupRenderer
-    ] === true;
   const selectedClass = options.selectedClass as
     | BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>
     | undefined;
@@ -240,7 +236,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
             options.key,
             renderItem,
             renderArity,
-            compilerOwnsTextCleanup,
             deferEventPromotion,
             selectedClassState,
           )
@@ -261,7 +256,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
           options.key,
           renderItem,
           renderArity,
-          compilerOwnsTextCleanup,
           deferEventPromotion,
           selectedClassState,
         )
@@ -352,7 +346,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
           currentItems,
           renderItem,
           renderArity,
-          compilerOwnsTextCleanup,
           deferEventPromotion,
           selectedClassState,
         )
@@ -394,7 +387,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
         currentItems,
         renderItem,
         renderArity,
-        compilerOwnsTextCleanup,
         deferEventPromotion,
         selectedClassState,
       );
@@ -440,7 +432,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
           currentItems,
           renderItem,
           renderArity,
-          compilerOwnsTextCleanup,
           deferEventPromotion,
           selectedClassState,
         );
@@ -767,7 +758,6 @@ function createSingleNodeRecordsWithFragment<T, TNode extends ChildNode>(
   currentItems: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
-  compilerOwnsTextCleanup: boolean,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): { fragment: DocumentFragment; records: Map<unknown, SingleNodeRecord> } {
@@ -786,7 +776,6 @@ function createSingleNodeRecordsWithFragment<T, TNode extends ChildNode>(
       currentItems,
       renderItem,
       renderArity,
-      compilerOwnsTextCleanup,
       deferEventPromotion,
       selectedClassState,
     );
@@ -804,7 +793,6 @@ function createSingleNodeRecordsFromKeysWithFragment<T, TNode extends ChildNode>
   items: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
-  compilerOwnsTextCleanup: boolean,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): { fragment: DocumentFragment; records: Map<unknown, SingleNodeRecord> } {
@@ -820,7 +808,6 @@ function createSingleNodeRecordsFromKeysWithFragment<T, TNode extends ChildNode>
       items,
       renderItem,
       renderArity,
-      compilerOwnsTextCleanup,
       deferEventPromotion,
       selectedClassState,
     );
@@ -840,10 +827,11 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
   items: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
-  compilerOwnsTextCleanup: boolean,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): SingleNodeRecord {
+  const compilerOwnsTextCleanup =
+    (renderItem as InternalSingleNodeRenderer<T, TNode>)[compilerOwnsTextCleanupRenderer] === true;
   let node: TNode;
   let scope: DomScope | undefined;
   let promoteEvents: (() => void) | undefined;
@@ -912,7 +900,6 @@ function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
-  compilerOwnsTextCleanup: boolean,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): Map<unknown, SingleNodeRecord> | undefined {
@@ -938,7 +925,6 @@ function tryReplaceDisjointSingleNodeItems<T, TNode extends ChildNode>(
     currentItems,
     renderItem,
     renderArity,
-    compilerOwnsTextCleanup,
     deferEventPromotion,
     selectedClassState,
   );
@@ -964,7 +950,6 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
   key: (item: T, index: number, items: readonly T[]) => unknown,
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
-  compilerOwnsTextCleanup: boolean,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): Map<unknown, SingleNodeRecord> | undefined {
@@ -1028,7 +1013,6 @@ function tryAppendSingleNodeItems<T, TNode extends ChildNode>(
         currentItems,
         renderItem,
         renderArity,
-        compilerOwnsTextCleanup,
         deferEventPromotion,
         selectedClassState,
       );
@@ -1471,7 +1455,6 @@ function tryAppendSingleNodeRecords<T, TNode extends ChildNode>(
   currentItems: readonly T[],
   renderItem: SingleNodeRenderer<T, TNode>,
   renderArity: number,
-  compilerOwnsTextCleanup: boolean,
   deferEventPromotion: boolean,
   selectedClassState: SelectedClassState | undefined,
 ): Map<unknown, SingleNodeRecord> | undefined {
@@ -1527,7 +1510,6 @@ function tryAppendSingleNodeRecords<T, TNode extends ChildNode>(
         currentItems,
         renderItem,
         renderArity,
-        compilerOwnsTextCleanup,
         deferEventPromotion,
         selectedClassState,
       );
