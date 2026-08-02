@@ -235,8 +235,19 @@ describe("subscribeRefreshable", () => {
     expect(refreshes).toBe(0);
   });
 
-  test("removes the deferred tracker when the lazy listener factory throws", () => {
-    const source: Source = { subscribers: null };
+  test("removes the deferred tracker without reentering a failed lazy listener factory", () => {
+    let factoryCalls = 0;
+    let noSubscriberCalls = 0;
+    const source: Source = {
+      onNoSubscribers: () => {
+        noSubscriberCalls += 1;
+
+        if (noSubscriberCalls === 1) {
+          trackSource(source);
+        }
+      },
+      subscribers: null,
+    };
 
     expect(() =>
       subscribeRefreshableIfTrackedLazy(
@@ -244,11 +255,14 @@ describe("subscribeRefreshable", () => {
           trackSource(source);
         },
         () => {
-          throw new Error("factory failed");
+          factoryCalls += 1;
+          throw new Error(`factory failed ${factoryCalls}`);
         },
       ),
-    ).toThrow("factory failed");
+    ).toThrow("factory failed 1");
 
+    expect(factoryCalls).toBe(1);
+    expect(noSubscriberCalls).toBe(1);
     expect(source.subscribers).toBeNull();
   });
 

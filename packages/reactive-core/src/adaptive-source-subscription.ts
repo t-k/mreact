@@ -169,7 +169,17 @@ function activateDeferredLazySubscription(source: Source): void {
   try {
     listener = createListener();
   } catch (error) {
-    removeSourceSubscriber(source, deferredLazyReactiveTracker);
+    const failedTracker = runtimeState.activeTracker;
+    runtimeState.activeTracker = null;
+
+    try {
+      removeSourceSubscriber(source, deferredLazyReactiveTracker);
+    } catch {
+      // Preserve the listener factory failure after best-effort tracker cleanup.
+    } finally {
+      runtimeState.activeTracker = failedTracker;
+    }
+
     throw error;
   }
 
