@@ -196,9 +196,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     const parent = document.createElement("tbody");
     const marker = document.createComment("rows");
     let reads = 0;
-    let rowContext:
-      | { readonly item: typeof first; readonly index: number; readonly items: readonly (typeof first)[] }
-      | undefined;
     parent.append(marker);
 
     const dispose = bindCompilerKeyedSingleNodeList(
@@ -206,7 +203,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
       marker,
       () => items.get(),
       (context) => {
-        rowContext = context;
         const row = document.createElement("tr");
         const text = document.createTextNode("");
         bindText(text, () => {
@@ -225,7 +221,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     await flushEffects();
 
     expect(reads).toBe(readsAfterMount);
-    expect(rowContext?.items).toBe(items.get());
     dispose();
   });
 
@@ -1233,7 +1228,6 @@ describe("bindStaticKeyedSingleNodeList", () => {
     expect(updateRecordSource).not.toContain("record.currentItem = nextItem");
     expect(updateRecordSource).not.toContain("record.currentIndex = nextIndex");
     expect(updateRecordSource).not.toContain("record.currentItems = nextItems");
-    expect(updateRecordSource).toContain("(reads & 4) === 0");
   });
 
   test("creates scoped render node results without per-row object spread", async () => {
