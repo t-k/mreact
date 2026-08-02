@@ -110,6 +110,7 @@ const activeCompilerRowContext = Symbol("activeCompilerRowContext");
 const compilerOwnsTextCleanupRenderer = Symbol("compilerOwnsTextCleanupRenderer");
 const noopCompilerTextDispose: Dispose = () => {};
 let activeCompilerTextContext: InternalCompilerKeyedRowContext | undefined;
+let markActiveCompilerTextForHydration = false;
 type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowIndex]: number;
   [compilerRowItem]: unknown;
@@ -518,6 +519,8 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
       context[compilerRowEventOwner] = compilerEventOwner;
     }
     let node: TNode;
+    const previousHydrationMarker = markActiveCompilerTextForHydration;
+    markActiveCompilerTextForHydration = markRecordsForHydration;
     try {
       node = renderItem(context as CompilerKeyedRowContext<T>);
     } catch (error) {
@@ -525,6 +528,8 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
         disposeCompilerRowTextSubscriptions(context);
       }
       throw error;
+    } finally {
+      markActiveCompilerTextForHydration = previousHydrationMarker;
     }
     (node as CompilerKeyedRowNode)[activeCompilerRowContext] = context;
     if (markRecordsForHydration) {
@@ -557,6 +562,7 @@ export function bindCompilerKeyedText<T>(
   readValue: () => unknown,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
+  markCompilerTextForHydration(node);
 
   const subscription = subscribeRefreshable(() => {
     const previousContext = activeCompilerTextContext;
@@ -592,6 +598,7 @@ export function bindCompilerKeyedPropertyText<T, K extends keyof T>(
   property: K,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
+  markCompilerTextForHydration(node);
 
   const subscription = subscribeRefreshableIfTracked(() => {
     const previousContext = activeCompilerTextContext;
@@ -662,6 +669,7 @@ export function bindCompilerKeyedCellText<T, K extends keyof T>(
   property: K,
 ): Dispose {
   const internalContext = context as InternalCompilerKeyedRowContext;
+  markCompilerTextForHydration(node);
 
   const subscription = subscribeRefreshable(() => {
     const previousContext = activeCompilerTextContext;
@@ -689,6 +697,12 @@ export function bindCompilerKeyedCellText<T, K extends keyof T>(
   }
 
   return registerIdempotentDispose(() => subscription.dispose());
+}
+
+function markCompilerTextForHydration(node: Text): void {
+  if (markActiveCompilerTextForHydration) {
+    (node as Text & { __mreactReactiveText?: true }).__mreactReactiveText = true;
+  }
 }
 
 function uniqueSingleNodeKeyedItems<T>(

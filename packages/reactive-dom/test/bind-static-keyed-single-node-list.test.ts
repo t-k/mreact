@@ -132,7 +132,39 @@ describe("bindStaticKeyedSingleNodeList", () => {
     dispose();
   });
 
-  test("compiler keyed property text relies on the dynamic row marker during hydration", async () => {
+  test("compiler keyed property text skips hydration markers during normal rendering", async () => {
+    const items = cell<readonly { readonly id: number; readonly label: string }[]>([
+      { id: 1, label: "A" },
+    ]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const row = document.createElement("tr");
+        const text = document.createTextNode("");
+        bindCompilerKeyedPropertyText(context, text, "label");
+        row.append(text);
+        return row;
+      },
+      { key: (item) => item.id, compilerOwnsTextCleanup: true },
+    );
+    await flushEffects();
+
+    const text = parent.firstChild?.firstChild as Text & { __mreactReactiveText?: true };
+    expect(text.__mreactReactiveText).toBeUndefined();
+    items.set([{ id: 1, label: "B" }]);
+    await flushEffects();
+    expect(text.data).toBe("B");
+
+    dispose();
+  });
+
+  test("compiler keyed property text keeps hydration markers with the dynamic row marker", async () => {
     type Item = { readonly id: number; readonly label: string };
     type DynamicNode = Node & {
       __mreactDynamicNode?: true;
@@ -168,7 +200,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
     const generatedRow = generatedParent.firstChild as DynamicNode;
     const generatedText = generatedRow.firstChild?.firstChild as DynamicNode;
     expect(generatedRow.__mreactDynamicNode).toBe(true);
-    expect(generatedText.__mreactReactiveText).toBeUndefined();
+    expect(generatedText.__mreactReactiveText).toBe(true);
 
     const serverParent = document.createElement("tbody");
     serverParent.innerHTML = "<tr><td>A</td></tr>";
@@ -176,6 +208,53 @@ describe("bindStaticKeyedSingleNodeList", () => {
     items.set([{ id: 1, label: "B" }]);
     await flushEffects();
     expect(serverParent.textContent).toBe("B");
+
+    dispose();
+  });
+
+  test("compiler keyed property text keeps its hydration marker after escaping the row", async () => {
+    const escapedHost = document.createElement("aside");
+    let renderedText: Text | undefined;
+    const row = {
+      id: 1,
+      get label(): string {
+        if (renderedText !== undefined) {
+          escapedHost.append(renderedText);
+        }
+        return "A";
+      },
+    };
+    const items = cell<readonly { readonly id: number; readonly label: string }[]>([row]);
+    const parent = document.createElement("tbody");
+    const marker = document.createComment("rows");
+    const hydrationGlobal = globalThis as typeof globalThis & {
+      __mreactHydratingDynamicRanges?: boolean;
+    };
+    parent.append(marker);
+
+    hydrationGlobal.__mreactHydratingDynamicRanges = true;
+    const dispose = bindCompilerKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (context) => {
+        const generatedRow = document.createElement("tr");
+        renderedText = document.createTextNode("");
+        generatedRow.append(renderedText);
+        bindCompilerKeyedPropertyText(context, renderedText, "label");
+        return generatedRow;
+      },
+      { key: (item) => item.id, compilerOwnsTextCleanup: true },
+    );
+    delete hydrationGlobal.__mreactHydratingDynamicRanges;
+    await flushEffects();
+
+    const escapedText = escapedHost.firstChild as Text & { __mreactReactiveText?: true };
+    expect(escapedText).toBe(renderedText);
+    expect(escapedText.__mreactReactiveText).toBe(true);
+    items.set([{ id: 1, label: "B" }]);
+    await flushEffects();
+    expect(escapedText.data).toBe("B");
 
     dispose();
   });
