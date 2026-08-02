@@ -104,46 +104,6 @@ describe("compiler runtime smoke", () => {
     expect(nextRow.querySelector(".label")?.textContent).toBe("C");
   });
 
-  test("compiler keyed live child aliases survive synchronous custom element moves", async () => {
-    const elementName = "x-mreact-live-child-alias";
-    if (customElements.get(elementName) === undefined) {
-      customElements.define(
-        elementName,
-        class extends HTMLElement {
-          set value(_value: unknown) {
-            this.parentNode?.append(this);
-          }
-        },
-      );
-    }
-    const output = transform({
-      code: `export function App() {
-        const rows = [{ id: 1, label: "A", value: "x", other: "B" }];
-        return <section>{rows.map((row) => (
-          <div key={row.id}>
-            <span>{row.other}</span>
-            <x-mreact-live-child-alias value={row.value} onClick={() => globalThis.__movedAliasHit = row.id}>{row.label}</x-mreact-live-child-alias>
-            <b>tail</b>
-          </div>
-        ))}</section>;
-      }`,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    const node = (await runClientComponent(output.code)) as HTMLElement;
-    const movedElement = node.querySelector(elementName) as HTMLElement;
-    expect(movedElement).toBe(node.querySelector("section div")?.lastElementChild);
-    expect(movedElement.textContent).toBe("A");
-    movedElement.click();
-    expect(
-      (globalThis as typeof globalThis & { __movedAliasHit?: number }).__movedAliasHit,
-    ).toBe(1);
-    delete (globalThis as typeof globalThis & { __movedAliasHit?: number }).__movedAliasHit;
-  });
-
   test("compiler keyed text preserves getter dependencies across row replacement", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

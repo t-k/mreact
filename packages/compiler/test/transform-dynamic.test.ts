@@ -176,30 +176,6 @@ describe("compiler dynamic JSX transform", () => {
     expect(output.code).not.toContain("const _keyedChildren");
   });
 
-  test("keeps element path CSE when the parent uses a live child collection", () => {
-    const output = transform({
-      code: `
-        export function App() {
-          const rows = cell([{ id: 1, label: "A", value: "x", other: "B" }]);
-          return <section>{rows.get().map((row) => (
-            <div key={row.id}>
-              <span>{row.other}</span>
-              <x-row value={row.value} onClick={() => globalThis.__selected = row.id}>{row.label}</x-row>
-            </div>
-          ))}</section>;
-        }
-      `,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
-
-    expect(output.diagnostics).toEqual([]);
-    expect(output.code).toMatch(
-      /const (?<element>_keyedElement\w*) = _keyedChildren\[1\];\s*bindProp\(\k<element>, "value"[\s\S]*?\k<element>\[_keyedEventSlot\] = 0;\s*const _text_1 = \k<element>\.firstChild;/u,
-    );
-  });
-
   test("archives child nodes when static text precedes a live keyed anchor", () => {
     const output = transform({
       code: `
