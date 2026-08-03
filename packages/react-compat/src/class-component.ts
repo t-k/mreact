@@ -705,6 +705,7 @@ function installClassLifecycleEffects(
 
   useLayoutEffect(() => {
     return () => {
+      didCommitRef.current = false;
       instance.componentWillUnmount?.();
       classLifecycleSnapshots.delete(instance);
       classUpdateContexts.delete(instance);

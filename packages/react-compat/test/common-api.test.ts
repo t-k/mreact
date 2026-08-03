@@ -771,6 +771,40 @@ describe("react-compat common API subset", () => {
     expect(container.querySelector(".series-curve")).not.toBeNull();
   });
 
+  test("StrictMode effect replay remounts class component lifecycles", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let mounted = false;
+
+    class AnimatedSeries extends Component {
+      componentDidMount() {
+        mounted = true;
+        calls.push("mount");
+      }
+
+      componentWillUnmount() {
+        mounted = false;
+        calls.push("unmount");
+      }
+
+      render() {
+        return createElement("path", { d: "M0 0L10 10" });
+      }
+    }
+
+    root.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement("svg", null, createElement(AnimatedSeries, {})),
+      ),
+    );
+
+    expect(calls).toEqual(["mount", "unmount", "mount"]);
+    expect(mounted).toBe(true);
+  });
+
   test("lazy renders fallback first and resolved component after promise resolves", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);

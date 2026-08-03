@@ -20,6 +20,21 @@ async function expectVisibleSvgWithDataShape(
   await expect(card.locator(shapeSelector).first()).toBeVisible();
 }
 
+async function expectVisibleBarPaths(card: Locator): Promise<void> {
+  const barPaths = card.locator(".recharts-bar-rectangle path");
+  await expect
+    .poll(() =>
+      barPaths.evaluateAll(
+        (paths) =>
+          paths.filter((path) => {
+            const box = path.getBoundingClientRect();
+            return box.width > 0 && box.height > 0;
+          }).length,
+      ),
+    )
+    .toBe(6);
+}
+
 test.describe.serial("react-libraries example", () => {
   let server: RunningServer;
 
@@ -74,7 +89,7 @@ test.describe.serial("react-libraries example", () => {
       timeout: 10000,
     });
 
-    await expectVisibleSvgWithDataShape(revenueCard, ".recharts-bar-rectangle");
+    await expectVisibleBarPaths(revenueCard);
   });
 
   test("rechartsの棒グラフはhover後も棒を維持する", async ({ page }) => {
@@ -83,17 +98,14 @@ test.describe.serial("react-libraries example", () => {
     const revenueCard = page.locator(".card").filter({ hasText: "Monthly Revenue" });
     await expect(revenueCard).toBeVisible();
 
-    const barShapes = revenueCard.locator(".recharts-bar-rectangle path");
-    await expect(barShapes.first()).toBeVisible();
-    await expect(barShapes).toHaveCount(6);
+    await expectVisibleBarPaths(revenueCard);
 
     const svgBox = await revenueCard.locator("svg").first().boundingBox();
     expect(svgBox).not.toBeNull();
 
     await page.mouse.move(svgBox!.x + svgBox!.width * 0.3, svgBox!.y + svgBox!.height * 0.55);
 
-    await expect(barShapes.first()).toBeVisible();
-    await expect(barShapes).toHaveCount(6);
+    await expectVisibleBarPaths(revenueCard);
   });
 
   test("rechartsの円グラフがレンダリングされる", async ({ page }) => {
