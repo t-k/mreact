@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.0.200 - 2026-08-03
+
+### Changed
+
+- Kept compiler-generated memo-only dynamic branches on a lightweight reactive DOM insertion path so they do not pull keyed-list runtime code into client bundles.
+
+### Fixed
+
+- Fixed client compiler tracking for local values derived transitively from cell reads so JSX attributes, text, conditional branches, keyed lists, and Promise-driven updates stay consistent after cell changes while imperative and unsupported alias uses retain their safe fallback behavior.
+- Fixed native compiled `memo()` conditionals so custom and default comparators preserve rendered DOM identity, keyed list nodes, alternate render values, and cleanup-scope ownership across equal and unequal prop updates.
+
 ## 0.0.199 - 2026-08-03
 
 ### Changed
