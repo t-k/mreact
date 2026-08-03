@@ -1974,4 +1974,106 @@ export function App() {
     expect(node.querySelector("span")?.textContent).toBe("Visible");
     expect(node.dataset.local).toBe("local");
   });
+
+  test("client transform honors native memo comparators at dynamic insertion owners", async () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const revision = cell(0);
+const signature = cell("stable");
+
+const Card = memo(
+  function Card(props: { readonly revision: number; readonly signature: string }) {
+    (globalThis as any).__nativeMemoRenders = ((globalThis as any).__nativeMemoRenders ?? 0) + 1;
+    return <article data-revision={props.revision}>Stable</article>;
+  },
+  (previous, next) => {
+    (globalThis as any).__nativeMemoComparisons = ((globalThis as any).__nativeMemoComparisons ?? 0) + 1;
+    return previous.signature === next.signature;
+  },
+);
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => revision.set(revision.get() + 1)}>Update</button>
+    <button type="button" onClick={() => signature.set("changed")}>Change signature</button>
+    {revision.get() >= 0 && <Card revision={revision.get()} signature={signature.get()} />}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("createMemo(");
+    expect(output.code).toContain("__nativeMemoComparisons");
+    expect(output.code).toContain("memo: true");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    const card = node.querySelector("article");
+
+    expect(
+      (globalThis as typeof globalThis & { __nativeMemoRenders?: number }).__nativeMemoRenders,
+    ).toBe(1);
+    const buttons = node.querySelectorAll("button");
+    buttons[0]?.click();
+    await flushEffects();
+
+    expect(
+      (globalThis as typeof globalThis & { __nativeMemoComparisons?: number })
+        .__nativeMemoComparisons,
+    ).toBe(1);
+    expect(
+      (globalThis as typeof globalThis & { __nativeMemoRenders?: number }).__nativeMemoRenders,
+    ).toBe(1);
+    expect(node.querySelector("article")).toBe(card);
+    expect(card?.getAttribute("data-revision")).toBe("0");
+
+    buttons[1]?.click();
+    await flushEffects();
+
+    const changedCard = node.querySelector("article");
+    expect(
+      (globalThis as typeof globalThis & { __nativeMemoComparisons?: number })
+        .__nativeMemoComparisons,
+    ).toBe(2);
+    expect(
+      (globalThis as typeof globalThis & { __nativeMemoRenders?: number }).__nativeMemoRenders,
+    ).toBe(2);
+    expect(changedCard).not.toBe(card);
+    expect(changedCard?.getAttribute("data-revision")).toBe("1");
+    expect(card?.isConnected).toBe(false);
+
+    delete (globalThis as typeof globalThis & { __nativeMemoRenders?: number })
+      .__nativeMemoRenders;
+    delete (globalThis as typeof globalThis & { __nativeMemoComparisons?: number })
+      .__nativeMemoComparisons;
+  });
+
+  test("client transform keeps static and keyed-list memo calls on direct native paths", async () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact";
+
+const Card = memo(function Card(props: { readonly label: string }) {
+  return <article>{props.label}</article>;
+});
+
+export function App() {
+  const rows = [{ id: "a", label: "A" }];
+  return <main><Card label="Static" />{rows.map((row) => <Card key={row.id} label={row.label} />)}</main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("createMemo");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(Array.from(node.querySelectorAll("article"), (article) => article.textContent)).toEqual([
+      "Static",
+      "A",
+    ]);
+  });
 });

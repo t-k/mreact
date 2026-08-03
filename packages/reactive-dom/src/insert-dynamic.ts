@@ -5,6 +5,7 @@ import {
 } from "@reckona/mreact-reactive-core/internal";
 import { bindList } from "./bind-list.js";
 import { isListRenderValue } from "./create-list.js";
+import { isMemoRenderValue } from "./create-memo.js";
 import {
   isDynamicHydrationEnabled,
   markDynamicNode,
@@ -12,14 +13,19 @@ import {
 } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import type { Dispose, ListRenderValue, RenderValue } from "./types.js";
+import type {
+  Dispose,
+  ListRenderValue,
+  MemoRenderValue,
+  RenderValue,
+} from "./types.js";
 
 /** Inserts and updates a dynamic render value before a marker node. */
 export function insertDynamic(
   parent: ParentNode,
   marker: ChildNode,
   value: () => RenderValue,
-  options?: { debugLabel?: string },
+  options?: { debugLabel?: string; memo?: boolean },
 ): Dispose {
   void parent;
   const markForHydration = isDynamicHydrationEnabled();
@@ -31,10 +37,12 @@ export function insertDynamic(
   let current: Node[] = [];
   let disposeCurrentScope: Dispose | undefined;
   let currentList: BoundDynamicList | undefined;
+  let currentMemo: MemoRenderValue | undefined;
 
   const clear = () => {
     const disposeList = currentList?.dispose;
     currentList = undefined;
+    currentMemo = undefined;
     const disposeScope = disposeCurrentScope;
     disposeCurrentScope = undefined;
     let firstError: unknown;
@@ -68,6 +76,27 @@ export function insertDynamic(
 
   const run = () => {
     let firstError: unknown;
+    let preparedValue: RenderValue;
+
+    if (options?.memo === true) {
+      try {
+        preparedValue = value();
+        if (
+          isMemoRenderValue(preparedValue) &&
+          canReuseMemo(currentMemo, preparedValue)
+        ) {
+          currentMemo = preparedValue;
+          return;
+        }
+      } catch (error) {
+        try {
+          clear();
+        } catch (cleanupError) {
+          firstError = cleanupError;
+        }
+        throw firstError ?? error;
+      }
+    }
 
     if (currentList === undefined) {
       const disposeScope = disposeCurrentScope;
@@ -85,8 +114,13 @@ export function insertDynamic(
 
     try {
       next = createScopedRenderNodes(() => {
-        nextValueRef.value = value();
+        nextValueRef.value = options?.memo === true ? preparedValue : value();
         const nextValue = nextValueRef.value;
+
+        if (isMemoRenderValue(nextValue)) {
+          return nextValue.render(nextValue.props);
+        }
+
         return isListRenderValue(nextValue) ? null : nextValue;
       });
     } catch (error) {
@@ -173,6 +207,7 @@ export function insertDynamic(
 
     if (isSameNodeList(current, next.nodes)) {
       disposeCurrentScope = next.dispose;
+      currentMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
       if (firstError !== undefined) {
         throw firstError;
       }
@@ -186,6 +221,7 @@ export function insertDynamic(
     }
     current = markForHydration ? markDynamicNodes(next.nodes) : next.nodes;
     disposeCurrentScope = next.dispose;
+    currentMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
 
     const insertionParent = marker.parentNode;
 
@@ -225,6 +261,17 @@ export function insertDynamic(
   });
   registerCleanup(disposeOwnedDynamic);
   return disposeOwnedDynamic;
+}
+
+function canReuseMemo(
+  current: MemoRenderValue | undefined,
+  next: MemoRenderValue,
+): boolean {
+  return (
+    current !== undefined &&
+    current.type === next.type &&
+    next.compare(current.props, next.props)
+  );
 }
 
 interface BoundDynamicList {

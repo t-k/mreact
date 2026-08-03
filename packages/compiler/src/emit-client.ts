@@ -3,6 +3,10 @@ import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
 import { OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER } from "./oxc-render-values.js";
+import {
+  getCompatInlineMemo,
+  type CompatInlineMemo,
+} from "./compat-inline-memo.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitResult {
@@ -33,9 +37,22 @@ export function emitClient(
     clientBoundaryHelperName === undefined
       ? ""
       : emitClientBoundaryHelper(clientBoundaryHelperName);
+  const inlineMemoComponents = new Map(
+    ir.components.flatMap((component) => {
+      const inlineMemo = getCompatInlineMemo(component);
+      return inlineMemo === undefined ? [] : ([[component.name, inlineMemo]] as const);
+    }),
+  );
   const components = ir.components
     .map((component) =>
-      emitComponent(component, moduleAllocator, helperNames, clientBoundaryHelperName, options),
+      emitComponent(
+        component,
+        moduleAllocator,
+        helperNames,
+        clientBoundaryHelperName,
+        inlineMemoComponents,
+        options,
+      ),
     )
     .join("\n\n")
     .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef)
@@ -55,6 +72,7 @@ type RuntimeHelperName =
   | "bindSpreadProps"
   | "bindText"
   | "createList"
+  | "createMemo"
   | "createTemplate"
   | "createTemplateElement"
   | "insertDynamic"
@@ -89,6 +107,7 @@ function allocateRuntimeHelperNames(
     bindSpreadProps: "bindSpreadProps",
     bindText: "bindText",
     createList: "createList",
+    createMemo: "createMemo",
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
@@ -139,6 +158,20 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
   const specifiers = new Set<string>(["createTemplate"]);
   const internalSpecifiers = new Set<string>();
   const reactiveCoreSpecifiers = new Set<string>();
+
+  const inlineMemoComponentNames = new Set(
+    ir.components
+      .filter((component) => getCompatInlineMemo(component) !== undefined)
+      .map((component) => component.name),
+  );
+
+  if (
+    ir.components.some((component) =>
+      treeUsesOwnerScopedMemo(component.root, inlineMemoComponentNames),
+    )
+  ) {
+    specifiers.add("createMemo");
+  }
 
   if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
     specifiers.add("bindDomRef");
@@ -352,6 +385,7 @@ function emitComponent(
   moduleAllocator: NameAllocator,
   helperNames: RuntimeHelperNames,
   clientBoundaryHelperName: string | undefined,
+  inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>,
   options: { dev?: boolean; filename?: string },
 ): string {
   const templateName = moduleAllocator("_tmpl_" + component.name, component.bindingNames);
@@ -370,6 +404,7 @@ function emitComponent(
       textIndex: 0,
       helperNames,
       clientBoundaryHelperName,
+      inlineMemoComponents,
       debugLabel,
     };
     return [
@@ -394,6 +429,7 @@ function emitComponent(
       textIndex: 0,
       helperNames,
       clientBoundaryHelperName,
+      inlineMemoComponents,
       debugLabel,
     };
     const fragmentName = allocator("_fragment");
@@ -404,7 +440,7 @@ function emitComponent(
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDebugOptions(debugLabel)});`,
+      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDynamicOptions(debugLabel, isOwnerScopedMemoConditional(component.root, state))});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -418,6 +454,7 @@ function emitComponent(
     textIndex: 0,
     helperNames,
     clientBoundaryHelperName,
+    inlineMemoComponents,
     debugLabel,
   });
   return [
@@ -504,14 +541,19 @@ interface EmitSetupState {
   textIndex: number;
   helperNames: RuntimeHelperNames;
   clientBoundaryHelperName?: string | undefined;
+  inlineMemoComponents: ReadonlyMap<string, CompatInlineMemo>;
   debugLabel?: string | undefined;
   compilerKeyedEventSlotKeys?: ReadonlyMap<string, string> | undefined;
   compilerKeyedElementPath?: string | undefined;
   compilerKeyedRowContext?: string | undefined;
 }
 
-function emitDebugOptions(debugLabel: string | undefined): string {
-  return debugLabel === undefined ? "" : `, { debugLabel: ${JSON.stringify(debugLabel)} }`;
+function emitDynamicOptions(debugLabel: string | undefined, memo = false): string {
+  const entries = [
+    ...(debugLabel === undefined ? [] : [`debugLabel: ${JSON.stringify(debugLabel)}`]),
+    ...(memo ? ["memo: true"] : []),
+  ];
+  return entries.length === 0 ? "" : `, { ${entries.join(", ")} }`;
 }
 
 function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string {
@@ -631,7 +673,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
         lines.push(
-          `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => (${child.code})${emitDebugOptions(state.debugLabel)});`,
+          `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => (${child.code})${emitDynamicOptions(state.debugLabel)});`,
         );
         childIndex += 1;
         continue;
@@ -695,7 +737,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
     if (child.kind === "conditional") {
       lines.push(
-        `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDebugOptions(state.debugLabel)});`,
+        `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel, isOwnerScopedMemoConditional(child, state))});`,
       );
       childIndex += 1;
       continue;
@@ -872,16 +914,22 @@ function needsStableChildrenSnapshot(children: readonly JsxNodeIr[]): boolean {
   return false;
 }
 
-function emitRenderValueExpression(children: JsxNodeIr[], state: EmitSetupState): string {
+function emitRenderValueExpression(
+  children: JsxNodeIr[],
+  state: EmitSetupState,
+  ownerScopedMemo = false,
+): string {
   if (children.length === 0) {
     return "null";
   }
 
   if (children.length === 1) {
-    return emitNodeRenderValueExpression(children[0] as JsxNodeIr, state);
+    return emitNodeRenderValueExpression(children[0] as JsxNodeIr, state, ownerScopedMemo);
   }
 
-  return `[${children.map((child) => emitNodeRenderValueExpression(child, state)).join(", ")}]`;
+  return `[${children
+    .map((child) => emitNodeRenderValueExpression(child, state, ownerScopedMemo))
+    .join(", ")}]`;
 }
 
 function emitAsyncBoundarySetup(
@@ -916,7 +964,11 @@ function emitAsyncBoundarySetup(
   ].join("\n");
 }
 
-function emitNodeRenderValueExpression(node: JsxNodeIr, state: EmitSetupState): string {
+function emitNodeRenderValueExpression(
+  node: JsxNodeIr,
+  state: EmitSetupState,
+  ownerScopedMemo = false,
+): string {
   if (node.kind === "text") {
     return JSON.stringify(node.value);
   }
@@ -926,6 +978,16 @@ function emitNodeRenderValueExpression(node: JsxNodeIr, state: EmitSetupState): 
   }
 
   if (node.kind === "component") {
+    const inlineMemo = state.inlineMemoComponents.get(node.name);
+
+    if (ownerScopedMemo && inlineMemo !== undefined) {
+      const memoProps = state.allocateName("_memoProps");
+      const propsCode = emitPropsObject(node.props, node.children, state, false);
+      const compareArgument =
+        inlineMemo.compareCode === undefined ? "" : `, ${inlineMemo.compareCode}`;
+      return `${state.helperNames.createMemo}(${node.name}, ${propsCode}, (${memoProps}) => ${node.name}(${memoProps})${compareArgument})`;
+    }
+
     return emitComponentCall(
       node.name,
       node.props,
@@ -985,12 +1047,86 @@ function emitNodeRenderValueExpression(node: JsxNodeIr, state: EmitSetupState): 
   ].join("\n");
 }
 
+function isOwnerScopedMemoConditional(
+  node: Extract<JsxNodeIr, { kind: "conditional" }>,
+  state: EmitSetupState,
+): boolean {
+  const branches = [node.whenTrue, node.whenFalse];
+  return (
+    branches.some(
+      (branch) =>
+        branch.length === 1 &&
+        branch[0]?.kind === "component" &&
+        state.inlineMemoComponents.has(branch[0].name),
+    ) &&
+    branches.every(
+      (branch) =>
+        branch.length === 0 ||
+        (branch.length === 1 &&
+          branch[0]?.kind === "component" &&
+          state.inlineMemoComponents.has(branch[0].name)) ||
+        branch.every((child) => child.kind === "expr" || child.kind === "text"),
+    )
+  );
+}
+
+function treeUsesOwnerScopedMemo(
+  node: JsxNodeIr,
+  inlineMemoComponentNames: ReadonlySet<string>,
+): boolean {
+  if (
+    node.kind === "conditional" &&
+    isOwnerScopedMemoBranches(node.whenTrue, node.whenFalse, inlineMemoComponentNames)
+  ) {
+    return true;
+  }
+
+  if (node.kind === "conditional") {
+    return [...node.whenTrue, ...node.whenFalse].some((child) =>
+      treeUsesOwnerScopedMemo(child, inlineMemoComponentNames),
+    );
+  }
+
+  if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
+    return node.children.some((child) =>
+      treeUsesOwnerScopedMemo(child, inlineMemoComponentNames),
+    );
+  }
+
+  return false;
+}
+
+function isOwnerScopedMemoBranches(
+  whenTrue: readonly JsxNodeIr[],
+  whenFalse: readonly JsxNodeIr[],
+  inlineMemoComponentNames: ReadonlySet<string>,
+): boolean {
+  const branches = [whenTrue, whenFalse];
+  return (
+    branches.some(
+      (branch) =>
+        branch.length === 1 &&
+        branch[0]?.kind === "component" &&
+        inlineMemoComponentNames.has(branch[0].name),
+    ) &&
+    branches.every(
+      (branch) =>
+        branch.length === 0 ||
+        (branch.length === 1 &&
+          branch[0]?.kind === "component" &&
+          inlineMemoComponentNames.has(branch[0].name)) ||
+        branch.every((child) => child.kind === "expr" || child.kind === "text"),
+    )
+  );
+}
+
 function emitConditionalRenderValueExpression(
   node: Extract<JsxNodeIr, { kind: "conditional" }>,
   state: EmitSetupState,
 ): string {
-  const whenTrue = emitRenderValueExpression(node.whenTrue, state);
-  const whenFalse = emitRenderValueExpression(node.whenFalse, state);
+  const ownerScopedMemo = isOwnerScopedMemoConditional(node, state);
+  const whenTrue = emitRenderValueExpression(node.whenTrue, state, ownerScopedMemo);
+  const whenFalse = emitRenderValueExpression(node.whenFalse, state, ownerScopedMemo);
 
   if (node.conditionValueName === undefined) {
     return `((${node.conditionCode}) ? ${whenTrue} : ${whenFalse})`;
@@ -1111,6 +1247,7 @@ function emitPropsObject(
   props: ComponentPropIr[],
   children: JsxNodeIr[],
   state: EmitSetupState,
+  reactiveGetters = true,
 ): string {
   const entries = props.map((prop) => {
     if (prop.kind === "spread-prop") {
@@ -1121,7 +1258,7 @@ function emitPropsObject(
       return `${emitPropName(prop.name)}: ${emitRenderValueExpression(prop.children, state)}`;
     }
 
-    if (shouldEmitReactiveComponentPropGetter(prop.code)) {
+    if (reactiveGetters && shouldEmitReactiveComponentPropGetter(prop.code)) {
       return `get ${emitGetterPropName(prop.name)}() { return (${prop.code}); }`;
     }
 

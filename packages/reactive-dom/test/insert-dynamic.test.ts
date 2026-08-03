@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindDomRef, createList, insertDynamic } from "../src/index.js";
+import { bindDomRef, createList, createMemo, insertDynamic } from "../src/index.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 import { registerDispose } from "../src/scope.js";
@@ -75,6 +75,117 @@ describe("insertDynamic", () => {
 
     expect(parent.firstChild).toBe(node);
     expect(parent.innerHTML).toBe("<strong>stable</strong><!--marker-->");
+
+    dispose();
+  });
+
+  test("retains an equal memo render value and its cleanup scope", async () => {
+    const props = cell({ signature: "stable", revision: 0 });
+    const events: string[] = [];
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(
+      parent,
+      marker,
+      () =>
+        createMemo(
+          "Card",
+          props.get(),
+          (nextProps) => {
+            events.push(`render:${nextProps.revision}`);
+            registerDispose(() => events.push(`dispose:${nextProps.revision}`));
+            const article = document.createElement("article");
+            article.dataset.revision = String(nextProps.revision);
+            return article;
+          },
+          (previous, next) => previous.signature === next.signature,
+        ),
+      { memo: true },
+    );
+    const article = parent.querySelector("article");
+
+    props.set({ signature: "stable", revision: 1 });
+    await flushEffects();
+
+    expect(parent.querySelector("article")).toBe(article);
+    expect(article?.dataset.revision).toBe("0");
+    expect(events).toEqual(["render:0"]);
+
+    dispose();
+    expect(events).toEqual(["render:0", "dispose:0"]);
+  });
+
+  test("replaces an unequal memo render value and disposes each scope once", async () => {
+    const props = cell({ signature: "a" });
+    const events: string[] = [];
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(
+      parent,
+      marker,
+      () =>
+        createMemo(
+          "Card",
+          props.get(),
+          (nextProps) => {
+            events.push(`render:${nextProps.signature}`);
+            registerDispose(() => events.push(`dispose:${nextProps.signature}`));
+            const article = document.createElement("article");
+            article.textContent = nextProps.signature;
+            return article;
+          },
+          (previous, next) => previous.signature === next.signature,
+        ),
+      { memo: true },
+    );
+    const firstArticle = parent.querySelector("article");
+
+    props.set({ signature: "b" });
+    await flushEffects();
+
+    expect(parent.querySelector("article")).not.toBe(firstArticle);
+    expect(parent.querySelector("article")?.textContent).toBe("b");
+    expect(events).toEqual(["render:a", "dispose:a", "render:b"]);
+
+    dispose();
+    expect(events).toEqual(["render:a", "dispose:a", "render:b", "dispose:b"]);
+  });
+
+  test("uses shallow prop equality when a memo comparator is omitted", async () => {
+    const props = cell({ label: "stable" });
+    let renders = 0;
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertDynamic(
+      parent,
+      marker,
+      () =>
+        createMemo("Label", props.get(), (nextProps) => {
+          renders += 1;
+          const span = document.createElement("span");
+          span.textContent = nextProps.label;
+          return span;
+        }),
+      { memo: true },
+    );
+    const firstSpan = parent.querySelector("span");
+
+    props.set({ label: "stable" });
+    await flushEffects();
+    expect(parent.querySelector("span")).toBe(firstSpan);
+    expect(renders).toBe(1);
+
+    props.set({ label: "changed" });
+    await flushEffects();
+    expect(parent.querySelector("span")).not.toBe(firstSpan);
+    expect(parent.textContent).toBe("changed");
+    expect(renders).toBe(2);
 
     dispose();
   });
