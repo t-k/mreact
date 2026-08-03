@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.0.199 - 2026-08-03
+
+### Changed
+
+- Improved compiled keyed list performance by specializing selected classes, property and text reads, delegated row events, and stable row reconciliation while preserving the normal application execution path.
+- Reduced reactive core and reactive DOM allocation and cleanup overhead for effect dependencies, keyed row scopes, text bindings, and retained list records.
+
+### Fixed
+
+- Fixed compiled keyed list hydration and update semantics for delegated events, selected classes, aliased paths, escaped text, unsafe mutation fallbacks, duplicate replacements, and lazy subscription cleanup.
+- Fixed React-compatible StrictMode class lifecycle replay so `componentDidMount()` and lifecycle-scheduled state updates run again after the simulated unmount, restoring class-driven animations such as Recharts bars.
+- Fixed the public inline `effect()` callback type so generated declarations preserve the callback contract.
+
 ## 0.0.198 - 2026-07-25
 
 ### Fixed
