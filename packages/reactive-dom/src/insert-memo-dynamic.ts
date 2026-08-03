@@ -20,11 +20,13 @@ import type {
   RenderValue,
 } from "./types.js";
 
+type MemoDynamicValue = RenderValue | MemoRenderValue;
+
 /** Inserts a compiler-owned memo render value before a marker node. */
 export function insertMemoDynamic(
   parent: ParentNode,
   marker: ChildNode,
-  value: () => RenderValue,
+  value: () => MemoDynamicValue,
   options?: { debugLabel?: string },
 ): Dispose {
   void parent;
@@ -74,7 +76,7 @@ export function insertMemoDynamic(
   };
 
   const run = () => {
-    let nextValue: RenderValue;
+    let nextValue: MemoDynamicValue;
 
     try {
       nextValue = value();

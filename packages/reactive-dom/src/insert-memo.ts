@@ -13,11 +13,13 @@ import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, MemoRenderValue, RenderValue } from "./types.js";
 
+type MemoInsertionValue = RenderValue | MemoRenderValue;
+
 /** Inserts a compiler-proven memo or non-list fallback before a marker node. */
 export function insertMemo(
   parent: ParentNode,
   marker: ChildNode,
-  value: () => RenderValue,
+  value: () => MemoInsertionValue,
   options?: { debugLabel?: string },
 ): Dispose {
   void parent;
@@ -58,7 +60,7 @@ export function insertMemo(
   };
 
   const run = () => {
-    let nextValue: RenderValue;
+    let nextValue: MemoInsertionValue;
 
     try {
       nextValue = value();

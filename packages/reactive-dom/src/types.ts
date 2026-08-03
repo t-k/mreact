@@ -36,5 +36,4 @@ export type RenderValue =
   | null
   | undefined
   | ListRenderValue
-  | MemoRenderValue
   | readonly RenderValue[];
