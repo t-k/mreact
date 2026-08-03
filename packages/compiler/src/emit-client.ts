@@ -76,6 +76,7 @@ type RuntimeHelperName =
   | "createTemplate"
   | "createTemplateElement"
   | "insertDynamic"
+  | "insertMemo"
   | "insertMemoDynamic"
   | "bindCompilerKeyedCellText"
   | "bindCompilerKeyedSingleNodeList"
@@ -112,6 +113,7 @@ function allocateRuntimeHelperNames(
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
+    insertMemo: "insertMemo",
     insertMemoDynamic: "insertMemoDynamic",
     bindCompilerKeyedCellText: "bindCompilerKeyedCellText",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
@@ -167,12 +169,20 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       .map((component) => component.name),
   );
 
-  if (
-    ir.components.some((component) =>
-      treeUsesOwnerScopedMemo(component.root, inlineMemoComponentNames),
-    )
-  ) {
+  const usesLightweightMemoInsertion = ir.components.some((component) =>
+    treeUsesOwnerScopedMemo(component.root, inlineMemoComponentNames, false),
+  );
+  const usesListCapableMemoInsertion = ir.components.some((component) =>
+    treeUsesOwnerScopedMemo(component.root, inlineMemoComponentNames, true),
+  );
+
+  if (usesLightweightMemoInsertion || usesListCapableMemoInsertion) {
     internalSpecifiers.add("createMemo");
+  }
+  if (usesLightweightMemoInsertion) {
+    internalSpecifiers.add("insertMemo");
+  }
+  if (usesListCapableMemoInsertion) {
     internalSpecifiers.add("insertMemoDynamic");
   }
 
@@ -437,14 +447,14 @@ function emitComponent(
     };
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
-    const ownerScopedMemo = isOwnerScopedMemoConditional(component.root, state);
+    const ownerScopedMemoHelper = ownerScopedMemoInsertionHelper(component.root, state);
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${ownerScopedMemo ? helperNames.insertMemoDynamic : helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDynamicOptions(debugLabel)});`,
+      `  ${ownerScopedMemoHelper ?? helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDynamicOptions(debugLabel)});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -740,9 +750,9 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     }
 
     if (child.kind === "conditional") {
-      const ownerScopedMemo = isOwnerScopedMemoConditional(child, state);
+      const ownerScopedMemoHelper = ownerScopedMemoInsertionHelper(child, state);
       lines.push(
-        `  ${ownerScopedMemo ? state.helperNames.insertMemoDynamic : state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel)});`,
+        `  ${ownerScopedMemoHelper ?? state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel)});`,
       );
       childIndex += 1;
       continue;
@@ -1080,30 +1090,57 @@ function isOwnerScopedMemoConditional(
   );
 }
 
+function ownerScopedMemoInsertionHelper(
+  node: Extract<JsxNodeIr, { kind: "conditional" }>,
+  state: EmitSetupState,
+): string | undefined {
+  if (!isOwnerScopedMemoConditional(node, state)) {
+    return undefined;
+  }
+
+  return ownerScopedMemoBranchesNeedListSupport(node.whenTrue, node.whenFalse)
+    ? state.helperNames.insertMemoDynamic
+    : state.helperNames.insertMemo;
+}
+
 function treeUsesOwnerScopedMemo(
   node: JsxNodeIr,
   inlineMemoComponentNames: ReadonlySet<string>,
+  requiresListSupport: boolean,
 ): boolean {
   if (
     node.kind === "conditional" &&
-    isOwnerScopedMemoBranches(node.whenTrue, node.whenFalse, inlineMemoComponentNames)
+    isOwnerScopedMemoBranches(node.whenTrue, node.whenFalse, inlineMemoComponentNames) &&
+    ownerScopedMemoBranchesNeedListSupport(node.whenTrue, node.whenFalse) ===
+      requiresListSupport
   ) {
     return true;
   }
 
   if (node.kind === "conditional") {
     return [...node.whenTrue, ...node.whenFalse].some((child) =>
-      treeUsesOwnerScopedMemo(child, inlineMemoComponentNames),
+      treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
     );
   }
 
   if (node.kind === "list" || node.kind === "element" || node.kind === "fragment") {
     return node.children.some((child) =>
-      treeUsesOwnerScopedMemo(child, inlineMemoComponentNames),
+      treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
     );
   }
 
   return false;
+}
+
+function ownerScopedMemoBranchesNeedListSupport(
+  whenTrue: readonly JsxNodeIr[],
+  whenFalse: readonly JsxNodeIr[],
+): boolean {
+  return [whenTrue, whenFalse].some(
+    (branch) =>
+      branch.length === 1 &&
+      (branch[0]?.kind === "expr" || branch[0]?.kind === "list"),
+  );
 }
 
 function isOwnerScopedMemoBranches(

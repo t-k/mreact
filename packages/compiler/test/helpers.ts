@@ -59,6 +59,7 @@ import {
   markCompilerKeyedEventSlot,
 } from "../../reactive-dom/src/internal.js";
 import { createMemo } from "../../reactive-dom/src/create-memo.js";
+import { insertMemo } from "../../reactive-dom/src/insert-memo.js";
 import { insertMemoDynamic } from "../../reactive-dom/src/insert-memo-dynamic.js";
 
 function escapeHtmlBatch(values: readonly unknown[]): string[] {
@@ -418,7 +419,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|createMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|createMemo|insertMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -428,19 +429,21 @@ function extractClientInternalRuntimeEntries(
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value:
-        match.groups.importedName === "insertMemoDynamic"
-          ? insertMemoDynamic
-          : match.groups.importedName === "createMemo"
-          ? createMemo
-          : match.groups.importedName === "markCompilerKeyedEventSlot"
-          ? markCompilerKeyedEventSlot
-          : match.groups.importedName === "bindCompilerKeyedCellText"
-            ? bindCompilerKeyedCellText
-            : match.groups.importedName === "bindCompilerKeyedPropertyText"
-              ? bindCompilerKeyedPropertyText
-              : match.groups.importedName === "bindCompilerKeyedText"
-                ? bindCompilerKeyedText
-                : bindCompilerKeyedSingleNodeList,
+        match.groups.importedName === "insertMemo"
+          ? insertMemo
+          : match.groups.importedName === "insertMemoDynamic"
+            ? insertMemoDynamic
+            : match.groups.importedName === "createMemo"
+              ? createMemo
+              : match.groups.importedName === "markCompilerKeyedEventSlot"
+                ? markCompilerKeyedEventSlot
+                : match.groups.importedName === "bindCompilerKeyedCellText"
+                  ? bindCompilerKeyedCellText
+                  : match.groups.importedName === "bindCompilerKeyedPropertyText"
+                    ? bindCompilerKeyedPropertyText
+                    : match.groups.importedName === "bindCompilerKeyedText"
+                      ? bindCompilerKeyedText
+                      : bindCompilerKeyedSingleNodeList,
     };
   });
 }

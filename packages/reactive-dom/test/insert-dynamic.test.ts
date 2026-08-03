@@ -6,6 +6,7 @@ import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindDomRef, createList, insertDynamic } from "../src/index.js";
 import { createMemo } from "../src/create-memo.js";
+import { insertMemo } from "../src/insert-memo.js";
 import { insertMemoDynamic } from "../src/insert-memo-dynamic.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
@@ -88,7 +89,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemoDynamic(
+    const dispose = insertMemo(
       parent,
       marker,
       () =>
@@ -125,7 +126,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemoDynamic(
+    const dispose = insertMemo(
       parent,
       marker,
       () =>
@@ -207,7 +208,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemoDynamic(
+    const dispose = insertMemo(
       parent,
       marker,
       () =>
@@ -241,7 +242,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertMemoDynamic(parent, marker, () =>
+    const dispose = insertMemo(parent, marker, () =>
       createMemo(
         "Revision",
         props.get(),

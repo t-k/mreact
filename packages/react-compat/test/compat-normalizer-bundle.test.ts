@@ -16,6 +16,8 @@ const packedCompatConsumerSizeBudgets = {
   native: { gzipBytes: 9_350, rawBytes: 34_900 },
 } as const;
 
+const packedMemoConsumerSizeBudget = { gzipBytes: 3_875, rawBytes: 11_950 } as const;
+
 describe("react-compat production bundle", () => {
   test.each([
     ["root", 'import { createElement } from "@reckona/mreact-compat"; void createElement("div", null);'],
@@ -203,8 +205,23 @@ export function mount(container) {
   insertDynamic(container, marker, () => "native only");
 }`,
       );
+      const memo = await bundlePackedScenario(
+        root,
+        "memo",
+        `import { createMemo, insertMemo } from "@reckona/mreact-reactive-dom/internal";
+const component = "Card", props = { label: "x" }, render = p => p.label;
+export function mount(parent, marker) {
+  return insertMemo(parent, marker, () => createMemo(component, props, render));
+}`,
+      );
       expect(Object.keys(native.modules)).not.toEqual(
         expect.arrayContaining([expect.stringContaining("@reckona/mreact-compat")]),
+      );
+      expect(Object.keys(memo.modules).some((moduleId) => moduleId.endsWith("bind-list.js"))).toBe(
+        false,
+      );
+      expect(Object.keys(memo.modules).some((moduleId) => moduleId.endsWith("create-list.js"))).toBe(
+        false,
       );
       expect(sizes).toHaveLength(3);
       expect(sizes.every((size) => size.rawBytes > size.gzipBytes)).toBe(true);
@@ -222,6 +239,12 @@ export function mount(container) {
       );
       expect(gzipSync(native.code).length, "native packed consumer gzip bytes").toBeLessThanOrEqual(
         packedCompatConsumerSizeBudgets.native.gzipBytes,
+      );
+      expect(Buffer.byteLength(memo.code), "memo-only packed consumer raw bytes").toBeLessThanOrEqual(
+        packedMemoConsumerSizeBudget.rawBytes,
+      );
+      expect(gzipSync(memo.code).length, "memo-only packed consumer gzip bytes").toBeLessThanOrEqual(
+        packedMemoConsumerSizeBudget.gzipBytes,
       );
     } finally {
       await rm(root, { force: true, recursive: true });
