@@ -105,6 +105,8 @@ export interface CompiledSingleNodeListIr {
     // (undocumented)
     eventPrograms?: CompilerKeyedEventProgramIr[];
     // (undocumented)
+    ownsTextCleanup?: true;
+    // (undocumented)
     root: JsxElementIr;
     // (undocumented)
     selectedClass?: CompilerSelectedClassIr;
@@ -280,9 +282,11 @@ export interface ExprIr {
     // (undocumented)
     code: string;
     // (undocumented)
+    compilerKeyedProperty?: string;
+    // (undocumented)
     kind: "expr";
     // (undocumented)
-    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-text";
+    renderMode?: "dynamic" | "html" | "react-node" | "stream-node" | "compat-child" | "compiler-keyed-initial-text" | "compiler-keyed-cell-text" | "compiler-keyed-text";
 }
 
 // @public
