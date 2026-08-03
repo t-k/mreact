@@ -137,6 +137,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     const packageJson = JSON.parse(
       await readFile(join(reactCompatFixtureRoot, "package.json"), "utf8"),
     ) as {
+      dependencies?: Record<string, string>;
       scripts?: Record<string, string>;
       "js-framework-benchmark"?: Record<string, string>;
     };
@@ -144,6 +145,9 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
       "@reckona/mreact-compat",
+    );
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe(
+      packageJson.dependencies?.["@reckona/mreact-compat"],
     );
     expect(packageJson.dependencies?.["@reckona/mreact-compat"]).toBe("0.0.169");
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
@@ -301,6 +305,11 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
   test("builds with production defines used by the benchmark hot paths", async () => {
     const config = await readFile(join(reactCompatFixtureRoot, "vite.config.ts"), "utf8");
 
+    expect(config).toContain('from "@reckona/mreact-compiler"');
+    expect(config).toContain('target: "client"');
+    expect(config).toContain('mode: "compat"');
+    expect(config).toContain('entry: "src/main.tsx"');
+    expect(config).not.toContain('entry: "src/main.ts"');
     expect(config).toContain("__MREACT_CLIENT_DEVTOOLS__");
     expect(config).toContain('"false"');
     expect(config).toContain('"process.env.NODE_ENV"');
@@ -387,6 +396,9 @@ describe("js-framework-benchmark official runner", () => {
       runner.indexOf("const frameworkMappings"),
     );
     expect(localDependencies).toContain('"@reckona/mreact-compiler"');
+    expect(localDependencies).toContain(
+      '"mreact-react-compat": [\n    "@reckona/mreact-compiler",',
+    );
     const copyFixtures = runner.slice(
       runner.indexOf("async function copyMreactFixtures"),
       runner.indexOf("function startServer"),
