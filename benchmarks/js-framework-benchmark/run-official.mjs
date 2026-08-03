@@ -12,15 +12,13 @@ const checkoutRoot = resolve(
     join(tmpdir(), `mreact-js-framework-benchmark-${process.pid}`),
 );
 const resultsRoot = process.env.MREACT_BENCHMARK_RESULTS_DIR;
-const resultDir = resultsRoot === undefined
-  ? join(repoRoot, "benchmarks", "results", "local-js-framework")
-  : resultsRoot;
+const resultDir =
+  resultsRoot === undefined
+    ? join(repoRoot, "benchmarks", "results", "local-js-framework")
+    : resultsRoot;
 const officialResultDir = join(resultDir, "js-framework-benchmark-results");
 const officialTraceDir = join(resultDir, "js-framework-benchmark-traces");
-const useLocalPackages = parseBooleanEnv(
-  process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES,
-  true,
-);
+const useLocalPackages = parseBooleanEnv(process.env.MREACT_JS_FRAMEWORK_LOCAL_PACKAGES, true);
 const localPackageModeHelp =
   "Set MREACT_JS_FRAMEWORK_LOCAL_PACKAGES=0 to benchmark published npm packages.";
 
@@ -56,21 +54,12 @@ const localPackageByName = new Map(localPackageSpecs.map((spec) => [spec.name, s
 
 const localFixtureDependencies = {
   mreact: [
-    "@reckona/mreact-reactive-core",
-    "@reckona/mreact-reactive-dom",
-  ],
-  "mreact-compiled": [
     "@reckona/mreact-compiler",
     "@reckona/mreact-reactive-core",
     "@reckona/mreact-reactive-dom",
   ],
-  "mreact-react-compat": [
-    "@reckona/mreact-reactive-dom",
-    "@reckona/mreact-compat",
-  ],
-  "mreact-react-compat-vdom": [
-    "@reckona/mreact-compat",
-  ],
+  "mreact-react-compat": ["@reckona/mreact-reactive-dom", "@reckona/mreact-compat"],
+  "mreact-react-compat-vdom": ["@reckona/mreact-compat"],
 };
 
 const frameworkMappings = [
@@ -109,10 +98,6 @@ const frameworkMappings = [
   {
     primitive: "mreact",
     official: "keyed/mreact",
-  },
-  {
-    primitive: "mreact compiled",
-    official: "keyed/mreact-compiled",
   },
 ];
 
@@ -495,12 +480,16 @@ async function prepareCheckout() {
   if (!existsSync(join(checkoutRoot, "package.json"))) {
     await rm(checkoutRoot, { force: true, recursive: true });
     await mkdir(checkoutRoot, { recursive: true });
-    await run("git", [
-      "clone",
-      "--depth=1",
-      "https://github.com/krausest/js-framework-benchmark.git",
-      checkoutRoot,
-    ], repoRoot);
+    await run(
+      "git",
+      [
+        "clone",
+        "--depth=1",
+        "https://github.com/krausest/js-framework-benchmark.git",
+        checkoutRoot,
+      ],
+      repoRoot,
+    );
   }
 }
 
@@ -571,7 +560,10 @@ async function applyLocalFixtureDependencies(fixtureDir, packageRoot, dependenci
     if (localPackage === undefined) {
       throw new Error(`Missing local package staging config for ${dependency}`);
     }
-    packageJson.dependencies[dependency] = fileDependency(fixtureDir, localPackageDir(packageRoot, localPackage));
+    packageJson.dependencies[dependency] = fileDependency(
+      fixtureDir,
+      localPackageDir(packageRoot, localPackage),
+    );
   }
 
   await applyLocalFixtureVersion(packageJson, packageRoot, dependencies[dependencies.length - 1]);
@@ -610,12 +602,7 @@ function fileDependency(fromDir, toDir) {
 }
 
 async function copyMreactFixtures() {
-  for (const name of [
-    "mreact",
-    "mreact-compiled",
-    "mreact-react-compat",
-    "mreact-react-compat-vdom",
-  ]) {
+  for (const name of ["mreact", "mreact-react-compat", "mreact-react-compat-vdom"]) {
     await cp(join(fixtureRoot, name), join(checkoutRoot, "frameworks", "keyed", name), {
       force: true,
       recursive: true,
@@ -796,7 +783,9 @@ function formatJsFrameworkRankingSections(resultRows) {
     }
 
     lines.push(`### ${descriptor.caseName}`, "");
-    lines.push(`| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`);
+    lines.push(
+      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`,
+    );
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
 
     const bestRow = rankedRows[0];
@@ -810,7 +799,9 @@ function formatJsFrameworkRankingSections(resultRows) {
   }
 
   if (lines.length === 0) {
-    lines.push(`| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`);
+    lines.push(
+      `| rank | framework | case | value | script | paint | diff vs 1st | diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |`,
+    );
     lines.push("| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
     lines.push("|  | no completed results |  |  |  |  |  |  |  |");
     lines.push("");
@@ -864,7 +855,9 @@ function formatDiffVsBest(row, bestRow) {
 function formatPercent(value) {
   const rounded = Math.round(value * 100) / 100;
   const sign = rounded > 0 ? "+" : "";
-  return `${sign}${String(rounded).replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "")}%`;
+  return `${sign}${String(rounded)
+    .replace(/(\.\d*?)0+$/, "$1")
+    .replace(/\.$/, "")}%`;
 }
 
 function escapeMarkdownTableCell(value) {

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../../packages/compiler/src/index.js";
@@ -14,7 +14,7 @@ const fixtureRoot = join(
   "keyed",
   "mreact",
 );
-const compiledFixtureRoot = join(
+const legacyCompiledFixtureRoot = join(
   process.cwd(),
   "benchmarks",
   "js-framework-benchmark",
@@ -48,14 +48,18 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
 
   test("declares the metadata and build command expected by js-framework-benchmark", async () => {
     const packageJson = JSON.parse(await readFile(join(fixtureRoot, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      name?: string;
       scripts?: Record<string, string>;
       "js-framework-benchmark"?: Record<string, string>;
     };
 
+    expect(packageJson.name).toBe("js-framework-benchmark-mreact");
     expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
     expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
       "@reckona/mreact-reactive-dom",
     );
+    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.169");
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-core"]).toBe("0.0.169");
     expect(packageJson.dependencies?.["@reckona/mreact-reactive-dom"]).toBe("0.0.169");
     expect(packageJson["js-framework-benchmark"]?.frameworkHomeURL).toBe(
@@ -63,139 +67,26 @@ describe("js-framework-benchmark mreact keyed fixture", () => {
     );
   });
 
-  test("keeps official action button ids and table target shape", async () => {
+  test("keeps the official keyed benchmark DOM contract", async () => {
     const html = await readFile(join(fixtureRoot, "index.html"), "utf8");
+    const main = await readFile(join(fixtureRoot, "src", "main.tsx"), "utf8");
 
     expect(html).toContain('id="main"');
-    expect(html).toContain('id="run"');
-    expect(html).toContain('id="runlots"');
-    expect(html).toContain('id="add"');
-    expect(html).toContain('id="update"');
-    expect(html).toContain('id="clear"');
-    expect(html).toContain('id="swaprows"');
-    expect(html).toContain('class="table table-hover table-striped test-data"');
     expect(html).toContain('src="dist/main.js"');
-    expect(html).not.toContain("/src/main.ts");
+    for (const id of ["run", "runlots", "add", "update", "clear", "swaprows"]) {
+      expect(main).toContain(`id="${id}"`);
+    }
+    expect(main).toContain('class="table table-hover table-striped test-data"');
+    expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
+    expect(main).toContain('aria-hidden="true"');
+    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
   });
 
-  test("updates row labels through keyed row state instead of replacing the data array", async () => {
-    const main = await readFile(join(fixtureRoot, "src", "main.ts"), "utf8");
-
-    expect(main).toContain("batch(() =>");
-    expect(main).toContain('row.label.set(`${row.label.get()} !!!`)');
-    expect(main).not.toContain("row.label.set((label)");
-    expect(main).toContain("if (selected.get() !== null)");
-    expect(main).toContain("rows.findIndex((row) => row.id === id)");
-    expect(main).toContain("const next = new Array<Row>(rows.length - 1)");
-    expect(main).toContain("return next");
-    expect(main).toContain("createTemplateElement");
-    expect(main).toContain("const createRowTemplate = createTemplateElement<HTMLTableRowElement>(");
-    expect(main).toContain('class="col-md-1"> </td>');
-    expect(main).not.toContain('data-action="select"');
-    expect(main).not.toContain('data-action="remove"');
-    expect(main).toContain("const idText = idCell.firstChild as Text;");
-    expect(main).toContain("const labelText = selectLink.firstChild as Text;");
-    expect(main).toContain("function getRowId(rowElement: HTMLTableRowElement): number | undefined");
-    expect(main).toContain("Number.parseInt(idCell?.textContent ?? \"\", 10)");
-    expect(main).toContain("bindStaticKeyedSingleNodeList(");
-    expect(main).toContain("deferEventPromotion: false");
-    expect(main).toContain("selectedClass: {");
-    expect(main).toContain('className: "danger"');
-    expect(main).toContain("preserveInitial: true");
-    expect(main).toContain("source: selected");
-    expect(main).toContain('bindEvent(tbody, "click", handleRowClick);');
-    expect(main).toContain('target.closest<HTMLAnchorElement>("a")');
-    expect(main).toContain('classList.contains("glyphicon-remove")');
-    expect(main).toContain("key: (row) => row.id");
-    expect(main).not.toContain("bindList(");
-    expect(main).not.toContain('itemMode: "static"');
-    expect(main).not.toContain("data.set(data.get().map");
-    expect(main).not.toContain("selected.get() === row.id");
-    expect(main).not.toContain("bindProp(tr, \"className\"");
-    expect(main).not.toContain("bindSelectorClass(");
-    expect(main).not.toContain("bindEvent(selectLink");
-    expect(main).not.toContain("bindEvent(removeLink");
-    expect(main).not.toContain("rowElements");
-    expect(main).not.toContain("previousSelectedRow");
-    expect(main).not.toContain(".className =");
-    expect(main).not.toContain("new WeakMap<HTMLTableRowElement, number>()");
-    expect(main).not.toContain("rowIdProperty");
-    expect(main).not.toContain("document.createTextNode(String(row.id))");
-  });
-
-  test("runs official keyed table actions through delegated row events", async () => {
-    document.body.innerHTML = [
-      '<div id="main">',
-      '<button id="run"></button>',
-      '<button id="runlots"></button>',
-      '<button id="add"></button>',
-      '<button id="update"></button>',
-      '<button id="clear"></button>',
-      '<button id="swaprows"></button>',
-      '<table><tbody id="tbody"></tbody></table>',
-      "</div>",
-    ].join("");
-    vi.resetModules();
-
-    await import("./frameworks/keyed/mreact/src/main.ts");
-
-    const click = async (selector: string): Promise<void> => {
-      const element = document.querySelector<HTMLElement>(selector);
-
-      if (element === null) {
-        throw new Error(`Missing ${selector}`);
-      }
-
-      element.click();
-      await flushEffects();
-    };
-    const rows = (): HTMLTableRowElement[] =>
-      Array.from(document.querySelectorAll<HTMLTableRowElement>("#tbody tr"));
-    const rowId = (row: HTMLTableRowElement): string => row.cells[0]?.textContent ?? "";
-    const rowLabel = (row: HTMLTableRowElement): string => row.cells[1]?.textContent ?? "";
-
-    await click("#run");
-    expect(rows()).toHaveLength(1_000);
-    expect(rowId(rows()[0] as HTMLTableRowElement)).toBe("1");
-
-    const firstLabel = rowLabel(rows()[0] as HTMLTableRowElement);
-    await click("#update");
-    expect(rowLabel(rows()[0] as HTMLTableRowElement)).toBe(`${firstLabel} !!!`);
-
-    await click("#tbody tr:nth-child(2) td:nth-child(2) a");
-    expect(rows()[1]?.className).toBe("danger");
-
-    await click("#swaprows");
-    expect(rowId(rows()[998] as HTMLTableRowElement)).toBe("2");
-    expect(rows()[998]?.className).toBe("danger");
-
-    await click("#tbody tr:nth-child(999) td:nth-child(3) a");
-    expect(rows()).toHaveLength(999);
-    expect(rows().some((row) => rowId(row) === "2")).toBe(false);
-
-    await click("#clear");
-    expect(rows()).toHaveLength(0);
-  });
-});
-
-describe("js-framework-benchmark compiler-generated mreact keyed fixture", () => {
   test("uses the public compiler on ordinary keyed JSX", async () => {
-    const packageJson = JSON.parse(
-      await readFile(join(compiledFixtureRoot, "package.json"), "utf8"),
-    ) as {
-      dependencies?: Record<string, string>;
-      scripts?: Record<string, string>;
-      "js-framework-benchmark"?: Record<string, string>;
-    };
-    const config = await readFile(join(compiledFixtureRoot, "vite.config.ts"), "utf8");
-    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
-    const entry = await readFile(join(compiledFixtureRoot, "src", "index.ts"), "utf8");
+    const config = await readFile(join(fixtureRoot, "vite.config.ts"), "utf8");
+    const main = await readFile(join(fixtureRoot, "src", "main.tsx"), "utf8");
+    const entry = await readFile(join(fixtureRoot, "src", "index.ts"), "utf8");
 
-    expect(packageJson.scripts?.["build-prod"]).toBe("vite build --mode production");
-    expect(packageJson["js-framework-benchmark"]?.frameworkVersionFromPackage).toBe(
-      "@reckona/mreact-reactive-dom",
-    );
-    expect(packageJson.dependencies?.["@reckona/mreact-compiler"]).toBe("0.0.169");
     expect(config).toContain('target: "client"');
     expect(config).toContain('mode: "reactive"');
     expect(config).toContain("transform({");
@@ -215,19 +106,8 @@ describe("js-framework-benchmark compiler-generated mreact keyed fixture", () =>
     expect(main).not.toContain("bindList");
   });
 
-  test("keeps the official keyed benchmark DOM contract", async () => {
-    const html = await readFile(join(compiledFixtureRoot, "index.html"), "utf8");
-    const main = await readFile(join(compiledFixtureRoot, "src", "main.tsx"), "utf8");
-
-    expect(html).toContain('id="main"');
-    expect(html).toContain('src="dist/main.js"');
-    for (const id of ["run", "runlots", "add", "update", "clear", "swaprows"]) {
-      expect(main).toContain(`id="${id}"`);
-    }
-    expect(main).toContain('class="table table-hover table-striped test-data"');
-    expect(main).toContain('class="preloadicon glyphicon glyphicon-remove"');
-    expect(main).toContain('aria-hidden="true"');
-    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
+  test("does not keep a second compiled benchmark identity", async () => {
+    await expect(access(legacyCompiledFixtureRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
@@ -297,7 +177,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("previous.selected === next.selected && previous.row === next.row");
     expect(main).toContain('RowMemo.__mreactMemoCompareProps = ["selected", "row"];');
     expect(main).toContain("return _createReactiveDomBlock((props) =>");
-    expect(main).toContain("document.createElement(\"tr\")");
+    expect(main).toContain('document.createElement("tr")');
     expect(main).toContain("bindEvent");
     expect(main).toContain("bindSelectedKeyedSingleNodeList");
     expect(main).toContain("selectedClass");
@@ -305,9 +185,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(main).toContain("return (selectRow(props.row.id));");
     expect(main).toContain("return (removeRow(props.row.id));");
     expect(main).not.toContain("const _h = (() => selectRow(props.row.id));");
-    expect(main).not.toContain(
-      'const _disposeEvent = typeof _h === "function" ? _bindEvent',
-    );
+    expect(main).not.toContain('const _disposeEvent = typeof _h === "function" ? _bindEvent');
     expect(main.slice(main.indexOf("function Row"))).not.toContain("addEventListener");
   });
 
@@ -433,19 +311,21 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
 
     expect(main).toContain("const next = rows.slice(0);");
     expect(main).toContain("for (let index = 0; index < next.length; index += 10)");
-    expect(main).toContain('next[index] = { id: row.id, label: `${row.label} !!!` };');
+    expect(main).toContain("next[index] = { id: row.id, label: `${row.label} !!!` };");
     expect(main).not.toContain("return rows.map((row, index)");
   });
 });
 
 describe("js-framework-benchmark mreact keyed production build", () => {
-  test("builds with production defines used by reactive-core hot paths", async () => {
+  test("builds compiler output with production defines used by reactive-core hot paths", async () => {
     const config = await readFile(join(fixtureRoot, "vite.config.ts"), "utf8");
 
     expect(config).toContain("__MREACT_CLIENT_DEVTOOLS__");
     expect(config).toContain('"false"');
+    expect(config).toContain('"process.env.NODE_ENV"');
+    expect(config).toContain('"production"');
     expect(config).toContain('minify: "oxc"');
-    expect(config).toContain('input: "src/main.ts"');
+    expect(config).toContain('input: "src/index.ts"');
     expect(config).toContain("rolldownOptions:");
     expect(config).not.toContain("lib:");
   });
@@ -454,12 +334,7 @@ describe("js-framework-benchmark mreact keyed production build", () => {
 describe("js-framework-benchmark official runner", () => {
   test("maps primitive benchmark peers to upstream keyed DOM fixtures when available", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -472,12 +347,17 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain('official: "keyed/mreact-react-compat-vdom"');
     expect(runner).toContain('official: "keyed/solid"');
     expect(runner).toContain('official: "keyed/mreact"');
-    expect(runner).toContain('official: "keyed/mreact-compiled"');
+    expect(runner).not.toContain('official: "keyed/mreact-compiled"');
+    const localDependencies = runner.slice(
+      runner.indexOf("const localFixtureDependencies"),
+      runner.indexOf("const frameworkMappings"),
+    );
+    expect(localDependencies).toContain('"@reckona/mreact-compiler"');
     const copyFixtures = runner.slice(
       runner.indexOf("async function copyMreactFixtures"),
       runner.indexOf("function startServer"),
     );
-    expect(copyFixtures).toContain('"mreact-compiled"');
+    expect(copyFixtures).not.toContain('"mreact-compiled"');
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");
     expect(runner).toContain("qwik-v2");
     expect(runner).toContain("solid-v2");
@@ -485,12 +365,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("skips Playwright browser downloads during official dependency installation", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -512,12 +387,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("compiles the official webdriver runner after installing dependencies", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -528,12 +398,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("uses local mreact package builds by default for unreleased benchmark changes", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -542,18 +407,15 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain("await prepareLocalPackages();");
     expect(runner).toContain("await applyLocalFixtureDependencies(fixtureDir");
     expect(runner).toContain('return join(fixtureDir, "mreact-local-packages");');
-    expect(runner).toContain('benchmarkData.frameworkVersion = `${versionPackageJson.version}-local`;');
+    expect(runner).toContain(
+      "benchmarkData.frameworkVersion = `${versionPackageJson.version}-local`;",
+    );
     expect(runner).toContain("delete benchmarkData.frameworkVersionFromPackage;");
   });
 
   test("can opt out of local package builds for published npm comparisons", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -563,12 +425,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("uses the build-only rebuild path before configurable official browser checks", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -582,12 +439,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("propagates an explicit Chrome binary through every official browser check", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -605,12 +457,7 @@ describe("js-framework-benchmark official runner", () => {
 
   test("reports selected benchmark results with rankings and diff from best", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -618,27 +465,18 @@ describe("js-framework-benchmark official runner", () => {
     expect(runner).toContain(
       "Lower values are better for all js-framework-benchmark metrics reported here.",
     );
-    expect(runner).toContain(
-      "diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |",
-    );
+    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} | unit |");
     expect(runner).toContain("formatJsFrameworkRankingSections(resultRows)");
     expect(runner).toContain("formatDiffVsBest(row, bestRow)");
     expect(runner).toContain("formatDiffVsBest(row, anchorRow)");
     expect(runner).toContain("readMetricParts(files, framework, descriptor.caseId");
     expect(runner).toContain("## Results");
-    expect(runner).toContain(
-      "diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |",
-    );
+    expect(runner).toContain("diff vs ${escapeMarkdownTableCell(diffAnchorFramework)} |");
   });
 
   test("uses official js-framework-benchmark case labels in summaries", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
@@ -663,16 +501,13 @@ describe("js-framework-benchmark official runner", () => {
 
   test("copies official Chrome traces next to the js-framework results", async () => {
     const runner = await readFile(
-      join(
-        process.cwd(),
-        "benchmarks",
-        "js-framework-benchmark",
-        "run-official.mjs",
-      ),
+      join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
       "utf8",
     );
 
-    expect(runner).toContain("const officialTraceDir = join(resultDir, \"js-framework-benchmark-traces\");");
+    expect(runner).toContain(
+      'const officialTraceDir = join(resultDir, "js-framework-benchmark-traces");',
+    );
     expect(runner).toContain("await copyTraces();");
     expect(runner).toContain("Chrome trace files are stored");
   });
