@@ -1069,8 +1069,7 @@ function isOwnerScopedMemoConditional(
         branch.length === 0 ||
         (branch.length === 1 &&
           branch[0]?.kind === "component" &&
-          state.inlineMemoComponents.has(branch[0].name)) ||
-        branch.every((child) => child.kind === "expr" || child.kind === "text"),
+          state.inlineMemoComponents.has(branch[0].name)),
     )
   );
 }
@@ -1119,8 +1118,7 @@ function isOwnerScopedMemoBranches(
         branch.length === 0 ||
         (branch.length === 1 &&
           branch[0]?.kind === "component" &&
-          inlineMemoComponentNames.has(branch[0].name)) ||
-        branch.every((child) => child.kind === "expr" || child.kind === "text"),
+          inlineMemoComponentNames.has(branch[0].name)),
     )
   );
 }

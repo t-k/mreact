@@ -1932,8 +1932,10 @@ const normalize = (value: boolean) => value;
 export function App() {
   let mutable = active.get();
   const called = normalize(active.get());
+  const snapshot = active.get();
+  const chained = normalize(snapshot);
   const sorted = rows.get().sort((left, right) => left.id.localeCompare(right.id));
-  return <main>{mutable && <p>Mutable</p>}{called && <p>Called</p>}{sorted.length}</main>;
+  return <main>{mutable && <p>Mutable</p>}{called && <p>Called</p>}{chained && <p>Chained</p>}{sorted.length}</main>;
 }`,
       filename: "App.tsx",
       target: "client",
@@ -1943,6 +1945,8 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("let mutable = active.get();");
     expect(output.code).toContain("const called = normalize(active.get());");
+    expect(output.code).toContain("const snapshot = active.get();");
+    expect(output.code).toContain("const chained = normalize(snapshot);");
     expect(output.code).toContain("const sorted = rows.get().sort(");
     expect(output.code).not.toContain("untrack");
   });
@@ -2019,7 +2023,7 @@ export function App() {
   return <main>
     <button type="button" onClick={() => revision.set(revision.get() + 1)}>Update</button>
     <button type="button" onClick={() => signature.set("changed")}>Change signature</button>
-    {revision.get() >= 0 && <Card revision={revision.get()} signature={signature.get()} />}
+    {revision.get() >= 0 ? <Card revision={revision.get()} signature={signature.get()} /> : null}
   </main>;
 }`,
       filename: "App.tsx",
@@ -2096,5 +2100,36 @@ export function App() {
       "Static",
       "A",
     ]);
+  });
+
+  test("client transform keeps memo conditionals with expression alternates on insertDynamic", async () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const show = cell(true);
+const fallback = cell("Fallback");
+const Card = memo(function Card() { return <article>Card</article>; });
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => show.set(false)}>Hide</button>
+    {show.get() ? <Card /> : fallback.get()}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).not.toContain("insertMemoDynamic");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("article")?.textContent).toBe("Card");
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("article")).toBeNull();
+    expect(node.textContent).toContain("Fallback");
   });
 });

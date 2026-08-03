@@ -189,6 +189,46 @@ describe("insertDynamic", () => {
     dispose();
   });
 
+  test("compares after a bailout against the last rendered props", async () => {
+    const props = cell({ revision: 0 });
+    const comparisons: Array<[number, number]> = [];
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertMemoDynamic(parent, marker, () =>
+      createMemo(
+        "Revision",
+        props.get(),
+        (nextProps) => {
+          const span = document.createElement("span");
+          span.textContent = String(nextProps.revision);
+          return span;
+        },
+        (previous, next) => {
+          comparisons.push([previous.revision, next.revision]);
+          return previous.revision + 1 === next.revision;
+        },
+      ),
+    );
+    const firstSpan = parent.querySelector("span");
+
+    props.set({ revision: 1 });
+    await flushEffects();
+    expect(parent.querySelector("span")).toBe(firstSpan);
+
+    props.set({ revision: 2 });
+    await flushEffects();
+    expect(comparisons).toEqual([
+      [0, 1],
+      [0, 2],
+    ]);
+    expect(parent.querySelector("span")).not.toBe(firstSpan);
+    expect(parent.textContent).toBe("2");
+
+    dispose();
+  });
+
   test("completes branch replacement after the previous cleanup throws", async () => {
     const value = cell("a");
     const parent = document.createElement("div");

@@ -68,7 +68,6 @@ export function insertMemoDynamic(
         currentMemo.type === nextValue.type &&
         nextValue.compare(currentMemo.props, nextValue.props)
       ) {
-        currentMemo = nextValue;
         return;
       }
     } catch (error) {
