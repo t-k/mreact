@@ -72,6 +72,12 @@ async function main(): Promise<void> {
       );
     }
     await writeRunSummary({ outputDir, runId, results });
+    const failedFixtures = failedFixtureIds(results);
+    if (failedFixtures.length > 0) {
+      throw new Error(
+        `Recharts compat lab failed for ${failedFixtures.join(", ")}. Results: ${outputDir}`,
+      );
+    }
     console.log(`Recharts compat lab results: ${outputDir}`);
   } finally {
     await Promise.all([
@@ -244,6 +250,12 @@ export function fixtureDomSummaryMatches(
   return Object.entries(expected ?? {}).every(
     ([key, value]) => summary[key as keyof DomSummary] === value,
   );
+}
+
+export function failedFixtureIds(
+  results: readonly Pick<FixtureRunResult, "fixtureId" | "ok">[],
+): string[] {
+  return results.filter((result) => !result.ok).map((result) => result.fixtureId);
 }
 
 async function runInteractions(page: Page, interactions: CompatInteraction[]): Promise<void> {
