@@ -2176,4 +2176,49 @@ export function App() {
     expect(node.querySelector("span")?.textContent).toBe("Row");
     expect(node.textContent).not.toContain("[object Object]");
   });
+
+  test("client transform unwraps explicit list render values from memo expression alternates", async () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const show = cell(true);
+const rows = [{ id: "a", label: "A" }];
+const LIST_RENDER_VALUE = Symbol.for("mreact.list-render-value");
+const Card = memo(function Card() { return <article>Card</article>; });
+
+function explicitList() {
+  return {
+    [LIST_RENDER_VALUE]: true,
+    items: () => rows,
+    renderItem: (row: { readonly id: string; readonly label: string }) => {
+      const span = document.createElement("span");
+      span.textContent = row.label;
+      return span;
+    },
+    options: { key: (row: { readonly id: string }) => row.id },
+  };
+}
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => show.set(false)}>Show rows</button>
+    {show.get() ? <Card /> : explicitList()}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("insertMemoDynamic");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("article")).toBeNull();
+    expect(node.querySelector("span")?.textContent).toBe("A");
+    expect(node.textContent).not.toContain("[object Object]");
+  });
 });

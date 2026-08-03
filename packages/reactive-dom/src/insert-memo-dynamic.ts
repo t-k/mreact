@@ -109,9 +109,13 @@ export function insertMemoDynamic(
     }
 
     let next;
+    let renderedMemoValue: RenderValue;
     try {
       next = createScopedRenderNodes(() => {
-        if (isMemoRenderValue(nextValue)) return nextValue.render(nextValue.props);
+        if (isMemoRenderValue(nextValue)) {
+          renderedMemoValue = nextValue.render(nextValue.props);
+          return isListRenderValue(renderedMemoValue) ? null : renderedMemoValue;
+        }
         return isListRenderValue(nextValue) ? null : nextValue;
       });
     } catch (error) {
@@ -123,18 +127,20 @@ export function insertMemoDynamic(
       throw firstError ?? error;
     }
 
-    if (isListRenderValue(nextValue)) {
+    const resolvedValue = isMemoRenderValue(nextValue) ? renderedMemoValue : nextValue;
+
+    if (isListRenderValue(resolvedValue)) {
       next.dispose();
-      const nextKeyed = nextValue.options?.key !== undefined;
-      const nextNestedObjectFallback = nextValue.options?.nestedObjectFallback === true;
+      const nextKeyed = resolvedValue.options?.key !== undefined;
+      const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
 
       if (
         currentList !== undefined &&
         currentList.keyed === nextKeyed &&
         currentList.nestedObjectFallback === nextNestedObjectFallback
       ) {
-        currentList.value.set(nextValue);
-        currentMemo = undefined;
+        currentList.value.set(resolvedValue);
+        currentMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
         if (firstError !== undefined) throw firstError;
         return;
       }
@@ -151,9 +157,9 @@ export function insertMemoDynamic(
         return;
       }
 
-      const listValue = cell(nextValue);
+      const listValue = cell(resolvedValue);
       const listOptions =
-        nextValue.options === undefined
+        resolvedValue.options === undefined
           ? undefined
           : {
               ...(nextKeyed
@@ -176,7 +182,7 @@ export function insertMemoDynamic(
           listOptions,
         ),
       };
-      currentMemo = undefined;
+      currentMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
       if (firstError !== undefined) throw firstError;
       return;
     }
