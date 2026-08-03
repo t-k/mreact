@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.0.201 - 2026-08-04
+
+### Fixed
+
+- Fixed client compiler runtime imports for owner-scoped memo conditionals nested in component children, JSX render props, and async-boundary branches so generated hydration code no longer references missing memo helpers.
+
 ## 0.0.200 - 2026-08-03
 
 ### Changed
