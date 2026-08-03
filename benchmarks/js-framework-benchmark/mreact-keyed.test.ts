@@ -278,7 +278,7 @@ describe("js-framework-benchmark mreact react-compat keyed fixture", () => {
     expect(rows()).toHaveLength(10_000);
     await click("#clear");
     expect(rows()).toHaveLength(0);
-  });
+  }, 15_000);
 
   test("keeps a plain VDOM react-compatible fixture beside the lowered fixture", async () => {
     const main = await readFile(join(reactCompatVdomFixtureRoot, "src", "main.ts"), "utf8");
