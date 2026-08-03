@@ -2009,7 +2009,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("createMemo(");
     expect(output.code).toContain("__nativeMemoComparisons");
-    expect(output.code).toContain("memo: true");
+    expect(output.code).toContain("insertMemoDynamic(");
     const node = (await runClientComponent(output.code)) as HTMLElement;
     const card = node.querySelector("article");
 

@@ -4,7 +4,9 @@ import { describe, expect, test } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { withCleanupScope } from "@reckona/mreact-reactive-core/internal";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
-import { bindDomRef, createList, createMemo, insertDynamic } from "../src/index.js";
+import { bindDomRef, createList, insertDynamic } from "../src/index.js";
+import { createMemo } from "../src/create-memo.js";
+import { insertMemoDynamic } from "../src/insert-memo-dynamic.js";
 import { bindText } from "../src/bind-text.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
 import { registerDispose } from "../src/scope.js";
@@ -86,7 +88,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertDynamic(
+    const dispose = insertMemoDynamic(
       parent,
       marker,
       () =>
@@ -102,7 +104,6 @@ describe("insertDynamic", () => {
           },
           (previous, next) => previous.signature === next.signature,
         ),
-      { memo: true },
     );
     const article = parent.querySelector("article");
 
@@ -124,7 +125,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertDynamic(
+    const dispose = insertMemoDynamic(
       parent,
       marker,
       () =>
@@ -140,7 +141,6 @@ describe("insertDynamic", () => {
           },
           (previous, next) => previous.signature === next.signature,
         ),
-      { memo: true },
     );
     const firstArticle = parent.querySelector("article");
 
@@ -162,7 +162,7 @@ describe("insertDynamic", () => {
     const marker = document.createComment("marker");
     parent.append(marker);
 
-    const dispose = insertDynamic(
+    const dispose = insertMemoDynamic(
       parent,
       marker,
       () =>
@@ -172,7 +172,6 @@ describe("insertDynamic", () => {
           span.textContent = nextProps.label;
           return span;
         }),
-      { memo: true },
     );
     const firstSpan = parent.querySelector("span");
 

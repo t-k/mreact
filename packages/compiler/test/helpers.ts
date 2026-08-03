@@ -6,7 +6,6 @@ import {
   bindSpreadProps,
   bindText,
   createList,
-  createMemo,
   createTemplate,
   createTemplateElement,
   insertDynamic,
@@ -59,6 +58,8 @@ import {
   bindCompilerKeyedText,
   markCompilerKeyedEventSlot,
 } from "../../reactive-dom/src/internal.js";
+import { createMemo } from "../../reactive-dom/src/create-memo.js";
+import { insertMemoDynamic } from "../../reactive-dom/src/insert-memo-dynamic.js";
 
 function escapeHtmlBatch(values: readonly unknown[]): string[] {
   return values.map((value) =>
@@ -417,7 +418,7 @@ function extractClientInternalRuntimeEntries(
 
   return specifiers.split(", ").map((specifier) => {
     const match = specifier.match(
-      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      /^(?<importedName>bindCompilerKeyedCellText|bindCompilerKeyedPropertyText|bindCompilerKeyedSingleNodeList|bindCompilerKeyedText|createMemo|insertMemoDynamic|markCompilerKeyedEventSlot)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
     );
 
     if (match?.groups === undefined) {
@@ -427,7 +428,11 @@ function extractClientInternalRuntimeEntries(
     return {
       localName: match.groups.localName ?? match.groups.importedName,
       value:
-        match.groups.importedName === "markCompilerKeyedEventSlot"
+        match.groups.importedName === "insertMemoDynamic"
+          ? insertMemoDynamic
+          : match.groups.importedName === "createMemo"
+          ? createMemo
+          : match.groups.importedName === "markCompilerKeyedEventSlot"
           ? markCompilerKeyedEventSlot
           : match.groups.importedName === "bindCompilerKeyedCellText"
             ? bindCompilerKeyedCellText

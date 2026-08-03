@@ -76,6 +76,7 @@ type RuntimeHelperName =
   | "createTemplate"
   | "createTemplateElement"
   | "insertDynamic"
+  | "insertMemoDynamic"
   | "bindCompilerKeyedCellText"
   | "bindCompilerKeyedSingleNodeList"
   | "bindCompilerKeyedPropertyText"
@@ -111,6 +112,7 @@ function allocateRuntimeHelperNames(
     createTemplate: "createTemplate",
     createTemplateElement: "createTemplateElement",
     insertDynamic: "insertDynamic",
+    insertMemoDynamic: "insertMemoDynamic",
     bindCompilerKeyedCellText: "bindCompilerKeyedCellText",
     bindCompilerKeyedSingleNodeList: "bindCompilerKeyedSingleNodeList",
     bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
@@ -170,7 +172,8 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
       treeUsesOwnerScopedMemo(component.root, inlineMemoComponentNames),
     )
   ) {
-    specifiers.add("createMemo");
+    internalSpecifiers.add("createMemo");
+    internalSpecifiers.add("insertMemoDynamic");
   }
 
   if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
@@ -434,13 +437,14 @@ function emitComponent(
     };
     const fragmentName = allocator("_fragment");
     const markerName = allocator("_marker");
+    const ownerScopedMemo = isOwnerScopedMemoConditional(component.root, state);
     return [
       `${functionKeyword} ${component.name}(${parameters}) {`,
       ...body,
       `  const ${fragmentName} = document.createDocumentFragment();`,
       `  const ${markerName} = document.createComment("");`,
       `  ${fragmentName}.append(${markerName});`,
-      `  ${helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDynamicOptions(debugLabel, isOwnerScopedMemoConditional(component.root, state))});`,
+      `  ${ownerScopedMemo ? helperNames.insertMemoDynamic : helperNames.insertDynamic}(${fragmentName}, ${markerName}, () => ${emitNodeRenderValueExpression(component.root, state)}${emitDynamicOptions(debugLabel)});`,
       `  return ${fragmentName};`,
       `}`,
     ].join("\n");
@@ -736,8 +740,9 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
     }
 
     if (child.kind === "conditional") {
+      const ownerScopedMemo = isOwnerScopedMemoConditional(child, state);
       lines.push(
-        `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel, isOwnerScopedMemoConditional(child, state))});`,
+        `  ${ownerScopedMemo ? state.helperNames.insertMemoDynamic : state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDynamicOptions(state.debugLabel)});`,
       );
       childIndex += 1;
       continue;
