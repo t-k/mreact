@@ -1267,6 +1267,45 @@ describe("react-compat official React conformance", () => {
     expect(compat).toEqual(react);
   });
 
+  test("replays StrictMode class mount lifecycles and updates like React", async () => {
+    function createElement(api: RuntimeApi, log: string[]) {
+      const BaseComponent = api.Component as typeof React.Component<
+        Record<string, never>,
+        { mountCount: number }
+      >;
+
+      class AnimatedSeries extends BaseComponent {
+        state = { mountCount: 0 };
+
+        componentDidMount() {
+          log.push("mount");
+          this.setState((state) => ({ mountCount: state.mountCount + 1 }));
+        }
+
+        componentWillUnmount() {
+          log.push("unmount");
+        }
+
+        render() {
+          return api.createElement("path", {
+            "data-mount-count": this.state.mountCount,
+          });
+        }
+      }
+
+      return api.createElement(
+        api.StrictMode,
+        null,
+        api.createElement("svg", null, api.createElement(AnimatedSeries, null)),
+      );
+    }
+
+    const react = await renderReactDomConformance(createElement, () => undefined);
+    const compat = await renderCompatDomConformance(createElement, () => undefined);
+
+    expect(compat).toEqual(react);
+  });
+
   test("hydrates matching server markup and attaches event handlers like React", async () => {
     function createElement(api: RuntimeApi, log: string[]) {
       return api.createElement(

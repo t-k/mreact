@@ -777,10 +777,16 @@ describe("react-compat common API subset", () => {
     const calls: string[] = [];
     let mounted = false;
 
-    class AnimatedSeries extends Component {
+    class AnimatedSeries extends Component<
+      Record<string, never>,
+      { mountCount: number }
+    > {
+      state = { mountCount: 0 };
+
       componentDidMount() {
         mounted = true;
         calls.push("mount");
+        this.setState((state) => ({ mountCount: state.mountCount + 1 }));
       }
 
       componentWillUnmount() {
@@ -789,7 +795,10 @@ describe("react-compat common API subset", () => {
       }
 
       render() {
-        return createElement("path", { d: "M0 0L10 10" });
+        return createElement("path", {
+          d: "M0 0L10 10",
+          "data-mount-count": this.state.mountCount,
+        });
       }
     }
 
@@ -803,6 +812,7 @@ describe("react-compat common API subset", () => {
 
     expect(calls).toEqual(["mount", "unmount", "mount"]);
     expect(mounted).toBe(true);
+    expect(container.querySelector("path")?.getAttribute("data-mount-count")).toBe("2");
   });
 
   test("lazy renders fallback first and resolved component after promise resolves", async () => {

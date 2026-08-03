@@ -332,6 +332,8 @@ export function renderClassComponentWithRuntime(
       previousProps,
       previousState,
       shouldSkipUpdate,
+      runtime,
+      path,
       replacedInstance,
     );
 
@@ -672,9 +674,18 @@ function installClassLifecycleEffects(
   previousProps: Record<string, unknown> | undefined,
   previousState: Record<string, unknown>,
   skipUpdate: boolean,
+  runtime: RootRuntime,
+  path: string,
   replacedInstance?: ClassComponentInstance,
 ): void {
+  const replaySnapshotRef = useRef<ClassLifecycleSnapshot | undefined>(undefined);
+
   useLayoutEffect(() => {
+    if (replaySnapshotRef.current !== undefined) {
+      classLifecycleSnapshots.set(instance, replaySnapshotRef.current);
+      replaySnapshotRef.current = undefined;
+    }
+    installClassUpdateMethods(instance, runtime, path);
     const lifecycleSnapshot = classLifecycleSnapshots.get(instance);
 
     if (replacedInstance !== undefined) {
@@ -705,6 +716,7 @@ function installClassLifecycleEffects(
 
   useLayoutEffect(() => {
     return () => {
+      replaySnapshotRef.current = classLifecycleSnapshots.get(instance);
       didCommitRef.current = false;
       instance.componentWillUnmount?.();
       classLifecycleSnapshots.delete(instance);
