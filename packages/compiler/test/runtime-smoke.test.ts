@@ -1947,6 +1947,27 @@ export function App() {
     expect(output.code).not.toContain("untrack");
   });
 
+  test("client transform keeps imperative safe alias uses on the tracked fallback", () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const count = cell(0);
+
+export function App() {
+  const current = count.get();
+  globalThis.__imperativeCount = current;
+  return <button type="button" onClick={() => count.set(count.get() + 1)}>Count</button>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("const current = count.get();");
+    expect(output.code).not.toContain("untrack");
+  });
+
   test("client transform allocates a collision-free untrack helper", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";

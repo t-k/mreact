@@ -3,6 +3,7 @@ import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-n
 
 interface ReactiveAliasReplacement {
   end: number;
+  name: string;
   start: number;
   text: string;
 }
@@ -127,6 +128,7 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
     replacements.push({
       start,
       end,
+      name: id.name,
       text: `${OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER}(() => (${readSource(code, initializer)}))`,
     });
   }
@@ -149,6 +151,94 @@ export function formatOxcUntrackedReactiveAliasDeclaration(
   }
 
   return source;
+}
+
+export function collectOxcCompilerOwnedReactiveAliases(
+  statements: readonly unknown[],
+  rootStatement: unknown,
+  aliases: ReadonlyMap<string, string>,
+): Map<string, string> {
+  const dependencies = new Map<string, Set<string>>();
+  const unownedReferences = new Set<string>();
+
+  for (const statementValue of statements) {
+    const statement = readObject(statementValue);
+
+    if (statementValue === rootStatement) continue;
+
+    if (statement.type !== "VariableDeclaration") {
+      for (const name of collectOxcReactiveAliasReferenceNames(statement, aliases)) {
+        unownedReferences.add(name);
+      }
+      continue;
+    }
+
+    for (const declarationValue of readArray(statement.declarations)) {
+      const declaration = readObject(declarationValue);
+      const id = readObject(declaration.id);
+      const initializer = unwrapOxcParentheses(readObject(declaration.init));
+      const references = collectOxcReactiveAliasReferenceNames(initializer, aliases);
+
+      if (typeof id.name === "string" && aliases.has(id.name)) {
+        dependencies.set(id.name, references);
+        continue;
+      }
+
+      for (const name of references) {
+        unownedReferences.add(name);
+      }
+    }
+  }
+
+  const reachable = collectOxcReactiveAliasDependencyClosure(
+    collectOxcReactiveAliasReferenceNames(readObject(rootStatement), aliases),
+    dependencies,
+  );
+  const disqualified = collectOxcReactiveAliasDependencyClosure(
+    unownedReferences,
+    dependencies,
+  );
+
+  return new Map(
+    [...aliases].filter(([name]) => reachable.has(name) && !disqualified.has(name)),
+  );
+}
+
+function collectOxcReactiveAliasReferenceNames(
+  node: Record<string, unknown>,
+  aliases: ReadonlyMap<string, string>,
+): Set<string> {
+  const replacements: ReactiveAliasReplacement[] = [];
+  collectOxcReactiveAliasReplacements(
+    node,
+    undefined,
+    undefined,
+    aliases,
+    new Set(),
+    replacements,
+  );
+  return new Set(replacements.map((replacement) => replacement.name));
+}
+
+function collectOxcReactiveAliasDependencyClosure(
+  initial: ReadonlySet<string>,
+  dependencies: ReadonlyMap<string, ReadonlySet<string>>,
+): Set<string> {
+  const closure = new Set(initial);
+  const pending = [...initial];
+
+  while (pending.length > 0) {
+    const name = pending.pop();
+    if (name === undefined) continue;
+
+    for (const dependency of dependencies.get(name) ?? []) {
+      if (closure.has(dependency)) continue;
+      closure.add(dependency);
+      pending.push(dependency);
+    }
+  }
+
+  return closure;
 }
 
 export function collectOxcReactiveDerivedFunctionNames(
@@ -267,6 +357,7 @@ function collectOxcReactiveAliasReplacements(
     if (replacement !== undefined && start !== undefined && end !== undefined) {
       replacements.push({
         end,
+        name: object.name,
         start,
         text: isOxcShorthandPropertyValue(object, parent)
           ? `${object.name}: (${replacement})`

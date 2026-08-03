@@ -94,6 +94,7 @@ import {
 import { isOxcJsxBranch, readOxcReturnExpressionFromStatement } from "./oxc-expression-utils.js";
 import {
   collectOxcBodyJsxBindingNames,
+  collectOxcCompilerOwnedReactiveAliases,
   collectOxcReactiveDerivedFunctionNames,
   collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
@@ -1337,6 +1338,10 @@ function analyzeOxcFunctionLikeComponent(
     body,
     reactiveDerivedFunctionNames,
   );
+  const compilerOwnedReactiveAliasBindings =
+    earlyIfRootReturn === undefined
+      ? collectOxcCompilerOwnedReactiveAliases(body, rootStatement, reactiveAliasBindings)
+      : new Map<string, string>();
   const bodyStatements = body
     .filter(
       (bodyStatement) =>
@@ -1361,8 +1366,11 @@ function analyzeOxcFunctionLikeComponent(
       }
 
       return target === "client" && bodyStatementJsx !== "compat-object"
-        ? (formatOxcUntrackedReactiveAliasDeclaration(code, bodyStatement, reactiveAliasBindings) ??
-            formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
+        ? (formatOxcUntrackedReactiveAliasDeclaration(
+            code,
+            bodyStatement,
+            compilerOwnedReactiveAliasBindings,
+          ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
         : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);
     });
   const componentBodyBindings = collectOxcVariableInitializers(body);
