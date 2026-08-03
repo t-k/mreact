@@ -2102,19 +2102,26 @@ export function App() {
     ]);
   });
 
-  test("client transform keeps memo conditionals with expression alternates on insertDynamic", async () => {
+  test("client transform preserves memo semantics with expression alternates", async () => {
     const output = transform({
       code: `import { memo } from "@reckona/mreact";
 import { cell } from "@reckona/mreact-reactive-core";
 
 const show = cell(true);
+const revision = cell(0);
 const fallback = cell("Fallback");
-const Card = memo(function Card() { return <article>Card</article>; });
+const Card = memo(
+  function Card(props: { readonly revision: number; readonly signature: string }) {
+    return <article data-revision={props.revision}>Card</article>;
+  },
+  (previous, next) => previous.signature === next.signature,
+);
 
 export function App() {
   return <main>
+    <button type="button" onClick={() => revision.set(revision.get() + 1)}>Update</button>
     <button type="button" onClick={() => show.set(false)}>Hide</button>
-    {show.get() ? <Card /> : fallback.get()}
+    {show.get() ? <Card revision={revision.get()} signature="stable" /> : fallback.get()}
   </main>;
 }`,
       filename: "App.tsx",
@@ -2123,13 +2130,50 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).not.toContain("insertMemoDynamic");
+    expect(output.code).toContain("insertMemoDynamic");
     const node = (await runClientComponent(output.code)) as HTMLElement;
+    const buttons = node.querySelectorAll("button");
+    const card = node.querySelector("article");
 
-    expect(node.querySelector("article")?.textContent).toBe("Card");
-    node.querySelector("button")?.click();
+    buttons[0]?.click();
+    await flushEffects();
+    expect(node.querySelector("article")).toBe(card);
+    expect(card?.getAttribute("data-revision")).toBe("0");
+
+    buttons[1]?.click();
     await flushEffects();
     expect(node.querySelector("article")).toBeNull();
     expect(node.textContent).toContain("Fallback");
+  });
+
+  test("client transform switches a memo conditional to a keyed list alternate", async () => {
+    const output = transform({
+      code: `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const show = cell(true);
+const rows = [{ id: "a", label: "A" }];
+const Card = memo(function Card() { return <article>Card</article>; });
+
+export function App() {
+  return <main>
+    <button type="button" onClick={() => show.set(false)}>Show rows</button>
+    {show.get() ? <Card /> : rows.map((row) => <span key={row.id}>Row</span>)}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("insertMemoDynamic");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+    expect(node.querySelector("article")).toBeNull();
+    expect(node.querySelector("span")?.textContent).toBe("Row");
+    expect(node.textContent).not.toContain("[object Object]");
   });
 });

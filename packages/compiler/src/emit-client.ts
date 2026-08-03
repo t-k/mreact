@@ -979,7 +979,9 @@ function emitNodeRenderValueExpression(
   }
 
   if (node.kind === "expr") {
-    return `(${node.code})`;
+    return ownerScopedMemo
+      ? `${state.helperNames.createMemo}(null, null, () => (${node.code}), () => false)`
+      : `(${node.code})`;
   }
 
   if (node.kind === "component") {
@@ -1069,7 +1071,11 @@ function isOwnerScopedMemoConditional(
         branch.length === 0 ||
         (branch.length === 1 &&
           branch[0]?.kind === "component" &&
-          state.inlineMemoComponents.has(branch[0].name)),
+          state.inlineMemoComponents.has(branch[0].name)) ||
+        (branch.length === 1 &&
+          (branch[0]?.kind === "expr" ||
+            branch[0]?.kind === "text" ||
+            branch[0]?.kind === "list")),
     )
   );
 }
@@ -1118,7 +1124,11 @@ function isOwnerScopedMemoBranches(
         branch.length === 0 ||
         (branch.length === 1 &&
           branch[0]?.kind === "component" &&
-          inlineMemoComponentNames.has(branch[0].name)),
+          inlineMemoComponentNames.has(branch[0].name)) ||
+        (branch.length === 1 &&
+          (branch[0]?.kind === "expr" ||
+            branch[0]?.kind === "text" ||
+            branch[0]?.kind === "list")),
     )
   );
 }

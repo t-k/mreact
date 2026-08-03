@@ -1,9 +1,11 @@
-import { effect } from "@reckona/mreact-reactive-core";
+import { cell, effect, type Cell } from "@reckona/mreact-reactive-core";
 import {
   effectWithDebugLabel,
   registerCleanup,
 } from "@reckona/mreact-reactive-core/internal";
 import { isMemoRenderValue } from "./create-memo.js";
+import { bindList } from "./bind-list.js";
+import { isListRenderValue } from "./create-list.js";
 import {
   isDynamicHydrationEnabled,
   markDynamicNode,
@@ -11,7 +13,12 @@ import {
 } from "./dynamic-node.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
-import type { Dispose, MemoRenderValue, RenderValue } from "./types.js";
+import type {
+  Dispose,
+  ListRenderValue,
+  MemoRenderValue,
+  RenderValue,
+} from "./types.js";
 
 /** Inserts a compiler-owned memo render value before a marker node. */
 export function insertMemoDynamic(
@@ -28,19 +35,28 @@ export function insertMemoDynamic(
   }
 
   let current: Node[] = [];
+  let currentList: BoundMemoDynamicList | undefined;
   let currentMemo: MemoRenderValue | undefined;
   let disposeCurrentScope: Dispose | undefined;
 
   const clear = () => {
     currentMemo = undefined;
+    const disposeList = currentList?.dispose;
+    currentList = undefined;
     const disposeScope = disposeCurrentScope;
     disposeCurrentScope = undefined;
     let firstError: unknown;
 
     try {
-      disposeScope?.();
+      disposeList?.();
     } catch (error) {
       firstError = error;
+    }
+
+    try {
+      disposeScope?.();
+    } catch (error) {
+      firstError ??= error;
     }
 
     for (const node of current) {
@@ -81,20 +97,23 @@ export function insertMemoDynamic(
     }
 
     let firstError: unknown;
-    const previousScope = disposeCurrentScope;
-    disposeCurrentScope = undefined;
+    if (currentList === undefined) {
+      const previousScope = disposeCurrentScope;
+      disposeCurrentScope = undefined;
 
-    try {
-      previousScope?.();
-    } catch (error) {
-      firstError = error;
+      try {
+        previousScope?.();
+      } catch (error) {
+        firstError = error;
+      }
     }
 
     let next;
     try {
-      next = createScopedRenderNodes(() =>
-        isMemoRenderValue(nextValue) ? nextValue.render(nextValue.props) : nextValue,
-      );
+      next = createScopedRenderNodes(() => {
+        if (isMemoRenderValue(nextValue)) return nextValue.render(nextValue.props);
+        return isListRenderValue(nextValue) ? null : nextValue;
+      });
     } catch (error) {
       try {
         clear();
@@ -102,6 +121,72 @@ export function insertMemoDynamic(
         firstError ??= cleanupError;
       }
       throw firstError ?? error;
+    }
+
+    if (isListRenderValue(nextValue)) {
+      next.dispose();
+      const nextKeyed = nextValue.options?.key !== undefined;
+      const nextNestedObjectFallback = nextValue.options?.nestedObjectFallback === true;
+
+      if (
+        currentList !== undefined &&
+        currentList.keyed === nextKeyed &&
+        currentList.nestedObjectFallback === nextNestedObjectFallback
+      ) {
+        currentList.value.set(nextValue);
+        currentMemo = undefined;
+        if (firstError !== undefined) throw firstError;
+        return;
+      }
+
+      try {
+        clear();
+      } catch (error) {
+        firstError ??= error;
+      }
+
+      const insertionParent = marker.parentNode;
+      if (insertionParent === null) {
+        if (firstError !== undefined) throw firstError;
+        return;
+      }
+
+      const listValue = cell(nextValue);
+      const listOptions =
+        nextValue.options === undefined
+          ? undefined
+          : {
+              ...(nextKeyed
+                ? {
+                    key: (item: unknown, index: number, items: readonly unknown[]) =>
+                      listValue.get().options?.key?.(item, index, items),
+                  }
+                : {}),
+              ...(nextNestedObjectFallback ? { nestedObjectFallback: true } : {}),
+            };
+      currentList = {
+        value: listValue,
+        keyed: nextKeyed,
+        nestedObjectFallback: nextNestedObjectFallback,
+        dispose: bindList(
+          insertionParent,
+          marker,
+          () => listValue.get().items(),
+          (item, index, items) => listValue.get().renderItem(item, index, items),
+          listOptions,
+        ),
+      };
+      currentMemo = undefined;
+      if (firstError !== undefined) throw firstError;
+      return;
+    }
+
+    if (currentList !== undefined) {
+      try {
+        clear();
+      } catch (error) {
+        firstError ??= error;
+      }
     }
 
     if (isSameNodeList(current, next.nodes)) {
@@ -151,6 +236,13 @@ export function insertMemoDynamic(
   });
   registerCleanup(disposeOwnedDynamic);
   return disposeOwnedDynamic;
+}
+
+interface BoundMemoDynamicList {
+  value: Cell<ListRenderValue>;
+  keyed: boolean;
+  nestedObjectFallback: boolean;
+  dispose: Dispose;
 }
 
 function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
