@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../../packages/compiler/src/index.js";
@@ -332,6 +333,39 @@ describe("js-framework-benchmark mreact keyed production build", () => {
 });
 
 describe("js-framework-benchmark official runner", () => {
+  test("replaces reused checkout fixtures instead of merging stale implementations", async () => {
+    const temporaryRoot = await mkdtemp(join(tmpdir(), "mreact-fixture-sync-"));
+    const sourceRoot = join(temporaryRoot, "source");
+    const checkoutRoot = join(temporaryRoot, "checkout");
+    const checkoutKeyedRoot = join(checkoutRoot, "frameworks", "keyed");
+
+    try {
+      for (const name of ["mreact", "mreact-react-compat", "mreact-react-compat-vdom"]) {
+        await mkdir(join(sourceRoot, name, "src"), { recursive: true });
+        await writeFile(join(sourceRoot, name, "src", "current.txt"), name);
+      }
+      await mkdir(join(checkoutKeyedRoot, "mreact", "src"), { recursive: true });
+      await writeFile(join(checkoutKeyedRoot, "mreact", "src", "main.ts"), "stale handwritten");
+      await mkdir(join(checkoutKeyedRoot, "mreact-compiled"), { recursive: true });
+      await writeFile(join(checkoutKeyedRoot, "mreact-compiled", "stale.txt"), "stale compiled");
+
+      const { syncMreactFixtureDirectories } = await import("./sync-mreact-fixtures.mjs");
+      await syncMreactFixtureDirectories({ checkoutRoot, fixtureRoot: sourceRoot });
+
+      await expect(
+        access(join(checkoutKeyedRoot, "mreact", "src", "main.ts")),
+      ).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(join(checkoutKeyedRoot, "mreact-compiled"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      expect(await readFile(join(checkoutKeyedRoot, "mreact", "src", "current.txt"), "utf8")).toBe(
+        "mreact",
+      );
+    } finally {
+      await rm(temporaryRoot, { force: true, recursive: true });
+    }
+  });
+
   test("maps primitive benchmark peers to upstream keyed DOM fixtures when available", async () => {
     const runner = await readFile(
       join(process.cwd(), "benchmarks", "js-framework-benchmark", "run-official.mjs"),
@@ -356,6 +390,12 @@ describe("js-framework-benchmark official runner", () => {
     const copyFixtures = runner.slice(
       runner.indexOf("async function copyMreactFixtures"),
       runner.indexOf("function startServer"),
+    );
+    expect(runner).toContain(
+      'import { syncMreactFixtureDirectories } from "./sync-mreact-fixtures.mjs";',
+    );
+    expect(copyFixtures).toContain(
+      "await syncMreactFixtureDirectories({ checkoutRoot, fixtureRoot });",
     );
     expect(copyFixtures).not.toContain('"mreact-compiled"');
     expect(runner).toContain("qwik: krausest/js-framework-benchmark keyed/qwik currently fails");

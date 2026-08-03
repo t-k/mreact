@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
+import { syncMreactFixtureDirectories } from "./sync-mreact-fixtures.mjs";
 
 const repoRoot = resolve(new URL("../..", import.meta.url).pathname);
 const fixtureRoot = join(repoRoot, "benchmarks", "js-framework-benchmark", "frameworks", "keyed");
@@ -602,12 +603,7 @@ function fileDependency(fromDir, toDir) {
 }
 
 async function copyMreactFixtures() {
-  for (const name of ["mreact", "mreact-react-compat", "mreact-react-compat-vdom"]) {
-    await cp(join(fixtureRoot, name), join(checkoutRoot, "frameworks", "keyed", name), {
-      force: true,
-      recursive: true,
-    });
-  }
+  await syncMreactFixtureDirectories({ checkoutRoot, fixtureRoot });
 }
 
 function startServer() {
