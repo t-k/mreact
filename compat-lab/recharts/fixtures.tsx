@@ -239,6 +239,7 @@ export const rechartsFixtures: CompatFixture[] = [
       CartesianGrid: ["strokeDasharray"],
     },
     riskTags: ["svg", "layout-measurement"],
+    expectedDomSummary: { barPathCount: 6 },
     viewport: { width: 960, height: 640 },
     render: () => (
       <ChartFrame>
@@ -822,6 +823,7 @@ export const rechartsFixtures: CompatFixture[] = [
       XAxis: ["dataKey"],
     },
     riskTags: ["svg", "animation", "effect-timing"],
+    expectedDomSummary: { barPathCount: 6 },
     viewport: { width: 960, height: 640 },
     interactions: [
       {

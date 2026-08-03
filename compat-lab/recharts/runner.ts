@@ -7,7 +7,7 @@ import type { DomSummary } from "./dom-summary.js";
 import { rechartsFixtures } from "./fixtures.js";
 import { diffPngWithBrowserCanvas } from "./image-diff.js";
 import { writeRunSummary, type FixtureRunResult } from "./result-writer.js";
-import type { CompatInteraction } from "./types.js";
+import type { CompatFixture, CompatInteraction } from "./types.js";
 
 export interface RunnerArgs {
   fixtureId: string | undefined;
@@ -63,6 +63,7 @@ async function main(): Promise<void> {
           browser,
           fixtureId: fixture.id,
           interactions: fixture.interactions ?? [],
+          expectedDomSummary: fixture.expectedDomSummary,
           outputDir,
           reactUrl: `${reactServer.url}/?fixture=${encodeURIComponent(fixture.id)}`,
           compatUrl: `${compatServer.url}/?fixture=${encodeURIComponent(fixture.id)}`,
@@ -106,6 +107,7 @@ async function runFixture(input: {
   browser: Browser;
   fixtureId: string;
   interactions: CompatInteraction[];
+  expectedDomSummary: CompatFixture["expectedDomSummary"];
   outputDir: string;
   reactUrl: string;
   compatUrl: string;
@@ -160,7 +162,9 @@ async function runFixture(input: {
 
     return {
       fixtureId: input.fixtureId,
-      ok: react.domSummary.svgCount > 0 && compat.domSummary.svgCount > 0,
+      ok:
+        fixtureDomSummaryMatches(react.domSummary, input.expectedDomSummary) &&
+        fixtureDomSummaryMatches(compat.domSummary, input.expectedDomSummary),
       pixelDiffRatio: diff.pixelDiffRatio,
       reactDomSummary: react.domSummary,
       compatDomSummary: compat.domSummary,
@@ -218,6 +222,7 @@ async function captureRuntime(input: {
     return {
       svgCount: element.querySelectorAll("svg").length,
       pathCount: element.querySelectorAll("path").length,
+      barPathCount: element.querySelectorAll(".recharts-bar-rectangle path").length,
       rectCount: element.querySelectorAll("rect").length,
       circleCount: element.querySelectorAll("circle").length,
       text,
@@ -226,6 +231,19 @@ async function captureRuntime(input: {
   });
 
   return { screenshotPath: input.screenshotPath, domSummary };
+}
+
+export function fixtureDomSummaryMatches(
+  summary: DomSummary,
+  expected: CompatFixture["expectedDomSummary"] = undefined,
+): boolean {
+  if (summary.svgCount === 0) {
+    return false;
+  }
+
+  return Object.entries(expected ?? {}).every(
+    ([key, value]) => summary[key as keyof DomSummary] === value,
+  );
 }
 
 async function runInteractions(page: Page, interactions: CompatInteraction[]): Promise<void> {

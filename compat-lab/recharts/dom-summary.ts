@@ -1,6 +1,7 @@
 export interface DomSummary {
   svgCount: number;
   pathCount: number;
+  barPathCount: number;
   rectCount: number;
   circleCount: number;
   text: string[];
@@ -19,6 +20,7 @@ export function collectDomSummary(root: Element): DomSummary {
   return {
     svgCount: root.querySelectorAll("svg").length,
     pathCount: root.querySelectorAll("path").length,
+    barPathCount: root.querySelectorAll(".recharts-bar-rectangle path").length,
     rectCount: root.querySelectorAll("rect").length,
     circleCount: root.querySelectorAll("circle").length,
     text,

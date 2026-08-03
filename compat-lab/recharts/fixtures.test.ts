@@ -44,6 +44,16 @@ describe("recharts compat fixture registry", () => {
     ]);
   });
 
+  test("bar fixtures require all six rendered data paths", () => {
+    for (const fixtureId of [
+      "recharts-bar-basic",
+      "recharts-animation-lifecycle",
+    ]) {
+      const fixture = rechartsFixtures.find((candidate) => candidate.id === fixtureId);
+      expect(fixture?.expectedDomSummary).toEqual({ barPathCount: 6 });
+    }
+  });
+
   test("fixtures cover every public Recharts component export", () => {
     const coveredFeatures = new Set(rechartsFixtures.flatMap((fixture) => fixture.features));
 

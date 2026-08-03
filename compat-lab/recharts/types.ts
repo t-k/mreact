@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { DomSummary } from "./dom-summary.js";
 
 export type CompatRuntime = "react" | "compat";
 
@@ -39,4 +40,5 @@ export interface CompatFixture {
   viewport: { width: number; height: number };
   render: (runtime: CompatRuntime) => ReactNode;
   interactions?: CompatInteraction[];
+  expectedDomSummary?: Partial<Pick<DomSummary, "barPathCount">>;
 }
