@@ -181,10 +181,16 @@ describe("example configuration contracts", () => {
   test("selective-hydration wires server boundaries to the client manifest", async () => {
     const server = await readExample("selective-hydration/server.ts");
     const client = await readExample("selective-hydration/src/client-entry.ts");
+    const viteConfig = await readExample("selective-hydration/vite.config.ts");
+    const readme = await readExample("selective-hydration/README.md");
 
-    expect(server).toContain("renderHydrationBoundary");
+    expect(viteConfig).toContain("serverHydration: true");
+    expect(server).not.toContain("renderHydrationBoundary");
+    expect(server).toContain("buildShell(rendered, manifestHtml)");
     expect(server).toContain('"App:0"');
     expect(client).toContain("manifestRoot: document");
+    expect(readme).toContain("loaded during the initial navigation");
+    expect(readme).not.toContain("fetched only after a click");
   });
 });
 

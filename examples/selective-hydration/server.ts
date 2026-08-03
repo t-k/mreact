@@ -6,8 +6,8 @@
 //   3. embed an event hydration manifest (the events the client should
 //      capture until hydration actually runs),
 //   4. ship the HTML plus a <script type="module"> tag for the client
-//      entry. The browser does not need to fetch the client bundle
-//      until the first manifest-matching click.
+//      entry. The entry loads immediately and arms event capture, while
+//      hydration waits for the first manifest-matching click.
 import { createServer as createHttpServer } from "node:http";
 import { createServer as createViteServer } from "vite";
 
@@ -34,11 +34,6 @@ async function main(): Promise<void> {
       const runtime = await vite.ssrLoadModule("@reckona/mreact-server");
 
       const rendered: string = compat.renderToString(page.App, {});
-      const boundarySink = runtime.createStringSink();
-      runtime.renderHydrationBoundary(boundarySink, "App", (sink) => {
-        sink.append(rendered);
-      });
-
       const manifest = runtime.createEventHydrationManifest([
         { id: "App:0", event: "click", handler: "onClick" },
       ]);
@@ -49,7 +44,7 @@ async function main(): Promise<void> {
       res.statusCode = 200;
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Cache-Control", "no-store");
-      res.end(buildShell(boundarySink.toString(), manifestHtml));
+      res.end(buildShell(rendered, manifestHtml));
     } catch (error) {
       console.error(error);
       if (!res.headersSent) {

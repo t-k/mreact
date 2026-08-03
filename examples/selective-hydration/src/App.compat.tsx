@@ -16,10 +16,10 @@ export function App() {
     <main>
       <h1>Selective hydration</h1>
       <p>
-        The HTML you are reading was rendered on the server. No JS has
-        been requested yet. The first time you click <code>+1</code>, the
-        client bundle is fetched, hydration runs, and the captured click
-        is replayed against the freshly-hydrated tree.
+        The HTML you are reading was rendered on the server. The client runtime
+        is ready, but this boundary stays static until the first time you click{" "}
+        <code>+1</code>. That click triggers hydration and is replayed against the
+        freshly-hydrated tree.
       </p>
       <p data-status>
         status:{" "}

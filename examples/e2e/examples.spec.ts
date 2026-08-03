@@ -500,6 +500,12 @@ test("react-compat example supports hooks and lazy Suspense", async ({ page }) =
 test("selective-hydration example hydrates on interaction and then updates state", async ({
   page,
 }) => {
+  const pageErrors: string[] = [];
+  const consoleErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
   const port = await getAvailablePort();
   const server = await startProcessServer({
     args: ["dev"],
@@ -511,10 +517,36 @@ test("selective-hydration example hydrates on interaction and then updates state
   try {
     await page.goto(server.url);
     await expect(page.getByRole("heading", { name: "Selective hydration" })).toBeVisible();
+    await expect(page.getByText("status: static SSR")).toBeVisible();
+    await expect(page.getByText("count: 0")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const comments: string[] = [];
+          const walker = document.createTreeWalker(document, NodeFilter.SHOW_COMMENT);
+          while (walker.nextNode()) comments.push(walker.currentNode.nodeValue ?? "");
+          return comments.filter((comment) => comment === "mreact-h:start:App").length;
+        }),
+      )
+      .toBe(1);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const comments: string[] = [];
+          const walker = document.createTreeWalker(document, NodeFilter.SHOW_COMMENT);
+          while (walker.nextNode()) comments.push(walker.currentNode.nodeValue ?? "");
+          return comments.filter((comment) => comment === "mreact-h:end:App").length;
+        }),
+      )
+      .toBe(1);
+
     await page.getByRole("button", { name: "+1" }).click();
     await expect(page.getByText("status: hydrated")).toBeVisible();
-    await page.getByRole("button", { name: "+1" }).click();
     await expect(page.getByText("count: 1")).toBeVisible();
+    await page.getByRole("button", { name: "+1" }).click();
+    await expect(page.getByText("count: 2")).toBeVisible();
+    expect(pageErrors).toEqual([]);
+    expect(consoleErrors).toEqual([]);
   } finally {
     await server.close();
   }
