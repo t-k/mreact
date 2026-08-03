@@ -97,7 +97,7 @@ export function insertMemoDynamic(
     }
 
     let firstError: unknown;
-    if (currentList === undefined) {
+    if (currentList === undefined || currentMemo !== undefined) {
       const previousScope = disposeCurrentScope;
       disposeCurrentScope = undefined;
 
@@ -130,7 +130,11 @@ export function insertMemoDynamic(
     const resolvedValue = isMemoRenderValue(nextValue) ? renderedMemoValue : nextValue;
 
     if (isListRenderValue(resolvedValue)) {
-      next.dispose();
+      const nextMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
+      const nextMemoScope = nextMemo === undefined ? undefined : next.dispose;
+      if (nextMemoScope === undefined) {
+        next.dispose();
+      }
       const nextKeyed = resolvedValue.options?.key !== undefined;
       const nextNestedObjectFallback = resolvedValue.options?.nestedObjectFallback === true;
 
@@ -140,7 +144,8 @@ export function insertMemoDynamic(
         currentList.nestedObjectFallback === nextNestedObjectFallback
       ) {
         currentList.value.set(resolvedValue);
-        currentMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
+        currentMemo = nextMemo;
+        disposeCurrentScope = nextMemoScope;
         if (firstError !== undefined) throw firstError;
         return;
       }
@@ -153,6 +158,11 @@ export function insertMemoDynamic(
 
       const insertionParent = marker.parentNode;
       if (insertionParent === null) {
+        try {
+          nextMemoScope?.();
+        } catch (error) {
+          firstError ??= error;
+        }
         if (firstError !== undefined) throw firstError;
         return;
       }
@@ -170,19 +180,29 @@ export function insertMemoDynamic(
                 : {}),
               ...(nextNestedObjectFallback ? { nestedObjectFallback: true } : {}),
             };
-      currentList = {
-        value: listValue,
-        keyed: nextKeyed,
-        nestedObjectFallback: nextNestedObjectFallback,
-        dispose: bindList(
-          insertionParent,
-          marker,
-          () => listValue.get().items(),
-          (item, index, items) => listValue.get().renderItem(item, index, items),
-          listOptions,
-        ),
-      };
-      currentMemo = isMemoRenderValue(nextValue) ? nextValue : undefined;
+      try {
+        currentList = {
+          value: listValue,
+          keyed: nextKeyed,
+          nestedObjectFallback: nextNestedObjectFallback,
+          dispose: bindList(
+            insertionParent,
+            marker,
+            () => listValue.get().items(),
+            (item, index, items) => listValue.get().renderItem(item, index, items),
+            listOptions,
+          ),
+        };
+      } catch (error) {
+        try {
+          nextMemoScope?.();
+        } catch (cleanupError) {
+          firstError ??= cleanupError;
+        }
+        throw firstError ?? error;
+      }
+      currentMemo = nextMemo;
+      disposeCurrentScope = nextMemoScope;
       if (firstError !== undefined) throw firstError;
       return;
     }

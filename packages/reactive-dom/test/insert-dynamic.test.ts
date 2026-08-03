@@ -155,6 +155,51 @@ describe("insertDynamic", () => {
     expect(events).toEqual(["render:a", "dispose:a", "render:b", "dispose:b"]);
   });
 
+  test("retains a memo list render scope until replacement or disposal", async () => {
+    const props = cell({ signature: "a", revision: 0 });
+    const events: string[] = [];
+    const parent = document.createElement("div");
+    const marker = document.createComment("marker");
+    parent.append(marker);
+
+    const dispose = insertMemoDynamic(
+      parent,
+      marker,
+      () =>
+        createMemo(
+          "List",
+          props.get(),
+          (nextProps) => {
+            events.push(`render:${nextProps.revision}`);
+            registerDispose(() => events.push(`dispose:${nextProps.revision}`));
+            return createList(
+              () => [`row:${nextProps.revision}`],
+              (row) => document.createTextNode(row),
+            );
+          },
+          (previous, next) => previous.signature === next.signature,
+        ),
+    );
+
+    expect(parent.textContent).toBe("row:0");
+    expect(events).toEqual(["render:0"]);
+
+    props.set({ signature: "a", revision: 1 });
+    await flushEffects();
+
+    expect(parent.textContent).toBe("row:0");
+    expect(events).toEqual(["render:0"]);
+
+    props.set({ signature: "b", revision: 2 });
+    await flushEffects();
+
+    expect(parent.textContent).toBe("row:2");
+    expect(events).toEqual(["render:0", "dispose:0", "render:2"]);
+
+    dispose();
+    expect(events).toEqual(["render:0", "dispose:0", "render:2", "dispose:2"]);
+  });
+
   test("uses shallow prop equality when a memo comparator is omitted", async () => {
     const props = cell({ label: "stable" });
     let renders = 0;
