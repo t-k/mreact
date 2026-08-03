@@ -1129,6 +1129,35 @@ function treeUsesOwnerScopedMemo(
     );
   }
 
+  if (node.kind === "component") {
+    return (
+      node.props.some(
+        (prop) =>
+          prop.kind === "render-prop" &&
+          prop.children.some((child) =>
+            treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
+          ),
+      ) ||
+      node.children.some((child) =>
+        treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
+      )
+    );
+  }
+
+  if (node.kind === "async-boundary") {
+    return (
+      node.children.some((child) =>
+        treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
+      ) ||
+      node.placeholderChildren?.some((child) =>
+        treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
+      ) === true ||
+      node.catchChildren?.some((child) =>
+        treeUsesOwnerScopedMemo(child, inlineMemoComponentNames, requiresListSupport),
+      ) === true
+    );
+  }
+
   return false;
 }
 

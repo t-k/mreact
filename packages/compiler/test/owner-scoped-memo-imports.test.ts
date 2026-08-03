@@ -40,7 +40,7 @@ const locations = [
     name: "Await catch branch",
     emitsCalls: false,
     wrap: (conditional: string) =>
-      `<main><Await value={Promise.reject(new Error(\"failed\"))} catch={() => <section>{${conditional}}</section>}>{() => <span>Loaded</span>}</Await></main>`,
+      `<main><Await value={Promise.reject(new Error("failed"))} catch={() => <section>{${conditional}}</section>}>{() => <span>Loaded</span>}</Await></main>`,
   },
 ] as const;
 
