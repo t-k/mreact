@@ -40,7 +40,7 @@ import {
 } from "@reckona/mreact-compat/jsx-runtime";
 import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";
 import { bindSelectedKeyedSingleNodeList } from "@reckona/mreact-compat/internal";
-import { cell, computed, effect } from "@reckona/mreact-reactive-core";
+import { cell, computed, effect, untrack } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   createStringSink,
@@ -430,38 +430,41 @@ function extractClientInternalRuntimeEntries(
           ? markCompilerKeyedEventSlot
           : match.groups.importedName === "bindCompilerKeyedCellText"
             ? bindCompilerKeyedCellText
-          : match.groups.importedName === "bindCompilerKeyedPropertyText"
-            ? bindCompilerKeyedPropertyText
-          : match.groups.importedName === "bindCompilerKeyedText"
-            ? bindCompilerKeyedText
-            : bindCompilerKeyedSingleNodeList,
+            : match.groups.importedName === "bindCompilerKeyedPropertyText"
+              ? bindCompilerKeyedPropertyText
+              : match.groups.importedName === "bindCompilerKeyedText"
+                ? bindCompilerKeyedText
+                : bindCompilerKeyedSingleNodeList,
     };
   });
 }
 
 function extractReactiveCoreRuntimeEntries(code: string): { localName: string; value: unknown }[] {
-  const importMatch = code.match(
-    /^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-core";/m,
+  const importMatches = Array.from(
+    code.matchAll(/^import \{ (?<specifiers>[^}]+) \} from "@reckona\/mreact-reactive-core";/gm),
   );
-  const specifiers = importMatch?.groups?.specifiers;
 
-  if (specifiers === undefined) {
-    return [];
-  }
+  return importMatches.flatMap((importMatch) => {
+    const specifiers = importMatch.groups?.specifiers;
 
-  return specifiers.split(", ").map((specifier) => {
-    const match = specifier.match(
-      /^(?<importedName>cell|computed|effect)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
-    );
-
-    if (match?.groups === undefined) {
-      throw new Error(`Unsupported reactive core runtime import: ${specifier}`);
+    if (specifiers === undefined) {
+      return [];
     }
 
-    return {
-      localName: match.groups.localName ?? match.groups.importedName,
-      value: getReactiveCoreRuntimeValue(match.groups.importedName),
-    };
+    return specifiers.split(", ").map((specifier) => {
+      const match = specifier.match(
+        /^(?<importedName>cell|computed|effect|untrack)(?: as (?<localName>[A-Za-z_$][\w$]*))?$/,
+      );
+
+      if (match?.groups === undefined) {
+        throw new Error(`Unsupported reactive core runtime import: ${specifier}`);
+      }
+
+      return {
+        localName: match.groups.localName ?? match.groups.importedName,
+        value: getReactiveCoreRuntimeValue(match.groups.importedName),
+      };
+    });
   });
 }
 
@@ -476,6 +479,10 @@ function getReactiveCoreRuntimeValue(importedName: string): unknown {
 
   if (importedName === "effect") {
     return effect;
+  }
+
+  if (importedName === "untrack") {
+    return untrack;
   }
 
   throw new Error(`Unsupported reactive core runtime import: ${importedName}`);

@@ -2,6 +2,7 @@ import type { ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js"
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
+import { OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER } from "./oxc-render-values.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
 
 export interface EmitResult {
@@ -37,7 +38,8 @@ export function emitClient(
       emitComponent(component, moduleAllocator, helperNames, clientBoundaryHelperName, options),
     )
     .join("\n\n")
-    .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef);
+    .replaceAll(OXC_BIND_DOM_REF_PLACEHOLDER, helperNames.bindDomRef)
+    .replaceAll(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER, helperNames.untrack);
 
   return {
     code: `${[importLines, userImports, moduleStatements, clientBoundaryHelper].filter(Boolean).join("\n")}\n\n${components}\n`,
@@ -60,7 +62,8 @@ type RuntimeHelperName =
   | "bindCompilerKeyedSingleNodeList"
   | "bindCompilerKeyedPropertyText"
   | "bindCompilerKeyedText"
-  | "markCompilerKeyedEventSlot";
+  | "markCompilerKeyedEventSlot"
+  | "untrack";
 
 type RuntimeHelperNames = Record<RuntimeHelperName, string>;
 
@@ -94,6 +97,7 @@ function allocateRuntimeHelperNames(
     bindCompilerKeyedPropertyText: "bindCompilerKeyedPropertyText",
     bindCompilerKeyedText: "bindCompilerKeyedText",
     markCompilerKeyedEventSlot: "markCompilerKeyedEventSlot",
+    untrack: "untrack",
   };
 
   for (const specifier of specifiers) {
@@ -134,9 +138,14 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
 
   const specifiers = new Set<string>(["createTemplate"]);
   const internalSpecifiers = new Set<string>();
+  const reactiveCoreSpecifiers = new Set<string>();
 
   if (JSON.stringify(ir).includes(OXC_BIND_DOM_REF_PLACEHOLDER)) {
     specifiers.add("bindDomRef");
+  }
+
+  if (JSON.stringify(ir).includes(OXC_UNTRACK_REACTIVE_ALIAS_PLACEHOLDER)) {
+    reactiveCoreSpecifiers.add("untrack");
   }
 
   for (const component of ir.components) {
@@ -208,6 +217,12 @@ function collectImports(ir: ModuleIr): RuntimeImport[] {
     imports.push({
       source: "@reckona/mreact-reactive-dom/internal",
       specifiers: Array.from(internalSpecifiers).sort(),
+    });
+  }
+  if (reactiveCoreSpecifiers.size > 0) {
+    imports.push({
+      source: "@reckona/mreact-reactive-core",
+      specifiers: Array.from(reactiveCoreSpecifiers).sort(),
     });
   }
   return imports;
@@ -611,7 +626,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
             childIndex === 0
           ? `${currentPath}.firstChild`
           : `${currentPath}.childNodes[${childIndex}]`
-        : `${stableChildrenName}[${childIndex}]`;
+      : `${stableChildrenName}[${childIndex}]`;
 
     if (child.kind === "expr") {
       if (child.renderMode === "dynamic") {
@@ -680,7 +695,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
     if (child.kind === "conditional") {
       lines.push(
-          `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDebugOptions(state.debugLabel)});`,
+        `  ${state.helperNames.insertDynamic}(${currentPath}, ${childPath}, () => ${emitConditionalRenderValueExpression(child, state)}${emitDebugOptions(state.debugLabel)});`,
       );
       childIndex += 1;
       continue;
@@ -747,9 +762,7 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
 
     const previousCompilerKeyedElementPath = state.compilerKeyedElementPath;
     state.compilerKeyedElementPath =
-      state.compilerKeyedRowContext !== undefined && usesLiveChildPath
-        ? childPath
-        : undefined;
+      state.compilerKeyedRowContext !== undefined && usesLiveChildPath ? childPath : undefined;
     lines.push(emitSetup(child, childPath, state));
     state.compilerKeyedElementPath = previousCompilerKeyedElementPath;
     if (child.kind === "component") {
@@ -766,10 +779,7 @@ function shouldCacheCompilerKeyedElementPath(
   path: string,
   state: EmitSetupState,
 ): boolean {
-  if (
-    state.compilerKeyedRowContext === undefined ||
-    state.compilerKeyedElementPath !== path
-  ) {
+  if (state.compilerKeyedRowContext === undefined || state.compilerKeyedElementPath !== path) {
     return false;
   }
 
@@ -852,9 +862,7 @@ function needsStableChildrenSnapshot(children: readonly JsxNodeIr[]): boolean {
     }
 
     const usesDirectLivePath =
-      child.kind !== "component" &&
-      usesLiveInsertionAnchor(child) &&
-      !sawStaticText;
+      child.kind !== "component" && usesLiveInsertionAnchor(child) && !sawStaticText;
 
     if (!usesDirectLivePath) {
       return true;

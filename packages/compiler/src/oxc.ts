@@ -97,6 +97,7 @@ import {
   collectOxcReactiveDerivedFunctionNames,
   collectOxcReactiveReadAliases,
   containsOxcJsxSyntax,
+  formatOxcUntrackedReactiveAliasDeclaration,
   markOxcRenderValueExpressions,
   rewriteOxcReactiveAliasExpressionCode,
 } from "./oxc-render-values.js";
@@ -1331,6 +1332,11 @@ function analyzeOxcFunctionLikeComponent(
     /^[a-z]/.test(name) && componentNames.has(name)
       ? new Set([...componentNames].filter((componentName) => componentName !== name))
       : componentNames;
+  const reactiveAliasBindings = collectOxcReactiveReadAliases(
+    code,
+    body,
+    reactiveDerivedFunctionNames,
+  );
   const bodyStatements = body
     .filter(
       (bodyStatement) =>
@@ -1339,18 +1345,26 @@ function analyzeOxcFunctionLikeComponent(
         earlyIfRootReturn?.fallthroughBodyStatements.includes(bodyStatement) !== true &&
         bodyStatement !== earlyIfRootReturn?.fallthroughStatement,
     )
-    .map(
-      (bodyStatement) =>
-        lowerOxcBodyStatementJsx(
-          code,
-          bodyStatement,
-          bodyComponentNames,
-          target,
-          diagnostics,
-          bodyStatementJsx,
-          bodyLowerers,
-        ) ?? formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx),
-    );
+    .map((bodyStatement) => {
+      const loweredStatement = lowerOxcBodyStatementJsx(
+        code,
+        bodyStatement,
+        bodyComponentNames,
+        target,
+        diagnostics,
+        bodyStatementJsx,
+        bodyLowerers,
+      );
+
+      if (loweredStatement !== undefined) {
+        return loweredStatement;
+      }
+
+      return target === "client" && bodyStatementJsx !== "compat-object"
+        ? (formatOxcUntrackedReactiveAliasDeclaration(code, bodyStatement, reactiveAliasBindings) ??
+            formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx))
+        : formatOxcBodyStatement(code, bodyStatement, bodyStatementJsx);
+    });
   const componentBodyBindings = collectOxcVariableInitializers(body);
   const componentConstBindings = new Set([
     ...[...moduleConstBindings].filter(
@@ -1358,11 +1372,6 @@ function analyzeOxcFunctionLikeComponent(
     ),
     ...collectOxcConstBindingNames(body),
   ]);
-  const reactiveAliasBindings = collectOxcReactiveReadAliases(
-    code,
-    body,
-    reactiveDerivedFunctionNames,
-  );
   const childAnalysisContext = createOxcChildAnalysisContext(
     bodyComponentNames,
     target,

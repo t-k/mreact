@@ -1417,7 +1417,9 @@ export default function Page() {
     expect(shell?.querySelector("[data-shell='settings']")).toBeNull();
     expect(shell?.textContent).toBe("Settings");
     expect(document.querySelector("template[data-mreact-client-boundary='Shell']")).toBeNull();
-    expect(document.querySelector("template[data-mreact-client-boundary-children='Shell']")).toBeNull();
+    expect(
+      document.querySelector("template[data-mreact-client-boundary-children='Shell']"),
+    ).toBeNull();
     expect(document.querySelector("script[data-mreact-client-boundary-props='Shell']")).toBeNull();
   });
 
@@ -1452,7 +1454,9 @@ export default function Page(props) {
     );
 
     expect(document.querySelector("main")?.getAttribute("data-children")).toBe("empty");
-    expect(document.querySelector("template[data-mreact-client-boundary-children='Shell']")).toBeNull();
+    expect(
+      document.querySelector("template[data-mreact-client-boundary-children='Shell']"),
+    ).toBeNull();
   });
 
   test("hydrates nested client boundaries restored from the original children archive", async () => {
@@ -1481,7 +1485,8 @@ export default function Page() {
   return <Shell><Counter /></Shell>;
 }`;
     await writeFile(file, code);
-    const nestedBoundary = '<template data-mreact-client-boundary="Counter"></template><button type="button" data-counter>count: 0</button><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script>';
+    const nestedBoundary =
+      '<template data-mreact-client-boundary="Counter"></template><button type="button" data-counter>count: 0</button><script type="application/json" data-mreact-client-boundary-props="Counter">{}</script>';
     document.body.innerHTML = [
       `<div data-mreact-route-id="index"><template data-mreact-client-boundary="Shell" data-mreact-client-boundary-fallback="component"></template><main data-shell="settings">${nestedBoundary}</main><template data-mreact-client-boundary-children="Shell"><!--mreact-client-boundary-children-start-->${nestedBoundary}<!--mreact-client-boundary-children-end--></template><script type="application/json" data-mreact-client-boundary-props="Shell">{}</script></div>`,
       '<script type="application/json" id="mreact-props-index">{}</script>',
@@ -4136,6 +4141,106 @@ export default function ItemsPage() {
     expect(document.querySelector("li")?.textContent).toBe("A");
   });
 
+  test("resumes memoized keyed DOM across an unrelated sibling update", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-memoized-keyed-sibling-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `import { memo } from "@reckona/mreact";
+import { cell } from "@reckona/mreact-reactive-core";
+
+const selectionMode = cell(false);
+const media = [{ id: "a", src: "/a.jpg" }, { id: "b", src: "/b.jpg" }];
+
+const MediaList = memo(
+  function MediaList(props: { readonly items: typeof media; readonly signature: string }) {
+    (globalThis as any).__memoizedKeyedRenders = ((globalThis as any).__memoizedKeyedRenders ?? 0) + 1;
+    return <section data-testid="media-list">{props.items.map((item) => (
+      <article key={item.id} data-id={item.id}><img src={item.src} alt={item.id} /></article>
+    ))}</section>;
+  },
+  (previous, next) => {
+    (globalThis as any).__memoizedKeyedComparisons = ((globalThis as any).__memoizedKeyedComparisons ?? 0) + 1;
+    return previous.signature === next.signature;
+  },
+);
+
+export default function Page() {
+  const selecting = selectionMode.get();
+  (globalThis as any).__memoizedKeyedPageEvaluations = ((globalThis as any).__memoizedKeyedPageEvaluations ?? 0) + 1;
+
+  return <main>
+    <button type="button" onClick={() => selectionMode.set(!selectionMode.get())}>Toggle</button>
+    {selecting && <aside data-testid="selection">Selecting</aside>}
+    <MediaList items={media} signature="stable" />
+  </main>;
+}`;
+    await writeFile(file, code);
+    const references = await collectClientRouteReferences({
+      appDir,
+      code,
+      filename: file,
+    });
+
+    document.body.innerHTML = [
+      '<div data-mreact-route-id="index"><main><button type="button">Toggle</button><section data-testid="media-list"><article data-id="a"><img src="/a.jpg" alt="a"></article><article data-id="b"><img src="/b.jpg" alt="b"></article></section></main></div>',
+      '<script type="application/json" id="mreact-props-index">{}</script>',
+    ].join("");
+
+    const bundle = await buildClientRouteBundle({
+      code,
+      clientReferenceImports: references.clientReferenceImports,
+      clientReferenceManifest: references.clientReferenceManifest,
+      filename: file,
+      routePath: "/",
+    });
+    await import(
+      `data:text/javascript;charset=utf-8,${encodeURIComponent(bundle)}#memoized-keyed-sibling-client`
+    );
+    await flushRouterMicrotasks();
+
+    const route = document.querySelector<HTMLElement>("[data-mreact-route-id='index']");
+    const firstCard = route?.querySelector<HTMLElement>("[data-id='a']");
+    const firstImage = firstCard?.querySelector<HTMLImageElement>("img");
+    const initialPageEvaluations = (
+      globalThis as typeof globalThis & { __memoizedKeyedPageEvaluations?: number }
+    ).__memoizedKeyedPageEvaluations;
+    const removedMediaNodes: Node[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.removedNodes) {
+          if (
+            node instanceof HTMLElement &&
+            (node.matches("article, img") || node.querySelector("article, img") !== null)
+          ) {
+            removedMediaNodes.push(node);
+          }
+        }
+      }
+    });
+    observer.observe(route as HTMLElement, { childList: true, subtree: true });
+
+    route?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    await flushRouterMicrotasks();
+    observer.disconnect();
+
+    expect(route?.querySelector("[data-testid='selection']")?.textContent).toBe("Selecting");
+    expect(
+      (globalThis as typeof globalThis & { __memoizedKeyedPageEvaluations?: number })
+        .__memoizedKeyedPageEvaluations,
+    ).toBe(initialPageEvaluations);
+    expect(route?.querySelector("[data-id='a']")).toBe(firstCard);
+    expect(route?.querySelector("[data-id='a'] img")).toBe(firstImage);
+    expect(firstCard?.isConnected).toBe(true);
+    expect(firstImage?.isConnected).toBe(true);
+    expect(removedMediaNodes).toEqual([]);
+
+    delete (globalThis as typeof globalThis & { __memoizedKeyedPageEvaluations?: number })
+      .__memoizedKeyedPageEvaluations;
+    delete (globalThis as typeof globalThis & { __memoizedKeyedRenders?: number })
+      .__memoizedKeyedRenders;
+    delete (globalThis as typeof globalThis & { __memoizedKeyedComparisons?: number })
+      .__memoizedKeyedComparisons;
+  });
+
   test("passes object row properties to route-local components inside client route maps", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-local-component-map-props-"));
     const file = join(appDir, "page.mreact.tsx");
@@ -5936,14 +6041,16 @@ export default function Page() {
 
     expect(document.querySelector("main")?.textContent).toBe("Two");
     expect(state.__cleanupEvents).toEqual(["first", "second"]);
-    expect(tasks.some((task) => {
-      try {
-        task();
-        return false;
-      } catch (error) {
-        return error instanceof Error && error.message === "cleanup failed";
-      }
-    })).toBe(true);
+    expect(
+      tasks.some((task) => {
+        try {
+          task();
+          return false;
+        } catch (error) {
+          return error instanceof Error && error.message === "cleanup failed";
+        }
+      }),
+    ).toBe(true);
     queueMicrotaskSpy.mockRestore();
   });
 

@@ -138,9 +138,9 @@ describe("compiler runtime smoke", () => {
     expect(movedElement).toBe(node.querySelector("section div")?.lastElementChild);
     expect(movedElement.textContent).toBe("A");
     movedElement.click();
-    expect(
-      (globalThis as typeof globalThis & { __movedAliasHit?: number }).__movedAliasHit,
-    ).toBe(1);
+    expect((globalThis as typeof globalThis & { __movedAliasHit?: number }).__movedAliasHit).toBe(
+      1,
+    );
     delete (globalThis as typeof globalThis & { __movedAliasHit?: number }).__movedAliasHit;
   });
 
@@ -1663,9 +1663,7 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain(
-      "{ key: (item) => (item.id), compilerOwnsTextCleanup: true }",
-    );
+    expect(output.code).toContain("{ key: (item) => (item.id), compilerOwnsTextCleanup: true }");
 
     const node = await runClientComponent(output.code);
     expect((node as HTMLElement).outerHTML).toBe("<ul><li>A</li><!----></ul>");
@@ -1810,5 +1808,170 @@ export function App() {
 
     expect((node as HTMLElement).textContent).toContain("Saved");
     expect((node as HTMLElement).textContent).not.toContain("Name is required.");
+  });
+
+  test.each([true, false])(
+    "client transform refreshes transitive local derived values with dev=$dev",
+    async (dev) => {
+      const output = transform({
+        code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const selectedIds = cell<readonly string[]>([]);
+
+export function App() {
+  const ids = selectedIds.get();
+  const canSubmit = ids.length > 0;
+
+  return <main>
+    <button
+      id="select"
+      type="button"
+      aria-pressed={ids.includes("a")}
+      onClick={() => selectedIds.set(["a"])}
+    >Select</button>
+    <button id="submit" type="button" disabled={!canSubmit}>Submit</button>
+  </main>;
+}`,
+        filename: "App.tsx",
+        target: "client",
+        dev,
+      });
+
+      expect(output.diagnostics).toEqual([]);
+      expect(output.code).not.toContain("() => (!canSubmit)");
+
+      const node = (await runClientComponent(output.code)) as HTMLElement;
+      const select = node.querySelector<HTMLButtonElement>("#select");
+      const submit = node.querySelector<HTMLButtonElement>("#submit");
+
+      expect(select?.getAttribute("aria-pressed")).toBeNull();
+      expect(submit?.disabled).toBe(true);
+
+      select?.click();
+      await flushEffects();
+
+      expect(select?.getAttribute("aria-pressed")).toBe("");
+      expect(submit?.disabled).toBe(false);
+    },
+  );
+
+  test("client transform switches a transitive local keyed branch", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const itemsCell = cell<readonly { readonly id: string; readonly label: string }[]>([]);
+
+export function App() {
+  const items = itemsCell.get();
+  const hasItems = items.length > 0;
+
+  return <main>
+    <button type="button" onClick={() => itemsCell.set([{ id: "a", label: "A" }])}>Load</button>
+    {!hasItems && <p data-state="empty">Empty</p>}
+    {hasItems && <ul>{items.map((item) => <li key={item.id}>{item.label}</li>)}</ul>}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+    expect(node.querySelector("[data-state='empty']")?.textContent).toBe("Empty");
+    expect(node.querySelector("li")).toBeNull();
+
+    node.querySelector("button")?.click();
+    await flushEffects();
+
+    expect(node.querySelector("[data-state='empty']")).toBeNull();
+    expect(node.querySelector("li")?.textContent).toBe("A");
+  });
+
+  test("client transform switches transitive sibling branches after a promise update", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const status = cell<"ready" | "success">("ready");
+
+export function App() {
+  const currentStatus = status.get();
+  const isReady = currentStatus === "ready";
+  const isSuccess = currentStatus === "success";
+
+  return <main>
+    {isReady && <button type="button" onClick={() => Promise.resolve().then(() => status.set("success"))}>Confirm</button>}
+    {isSuccess && <h1>Success</h1>}
+  </main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    node.querySelector("button")?.click();
+    await Promise.resolve();
+    await flushEffects();
+
+    expect(node.querySelector("button")).toBeNull();
+    expect(node.querySelector("h1")?.textContent).toBe("Success");
+  });
+
+  test("client transform leaves unsafe and mutable reactive snapshots on the tracked fallback", () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const active = cell(true);
+const rows = cell([{ id: "a" }]);
+const normalize = (value: boolean) => value;
+
+export function App() {
+  let mutable = active.get();
+  const called = normalize(active.get());
+  const sorted = rows.get().sort((left, right) => left.id.localeCompare(right.id));
+  return <main>{mutable && <p>Mutable</p>}{called && <p>Called</p>}{sorted.length}</main>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("let mutable = active.get();");
+    expect(output.code).toContain("const called = normalize(active.get());");
+    expect(output.code).toContain("const sorted = rows.get().sort(");
+    expect(output.code).not.toContain("untrack");
+  });
+
+  test("client transform allocates a collision-free untrack helper", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+
+const enabled = cell(false);
+
+export function App() {
+  const untrack = "local";
+  const current = enabled.get();
+  const visible = current === true;
+  return <button type="button" data-local={untrack} onClick={() => enabled.set(true)}>{visible && <span>Visible</span>}</button>;
+}`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(output.code).toContain("import { untrack as _untrack }");
+    const node = (await runClientComponent(output.code)) as HTMLElement;
+
+    expect(node.querySelector("span")).toBeNull();
+    node.click();
+    await flushEffects();
+    expect(node.querySelector("span")?.textContent).toBe("Visible");
+    expect(node.dataset.local).toBe("local");
   });
 });
