@@ -117,6 +117,7 @@ export interface AppRouterCacheEntry {
     path: string;
     // (undocumented)
     status: number;
+    strictTransportSecurity?: string | undefined;
 }
 
 // @public

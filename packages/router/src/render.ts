@@ -60,7 +60,10 @@ import {
   routeCacheKey,
   routeCachePolicyFromSource,
 } from "./cache.js";
-import { trackRequestHeaderReads } from "./request-header-tracking.js";
+import {
+  trackRequestHeaderReads,
+  type TrackedHeaderRequest,
+} from "./request-header-tracking.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
 import {
   importAppRouterBuiltFileModule,
@@ -228,10 +231,12 @@ export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions 
    *
    * Callers that store the rendered HTML under a key which ignores headers,
    * such as prerender regeneration, pass this to learn whether the result is
-   * only correct for the current visitor. Pass it initialized to `true`: a
-   * render that returns without reporting back stays header dependent.
+   * only correct for the current visitor. Initialize it to a function returning
+   * `true`: a render that returns without reporting back stays header
+   * dependent. Call it only after draining the response body, because a
+   * streamed render can read headers while its deferred parts resolve.
    */
-  renderSignals?: { headerDependent: boolean } | undefined;
+  renderSignals?: { headerDependent: () => boolean } | undefined;
   serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
 }
 
@@ -981,6 +986,7 @@ async function renderAppRequestInternal(
         script: string | undefined;
       }
     | undefined;
+  let trackedRequest: TrackedHeaderRequest | undefined;
   return (await withRouteCacheContext(options.routeCache, async () => {
   try {
     if (matched.route.kind === "asset") {
@@ -1083,7 +1089,7 @@ async function renderAppRequestInternal(
     // stored under a key that ignores it. Callers that store by path alone ask
     // for tracking through `renderSignals` even when the route itself declares
     // no cache policy.
-    const trackedRequest =
+    trackedRequest =
       mayUseRouteCache || options.renderSignals !== undefined
         ? trackRequestHeaderReads(options.request)
         : undefined;
@@ -1619,10 +1625,6 @@ async function renderAppRequestInternal(
 
     const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
 
-    if (options.renderSignals !== undefined) {
-      options.renderSignals.headerDependent = trackedRequest?.readAnyHeader() ?? true;
-    }
-
     const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)
       : await cacheRouteResponse({
@@ -1705,6 +1707,16 @@ async function renderAppRequestInternal(
     });
     emitRenderTiming(options, timing, response.status);
     return response;
+  } finally {
+    // Reported from every return path, including the streaming ones, so that a
+    // caller storing by path alone never mistakes an unreported render for a
+    // shareable one. The value stays lazy because a streamed render can still
+    // read request headers while its deferred parts resolve; callers read it
+    // after draining the body.
+    if (options.renderSignals !== undefined) {
+      const tracked = trackedRequest;
+      options.renderSignals.headerDependent = () => tracked?.readAnyHeader() ?? true;
+    }
   }
   })).value;
 }

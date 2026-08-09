@@ -8707,6 +8707,77 @@ export default function Page(props) {
     expect(await german.text()).toContain("<main>country: DE</main>");
   });
 
+  test("stores a regenerated streaming prerender that reads no request header", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-stream-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export function loader() {
+  const state = globalThis as { __mreactStreamPrerenderCalls?: number };
+  state.__mreactStreamPrerenderCalls = (state.__mreactStreamPrerenderCalls ?? 0) + 1;
+  return { run: Promise.resolve(state.__mreactStreamPrerenderCalls) };
+}
+
+export default function Page(props) {
+  return <main><Await value={props.data.run} placeholder={<em>loading</em>}>{value => <strong>run: {value}</strong>}</Await></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-stream-prerender",
+          "x-mreact-action-nonce": "nonce-stream-prerender",
+          "x-mreact-csrf": "csrf-stream-prerender",
+        },
+        method: "POST",
+      }),
+    });
+
+    const regenerated = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const regeneratedHtml = await regenerated.text();
+    const replayed = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    const replayedHtml = await replayed.text();
+
+    // The second request must replay the stored regeneration rather than
+    // running the loader again.
+    expect(regeneratedHtml).toContain("run: 2");
+    expect(replayedHtml).toContain("run: 2");
+  });
+
   test("prerenders dynamic routes from generateStaticParams at build time", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-prerender-"));
     const appDir = join(rootDir, "app");

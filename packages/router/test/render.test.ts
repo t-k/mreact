@@ -2556,6 +2556,36 @@ export default function Page(props) {
     expect(await response.text()).toContain("<main>locale: ja</main>");
   });
 
+  test("replays HSTS on cached routes per request scheme", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-hsts-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export const metadata = {
+  security: { hsts: { maxAge: 63072000 } },
+};
+
+export default function Page() {
+  return <main>secure</main>;
+}`,
+    );
+
+    const miss = await renderAppRequest({
+      appDir,
+      request: new Request("https://local.test/"),
+    });
+    const hit = await renderAppRequest({
+      appDir,
+      request: new Request("https://local.test/"),
+    });
+
+    expect(miss.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(hit.headers.get("x-mreact-cache")).toBe("HIT");
+    expect(miss.headers.get("strict-transport-security")).toContain("max-age=63072000");
+    expect(hit.headers.get("strict-transport-security")).toContain("max-age=63072000");
+  });
+
   test("does not disclose a visitor's client IP to the next visitor", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-ip-"));
     await writeFile(

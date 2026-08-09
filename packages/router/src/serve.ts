@@ -874,7 +874,7 @@ async function readPrerenderedRoute(
 function renderBuiltDynamicResponse(
   options: RenderBuiltAppRequestOptions & {
     matchedRoute?: MatchedRoute | undefined;
-    renderSignals?: { headerDependent: boolean } | undefined;
+    renderSignals?: { headerDependent: () => boolean } | undefined;
     requestUrl?: URL | undefined;
     runtime: BuiltRuntime;
   },
@@ -988,17 +988,29 @@ async function runPrerenderRegeneration(
     // render that depended on this visitor's request headers must not become
     // one; it is returned to the caller without being stored. The signal starts
     // closed so that a render which never reports back is not stored either.
-    const renderSignals = { headerDependent: true };
+    const renderSignals = { headerDependent: () => true };
     const response = await renderBuiltDynamicResponse({ ...options, renderSignals });
 
-    return response.ok && !renderSignals.headerDependent && !isVisitorDependentResponse(response)
-      ? await cacheRegeneratedPrerenderedRoute(
+    if (!response.ok) {
+      return response;
+    }
+
+    // Draining the body finishes a streamed render, so the signal is only
+    // final once the whole response has been read.
+    const body = await response.text();
+
+    return renderSignals.headerDependent() || isVisitorDependentResponse(response)
+      ? htmlResponse(body, {
+          headers: response.headers,
+          status: response.status,
+        })
+      : await cacheRegeneratedPrerenderedRoute(
           options.runtime,
           path,
+          body,
           response,
           options.prerenderStore,
-        )
-      : response;
+        );
   };
 
   return options.prerenderStore?.withLock === undefined
@@ -1034,10 +1046,10 @@ function isVisitorDependentResponse(response: Response): boolean {
 async function cacheRegeneratedPrerenderedRoute(
   runtime: BuiltRuntime,
   path: string,
+  body: string,
   response: Response,
   store: AppRouterPrerenderStore | undefined,
 ): Promise<Response> {
-  const body = await response.text();
   const headers: Record<string, string> = {};
 
   response.headers.forEach((value, key) => {

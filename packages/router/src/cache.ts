@@ -34,6 +34,13 @@ export interface AppRouterCacheEntry {
   headers?: Record<string, string> | undefined;
   path: string;
   status: number;
+  /**
+   * Strict-Transport-Security value to replay to secure requests only.
+   *
+   * It is kept out of `headers` because it depends on the scheme of the
+   * request that produced the entry, which the cache key does not cover.
+   */
+  strictTransportSecurity?: string | undefined;
 }
 
 /**
@@ -295,6 +302,11 @@ export function cachedRouteResponse(options: {
       headers.set("content-type", "text/html; charset=utf-8");
     }
     headers.set("x-mreact-cache", "HIT");
+    // Replayed against the scheme of the request being served, not the one
+    // that produced the entry.
+    if (cached.strictTransportSecurity !== undefined && isSecureRequest(options.request)) {
+      headers.set(HSTS_HEADER, cached.strictTransportSecurity);
+    }
 
     return new Response(cached.body, {
       headers,
@@ -367,23 +379,24 @@ export async function cacheRouteResponse(options: {
 
   // Metadata-derived security headers are part of the rendered response, so
   // they are stored with it and replayed on a hit rather than dropped by the
-  // rebuilt cache response. Strict-Transport-Security is excluded because it is
-  // derived from the scheme of the request that happened to miss, and the key
-  // does not cover the scheme; a single forwarded http request would otherwise
-  // pin an entry with no HSTS for the whole lifetime. Apply HSTS at the edge
-  // for cached routes.
+  // rebuilt cache response. Strict-Transport-Security is kept apart because it
+  // is derived from the scheme of whichever request missed and the key does not
+  // cover the scheme: it is replayed only to requests that are themselves
+  // secure, instead of pinning one visitor's scheme onto the entry.
   const storedHeaders: Record<string, string> = {};
   options.response.headers.forEach((value, key) => {
-    if (key !== "cache-control" && key !== "x-mreact-cache" && key !== "strict-transport-security") {
+    if (key !== "cache-control" && key !== "x-mreact-cache" && key !== HSTS_HEADER) {
       storedHeaders[key] = value;
     }
   });
+  const hsts = options.response.headers.get(HSTS_HEADER) ?? undefined;
 
   await (options.cache ?? cacheState.memoryCache).set(options.key, {
     body,
     cacheControl,
     expiresAt: (options.now ?? Date.now()) + options.policy.revalidateSeconds * 1000,
     headers: storedHeaders,
+    ...(hsts === undefined ? {} : { strictTransportSecurity: hsts }),
     path: normalizeRevalidationPath(options.path),
     status,
   });
@@ -394,11 +407,20 @@ export async function cacheRouteResponse(options: {
     headers.set("content-type", contentType);
   }
   headers.set("x-mreact-cache", "MISS");
+  if (hsts !== undefined) {
+    headers.set(HSTS_HEADER, hsts);
+  }
 
   return new Response(body, {
     headers,
     status,
   });
+}
+
+const HSTS_HEADER = "strict-transport-security";
+
+function isSecureRequest(request: Request | undefined): boolean {
+  return request !== undefined && new URL(request.url).protocol === "https:";
 }
 
 function requestCarriesCredentials(request: Request | undefined): boolean {

@@ -478,7 +478,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
       // keep them away from. The built runtime re-matches the same way.
       request = middlewareResult.request;
       const rematched = matchCloudflareRoute(
-        [...context.serverManifest.routes].sort(compareCloudflareRoutes),
+        sortedCloudflareRoutes(context.serverManifest),
         new URL(request.url).pathname,
       );
 
@@ -1420,6 +1420,23 @@ function normalizeCloudflareRouteModulePath(path: string): string {
   const withoutPrefix = path.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
 
   return withoutPrefix.replace(/\.(?:mjs|js|ts|tsx)$/, "");
+}
+
+// The manifest is the same object across requests, so a rewrite-heavy app pays
+// for the specificity sort once rather than on every rewritten request.
+const sortedRoutesByManifest = new WeakMap<BuiltServerManifest, readonly AppRoute[]>();
+
+function sortedCloudflareRoutes(manifest: BuiltServerManifest): readonly AppRoute[] {
+  const cached = sortedRoutesByManifest.get(manifest);
+
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const sorted = [...manifest.routes].sort(compareCloudflareRoutes);
+  sortedRoutesByManifest.set(manifest, sorted);
+
+  return sorted;
 }
 
 function matchCloudflareRoute(
