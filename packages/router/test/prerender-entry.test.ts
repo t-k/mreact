@@ -2,6 +2,17 @@ import { describe, expect, test } from "vitest";
 import { isCurrentPrerenderedRoute } from "../src/prerender-entry.js";
 
 describe("prerender entry validation", () => {
+  test("rejects a complete schema-1 entry", () => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: { "content-type": "text/html; charset=utf-8" },
+        html: "<main>visitor A</main>",
+        schemaVersion: 1,
+        status: 200,
+      }),
+    ).toBe(false);
+  });
+
   test.each([
     ["Set-Cookie", "session=visitor-a"],
     ["Vary", "Cookie"],
@@ -14,7 +25,7 @@ describe("prerender entry validation", () => {
       isCurrentPrerenderedRoute({
         headers: { [name]: value },
         html: "<main>visitor A</main>",
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 200,
       }),
     ).toBe(false);
@@ -28,7 +39,7 @@ describe("prerender entry validation", () => {
           "content-type": "text/html; charset=utf-8",
         },
         html: "<main>shared</main>",
-        schemaVersion: 1,
+        schemaVersion: 2,
         status: 200,
       }),
     ).toBe(true);

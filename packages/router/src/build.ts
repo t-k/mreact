@@ -70,7 +70,11 @@ import {
 import type { ModuleMetadata } from "@reckona/mreact-compiler";
 import type { RouteCachePolicy } from "./cache.js";
 import { routeCachePolicyFromSource } from "./cache.js";
-import { bundleMiddlewareModuleCode, renderAppRequest } from "./render.js";
+import {
+  bundleMiddlewareModuleCode,
+  renderAppRequest,
+  type RenderAppRequestRuntimeOptions,
+} from "./render.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
 import {
   hasGenerateStaticParamsExport,
@@ -420,7 +424,7 @@ export interface BuiltPrerenderedRoute {
   headers: Record<string, string>;
   html: string;
   /** Identifies entries that satisfy the complete current prerender contract. */
-  schemaVersion?: 1 | undefined;
+  schemaVersion?: 2 | undefined;
   status: number;
 }
 
@@ -2614,7 +2618,10 @@ async function prerenderStaticRoutes(options: {
 
       const entries: Array<[string, BuiltPrerenderedRoute]> = [];
       for (const pathname of await prerenderPathsForRoute(route, analysis, options.vitePlugins)) {
-        const response = await renderAppRequest({
+        const renderSignals = {
+          headerDependent: () => true,
+        };
+        const renderOptions = {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientScripts,
@@ -2623,13 +2630,15 @@ async function prerenderStaticRoutes(options: {
           importPolicy,
           navigationScripts,
           request: new Request(`http://mreact.local${pathname}`),
+          renderSignals,
           serverModuleCacheVersion,
           serverModules: serverModuleMap,
           vitePlugins: options.vitePlugins,
-        });
+        } satisfies RenderAppRequestRuntimeOptions;
+        const response = await renderAppRequest(renderOptions);
         const html = await response.text();
 
-        if (isVisitorDependentResponse(response)) {
+        if (renderSignals.headerDependent() || isVisitorDependentResponse(response)) {
           continue;
         }
 

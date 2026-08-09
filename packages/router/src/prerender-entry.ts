@@ -1,6 +1,6 @@
 import type { BuiltPrerenderedRoute } from "./build.js";
 
-export const PRERENDERED_ROUTE_SCHEMA_VERSION = 1;
+export const PRERENDERED_ROUTE_SCHEMA_VERSION = 2;
 
 export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerenderedRoute {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {

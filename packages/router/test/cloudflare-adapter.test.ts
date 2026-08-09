@@ -248,7 +248,7 @@ export async function POST(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-            schemaVersion: 1,
+            schemaVersion: 2,
             status: 200,
           },
         },
@@ -280,7 +280,7 @@ export async function POST(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: '<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>',
-            schemaVersion: 1,
+            schemaVersion: 2,
             status: 200,
           },
         },
@@ -334,7 +334,7 @@ export function middleware(request) {
             "/": {
               headers: { "content-type": "text/html; charset=utf-8" },
               html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-              schemaVersion: 1,
+              schemaVersion: 2,
               status: 200,
             },
           },
@@ -492,7 +492,7 @@ export function middleware(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-            schemaVersion: 1,
+            schemaVersion: 2,
             status: 200,
           },
         },

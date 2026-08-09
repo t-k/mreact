@@ -40,7 +40,7 @@ export interface AppRouterCacheEntry {
    * runtimes, or custom serializers that drop new security fields, is never
    * replayed under the current security rules.
    */
-  schemaVersion?: 1 | undefined;
+  schemaVersion?: 2 | undefined;
   status: number;
   /**
    * Strict-Transport-Security value to replay to secure requests only.
@@ -438,7 +438,7 @@ export async function cacheRouteResponse(options: {
 }
 
 const HSTS_HEADER = "strict-transport-security";
-const ROUTE_CACHE_ENTRY_SCHEMA_VERSION = 1;
+const ROUTE_CACHE_ENTRY_SCHEMA_VERSION = 2;
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (

@@ -2815,6 +2815,44 @@ export default function Page(props) {
     expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
   });
 
+  test("keeps external packages cacheable when they do not access Request", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-external-safe-"));
+    const packageDir = join(appDir, "node_modules", "fixture-safe-label");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "fixture-safe-label", type: "module", exports: "./index.js" }),
+    );
+    await writeFile(join(packageDir, "index.js"), `export const label = "shared";`);
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { label } from "fixture-safe-label";
+
+export const revalidate = 60;
+
+export function loader() {
+  return { label };
+}
+
+export default function Page(props) {
+  return <main>{props.data.label}</main>;
+}`,
+    );
+
+    const render = () =>
+      renderAppRequest({
+        appDir,
+        importPolicy: { allowedPackages: ["fixture-safe-label"] },
+        request: new Request("http://local.test/"),
+      });
+    const miss = await render();
+    const hit = await render();
+
+    expect(miss.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(hit.headers.get("x-mreact-cache")).toBe("HIT");
+    expect(await hit.text()).toContain("<main>shared</main>");
+  });
+
   test("does not cache Request reconstruction hidden in a layout helper", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-layout-request-"));
     await writeFile(

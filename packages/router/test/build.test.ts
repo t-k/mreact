@@ -3053,9 +3053,46 @@ export default function Page(props) {
       prerenderedRoutes?: Record<string, { html: string; schemaVersion?: number; status: number }>;
     };
 
-    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(1);
+    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(2);
     expect(serverManifest.prerenderedRoutes?.["/"]?.status).toBe(200);
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Policy OK</main>");
+  });
+
+  test("does not publish prerenders that read Request through an external package", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-external-request-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(rootDir, "package.json"),
+      JSON.stringify({ dependencies: { "fixture-request-reader": "1.0.0" } }),
+    );
+    await writeFakePackage(
+      rootDir,
+      "fixture-request-reader",
+      `export function readHost(context) {
+  return new URL(new Request(context["request"]).url).host;
+}
+`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { readHost } from "fixture-request-reader";
+
+export const prerender = true;
+
+export default function Page(context) {
+  return <main>{readHost(context)}</main>;
+}
+`,
+    );
+
+    await buildApp({ outDir, projectRoot: rootDir, routesDir: "src/app" });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, unknown> };
+
+    expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
   });
 
   test("does not publish visitor-dependent build responses as shared prerenders", async () => {

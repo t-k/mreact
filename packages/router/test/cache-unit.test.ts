@@ -11,6 +11,7 @@ import {
   stripRevalidateExport,
   withRouteCacheContext,
 } from "../src/cache.js";
+import type { AppRouterCacheEntry } from "../src/cache.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -97,6 +98,21 @@ describe("router cache helpers", () => {
     await expect(cachedRouteResponse({ cache, key: "legacy" })).resolves.toBeUndefined();
   });
 
+  test("cachedRouteResponse rejects complete schema-1 persistent entries", async () => {
+    const cache = createMemoryRouteCache();
+    await cache.set("schema-1", {
+      body: "<main>visitor A</main>",
+      cacheControl: "s-maxage=60",
+      expiresAt: Date.now() + 60_000,
+      headers: { "content-type": "text/html; charset=utf-8" },
+      path: "/",
+      schemaVersion: 1,
+      status: 200,
+    } as unknown as AppRouterCacheEntry);
+
+    await expect(cachedRouteResponse({ cache, key: "schema-1" })).resolves.toBeUndefined();
+  });
+
   test("cachedRouteResponse rejects current entries that dropped persisted headers", async () => {
     const cache = createMemoryRouteCache();
     await cache.set("incomplete", {
@@ -104,7 +120,7 @@ describe("router cache helpers", () => {
       cacheControl: "s-maxage=60",
       expiresAt: Date.now() + 60_000,
       path: "/",
-      schemaVersion: 1,
+      schemaVersion: 2,
       status: 200,
     });
 
@@ -121,7 +137,7 @@ describe("router cache helpers", () => {
       response: new Response("<main>safe</main>"),
     });
 
-    expect(cache.get("current")).toMatchObject({ schemaVersion: 1 });
+    expect(cache.get("current")).toMatchObject({ schemaVersion: 2 });
   });
 
   test("cacheRouteResponse without a policy passes the response through unchanged", async () => {
