@@ -383,6 +383,61 @@ describe("concurrent fiber work loop", () => {
     expect(root.finishedWork?.child?.child?.child?.type).toBe("span");
   });
 
+  it("isolates provider values across interleaved concurrent roots", () => {
+    const firstRoot = createFiberRoot(document.createElement("div"));
+    const secondRoot = createFiberRoot(document.createElement("div"));
+    const Theme = createContext("default");
+    const observed: string[] = [];
+    const renderConsumer = (value: unknown) => {
+      observed.push(String(value));
+      return createElement("span", null, String(value));
+    };
+
+    prepareFreshStack(
+      firstRoot,
+      createElement(
+        Theme.Provider,
+        { value: "first" },
+        createElement(Theme.Consumer, null, renderConsumer),
+      ),
+      TransitionLane,
+    );
+    prepareFreshStack(
+      secondRoot,
+      createElement(
+        Theme.Provider,
+        { value: "second" },
+        createElement(Theme.Consumer, null, renderConsumer),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(firstRoot, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+    expect(
+      renderRootConcurrent(secondRoot, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+
+    expect(
+      renderRootConcurrent(firstRoot, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    expect(
+      renderRootConcurrent(secondRoot, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(observed).toEqual(["first", "second"]);
+    expect(Theme.values).toEqual([]);
+  });
+
   it("cleans yielded provider context when lower priority work is aborted", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
