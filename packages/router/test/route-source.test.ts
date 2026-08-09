@@ -5,6 +5,7 @@ import {
   hasPrerenderExport,
   isStreamRouteSource,
   routeClosureMayUseAwaitBoundary,
+  routeClosureMayUseRequestInput,
   stripRouteClientOnlyExports,
   stripRouteModuleExports,
   stripRouteRequestOnlyExports,
@@ -235,5 +236,39 @@ export default function Page(props) {
 
     expect(usesAwait).toBe(true);
     expect(lookedUp).toEqual(["/repo/app/panel.ts", "/repo/app/panel.tsx"]);
+  });
+
+  test("classifies request inputs through direct and local source references", () => {
+    const files = {
+      "/repo/app/helper.ts":
+        'export function copy(value) { return new Request(value).headers.get("x-region"); }',
+      "/repo/app/page.tsx":
+        'import { copy } from "./helper"; export function loader(context) { return copy(context["request"]); }',
+    };
+
+    expect(
+      routeClosureMayUseRequestInput({
+        filename: "/repo/app/page.tsx",
+        files,
+        projectRoot: "/repo/app",
+        source: files["/repo/app/page.tsx"],
+      }),
+    ).toBe(true);
+    expect(
+      routeClosureMayUseRequestInput({
+        filename: "/repo/app/page.tsx",
+        files: {},
+        projectRoot: "/repo/app",
+        source: 'export function loader() { return fetch("https://api.test/data"); }',
+      }),
+    ).toBe(true);
+    expect(
+      routeClosureMayUseRequestInput({
+        filename: "/repo/app/page.tsx",
+        files: {},
+        projectRoot: "/repo/app",
+        source: 'export function loader() { return { label: "public" }; }',
+      }),
+    ).toBe(false);
   });
 });
