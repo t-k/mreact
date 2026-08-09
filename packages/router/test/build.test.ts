@@ -8707,6 +8707,138 @@ export default function Page(props) {
     expect(await german.text()).toContain("<main>country: DE</main>");
   });
 
+  test("does not single-flight a regenerated visitor-dependent prerender across requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-concurrent-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export async function loader({ request }) {
+  const country = request.headers.get("cf-ipcountry") ?? "unknown";
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  return { country };
+}
+
+export default function Page(props) {
+  return <main>country: {props.data.country}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-regen-concurrent",
+          "x-mreact-action-nonce": "nonce-regen-concurrent",
+          "x-mreact-csrf": "csrf-regen-concurrent",
+        },
+        method: "POST",
+      }),
+    });
+
+    const [japanese, german] = await Promise.all([
+      renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/", {
+          headers: { "cf-ipcountry": "JP" },
+        }),
+      }),
+      renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/", {
+          headers: { "cf-ipcountry": "DE" },
+        }),
+      }),
+    ]);
+
+    expect(await japanese.text()).toContain("<main>country: JP</main>");
+    expect(await german.text()).toContain("<main>country: DE</main>");
+  });
+
+  test("does not persist regenerated prerenders that set a visitor cookie", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-cookie-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const store = createRecordingPrerenderStore();
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}
+
+export function save() {
+  return "saved";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `import { save } from "./actions";
+
+export const prerender = true;
+
+export default function Page() {
+  return <main><form action={save}><button type="submit">Save</button></form></main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-regen-cookie",
+          "x-mreact-action-nonce": "nonce-regen-cookie",
+          "x-mreact-csrf": "csrf-regen-cookie",
+        },
+        method: "POST",
+      }),
+    });
+    const setsBefore = store.calls.filter((call) => call === "set:/").length;
+
+    const regenerated = await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(regenerated.headers.get("set-cookie")).toContain("mreact.csrf=");
+    expect(store.calls.filter((call) => call === "set:/")).toHaveLength(setsBefore);
+  });
+
   test("stores a regenerated streaming prerender that reads no request header", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-stream-"));
     const appDir = join(rootDir, "app");

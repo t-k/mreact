@@ -33,6 +33,14 @@ export interface AppRouterCacheEntry {
    */
   headers?: Record<string, string> | undefined;
   path: string;
+  /**
+   * Identifies entries that preserve the complete current cache contract.
+   *
+   * Missing markers are treated as cache misses so HTML written by older
+   * runtimes, or custom serializers that drop new security fields, is never
+   * replayed under the current security rules.
+   */
+  schemaVersion?: 1 | undefined;
   status: number;
   /**
    * Strict-Transport-Security value to replay to secure requests only.
@@ -292,7 +300,11 @@ export function cachedRouteResponse(options: {
     const now = options.now ?? Date.now();
     const cached = await cache.get(options.key, now);
 
-    if (cached === undefined || cached.expiresAt <= now) {
+    if (
+      cached === undefined ||
+      cached.expiresAt <= now ||
+      cached.schemaVersion !== ROUTE_CACHE_ENTRY_SCHEMA_VERSION
+    ) {
       return undefined;
     }
 
@@ -404,6 +416,7 @@ export async function cacheRouteResponse(options: {
     headers: storedHeaders,
     ...(hsts === undefined ? {} : { strictTransportSecurity: hsts }),
     path: normalizeRevalidationPath(options.path),
+    schemaVersion: ROUTE_CACHE_ENTRY_SCHEMA_VERSION,
     status,
   });
 
@@ -424,6 +437,7 @@ export async function cacheRouteResponse(options: {
 }
 
 const HSTS_HEADER = "strict-transport-security";
+const ROUTE_CACHE_ENTRY_SCHEMA_VERSION = 1;
 
 function isSecureRequest(request: Request | undefined): boolean {
   // `Request.url` is always absolute, so this avoids parsing a URL on the

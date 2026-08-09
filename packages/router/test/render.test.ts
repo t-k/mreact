@@ -2614,6 +2614,14 @@ export default function Page() {
     expect(response.status).toBe(200);
     expect(response.headers.get("strict-transport-security")).toBeNull();
     expect(await response.text()).toContain("<main>plain</main>");
+
+    const secureResponse = await renderAppRequest({
+      appDir,
+      request: new Request("https://local.test/"),
+    });
+
+    expect(secureResponse.status).toBe(500);
+    expect(secureResponse.headers.get("x-mreact-cache")).not.toBe("HIT");
   });
 
   test("keeps HSTS for secure visitors after a plain request populated the cache", async () => {
@@ -2678,6 +2686,156 @@ export default function Page(props) {
 
     expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
     expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+  });
+
+  test("does not cache headers read from a reconstructed Request", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-request-copy-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader(context) {
+  const copied = new Request(context.request);
+  return { ip: copied.headers.get("cf-connecting-ip") ?? "none" };
+}
+
+export default function Page(props) {
+  return <main>ip: {props.data.ip}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "203.0.113.7" },
+      }),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "198.51.100.42" },
+      }),
+    });
+
+    expect(first.headers.get("cache-control")).toBe("private, no-store");
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+  });
+
+  test("does not cache Request reconstruction hidden in a local helper", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-request-helper-"));
+    await writeFile(
+      join(appDir, "request-helper.ts"),
+      `export function readIp(value) {
+  const copied = new Request(value["request"]);
+  return copied.headers.get("cf-connecting-ip") ?? "none";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { readIp } from "./request-helper";
+
+export const revalidate = 60;
+
+export function loader(context) {
+  return { ip: readIp(context) };
+}
+
+export default function Page(props) {
+  return <main>ip: {props.data.ip}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "203.0.113.7" },
+      }),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "198.51.100.42" },
+      }),
+    });
+
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+  });
+
+  test("does not cache Request reconstruction hidden in a layout helper", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-layout-request-"));
+    await writeFile(
+      join(appDir, "request-helper.ts"),
+      `export function readIp(value) {
+  const copied = new Request(value);
+  return copied.headers.get("cf-connecting-ip") ?? "none";
+}`,
+    );
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import { readIp } from "./request-helper";
+
+export default function Layout(props) {
+  return <div data-ip={readIp(props.request)}>{props.children}</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export default function Page() {
+  return <main>safe</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "203.0.113.7" },
+      }),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "198.51.100.42" },
+      }),
+    });
+
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await first.text()).toContain('data-ip="203.0.113.7"');
+    expect(await second.text()).toContain('data-ip="198.51.100.42"');
+  });
+
+  test("does not share absolute request URL output across hosts", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-origin-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export default function Page(props) {
+  return <main>origin: {new URL(props.request.url).origin}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("https://tenant-a.test/"),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("https://tenant-b.test/"),
+    });
+
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await first.text()).toContain("<main>origin: https://tenant-a.test</main>");
+    expect(await second.text()).toContain("<main>origin: https://tenant-b.test</main>");
   });
 
   test("marks a header dependent route as uncacheable for shared caches", async () => {
@@ -2755,10 +2913,10 @@ export default function Page(props) {
       join(appDir, "page.mreact.tsx"),
       `export const revalidate = 60;
 
-export function loader({ request }) {
+export function loader() {
   const state = globalThis as { __mreactSharedCacheCalls?: number };
   state.__mreactSharedCacheCalls = (state.__mreactSharedCacheCalls ?? 0) + 1;
-  return { calls: state.__mreactSharedCacheCalls, path: new URL(request.url).pathname };
+  return { calls: state.__mreactSharedCacheCalls };
 }
 
 export default function Page(props) {

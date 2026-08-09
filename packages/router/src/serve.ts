@@ -957,14 +957,19 @@ async function renderAndCachePrerenderWithLock(
   const existing = options.runtime.prerenderLocks.get(path);
 
   if (existing !== undefined) {
-    return cloneResponse(await existing);
+    const result = await existing;
+    if (result.shareable) {
+      return cloneResponse(result.response);
+    }
+
+    return (await runPrerenderRegeneration(options, path)).response;
   }
 
   const task = runPrerenderRegeneration(options, path);
   options.runtime.prerenderLocks.set(path, task);
 
   try {
-    return cloneResponse(await task);
+    return cloneResponse((await task).response);
   } finally {
     options.runtime.prerenderLocks.delete(path);
   }
@@ -973,15 +978,18 @@ async function renderAndCachePrerenderWithLock(
 async function runPrerenderRegeneration(
   options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
   path: string,
-): Promise<Response> {
+): Promise<{ response: Response; shareable: boolean }> {
   const regenerate = async () => {
     const stored = await readPrerenderedRoute(options.runtime, path, options.prerenderStore);
 
     if (stored !== undefined) {
-      return htmlResponse(stored.html, {
-        headers: stored.headers,
-        status: stored.status,
-      });
+      return {
+        response: htmlResponse(stored.html, {
+          headers: stored.headers,
+          status: stored.status,
+        }),
+        shareable: true,
+      };
     }
 
     // A prerendered entry is replayed to every visitor by path alone, so a
@@ -992,25 +1000,33 @@ async function runPrerenderRegeneration(
     const response = await renderBuiltDynamicResponse({ ...options, renderSignals });
 
     if (!response.ok) {
-      return response;
+      return { response, shareable: false };
     }
 
     // Draining the body finishes a streamed render, so the signal is only
     // final once the whole response has been read.
     const body = await response.text();
 
-    return renderSignals.headerDependent() || isVisitorDependentResponse(response)
-      ? htmlResponse(body, {
+    if (renderSignals.headerDependent() || isVisitorDependentResponse(response)) {
+      return {
+        response: htmlResponse(body, {
           headers: response.headers,
           status: response.status,
-        })
-      : await cacheRegeneratedPrerenderedRoute(
+        }),
+        shareable: false,
+      };
+    }
+
+    return {
+      response: await cacheRegeneratedPrerenderedRoute(
           options.runtime,
           path,
           body,
           response,
           options.prerenderStore,
-        );
+        ),
+      shareable: true,
+    };
   };
 
   return options.prerenderStore?.withLock === undefined
@@ -1037,9 +1053,16 @@ async function applyBuiltPrerenderInvalidations(
 }
 
 function isVisitorDependentResponse(response: Response): boolean {
+  const cacheControl = response.headers.get("cache-control") ?? "";
+  const forbidsSharedStorage = cacheControl.split(",").some((directive) =>
+    /^(?:private|no-cache|no-store)(?:=|$)/i.test(directive.trim())
+  );
+
   return (
-    response.headers.get("x-mreact-cache") === "DYNAMIC" ||
-    (response.headers.get("cache-control") ?? "").includes("no-store")
+    response.headers.get("x-mreact-cache")?.toUpperCase() === "DYNAMIC" ||
+    response.headers.has("set-cookie") ||
+    response.headers.has("vary") ||
+    forbidsSharedStorage
   );
 }
 

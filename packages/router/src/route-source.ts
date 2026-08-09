@@ -1,5 +1,6 @@
 import { dirname, isAbsolute, join } from "node:path";
 import {
+  collectIdentifierReferenceNames,
   collectFormActionExpressionReferences,
   collectTopLevelValueExportNames,
   collectJsxComponentRootNames,
@@ -198,6 +199,76 @@ export function routeClosureMayUseAwaitBoundary(options: {
     }
 
     return false;
+  } finally {
+    seen.delete(options.filename);
+  }
+}
+
+const REQUEST_INPUT_IDENTIFIERS = new Set(["fetch", "request", "Request"]);
+
+/**
+ * Conservatively detects route closures that may consume Request inputs which
+ * are not represented by the shared route cache key.
+ *
+ * This deliberately over-approximates: a false positive disables shared HTML
+ * reuse, while a false negative can disclose one request's rendered values to
+ * another. Local server imports are traversed so helpers that reconstruct a
+ * Request from its internal slots are covered before cache lookup.
+ */
+export function routeClosureMayUseRequestInput(options: {
+  filename: string;
+  files: RouteSourceLookup;
+  projectRoot: string;
+  seen?: Set<string> | undefined;
+  source: string;
+}): boolean {
+  const seen = options.seen ?? new Set<string>();
+  if (seen.has(options.filename)) {
+    return false;
+  }
+
+  seen.add(options.filename);
+
+  try {
+    if (hasModuleDirective({ code: options.source, directive: "use client" })) {
+      return false;
+    }
+
+    const sourceFilename = sourceFilenameForCompiler(options.projectRoot, options.filename);
+    if (
+      collectIdentifierReferenceNames({
+        code: options.source,
+        filename: sourceFilename,
+      }).some((name) => REQUEST_INPUT_IDENTIFIERS.has(name))
+    ) {
+      return true;
+    }
+
+    for (const reference of collectStaticImportReferences({
+      code: options.source,
+      filename: sourceFilename,
+    })) {
+      const resolved = resolveLocalSourceImport(options.files, options.filename, reference.source);
+
+      if (
+        resolved !== undefined &&
+        routeClosureMayUseRequestInput({
+          filename: resolved.filename,
+          files: options.files,
+          projectRoot: options.projectRoot,
+          seen,
+          source: resolved.source,
+        })
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  } catch {
+    // An analysis parser mismatch must not turn an unknown route into a shared
+    // cache candidate. The normal compiler still reports actual source errors.
+    return true;
   } finally {
     seen.delete(options.filename);
   }

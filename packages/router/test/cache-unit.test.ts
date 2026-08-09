@@ -84,6 +84,32 @@ describe("router cache helpers", () => {
     await expect(cachedRouteResponse({ cache, key: "missing" })).resolves.toBeUndefined();
   });
 
+  test("cachedRouteResponse rejects legacy persistent entries without a schema marker", async () => {
+    const cache = createMemoryRouteCache();
+    await cache.set("legacy", {
+      body: "<main>visitor A</main>",
+      cacheControl: "s-maxage=60",
+      expiresAt: Date.now() + 60_000,
+      path: "/",
+      status: 200,
+    });
+
+    await expect(cachedRouteResponse({ cache, key: "legacy" })).resolves.toBeUndefined();
+  });
+
+  test("cacheRouteResponse marks newly stored entries with the current schema", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "current",
+      path: "/",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("<main>safe</main>"),
+    });
+
+    expect(cache.get("current")).toMatchObject({ schemaVersion: 1 });
+  });
+
   test("cacheRouteResponse without a policy passes the response through unchanged", async () => {
     const original = new Response("body");
     const result = await cacheRouteResponse({

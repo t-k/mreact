@@ -10,9 +10,15 @@ describe("request header read tracking", () => {
       }),
     );
 
-    expect(new URL(tracked.request.url).pathname).toBe("/items");
     expect(tracked.request.method).toBe("GET");
     expect(tracked.readAnyHeader()).toBe(false);
+  });
+
+  test("reports a read when application code observes the request URL", () => {
+    const tracked = trackRequestHeaderReads(new Request("https://tenant-a.test/items?id=1"));
+
+    expect(tracked.request.url).toBe("https://tenant-a.test/items?id=1");
+    expect(tracked.readAnyHeader()).toBe(true);
   });
 
   test("reports a read for get, has and iteration", () => {

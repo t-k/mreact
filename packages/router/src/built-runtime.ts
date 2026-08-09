@@ -25,7 +25,7 @@ export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   prerenderableRoutes: ReadonlySet<string>;
-  prerenderLocks: Map<string, Promise<Response>>;
+  prerenderLocks: Map<string, Promise<{ response: Response; shareable: boolean }>>;
   prerenderedRoutes: Map<string, BuiltPrerenderedRoute>;
   routeMatcher: RouteMatcher;
   routes: readonly AppRoute[];
@@ -78,7 +78,7 @@ export async function materializeBuiltRuntime(options: {
   }));
   const prerenderedRoutes = new Map(Object.entries(serverManifest.prerenderedRoutes ?? {}));
   const prerenderableRoutes = new Set(prerenderedRoutes.keys());
-  const prerenderLocks = new Map<string, Promise<Response>>();
+  const prerenderLocks = new Map<string, Promise<{ response: Response; shareable: boolean }>>();
   const serverModules = new Map<string, BuiltServerModuleArtifact>(
     Object.entries(serverManifest.serverModules ?? {}).map(([file, artifact]) => [
       join(appDir, file),

@@ -1,5 +1,5 @@
 /**
- * Observes request header reads performed by application code during a render.
+ * Observes request inputs read by application code during a render.
  *
  * The shared route cache is keyed on the app directory, route path, pathname
  * and query only. A render that reads a request header therefore produces HTML
@@ -15,10 +15,9 @@
  *
  * Reconstructing the request with `new Request(request)` copies headers from
  * internal slots that no interception can reach, so headers read through such a
- * copy are not observed. Callers that cannot construct the tracker treat the
- * render as header dependent instead, and `render.ts` does the same whenever a
- * cache policy appears without a tracker, so the uncovered case is a rewrapped
- * request rather than a silent cache write.
+ * copy are not observed. `render.ts` therefore also uses conservative source
+ * closure analysis to opt routes that reference Request inputs out of shared
+ * caching before a hit can be served.
  */
 export interface TrackedHeaderRequest {
   /** Returns true once application code has read any request header. */
@@ -69,6 +68,7 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
   }
 
   const originalHeaders = tracked.headers;
+  const originalUrl = tracked.url;
   const headers = new Proxy(originalHeaders, {
     get(target, property) {
       const value = Reflect.get(target, property, target);
@@ -81,6 +81,17 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
         readAny = true;
         return Reflect.apply(value as (...callArgs: unknown[]) => unknown, target, args);
       };
+    },
+  });
+
+  // Origin/host are not part of the route cache key. Treat any URL observation
+  // as request dependence so a multi-host process cannot replay one tenant's
+  // absolute URLs to another. Path and query reads are conservatively included.
+  Object.defineProperty(tracked, "url", {
+    configurable: true,
+    get: () => {
+      readAny = true;
+      return originalUrl;
     },
   });
 

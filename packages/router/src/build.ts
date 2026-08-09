@@ -78,6 +78,7 @@ import {
   hasPrerenderExport,
   isStreamRouteSource,
   routeClosureMayUseAwaitBoundary,
+  routeClosureMayUseRequestInput,
   stripRouteBuildExports,
   stripRouteClientOnlyExports,
   stripRouteClientSource,
@@ -368,6 +369,7 @@ export interface BuiltRouteSourceAnalysisSummary {
   routePath: string;
   sourceHash: string;
   streamRoute: boolean;
+  usesRequestInput?: boolean | undefined;
   usesRuntimeCacheControl: boolean;
 }
 
@@ -393,6 +395,7 @@ interface BuildRouteSourceAnalysis extends BuildSourceAnalysis {
   route: AppRoute & { kind: "page" };
   routeCode: string;
   streamRoute: boolean;
+  usesRequestInput: boolean;
 }
 
 interface BuildSourceAnalysisScope {
@@ -1384,6 +1387,14 @@ async function analyzeBuildRouteSources(options: {
             projectRoot: options.projectRoot,
             source,
           }),
+          usesRequestInput: await buildRouteUsesRequestInput({
+            file,
+            files: options.files,
+            project: options.project,
+            projectRoot: options.projectRoot,
+            routeFile: route.file,
+            source,
+          }),
         },
       ] as const;
     },
@@ -1409,6 +1420,39 @@ async function analyzeBuildRouteSources(options: {
     byFile,
     byRouteFile,
   };
+}
+
+async function buildRouteUsesRequestInput(options: {
+  file: string;
+  files: Record<string, string>;
+  project: ResolvedAppRouterProject;
+  projectRoot: string;
+  routeFile: string;
+  source: string;
+}): Promise<boolean> {
+  const shells = await existingRouteShellCandidates(
+    options.project.routesDir,
+    options.routeFile,
+    async (shellFile) =>
+      options.files[relative(options.projectRoot, shellFile).split(sep).join("/")] !== undefined,
+  );
+  const sources = [
+    { file: options.file, source: options.source },
+    ...shells.flatMap((shell) => {
+      const file = relative(options.projectRoot, shell.file).split(sep).join("/");
+      const source = options.files[file];
+      return source === undefined ? [] : [{ file, source }];
+    }),
+  ];
+
+  return sources.some((entry) =>
+    routeClosureMayUseRequestInput({
+      filename: entry.file,
+      files: options.files,
+      projectRoot: options.projectRoot,
+      source: entry.source,
+    })
+  );
 }
 
 function analyzeBuildSource(source: string, filename: string): BuildSourceAnalysis {
@@ -3141,6 +3185,7 @@ function builtRouteSourceAnalysisSummary(options: {
     routePath: options.analysis.route.path,
     sourceHash: options.analysis.sourceHash,
     streamRoute: options.analysis.streamRoute,
+    usesRequestInput: options.analysis.usesRequestInput,
     usesRuntimeCacheControl: options.analysis.usesRuntimeCacheControl,
   };
 }

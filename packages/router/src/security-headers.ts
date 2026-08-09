@@ -85,6 +85,20 @@ export function configuredHstsHeader(
   }
 }
 
+/** Returns whether HSTS is configured but cannot be serialized safely. */
+export function hasInvalidConfiguredHsts(security: RouteSecurityHeaders | undefined): boolean {
+  if (security?.hsts === undefined || security.hsts === false || security.hsts === null) {
+    return false;
+  }
+
+  try {
+    serializeHsts(security.hsts);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function serializeHsts(hsts: NonNullable<RouteSecurityHeaders["hsts"]>): string {
   if (hsts === false) {
     throw new TypeError("Invalid security header value for hsts.");

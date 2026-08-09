@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
+import { readFileSync } from "node:fs";
 import { access, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { formatDiagnostic, transform } from "@reckona/mreact-compiler";
@@ -64,7 +65,10 @@ import {
   trackRequestHeaderReads,
   type TrackedHeaderRequest,
 } from "./request-header-tracking.js";
-import { configuredHstsHeader } from "./security-headers.js";
+import {
+  configuredHstsHeader,
+  hasInvalidConfiguredHsts,
+} from "./security-headers.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
 import {
   importAppRouterBuiltFileModule,
@@ -83,6 +87,7 @@ import {
   hasLoaderExport,
   isStreamRouteSource,
   routeClosureMayUseAwaitBoundary,
+  routeClosureMayUseRequestInput,
   stripRouteBuildExports,
   stripRouteModuleExports,
   stripRouteClientOnlyExports,
@@ -658,6 +663,7 @@ interface RouteSourceAnalysis {
   hasLoader: boolean;
   routeCode: string;
   streamRoute: boolean;
+  usesRequestInput: boolean;
   usesRuntimeCacheControl: boolean;
 }
 
@@ -991,6 +997,8 @@ async function renderAppRequestInternal(
       }
     | undefined;
   let trackedRequest: TrackedHeaderRequest | undefined;
+  let sourceUsesRequestInput = true;
+  let invalidConfiguredHsts = false;
   return (await withRouteCacheContext(options.routeCache, async () => {
   try {
     if (matched.route.kind === "asset") {
@@ -1063,14 +1071,16 @@ async function renderAppRequestInternal(
       timing,
       vitePlugins: options.vitePlugins,
     });
+    sourceUsesRequestInput = originalAnalysis.usesRequestInput;
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
     const navigationScript = options.navigationScripts?.get(matched.route.path);
     const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
     const mayUseRouteCache =
-      cachePolicy === undefined
+      !sourceUsesRequestInput &&
+      (cachePolicy === undefined
         ? originalAnalysis.usesRuntimeCacheControl
-        : cachePolicy.revalidateSeconds !== 0;
+        : cachePolicy.revalidateSeconds !== 0);
     const reloadRouteCache = isNavigationRouteCacheReloadRequest(options.request);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const cachedResponse =
@@ -1483,6 +1493,12 @@ async function renderAppRequestInternal(
       emitRenderTiming(options, timing, data.status);
       return data;
     }
+    sourceUsesRequestInput ||= await routeShellsMayUseRequestInput({
+      appDir: options.appDir,
+      pageFile: matched.route.file,
+      serverModuleCacheVersion: options.serverModuleCacheVersion,
+      serverSourceFiles: options.serverSourceFiles,
+    });
     await waitForRenderPreload(options, timing);
     await loadServerRenderArtifacts(options, matched.route.file, timing);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
@@ -1629,6 +1645,7 @@ async function renderAppRequestInternal(
 
     const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
     const configuredHsts = configuredHstsHeader(metadata?.security);
+    invalidConfiguredHsts = hasInvalidConfiguredHsts(metadata?.security);
 
     const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)
@@ -1639,7 +1656,8 @@ async function renderAppRequestInternal(
           // outside the page source, which is what `mayUseRouteCache` scans.
           // Without a tracker there is no evidence the render ignored request
           // headers, so the entry is treated as header dependent.
-          headerDependent: trackedRequest?.readAnyHeader() ?? true,
+          headerDependent:
+            sourceUsesRequestInput || invalidConfiguredHsts || (trackedRequest?.readAnyHeader() ?? true),
           ...(configuredHsts === undefined ? {} : { strictTransportSecurity: configuredHsts }),
           path: matched.route.path,
           policy: effectiveCachePolicy,
@@ -1721,7 +1739,8 @@ async function renderAppRequestInternal(
     // after draining the body.
     if (options.renderSignals !== undefined) {
       const tracked = trackedRequest;
-      options.renderSignals.headerDependent = () => tracked?.readAnyHeader() ?? true;
+      options.renderSignals.headerDependent = () =>
+        sourceUsesRequestInput || invalidConfiguredHsts || (tracked?.readAnyHeader() ?? true);
     }
   }
   })).value;
@@ -3047,6 +3066,9 @@ function routeSourceAnalysisFromArtifact(
     hasLoader: artifact.hasLoader,
     routeCode: artifact.routeCode,
     streamRoute: artifact.streamRoute,
+    // Older built artifacts predate request-input safety analysis. Treat them
+    // as dependent until rebuilt rather than trusting an absent safety signal.
+    usesRequestInput: artifact.usesRequestInput ?? true,
     usesRuntimeCacheControl: artifact.usesRuntimeCacheControl,
   };
 }
@@ -3089,17 +3111,77 @@ async function analyzeRouteSourceUncached(options: {
         projectRoot: options.appDir,
         source: options.code,
       }),
+    usesRequestInput: routeClosureMayUseRequestInput({
+      filename: options.filename,
+      files: routeSourceFilesForAnalysis(options),
+      projectRoot: options.appDir,
+      source: options.code,
+    }),
     usesRuntimeCacheControl: usesRuntimeCacheControl(options.code),
   };
 }
 
 function routeSourceFilesForAnalysis(options: {
+  appDir: string;
   code: string;
   filename: string;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
 }): (file: string) => string | undefined {
-  return (file) =>
-    file === options.filename ? options.code : options.serverSourceFiles?.get(file);
+  return (file) => {
+    const known = file === options.filename ? options.code : options.serverSourceFiles?.get(file);
+    if (known !== undefined) {
+      return known;
+    }
+
+    const relativeFile = relative(resolve(options.appDir), resolve(file));
+    if (relativeFile === "" || relativeFile === ".." || relativeFile.startsWith(`..${sep}`)) {
+      return undefined;
+    }
+
+    try {
+      return readFileSync(file, "utf8");
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+async function routeShellsMayUseRequestInput(options: {
+  appDir: string;
+  pageFile: string;
+  serverModuleCacheVersion: string | undefined;
+  serverSourceFiles: ReadonlyMap<string, string> | undefined;
+}): Promise<boolean> {
+  const shells = await shellFilesForPage(
+    options.appDir,
+    options.pageFile,
+    options.serverModuleCacheVersion,
+  );
+
+  for (const shell of shells) {
+    const source = await readServerSourceFile(
+      shell.file,
+      options.serverModuleCacheVersion,
+      options.serverSourceFiles,
+    );
+    if (
+      routeClosureMayUseRequestInput({
+        filename: shell.file,
+        files: routeSourceFilesForAnalysis({
+          appDir: options.appDir,
+          code: source,
+          filename: shell.file,
+          serverSourceFiles: options.serverSourceFiles,
+        }),
+        projectRoot: options.appDir,
+        source,
+      })
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 async function runServerModule(
