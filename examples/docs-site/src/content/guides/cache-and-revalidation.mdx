@@ -134,7 +134,7 @@ startServer({
 });
 ```
 
-The adapter must support `get(key)`, `set(key, entry)`, and `deleteByPath(path)`. `deleteByPath(path)` is what makes `revalidatePath("/notes")` remove every cached variant for that route path. Custom Redis, KV, and database adapters must persist the complete entry passed to `set`, including `schemaVersion`, `headers`, and `strictTransportSecurity`; entries without the current schema marker are treated as misses. This is a fail-closed migration rule, so adapters that persisted only fields from an older Mreact release will repopulate entries on demand after upgrading.
+The adapter must support `get(key)`, `set(key, entry)`, and `deleteByPath(path)`. `deleteByPath(path)` is what makes `revalidatePath("/notes")` remove every cached variant for that route path. Custom Redis, KV, and database adapters must persist the complete entry passed to `set`, including `schemaVersion`, `headers`, and `strictTransportSecurity`; entries without the current schema marker or required headers are treated as misses. This is a fail-closed migration rule, so adapters that persisted only fields from an older Mreact release will repopulate entries on demand after upgrading. The same rule applies to external `prerenderStore` implementations: persist the complete prerender entry, and expect Mreact to delete and replace entries from older schemas.
 
 ## Avoid accidental caching
 

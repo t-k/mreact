@@ -98,6 +98,7 @@ import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
+import { PRERENDERED_ROUTE_SCHEMA_VERSION } from "./prerender-entry.js";
 import { prepareRouteServerActionPlaceholders } from "./actions.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
@@ -415,6 +416,8 @@ export interface BuiltServerModuleOutput {
 export interface BuiltPrerenderedRoute {
   headers: Record<string, string>;
   html: string;
+  /** Identifies entries that satisfy the complete current prerender contract. */
+  schemaVersion?: 1 | undefined;
   status: number;
 }
 
@@ -2631,6 +2634,7 @@ async function prerenderStaticRoutes(options: {
           {
             headers,
             html: await response.text(),
+            schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
             status: response.status,
           },
         ]);

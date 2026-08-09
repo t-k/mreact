@@ -3050,9 +3050,10 @@ export default function Page(props) {
     const serverManifest = JSON.parse(
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as {
-      prerenderedRoutes?: Record<string, { html: string; status: number }>;
+      prerenderedRoutes?: Record<string, { html: string; schemaVersion?: number; status: number }>;
     };
 
+    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(1);
     expect(serverManifest.prerenderedRoutes?.["/"]?.status).toBe(200);
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Policy OK</main>");
   });
@@ -8837,6 +8838,38 @@ export default function Page() {
 
     expect(regenerated.headers.get("set-cookie")).toContain("mreact.csrf=");
     expect(store.calls.filter((call) => call === "set:/")).toHaveLength(setsBefore);
+  });
+
+  test("rejects legacy external prerender entries after an upgrade", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-legacy-store-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const store = createRecordingPrerenderStore();
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+
+export default function Page() {
+  return <main>safe build output</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    await store.set("/", {
+      headers: { "set-cookie": "session=visitor-a; Path=/" },
+      html: "<main>visitor A secret</main>",
+      status: 200,
+    });
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(await response.text()).toContain("<main>safe build output</main>");
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(store.calls).toContain("delete:/");
   });
 
   test("stores a regenerated streaming prerender that reads no request header", async () => {

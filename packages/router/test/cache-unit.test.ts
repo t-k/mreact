@@ -97,6 +97,20 @@ describe("router cache helpers", () => {
     await expect(cachedRouteResponse({ cache, key: "legacy" })).resolves.toBeUndefined();
   });
 
+  test("cachedRouteResponse rejects current entries that dropped persisted headers", async () => {
+    const cache = createMemoryRouteCache();
+    await cache.set("incomplete", {
+      body: "<main>missing CSP</main>",
+      cacheControl: "s-maxage=60",
+      expiresAt: Date.now() + 60_000,
+      path: "/",
+      schemaVersion: 1,
+      status: 200,
+    });
+
+    await expect(cachedRouteResponse({ cache, key: "incomplete" })).resolves.toBeUndefined();
+  });
+
   test("cacheRouteResponse marks newly stored entries with the current schema", async () => {
     const cache = createMemoryRouteCache();
     await cacheRouteResponse({

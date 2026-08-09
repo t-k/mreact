@@ -1504,6 +1504,8 @@ describe("docs-site example contract", () => {
     expect(cacheGuide).toContain("new Request(request)");
     expect(cacheGuide).toContain("schemaVersion");
     expect(cacheGuide).toContain("persist the complete entry");
+    expect(cacheGuide).toContain("prerenderStore");
+    expect(cacheGuide).toContain("delete and replace entries from older schemas");
     expect(cacheGuide).toContain("[Data Loading](/guides/data-loading/)");
     expect(cacheGuide).toContain("[Server Actions](/guides/server-actions/)");
     expect(cacheGuide).toContain("[Cache API](/reference/cache-api/)");

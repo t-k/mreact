@@ -303,7 +303,8 @@ export function cachedRouteResponse(options: {
     if (
       cached === undefined ||
       cached.expiresAt <= now ||
-      cached.schemaVersion !== ROUTE_CACHE_ENTRY_SCHEMA_VERSION
+      cached.schemaVersion !== ROUTE_CACHE_ENTRY_SCHEMA_VERSION ||
+      !isStringRecord(cached.headers)
     ) {
       return undefined;
     }
@@ -438,6 +439,15 @@ export async function cacheRouteResponse(options: {
 
 const HSTS_HEADER = "strict-transport-security";
 const ROUTE_CACHE_ENTRY_SCHEMA_VERSION = 1;
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.values(value).every((entry) => typeof entry === "string")
+  );
+}
 
 function isSecureRequest(request: Request | undefined): boolean {
   // `Request.url` is always absolute, so this avoids parsing a URL on the

@@ -57,6 +57,10 @@ import { startNodeRequestServer } from "./node-server.js";
 import { builtAppRuntimePreloadPlan } from "./preload-policy.js";
 import { normalizeRoutePath } from "./route-path.js";
 import type { HttpUpgradeHandler } from "./upgrade.js";
+import {
+  isCurrentPrerenderedRoute,
+  PRERENDERED_ROUTE_SCHEMA_VERSION,
+} from "./prerender-entry.js";
 
 interface BuiltRuntimeCacheEntry {
   clientManifestText: string;
@@ -543,7 +547,7 @@ function prerenderedRouteResponse(
   prerendered: BuiltPrerenderedRoute | undefined,
   method: string,
 ): Response | undefined {
-  if (prerendered === undefined) {
+  if (!isCurrentPrerenderedRoute(prerendered)) {
     return undefined;
   }
 
@@ -858,13 +862,22 @@ async function readPrerenderedRoute(
   const stored = await store?.get(path);
 
   if (stored !== undefined) {
-    runtime.prerenderedRoutes.set(path, stored);
-    return stored;
+    if (isCurrentPrerenderedRoute(stored)) {
+      runtime.prerenderedRoutes.set(path, stored);
+      return stored;
+    }
+
+    await store?.delete(path);
   }
 
   const manifestEntry = runtime.prerenderedRoutes.get(path);
 
-  if (manifestEntry !== undefined && store !== undefined) {
+  if (!isCurrentPrerenderedRoute(manifestEntry)) {
+    runtime.prerenderedRoutes.delete(path);
+    return undefined;
+  }
+
+  if (store !== undefined) {
     await store.set(path, manifestEntry);
   }
 
@@ -1078,9 +1091,10 @@ async function cacheRegeneratedPrerenderedRoute(
   response.headers.forEach((value, key) => {
     headers[key] = value;
   });
-  const entry = {
+  const entry: BuiltPrerenderedRoute = {
     headers,
     html: body,
+    schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
     status: response.status,
   };
   runtime.prerenderedRoutes.set(path, entry);
