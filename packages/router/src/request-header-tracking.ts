@@ -141,7 +141,7 @@ export function withTrackedRequest<T extends object>(
   request: Request,
   tracked: TrackedHeaderRequest | undefined,
 ): T & { request: Request } {
-  const context = { ...values } as T & { request: Request };
+  const context = values as T & { request: Request };
 
   Object.defineProperty(context, "request", {
     configurable: true,

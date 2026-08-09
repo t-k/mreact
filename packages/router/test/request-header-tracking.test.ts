@@ -108,8 +108,10 @@ describe("request header read tracking", () => {
 
   test("keeps an untouched application context request independent", () => {
     const tracked = trackRequestHeaderReads(new Request("https://app.test/items"));
-    const context = withTrackedRequest({ params: {} }, tracked.request, tracked);
+    const values = { params: {} };
+    const context = withTrackedRequest(values, tracked.request, tracked);
 
+    expect(context).toBe(values);
     expect(Object.keys(context)).toEqual(["params", "request"]);
     expect(tracked.requestDependent()).toBe(false);
   });
