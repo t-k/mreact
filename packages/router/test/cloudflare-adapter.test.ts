@@ -248,6 +248,7 @@ export async function POST(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+            schemaVersion: 1,
             status: 200,
           },
         },
@@ -279,6 +280,7 @@ export async function POST(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: '<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>',
+            schemaVersion: 1,
             status: 200,
           },
         },
@@ -332,6 +334,7 @@ export function middleware(request) {
             "/": {
               headers: { "content-type": "text/html; charset=utf-8" },
               html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+              schemaVersion: 1,
               status: 200,
             },
           },
@@ -489,6 +492,7 @@ export function middleware(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+            schemaVersion: 1,
             status: 200,
           },
         },
@@ -505,6 +509,39 @@ export function middleware(request: Request) {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("<main>Prerendered</main>");
+  });
+
+  test("rejects legacy Cloudflare prerendered HTML after an upgrade", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      render() {
+        return new Response("<main>safe dynamic output</main>", {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        });
+      },
+      serverManifest: {
+        files: {},
+        prerenderedRoutes: {
+          "/": {
+            headers: { "set-cookie": "session=visitor-a; Path=/" },
+            html: "<main>visitor A secret</main>",
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(await response.text()).toContain("<main>safe dynamic output</main>");
+    expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   test("delegates dynamic routes to an injected edge render function", async () => {

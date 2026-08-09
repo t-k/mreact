@@ -38,6 +38,7 @@ import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
+import { isCurrentPrerenderedRoute } from "../prerender-entry.js";
 
 /** Re-exports build manifest contracts used by Cloudflare handlers. */
 export type {
@@ -1385,7 +1386,7 @@ function prerenderedResponse(
 
   const prerendered = prerenderedRoutes?.[path];
 
-  if (prerendered === undefined) {
+  if (!isCurrentPrerenderedRoute(prerendered)) {
     return undefined;
   }
 
@@ -1405,7 +1406,7 @@ function cloudflareRouteRequiresModule(route: AppRoute, manifest: BuiltServerMan
     route.kind === "server" ||
     (route.kind === "page" &&
       (route.segments.some((segment) => segment.kind !== "static") ||
-        manifest.prerenderedRoutes?.[route.path] === undefined))
+        !isCurrentPrerenderedRoute(manifest.prerenderedRoutes?.[route.path])))
   );
 }
 
