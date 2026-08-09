@@ -60,6 +60,7 @@ import {
   routeCacheKey,
   routeCachePolicyFromSource,
 } from "./cache.js";
+import { trackRequestHeaderReads } from "./request-header-tracking.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
 import {
   importAppRouterBuiltFileModule,
@@ -1067,6 +1068,15 @@ async function renderAppRequestInternal(
       return cachedResponse;
     }
 
+    // Only a cacheable route that is about to render pays for header-read
+    // tracking; cache hits returned above never construct it. Application code
+    // reads headers through this request so that a render depending on one is
+    // never stored under a key that ignores it.
+    const trackedRequest = mayUseRouteCache
+      ? trackRequestHeaderReads(options.request)
+      : undefined;
+    const appRequest = trackedRequest?.request ?? options.request;
+
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     const preparedActions = await prepareRouteServerActions({
       appDir: options.appDir,
@@ -1112,7 +1122,7 @@ async function renderAppRequestInternal(
             env: options.env,
             params: matched.params,
             queryClient,
-            request: options.request,
+            request: appRequest,
           },
           filename: matched.route.file,
           importPolicy: options.importPolicy,
@@ -1202,7 +1212,7 @@ async function renderAppRequestInternal(
               data,
               params: matched.params,
               queryClient,
-              request: options.request,
+              request: appRequest,
             },
             matched.route.file,
             options.serverModules,
@@ -1243,7 +1253,7 @@ async function renderAppRequestInternal(
               data,
               params: matched.params,
               queryClient,
-              request: options.request,
+              request: appRequest,
             },
             slots: renderedPage.slots,
             serverModules: options.serverModules,
@@ -1261,7 +1271,7 @@ async function renderAppRequestInternal(
           context: {
             data,
             params: matched.params,
-            request: options.request,
+            request: appRequest,
           },
           filename: matched.route.file,
           importPolicy: options.importPolicy,
@@ -1376,7 +1386,7 @@ async function renderAppRequestInternal(
           pageFile: matched.route.file,
           params: matched.params,
           queryClient,
-          request: options.request,
+          request: appRequest,
           routePath: matched.route.path,
           routeScripts: options.clientScripts,
           serverModules: options.serverModules,
@@ -1406,7 +1416,7 @@ async function renderAppRequestInternal(
         data,
         params: matched.params,
         queryClient,
-        request: options.request,
+        request: appRequest,
       };
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const stream = runServerStreamModule(output.code, {
@@ -1480,7 +1490,7 @@ async function renderAppRequestInternal(
           data,
           params: matched.params,
           queryClient,
-          request: options.request,
+          request: appRequest,
         },
         matched.route.file,
         options.serverModules,
@@ -1528,7 +1538,7 @@ async function renderAppRequestInternal(
           data,
           params: matched.params,
           queryClient,
-          request: options.request,
+          request: appRequest,
         },
         slots: renderedPage.slots,
         serverModules: options.serverModules,
@@ -1547,7 +1557,7 @@ async function renderAppRequestInternal(
       context: {
         data,
         params: matched.params,
-        request: options.request,
+        request: appRequest,
       },
       filename: matched.route.file,
       importPolicy: options.importPolicy,
@@ -1602,6 +1612,7 @@ async function renderAppRequestInternal(
       : await cacheRouteResponse({
           key: cacheKey,
           cache: options.routeCache,
+          headerDependent: trackedRequest?.readAnyHeader() ?? false,
           path: matched.route.path,
           policy: effectiveCachePolicy,
           request: options.request,

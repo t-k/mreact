@@ -2495,6 +2495,107 @@ export default function Page(props) {
     expect(await second.text()).toContain("<main>calls: 1</main>");
   });
 
+  test("does not disclose a visitor's client IP to the next visitor", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-ip-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader({ request }) {
+  return { ip: request.headers.get("cf-connecting-ip") ?? "none" };
+}
+
+export default function Page(props) {
+  return <main>ip: {props.data.ip}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "203.0.113.7" },
+      }),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-connecting-ip": "198.51.100.42" },
+      }),
+    });
+
+    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+  });
+
+  test("marks a header dependent route as uncacheable for shared caches", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-dynamic-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader({ request }) {
+  return { country: request.headers.get("cf-ipcountry") ?? "unknown" };
+}
+
+export default function Page(props) {
+  return <main>country: {props.data.country}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-ipcountry": "JP" },
+      }),
+    });
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await response.text()).toContain("<main>country: JP</main>");
+  });
+
+  test("keeps sharing cached HTML when a layout reads no request header", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-shared-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `export default function Layout(props) {
+  return <div id="shell">{props.children}</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader({ request }) {
+  const state = globalThis as { __mreactSharedCacheCalls?: number };
+  state.__mreactSharedCacheCalls = (state.__mreactSharedCacheCalls ?? 0) + 1;
+  return { calls: state.__mreactSharedCacheCalls, path: new URL(request.url).pathname };
+}
+
+export default function Page(props) {
+  return <main>calls: {props.data.calls}</main>;
+}`,
+    );
+
+    const first = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "accept-language": "en" },
+      }),
+    });
+    const second = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "accept-language": "ja" },
+      }),
+    });
+
+    expect(first.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
+    expect(second.headers.get("x-mreact-cache")).toBe("HIT");
+    expect(await first.text()).toContain("<main>calls: 1</main>");
+    expect(await second.text()).toContain("<main>calls: 1</main>");
+  });
+
   test("isolates cached route HTML by Accept-Language", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-locale-"));
     await writeFile(

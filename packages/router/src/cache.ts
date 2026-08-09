@@ -294,6 +294,7 @@ export function cachedRouteResponse(options: {
 
 export async function cacheRouteResponse(options: {
   cache?: AppRouterCache | undefined;
+  headerDependent?: boolean | undefined;
   key: string;
   now?: number;
   path: string;
@@ -315,7 +316,12 @@ export async function cacheRouteResponse(options: {
   const status = options.response.status;
   const contentType = options.response.headers.get("content-type") ?? "text/html; charset=utf-8";
 
+  // A render that read a request header only produced HTML that is correct for
+  // that header value. The cache key covers the path and query alone, so the
+  // entry cannot be shared; the response is marked uncacheable for downstream
+  // shared caches too, which are keyed the same way.
   if (
+    options.headerDependent === true ||
     requestCarriesCredentials(options.request) ||
     options.response.headers.has("set-cookie")
   ) {
@@ -323,6 +329,9 @@ export async function cacheRouteResponse(options: {
     headers.set("cache-control", "private, no-store");
     if (!headers.has("content-type")) {
       headers.set("content-type", contentType);
+    }
+    if (options.headerDependent === true) {
+      headers.set("x-mreact-cache", "DYNAMIC");
     }
 
     return new Response(body, {
