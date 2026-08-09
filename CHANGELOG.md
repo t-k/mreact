@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.0.202 - 2026-08-09
+
+### Added
+
+- Added opt-in forwarded HTTPS detection for Node deployments through `trustForwardedProto`, `--trust-forwarded-proto`, and `MREACT_ROUTER_TRUST_FORWARDED_PROTO=1`. The default remains disabled, TLS sockets take precedence, and proxy trust requires an overwriting trusted proxy with no direct access to the Node port.
+
+### Changed
+
+- Changed shared route cache and external prerender entries to a new fail-closed schema that preserves complete response and security headers. Custom Redis, KV, database, or prerender stores must persist every field passed to `set`; entries from older schemas are treated as misses and repopulated on demand.
+- Changed static export to validate selected prerender paths, schema versions, shareability headers, and successful status codes before replacing the existing export directory.
+
+### Fixed
+
+- Fixed Node and Cloudflare built runtimes so middleware always runs before prerendered HTML is served, and fixed Cloudflare middleware rewrites so the rewritten destination is rematched instead of rendering the original protected route.
+- Fixed shared route cache, build prerendering, and regeneration so request-dependent HTML is never replayed across visitors when loaders, pages, layouts, metadata, streaming content, external packages, cloned or reconstructed Requests, or response hooks observe request input.
+- Fixed prerender and route cache replay for `Set-Cookie`, `Vary`, private or non-storable cache control, dynamic markers, HSTS, malformed HSTS settings, and streamed ISR entries, including fail-closed rejection of legacy artifacts by Node, Cloudflare, and static export adapters.
+- Fixed rendered layout data isolation and React-compatible context ownership so concurrent requests and roots cannot observe another render's values.
+
 ## 0.0.201 - 2026-08-04
 
 ### Fixed
