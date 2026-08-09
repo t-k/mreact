@@ -1,3 +1,7 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildApp, renderBuiltAppRequest } from "@reckona/mreact-router";
 import { describe, expect, it } from "vitest";
 import { createAppFixture, responseText } from "@reckona/mreact-test-utils";
 import { createMemorySessionStore, createSession } from "../src/index.js";
@@ -89,6 +93,107 @@ describe("auth router integration", () => {
     expect(html).not.toContain("server-only");
     expect(html).not.toContain("refreshToken");
     expect(html).not.toContain("__mreact_action_nonce");
+  });
+
+  it("isolates zero-argument layout auth output across warm built requests", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-auth-layout-isolation-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const sessions = createMemorySessionStore<{ privateMarker: string; userId: string }>();
+    setTestSessionStore(sessions);
+
+    try {
+      await mkdir(join(appDir, "profile"), { recursive: true });
+      await writeFile(
+        join(appDir, "session-store.ts"),
+        `import { createMemorySessionStore } from "@reckona/mreact-auth";
+
+const globalKey = "__mreactAuthPackageTestSessions";
+const globalStore = globalThis as typeof globalThis & {
+  [globalKey]?: ReturnType<typeof createMemorySessionStore<{
+    privateMarker: string;
+    userId: string;
+  }>>;
+};
+
+export const sessions =
+  globalStore[globalKey] ??= createMemorySessionStore<{
+    privateMarker: string;
+    userId: string;
+  }>();`,
+      );
+      await writeFile(
+        join(appDir, "layout.tsx"),
+        `import { getSessionClaims } from "@reckona/mreact-auth";
+
+export default function Layout() {
+  const claims = getSessionClaims<{ privateMarker: string; userId: string }>();
+  return <html><body><strong data-layout-user>{claims?.userId}:{claims?.privateMarker}</strong><Slot /></body></html>;
+}`,
+      );
+      await writeFile(
+        join(appDir, "profile", "page.tsx"),
+        `import { configureAuth, requireSession } from "@reckona/mreact-auth";
+import { sessions } from "../session-store.ts";
+
+configureAuth({
+  serializeClaims(data) {
+    if (typeof data !== "object" || data === null || !("privateMarker" in data) || !("userId" in data)) {
+      return undefined;
+    }
+
+    return {
+      privateMarker: String(data.privateMarker),
+      userId: String(data.userId),
+    };
+  },
+});
+
+export async function loader({ request }: { request: Request }) {
+  await requireSession(request, sessions);
+}
+
+export default function ProfilePage() {
+  return <main>Profile</main>;
+}`,
+      );
+      await buildApp({ appDir, outDir });
+
+      const firstLogin = new Response(null);
+      await createSession(firstLogin, sessions, {
+        privateMarker: "FIRST_USER_PRIVATE_MARKER",
+        userId: "ada",
+      });
+      const secondLogin = new Response(null);
+      await createSession(secondLogin, sessions, {
+        privateMarker: "SECOND_USER_PRIVATE_MARKER",
+        userId: "grace",
+      });
+
+      const first = await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/profile", {
+          headers: { cookie: cookiePair(firstLogin) },
+        }),
+      });
+      const second = await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/profile", {
+          headers: { cookie: cookiePair(secondLogin) },
+        }),
+      });
+      const firstHtml = await first.text();
+      const secondHtml = await second.text();
+
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(firstHtml).toContain("ada:FIRST_USER_PRIVATE_MARKER");
+      expect(firstHtml).not.toContain("SECOND_USER_PRIVATE_MARKER");
+      expect(secondHtml).toContain("grace:SECOND_USER_PRIVATE_MARKER");
+      expect(secondHtml).not.toContain("FIRST_USER_PRIVATE_MARKER");
+    } finally {
+      await rm(rootDir, { force: true, recursive: true });
+    }
   });
 });
 
