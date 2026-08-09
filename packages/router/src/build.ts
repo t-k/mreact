@@ -98,7 +98,10 @@ import { collectRouteCssFilesFromSources, collectSpecialBoundaryFiles } from "./
 import { existingRouteShellCandidates } from "./route-shells.js";
 import { sourceModuleCandidates } from "./source-modules.js";
 import { collectBuildInferredServerActions } from "./server-action-inference.js";
-import { PRERENDERED_ROUTE_SCHEMA_VERSION } from "./prerender-entry.js";
+import {
+  isVisitorDependentResponse,
+  PRERENDERED_ROUTE_SCHEMA_VERSION,
+} from "./prerender-entry.js";
 import { prepareRouteServerActionPlaceholders } from "./actions.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
 import { workspacePackageFile } from "./workspace-packages.js";
@@ -2624,6 +2627,12 @@ async function prerenderStaticRoutes(options: {
           serverModules: serverModuleMap,
           vitePlugins: options.vitePlugins,
         });
+        const html = await response.text();
+
+        if (isVisitorDependentResponse(response)) {
+          continue;
+        }
+
         const headers: Record<string, string> = {};
 
         response.headers.forEach((value, key) => {
@@ -2633,7 +2642,7 @@ async function prerenderStaticRoutes(options: {
           pathname,
           {
             headers,
-            html: await response.text(),
+            html,
             schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
             status: response.status,
           },

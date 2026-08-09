@@ -59,6 +59,7 @@ import { normalizeRoutePath } from "./route-path.js";
 import type { HttpUpgradeHandler } from "./upgrade.js";
 import {
   isCurrentPrerenderedRoute,
+  isVisitorDependentResponse,
   PRERENDERED_ROUTE_SCHEMA_VERSION,
 } from "./prerender-entry.js";
 
@@ -1063,20 +1064,6 @@ async function applyBuiltPrerenderInvalidations(
     runtime.prerenderedRoutes.delete(normalized);
     await store?.delete(normalized);
   }
-}
-
-function isVisitorDependentResponse(response: Response): boolean {
-  const cacheControl = response.headers.get("cache-control") ?? "";
-  const forbidsSharedStorage = cacheControl.split(",").some((directive) =>
-    /^(?:private|no-cache|no-store)(?:=|$)/i.test(directive.trim())
-  );
-
-  return (
-    response.headers.get("x-mreact-cache")?.toUpperCase() === "DYNAMIC" ||
-    response.headers.has("set-cookie") ||
-    response.headers.has("vary") ||
-    forbidsSharedStorage
-  );
 }
 
 async function cacheRegeneratedPrerenderedRoute(

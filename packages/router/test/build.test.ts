@@ -3058,6 +3058,48 @@ export default function Page(props) {
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Policy OK</main>");
   });
 
+  test("does not publish visitor-dependent build responses as shared prerenders", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-visitor-dependent-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export default function Page() { return <main>Private build response</main>; }
+`,
+    );
+    await writeFile(
+      join(appDir, "on-response.ts"),
+      `export function onResponse(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("set-cookie", "visitor-secret=build-only; Path=/; HttpOnly");
+  return new Response(response.body, { headers, status: response.status });
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, unknown> };
+    expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
+    await expect(access(join(outDir, "cloudflare", "routes", "index.mjs"))).resolves.toBeUndefined();
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("set-cookie")).toContain("visitor-secret=build-only");
+    await expect(response.text()).resolves.toContain("<main>Private build response</main>");
+  });
+
   test("build forwards user Vite plugins to route bundles", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");
