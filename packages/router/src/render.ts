@@ -64,6 +64,7 @@ import {
   trackRequestHeaderReads,
   type TrackedHeaderRequest,
 } from "./request-header-tracking.js";
+import { configuredHstsHeader } from "./security-headers.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
 import {
   importAppRouterBuiltFileModule,
@@ -935,6 +936,9 @@ async function renderAppRequestInternal(
         renderAppRequestInternal({
           ...options,
           matchedRoute: undefined,
+          // This renders a different route than the caller asked about, so its
+          // header dependence says nothing about the caller's request.
+          renderSignals: undefined,
           request: singleFlightNavigationRequest({
             path: singleFlight.path,
             request: singleFlight.request,
@@ -1635,6 +1639,9 @@ async function renderAppRequestInternal(
           // Without a tracker there is no evidence the render ignored request
           // headers, so the entry is treated as header dependent.
           headerDependent: trackedRequest?.readAnyHeader() ?? true,
+          ...(configuredHstsHeader(metadata?.security) === undefined
+            ? {}
+            : { strictTransportSecurity: configuredHstsHeader(metadata?.security) }),
           path: matched.route.path,
           policy: effectiveCachePolicy,
           request: options.request,

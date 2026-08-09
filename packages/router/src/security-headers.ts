@@ -58,6 +58,22 @@ export function routeSecurityHeaders(options: {
   return headers;
 }
 
+/**
+ * Returns the configured Strict-Transport-Security value regardless of scheme.
+ *
+ * `routeSecurityHeaders` only emits the header for secure requests, so callers
+ * that persist a response across requests need the configured value on its own:
+ * the scheme of the request that happened to produce the response must not
+ * decide what later requests receive.
+ */
+export function configuredHstsHeader(
+  security: RouteSecurityHeaders | undefined,
+): string | undefined {
+  return security?.hsts === undefined || security.hsts === false || security.hsts === null
+    ? undefined
+    : serializeHsts(security.hsts);
+}
+
 function serializeHsts(hsts: NonNullable<RouteSecurityHeaders["hsts"]>): string {
   if (hsts === false) {
     throw new TypeError("Invalid security header value for hsts.");

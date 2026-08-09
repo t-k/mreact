@@ -2579,11 +2579,48 @@ export default function Page() {
       appDir,
       request: new Request("https://local.test/"),
     });
+    const plain = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
 
     expect(miss.headers.get("x-mreact-cache")).toBe("MISS");
     expect(hit.headers.get("x-mreact-cache")).toBe("HIT");
     expect(miss.headers.get("strict-transport-security")).toContain("max-age=63072000");
     expect(hit.headers.get("strict-transport-security")).toContain("max-age=63072000");
+    expect(plain.headers.get("strict-transport-security")).toBeNull();
+  });
+
+  test("keeps HSTS for secure visitors after a plain request populated the cache", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-hsts-plain-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export const metadata = {
+  security: { hsts: { maxAge: 63072000 } },
+};
+
+export default function Page() {
+  return <main>secure</main>;
+}`,
+    );
+
+    // The entry is created by a plain request, whose own response carries no
+    // HSTS. Later secure visitors must still receive it.
+    const plainMiss = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const secureHit = await renderAppRequest({
+      appDir,
+      request: new Request("https://local.test/"),
+    });
+
+    expect(plainMiss.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(plainMiss.headers.get("strict-transport-security")).toBeNull();
+    expect(secureHit.headers.get("x-mreact-cache")).toBe("HIT");
+    expect(secureHit.headers.get("strict-transport-security")).toContain("max-age=63072000");
   });
 
   test("does not disclose a visitor's client IP to the next visitor", async () => {

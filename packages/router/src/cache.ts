@@ -324,6 +324,8 @@ export async function cacheRouteResponse(options: {
   policy: RouteCachePolicy | undefined;
   request?: Request | undefined;
   response: Response;
+  /** Configured Strict-Transport-Security value, independent of this request's scheme. */
+  strictTransportSecurity?: string | undefined;
 }): Promise<Response> {
   if (options.policy === undefined) {
     return options.response;
@@ -389,7 +391,11 @@ export async function cacheRouteResponse(options: {
       storedHeaders[key] = value;
     }
   });
-  const hsts = options.response.headers.get(HSTS_HEADER) ?? undefined;
+  // Taken from the route's configuration rather than from this response, whose
+  // HSTS header is present only when this particular request was secure. Using
+  // the response would let one plain request pin an entry that withholds HSTS
+  // from every later secure visitor.
+  const hsts = options.strictTransportSecurity;
 
   await (options.cache ?? cacheState.memoryCache).set(options.key, {
     body,
@@ -407,7 +413,7 @@ export async function cacheRouteResponse(options: {
     headers.set("content-type", contentType);
   }
   headers.set("x-mreact-cache", "MISS");
-  if (hsts !== undefined) {
+  if (hsts !== undefined && isSecureRequest(options.request)) {
     headers.set(HSTS_HEADER, hsts);
   }
 
@@ -420,7 +426,9 @@ export async function cacheRouteResponse(options: {
 const HSTS_HEADER = "strict-transport-security";
 
 function isSecureRequest(request: Request | undefined): boolean {
-  return request !== undefined && new URL(request.url).protocol === "https:";
+  // `Request.url` is always absolute, so this avoids parsing a URL on the
+  // cache-hit hot path.
+  return request?.url.startsWith("https://") === true;
 }
 
 function requestCarriesCredentials(request: Request | undefined): boolean {
