@@ -1628,6 +1628,7 @@ async function renderAppRequestInternal(
     );
 
     const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
+    const configuredHsts = configuredHstsHeader(metadata?.security);
 
     const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)
@@ -1639,9 +1640,7 @@ async function renderAppRequestInternal(
           // Without a tracker there is no evidence the render ignored request
           // headers, so the entry is treated as header dependent.
           headerDependent: trackedRequest?.readAnyHeader() ?? true,
-          ...(configuredHstsHeader(metadata?.security) === undefined
-            ? {}
-            : { strictTransportSecurity: configuredHstsHeader(metadata?.security) }),
+          ...(configuredHsts === undefined ? {} : { strictTransportSecurity: configuredHsts }),
           path: matched.route.path,
           policy: effectiveCachePolicy,
           request: options.request,

@@ -65,13 +65,24 @@ export function routeSecurityHeaders(options: {
  * that persist a response across requests need the configured value on its own:
  * the scheme of the request that happened to produce the response must not
  * decide what later requests receive.
+ *
+ * An invalid value yields `undefined` rather than throwing. This runs on every
+ * render that may be cached, including plain ones that would never emit the
+ * header, and reporting the configuration error is `routeSecurityHeaders`'s
+ * job on the request that actually emits it.
  */
 export function configuredHstsHeader(
   security: RouteSecurityHeaders | undefined,
 ): string | undefined {
-  return security?.hsts === undefined || security.hsts === false || security.hsts === null
-    ? undefined
-    : serializeHsts(security.hsts);
+  if (security?.hsts === undefined || security.hsts === false || security.hsts === null) {
+    return undefined;
+  }
+
+  try {
+    return serializeHsts(security.hsts);
+  } catch {
+    return undefined;
+  }
 }
 
 function serializeHsts(hsts: NonNullable<RouteSecurityHeaders["hsts"]>): string {

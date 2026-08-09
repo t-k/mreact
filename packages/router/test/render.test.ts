@@ -2591,6 +2591,31 @@ export default function Page() {
     expect(plain.headers.get("strict-transport-security")).toBeNull();
   });
 
+  test("does not fail a plain render because of an invalid hsts setting", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-hsts-invalid-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export const metadata = {
+  security: { hsts: true },
+};
+
+export default function Page() {
+  return <main>plain</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("strict-transport-security")).toBeNull();
+    expect(await response.text()).toContain("<main>plain</main>");
+  });
+
   test("keeps HSTS for secure visitors after a plain request populated the cache", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-hsts-plain-"));
     await writeFile(
