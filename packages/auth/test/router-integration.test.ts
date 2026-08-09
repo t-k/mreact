@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { buildApp, renderBuiltAppRequest } from "@reckona/mreact-router";
 import { describe, expect, it } from "vitest";
 import { createAppFixture, responseText } from "@reckona/mreact-test-utils";
-import { createMemorySessionStore, createSession } from "../src/index.js";
+import {
+  __resetAuthForTesting,
+  createMemorySessionStore,
+  createSession,
+} from "../src/index.js";
 
 function cookiePair(response: Response): string {
   return response.headers.get("set-cookie")?.split(";")[0] ?? "";
@@ -18,6 +22,14 @@ function setTestSessionStore<TData>(
       __mreactAuthPackageTestSessions?: ReturnType<typeof createMemorySessionStore<TData>>;
     }
   ).__mreactAuthPackageTestSessions = store;
+}
+
+function testSessionStoreGlobal(): typeof globalThis & {
+  __mreactAuthPackageTestSessions?: unknown;
+} {
+  return globalThis as typeof globalThis & {
+    __mreactAuthPackageTestSessions?: unknown;
+  };
 }
 
 describe("auth router integration", () => {
@@ -100,6 +112,7 @@ describe("auth router integration", () => {
     const appDir = join(rootDir, "app");
     const outDir = join(rootDir, ".mreact");
     const sessions = createMemorySessionStore<{ privateMarker: string; userId: string }>();
+    const previousSessions = testSessionStoreGlobal().__mreactAuthPackageTestSessions;
     setTestSessionStore(sessions);
 
     try {
@@ -192,6 +205,13 @@ export default function ProfilePage() {
       expect(secondHtml).toContain("grace:SECOND_USER_PRIVATE_MARKER");
       expect(secondHtml).not.toContain("FIRST_USER_PRIVATE_MARKER");
     } finally {
+      const testGlobal = testSessionStoreGlobal();
+      if (previousSessions === undefined) {
+        delete testGlobal.__mreactAuthPackageTestSessions;
+      } else {
+        testGlobal.__mreactAuthPackageTestSessions = previousSessions;
+      }
+      __resetAuthForTesting();
       await rm(rootDir, { force: true, recursive: true });
     }
   });

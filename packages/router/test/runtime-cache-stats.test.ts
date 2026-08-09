@@ -20,6 +20,14 @@ describe("router runtime cache stats", () => {
         size: expect.any(Number),
       }),
     );
+    expect(stats).toContainEqual({
+      evictions: 0,
+      hits: 0,
+      maxEntries: 0,
+      misses: 0,
+      name: "rendered-shell",
+      size: 0,
+    });
     expect(JSON.stringify(stats)).not.toContain("\u0000");
   });
 });

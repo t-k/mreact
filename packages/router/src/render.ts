@@ -617,6 +617,15 @@ export function routerRenderRuntimeCacheStats(): RouterRuntimeCacheStat[] {
       maxComposedRouteMetadataCacheEntries,
       composedRouteMetadataCacheCounters,
     ),
+    // Preserve the public diagnostics entry while making explicit that rendered HTML reuse is disabled.
+    {
+      evictions: 0,
+      hits: 0,
+      maxEntries: 0,
+      misses: 0,
+      name: "rendered-shell",
+      size: 0,
+    },
   ];
 }
 
