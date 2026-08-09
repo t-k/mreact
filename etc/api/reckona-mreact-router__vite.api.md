@@ -42,6 +42,7 @@ export interface AppRouterCacheEntry {
     headers?: Record<string, string> | undefined;
     // (undocumented)
     path: string;
+    schemaVersion?: 1 | undefined;
     // (undocumented)
     status: number;
     strictTransportSecurity?: string | undefined;

@@ -210,6 +210,8 @@ export interface BuiltRouteSourceAnalysisSummary {
     // (undocumented)
     streamRoute: boolean;
     // (undocumented)
+    usesRequestInput?: boolean | undefined;
+    // (undocumented)
     usesRuntimeCacheControl: boolean;
 }
 
