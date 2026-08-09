@@ -24,6 +24,14 @@ export interface AppRouterCacheEntry {
   body: string;
   cacheControl: string;
   expiresAt: number;
+  /**
+   * Response headers to replay on a cache hit.
+   *
+   * Metadata-derived security headers such as `content-security-policy`,
+   * `x-frame-options` and `x-content-type-options` live here, so that turning a
+   * route into a cached one does not quietly drop them.
+   */
+  headers?: Record<string, string> | undefined;
   path: string;
   status: number;
 }
@@ -281,12 +289,15 @@ export function cachedRouteResponse(options: {
       return undefined;
     }
 
+    const headers = new Headers(cached.headers ?? {});
+    headers.set("cache-control", cached.cacheControl);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "text/html; charset=utf-8");
+    }
+    headers.set("x-mreact-cache", "HIT");
+
     return new Response(cached.body, {
-      headers: {
-        "cache-control": cached.cacheControl,
-        "content-type": "text/html; charset=utf-8",
-        "x-mreact-cache": "HIT",
-      },
+      headers,
       status: cached.status,
     });
   });
@@ -340,20 +351,34 @@ export async function cacheRouteResponse(options: {
     });
   }
 
+  // Metadata-derived security headers are part of the rendered response, so
+  // they are stored with it and replayed on a hit rather than dropped by the
+  // rebuilt cache response.
+  const storedHeaders: Record<string, string> = {};
+  options.response.headers.forEach((value, key) => {
+    if (key !== "cache-control" && key !== "x-mreact-cache") {
+      storedHeaders[key] = value;
+    }
+  });
+
   await (options.cache ?? cacheState.memoryCache).set(options.key, {
     body,
     cacheControl,
     expiresAt: (options.now ?? Date.now()) + options.policy.revalidateSeconds * 1000,
+    headers: storedHeaders,
     path: normalizeRevalidationPath(options.path),
     status,
   });
 
+  const headers = new Headers(storedHeaders);
+  headers.set("cache-control", cacheControl);
+  if (!headers.has("content-type")) {
+    headers.set("content-type", contentType);
+  }
+  headers.set("x-mreact-cache", "MISS");
+
   return new Response(body, {
-    headers: {
-      "cache-control": cacheControl,
-      "content-type": contentType,
-      "x-mreact-cache": "MISS",
-    },
+    headers,
     status,
   });
 }

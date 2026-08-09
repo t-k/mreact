@@ -300,40 +300,103 @@ export async function POST(request: Request) {
     expect(await response.text()).toContain('data-mreact-route-id="index"');
   });
 
-  test("routes Cloudflare prerendered HTML through render when the app has middleware", async () => {
-    const handler = createCloudflareRequestHandler({
-      assets: {},
-      clientManifest: { routes: [] },
-      render(request) {
-        return request.headers.get("x-account-state") === "suspended"
-          ? new Response("Forbidden", { status: 403 })
-          : new Response("<main>Prerendered</main>", {
-              headers: { "content-type": "text/html; charset=utf-8" },
-            });
-      },
-      serverManifest: {
-        files: {
-          "middleware.ts": `export const config = { matcher: "/:path*" };
+  // A real Cloudflare build keys `serverManifest.files` on paths relative to
+  // the project root, so a default `src/app` project stores the middleware as
+  // "src/app/middleware.ts" and declares `routesDir: "src/app"`.
+  for (const layout of [
+    { files: "middleware.ts", label: "a flat routes directory", routesDir: "" },
+    { files: "src/app/middleware.ts", label: "a src/app project", routesDir: "src/app" },
+  ]) {
+    test(`routes Cloudflare prerendered HTML through middleware for ${layout.label}`, async () => {
+      const handler = createCloudflareRequestHandler({
+        assets: {},
+        clientManifest: { routes: [] },
+        render(request) {
+          return request.headers.get("x-account-state") === "suspended"
+            ? new Response("Forbidden", { status: 403 })
+            : new Response("<main>Rendered</main>", {
+                headers: { "content-type": "text/html; charset=utf-8" },
+              });
+        },
+        serverManifest: {
+          files: {
+            [layout.files]: `export const config = { matcher: "/:path*" };
 
 export function middleware(request) {
   if (request.headers.get("x-account-state") === "suspended") {
     return new Response("Forbidden", { status: 403 });
   }
 }`,
-        },
-        prerenderedRoutes: {
-          "/": {
-            headers: { "content-type": "text/html; charset=utf-8" },
-            html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-            status: 200,
           },
+          prerenderedRoutes: {
+            "/": {
+              headers: { "content-type": "text/html; charset=utf-8" },
+              html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+              status: 200,
+            },
+          },
+          routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+          routesDir: layout.routesDir,
+          version: 1,
         },
-        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
-        version: 1,
-      },
+      });
+
+      const response = await handler.fetch(
+        new Request("https://app.example/", {
+          headers: { "x-account-state": "suspended" },
+        }),
+        {},
+        createExecutionContext(),
+      );
+
+      expect(response.status).toBe(403);
+      expect(await response.text()).toBe("Forbidden");
+    });
+  }
+
+  test("gates and then serves a built Cloudflare prerendered route with middleware", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-prerender-middleware-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { matcher: "/:path*" };
+
+export function middleware(request: Request) {
+  if (request.headers.get("x-account-state") === "suspended") {
+    return new Response("Forbidden", { status: 403 });
+  }
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export default function Page() { return <main>Prerendered</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir, projectRoot: rootDir, targets: ["cloudflare"] });
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
     });
 
-    const response = await handler.fetch(
+    const blocked = await handler.fetch(
       new Request("https://app.example/", {
         headers: { "x-account-state": "suspended" },
       }),
@@ -341,8 +404,17 @@ export function middleware(request) {
       createExecutionContext(),
     );
 
-    expect(response.status).toBe(403);
-    expect(await response.text()).toBe("Forbidden");
+    expect(blocked.status).toBe(403);
+    expect(await blocked.text()).toBe("Forbidden");
+
+    const allowed = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(allowed.status).toBe(200);
+    expect(await allowed.text()).toContain("<main>Prerendered</main>");
   });
 
   test("serves Cloudflare prerendered HTML directly when the app has no middleware", async () => {

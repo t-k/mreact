@@ -2495,6 +2495,42 @@ export default function Page(props) {
     expect(await second.text()).toContain("<main>calls: 1</main>");
   });
 
+  test("keeps security headers on cached route responses", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-headers-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export const metadata = {
+  csp: { directives: { "default-src": "'self'" } },
+  security: { frameOptions: "DENY" },
+};
+
+export default function Page() {
+  return <main>guarded</main>;
+}`,
+    );
+
+    const miss = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const hit = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(miss.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(hit.headers.get("x-mreact-cache")).toBe("HIT");
+
+    for (const response of [miss, hit]) {
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("x-frame-options")).toBe("DENY");
+      expect(response.headers.get("content-security-policy")).toBe("default-src 'self'");
+      expect(response.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
+    }
+  });
+
   test("does not disclose a visitor's client IP to the next visitor", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-ip-"));
     await writeFile(
@@ -2552,6 +2588,42 @@ export default function Page(props) {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(response.headers.get("x-mreact-cache")).toBe("DYNAMIC");
     expect(await response.text()).toContain("<main>country: JP</main>");
+  });
+
+  test("does not advertise a shared lifetime when a layout sets the cache policy", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-layout-policy-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `import { cacheControl } from "@reckona/mreact-router";
+
+export default function Layout(props) {
+  cacheControl({ sMaxAge: 120, staleWhileRevalidate: true });
+  return <div id="shell">{props.children}</div>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export function loader({ request }) {
+  return { locale: request.headers.get("accept-language") ?? "en" };
+}
+
+export default function Page(props) {
+  return <main>locale: {props.data.locale}</main>;
+}`,
+    );
+
+    const english = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", { headers: { "accept-language": "en" } }),
+    });
+    const japanese = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", { headers: { "accept-language": "ja" } }),
+    });
+
+    expect(english.headers.get("cache-control")).not.toContain("s-maxage");
+    expect(await english.text()).toContain("<main>locale: en</main>");
+    expect(await japanese.text()).toContain("<main>locale: ja</main>");
   });
 
   test("keeps sharing cached HTML when a layout reads no request header", async () => {

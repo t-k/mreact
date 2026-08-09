@@ -982,7 +982,10 @@ async function runPrerenderRegeneration(
 
     const response = await renderBuiltDynamicResponse(options);
 
-    return response.ok
+    // A prerendered entry is replayed to every visitor by path alone, so a
+    // render that depended on this visitor's request headers must not become
+    // one; it is returned to the caller without being stored.
+    return response.ok && !isVisitorDependentResponse(response)
       ? await cacheRegeneratedPrerenderedRoute(
           options.runtime,
           path,
@@ -1013,6 +1016,13 @@ async function applyBuiltPrerenderInvalidations(
     runtime.prerenderedRoutes.delete(normalized);
     await store?.delete(normalized);
   }
+}
+
+function isVisitorDependentResponse(response: Response): boolean {
+  return (
+    response.headers.get("x-mreact-cache") === "DYNAMIC" ||
+    (response.headers.get("cache-control") ?? "").includes("no-store")
+  );
 }
 
 async function cacheRegeneratedPrerenderedRoute(

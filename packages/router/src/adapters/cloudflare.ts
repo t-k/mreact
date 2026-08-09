@@ -472,6 +472,20 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     }
     request = middlewareResult.request;
 
+    // Middleware apps skip the prerendered fast path in `handleCloudflareRequest`
+    // so that access gates run first, so the stored HTML is resolved here
+    // instead, against the post-middleware path.
+    const prerendered = prerenderedResponse(
+      context.serverManifest.prerenderedRoutes,
+      normalizeRoutePath(new URL(request.url).pathname),
+      request.method,
+      isCloudflareNavigationRequest(request),
+    );
+
+    if (prerendered !== undefined) {
+      return prerendered;
+    }
+
     if (context.route.kind !== "server" && isCloudflareNavigationRequest(request)) {
       return cloudflareDocumentReloadNavigationResponse();
     }
@@ -1325,12 +1339,20 @@ function cacheControlHasDirective(cacheControl: string | null, directive: string
   return cacheControl.split(",").some((part) => part.trim().toLowerCase() === normalizedDirective);
 }
 
+// `serverManifest.files` is keyed on paths relative to the project root, so a
+// default `src/app` project stores the middleware as "src/app/middleware.ts".
+// This mirrors `hasMiddleware` in built-runtime.ts, which resolves the same two
+// names against the routes directory.
 function builtServerManifestHasMiddleware(manifest: {
   files: Record<string, string>;
+  routesDir?: string | undefined;
 }): boolean {
+  const routesDir = (manifest.routesDir ?? "").replaceAll("\\", "/").replace(/\/+$/, "");
+  const prefix = routesDir === "" ? "" : `${routesDir}/`;
+
   return (
-    manifest.files["middleware.ts"] !== undefined ||
-    manifest.files["middleware.mreact.ts"] !== undefined
+    manifest.files[`${prefix}middleware.ts`] !== undefined ||
+    manifest.files[`${prefix}middleware.mreact.ts`] !== undefined
   );
 }
 

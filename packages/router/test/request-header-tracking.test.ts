@@ -37,6 +37,26 @@ describe("request header read tracking", () => {
     expect(enumerated.readAnyHeader()).toBe(true);
   });
 
+  test("records a read performed through a cloned request", () => {
+    const tracked = trackRequestHeaderReads(
+      new Request("https://app.test/", { headers: { "accept-language": "ja" } }),
+    );
+
+    expect(tracked.request.clone().headers.get("accept-language")).toBe("ja");
+    expect(tracked.readAnyHeader()).toBe(true);
+  });
+
+  test("records a read for taking a reference to the headers", () => {
+    const tracked = trackRequestHeaderReads(
+      new Request("https://app.test/", { headers: { "accept-language": "ja" } }),
+    );
+
+    const headers = tracked.request.headers;
+
+    expect(headers).toBeInstanceOf(Headers);
+    expect(tracked.readAnyHeader()).toBe(true);
+  });
+
   test("records a read for a header that is absent", () => {
     const tracked = trackRequestHeaderReads(new Request("https://app.test/"));
 

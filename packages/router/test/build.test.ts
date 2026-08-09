@@ -8636,6 +8636,76 @@ export default function Page(props) {
     expect(await regenerated.text()).toContain("<main>fastpath</main>");
   });
 
+  test("does not pin a regenerated prerender to one visitor's request headers", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-headers-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "actions.ts"),
+      `"use server";
+
+import { revalidatePath } from "@reckona/mreact-router";
+
+export function invalidateHome() {
+  revalidatePath("/");
+  return "ok";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export const revalidate = 60;
+
+export function loader({ request }) {
+  return { country: request.headers.get("cf-ipcountry") ?? "unknown" };
+}
+
+export default function Page(props) {
+  return <main>country: {props.data.country}</main>;
+}`,
+    );
+
+    await buildApp({ appDir, outDir });
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: JSON.stringify({
+          args: [],
+          exportName: "invalidateHome",
+          moduleId: "actions.ts",
+        }),
+        headers: {
+          "content-type": "application/json",
+          cookie: "mreact.csrf=csrf-regen-headers",
+          "x-mreact-action-nonce": "nonce-regen-headers",
+          "x-mreact-csrf": "csrf-regen-headers",
+        },
+        method: "POST",
+      }),
+    });
+
+    const japanese = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-ipcountry": "JP" },
+      }),
+    });
+    const german = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/", {
+        headers: { "cf-ipcountry": "DE" },
+      }),
+    });
+
+    expect(await japanese.text()).toContain("<main>country: JP</main>");
+    expect(await german.text()).toContain("<main>country: DE</main>");
+  });
+
   test("prerenders dynamic routes from generateStaticParams at build time", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-dynamic-prerender-"));
     const appDir = join(rootDir, "app");

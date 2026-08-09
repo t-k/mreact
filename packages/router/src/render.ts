@@ -1612,7 +1612,11 @@ async function renderAppRequestInternal(
       : await cacheRouteResponse({
           key: cacheKey,
           cache: options.routeCache,
-          headerDependent: trackedRequest?.readAnyHeader() ?? false,
+          // A policy can still arrive from a runtime cacheControl() call made
+          // outside the page source, which is what `mayUseRouteCache` scans.
+          // Without a tracker there is no evidence the render ignored request
+          // headers, so the entry is treated as header dependent.
+          headerDependent: trackedRequest?.readAnyHeader() ?? true,
           path: matched.route.path,
           policy: effectiveCachePolicy,
           request: options.request,

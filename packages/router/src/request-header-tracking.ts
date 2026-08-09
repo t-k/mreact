@@ -12,6 +12,13 @@
  * Only the request handed to application code is tracked. Router internals keep
  * using the original request, so their own header reads never mark a route as
  * header dependent.
+ *
+ * Reconstructing the request with `new Request(request)` copies headers from
+ * internal slots that no interception can reach, so headers read through such a
+ * copy are not observed. Callers that cannot construct the tracker treat the
+ * render as header dependent instead, and `render.ts` does the same whenever a
+ * cache policy appears without a tracker, so the uncovered case is a rewrapped
+ * request rather than a silent cache write.
  */
 export interface TrackedHeaderRequest {
   /** Returns true once application code has read any request header. */
@@ -61,7 +68,8 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
     };
   }
 
-  const headers = new Proxy(tracked.headers, {
+  const originalHeaders = tracked.headers;
+  const headers = new Proxy(originalHeaders, {
     get(target, property) {
       const value = Reflect.get(target, property, target);
 
@@ -78,9 +86,26 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
 
   // Shadow the prototype getter on a real Request so that `fetch(request)`,
   // `request.json()` and instanceof checks keep working in every runtime.
+  // Taking a reference counts as a read on its own: a caller that reached for
+  // the headers is assumed to depend on them, which keeps the decision closed
+  // when the reference escapes into code this module cannot observe.
   Object.defineProperty(tracked, "headers", {
     configurable: true,
-    get: () => headers,
+    get: () => {
+      readAny = true;
+      return headers;
+    },
+  });
+
+  // `clone()` copies headers from internal slots rather than through the
+  // property above, so an unshadowed clone would hand back untracked headers.
+  Object.defineProperty(tracked, "clone", {
+    configurable: true,
+    value: (): Request => {
+      readAny = true;
+      return Request.prototype.clone.call(tracked);
+    },
+    writable: true,
   });
 
   return {

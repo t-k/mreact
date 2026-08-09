@@ -32,6 +32,7 @@ export interface AppRouterCacheEntry {
     cacheControl: string;
     // (undocumented)
     expiresAt: number;
+    headers?: Record<string, string> | undefined;
     // (undocumented)
     path: string;
     // (undocumented)
