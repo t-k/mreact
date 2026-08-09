@@ -874,11 +874,15 @@ async function readPrerenderedRoute(
 function renderBuiltDynamicResponse(
   options: RenderBuiltAppRequestOptions & {
     matchedRoute?: MatchedRoute | undefined;
+    renderSignals?: { headerDependent: boolean } | undefined;
     requestUrl?: URL | undefined;
     runtime: BuiltRuntime;
   },
 ): Promise<Response> {
-  return renderAppRequest(builtRenderAppRequestOptions(options));
+  return renderAppRequest({
+    ...builtRenderAppRequestOptions(options),
+    ...(options.renderSignals === undefined ? {} : { renderSignals: options.renderSignals }),
+  });
 }
 
 function builtRenderAppRequestOptions(
@@ -980,12 +984,14 @@ async function runPrerenderRegeneration(
       });
     }
 
-    const response = await renderBuiltDynamicResponse(options);
-
     // A prerendered entry is replayed to every visitor by path alone, so a
     // render that depended on this visitor's request headers must not become
-    // one; it is returned to the caller without being stored.
-    return response.ok && !isVisitorDependentResponse(response)
+    // one; it is returned to the caller without being stored. The signal starts
+    // closed so that a render which never reports back is not stored either.
+    const renderSignals = { headerDependent: true };
+    const response = await renderBuiltDynamicResponse({ ...options, renderSignals });
+
+    return response.ok && !renderSignals.headerDependent && !isVisitorDependentResponse(response)
       ? await cacheRegeneratedPrerenderedRoute(
           options.runtime,
           path,

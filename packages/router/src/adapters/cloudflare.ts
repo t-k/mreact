@@ -470,7 +470,24 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     if (middlewareResult.type === "response") {
       return middlewareResult.response;
     }
-    request = middlewareResult.request;
+
+    if (middlewareResult.request !== request) {
+      // The route was matched against the pre-middleware URL, so a rewrite has
+      // to re-match: otherwise the rewritten path would still render the module
+      // the visitor asked for, which is the module a rewrite is often used to
+      // keep them away from. The built runtime re-matches the same way.
+      request = middlewareResult.request;
+      const rematched = matchCloudflareRoute(
+        [...context.serverManifest.routes].sort(compareCloudflareRoutes),
+        new URL(request.url).pathname,
+      );
+
+      if (rematched === undefined) {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      context = { ...context, params: rematched.params, route: rematched.route };
+    }
 
     // Middleware apps skip the prerendered fast path in `handleCloudflareRequest`
     // so that access gates run first, so the stored HTML is resolved here

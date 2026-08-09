@@ -318,6 +318,20 @@ export async function cacheRouteResponse(options: {
   }
 
   if (options.policy.revalidateSeconds === 0) {
+    // No entry is stored here, but cacheControl({ maxAge }) still emits a bare
+    // max-age that a shared cache may store, so a header dependent render has
+    // to opt out of that too. Directives that already keep the response out of
+    // shared caches are left exactly as the application asked for them.
+    const sharedCacheMayStore = !/(^|,)\s*(private|no-store)\s*(,|$)/.test(
+      options.policy.cacheControl,
+    );
+
+    if (options.headerDependent === true && sharedCacheMayStore) {
+      options.response.headers.set("cache-control", "private, no-store");
+      options.response.headers.set("x-mreact-cache", "DYNAMIC");
+      return options.response;
+    }
+
     options.response.headers.set("cache-control", options.policy.cacheControl);
     return options.response;
   }
@@ -353,10 +367,14 @@ export async function cacheRouteResponse(options: {
 
   // Metadata-derived security headers are part of the rendered response, so
   // they are stored with it and replayed on a hit rather than dropped by the
-  // rebuilt cache response.
+  // rebuilt cache response. Strict-Transport-Security is excluded because it is
+  // derived from the scheme of the request that happened to miss, and the key
+  // does not cover the scheme; a single forwarded http request would otherwise
+  // pin an entry with no HSTS for the whole lifetime. Apply HSTS at the edge
+  // for cached routes.
   const storedHeaders: Record<string, string> = {};
   options.response.headers.forEach((value, key) => {
-    if (key !== "cache-control" && key !== "x-mreact-cache") {
+    if (key !== "cache-control" && key !== "x-mreact-cache" && key !== "strict-transport-security") {
       storedHeaders[key] = value;
     }
   });

@@ -223,6 +223,15 @@ export interface RenderAppRequestOptions {
 }
 
 export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions {
+  /**
+   * Receives whether the render depended on the incoming request headers.
+   *
+   * Callers that store the rendered HTML under a key which ignores headers,
+   * such as prerender regeneration, pass this to learn whether the result is
+   * only correct for the current visitor. Pass it initialized to `true`: a
+   * render that returns without reporting back stays header dependent.
+   */
+  renderSignals?: { headerDependent: boolean } | undefined;
   serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
 }
 
@@ -1068,13 +1077,16 @@ async function renderAppRequestInternal(
       return cachedResponse;
     }
 
-    // Only a cacheable route that is about to render pays for header-read
-    // tracking; cache hits returned above never construct it. Application code
-    // reads headers through this request so that a render depending on one is
-    // never stored under a key that ignores it.
-    const trackedRequest = mayUseRouteCache
-      ? trackRequestHeaderReads(options.request)
-      : undefined;
+    // Only a route whose result may be stored pays for header-read tracking;
+    // cache hits returned above never construct it. Application code reads
+    // headers through this request so that a render depending on one is never
+    // stored under a key that ignores it. Callers that store by path alone ask
+    // for tracking through `renderSignals` even when the route itself declares
+    // no cache policy.
+    const trackedRequest =
+      mayUseRouteCache || options.renderSignals !== undefined
+        ? trackRequestHeaderReads(options.request)
+        : undefined;
     const appRequest = trackedRequest?.request ?? options.request;
 
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
@@ -1606,6 +1618,10 @@ async function renderAppRequestInternal(
     );
 
     const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
+
+    if (options.renderSignals !== undefined) {
+      options.renderSignals.headerDependent = trackedRequest?.readAnyHeader() ?? true;
+    }
 
     const finalResponse = preparedActions.hasFormActions
       ? withRouteCacheHeader(response, effectiveCachePolicy)

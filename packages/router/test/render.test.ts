@@ -2531,6 +2531,31 @@ export default function Page() {
     }
   });
 
+  test("does not advertise a shared lifetime for a header dependent max-age route", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-maxage-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { cacheControl } from "@reckona/mreact-router";
+
+export function loader({ request }) {
+  cacheControl({ maxAge: 300 });
+  return { locale: request.headers.get("accept-language") ?? "en" };
+}
+
+export default function Page(props) {
+  return <main>locale: {props.data.locale}</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", { headers: { "accept-language": "ja" } }),
+    });
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.text()).toContain("<main>locale: ja</main>");
+  });
+
   test("does not disclose a visitor's client IP to the next visitor", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-ip-"));
     await writeFile(

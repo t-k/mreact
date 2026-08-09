@@ -417,6 +417,65 @@ export default function Page() { return <main>Prerendered</main>; }`,
     expect(await allowed.text()).toContain("<main>Prerendered</main>");
   });
 
+  test("renders the rewritten route when Cloudflare middleware rewrites", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-rewrite-route-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(join(appDir, "gated"), { recursive: true });
+    await mkdir(join(appDir, "public-notice"), { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `import { rewrite } from "@reckona/mreact-router";
+
+export const config = { matcher: "/:path*" };
+
+export function middleware(request: Request) {
+  if (new URL(request.url).pathname === "/gated") {
+    return rewrite("/public-notice");
+  }
+}`,
+    );
+    await writeFile(
+      join(appDir, "gated", "page.tsx"),
+      `export default function Page() { return <main>GATED-SECRET</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "public-notice", "page.tsx"),
+      `export default function Page() { return <main>PUBLIC-NOTICE</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as {
+      routeModules: Record<string, () => Promise<unknown>>;
+    };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({
+        modules: registry.routeModules,
+      }),
+      serverManifest,
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/gated"),
+      {},
+      createExecutionContext(),
+    );
+    const html = await response.text();
+
+    expect(html).toContain("<main>PUBLIC-NOTICE</main>");
+    expect(html).not.toContain("GATED-SECRET");
+  });
+
   test("serves Cloudflare prerendered HTML directly when the app has no middleware", async () => {
     const handler = createCloudflareRequestHandler({
       assets: {},

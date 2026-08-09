@@ -8654,8 +8654,9 @@ export function invalidateHome() {
     );
     await writeFile(
       join(appDir, "page.tsx"),
+      // A plain prerender route carries no revalidate: the regeneration guard
+      // must not depend on a route cache policy being present.
       `export const prerender = true;
-export const revalidate = 60;
 
 export function loader({ request }) {
   return { country: request.headers.get("cf-ipcountry") ?? "unknown" };
