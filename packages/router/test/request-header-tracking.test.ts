@@ -116,6 +116,17 @@ describe("request header read tracking", () => {
     expect(tracked.requestDependent()).toBe(false);
   });
 
+  test("preserves mutable request context compatibility", () => {
+    const tracked = trackRequestHeaderReads(new Request("https://app.test/original"));
+    const context = withTrackedRequest({ params: {} }, tracked.request, tracked);
+    const replacement = new Request("https://app.test/replacement");
+
+    context.request = replacement;
+
+    expect(context.request).toBe(replacement);
+    expect(tracked.requestDependent()).toBe(true);
+  });
+
   test("reports a request carrying a body as header dependent without cloning it", async () => {
     const request = new Request("https://app.test/submit", {
       body: JSON.stringify({ ok: true }),

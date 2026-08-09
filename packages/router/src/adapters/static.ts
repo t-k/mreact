@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
+import { isCurrentPrerenderedRoute } from "../prerender-entry.js";
 
 /**
  * Configures static export from a built app-router output directory.
@@ -32,17 +33,29 @@ export async function exportStaticApp(options: StaticExportOptions): Promise<Sta
   ) as { publicAssets?: readonly string[] };
   const prerenderedRoutes = manifest.prerenderedRoutes ?? {};
   const routes = [...(options.paths ?? Object.keys(prerenderedRoutes))].sort();
-
-  await rm(options.exportDir, { force: true, recursive: true });
-  await mkdir(options.exportDir, { recursive: true });
-
-  for (const route of routes) {
+  const entries = routes.map((route): readonly [string, BuiltPrerenderedRoute] => {
+    routeToHtmlFile(options.exportDir, route);
     const entry = prerenderedRoutes[route];
 
     if (entry === undefined) {
       throw new Error(`Cannot export non-prerendered route: ${route}`);
     }
 
+    if (!isCurrentPrerenderedRoute(entry)) {
+      throw new Error(`Cannot export invalid prerendered route: ${route}`);
+    }
+
+    if (entry.status < 200 || entry.status >= 300) {
+      throw new Error(`Cannot export route ${route} with status ${entry.status}.`);
+    }
+
+    return [route, entry];
+  });
+
+  await rm(options.exportDir, { force: true, recursive: true });
+  await mkdir(options.exportDir, { recursive: true });
+
+  for (const [route, entry] of entries) {
     await writePrerenderedRoute(options.exportDir, route, entry);
   }
 

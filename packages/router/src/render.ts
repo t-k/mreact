@@ -1747,9 +1747,24 @@ async function applyAppRouterResponseHook(
   options: RenderAppRequestOptions,
 ): Promise<Response> {
   const onResponse = await resolveAppRouterResponseHook(options);
-  const hooked = await onResponse?.(response, {
-    request: options.request,
-  });
+
+  if (onResponse === undefined) {
+    return response;
+  }
+
+  const renderSignals = (options as RenderAppRequestRuntimeOptions).renderSignals;
+  const trackedRequest =
+    renderSignals === undefined ? undefined : trackRequestHeaderReads(options.request);
+  const hooked = await onResponse(
+    response,
+    withTrackedRequest({}, trackedRequest?.request ?? options.request, trackedRequest),
+  );
+
+  if (renderSignals !== undefined && trackedRequest !== undefined) {
+    const renderHeaderDependent = renderSignals.headerDependent;
+    renderSignals.headerDependent = () =>
+      renderHeaderDependent() || trackedRequest.requestDependent();
+  }
 
   return hooked instanceof Response ? hooked : response;
 }

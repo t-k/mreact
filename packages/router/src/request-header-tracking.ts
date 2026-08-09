@@ -142,13 +142,18 @@ export function withTrackedRequest<T extends object>(
   tracked: TrackedHeaderRequest | undefined,
 ): T & { request: Request } {
   const context = values as T & { request: Request };
+  let currentRequest = request;
 
   Object.defineProperty(context, "request", {
     configurable: true,
     enumerable: true,
     get() {
       tracked?.markRequestAccess();
-      return request;
+      return currentRequest;
+    },
+    set(value: Request) {
+      tracked?.markRequestAccess();
+      currentRequest = value;
     },
   });
 

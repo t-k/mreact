@@ -119,6 +119,7 @@ export default function Page() { return <main>Static adapter</main>; }`,
           "../escape": {
             headers: {},
             html: "<main>escape</main>",
+            schemaVersion: 2,
             status: 200,
           },
         },
@@ -133,6 +134,42 @@ export default function Page() { return <main>Static adapter</main>; }`,
       /unsafe static export route/,
     );
     await expect(stat(join(rootDir, "escape", "index.html"))).rejects.toThrow();
+  });
+
+  test.each([
+    ["legacy schema", { schemaVersion: 1 }],
+    ["missing schema", {}],
+    ["visitor-dependent headers", { schemaVersion: 2, headers: { vary: "Cookie" } }],
+  ])("rejects %s prerender entries before replacing an existing export", async (_name, overrides) => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-adapter-unsafe-entry-"));
+    const outDir = join(rootDir, "out");
+    const exportDir = join(rootDir, "dist");
+    await mkdir(join(outDir, "server"), { recursive: true });
+    await mkdir(join(outDir, "client"), { recursive: true });
+    await mkdir(exportDir, { recursive: true });
+    await writeFile(join(exportDir, "existing.txt"), "preserve me");
+    await writeFile(
+      join(outDir, "server", "manifest.json"),
+      JSON.stringify({
+        prerenderedRoutes: {
+          "/": {
+            headers: {},
+            html: "<main>unsafe</main>",
+            status: 200,
+            ...overrides,
+          },
+        },
+      }),
+    );
+    await writeFile(
+      join(outDir, "client", "manifest.json"),
+      JSON.stringify({ publicAssets: [] }),
+    );
+
+    await expect(exportStaticApp({ exportDir, outDir })).rejects.toThrow(
+      /Cannot export invalid prerendered route: \//,
+    );
+    await expect(readFile(join(exportDir, "existing.txt"), "utf8")).resolves.toBe("preserve me");
   });
 
   test("creates an edge-safe Request/Response handler", async () => {

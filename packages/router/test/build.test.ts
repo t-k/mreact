@@ -3158,6 +3158,64 @@ export default function Page() { return <main>Private build response</main>; }
     await expect(response.text()).resolves.toContain("<main>Private build response</main>");
   });
 
+  test("does not publish prerenders when the response hook reads Request", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-response-hook-request-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export default function Page() { return <main>Shared shell</main>; }
+`,
+    );
+    await writeFile(
+      join(appDir, "on-response.ts"),
+      `export function onResponse(response: Response, context: { request: Request }) {
+  let emitted = false;
+  const body = new ReadableStream({
+    async pull(controller) {
+      if (emitted) return;
+      emitted = true;
+      const copied = new Request(context.request);
+      const html = await response.text();
+      controller.enqueue(new TextEncoder().encode(
+        html.replace("</main>", " " + new URL(copied.url).host + "</main>"),
+      ));
+      controller.close();
+    },
+  });
+  return new Response(body, { headers: response.headers, status: response.status });
+}
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, unknown> };
+
+    expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
+    await expect(access(join(outDir, "cloudflare", "routes", "index.mjs"))).resolves.toBeUndefined();
+
+    const first = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://visitor-a.test/"),
+    });
+    const second = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://visitor-b.test/"),
+    });
+
+    expect(await first.text()).toContain("<main>Shared shell visitor-a.test</main>");
+    expect(await second.text()).toContain("<main>Shared shell visitor-b.test</main>");
+  });
+
   test("build forwards user Vite plugins to route bundles", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-build-vite-plugins-"));
     const appDir = join(rootDir, "src", "app");
