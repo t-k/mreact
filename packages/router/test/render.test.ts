@@ -2767,6 +2767,54 @@ export default function Page(props) {
     expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
   });
 
+  test("does not share external package Request reconstruction", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-external-request-"));
+    const packageDir = join(appDir, "node_modules", "fixture-request-reader");
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, "package.json"),
+      JSON.stringify({ name: "fixture-request-reader", type: "module", exports: "./index.js" }),
+    );
+    await writeFile(
+      join(packageDir, "index.js"),
+      `export function readIp(context) {
+  const copied = new Request(context["request"]);
+  return copied.headers.get("cf-connecting-ip") ?? "none";
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `import { readIp } from "fixture-request-reader";
+
+export const revalidate = 60;
+
+export function loader(context) {
+  return { ip: readIp(context) };
+}
+
+export default function Page(props) {
+  return <main>ip: {props.data.ip}</main>;
+}`,
+    );
+
+    const render = (ip: string) =>
+      renderAppRequest({
+        appDir,
+        importPolicy: { allowedPackages: ["fixture-request-reader"] },
+        request: new Request("http://local.test/", {
+          headers: { "cf-connecting-ip": ip },
+        }),
+      });
+    const first = await render("203.0.113.7");
+    const second = await render("198.51.100.42");
+
+    expect(first.headers.get("cache-control")).toBe("private, no-store");
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await first.text()).toContain("<main>ip: 203.0.113.7</main>");
+    expect(await second.text()).toContain("<main>ip: 198.51.100.42</main>");
+  });
+
   test("does not cache Request reconstruction hidden in a layout helper", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-layout-request-"));
     await writeFile(

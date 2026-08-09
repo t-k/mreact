@@ -14,14 +14,16 @@
  * header dependent.
  *
  * Reconstructing the request with `new Request(request)` copies headers from
- * internal slots that no interception can reach, so headers read through such a
- * copy are not observed. `render.ts` therefore also uses conservative source
- * closure analysis to opt routes that reference Request inputs out of shared
- * caching before a hit can be served.
+ * internal slots that no interception can reach. Application contexts therefore
+ * mark access when their lazy `request` property is retrieved, before opaque
+ * helpers can reconstruct it. `render.ts` also uses conservative source closure
+ * analysis so a previously stored entry cannot bypass the runtime observation.
  */
 export interface TrackedHeaderRequest {
-  /** Returns true once application code has read any request header. */
-  readAnyHeader(): boolean;
+  /** Marks application access to the Request before it can escape tracking. */
+  markRequestAccess(): void;
+  /** Returns true once application code has observed request-specific input. */
+  requestDependent(): boolean;
   /** The request to hand to loaders, metadata functions and components. */
   request: Request;
 }
@@ -54,7 +56,8 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
     // response is never shared.
     if (request.body !== null) {
       return {
-        readAnyHeader: () => true,
+        markRequestAccess() {},
+        requestDependent: () => true,
         request,
       };
     }
@@ -62,7 +65,8 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
     tracked = request.clone();
   } catch {
     return {
-      readAnyHeader: () => true,
+      markRequestAccess() {},
+      requestDependent: () => true,
       request,
     };
   }
@@ -120,7 +124,33 @@ export function trackRequestHeaderReads(request: Request): TrackedHeaderRequest 
   });
 
   return {
-    readAnyHeader: () => readAny,
+    markRequestAccess: () => {
+      readAny = true;
+    },
+    requestDependent: () => readAny,
     request: tracked,
   };
+}
+
+/**
+ * Adds an enumerable Request property that records application access before
+ * opaque code can copy native Request internal slots.
+ */
+export function withTrackedRequest<T extends object>(
+  values: T,
+  request: Request,
+  tracked: TrackedHeaderRequest | undefined,
+): T & { request: Request } {
+  const context = { ...values } as T & { request: Request };
+
+  Object.defineProperty(context, "request", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      tracked?.markRequestAccess();
+      return request;
+    },
+  });
+
+  return context;
 }

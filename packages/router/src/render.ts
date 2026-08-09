@@ -64,6 +64,7 @@ import {
 import {
   trackRequestHeaderReads,
   type TrackedHeaderRequest,
+  withTrackedRequest,
 } from "./request-header-tracking.js";
 import {
   configuredHstsHeader,
@@ -1150,12 +1151,11 @@ async function renderAppRequestInternal(
       ? loadRouteDataWithInstrumentation({
           appDir: options.appDir,
           code: originalCode,
-          context: {
+          context: withTrackedRequest({
             env: options.env,
             params: matched.params,
             queryClient,
-            request: appRequest,
-          },
+          }, appRequest, trackedRequest),
           filename: matched.route.file,
           importPolicy: options.importPolicy,
           instrumentation: options.instrumentation,
@@ -1240,12 +1240,11 @@ async function renderAppRequestInternal(
         const renderedPage = await runWithQueryClient(queryClient, () =>
           runServerModuleWithSlots(
             stringOutput.code,
-            {
+            withTrackedRequest({
               data,
               params: matched.params,
               queryClient,
-              request: appRequest,
-            },
+            }, appRequest, trackedRequest),
             matched.route.file,
             options.serverModules,
             options.serverModuleCacheVersion,
@@ -1281,12 +1280,11 @@ async function renderAppRequestInternal(
             appDir: options.appDir,
             pageFile: matched.route.file,
             html: pageHtmlForLayout,
-            props: {
+            props: withTrackedRequest({
               data,
               params: matched.params,
               queryClient,
-              request: appRequest,
-            },
+            }, appRequest, trackedRequest),
             slots: renderedPage.slots,
             serverModules: options.serverModules,
             serverModuleCacheVersion: options.serverModuleCacheVersion,
@@ -1300,11 +1298,10 @@ async function renderAppRequestInternal(
         const metadata = await loadComposedRouteMetadata({
           appDir: options.appDir,
           code: originalCode,
-          context: {
+          context: withTrackedRequest({
             data,
             params: matched.params,
-            request: appRequest,
-          },
+          }, appRequest, trackedRequest),
           filename: matched.route.file,
           importPolicy: options.importPolicy,
           routes,
@@ -1419,6 +1416,7 @@ async function renderAppRequestInternal(
           params: matched.params,
           queryClient,
           request: appRequest,
+          trackedRequest,
           routePath: matched.route.path,
           routeScripts: options.clientScripts,
           serverModules: options.serverModules,
@@ -1444,12 +1442,11 @@ async function renderAppRequestInternal(
       }
 
       const data = streamData;
-      const props = {
+      const props = withTrackedRequest({
         data,
         params: matched.params,
         queryClient,
-        request: appRequest,
-      };
+      }, appRequest, trackedRequest);
       phaseStartedAt = renderTimingPhaseStartedAt(timing);
       const stream = runServerStreamModule(output.code, {
         appDir: options.appDir,
@@ -1524,12 +1521,11 @@ async function renderAppRequestInternal(
     const renderedPage = await runWithQueryClient(queryClient, () =>
       runServerModuleWithSlots(
         output.code,
-        {
+        withTrackedRequest({
           data,
           params: matched.params,
           queryClient,
-          request: appRequest,
-        },
+        }, appRequest, trackedRequest),
         matched.route.file,
         options.serverModules,
         options.serverModuleCacheVersion,
@@ -1572,12 +1568,11 @@ async function renderAppRequestInternal(
         appDir: options.appDir,
         pageFile: matched.route.file,
         html: pageHtmlForLayout,
-        props: {
+        props: withTrackedRequest({
           data,
           params: matched.params,
           queryClient,
-          request: appRequest,
-        },
+        }, appRequest, trackedRequest),
         slots: renderedPage.slots,
         serverModules: options.serverModules,
         serverModuleCacheVersion: options.serverModuleCacheVersion,
@@ -1592,11 +1587,10 @@ async function renderAppRequestInternal(
     const metadata = await loadComposedRouteMetadata({
       appDir: options.appDir,
       code: originalCode,
-      context: {
+      context: withTrackedRequest({
         data,
         params: matched.params,
-        request: appRequest,
-      },
+      }, appRequest, trackedRequest),
       filename: matched.route.file,
       importPolicy: options.importPolicy,
       routes,
@@ -1657,7 +1651,9 @@ async function renderAppRequestInternal(
           // Without a tracker there is no evidence the render ignored request
           // headers, so the entry is treated as header dependent.
           headerDependent:
-            sourceUsesRequestInput || invalidConfiguredHsts || (trackedRequest?.readAnyHeader() ?? true),
+            sourceUsesRequestInput ||
+            invalidConfiguredHsts ||
+            (trackedRequest?.requestDependent() ?? true),
           ...(configuredHsts === undefined ? {} : { strictTransportSecurity: configuredHsts }),
           path: matched.route.path,
           policy: effectiveCachePolicy,
@@ -1740,7 +1736,7 @@ async function renderAppRequestInternal(
     if (options.renderSignals !== undefined) {
       const tracked = trackedRequest;
       options.renderSignals.headerDependent = () =>
-        sourceUsesRequestInput || invalidConfiguredHsts || (tracked?.readAnyHeader() ?? true);
+        sourceUsesRequestInput || invalidConfiguredHsts || (tracked?.requestDependent() ?? true);
     }
   }
   })).value;
@@ -3660,6 +3656,7 @@ async function runServerStreamModuleWithLoading(
     params: RouteParams;
     queryClient: QueryClient;
     request: Request;
+    trackedRequest?: TrackedHeaderRequest | undefined;
     routePath: string;
     routeScripts?: ReadonlyMap<string, string> | undefined;
     serverModules?: ReadonlyMap<string, BuiltServerModuleArtifact> | undefined;
@@ -3670,12 +3667,11 @@ async function runServerStreamModuleWithLoading(
     importPolicy?: AppRouterImportPolicy | undefined;
   },
 ): Promise<ReadableStream<Uint8Array>> {
-  const loadingProps = {
+  const loadingProps = withTrackedRequest({
     data: undefined,
     params: options.params,
     queryClient: options.queryClient,
-    request: options.request,
-  };
+  }, options.request, options.trackedRequest);
   const layoutShells = await layoutShellsForPage(
     options.appDir,
     options.pageFile,
@@ -3735,12 +3731,11 @@ async function runServerStreamModuleWithLoading(
         await appendServerStreamModule(
           code,
           boundarySink,
-          {
+          withTrackedRequest({
             data,
             params: options.params,
             queryClient: options.queryClient,
-            request: options.request,
-          },
+          }, options.request, options.trackedRequest),
           options.pageFile,
           options.serverModules,
           options.serverModuleCacheVersion,
