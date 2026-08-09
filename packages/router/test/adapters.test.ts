@@ -8,6 +8,7 @@ import { buildApp } from "../src/build.js";
 import { createEdgeRequestHandler } from "../src/adapters/edge.js";
 import { createNodeRequestHandler } from "../src/adapters/node.js";
 import { exportStaticApp } from "../src/adapters/static.js";
+import { startServer } from "../src/serve.js";
 
 describe("mreact deployment adapters", () => {
   test("serves built output through the Node request handler", async () => {
@@ -64,6 +65,26 @@ export default function Page() { return <main>Secure proxy</main>; }`,
 
     expect(untrusted.headers.get("strict-transport-security")).toBeNull();
     expect(trusted.headers.get("strict-transport-security")).toBe("max-age=31536000");
+  });
+
+  test("passes forwarded protocol trust through startServer", async () => {
+    const { outDir } = await buildFixture("mreact-start-server-forwarded-proto-", {
+      "page.tsx": `export const metadata = {
+  security: { hsts: { maxAge: 31536000 } },
+};
+export default function Page() { return <main>Secure start</main>; }`,
+    });
+    const server = await startServer({ outDir, port: 0, trustForwardedProto: true });
+
+    try {
+      const response = await fetch(server.url, {
+        headers: { "x-forwarded-proto": "https" },
+      });
+
+      expect(response.headers.get("strict-transport-security")).toBe("max-age=31536000");
+    } finally {
+      await server.close();
+    }
   });
 
   test("exports prerendered routes and client assets deterministically", async () => {

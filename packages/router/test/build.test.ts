@@ -3080,6 +3080,7 @@ export default function Page(props) {
       `import { readHost } from "fixture-request-reader";
 
 export const prerender = true;
+export const revalidate = 60;
 
 export default function Page(context) {
   return <main>{readHost(context)}</main>;
@@ -3087,12 +3088,32 @@ export default function Page(context) {
 `,
     );
 
-    await buildApp({ outDir, projectRoot: rootDir, routesDir: "src/app" });
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
     const serverManifest = JSON.parse(
       await readFile(join(outDir, "server", "manifest.json"), "utf8"),
     ) as { prerenderedRoutes?: Record<string, unknown> };
 
     expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
+    await expect(access(join(outDir, "cloudflare", "route-modules.mjs"))).resolves.toBeUndefined();
+
+    const first = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://visitor-a.test/"),
+    });
+    const second = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://visitor-b.test/"),
+    });
+
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await first.text()).toContain("<main>visitor-a.test</main>");
+    expect(await second.text()).toContain("<main>visitor-b.test</main>");
   });
 
   test("does not publish visitor-dependent build responses as shared prerenders", async () => {
