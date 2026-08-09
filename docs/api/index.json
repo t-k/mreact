@@ -160341,9 +160341,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/static.ts",
-											"line": 9,
+											"line": 10,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L9"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L10"
 										}
 									],
 									"type": {
@@ -160360,9 +160360,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/static.ts",
-											"line": 10,
+											"line": 11,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L10"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L11"
 										}
 									],
 									"type": {
@@ -160381,9 +160381,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/static.ts",
-											"line": 11,
+											"line": 12,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L11"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L12"
 										}
 									],
 									"type": {
@@ -160412,9 +160412,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/static.ts",
-									"line": 8,
+									"line": 9,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L8"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L9"
 								}
 							]
 						},
@@ -160442,9 +160442,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/static.ts",
-											"line": 18,
+											"line": 19,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L18"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L19"
 										}
 									],
 									"type": {
@@ -160467,9 +160467,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/static.ts",
-									"line": 17,
+									"line": 18,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L17"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L18"
 								}
 							]
 						},
@@ -160482,9 +160482,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/static.ts",
-									"line": 26,
+									"line": 27,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L26"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L27"
 								}
 							],
 							"signatures": [
@@ -160505,9 +160505,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/static.ts",
-											"line": 26,
+											"line": 27,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L26"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/static.ts#L27"
 										}
 									],
 									"parameters": [
