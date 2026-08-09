@@ -369,7 +369,7 @@ describe("concurrent fiber work loop", () => {
         shouldYield: shouldYieldAfterUnits(2),
       }).status,
     ).toBe("yielded");
-    expect(Theme.values).toEqual(["inner"]);
+    expect(Theme.values).toEqual([]);
 
     expect(
       renderRootConcurrent(root, TransitionLane, {
@@ -438,6 +438,60 @@ describe("concurrent fiber work loop", () => {
     expect(Theme.values).toEqual([]);
   });
 
+  it("isolates external React context values across interleaved concurrent roots", () => {
+    const firstRoot = createFiberRoot(document.createElement("div"));
+    const secondRoot = createFiberRoot(document.createElement("div"));
+    const Theme = createExternalReactContext("default");
+    const observed: string[] = [];
+    const renderConsumer = (value: unknown) => {
+      observed.push(String(value));
+      return createElement("span", null, String(value));
+    };
+
+    prepareFreshStack(
+      firstRoot,
+      createElement(
+        Theme.Provider,
+        { value: "first" },
+        createElement(Theme.Consumer, null, renderConsumer),
+      ),
+      TransitionLane,
+    );
+    prepareFreshStack(
+      secondRoot,
+      createElement(
+        Theme.Provider,
+        { value: "second" },
+        createElement(Theme.Consumer, null, renderConsumer),
+      ),
+      TransitionLane,
+    );
+
+    expect(
+      renderRootConcurrent(firstRoot, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+    expect(
+      renderRootConcurrent(secondRoot, TransitionLane, {
+        shouldYield: shouldYieldAfterUnits(2),
+      }).status,
+    ).toBe("yielded");
+
+    expect(
+      renderRootConcurrent(firstRoot, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+    expect(
+      renderRootConcurrent(secondRoot, TransitionLane, {
+        shouldYield: () => false,
+      }).status,
+    ).toBe("completed");
+
+    expect(observed).toEqual(["first", "second"]);
+  });
+
   it("cleans yielded provider context when lower priority work is aborted", () => {
     const container = document.createElement("div");
     const root = createFiberRoot(container);
@@ -457,7 +511,7 @@ describe("concurrent fiber work loop", () => {
         shouldYield: shouldYieldAfterUnits(2),
       }).status,
     ).toBe("yielded");
-    expect(Theme.values).toEqual(["inner"]);
+    expect(Theme.values).toEqual([]);
 
     root.pendingLanes |= SyncLane;
     root.workInProgressElement = createElement("p", null, "sync");
@@ -843,6 +897,24 @@ describe("concurrent fiber work loop", () => {
     expect(commits).toEqual(["commit"]);
   });
 });
+
+function createExternalReactContext<T>(defaultValue: T) {
+  const context = {
+    $$typeof: Symbol.for("react.context"),
+    _currentValue: defaultValue,
+    _currentValue2: defaultValue,
+    _defaultValue: defaultValue,
+    Provider: undefined as unknown,
+    Consumer: undefined as unknown,
+    displayName: undefined as string | undefined,
+  };
+  context.Provider = context;
+  context.Consumer = {
+    $$typeof: Symbol.for("react.consumer"),
+    _context: context,
+  };
+  return context as unknown as ReturnType<typeof createContext<T>>;
+}
 
 describe("fiber child reconciliation", () => {
   it("reuses matching key and type alternates", () => {

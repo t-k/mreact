@@ -41,6 +41,15 @@ interface ContextReadObserverState {
   current: ContextReadObserver | undefined;
 }
 
+/** Stores context provider values for one concurrent Fiber root. */
+export interface ContextEnvironment {
+  values: WeakMap<object, unknown[]>;
+}
+
+interface ContextEnvironmentState {
+  current: ContextEnvironment | undefined;
+}
+
 const externalContextValues = new WeakMap<object, unknown[]>();
 
 const CONTEXT_READ_OBSERVER_STATE_KEY = Symbol.for(
@@ -52,6 +61,35 @@ const contextReadObserverState =
   ] ??= {
     current: undefined,
   });
+const CONTEXT_ENVIRONMENT_STATE_KEY = Symbol.for(
+  "modular.react.context_environment_state",
+);
+const contextEnvironmentState =
+  ((globalThis as typeof globalThis & Record<symbol, ContextEnvironmentState | undefined>)[
+    CONTEXT_ENVIRONMENT_STATE_KEY
+  ] ??= {
+    current: undefined,
+  });
+
+/** Creates isolated provider storage for one concurrent Fiber root. */
+export function createContextEnvironment(): ContextEnvironment {
+  return { values: new WeakMap<object, unknown[]>() };
+}
+
+/** Runs synchronous Fiber work against an isolated context environment. */
+export function withContextEnvironment<T>(
+  environment: ContextEnvironment,
+  render: () => T,
+): T {
+  const previousEnvironment = contextEnvironmentState.current;
+  contextEnvironmentState.current = environment;
+
+  try {
+    return render();
+  } finally {
+    contextEnvironmentState.current = previousEnvironment;
+  }
+}
 
 /** Creates a context object with Provider and Consumer entries. */
 export function createContext<T>(defaultValue: T): ReactCompatContext<T> {
@@ -103,6 +141,15 @@ export function useContext<T>(context: ReactCompatContextLike<T>): T {
 }
 
 export function readContextValue<T>(context: ReactCompatContextLike<T>): T {
+  const environmentValues = contextEnvironmentState.current?.values.get(context);
+  if (environmentValues !== undefined && environmentValues.length > 0) {
+    return environmentValues[environmentValues.length - 1] as T;
+  }
+
+  if (contextEnvironmentState.current !== undefined) {
+    return defaultContextValue(context);
+  }
+
   if (isInternalContextRecord(context)) {
     if (context.values.length === 0) {
       return context.defaultValue;
@@ -193,6 +240,14 @@ export function pushContextProvider<T>(
   value: T,
 ): void {
   const context = providerContext(provider);
+  const environment = contextEnvironmentState.current;
+
+  if (environment !== undefined) {
+    const values = environment.values.get(context) ?? [];
+    values.push(value);
+    environment.values.set(context, values);
+    return;
+  }
 
   if (isInternalContextRecord(context)) {
     context.values.push(value);
@@ -206,6 +261,12 @@ export function pushContextProvider<T>(
 
 export function popContextProvider<T>(provider: ReactCompatProvider<T>): void {
   const context = providerContext(provider);
+  const environment = contextEnvironmentState.current;
+
+  if (environment !== undefined) {
+    environment.values.get(context)?.pop();
+    return;
+  }
 
   if (isInternalContextRecord(context)) {
     context.values.pop();
@@ -252,4 +313,20 @@ function isInternalContextRecord<T>(
   context: ReactCompatContextLike<T>,
 ): context is ReactCompatContext<T> {
   return "values" in context && Array.isArray(context.values);
+}
+
+function defaultContextValue<T>(context: ReactCompatContextLike<T>): T {
+  if (isInternalContextRecord(context)) {
+    return context.defaultValue;
+  }
+
+  if (Object.hasOwn(context, "_currentValue")) {
+    return context._currentValue as T;
+  }
+
+  if (Object.hasOwn(context, "_currentValue2")) {
+    return context._currentValue2 as T;
+  }
+
+  return context._defaultValue as T;
 }

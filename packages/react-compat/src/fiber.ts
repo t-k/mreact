@@ -1,5 +1,9 @@
 import { NoFlags, type Flags } from "./fiber-flags.js";
 import { NoLanes, type Lane, type Lanes } from "./fiber-lanes.js";
+import {
+  createContextEnvironment,
+  type ContextEnvironment,
+} from "./context.js";
 
 export type FiberTag =
   | "host-root"
@@ -62,6 +66,7 @@ export interface FiberRoot {
   workInProgressElement: unknown;
   hydrationState: FiberHydrationState | undefined;
   refCleanupKnown: boolean;
+  contextEnvironment: ContextEnvironment;
 }
 
 export interface FiberHydrationState {
@@ -125,6 +130,7 @@ export function createFiberRoot(container: Element): FiberRoot {
     workInProgressElement: undefined,
     hydrationState: undefined,
     refCleanupKnown: false,
+    contextEnvironment: createContextEnvironment(),
   };
   current.stateNode = root;
   return root;

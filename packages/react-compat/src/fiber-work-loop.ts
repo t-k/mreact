@@ -21,6 +21,7 @@ import {
   cleanupUnfinishedWork,
   performUnitOfWork,
 } from "./fiber-reconciler.js";
+import { withContextEnvironment } from "./context.js";
 
 const fiberRootsByContainer = new WeakMap<Element, FiberRoot>();
 
@@ -100,6 +101,16 @@ export function renderRootConcurrent(
   root: FiberRoot,
   lanes: Lanes,
   options: ConcurrentRenderOptions = {},
+): ConcurrentRenderResult {
+  return withContextEnvironment(root.contextEnvironment, () =>
+    renderRootConcurrentInEnvironment(root, lanes, options),
+  );
+}
+
+function renderRootConcurrentInEnvironment(
+  root: FiberRoot,
+  lanes: Lanes,
+  options: ConcurrentRenderOptions,
 ): ConcurrentRenderResult {
   if (
     shouldPreemptWorkInProgress(root.workInProgressRootRenderLanes, lanes)
