@@ -181,6 +181,7 @@ export interface StartServerOptions {
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
   onUpgrade?: HttpUpgradeHandler | undefined;
+  trustForwardedProto?: boolean | undefined;
 }
 
 export function resolveRequestHost(options: {
@@ -699,6 +700,7 @@ export async function startServer(
     onUpgrade: options.onUpgrade,
     port: options.port,
     resolveHost: resolveRequestHost,
+    trustForwardedProto: options.trustForwardedProto,
     render: (request) =>
       runtime.render(request, {
         instrumentation: options.instrumentation,

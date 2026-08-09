@@ -14,6 +14,7 @@ import {
 } from "../logger.js";
 import type { AppRouterResponseHook } from "../render.js";
 import type { RouterInstrumentation } from "../trace.js";
+import { resolveNodeRequestProtocol } from "../node-server.js";
 
 /** Re-exports cache contracts used by Node handlers. */
 export type { AppRouterCache, AppRouterCacheEntry } from "../cache.js";
@@ -92,6 +93,7 @@ export interface NodeRequestHandlerOptions {
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy | undefined;
+  trustForwardedProto?: boolean | undefined;
 }
 
 /**
@@ -126,7 +128,12 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
         hostPolicy: options.hostPolicy,
         rawHost: incoming.headers.host,
       });
-      const request = nodeRequestToWebRequest(incoming, `http://${host}`);
+      const protocol = resolveNodeRequestProtocol({
+        encrypted: (incoming.socket as { encrypted?: boolean }).encrypted === true,
+        forwardedProto: incoming.headers["x-forwarded-proto"],
+        trustForwardedProto: options.trustForwardedProto,
+      });
+      const request = nodeRequestToWebRequest(incoming, `${protocol}://${host}`);
       const logFields = requestLogFields(request, "node");
       emitRouterLog(options.logger, "info", {
         ...logFields,

@@ -25,6 +25,7 @@ import {
   resolveCliHost,
   resolveCliHostPolicy,
   resolveCliRequestLogMode,
+  resolveCliTrustForwardedProto,
 } from "./cli-options.js";
 import { startDevServer } from "./dev-server.js";
 import { startServer } from "./serve.js";
@@ -169,6 +170,10 @@ if (parsed !== undefined) {
           logger,
           outDir: resolve(routeArg ?? ".mreact"),
           port: Number(process.env.PORT ?? 3001),
+          trustForwardedProto: resolveCliTrustForwardedProto(
+            parsed.trustForwardedProto,
+            process.env,
+          ),
         });
         console.log(`mreact app router serving built output at ${server.url}`);
       } else {

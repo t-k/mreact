@@ -465,4 +465,25 @@ export default function Page() {
       process.exitCode = previousExitCode;
     }
   });
+
+  test("passes forwarded protocol trust to startServer", async () => {
+    const startServer = vi.fn(async () => ({
+      close: async () => undefined,
+      server: {},
+      url: "http://0.0.0.0:3001",
+    }));
+    vi.doMock("../src/serve.js", () => ({ startServer }));
+    vi.stubEnv("MREACT_ROUTER_TRUST_FORWARDED_PROTO", "1");
+    process.argv = [process.argv[0]!, "cli.ts", "start"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(startServer).toHaveBeenCalledWith(
+        expect.objectContaining({ trustForwardedProto: true }),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      process.exitCode = previousExitCode;
+    }
+  });
 });

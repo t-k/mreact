@@ -33,6 +33,39 @@ describe("mreact deployment adapters", () => {
     }
   });
 
+  test("emits HSTS behind an explicitly trusted HTTPS proxy", async () => {
+    const { outDir } = await buildFixture("mreact-node-adapter-forwarded-proto-", {
+      "page.tsx": `export const metadata = {
+  security: { hsts: { maxAge: 31536000 } },
+};
+export default function Page() { return <main>Secure proxy</main>; }`,
+    });
+
+    const request = async (trustForwardedProto: boolean) => {
+      const handler = createNodeRequestHandler({ outDir, trustForwardedProto });
+      const server = createServer(handler);
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const address = server.address();
+      const port = typeof address === "object" && address !== null ? address.port : 0;
+
+      try {
+        return await fetch(`http://127.0.0.1:${port}/`, {
+          headers: { "x-forwarded-proto": "https" },
+        });
+      } finally {
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error === undefined ? resolve() : reject(error))),
+        );
+      }
+    };
+
+    const untrusted = await request(false);
+    const trusted = await request(true);
+
+    expect(untrusted.headers.get("strict-transport-security")).toBeNull();
+    expect(trusted.headers.get("strict-transport-security")).toBe("max-age=31536000");
+  });
+
   test("exports prerendered routes and client assets deterministically", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-adapter-"));
     const exportDir = join(rootDir, "dist");

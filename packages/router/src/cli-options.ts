@@ -28,6 +28,7 @@ export interface ParsedCliArguments {
   routeArg?: string | undefined;
   skipRuntimeDependencyCheck?: boolean | undefined;
   target?: CliBuildTarget | undefined;
+  trustForwardedProto?: boolean | undefined;
   worker?: string | undefined;
 }
 
@@ -100,6 +101,14 @@ export function parseCliArguments(argv: readonly string[]): ParsedCliArguments {
     if (value === "--allowed-hosts") {
       parsed.allowedHosts = parseCliAllowedHosts(readOptionValue(argv, index, "allowed-hosts"));
       index += 1;
+      continue;
+    }
+
+    if (value === "--trust-forwarded-proto") {
+      if (command !== "start") {
+        throw new Error("--trust-forwarded-proto is only supported by the start command");
+      }
+      parsed.trustForwardedProto = true;
       continue;
     }
 
@@ -330,6 +339,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "      Control Host header trust for request origin reconstruction.",
       "  --allowed-hosts <host[,host...]>",
       "      Exact Host header allow-list for public deployments.",
+      "  --trust-forwarded-proto",
+      "      Trust the first X-Forwarded-Proto value. Enable only when a trusted proxy overwrites the header and the Node port is not publicly reachable.",
       "  --log=requests  Print request summaries.",
       "  -h, --help      Show this help message.",
       "",
@@ -339,6 +350,8 @@ export function formatCliHelp(command?: string | undefined): string {
       "                  Host header trust policy when --host-policy is not set.",
       "  MREACT_ROUTER_ALLOWED_HOSTS",
       "                  Comma-separated Host header allow-list when --allowed-hosts is not set.",
+      "  MREACT_ROUTER_TRUST_FORWARDED_PROTO",
+      "                  Set to 1 to trust X-Forwarded-Proto when the flag is not set.",
       "  PORT            TCP port. Default: 3001.",
     ].join("\n");
   }
@@ -478,6 +491,17 @@ export function resolveCliAllowedHosts(
 
   const envValue = env.MREACT_ROUTER_ALLOWED_HOSTS;
   return envValue === undefined || envValue === "" ? undefined : parseCliAllowedHosts(envValue);
+}
+
+export function resolveCliTrustForwardedProto(
+  flagValue: boolean | undefined,
+  env: { MREACT_ROUTER_TRUST_FORWARDED_PROTO?: string | undefined },
+): boolean {
+  if (flagValue !== undefined) {
+    return flagValue;
+  }
+
+  return env.MREACT_ROUTER_TRUST_FORWARDED_PROTO === "1";
 }
 
 export function createCliRequestLogger(): AppRouterLogger {

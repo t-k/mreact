@@ -10,6 +10,7 @@ import {
   resolveCliHost,
   resolveCliHostPolicy,
   resolveCliRequestLogMode,
+  resolveCliTrustForwardedProto,
 } from "../src/cli-options.js";
 
 describe("router CLI options", () => {
@@ -81,6 +82,24 @@ describe("router CLI options", () => {
       hostPolicy: "trusted-proxy",
       routeArg: undefined,
     });
+  });
+
+  test("parses and resolves explicit forwarded protocol trust", () => {
+    expect(parseCliArguments(["start", ".mreact", "--trust-forwarded-proto"])).toEqual({
+      command: "start",
+      routeArg: ".mreact",
+      trustForwardedProto: true,
+    });
+    expect(
+      resolveCliTrustForwardedProto(false, { MREACT_ROUTER_TRUST_FORWARDED_PROTO: "1" }),
+    ).toBe(false);
+    expect(
+      resolveCliTrustForwardedProto(undefined, { MREACT_ROUTER_TRUST_FORWARDED_PROTO: "1" }),
+    ).toBe(true);
+    expect(resolveCliTrustForwardedProto(undefined, {})).toBe(false);
+    expect(
+      resolveCliTrustForwardedProto(undefined, { MREACT_ROUTER_TRUST_FORWARDED_PROTO: "true" }),
+    ).toBe(false);
   });
 
   test("parses build target flags", () => {
@@ -171,6 +190,8 @@ describe("router CLI options", () => {
     expect(startHelp).toContain("--host <host>");
     expect(startHelp).toContain("--host-policy");
     expect(startHelp).toContain("--allowed-hosts");
+    expect(startHelp).toContain("--trust-forwarded-proto");
+    expect(startHelp).toContain("MREACT_ROUTER_TRUST_FORWARDED_PROTO");
     expect(startHelp).toContain("127.0.0.1");
     expect(startHelp).toContain("0.0.0.0");
 

@@ -30,6 +30,27 @@ export interface StartNodeRequestServerOptions {
     hostPolicy?: "strict" | "trusted-proxy" | undefined;
     rawHost: string | undefined;
   }) => string) | undefined;
+  trustForwardedProto?: boolean | undefined;
+}
+
+export function resolveNodeRequestProtocol(options: {
+  encrypted: boolean;
+  forwardedProto: string | readonly string[] | undefined;
+  trustForwardedProto?: boolean | undefined;
+}): "http" | "https" {
+  if (options.encrypted) {
+    return "https";
+  }
+
+  if (options.trustForwardedProto !== true) {
+    return "http";
+  }
+
+  const forwarded = Array.isArray(options.forwardedProto)
+    ? options.forwardedProto[0]
+    : options.forwardedProto;
+  const first = forwarded?.split(",", 1)[0]?.trim().toLowerCase();
+  return first === "https" ? "https" : "http";
 }
 
 export async function startNodeRequestServer(
@@ -51,7 +72,12 @@ export async function startNodeRequestServer(
         hostPolicy: options.hostPolicy,
         rawHost: incoming.headers.host,
       });
-      const request = nodeRequestToWebRequest(incoming, `http://${host}`);
+      const protocol = resolveNodeRequestProtocol({
+        encrypted: (incoming.socket as { encrypted?: boolean }).encrypted === true,
+        forwardedProto: incoming.headers["x-forwarded-proto"],
+        trustForwardedProto: options.trustForwardedProto,
+      });
+      const request = nodeRequestToWebRequest(incoming, `${protocol}://${host}`);
       const logFields = requestLogFields(request, "node");
       emitRouterLog(options.logger, "info", {
         ...logFields,
