@@ -1471,6 +1471,7 @@ describe("docs-site example contract", () => {
     expect(cacheGuide).toContain("per-request QueryClient");
     expect(cacheGuide).toContain("Authorization");
     expect(cacheGuide).toContain("Set-Cookie");
+    expect(cacheGuide).toContain("Build-time prerendering and runtime regeneration");
     expect(cacheGuide).toContain("private, no-store");
     expect(cacheGuide).toContain("## Cache route HTML with revalidate");
     expect(cacheGuide).toContain("export const revalidate = 60");

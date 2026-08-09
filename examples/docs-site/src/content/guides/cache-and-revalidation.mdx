@@ -9,7 +9,7 @@ Mreact's route cache stores rendered route HTML. Use it when a page can safely r
 
 The route cache stores route HTML responses. It is not a loader data cache, not a database cache, and not the per-request QueryClient described in [Data Loading](/guides/data-loading/). A loader still runs when the route HTML is not in cache or when the cache entry has expired.
 
-Mreact avoids shared route caching for credentialed requests. Requests with `Authorization` or `Cookie` headers bypass route cache reads, and responses with `Set-Cookie` are returned with `private, no-store` instead of being stored in the shared route cache.
+Mreact avoids shared route caching for credentialed requests. Requests with `Authorization` or `Cookie` headers bypass route cache reads, and responses with `Set-Cookie` are returned with `private, no-store` instead of being stored in the shared route cache. Build-time prerendering and runtime regeneration also refuse to publish a shared entry when the response has `Set-Cookie`, `Vary`, `Cache-Control: private`, `no-cache`, or `no-store`, or an `x-mreact-cache: DYNAMIC` marker.
 
 Use route cache for public or safely shared pages. Keep user-specific pages, session-dependent pages, and admin pages uncached unless you have a route-specific private caching strategy outside Mreact's shared route cache.
 
