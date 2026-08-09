@@ -8540,6 +8540,39 @@ export default function Page() { return <main>Prerendered route</main>; }`,
     expect(await response.text()).toContain("<main>Prerendered route</main>");
   });
 
+  test("runs middleware before serving a prerendered route", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerendered-middleware-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "middleware.ts"),
+      `export const config = { matcher: "/:path*" };
+
+export function middleware(request: Request) {
+  if (request.headers.get("x-account-state") === "suspended") {
+    return new Response("Forbidden", { status: 403 });
+  }
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const prerender = true;
+export default function Page() { return <main>Prerendered route</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/", {
+        headers: { "x-account-state": "suspended" },
+      }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe("Forbidden");
+  });
+
   test("prerender regeneration response is tagged for the fast path", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-regen-fastpath-"));
     const appDir = join(rootDir, "app");
