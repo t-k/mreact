@@ -134,11 +134,13 @@ startServer({
 });
 ```
 
-The adapter must support `get(key)`, `set(key, entry)`, and `deleteByPath(path)`. `deleteByPath(path)` is what makes `revalidatePath("/notes")` remove every cached variant for that route path.
+The adapter must support `get(key)`, `set(key, entry)`, and `deleteByPath(path)`. `deleteByPath(path)` is what makes `revalidatePath("/notes")` remove every cached variant for that route path. Custom Redis, KV, and database adapters must persist the complete entry passed to `set`, including `schemaVersion`, `headers`, and `strictTransportSecurity`; entries without the current schema marker are treated as misses. This is a fail-closed migration rule, so adapters that persisted only fields from an older Mreact release will repopulate entries on demand after upgrading.
 
 ## Avoid accidental caching
 
 Do not cache pages that depend on cookies, bearer tokens, per-user headers, or request-specific secrets. Mreact will skip shared route cache for requests with `Authorization` or `Cookie`, and it will avoid storing responses that set cookies, but the safest design is to keep auth/session pages uncached.
+
+When a route, a layout, or one of their local server imports reads request headers or constructs `new Request(request)`, Mreact conservatively opts that route out of shared HTML caching. Reads through opaque external packages or ambient process state cannot always be proven from the local source closure. Keep those routes uncached with `export const revalidate = 0`, or move the request-dependent value outside shared rendered HTML.
 
 Host is not part of the route cache key. The cache key is scoped by app directory, route path, request pathname, and search params. If one process serves multiple virtual hosts, keep host separation in the reverse proxy, CDN, or custom cache adapter.
 
