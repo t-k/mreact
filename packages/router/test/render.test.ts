@@ -2495,6 +2495,38 @@ export default function Page(props) {
     expect(await second.text()).toContain("<main>calls: 1</main>");
   });
 
+  test("isolates cached route HTML by Accept-Language", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-locale-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function loader({ request }) {
+  return { locale: request.headers.get("accept-language") ?? "en" };
+}
+
+export default function Page(props) {
+  return <main>locale: {props.data.locale}</main>;
+}`,
+    );
+
+    const english = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "accept-language": "en" },
+      }),
+    });
+    const japanese = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/", {
+        headers: { "accept-language": "ja" },
+      }),
+    });
+
+    expect(await english.text()).toContain("<main>locale: en</main>");
+    expect(await japanese.text()).toContain("<main>locale: ja</main>");
+  });
+
   test("caches rendered route HTML for cacheControl called from a loader", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-cache-control-"));
     await writeFile(
