@@ -9,7 +9,7 @@ Host policy is a production boundary. Configure it before a public deployment be
 
 Attackers can send arbitrary `Host` headers to many public HTTP endpoints. If an app trusts that value when building redirects, canonical URLs, password reset links, OAuth callbacks, or cache keys, the app can generate attacker-controlled origins.
 
-Prefer a strict allow-list in production. Use trusted proxy mode only when a reverse proxy or platform normalizes `Host`, `X-Forwarded-Host`, and `X-Forwarded-Proto` before the request reaches Mreact.
+Prefer a strict allow-list in production. Host policy and request scheme trust are separate controls: `hostPolicy: "trusted-proxy"` does not enable forwarded protocol trust.
 
 ## Configure strict hosts
 
@@ -38,7 +38,26 @@ Use `hostPolicy: "strict"` when your app is directly reachable from the internet
 
 ## Use trusted proxy intentionally
 
-Use `hostPolicy: "trusted-proxy"` only when the platform-provided proxy is the only public entrypoint and it overwrites forwarded host/proto headers. Do not enable it for traffic that can reach the Node server directly.
+Use `hostPolicy: "trusted-proxy"` only when the platform-provided proxy is the only public entrypoint and it overwrites forwarded host headers. Do not enable it for traffic that can reach the Node server directly.
+
+Node servers ignore `X-Forwarded-Proto` by default. Enable it separately only when the proxy overwrites the header and the Node port is inaccessible from untrusted networks. Mreact uses the TLS socket when it is secure; otherwise, opt-in mode reads the first forwarded value and treats only `https` as HTTPS. Missing or malformed values remain HTTP.
+
+```bash
+MREACT_ROUTER_TRUST_FORWARDED_PROTO=1 mreact-router start .mreact
+```
+
+```ts
+await startServer({
+  allowedHosts: ["app.example.com"],
+  hostPolicy: "strict",
+  hostname: "0.0.0.0",
+  outDir: ".mreact",
+  port: Number(process.env.PORT ?? 3001),
+  trustForwardedProto: true,
+});
+```
+
+This setting affects absolute request URLs and scheme-sensitive response behavior. For example, a configured `Strict-Transport-Security` header is emitted only when Mreact sees an HTTPS request. Never enable forwarded protocol trust merely to make HSTS appear in a direct HTTP test.
 
 Cloud Run and many managed load balancers terminate TLS before the container. In that shape, the container normally binds `HOST=0.0.0.0`, receives the platform `PORT`, and uses a strict allowed host list for the public service URL. Use trusted proxy mode only after verifying how the platform sets forwarded headers.
 
@@ -47,7 +66,7 @@ AWS Lambda adapters receive normalized event data from API Gateway HTTP API v2 o
 ## Reverse proxy checklist
 
 - Publish only the reverse proxy or platform endpoint, not the internal Node port.
-- Normalize or overwrite `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-Port`.
+- Normalize or overwrite `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-Port`; remove client-supplied values rather than appending to them.
 - Reject unknown hosts at the edge before requests reach the app when the platform supports it.
 - Keep `allowedHosts` synchronized with DNS and custom domains.
 - Test redirects, metadata routes, canonical links, auth callbacks, and CSP report URLs through the public hostname.

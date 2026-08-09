@@ -115,7 +115,7 @@ export interface AppRouterCacheEntry {
     headers?: Record<string, string> | undefined;
     // (undocumented)
     path: string;
-    schemaVersion?: 1 | undefined;
+    schemaVersion?: 2 | undefined;
     // (undocumented)
     status: number;
     strictTransportSecurity?: string | undefined;
@@ -540,7 +540,7 @@ export interface BuiltPrerenderedRoute {
     headers: Record<string, string>;
     // (undocumented)
     html: string;
-    schemaVersion?: 1 | undefined;
+    schemaVersion?: 2 | undefined;
     // (undocumented)
     status: number;
 }
@@ -1872,6 +1872,7 @@ export interface StartServerOptions {
     serverActions?: AppRouterServerActionOptions | undefined;
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy;
+    trustForwardedProto?: boolean | undefined;
 }
 
 // @public

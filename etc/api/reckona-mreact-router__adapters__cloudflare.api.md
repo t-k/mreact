@@ -183,7 +183,7 @@ export interface BuiltPrerenderedRoute {
     headers: Record<string, string>;
     // (undocumented)
     html: string;
-    schemaVersion?: 1 | undefined;
+    schemaVersion?: 2 | undefined;
     // (undocumented)
     status: number;
 }

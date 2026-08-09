@@ -140,7 +140,9 @@ The adapter must support `get(key)`, `set(key, entry)`, and `deleteByPath(path)`
 
 Do not cache pages that depend on cookies, bearer tokens, per-user headers, or request-specific secrets. Mreact will skip shared route cache for requests with `Authorization` or `Cookie`, and it will avoid storing responses that set cookies, but the safest design is to keep auth/session pages uncached.
 
-When a route, a layout, or one of their local server imports reads request headers or constructs `new Request(request)`, Mreact conservatively opts that route out of shared HTML caching. Reads through opaque external packages or ambient process state cannot always be proven from the local source closure. Keep those routes uncached with `export const revalidate = 0`, or move the request-dependent value outside shared rendered HTML.
+When a route, layout, loader, or metadata function reads request input or constructs `new Request(request)`, Mreact opts that render out of shared HTML caching. Local source closure analysis prevents an older cache entry from being served before application code runs. Runtime tracking also covers an opaque external package when it accesses the application context's `request`, including packages that reconstruct a native `Request` before reading its headers. A package that never accesses `request` does not make the route dynamic.
+
+Ambient process state, mutable module globals, and request data obtained without using the application context cannot be tracked automatically. Keep routes that render those values uncached with `export const revalidate = 0`, or move the request-dependent value outside shared rendered HTML.
 
 Host is not part of the route cache key. The cache key is scoped by app directory, route path, request pathname, and search params. If one process serves multiple virtual hosts, keep host separation in the reverse proxy, CDN, or custom cache adapter.
 

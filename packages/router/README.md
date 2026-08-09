@@ -332,7 +332,7 @@ MREACT_ROUTER_LOG=requests mreact-router dev
 
 Each line includes method, path, status, duration, and runtime. Query strings, headers, and request bodies are intentionally omitted.
 
-Built Node output binds to `127.0.0.1` by default. Use `mreact-router start .mreact --host 0.0.0.0 --host-policy=strict` or `HOST=0.0.0.0 MREACT_ROUTER_HOST_POLICY=strict mreact-router start .mreact` inside containers behind explicit port publishing or a reverse proxy. This bind address is separate from Host header trust; configure `--allowed-hosts`, `MREACT_ROUTER_ALLOWED_HOSTS`, or `hostPolicy` for public deployments.
+Built Node output binds to `127.0.0.1` by default. Use `mreact-router start .mreact --host 0.0.0.0 --host-policy=strict` or `HOST=0.0.0.0 MREACT_ROUTER_HOST_POLICY=strict mreact-router start .mreact` inside containers behind explicit port publishing or a reverse proxy. This bind address is separate from Host header trust; configure `--allowed-hosts`, `MREACT_ROUTER_ALLOWED_HOSTS`, or `hostPolicy` for public deployments. Node ignores `X-Forwarded-Proto` by default. Use `--trust-forwarded-proto`, `MREACT_ROUTER_TRUST_FORWARDED_PROTO=1`, or `trustForwardedProto: true` only when a trusted proxy overwrites the header and the Node port is inaccessible to untrusted clients. `hostPolicy: "trusted-proxy"` does not enable protocol trust.
 
 Use `mreact-router --help`, `mreact-router help build`, or command-level help such as `mreact-router build --help` to inspect supported commands, build targets, and generated artifacts.
 

@@ -122,6 +122,7 @@ Mreact also reads framework-level deployment variables:
 - `HOST`: bind address for local or container servers.
 - `MREACT_ROUTER_HOST_POLICY`: host header policy.
 - `MREACT_ROUTER_ALLOWED_HOSTS`: comma-separated allowed hosts for strict host policy.
+- `MREACT_ROUTER_TRUST_FORWARDED_PROTO=1`: trust the first `X-Forwarded-Proto` value on Node only when a trusted proxy overwrites it and the Node port is not publicly reachable.
 - `MREACT_SERVER_ACTION_SECRET`: signing secret for server action tokens.
 
 Application-specific variables belong to the app. Document them with the deployment, keep secrets server-only, and expose public values intentionally.

@@ -16,6 +16,7 @@ Use this page when configuring framework behavior from CI, deployment platforms,
 - `MREACT_ROUTER_LOG=requests` enables request logging.
 - `MREACT_ROUTER_HOST_POLICY` controls host validation policy.
 - `MREACT_ROUTER_ALLOWED_HOSTS` provides the allowed host list for host validation.
+- `MREACT_ROUTER_TRUST_FORWARDED_PROTO=1` makes the Node server trust the first `X-Forwarded-Proto` value. Use it only behind a proxy that overwrites the header and blocks direct access to the Node port.
 - `MREACT_SERVER_ACTION_SECRET` signs server action requests. Set it in production when server actions are enabled.
 - `NODE_ENV=production` enables normal production assumptions in dependent tooling.
 

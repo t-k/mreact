@@ -38,6 +38,8 @@ const handler = await createNodeRequestHandler({ outDir: ".mreact" });
 createServer(handler).listen(Number(process.env.PORT ?? 3000));
 ```
 
+When a trusted reverse proxy terminates TLS, pass `trustForwardedProto: true` to `createNodeRequestHandler()` only if the proxy overwrites `X-Forwarded-Proto` and the Node listener is not directly reachable. This is independent of `hostPolicy`; the default remains false.
+
 ## Static export
 
 ```ts

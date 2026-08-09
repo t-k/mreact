@@ -709,7 +709,7 @@ describe("docs-site example contract", () => {
       ["src/content/reference/route-module-exports.mdx", ["## Page and layout modules", "definePage<typeof loader>", "generateStaticParams", "export const revalidate = 60", "export async function GET", "/api/functions/_reckona_mreact-router..definePage.html"]],
       ["src/content/reference/route-handler-context.mdx", ["## Dynamic params", "RouteHandlerContext<{ id: string }>", "context.params.id", "Response.json", "context.request", "/api/interfaces/_reckona_mreact-router..RouteHandlerContext.html"]],
       ["src/content/reference/response-helpers.mdx", ["## Redirects and 404s", "throwNotFound()", "redirectExternal", "parseForm", "createFormCsrfToken", "/api/functions/_reckona_mreact-router..throwNotFound.html"]],
-      ["src/content/reference/adapters.mdx", ["## Adapter imports", "createNodeRequestHandler", "createCloudflareRequestHandler", "createAwsLambdaRequestHandler", "exportStaticApp", "/api/modules/_reckona_mreact-router.adapters_static.html"]],
+      ["src/content/reference/adapters.mdx", ["## Adapter imports", "createNodeRequestHandler", "trustForwardedProto: true", "createCloudflareRequestHandler", "createAwsLambdaRequestHandler", "exportStaticApp", "/api/modules/_reckona_mreact-router.adapters_static.html"]],
       ["src/content/reference/metadata-api.mdx", ["## Static metadata", "generateMetadata", "csp: {", "security", "RouteHeadDescriptor", "/api/interfaces/_reckona_mreact-router..RouteMetadata.html"]],
       ["src/content/reference/auth-api.mdx", ["## Configure auth", "configureAuth", "runWithAuthRequest", "requirePermission", "tryRequireRole", "/api/modules/_reckona_mreact-auth.html"]],
       ["src/content/reference/cache-api.mdx", ["## Route HTML cache", "cacheControl({", "revalidatePath", "createMemoryRouteCache", "x-mreact-revalidate", "/api/interfaces/_reckona_mreact-router..CacheControlOptions.html"]],
@@ -1503,6 +1503,9 @@ describe("docs-site example contract", () => {
     expect(cacheGuide).toContain("## Avoid accidental caching");
     expect(cacheGuide).toContain("Host is not part of the route cache key");
     expect(cacheGuide).toContain("new Request(request)");
+    expect(cacheGuide).toContain("opaque external package");
+    expect(cacheGuide).toContain("accesses the application context's `request`");
+    expect(cacheGuide).toContain("Ambient process state");
     expect(cacheGuide).toContain("schemaVersion");
     expect(cacheGuide).toContain("persist the complete entry");
     expect(cacheGuide).toContain("prerenderStore");
@@ -1841,6 +1844,7 @@ describe("docs-site example contract", () => {
     expect(envGuide).toContain("HOST");
     expect(envGuide).toContain("MREACT_ROUTER_HOST_POLICY");
     expect(envGuide).toContain("MREACT_ROUTER_ALLOWED_HOSTS");
+    expect(envGuide).toContain("MREACT_ROUTER_TRUST_FORWARDED_PROTO");
     expect(envGuide).toContain("MREACT_SERVER_ACTION_SECRET");
     expect(envGuide).toContain("[Data Loading](/guides/data-loading/)");
     expect(envGuide).toContain("[HTTP APIs](/guides/http-apis/)");
@@ -1923,10 +1927,17 @@ describe("docs-site example contract", () => {
     expect(hostPolicy).toContain("MREACT_ROUTER_ALLOWED_HOSTS");
     expect(hostPolicy).toContain("trusted-proxy");
     expect(hostPolicy).toContain("X-Forwarded-Host");
+    expect(hostPolicy).toContain("trustForwardedProto: true");
+    expect(hostPolicy).toContain("MREACT_ROUTER_TRUST_FORWARDED_PROTO=1");
+    expect(hostPolicy).toContain("does not enable forwarded protocol trust");
+    expect(hostPolicy).toContain("Strict-Transport-Security");
     expect(hostPolicy).toContain("Cloud Run");
     expect(hostPolicy).toContain("AWS Lambda");
     expect(hostPolicy).toContain("[Environment Variables](/guides/environment-variables/)");
     expect(hostPolicy).toContain("[Authentication](/guides/authentication/)");
+
+    expect(container).toContain("MREACT_ROUTER_TRUST_FORWARDED_PROTO=1");
+    expect(container).toContain("overwrites `X-Forwarded-Proto`");
 
     expect(sourceMaps).toContain("Production client source maps are disabled by default");
     expect(sourceMaps).toContain('clientSourceMaps: "hidden"');

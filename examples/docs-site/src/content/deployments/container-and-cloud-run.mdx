@@ -12,7 +12,7 @@ mreact-router build --target=node
 mreact-router start .mreact
 ```
 
-The server reads `HOST` and `PORT`. In a container, use `HOST=0.0.0.0` so the platform can reach the process, set `PORT` to the platform port, and use `MREACT_ROUTER_HOST_POLICY=strict` with `MREACT_ROUTER_ALLOWED_HOSTS` for public hostnames.
+The server reads `HOST` and `PORT`. In a container, use `HOST=0.0.0.0` so the platform can reach the process, set `PORT` to the platform port, and use `MREACT_ROUTER_HOST_POLICY=strict` with `MREACT_ROUTER_ALLOWED_HOSTS` for public hostnames. If a trusted platform proxy terminates TLS, enable `MREACT_ROUTER_TRUST_FORWARDED_PROTO=1` only after verifying that it overwrites `X-Forwarded-Proto` and that clients cannot reach the container port directly.
 
 ```bash
 HOST=0.0.0.0 \
@@ -92,10 +92,10 @@ gcloud run deploy mreact-app \
   --image=REGION-docker.pkg.dev/PROJECT/REPOSITORY/mreact-app:TAG \
   --region=REGION \
   --allow-unauthenticated \
-  --set-env-vars=HOST=0.0.0.0,MREACT_ROUTER_HOST_POLICY=strict,MREACT_ROUTER_ALLOWED_HOSTS=app.example.com,MREACT_SERVER_ACTION_SECRET=replace-with-a-stable-secret
+  --set-env-vars=HOST=0.0.0.0,MREACT_ROUTER_HOST_POLICY=strict,MREACT_ROUTER_ALLOWED_HOSTS=app.example.com,MREACT_ROUTER_TRUST_FORWARDED_PROTO=1,MREACT_SERVER_ACTION_SECRET=replace-with-a-stable-secret
 ```
 
-If you rely on the generated `run.app` hostname instead of a custom domain, deploy once, read the service URL, and update `MREACT_ROUTER_ALLOWED_HOSTS` to that hostname. Keep `MREACT_SERVER_ACTION_SECRET` stable across revisions when the app uses server actions and may run more than one instance.
+If you rely on the generated `run.app` hostname instead of a custom domain, deploy once, read the service URL, and update `MREACT_ROUTER_ALLOWED_HOSTS` to that hostname. The forwarded protocol setting is safe only while Cloud Run's proxy remains the sole public entrypoint and overwrites `X-Forwarded-Proto`. Keep `MREACT_SERVER_ACTION_SECRET` stable across revisions when the app uses server actions and may run more than one instance.
 
 Cloud Run can scale to multiple instances, so use durable session storage and a shared route cache when route HTML cache needs to survive across instances.
 

@@ -93,6 +93,12 @@ export interface NodeRequestHandlerOptions {
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy | undefined;
+  /**
+   * Trusts the first `X-Forwarded-Proto` value when the socket is not TLS.
+   *
+   * Defaults to `false`. Enable only behind a proxy that overwrites the header
+   * and prevents untrusted clients from reaching the Node listener directly.
+   */
   trustForwardedProto?: boolean | undefined;
 }
 
