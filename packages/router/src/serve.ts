@@ -449,7 +449,14 @@ async function renderBuiltAppRequestWithRuntime(
   let normalizedPath = normalizeRoutePath(url.pathname);
   let matched = options.runtime.routeMatcher.match(normalizedPath);
 
-  if (options.request.method === "GET" || options.request.method === "HEAD") {
+  // Prerendered HTML may only be served ahead of middleware when the app has
+  // no middleware at all. Otherwise a middleware that gates access (auth,
+  // geo blocking, maintenance mode) would be bypassed for exactly the routes
+  // it is most often used to protect.
+  if (
+    !options.runtime.hasMiddleware &&
+    (request.method === "GET" || request.method === "HEAD")
+  ) {
     // Sync fast path when no external prerender store is configured (the
     // common case): skip the Promise wrap that `readPrerenderedRoute`
     // would otherwise introduce just to satisfy the async signature.
@@ -461,18 +468,10 @@ async function renderBuiltAppRequestWithRuntime(
             normalizedPath,
             options.prerenderStore,
           );
+    const prerenderedResponse = prerenderedRouteResponse(prerendered, request.method);
 
-    if (prerendered !== undefined) {
-      if (options.request.method === "HEAD") {
-        return new Response(null, {
-          headers: prerendered.headers,
-          status: prerendered.status,
-        });
-      }
-      return htmlResponse(prerendered.html, {
-        headers: prerendered.headers,
-        status: prerendered.status,
-      });
+    if (prerenderedResponse !== undefined) {
+      return prerenderedResponse;
     }
   }
 
@@ -487,6 +486,29 @@ async function renderBuiltAppRequestWithRuntime(
     request = middlewareResult.request;
     normalizedPath = normalizeRoutePath(new URL(request.url).pathname);
     matched = options.runtime.routeMatcher.match(normalizedPath);
+  }
+
+  // Middleware apps resolve prerendered HTML here instead, so that a
+  // middleware response or rewrite is honoured before the stored HTML is
+  // served. The lookup uses the post-middleware path.
+  if (
+    options.runtime.hasMiddleware &&
+    (request.method === "GET" || request.method === "HEAD")
+  ) {
+    const prerendered =
+      options.prerenderStore === undefined
+        ? options.runtime.prerenderedRoutes.get(normalizedPath)
+        : await readPrerenderedRoute(
+            options.runtime,
+            normalizedPath,
+            options.prerenderStore,
+          );
+    const prerenderedResponse = prerenderedRouteResponse(prerendered, request.method);
+
+    if (prerenderedResponse !== undefined) {
+      emitBuiltRenderTiming(options, request, timing, prerenderedResponse.status);
+      return prerenderedResponse;
+    }
   }
 
   if (request.method === "GET" && options.runtime.prerenderableRoutes.has(normalizedPath)) {
@@ -515,6 +537,27 @@ async function renderBuiltAppRequestWithRuntime(
   return options.sinkStrategy === "buffer"
     ? await materializeResponseAsBuffer(response)
     : response;
+}
+
+function prerenderedRouteResponse(
+  prerendered: BuiltPrerenderedRoute | undefined,
+  method: string,
+): Response | undefined {
+  if (prerendered === undefined) {
+    return undefined;
+  }
+
+  if (method === "HEAD") {
+    return new Response(null, {
+      headers: prerendered.headers,
+      status: prerendered.status,
+    });
+  }
+
+  return htmlResponse(prerendered.html, {
+    headers: prerendered.headers,
+    status: prerendered.status,
+  });
 }
 
 async function resolveBuiltMiddleware(

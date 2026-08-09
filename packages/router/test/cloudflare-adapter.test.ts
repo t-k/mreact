@@ -300,6 +300,82 @@ export async function POST(request: Request) {
     expect(await response.text()).toContain('data-mreact-route-id="index"');
   });
 
+  test("routes Cloudflare prerendered HTML through render when the app has middleware", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      render(request) {
+        return request.headers.get("x-account-state") === "suspended"
+          ? new Response("Forbidden", { status: 403 })
+          : new Response("<main>Prerendered</main>", {
+              headers: { "content-type": "text/html; charset=utf-8" },
+            });
+      },
+      serverManifest: {
+        files: {
+          "middleware.ts": `export const config = { matcher: "/:path*" };
+
+export function middleware(request) {
+  if (request.headers.get("x-account-state") === "suspended") {
+    return new Response("Forbidden", { status: 403 });
+  }
+}`,
+        },
+        prerenderedRoutes: {
+          "/": {
+            headers: { "content-type": "text/html; charset=utf-8" },
+            html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/", {
+        headers: { "x-account-state": "suspended" },
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe("Forbidden");
+  });
+
+  test("serves Cloudflare prerendered HTML directly when the app has no middleware", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      render() {
+        throw new Error("render must not run for a prerendered route without middleware");
+      },
+      serverManifest: {
+        files: {},
+        prerenderedRoutes: {
+          "/": {
+            headers: { "content-type": "text/html; charset=utf-8" },
+            html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Prerendered</main>");
+  });
+
   test("delegates dynamic routes to an injected edge render function", async () => {
     const handler = createCloudflareRequestHandler({
       assets: {},

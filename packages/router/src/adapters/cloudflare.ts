@@ -1193,12 +1193,18 @@ async function handleCloudflareRequest<Env>(
     return assetResponse;
   }
 
-  const staticResponse = prerenderedResponse(
-    options.serverManifest.prerenderedRoutes,
-    normalizeRoutePath(url.pathname),
-    request.method,
-    isCloudflareNavigationRequest(request),
-  );
+  // Prerendered HTML may only short-circuit `render` when the app has no
+  // middleware. Middleware runs inside `render`, so serving stored HTML here
+  // would bypass auth, geo blocking and maintenance gates for exactly the
+  // routes they are most often used to protect.
+  const staticResponse = builtServerManifestHasMiddleware(options.serverManifest)
+    ? undefined
+    : prerenderedResponse(
+        options.serverManifest.prerenderedRoutes,
+        normalizeRoutePath(url.pathname),
+        request.method,
+        isCloudflareNavigationRequest(request),
+      );
 
   if (staticResponse !== undefined) {
     emitRouterDevtoolsEvent({
@@ -1317,6 +1323,15 @@ function cacheControlHasDirective(cacheControl: string | null, directive: string
 
   const normalizedDirective = directive.toLowerCase();
   return cacheControl.split(",").some((part) => part.trim().toLowerCase() === normalizedDirective);
+}
+
+function builtServerManifestHasMiddleware(manifest: {
+  files: Record<string, string>;
+}): boolean {
+  return (
+    manifest.files["middleware.ts"] !== undefined ||
+    manifest.files["middleware.mreact.ts"] !== undefined
+  );
 }
 
 function prerenderedResponse(
