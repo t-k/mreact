@@ -3955,6 +3955,7 @@ function cloudflarePageRouteFacadeModuleSource(componentImport: string): string 
 const componentSlots = readComponentModuleExport(componentModule, "slots");
 const componentGenerateMetadata = readComponentModuleExport(componentModule, "generateMetadata");
 const componentMetadata = readComponentModuleExport(componentModule, "metadata");
+const componentSecurityHeadersApplied = readComponentModuleExport(componentModule, "__mreactSecurityHeadersApplied");
 
 export function App(props) {
   return renderCloudflareRouteComponent(props);
@@ -3969,6 +3970,7 @@ export const slots = componentSlots === undefined ? undefined : { ...componentSl
 export const generateMetadata =
   typeof componentGenerateMetadata === "function" ? componentGenerateMetadata : undefined;
 export const metadata = componentMetadata;
+export const __mreactSecurityHeadersApplied = componentSecurityHeadersApplied === true;
 
 function renderCloudflareRouteComponent(props) {
   const routeComponent = resolveCloudflareRouteComponent();
@@ -4715,7 +4717,9 @@ ${cloudflareShellRuntimeSource()}`;
 }
 
 function cloudflareShellRuntimeSource(): string {
-  return `async function renderLayoutShells(shells, props, namedSlots) {
+  return `export const __mreactSecurityHeadersApplied = true;
+
+async function renderLayoutShells(shells, props, namedSlots) {
   const slotContext = { consumedSlots: new Set(), namedSlots };
   const rendered = [];
   for (const shell of shells) {
@@ -5217,15 +5221,61 @@ function routeSecurityHeaders(security, request) {
   } else {
     headers["referrer-policy"] = validateHeaderValue(security?.referrerPolicy ?? "strict-origin-when-cross-origin");
   }
+  if (security?.permissionsPolicy === null) {
+    delete headers["permissions-policy"];
+  } else {
+    const permissionsPolicy = serializePermissionsPolicy(security?.permissionsPolicy);
+    if (permissionsPolicy === undefined) {
+      delete headers["permissions-policy"];
+    } else {
+      headers["permissions-policy"] = permissionsPolicy;
+    }
+  }
   if (security?.frameOptions === null) {
     delete headers["x-frame-options"];
   } else if (security?.frameOptions !== undefined) {
     headers["x-frame-options"] = validateHeaderValue(security.frameOptions);
   }
   if (request.url.startsWith("https://") && security?.hsts !== undefined && security.hsts !== false && security.hsts !== null) {
-    headers["strict-transport-security"] = \`max-age=\${Math.trunc(security.hsts.maxAge)}\${security.hsts.includeSubDomains === true ? "; includeSubDomains" : ""}\${security.hsts.preload === true ? "; preload" : ""}\`;
+    headers["strict-transport-security"] = serializeHsts(security.hsts);
   }
   return headers;
+}
+
+function serializeHsts(hsts) {
+  if (hsts === false) {
+    throw new TypeError("Invalid security header value for hsts.");
+  }
+  const maxAge = Math.trunc(hsts.maxAge);
+  if (!Number.isFinite(maxAge) || maxAge < 0) {
+    throw new TypeError("Invalid security header value for hsts.maxAge.");
+  }
+  const parts = [\`max-age=\${maxAge}\`];
+  if (hsts.includeSubDomains === true) {
+    parts.push("includeSubDomains");
+  }
+  if (hsts.preload === true) {
+    parts.push("preload");
+  }
+  return parts.join("; ");
+}
+
+function serializePermissionsPolicy(policy) {
+  if (policy === undefined) {
+    return "camera=(), microphone=(), geolocation=()";
+  }
+  const directives = [];
+  for (const [directive, allowlist] of Object.entries(policy)) {
+    if (allowlist === null || allowlist === undefined) {
+      continue;
+    }
+    validateToken(directive, "permissionsPolicy directive");
+    for (const value of allowlist) {
+      validatePermissionAllowlistValue(value);
+    }
+    directives.push(\`\${directive}=(\${allowlist.join(" ")})\`);
+  }
+  return directives.length === 0 ? undefined : directives.join(", ");
 }
 
 function validateHeaderValue(value) {
@@ -5236,6 +5286,22 @@ function validateHeaderValue(value) {
     }
   }
   return value;
+}
+
+function validateToken(value, label) {
+  if (!/^[A-Za-z][A-Za-z0-9-]*$/.test(value)) {
+    throw new TypeError(\`Invalid security header value for \${label}: \${JSON.stringify(value)}\`);
+  }
+}
+
+function validatePermissionAllowlistValue(value) {
+  if (value === "self" || value === "*" || /^[A-Za-z][A-Za-z0-9+.-]*:$/.test(value)) {
+    return;
+  }
+  if (/^https:\\/\\/[A-Za-z0-9.-]+(?::[0-9]+)?$/.test(value)) {
+    return;
+  }
+  throw new TypeError(\`Invalid security header value for permissionsPolicy allowlist: \${JSON.stringify(value)}\`);
 }
 
 function mergeRouteMetadata(metadata) {

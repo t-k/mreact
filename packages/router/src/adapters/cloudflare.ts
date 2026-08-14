@@ -604,6 +604,14 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     );
 
     if (rendered instanceof Response) {
+      if (
+        (pageModule as CloudflareRouteModule<unknown, Env> & {
+          __mreactSecurityHeadersApplied?: boolean | undefined;
+        }).__mreactSecurityHeadersApplied === true
+      ) {
+        return rendered;
+      }
+
       return withDefaultSecurityHeaders(rendered, request, metadata);
     }
 

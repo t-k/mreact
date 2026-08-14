@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { describe, expect, test, vi } from "vitest";
 import { __resetQueryClientForTesting, getQueryClient } from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
+import { routeSecurityHeaders } from "../src/security-headers.js";
 import {
   __resetCloudflareQueryClientFallbackForTesting,
   createCloudflareBuiltRequestHandler,
@@ -187,6 +188,132 @@ export default function Page() {
     expect(response.headers.get("x-frame-options")).toBe("DENY");
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  test.each([
+    {
+      label: "default security metadata",
+      security: {},
+    },
+    {
+      label: "custom permissions policy and every supported field",
+      security: {
+        contentTypeOptions: "custom-nosniff",
+        frameOptions: "DENY",
+        hsts: { includeSubDomains: true, maxAge: 31536000, preload: true },
+        permissionsPolicy: {
+          camera: ["self"],
+          geolocation: null,
+          microphone: [],
+          payment: ["https://pay.example", "https:", "*"],
+        },
+        referrerPolicy: "no-referrer",
+      },
+    },
+    {
+      label: "explicit permissions policy removal",
+      security: { permissionsPolicy: null },
+    },
+    {
+      label: "empty permissions policy removal",
+      security: { permissionsPolicy: {} },
+    },
+  ])("matches canonical security headers for $label", async ({ security }) => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-security-parity-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = { security: ${JSON.stringify(security)} };
+export default function Page() { return <main>Security parity</main>; }`,
+    );
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as { routeModules: Record<string, () => Promise<unknown>> };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const handler = createCloudflareBuiltRequestHandler({
+      assets: {},
+      clientManifest,
+      renderRoute: createCloudflareRouteModuleRenderer({ modules: registry.routeModules }),
+      serverManifest,
+    });
+    const request = new Request("https://app.example/");
+    const expected = routeSecurityHeaders({ request, security });
+    const response = await handler.fetch(request, {}, createExecutionContext());
+    const securityHeaderNames = [
+      "permissions-policy",
+      "referrer-policy",
+      "strict-transport-security",
+      "x-content-type-options",
+      "x-frame-options",
+    ];
+
+    expect(Object.fromEntries(securityHeaderNames.map((name) => [name, response.headers.get(name)])))
+      .toEqual(Object.fromEntries(securityHeaderNames.map((name) => [name, expected[name] ?? null])));
+  });
+
+  test.each([
+    { permissionsPolicy: { "camera; injected": ["self"] } },
+    { permissionsPolicy: { camera: ["https://allowed.example/path"] } },
+  ])("matches canonical permissions policy validation errors", async (security) => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-cloudflare-security-validation-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout(props) {
+  return <html><head></head><body>{props.children}</body></html>;
+}`,
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const metadata = { security: ${JSON.stringify(security)} };
+export default function Page() { return <main>Invalid security</main>; }`,
+    );
+    await buildApp({ appDir, outDir, targets: ["cloudflare"] });
+    const registry = (await import(
+      pathToFileURL(join(outDir, "cloudflare", "route-modules.mjs")).href
+    )) as { routeModules: Record<string, () => Promise<unknown>> };
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const renderRoute = createCloudflareRouteModuleRenderer({ modules: registry.routeModules });
+    const request = new Request("https://app.example/");
+    let expectedMessage = "";
+    try {
+      routeSecurityHeaders({ request, security });
+    } catch (error) {
+      expectedMessage = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(expectedMessage).not.toBe("");
+    await expect(
+      renderRoute(request, {
+        clientManifest,
+        context: createExecutionContext(),
+        env: {},
+        params: {},
+        route: serverManifest.routes[0],
+        serverManifest,
+      }),
+    ).rejects.toThrow(expectedMessage);
   });
 
   test("applies metadata headers when a built Cloudflare page returns a Response", async () => {
