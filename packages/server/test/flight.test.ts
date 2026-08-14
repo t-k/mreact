@@ -174,6 +174,17 @@ describe("server Flight runtime", () => {
     await expect(renderToFlightResponse(cyclic)).rejects.toThrow(/MR_FLIGHT_CYCLE/);
   });
 
+  test("rejects cyclic server reference bound values with a catchable error", async () => {
+    const selfBound = createServerReference("actions/save", "save", []);
+    selfBound.bound?.push(selfBound);
+    const first = createServerReference("actions/first", "first", []);
+    const second = createServerReference("actions/second", "second", [first]);
+    first.bound?.push(second);
+
+    await expect(renderToFlightResponse(selfBound)).rejects.toThrow(/MR_FLIGHT_CYCLE/);
+    await expect(renderToFlightResponse(first)).rejects.toThrow(/MR_FLIGHT_CYCLE/);
+  });
+
   test("uses one cache scope while rendering a Flight response", async () => {
     let calls = 0;
     const read = cache((name: string) => {

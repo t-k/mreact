@@ -376,6 +376,7 @@ interface FlightSerializationState {
   clientReferenceIndexes: Map<string, number>;
   serverReferences: FlightServerReference[];
   serverReferenceIndexes: Map<string, number>;
+  serverReferencesInProgress: Set<ServerReference>;
   objectModels: Map<object, FlightSerializationResult | typeof flightSerializationInProgress>;
   sharedModels: Set<object>;
   hasSharedModels: boolean;
@@ -440,6 +441,7 @@ export async function renderToFlightResponse<P extends Record<string, unknown>>(
       clientReferenceIndexes: new Map(),
       serverReferences: [],
       serverReferenceIndexes: new Map(),
+      serverReferencesInProgress: new Set(),
       objectModels: new Map(),
       sharedModels: new Set(),
       hasSharedModels: false,
@@ -2099,13 +2101,29 @@ function getServerReferenceId(
   reference: ServerReference,
   state: FlightSerializationState,
 ): number | Promise<number> {
-  const serializedBound =
-    reference.bound === undefined
-      ? undefined
-      : resolveFlightArray(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
-  return resolveFlightResult(serializedBound, (resolvedBound) =>
-    getServerReferenceIdForBound(reference, state, resolvedBound),
-  );
+  if (state.serverReferencesInProgress.has(reference)) {
+    throw new FlightDecodeError("MR_FLIGHT_CYCLE: cyclic server reference bound value");
+  }
+
+  state.serverReferencesInProgress.add(reference);
+  try {
+    const serializedBound =
+      reference.bound === undefined
+        ? undefined
+        : resolveFlightArray(reference.bound.map((value) => serializeFlightValue(value, state, 0)));
+    if (isThenable(serializedBound)) {
+      return Promise.resolve(serializedBound)
+        .then((resolvedBound) => getServerReferenceIdForBound(reference, state, resolvedBound))
+        .finally(() => state.serverReferencesInProgress.delete(reference));
+    }
+
+    const id = getServerReferenceIdForBound(reference, state, serializedBound);
+    state.serverReferencesInProgress.delete(reference);
+    return id;
+  } catch (error) {
+    state.serverReferencesInProgress.delete(reference);
+    throw error;
+  }
 }
 
 function getServerReferenceIdForBound(
