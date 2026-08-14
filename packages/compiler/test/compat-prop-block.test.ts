@@ -728,7 +728,7 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(target?.textContent).toBe("Saved");
   });
 
-  test("lowered spread attributes keep bindSpreadProps safety policy", async () => {
+  test("lowered spread attributes apply opted-in HTML and keep bindSpreadProps safety policy", async () => {
     const output = transform({
       code: `export function Box(props) {
           return <a id="target" {...props.linkProps}>safe</a>;
@@ -763,7 +763,8 @@ describe("react-compat prop reactive DOM block lowering", () => {
     expect(link?.getAttribute("href")).toBeNull();
     expect(link?.hasAttribute("onClick")).toBe(false);
     expect(link?.hasAttribute("onclick")).toBe(false);
-    expect(link?.innerHTML).toBe("safe");
+    expect(link?.innerHTML).toBe("<span>bad</span>");
+    expect(link?.hasAttribute("dangerouslySetInnerHTML")).toBe(false);
     expect(link?.getAttribute("title")).toBe("safe");
   });
 
