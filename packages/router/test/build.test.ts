@@ -1773,7 +1773,8 @@ export default function Login(props: { data: { intent: string } }) {
     expect(loginScript).toMatch(/^assets\/routes\/login\.[a-f0-9]{8}\.js$/);
     expect(html).toContain('data-mreact-route-id="login"');
     expect(html).toContain('<script type="application/json" id="mreact-props-login">');
-    expect(html).toContain(`"url":"https://app.example/login"`);
+    expect(html).toContain(`"url":"/login"`);
+    expect(html).not.toContain("app.example");
     expect(html).toContain(`"intent":"login"`);
     expect(html).toContain(`<link rel="modulepreload" href="/_mreact/client/${loginScript}">`);
     expect(html).toContain(`<script type="module" src="/_mreact/client/${loginScript}"></script>`);

@@ -1643,7 +1643,7 @@ function cloudflareHydrationMarkerParts(options: {
   const propsJson = escapeScriptJson(
     JSON.stringify({
       params: options.params,
-      request: { url: options.request.url },
+      request: { url: new URL(options.request.url).pathname },
       data: options.data,
     }),
   );

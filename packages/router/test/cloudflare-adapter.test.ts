@@ -3556,6 +3556,7 @@ export default function Page() {
     expect(JSON.parse(propsJson ?? "{}")).toMatchObject({
       data: { marker: "</script><script>alert(1)</script>" },
       params: { slug: "</script><script>alert(1)</script>" },
+      request: { url: "/payload/%3C/script%3E" },
     });
   });
 

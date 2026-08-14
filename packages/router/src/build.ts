@@ -4798,7 +4798,7 @@ function cloudflareHydrationMarkerParts(props) {
   const escapedRouteId = escapeHtmlAttribute(routeId);
   const propsJson = escapeScriptJson(JSON.stringify({
     params: props.params,
-    request: { url: props.request.url },
+    request: { url: new URL(props.request.url).pathname },
     data: props.data,
   }));
   const clientReferencesJson = route.clientReferenceManifest === undefined || route.clientReferenceManifest.length === 0
