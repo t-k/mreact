@@ -21,7 +21,7 @@ import {
   isEventLikePropName,
   isReactEventHandlerPropName,
 } from "@reckona/mreact-shared";
-import { setDomAttribute } from "@reckona/mreact-reactive-dom";
+import { setDomAttribute } from "@reckona/mreact-reactive-dom/internal";
 
 export function applyProps(
   element: HostElement,

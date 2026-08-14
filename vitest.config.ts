@@ -113,6 +113,10 @@ export default defineConfig({
           .pathname,
       },
       {
+        find: "@reckona/mreact-reactive-dom/internal",
+        replacement: new URL("./packages/reactive-dom/src/internal.ts", import.meta.url).pathname,
+      },
+      {
         find: "@reckona/mreact-reactive-dom",
         replacement: new URL("./packages/reactive-dom/src/index.ts", import.meta.url).pathname,
       },
