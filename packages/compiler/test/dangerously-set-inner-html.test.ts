@@ -4,7 +4,12 @@ import { afterEach, describe, expect, test } from "vitest";
 import type { Cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { transform } from "../src/index.js";
-import { runClientComponent, runServerComponent, runServerStreamComponent } from "./helpers.js";
+import {
+  runAsyncServerComponent,
+  runClientComponent,
+  runServerComponent,
+  runServerStreamComponent,
+} from "./helpers.js";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -206,6 +211,90 @@ describe("compiler dangerouslySetInnerHTML", () => {
     await expect(
       runServerStreamComponent(streamOutput.code, "App", invalidSpread),
     ).resolves.toContain('<div data-case="spread-only"></div>');
+  });
+
+  test("server string and stream evaluate merged HTML attributes once in source order", async () => {
+    const source = `export function App(props) {
+      return <div data-first={props.nextAttribute()} dangerouslySetInnerHTML={props.nextDirect()} {...props.nextSpread()} data-last={props.nextTrailing()}>child</div>;
+    }`;
+    const stringOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+    const streamOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    const createProps = () => {
+      const calls: string[] = [];
+      return {
+        calls,
+        props: {
+          nextAttribute: () => {
+            calls.push("attribute");
+            return "first";
+          },
+          nextDirect: () => {
+            calls.push("direct");
+            return { __html: "<b>direct</b>" };
+          },
+          nextSpread: () => {
+            calls.push("spread");
+            return { dangerouslySetInnerHTML: { __html: "<i>spread</i>" }, title: "spread" };
+          },
+          nextTrailing: () => {
+            calls.push("trailing");
+            return "last";
+          },
+        },
+      };
+    };
+    const stringCase = createProps();
+    const streamCase = createProps();
+    const expected =
+      '<div data-first="first" title="spread" data-last="last"><i>spread</i></div>';
+
+    expect(runServerComponent(stringOutput.code, "App", stringCase.props)).toBe(expected);
+    expect(stringCase.calls).toEqual(["attribute", "direct", "spread", "trailing"]);
+    await expect(
+      runServerStreamComponent(streamOutput.code, "App", streamCase.props),
+    ).resolves.toBe(expected);
+    expect(streamCase.calls).toEqual(["attribute", "direct", "spread", "trailing"]);
+  });
+
+  test("server string and stream preserve async children behind an HTML spread fallback", async () => {
+    const source = `async function Child() {
+      return <span>async child</span>;
+    }
+    export async function App() {
+      const spread = {};
+      return <div {...spread}><Child /></div>;
+    }`;
+    const stringOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+    const streamOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+
+    await expect(runAsyncServerComponent(stringOutput.code)).resolves.toBe(
+      "<div><span>async child</span></div>",
+    );
+    await expect(runServerStreamComponent(streamOutput.code)).resolves.toBe(
+      "<div><span>async child</span></div>",
+    );
   });
 
   test("server string and stream output reject non-exact opt-in objects without coercion", async () => {

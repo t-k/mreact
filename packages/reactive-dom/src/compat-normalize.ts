@@ -109,6 +109,6 @@ function applyCompatElementProps(
       continue;
     }
 
-    applyDomProp(node, name, value, { preferProperty: true });
+    applyDomProp(node, name, value, true);
   }
 }

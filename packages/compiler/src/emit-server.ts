@@ -657,8 +657,36 @@ function collectHtmlStatements(
     return statements;
   }
 
-  statements.push(`${outVar} += ${stringLiteral(`<${node.tagName}`)};`);
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
+  if (
+    dynamicAttributes === "emit" &&
+    !isVoidHtmlElement(node.tagName) &&
+    node.attributes.some((attr) => attr.kind === "spread-attr")
+  ) {
+    const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+    statements.push(
+      `${outVar} += ${emitMergedSpreadElementExpression(
+        node.tagName,
+        node.attributes,
+        attributeScan,
+        emitHtmlExpressionFromChildren(
+          node.children,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        ),
+        selectedAttributePart,
+        containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
+      )};`,
+    );
+    return statements;
+  }
+
+  statements.push(`${outVar} += ${stringLiteral(`<${node.tagName}`)};`);
 
   for (const attributePart of collectElementAttributeParts(
     node.tagName,
@@ -1019,6 +1047,31 @@ function collectHtmlParts(
   const childSelectedValueCode =
     node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
   const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
+  if (
+    dynamicAttributes === "emit" &&
+    !isVoidHtmlElement(node.tagName) &&
+    node.attributes.some((attr) => attr.kind === "spread-attr")
+  ) {
+    return [
+      emitMergedSpreadElementExpression(
+        node.tagName,
+        node.attributes,
+        attributeScan,
+        emitHtmlExpressionFromChildren(
+          node.children,
+          escapeHelperName,
+          escapeBatchHelperName,
+          asyncComponentNames,
+          dynamicAttributes,
+          contextProviderHelperName,
+          contextConsumerHelperName,
+          reactNodeRenderHelperName,
+        ),
+        selectedAttributePart,
+        containsAsyncServerOperationInChildren(node.children, asyncComponentNames),
+      ),
+    ];
+  }
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(
     node.attributes,
     emitHtmlExpressionFromChildren(
@@ -1086,6 +1139,29 @@ function emitDangerouslySetInnerHtmlExpression(
       : [];
   });
   return `(() => { const _props = {}; ${assignments.join(" ")} if (!Object.prototype.hasOwnProperty.call(_props, "dangerouslySetInnerHTML")) return ${fallbackCode}; return ${emitExactDangerouslySetInnerHtmlExpression("_props.dangerouslySetInnerHTML")}; })()`;
+}
+
+function emitMergedSpreadElementExpression(
+  tagName: string,
+  attrs: readonly AttributeIr[],
+  attributeScan: ElementAttributeScan,
+  fallbackCode: string,
+  selectedAttributePart: string | undefined,
+  asyncFallback: boolean,
+): string {
+  const propsName = `${currentSpreadAttributesHelperName}$props`;
+  const assignments = emitMergedSpreadPropsAssignments(
+    tagName,
+    attrs,
+    attributeScan,
+    propsName,
+    true,
+  );
+  const opening = `${stringLiteral(`<${tagName}`)} + ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName})${selectedAttributePart === undefined ? "" : ` + (${selectedAttributePart})`} + ">"`;
+  const innerHtml = `Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML") ? ${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)} : (${fallbackCode})`;
+
+  const invocation = `${asyncFallback ? "(async () =>" : "(() =>"} { const ${propsName} = {}; ${assignments.join(" ")} return ${opening} + (${innerHtml}) + ${stringLiteral(`</${tagName}>`)}; })()`;
+  return asyncFallback ? `(await ${invocation})` : invocation;
 }
 
 function emitExactDangerouslySetInnerHtmlExpression(code: string): string {
@@ -1195,7 +1271,26 @@ function emitMergedSpreadAttributeExpression(
   attrs: readonly AttributeIr[],
   attributeScan: ElementAttributeScan,
 ): string {
-  const statements = attrs.flatMap((attr): string[] => {
+  const propsName = "_props";
+  const statements = emitMergedSpreadPropsAssignments(
+    tagName,
+    attrs,
+    attributeScan,
+    propsName,
+    false,
+  );
+
+  return `(() => { const ${propsName} = {}; ${statements.join(" ")} return ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName}); })()`;
+}
+
+function emitMergedSpreadPropsAssignments(
+  tagName: string,
+  attrs: readonly AttributeIr[],
+  attributeScan: ElementAttributeScan,
+  propsName: string,
+  includeDangerouslySetInnerHtml: boolean,
+): string[] {
+  return attrs.flatMap((attr): string[] => {
     if (
       attr.kind !== "spread-attr" &&
       ((tagName === "input" &&
@@ -1208,18 +1303,18 @@ function emitMergedSpreadAttributeExpression(
     }
 
     if (attr.kind === "spread-attr") {
-      return [`${currentSpreadAttributesHelperName}$assign(_props, (${attr.code}) ?? {});`];
+      return [`${currentSpreadAttributesHelperName}$assign(${propsName}, (${attr.code}) ?? {});`];
     }
 
-    if (attr.kind === "event" || attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
+    if (attr.kind === "event" || attr.name === "key") {
       return [];
     }
 
-    const valueCode = attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
-    return [`_props[${stringLiteral(attr.name)}] = ${valueCode};`];
-  });
+    if (attr.name === "dangerouslySetInnerHTML" && !includeDangerouslySetInnerHtml) return [];
 
-  return `(() => { const _props = {}; ${statements.join(" ")} return ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, _props); })()`;
+    const valueCode = attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+    return [`${propsName}[${stringLiteral(attr.name)}] = ${valueCode};`];
+  });
 }
 
 interface ElementAttributeScan {

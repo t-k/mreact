@@ -71,7 +71,7 @@ function applySpreadProps(
           bindEvent(element as HTMLElement, eventName as keyof HTMLElementEventMap, value as EventListener),
         );
       } else {
-        applyDomProp(element, name, value, { preferProperty: false });
+        applyDomProp(element, name, value, false);
       }
 
       if (value === false || value === null || value === undefined) {

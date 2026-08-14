@@ -16,7 +16,7 @@ export type {
   BindStaticKeyedSingleNodeListSelectedClassOptions,
   SingleNodeRenderer,
 } from "./bind-static-keyed-single-node-list.js";
-export { withPropBindingMetadata } from "./dom-prop-application.js";
+export { setDomAttribute, withPropBindingMetadata } from "./dom-prop-application.js";
 export { bindSpreadProps } from "./bind-spread-props.js";
 export { bindText, bindTextBatch } from "./bind-text.js";
 export type { BindTextBatchOptions, BindTextOptions } from "./bind-text.js";

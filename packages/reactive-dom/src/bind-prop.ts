@@ -30,7 +30,7 @@ export function bindProp(
 
     initialized = true;
     previousValue = nextValue;
-    applyDomProp(element, name, nextValue, { preferProperty: true });
+    applyDomProp(element, name, nextValue, true);
   });
 
   return registerIdempotentDispose(disposeEffect);
@@ -54,7 +54,7 @@ function bindPropWithMetadata(
 
     initialized = true;
     previousValue = nextValue;
-    applyDomProp(target, name, nextValue, { preferProperty: true });
+    applyDomProp(target, name, nextValue, true);
   });
   const binding: PropBinding = {
     dispose: disposeEffect,
@@ -62,7 +62,7 @@ function bindPropWithMetadata(
       target = nextElement;
 
       if (initialized) {
-        applyDomProp(target, name, previousValue, { preferProperty: true });
+        applyDomProp(target, name, previousValue, true);
       }
     },
   };

@@ -1,36 +1,9 @@
 // Canonical URL and HTML-attribute safety helpers shared across server,
 // React compatibility, and reactive DOM render paths.
 
-const URL_ATTRIBUTE_NAMES = new Set([
-  "href",
-  "src",
-  "action",
-  "formaction",
-  "xlink:href",
-  "ping",
-  "poster",
-  "background",
-  "manifest",
-  "data",
-  "codebase",
-]);
-
-const SRCSET_ATTRIBUTE_NAMES = new Set(["srcset", "imagesrcset"]);
-
-const DANGEROUS_HTML_ATTRIBUTE_NAMES = new Set(["srcdoc"]);
-
-const UNSAFE_URL_SCHEMES = new Set([
-  "javascript",
-  "data",
-  "vbscript",
-  "livescript",
-  "mhtml",
-  "file",
-]);
-
 /** Returns true for HTML attributes that require explicit unsafe-HTML opt-in handling. */
 export function isDangerousHtmlAttribute(name: string): boolean {
-  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+  return name === "srcdoc";
 }
 
 /** Narrows a value to an explicit raw HTML opt-in payload. */
@@ -40,19 +13,19 @@ export function isDangerousHtmlOptIn(
   return (
     typeof value === "object" &&
     value !== null &&
-    "__html" in value &&
-    typeof (value as { __html?: unknown }).__html === "string"
+    Reflect.ownKeys(value).length === 1 &&
+    typeof Object.getOwnPropertyDescriptor(value, "__html")?.value === "string"
   );
 }
 
 /** Returns true when an attribute name normally carries a single URL value. */
 export function isUrlAttribute(name: string): boolean {
-  return URL_ATTRIBUTE_NAMES.has(name);
+  return /^(href|src|action|formaction|xlink:href|ping|poster|background|manifest|data|codebase)$/.test(name);
 }
 
 /** Returns true when an attribute name carries a srcset-style URL list. */
 export function isSrcsetAttribute(name: string): boolean {
-  return SRCSET_ATTRIBUTE_NAMES.has(name);
+  return name === "srcset" || name === "imagesrcset";
 }
 
 /** Checks whether an HTML URL-bearing attribute value uses a blocked scheme. */
@@ -116,7 +89,7 @@ function isUnsafeUrlValueForName(name: string, value: string): boolean {
   const canonical = canonicalizeUrlForSchemeCheck(value);
   const scheme = schemeOf(canonical);
   if (scheme === undefined) return false;
-  if (!UNSAFE_URL_SCHEMES.has(scheme)) return false;
+  if (!/^(javascript|data|vbscript|livescript|mhtml|file)$/.test(scheme)) return false;
   if (scheme === "data" && (name === "src" || name === "poster")) {
     if (/^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)) return false;
   }

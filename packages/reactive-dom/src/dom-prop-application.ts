@@ -8,10 +8,6 @@ import {
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
-export interface DomPropApplicationOptions {
-  preferProperty: boolean;
-}
-
 export interface PropBinding {
   dispose: Dispose;
   retarget: (element: Element) => void;
@@ -73,10 +69,10 @@ export function applyDomProp(
   element: Element,
   name: string,
   value: unknown,
-  options: DomPropApplicationOptions,
+  preferProperty: boolean,
 ): void {
   if (name === "dangerouslySetInnerHTML") {
-    element.innerHTML = readDangerouslySetInnerHtml(value) ?? "";
+    element.innerHTML = isDangerousHtmlOptIn(value) ? value.__html : "";
     return;
   }
 
@@ -88,7 +84,7 @@ export function applyDomProp(
     isUnsafeUrlAttribute(attrName, value)
   ) {
     clearDomProperty(element, name, attrName);
-    removeDomAttribute(element, attrName);
+    element.removeAttribute(attrName);
     return;
   }
 
@@ -111,13 +107,13 @@ export function applyDomProp(
     return;
   }
 
-  if (options.preferProperty && shouldAssignDomProperty(element, name)) {
+  if (preferProperty && shouldAssignDomProperty(element, name)) {
     (element as unknown as Record<string, unknown>)[name] = value;
     if (typeof value === "boolean") {
       if (value) {
         setDomAttribute(element, attrName, "");
       } else {
-        removeDomAttribute(element, attrName);
+        element.removeAttribute(attrName);
       }
     }
     return;
@@ -137,66 +133,28 @@ export function removeDomProp(element: Element, name: string): void {
     element.innerHTML = "";
     return;
   }
-
   const attrName = toDomAttributeName(name);
   clearDomProperty(element, name, attrName);
-  removeDomAttribute(element, attrName);
+  element.removeAttribute(attrName);
 }
 
-function readDangerouslySetInnerHtml(value: unknown): string | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-
-  const keys = Reflect.ownKeys(value);
-  if (keys.length !== 1 || keys[0] !== "__html") {
-    return undefined;
-  }
-
-  const descriptor = Object.getOwnPropertyDescriptor(value, "__html");
-  return descriptor !== undefined && "value" in descriptor && typeof descriptor.value === "string"
-    ? descriptor.value
-    : undefined;
-}
-
-function setDomAttribute(element: Element, name: string, value: string): void {
-  const namespace = domAttributeNamespace(name);
+export function setDomAttribute(element: Element, name: string, value: string): void {
+  const prefix = name.split(":", 1)[0];
+  const namespace =
+    prefix === "xlink"
+      ? "1999/xlink"
+      : prefix === "xml"
+        ? "XML/1998/namespace"
+        : prefix === "xmlns"
+          ? "2000/xmlns/"
+          : undefined;
   if (namespace === undefined) {
     element.setAttribute(name, value);
     return;
   }
 
-  element.setAttributeNS(namespace.uri, name, value);
+  element.setAttributeNS(`http://www.w3.org/${namespace}`, name, value);
 }
-
-function removeDomAttribute(element: Element, name: string): void {
-  const namespace = domAttributeNamespace(name);
-  if (namespace === undefined) {
-    element.removeAttribute(name);
-    return;
-  }
-
-  element.removeAttributeNS(namespace.uri, namespace.localName);
-}
-
-function domAttributeNamespace(
-  name: string,
-): { uri: string; localName: string } | undefined {
-  const separator = name.indexOf(":");
-  if (separator === -1) {
-    return undefined;
-  }
-
-  const prefix = name.slice(0, separator);
-  const uri = DOM_ATTRIBUTE_NAMESPACE_URIS[prefix];
-  return uri === undefined ? undefined : { uri, localName: name.slice(separator + 1) };
-}
-
-const DOM_ATTRIBUTE_NAMESPACE_URIS: Readonly<Record<string, string>> = {
-  xlink: "http://www.w3.org/1999/xlink",
-  xml: "http://www.w3.org/XML/1998/namespace",
-  xmlns: "http://www.w3.org/2000/xmlns/",
-};
 
 function applyStyleObject(element: HTMLElement, value: Record<string, unknown>): void {
   const nextNames = new Set(Object.keys(value).map(styleObjectKeyToCssName));
@@ -231,7 +189,11 @@ function styleObjectKeyToCssName(name: string): string {
 }
 
 export function toDomAttributeName(name: string): string {
-  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+  if (!HTML_ATTRIBUTE_ALIASES.test(name)) return name;
+  if (name === "acceptCharset") return "accept-charset";
+  if (name === "className") return "class";
+  if (name === "htmlFor") return "for";
+  return name === "httpEquiv" ? "http-equiv" : name.toLowerCase();
 }
 
 function clearDomProperty(element: Element, name: string, attrName: string): void {
@@ -272,30 +234,4 @@ function shouldAssignDomProperty(element: Element, name: string): boolean {
   );
 }
 
-const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
-  acceptCharset: "accept-charset",
-  autoFocus: "autofocus",
-  autoPlay: "autoplay",
-  charSet: "charset",
-  className: "class",
-  colSpan: "colspan",
-  contentEditable: "contenteditable",
-  crossOrigin: "crossorigin",
-  encType: "enctype",
-  formAction: "formaction",
-  frameBorder: "frameborder",
-  htmlFor: "for",
-  httpEquiv: "http-equiv",
-  maxLength: "maxlength",
-  minLength: "minlength",
-  noValidate: "novalidate",
-  playsInline: "playsinline",
-  readOnly: "readonly",
-  rowSpan: "rowspan",
-  spellCheck: "spellcheck",
-  imageSrcSet: "imagesrcset",
-  srcDoc: "srcdoc",
-  srcSet: "srcset",
-  tabIndex: "tabindex",
-  useMap: "usemap",
-};
+const HTML_ATTRIBUTE_ALIASES = /^(acceptCharset|className|formAction|htmlFor|httpEquiv|imageSrcSet|srcDoc|srcSet|tabIndex)$/;

@@ -993,7 +993,7 @@ function tryEmitPartAsStringExpression(
 
     return `${stringLiteral(`<!--mreact-h:start:${encodeURIComponent(part.hydrationId)}-->`)} + ${rendered} + ${stringLiteral(`<!--mreact-h:end:${encodeURIComponent(part.hydrationId)}-->`)}`;
   }
-  if (part.kind === "component" && part.hydrationId === undefined) {
+  if (part.kind === "component" && part.async !== true && part.hydrationId === undefined) {
     return emitRenderableHtmlExpression(
       `${part.name}(${emitPropsObject(part.props, part.children, part.escapeHelperName, part.name)})`,
     );
@@ -1686,6 +1686,37 @@ function collectHtmlParts(
       ? state
       : { ...state, selectedValueCode: childSelectedValueCode };
   const selectedAttributePart = collectOptionSelectedAttributePart(node, state.selectedValueCode);
+  if (
+    state.dynamicAttributes === "emit" &&
+    !isVoidHtmlElement(node.tagName) &&
+    node.attributes.some((attr) => attr.kind === "spread-attr")
+  ) {
+    const fallbackParts =
+      (childState.selectedValueCode === undefined
+        ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
+        : undefined) ??
+      node.children.flatMap((child) =>
+        collectHtmlParts(
+          child,
+          escapeHelperName,
+          asyncBoundaryHelperName,
+          outOfOrderBoundaryHelperName,
+          reactSuspenseBoundaryHelperName,
+          reactSuspenseOutOfOrderBoundaryHelperName,
+          childState,
+        ),
+      );
+    return [
+      emitMergedSpreadElementPart(
+        node.tagName,
+        node.attributes,
+        attributeScan,
+        selectedAttributePart,
+        fallbackParts,
+        escapeHelperName,
+      ),
+    ];
+  }
   const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(
     node.attributes,
     node.children,
@@ -1773,6 +1804,58 @@ function emitDangerouslySetInnerHtmlPart(
   return {
     kind: "raw-dynamic",
     code: emitExactDangerouslySetInnerHtmlExpression(attr.code),
+  };
+}
+
+function emitMergedSpreadElementPart(
+  tagName: string,
+  attrs: readonly AttributeIr[],
+  attributeScan: ElementAttributeScan,
+  selectedAttributePart: HtmlSyncPart | undefined,
+  fallbackParts: HtmlPart[],
+  escapeHelperName: string,
+): HtmlPart {
+  const propsName = `${currentSpreadAttributesHelperName}$props`;
+  const assignments = emitMergedSpreadPropsAssignments(
+    tagName,
+    attrs,
+    attributeScan,
+    propsName,
+    true,
+  );
+  const selectedExpression =
+    selectedAttributePart === undefined
+      ? undefined
+      : tryEmitPartAsStringExpression(
+          selectedAttributePart,
+          currentCompatRenderToStringHelperName,
+        );
+  const opening = `${stringLiteral(`<${tagName}`)} + ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName})${selectedExpression === undefined ? "" : ` + (${selectedExpression})`} + ">"`;
+  const closing = stringLiteral(`</${tagName}>`);
+  const fallbackExpressions = fallbackParts.map((part) =>
+    isHtmlSyncPart(part)
+      ? tryEmitPartAsStringExpression(part, currentCompatRenderToStringHelperName)
+      : undefined,
+  );
+  if (fallbackExpressions.every((expression) => expression !== undefined)) {
+    const fallback =
+      fallbackExpressions.length === 0 ? '""' : (fallbackExpressions as string[]).join(" + ");
+    const innerHtml = `Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML") ? ${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)} : (${fallback})`;
+    return {
+      kind: "raw-dynamic",
+      code: `(() => { const ${propsName} = {}; ${assignments.join(" ")} return ${opening} + (${innerHtml}) + ${closing}; })()`,
+    };
+  }
+
+  const fallbackStatements = emitNestedStreamAppendStatements(
+    fallbackParts,
+    "$sink",
+    currentCompatRenderToStringHelperName,
+  );
+  return {
+    kind: "stream-node",
+    code: `async ($sink) => { const ${propsName} = {}; ${assignments.join(" ")} $sink.append(${opening}); if (Object.prototype.hasOwnProperty.call(${propsName}, "dangerouslySetInnerHTML")) { $sink.append(${emitExactDangerouslySetInnerHtmlExpression(`${propsName}.dangerouslySetInnerHTML`)}); } else {\n${fallbackStatements}\n} $sink.append(${closing}); }`,
+    escapeHelperName,
   };
 }
 
@@ -1927,7 +2010,26 @@ function emitMergedSpreadAttributeExpression(
   attrs: readonly AttributeIr[],
   attributeScan: ElementAttributeScan,
 ): string {
-  const statements = attrs.flatMap((attr): string[] => {
+  const propsName = "_props";
+  const statements = emitMergedSpreadPropsAssignments(
+    tagName,
+    attrs,
+    attributeScan,
+    propsName,
+    false,
+  );
+
+  return `(() => { const ${propsName} = {}; ${statements.join(" ")} return ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName}); })()`;
+}
+
+function emitMergedSpreadPropsAssignments(
+  tagName: string,
+  attrs: readonly AttributeIr[],
+  attributeScan: ElementAttributeScan,
+  propsName: string,
+  includeDangerouslySetInnerHtml: boolean,
+): string[] {
+  return attrs.flatMap((attr): string[] => {
     if (
       attr.kind !== "spread-attr" &&
       ((tagName === "input" &&
@@ -1940,18 +2042,18 @@ function emitMergedSpreadAttributeExpression(
     }
 
     if (attr.kind === "spread-attr") {
-      return [`${currentSpreadAttributesHelperName}$assign(_props, (${attr.code}) ?? {});`];
+      return [`${currentSpreadAttributesHelperName}$assign(${propsName}, (${attr.code}) ?? {});`];
     }
 
-    if (attr.kind === "event" || attr.name === "key" || attr.name === "dangerouslySetInnerHTML") {
+    if (attr.kind === "event" || attr.name === "key") {
       return [];
     }
 
-    const valueCode = attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
-    return [`_props[${stringLiteral(attr.name)}] = ${valueCode};`];
-  });
+    if (attr.name === "dangerouslySetInnerHTML" && !includeDangerouslySetInnerHtml) return [];
 
-  return `(() => { const _props = {}; ${statements.join(" ")} return ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, _props); })()`;
+    const valueCode = attr.kind === "static-attr" ? stringLiteral(attr.value) : `(${attr.code})`;
+    return [`${propsName}[${stringLiteral(attr.name)}] = ${valueCode};`];
+  });
 }
 
 interface ElementAttributeScan {
