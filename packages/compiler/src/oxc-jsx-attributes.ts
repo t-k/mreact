@@ -124,6 +124,10 @@ export function analyzeOxcAttribute(
   }
 
   if (value.type === "Literal") {
+    if (name === "dangerouslySetInnerHTML") {
+      return [{ kind: "dynamic-attr", name, code: JSON.stringify(value.value) }];
+    }
+
     return [{ kind: "static-attr", name, value: String(value.value) }];
   }
 
@@ -141,7 +145,9 @@ export function analyzeOxcAttribute(
     return [attribute];
   }
 
-  return [{ kind: "static-attr", name, value: "" }];
+  return name === "dangerouslySetInnerHTML"
+    ? [{ kind: "dynamic-attr", name, code: "true" }]
+    : [{ kind: "static-attr", name, value: "" }];
 }
 
 export function findOxcJsxAttributeCode(

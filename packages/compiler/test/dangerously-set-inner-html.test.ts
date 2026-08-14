@@ -19,6 +19,32 @@ afterEach(() => {
 });
 
 describe("compiler dangerouslySetInnerHTML", () => {
+  test.each([
+    'dangerouslySetInnerHTML="<em>invalid</em>"',
+    "dangerouslySetInnerHTML",
+  ])("clears children for invalid static %s", async (attribute) => {
+    const source = `export function App() {
+      return <div ${attribute}><span>child</span></div>;
+    }`;
+    const serverOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+    const clientOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(runServerComponent(serverOutput.code)).toBe("<div></div>");
+    const element = (await runClientComponent(clientOutput.code)) as HTMLElement;
+    expect(element.innerHTML).toBe("");
+    expect(element.hasAttribute("dangerouslySetInnerHTML")).toBe(false);
+  });
+
   test("reactive client applies direct HTML and clears invalid or null values", async () => {
     const output = transform({
       code: `import { cell } from "@reckona/mreact-reactive-core";
