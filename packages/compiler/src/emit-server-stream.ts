@@ -491,7 +491,7 @@ function emitSpreadAttributesHelper(
     `  if (props == null || props === false) return "";`,
     `  let _out = "";`,
     `  for (const _rawName of Object.keys(props)) {`,
-    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children") continue;`,
+    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || _rawName === "dangerouslySetInnerHTML") continue;`,
     `    if (/^on/i.test(_rawName)) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,
@@ -1686,7 +1686,11 @@ function collectHtmlParts(
       ? state
       : { ...state, selectedValueCode: childSelectedValueCode };
   const selectedAttributePart = collectOptionSelectedAttributePart(node, state.selectedValueCode);
-  const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(node.attributes);
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlPart(
+    node.attributes,
+    node.children,
+    escapeHelperName,
+  );
   const childrenParts: HtmlPart[] = isVoidHtmlElement(node.tagName)
     ? []
     : dangerousInnerHtml !== undefined
@@ -1722,7 +1726,37 @@ function collectHtmlParts(
   ];
 }
 
-function emitDangerouslySetInnerHtmlPart(attrs: readonly AttributeIr[]): HtmlSyncPart | undefined {
+function emitDangerouslySetInnerHtmlPart(
+  attrs: readonly AttributeIr[],
+  children: JsxNodeIr[],
+  escapeHelperName: string,
+): HtmlPart | undefined {
+  if (attrs.some((attr) => attr.kind === "spread-attr")) {
+    const assignments = attrs.flatMap((attr): string[] => {
+      if (attr.kind === "spread-attr") {
+        return [`${currentSpreadAttributesHelperName}$assign(_props, (${attr.code}) ?? {});`];
+      }
+      return attr.kind === "dynamic-attr" && attr.name === "dangerouslySetInnerHTML"
+        ? [`_props.dangerouslySetInnerHTML = (${attr.code});`]
+        : [];
+    });
+    if (!children.some(containsAnyAsyncBoundary)) {
+      return {
+        kind: "raw-dynamic",
+        code: `(() => { const _props = {}; ${assignments.join(" ")} if (!Object.prototype.hasOwnProperty.call(_props, "dangerouslySetInnerHTML")) return ${emitHtmlExpressionFromChildren(children, escapeHelperName)}; return ${emitExactDangerouslySetInnerHtmlExpression("_props.dangerouslySetInnerHTML")}; })()`,
+      };
+    }
+
+    const fallbackRenderer = emitStreamRendererFromChildren(children, escapeHelperName, true);
+    const fallbackCode =
+      fallbackRenderer === undefined ? "" : ` else { await (${fallbackRenderer})($sink); }`;
+    return {
+      kind: "stream-node",
+      code: `async ($sink) => { const _props = {}; ${assignments.join(" ")} if (Object.prototype.hasOwnProperty.call(_props, "dangerouslySetInnerHTML")) { $sink.append(${emitExactDangerouslySetInnerHtmlExpression("_props.dangerouslySetInnerHTML")}); }${fallbackCode} }`,
+      escapeHelperName,
+    };
+  }
+
   let attr: Extract<AttributeIr, { kind: "dynamic-attr" }> | undefined;
   for (let index = attrs.length - 1; index >= 0; index -= 1) {
     const candidate = attrs[index];

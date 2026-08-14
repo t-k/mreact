@@ -49,14 +49,14 @@ export function applyProps(
           continue;
         }
 
-        if (element.hasAttribute(attributeName)) {
+        if (hasDomAttribute(element, attributeName)) {
           reportRecoverable(
             options,
             "attribute",
             path,
             new Error(`Hydration attribute mismatch: ${attributeName}.`),
           );
-          element.removeAttribute(attributeName);
+          removeDomAttribute(element, attributeName);
         }
       }
     }
@@ -372,7 +372,7 @@ function applyAttribute(
   // number, boolean -- is treated as if it were null (drop the
   // attribute and log a recoverable mismatch).
   if (isDangerousHtmlAttribute(name) && !isDangerousHtmlOptIn(value)) {
-    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
+    if (hasDomAttribute(element, name) && !preserveHydrationAttributes) {
       reportRecoverable(
         options,
         "attribute",
@@ -381,20 +381,20 @@ function applyAttribute(
       );
     }
     if (!preserveHydrationAttributes) {
-      element.removeAttribute(name);
+      removeDomAttribute(element, name);
     }
     return;
   }
 
   if (isEventLikePropName(name)) {
-    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
-      element.removeAttribute(name);
+    if (hasDomAttribute(element, name) && !preserveHydrationAttributes) {
+      removeDomAttribute(element, name);
     }
     return;
   }
 
   if (value === null || value === undefined || value === false) {
-    if (element.hasAttribute(name) && !preserveHydrationAttributes) {
+    if (hasDomAttribute(element, name) && !preserveHydrationAttributes) {
       reportRecoverable(
         options,
         "attribute",
@@ -404,7 +404,7 @@ function applyAttribute(
     }
 
     if (!preserveHydrationAttributes) {
-      element.removeAttribute(name);
+      removeDomAttribute(element, name);
     }
     return;
   }
@@ -436,7 +436,7 @@ function applyAttribute(
     return;
   }
 
-  const currentValue = element.getAttribute(name);
+  const currentValue = getDomAttribute(element, name);
 
   if (currentValue !== stringValue && !preserveHydrationAttributes) {
     reportRecoverable(
@@ -455,7 +455,7 @@ function applyAttribute(
     return;
   }
 
-  element.setAttribute(name, stringValue);
+  setDomAttribute(element, name, stringValue);
 }
 
 function applyInitialAttribute(
@@ -482,8 +482,55 @@ function applyInitialAttribute(
     return;
   }
 
-  element.setAttribute(name, stringValue);
+  setDomAttribute(element, name, stringValue);
 }
+
+function setDomAttribute(element: Element, name: string, value: string): void {
+  const namespace = domAttributeNamespace(name);
+  if (namespace === undefined) {
+    element.setAttribute(name, value);
+  } else {
+    element.setAttributeNS(namespace.uri, name, value);
+  }
+}
+
+function getDomAttribute(element: Element, name: string): string | null {
+  const namespace = domAttributeNamespace(name);
+  return namespace === undefined
+    ? element.getAttribute(name)
+    : element.getAttributeNS(namespace.uri, namespace.localName);
+}
+
+function hasDomAttribute(element: Element, name: string): boolean {
+  const namespace = domAttributeNamespace(name);
+  return namespace === undefined
+    ? element.hasAttribute(name)
+    : element.hasAttributeNS(namespace.uri, namespace.localName);
+}
+
+function removeDomAttribute(element: Element, name: string): void {
+  const namespace = domAttributeNamespace(name);
+  if (namespace === undefined) {
+    element.removeAttribute(name);
+  } else {
+    element.removeAttributeNS(namespace.uri, namespace.localName);
+  }
+}
+
+function domAttributeNamespace(
+  name: string,
+): { uri: string; localName: string } | undefined {
+  const separator = name.indexOf(":");
+  if (separator === -1) return undefined;
+  const uri = DOM_ATTRIBUTE_NAMESPACE_URIS[name.slice(0, separator)];
+  return uri === undefined ? undefined : { uri, localName: name.slice(separator + 1) };
+}
+
+const DOM_ATTRIBUTE_NAMESPACE_URIS: Readonly<Record<string, string>> = {
+  xlink: "http://www.w3.org/1999/xlink",
+  xml: "http://www.w3.org/XML/1998/namespace",
+  xmlns: "http://www.w3.org/2000/xmlns/",
+};
 
 function applyInitialOrHydrationAttribute(
   element: Element,

@@ -134,6 +134,80 @@ describe("compiler dangerouslySetInnerHTML", () => {
     expect(spreadDirect?.innerHTML).toBe("<mark>spread update</mark>");
   });
 
+  test("spread-only HTML replaces children and removal clears without restoring them", async () => {
+    const output = transform({
+      code: `import { cell } from "@reckona/mreact-reactive-core";
+        export function App() {
+          const spread = cell({ dangerouslySetInnerHTML: { __html: "<b>raw</b>" } });
+          globalThis.__innerHtmlSpread = spread;
+          return <div {...spread.get()}><span>child</span></div>;
+        }`,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    const element = (await runClientComponent(output.code)) as HTMLElement;
+    expect(element.innerHTML).toBe("<b>raw</b>");
+
+    globalThis.__innerHtmlSpread?.set({});
+    await flushEffects();
+    expect(element.innerHTML).toBe("");
+
+    globalThis.__innerHtmlSpread?.set({ dangerouslySetInnerHTML: { __html: 1 } });
+    await flushEffects();
+    expect(element.innerHTML).toBe("");
+  });
+
+  test("server string and stream merge direct and spread HTML in source order", async () => {
+    const source = `export function App(props) {
+      return <main>
+        <div data-case="spread-only" {...props.spread}>child</div>
+        <div data-case="direct-spread" dangerouslySetInnerHTML={props.direct} {...props.spread}>child</div>
+        <div data-case="spread-direct" {...props.spread} dangerouslySetInnerHTML={props.direct}>child</div>
+      </main>;
+    }`;
+    const stringOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+    const streamOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    const props = {
+      direct: { __html: "<b>direct</b>" },
+      spread: { dangerouslySetInnerHTML: { __html: "<i>spread</i>" } },
+    };
+    const expected =
+      '<main><div data-case="spread-only"><i>spread</i></div><div data-case="direct-spread"><i>spread</i></div><div data-case="spread-direct"><b>direct</b></div></main>';
+
+    expect(runServerComponent(stringOutput.code, "App", props)).toBe(expected);
+    await expect(runServerStreamComponent(streamOutput.code, "App", props)).resolves.toBe(expected);
+    expect(stringOutput.code).not.toContain('dangerouslySetInnerHTML="');
+    expect(streamOutput.code).not.toContain('dangerouslySetInnerHTML="');
+
+    const withoutHtml = { direct: null, spread: {} };
+    expect(runServerComponent(stringOutput.code, "App", withoutHtml)).toContain(
+      '<div data-case="spread-only">child</div>',
+    );
+    const invalidSpread = {
+      direct: null,
+      spread: { dangerouslySetInnerHTML: { __html: "<b>invalid</b>", extra: true } },
+    };
+    expect(runServerComponent(stringOutput.code, "App", invalidSpread)).toContain(
+      '<div data-case="spread-only"></div>',
+    );
+    await expect(
+      runServerStreamComponent(streamOutput.code, "App", invalidSpread),
+    ).resolves.toContain('<div data-case="spread-only"></div>');
+  });
+
   test("server string and stream output reject non-exact opt-in objects without coercion", async () => {
     const output = transform({
       code: `export function App(props) {

@@ -681,7 +681,19 @@ function collectHtmlStatements(
     return statements;
   }
 
-  const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(
+    node.attributes,
+    emitHtmlExpressionFromChildren(
+      node.children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    ),
+  );
   if (dangerousInnerHtml !== undefined) {
     statements.push(`${outVar} += ${dangerousInnerHtml};`);
     statements.push(`${outVar} += ${stringLiteral(`</${node.tagName}>`)};`);
@@ -1007,7 +1019,19 @@ function collectHtmlParts(
   const childSelectedValueCode =
     node.tagName === "select" ? attributeScan.formValueAttributeCode : undefined;
   const selectedAttributePart = collectOptionSelectedAttributePart(node, selectedValueCode);
-  const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(node.attributes);
+  const dangerousInnerHtml = emitDangerouslySetInnerHtmlExpression(
+    node.attributes,
+    emitHtmlExpressionFromChildren(
+      node.children,
+      escapeHelperName,
+      escapeBatchHelperName,
+      asyncComponentNames,
+      dynamicAttributes,
+      contextProviderHelperName,
+      contextConsumerHelperName,
+      reactNodeRenderHelperName,
+    ),
+  );
   const childrenParts = isVoidHtmlElement(node.tagName)
     ? []
     : dangerousInnerHtml !== undefined
@@ -1045,21 +1069,23 @@ function collectHtmlParts(
   ];
 }
 
-function emitDangerouslySetInnerHtmlExpression(attrs: readonly AttributeIr[]): string | undefined {
-  let attr: Extract<AttributeIr, { kind: "dynamic-attr" }> | undefined;
-  for (let index = attrs.length - 1; index >= 0; index -= 1) {
-    const candidate = attrs[index];
-    if (candidate?.kind === "dynamic-attr" && candidate.name === "dangerouslySetInnerHTML") {
-      attr = candidate;
-      break;
-    }
-  }
-
-  if (attr === undefined) {
+function emitDangerouslySetInnerHtmlExpression(
+  attrs: readonly AttributeIr[],
+  fallbackCode: string,
+): string | undefined {
+  if (!attrs.some((attr) => attr.kind === "spread-attr" || attr.name === "dangerouslySetInnerHTML")) {
     return undefined;
   }
 
-  return emitExactDangerouslySetInnerHtmlExpression(attr.code);
+  const assignments = attrs.flatMap((attr): string[] => {
+    if (attr.kind === "spread-attr") {
+      return [`${currentSpreadAttributesHelperName}$assign(_props, (${attr.code}) ?? {});`];
+    }
+    return attr.kind === "dynamic-attr" && attr.name === "dangerouslySetInnerHTML"
+      ? [`_props.dangerouslySetInnerHTML = (${attr.code});`]
+      : [];
+  });
+  return `(() => { const _props = {}; ${assignments.join(" ")} if (!Object.prototype.hasOwnProperty.call(_props, "dangerouslySetInnerHTML")) return ${fallbackCode}; return ${emitExactDangerouslySetInnerHtmlExpression("_props.dangerouslySetInnerHTML")}; })()`;
 }
 
 function emitExactDangerouslySetInnerHtmlExpression(code: string): string {
@@ -1986,7 +2012,7 @@ function emitSpreadAttributesHelper(
     `  if (props == null || props === false) return "";`,
     `  let _out = "";`,
     `  for (const _rawName of Object.keys(props)) {`,
-    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children") continue;`,
+    `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || _rawName === "dangerouslySetInnerHTML") continue;`,
     `    if (/^on/i.test(_rawName)) continue;`,
     `    let _value = props[_rawName];`,
     `    if (_value == null) continue;`,

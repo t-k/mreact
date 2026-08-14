@@ -71,7 +71,9 @@ describe("namespaced JSX names", () => {
     expect(reactiveUse?.getAttributeNS(XLINK_NAMESPACE, "href")).toBe("#icon");
     expect(reactiveUse?.getAttributeNS(XML_NAMESPACE, "lang")).toBe("en");
     expect(compatUse?.getAttribute("xlink:href")).toBe("#icon");
+    expect(compatUse?.getAttributeNS(XLINK_NAMESPACE, "href")).toBe("#icon");
     expect(compatUse?.getAttribute("xml:lang")).toBe("en");
+    expect(compatUse?.getAttributeNS(XML_NAMESPACE, "lang")).toBe("en");
   });
 
   test("preserves qualified attribute names in compat server mode", () => {
@@ -115,6 +117,25 @@ describe("namespaced JSX names", () => {
     expect(svg.querySelector("use")?.hasAttribute("xlink:href")).toBe(false);
     expect(svg.querySelector("use")?.hasAttributeNS(XLINK_NAMESPACE, "href")).toBe(false);
   });
+
+  test.each([
+    { sourceHref: "javascript:alert(1)", unsafeHref: "javascript:alert(1)" },
+    { sourceHref: "java\nscript:alert(1)", unsafeHref: "java\nscript:alert(1)" },
+  ])(
+    "drops static unsafe xlink:href $sourceHref from reactive client templates",
+    async ({ sourceHref, unsafeHref }) => {
+      const output = transform({
+        code: `export function App() { return <svg><a xlink:href="${sourceHref}">x</a></svg>; }`,
+        filename: "App.tsx",
+        target: "client",
+        dev: false,
+      });
+
+      expect(output.code).not.toContain(unsafeHref);
+      const svg = (await runClientComponent(output.code)) as SVGSVGElement;
+      expect(svg.querySelector("a")?.hasAttributeNS(XLINK_NAMESPACE, "href")).toBe(false);
+    },
+  );
 
   test("reports unsupported namespaced tag names without emitting a bare tag", () => {
     const output = transform({

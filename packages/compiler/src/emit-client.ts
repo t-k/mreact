@@ -1,4 +1,4 @@
-import type { ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
+import type { AttributeIr, ComponentPropIr, ComponentIr, JsxNodeIr, ModuleIr } from "./ir.js";
 import type { RuntimeImport } from "./types.js";
 import { listReadsNestedItemObject } from "./ir-nested-object-read.js";
 import { OXC_BIND_DOM_REF_PLACEHOLDER } from "./oxc-dom-lowering.js";
@@ -8,6 +8,7 @@ import {
   type CompatInlineMemo,
 } from "./compat-inline-memo.js";
 import { escapeHtmlAttribute as escapeHtml } from "@reckona/mreact-shared/html-escape";
+import { isStaticUrlValueUnsafe, isUrlAttribute } from "./emit-server-shared.js";
 
 export interface EmitResult {
   code: string;
@@ -519,7 +520,11 @@ function renderStaticHtml(node: JsxNodeIr): string {
   }
 
   const attrs = node.attributes
-    .filter((attr) => attr.kind === "static-attr")
+    .filter(
+      (attr): attr is Extract<AttributeIr, { kind: "static-attr" }> =>
+        attr.kind === "static-attr" &&
+        !(isUrlAttribute(attr.name) && isStaticUrlValueUnsafe(attr.name, attr.value)),
+    )
     .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
     .join("");
   const children = hasDirectDangerouslySetInnerHtml(node)
