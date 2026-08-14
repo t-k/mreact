@@ -344,7 +344,6 @@ export type ServerActionReplayClaim = {
 
 // @public
 export interface ServerActionReplayStore {
-    // (undocumented)
     claim(value: string): ServerActionReplayClaim | Promise<ServerActionReplayClaim>;
 }
 
