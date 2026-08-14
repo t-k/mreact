@@ -31,11 +31,26 @@ class FlightDecodeError extends Error {
   }
 }
 
+interface FlightDecodeContext {
+  decodedModels: WeakMap<object, unknown>;
+  activeReferenceIds: Set<number>;
+  completedReferences: Map<number, unknown>;
+}
+
+function createFlightDecodeContext(): FlightDecodeContext {
+  return {
+    decodedModels: new WeakMap(),
+    activeReferenceIds: new Set(),
+    completedReferences: new Map(),
+  };
+}
+
 export function decodeFlightModel(
   model: FlightModel,
   response: FlightResponse,
   options: DecodeFlightOptions,
   depth = 0,
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): unknown {
   if (depth > MAX_FLIGHT_DECODE_DEPTH) {
     throw new FlightDecodeError(
@@ -51,8 +66,22 @@ export function decodeFlightModel(
     return model;
   }
 
+  if (context.decodedModels.has(model)) {
+    return context.decodedModels.get(model);
+  }
+
+  const finish = <T>(value: T): T => {
+    context.decodedModels.set(model, value);
+    return value;
+  };
+
   if (Array.isArray(model)) {
-    return model.map((item) => decodeFlightModel(item, response, options, depth + 1));
+    const decoded: unknown[] = [];
+    context.decodedModels.set(model, decoded);
+    decoded.push(
+      ...model.map((item) => decodeFlightModel(item, response, options, depth + 1, context)),
+    );
+    return decoded;
   }
 
   if (model.kind === "undefined") {
@@ -60,7 +89,7 @@ export function decodeFlightModel(
   }
 
   if (model.kind === "date") {
-    return new Date(model.value);
+    return finish(new Date(model.value));
   }
 
   if (model.kind === "bigint") {
@@ -85,17 +114,23 @@ export function decodeFlightModel(
   }
 
   if (model.kind === "map") {
-    return new Map(
-      model.entries.map(([key, value]) => [
-        decodeFlightModel(key, response, options, depth + 1),
-        decodeFlightModel(value, response, options, depth + 1),
-      ]),
+    return finish(
+      new Map(
+        model.entries.map(([key, value]) => [
+          decodeFlightModel(key, response, options, depth + 1, context),
+          decodeFlightModel(value, response, options, depth + 1, context),
+        ]),
+      ),
     );
   }
 
   if (model.kind === "set") {
-    return new Set(
-      model.values.map((value) => decodeFlightModel(value, response, options, depth + 1)),
+    return finish(
+      new Set(
+        model.values.map((value) =>
+          decodeFlightModel(value, response, options, depth + 1, context),
+        ),
+      ),
     );
   }
 
@@ -103,27 +138,29 @@ export function decodeFlightModel(
     const formData = new FormData();
 
     for (const [name, value] of model.entries) {
-      const decoded = decodeFlightModel(value, response, options, depth + 1);
+      const decoded = decodeFlightModel(value, response, options, depth + 1, context);
       formData.append(name, decoded instanceof Blob ? decoded : String(decoded ?? ""));
     }
 
-    return formData;
+    return finish(formData);
   }
 
   if (model.kind === "iterable") {
-    return model.values.map((value) => decodeFlightModel(value, response, options, depth + 1));
+    return finish(
+      model.values.map((value) => decodeFlightModel(value, response, options, depth + 1, context)),
+    );
   }
 
   if (model.kind === "array-buffer") {
-    return createArrayBuffer(model.bytes);
+    return finish(createArrayBuffer(model.bytes));
   }
 
   if (model.kind === "typed-array") {
-    return createTypedArray(model.arrayType, model.bytes);
+    return finish(createTypedArray(model.arrayType, model.bytes));
   }
 
   if (model.kind === "data-view") {
-    return new DataView(createArrayBuffer(model.bytes));
+    return finish(new DataView(createArrayBuffer(model.bytes)));
   }
 
   if (model.kind === "error") {
@@ -140,23 +177,59 @@ export function decodeFlightModel(
   }
 
   if (model.kind === "element") {
-    return decodeFlightElementModel(
-      model,
-      response,
-      options,
-      (value, childDepth = 0) => decodeFlightModel(value, response, options, childDepth),
-      depth,
-      assertFlightDecodeDepth,
+    return finish(
+      decodeFlightElementModel(
+        model,
+        response,
+        options,
+        (value, childDepth = 0) => decodeFlightModel(value, response, options, childDepth, context),
+        depth,
+        assertFlightDecodeDepth,
+      ),
     );
   }
 
   if (model.kind === "server-reference") {
-    return createFlightServerReferenceStub(
-      model.id,
-      response,
-      options,
-      (value, childDepth = 0) => decodeFlightModel(value, response, options, childDepth),
+    return finish(
+      createFlightServerReferenceStub(model.id, response, options, (value, childDepth = 0) =>
+        decodeFlightModel(value, response, options, childDepth, context),
+      ),
     );
+  }
+
+  if (model.kind === "object-reference") {
+    if (context.completedReferences.has(model.id)) {
+      return context.completedReferences.get(model.id);
+    }
+    if (context.activeReferenceIds.has(model.id)) {
+      throw new FlightDecodeError(`MR_FLIGHT_CYCLE: cyclic object reference ${model.id}`);
+    }
+
+    const referencedModel = response.objectReferences?.[model.id];
+    if (referencedModel === undefined) {
+      throw new FlightDecodeError(`MR_FLIGHT_REFERENCE_MISSING: object reference ${model.id}`);
+    }
+
+    context.activeReferenceIds.add(model.id);
+    try {
+      const decoded = decodeFlightModel(referencedModel, response, options, depth + 1, context);
+      context.completedReferences.set(model.id, decoded);
+      return decoded;
+    } finally {
+      context.activeReferenceIds.delete(model.id);
+    }
+  }
+
+  if (model.kind === undefined) {
+    const decoded: Record<string, unknown> = {};
+    context.decodedModels.set(model, decoded);
+    for (const [key, value] of Object.entries(model)) {
+      decoded[key] =
+        value === undefined
+          ? undefined
+          : decodeFlightModel(value, response, options, depth + 1, context);
+    }
+    return decoded;
   }
 
   throw new Error(`Unexpected Flight model kind: ${model.kind}`);

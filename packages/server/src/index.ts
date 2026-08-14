@@ -41,6 +41,7 @@ export type {
   FlightIterableModel,
   FlightModel,
   FlightObjectModel,
+  FlightObjectReferenceModel,
   FlightDateModel,
   FlightBigIntModel,
   FlightNumberModel,

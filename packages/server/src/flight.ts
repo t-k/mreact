@@ -136,6 +136,8 @@ export interface FlightResponse {
   root: FlightModel;
   clientReferences: FlightClientReference[];
   serverReferences: FlightServerReference[];
+  /** Models referenced more than once, indexed by object-reference ids. */
+  objectReferences?: FlightModel[];
 }
 
 /** Recursive value model supported by the mreact Flight serializer. */
@@ -149,6 +151,7 @@ export type FlightModel =
   | FlightElementModel
   | FlightClientReferenceModel
   | FlightServerReferenceModel
+  | FlightObjectReferenceModel
   | FlightDateModel
   | FlightBigIntModel
   | FlightNumberModel
@@ -187,6 +190,12 @@ export interface FlightClientReferenceModel {
 /** Reference to a server module export inside a Flight model. */
 export interface FlightServerReferenceModel {
   kind: "server-reference";
+  id: number;
+}
+
+/** Reference to a shared object model inside a Flight response. */
+export interface FlightObjectReferenceModel {
+  kind: "object-reference";
   id: number;
 }
 
@@ -367,7 +376,12 @@ interface FlightSerializationState {
   clientReferenceIndexes: Map<string, number>;
   serverReferences: FlightServerReference[];
   serverReferenceIndexes: Map<string, number>;
+  objectModels: Map<object, FlightSerializationResult | typeof flightSerializationInProgress>;
+  sharedModels: Set<object>;
+  hasSharedModels: boolean;
 }
+
+const flightSerializationInProgress = Symbol("mreact.flight.serialization-in-progress");
 
 /** Creates a runtime client reference marker for a module export. */
 export function createClientReference(
@@ -426,17 +440,34 @@ export async function renderToFlightResponse<P extends Record<string, unknown>>(
       clientReferenceIndexes: new Map(),
       serverReferences: [],
       serverReferenceIndexes: new Map(),
+      objectModels: new Map(),
+      sharedModels: new Set(),
+      hasSharedModels: false,
     };
     const rootValue =
       typeof renderable === "function"
         ? await (renderable as (props: P) => unknown)(props)
         : renderable;
 
+    const serializedRoot = await serializeFlightValue(rootValue, state, 0);
+    const objectReferences: FlightModel[] = [];
+    const materialize = state.hasSharedModels
+      ? createFlightSerializationMaterializer(state.sharedModels, objectReferences)
+      : (model: FlightModel) => model;
+    const root = materialize(serializedRoot);
+    const serverReferences = state.serverReferences.map((reference) => ({
+      ...reference,
+      ...(reference.bound === undefined
+        ? {}
+        : { bound: reference.bound.map((model) => materialize(model)) }),
+    }));
+
     return {
       version: 1,
-      root: await serializeFlightValue(rootValue, state, 0),
+      root,
       clientReferences: state.clientReferences,
-      serverReferences: state.serverReferences,
+      serverReferences,
+      ...(objectReferences.length === 0 ? {} : { objectReferences }),
     };
   });
 }
@@ -612,6 +643,7 @@ export function toReactFlightRows(response: FlightResponse): string {
   const rows: string[] = [];
   const clientWireIds = new Map<number, number>();
   const serverWireIds = new Map<number, number>();
+  const objectWireIds = new Map<number, number>();
   let nextWireId = 1;
 
   for (const reference of response.clientReferences) {
@@ -630,6 +662,7 @@ export function toReactFlightRows(response: FlightResponse): string {
   const state: ReactFlightEncodingState = {
     clientWireIds,
     serverWireIds,
+    objectWireIds,
     outlineRows: rows,
     nextWireId,
   };
@@ -638,6 +671,16 @@ export function toReactFlightRows(response: FlightResponse): string {
     const wireId = state.nextWireId;
     state.nextWireId += 1;
     serverWireIds.set(reference.id, wireId);
+  }
+
+  for (const [id] of (response.objectReferences ?? []).entries()) {
+    const wireId = state.nextWireId;
+    state.nextWireId += 1;
+    objectWireIds.set(id, wireId);
+  }
+
+  for (const reference of response.serverReferences) {
+    const wireId = serverWireIds.get(reference.id) ?? reference.id;
     rows.push(
       `${formatReactFlightId(wireId)}:F${JSON.stringify({
         id: serverActionKey(reference.moduleId, reference.exportName),
@@ -647,6 +690,13 @@ export function toReactFlightRows(response: FlightResponse): string {
             : reference.bound.map((value) => encodeReactFlightModel(value, state)),
         name: reference.exportName,
       })}`,
+    );
+  }
+
+  for (const [id, model] of (response.objectReferences ?? []).entries()) {
+    const wireId = objectWireIds.get(id) ?? id;
+    rows.push(
+      `${formatReactFlightId(wireId)}:${JSON.stringify(encodeReactFlightModel(model, state))}`,
     );
   }
 
@@ -680,6 +730,9 @@ export function fromReactFlightRows(rows: string): FlightResponse {
       version: metadata.version,
       clientReferences: metadata.clientReferences,
       serverReferences: metadata.serverReferences,
+      ...(metadata.objectReferences === undefined
+        ? {}
+        : { objectReferences: metadata.objectReferences }),
       root: JSON.parse(rootLine.slice(3)) as FlightModel,
     };
   }
@@ -941,6 +994,7 @@ function resolveFlightPromiseChunks(
 interface ReactFlightEncodingState {
   clientWireIds: ReadonlyMap<number, number>;
   serverWireIds: ReadonlyMap<number, number>;
+  objectWireIds: ReadonlyMap<number, number>;
   outlineRows: string[];
   nextWireId: number;
 }
@@ -1036,6 +1090,10 @@ function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingSt
 
   if (model.kind === "server-reference") {
     return `$F${state.serverWireIds.get(model.id) ?? model.id}`;
+  }
+
+  if (model.kind === "object-reference") {
+    return `$${formatReactFlightId(state.objectWireIds.get(model.id) ?? model.id)}`;
   }
 
   if (model.kind === "client-reference") {
@@ -1383,11 +1441,13 @@ function flightCycle(id: number): never {
 
 interface FlightDecodeContext {
   inProgressChunkIds: Set<number>;
+  completedChunkModels: Map<number, FlightModel>;
 }
 
 function createFlightDecodeContext(): FlightDecodeContext {
   return {
     inProgressChunkIds: new Set(),
+    completedChunkModels: new Map(),
   };
 }
 
@@ -1624,19 +1684,26 @@ function decodeReactFlightChunk(
     };
   }
 
+  const completed = context.completedChunkModels.get(numericId);
+  if (completed !== undefined) {
+    return completed;
+  }
+
   if (context.inProgressChunkIds.has(numericId)) {
     flightCycle(numericId);
   }
 
   context.inProgressChunkIds.add(numericId);
   try {
-    return decodeReactFlightModel(
+    const decoded = decodeReactFlightModel(
       modelChunks.get(numericId),
       modelChunks,
       errorChunks,
       depth,
       context,
     );
+    context.completedChunkModels.set(numericId, decoded);
+    return decoded;
   } finally {
     context.inProgressChunkIds.delete(numericId);
   }
@@ -1776,10 +1843,6 @@ function serializeFlightValue(
     return { kind: "symbol", name: Symbol.keyFor(value) ?? value.description ?? "" };
   }
 
-  if (Array.isArray(value)) {
-    return resolveFlightArray(value.map((item) => serializeFlightValue(item, state, depth + 1)));
-  }
-
   if (isServerReference(value)) {
     const id = getServerReferenceId(value, state);
     return resolveFlightResult(id, (resolvedId) => ({
@@ -1788,15 +1851,44 @@ function serializeFlightValue(
     }));
   }
 
-  if (isReactCompatElement(value)) {
-    return serializeElement(value, state, depth + 1);
+  if (typeof value === "object") {
+    return serializeFlightObjectValue(value, state, depth);
   }
 
-  if (value instanceof Date) {
-    return { kind: "date", value: value.toJSON() };
+  throw new TypeError(`Unsupported Flight value: ${typeof value}`);
+}
+
+function serializeFlightObjectValue(
+  value: object,
+  state: FlightSerializationState,
+  depth: number,
+): FlightSerializationResult {
+  const existing = state.objectModels.get(value);
+  if (existing !== undefined) {
+    if (existing === flightSerializationInProgress) {
+      throw new FlightDecodeError("MR_FLIGHT_CYCLE: cyclic object value");
+    }
+    state.hasSharedModels = true;
+    return resolveFlightResult(existing, (model) => {
+      if (typeof model === "object" && model !== null) {
+        state.sharedModels.add(model);
+      }
+      return model;
+    });
   }
 
-  if (value instanceof Map) {
+  state.objectModels.set(value, flightSerializationInProgress);
+  let result: FlightSerializationResult;
+
+  if (Array.isArray(value)) {
+    result = resolveFlightArray(
+      value.map((item) => serializeFlightValue(item, state, depth + 1)),
+    );
+  } else if (isReactCompatElement(value)) {
+    result = serializeElement(value, state, depth + 1);
+  } else if (value instanceof Date) {
+    result = { kind: "date", value: value.toJSON() };
+  } else if (value instanceof Map) {
     const entries = resolveFlightArray(
       Array.from(value.entries()).map(([key, entryValue]) =>
         resolveFlightTuple(
@@ -1805,62 +1897,55 @@ function serializeFlightValue(
         ),
       ),
     );
-    return resolveFlightResult(entries, (resolvedEntries) => ({
+    result = resolveFlightResult(entries, (resolvedEntries) => ({
       kind: "map",
       entries: resolvedEntries,
     }));
-  }
-
-  if (value instanceof Set) {
+  } else if (value instanceof Set) {
     const values = resolveFlightArray(
       Array.from(value.values()).map((entryValue) =>
         serializeFlightValue(entryValue, state, depth + 1),
       ),
     );
-    return resolveFlightResult(values, (resolvedValues) => ({
+    result = resolveFlightResult(values, (resolvedValues) => ({
       kind: "set",
       values: resolvedValues,
     }));
-  }
-
-  if (isFormDataLike(value)) {
+  } else if (isFormDataLike(value)) {
     const entries = resolveFlightArray(
       Array.from(value.entries()).map(([key, entryValue]) =>
-        resolveFlightResult(serializeFlightValue(entryValue, state, depth + 1), (resolvedValue) => [
-          key,
-          resolvedValue,
-        ] as [string, FlightModel]),
+        resolveFlightResult(
+          serializeFlightValue(entryValue, state, depth + 1),
+          (resolvedValue) => [key, resolvedValue] as [string, FlightModel],
+        ),
       ),
     );
-    return resolveFlightResult(entries, (resolvedEntries) => ({
+    result = resolveFlightResult(entries, (resolvedEntries) => ({
       kind: "form-data",
       entries: resolvedEntries,
     }));
-  }
-
-  if (isIterableObject(value)) {
+  } else if (isIterableObject(value)) {
     const values = resolveFlightArray(
-      Array.from(value).map((entryValue) => serializeFlightValue(entryValue, state, depth + 1)),
+      Array.from(value).map((entryValue) =>
+        serializeFlightValue(entryValue, state, depth + 1),
+      ),
     );
-    return resolveFlightResult(values, (resolvedValues) => ({
+    result = resolveFlightResult(values, (resolvedValues) => ({
       kind: "iterable",
       values: resolvedValues,
     }));
-  }
-
-  if (value instanceof Error) {
-    return {
+  } else if (value instanceof Error) {
+    result = {
       kind: "error",
       name: value.name,
       message: value.message,
     };
+  } else {
+    result = serializeObject(value as Record<string, unknown>, state, depth + 1);
   }
 
-  if (typeof value === "object") {
-    return serializeObject(value as Record<string, unknown>, state, depth + 1);
-  }
-
-  throw new TypeError(`Unsupported Flight value: ${typeof value}`);
+  state.objectModels.set(value, result);
+  return result;
 }
 
 function serializeElement(
@@ -1917,10 +2002,10 @@ function serializeProps(
 ): FlightSerializationResult<Record<string, FlightModel>> {
   const entries = resolveFlightArray(
     Object.entries(props).map(([key, value]) =>
-      resolveFlightResult(serializeFlightValue(value, state, depth + 1), (resolvedValue) => [
-        key,
-        resolvedValue,
-      ]),
+      resolveFlightResult(
+        serializeFlightValue(value, state, depth + 1),
+        (resolvedValue) => [key, resolvedValue],
+      ),
     ),
   );
 
@@ -1945,6 +2030,50 @@ function serializeObject(
     entries,
     (resolvedEntries) => Object.fromEntries(resolvedEntries) as FlightObjectModel,
   );
+}
+
+function createFlightSerializationMaterializer(
+  sharedModels: ReadonlySet<object>,
+  objectReferences: FlightModel[],
+): (model: FlightModel) => FlightModel {
+  const referenceIds = new Map<object, number>();
+
+  const materialize = (model: FlightModel, expandingShared = false): FlightModel => {
+    if (
+      !expandingShared &&
+      typeof model === "object" &&
+      model !== null &&
+      sharedModels.has(model)
+    ) {
+      const existingId = referenceIds.get(model);
+      if (existingId !== undefined) {
+        return { kind: "object-reference", id: existingId };
+      }
+
+      const id = objectReferences.length;
+      referenceIds.set(model, id);
+      objectReferences.push({ kind: "undefined" });
+      objectReferences[id] = materialize(model, true);
+      return { kind: "object-reference", id };
+    }
+
+    if (model === null || typeof model !== "object") {
+      return model;
+    }
+
+    if (Array.isArray(model)) {
+      return model.map((item) => materialize(item));
+    }
+
+    return Object.fromEntries(
+      Object.entries(model).map(([key, value]) => [
+        key,
+        value === undefined ? undefined : materialize(value),
+      ]),
+    ) as FlightModel;
+  };
+
+  return materialize;
 }
 
 function getClientReferenceId(reference: ClientReference, state: FlightSerializationState): number {

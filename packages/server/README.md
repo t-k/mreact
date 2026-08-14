@@ -39,6 +39,7 @@ HTTP response body.
 - `@reckona/mreact-server/reorder` applies out-of-order SSR fragments in the
   browser.
 - `@reckona/mreact-server/flight` exposes Flight and server action primitives.
+- Flight serialization emits repeated object values through a shared reference table, rejects cycles, and preserves shared identity when decoded by `@reckona/mreact-compat`.
 - `@reckona/mreact-server/buffer-sink` exposes buffered streaming helpers.
 
 ## Notes

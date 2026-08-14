@@ -30,11 +30,13 @@ class FlightDecodeError extends Error {
 
 interface FlightDecodeContext {
   inProgressChunkIds: Set<number>;
+  completedChunkModels: Map<number, FlightModel>;
 }
 
 function createFlightDecodeContext(): FlightDecodeContext {
   return {
     inProgressChunkIds: new Set(),
+    completedChunkModels: new Map(),
   };
 }
 
@@ -76,6 +78,9 @@ function parseReactFlightRows(rows: string): FlightResponse {
       version: metadata.version,
       clientReferences: metadata.clientReferences,
       serverReferences: metadata.serverReferences,
+      ...(metadata.objectReferences === undefined
+        ? {}
+        : { objectReferences: metadata.objectReferences }),
       root: JSON.parse(rootLine.slice(3)) as FlightModel,
     };
   }
@@ -708,19 +713,26 @@ function decodeReactFlightChunk(
     };
   }
 
+  const completed = context.completedChunkModels.get(numericId);
+  if (completed !== undefined) {
+    return completed;
+  }
+
   if (context.inProgressChunkIds.has(numericId)) {
     flightCycle(numericId);
   }
 
   context.inProgressChunkIds.add(numericId);
   try {
-    return decodeReactFlightModel(
+    const decoded = decodeReactFlightModel(
       modelChunks.get(numericId),
       modelChunks,
       errorChunks,
       depth,
       context,
     );
+    context.completedChunkModels.set(numericId, decoded);
+    return decoded;
   } finally {
     context.inProgressChunkIds.delete(numericId);
   }

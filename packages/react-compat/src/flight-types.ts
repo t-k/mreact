@@ -20,6 +20,8 @@ export interface FlightResponse {
   root: FlightModel;
   clientReferences: FlightClientReference[];
   serverReferences: FlightServerReference[];
+  /** Models referenced more than once, indexed by object-reference ids. */
+  objectReferences?: FlightModel[];
 }
 
 /** Serializable model value supported by the mreact Flight decoder. */
@@ -33,6 +35,7 @@ export type FlightModel =
   | FlightElementModel
   | FlightClientReferenceModel
   | FlightServerReferenceModel
+  | FlightObjectReferenceModel
   | FlightDateModel
   | FlightBigIntModel
   | FlightNumberModel
@@ -70,6 +73,12 @@ export interface FlightClientReferenceModel {
 /** Flight model record that points at a server reference table entry. */
 export interface FlightServerReferenceModel {
   kind: "server-reference";
+  id: number;
+}
+
+/** Flight model record that points at a shared object table entry. */
+export interface FlightObjectReferenceModel {
+  kind: "object-reference";
   id: number;
 }
 

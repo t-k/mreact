@@ -148,6 +148,32 @@ describe("server Flight runtime", () => {
     expect(promiseInits).toBeLessThan(500);
   });
 
+  test("serializes a deeply shared acyclic graph once per distinct object", async () => {
+    let node: Record<string, unknown> = { leaf: 1 };
+
+    for (let depth = 0; depth < 40; depth += 1) {
+      node = { a: node, b: node };
+    }
+
+    const response = await renderToFlightResponse(node);
+    const payload = stringifyFlightResponse(response);
+
+    expect(response.objectReferences).toHaveLength(40);
+    expect(payload.length).toBeLessThan(10_000);
+    expect(payload.match(/"kind":"object-reference"/g)).toHaveLength(80);
+
+    const roundTripped = fromReactFlightRows(toReactFlightRows(response));
+    const roundTrippedRoot = roundTripped.root as { a: unknown; b: unknown };
+    expect(roundTrippedRoot.a).toBe(roundTrippedRoot.b);
+  });
+
+  test("rejects cyclic Flight values with a catchable error", async () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+
+    await expect(renderToFlightResponse(cyclic)).rejects.toThrow(/MR_FLIGHT_CYCLE/);
+  });
+
   test("uses one cache scope while rendering a Flight response", async () => {
     let calls = 0;
     const read = cache((name: string) => {

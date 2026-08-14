@@ -12,6 +12,33 @@ import {
 } from "../src/flight.js";
 
 describe("react-compat Flight client", () => {
+  test("restores shared object identity from structured reference tables", () => {
+    const decoded = decodeFlightResponse(
+      {
+        version: 1,
+        clientReferences: [],
+        serverReferences: [],
+        objectReferences: [{ name: "Ada" }],
+        root: {
+          first: { kind: "object-reference", id: 0 },
+          second: { kind: "object-reference", id: 0 },
+        },
+      },
+      { loadClientReference: () => "div" },
+    ) as { first: unknown; second: unknown };
+
+    expect(decoded.first).toBe(decoded.second);
+  });
+
+  test("restores shared object identity from React Flight outline rows", () => {
+    const decoded = decodeFlightResponse(
+      parseFlightResponse(['1:{"name":"Ada"}', '0:{"first":"$1","second":"$1"}'].join("\n")),
+      { loadClientReference: () => "div" },
+    ) as { first: unknown; second: unknown };
+
+    expect(decoded.first).toBe(decoded.second);
+  });
+
   test("covers every declared React Flight row tag and model token", () => {
     expect(getReactFlightProtocolCoverage()).toEqual({
       binaryRowTags: ["A", "O", "o", "U", "S", "s", "L", "l", "G", "g", "M", "m", "V"],

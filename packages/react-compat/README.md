@@ -46,6 +46,8 @@ Covered behavior families:
 | Resource hints | `preconnect`, `prefetchDNS`, `preload`, `preloadModule`, `preinit`, and `preinitModule` |
 | Flight | React Flight row parsing, model token decoding, server references, client references, binary chunks, and protocol coverage assertions |
 
+Flight decoding restores the identity of repeated object references. Mutating one decoded alias therefore affects every path that referenced the same server-side object.
+
 Run the focused compatibility checks with:
 
 ```bash
