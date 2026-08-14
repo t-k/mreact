@@ -425,43 +425,48 @@ export async function POST(request: Request) {
     expect(await response.text()).toBe("");
   });
 
-  test("serves navigation-compatible Cloudflare prerendered HTML with route markers", async () => {
-    const handler = createCloudflareRequestHandler({
-      assets: {},
-      clientManifest: { routes: [] },
-      serverManifest: {
-        files: {},
-        prerenderedRoutes: {
-          "/": {
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              vary: "x-mreact-navigation",
+  test.each([
+    ['<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>'],
+    ["<script><!--<script>--></script><div data-mreact-route-id=index></script>"],
+  ])(
+    "serves navigation-compatible Cloudflare prerendered HTML with route markers",
+    async (navigationHtml) => {
+      const handler = createCloudflareRequestHandler({
+        assets: {},
+        clientManifest: { routes: [] },
+        serverManifest: {
+          files: {},
+          prerenderedRoutes: {
+            "/": {
+              headers: {
+                "content-type": "text/html; charset=utf-8",
+                vary: "x-mreact-navigation",
+              },
+              html: "<!DOCTYPE html><main>Prerendered</main>",
+              navigationHtml,
+              schemaVersion: 4,
+              status: 200,
             },
-            html: "<!DOCTYPE html><main>Prerendered</main>",
-            navigationHtml:
-              '<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>',
-            schemaVersion: 4,
-            status: 200,
           },
+          routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+          version: 1,
         },
-        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
-        version: 1,
-      },
-    });
+      });
 
-    const response = await handler.fetch(
-      new Request("https://app.example/", {
-        headers: { "x-mreact-navigation": "1" },
-      }),
-      {},
-      createExecutionContext(),
-    );
+      const response = await handler.fetch(
+        new Request("https://app.example/", {
+          headers: { "x-mreact-navigation": "1" },
+        }),
+        {},
+        createExecutionContext(),
+      );
 
-    expect(response.status).toBe(200);
-    expect(response.headers.get("x-mreact-navigation")).toBeNull();
-    expect(response.headers.get("vary")).toContain("x-mreact-navigation");
-    expect(await response.text()).toContain('data-mreact-route-id="index"');
-  });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-mreact-navigation")).toBeNull();
+      expect(response.headers.get("vary")).toContain("x-mreact-navigation");
+      expect(await response.text()).toContain("data-mreact-route-id");
+    },
+  );
 
   test.each([
     ["comment text", '<!-- <div data-mreact-route-id="index"> --><main>Prerendered</main>'],
@@ -470,10 +475,6 @@ export async function POST(request: Request) {
     [
       "double-escaped script data",
       "<script><!--<script></script><div data-mreact-route-id=index></script>",
-    ],
-    [
-      "double-escaped script comment-like text",
-      "<script><!--<script>--></script><div data-mreact-route-id=index></script>",
     ],
   ])("reloads for a false prerendered navigation marker in %s", async (_label, navigationHtml) => {
     const handler = createCloudflareRequestHandler({

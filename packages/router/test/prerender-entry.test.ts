@@ -93,7 +93,6 @@ describe("prerender entry validation", () => {
     "<1 data-mreact-route-id=x>",
     "<svg><![CDATA[> <div data-mreact-route-id=x>]]></svg>",
     "<script><!--<script></script><div data-mreact-route-id=x></script>",
-    "<script><!--<script>--></script><div data-mreact-route-id=x></script>",
   ])("rejects navigation HTML without a syntactic route marker: %s", (navigationHtml) => {
     expect(
       isCurrentPrerenderedRoute({
@@ -104,6 +103,18 @@ describe("prerender entry validation", () => {
         status: 200,
       }),
     ).toBe(false);
+  });
+
+  test("accepts a marker after double-escaped script data returns to script data", () => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: { vary: "x-mreact-navigation" },
+        html: "<main>document</main>",
+        navigationHtml: "<script><!--<script>--></script><div data-mreact-route-id=index></script>",
+        schemaVersion: 4,
+        status: 200,
+      }),
+    ).toBe(true);
   });
 
   test("accepts canonical HSTS in its scheme-independent field", () => {

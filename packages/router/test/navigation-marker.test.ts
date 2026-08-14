@@ -9,6 +9,7 @@ describe("navigation route marker validation", () => {
     '<main class="page"\n DATA-MREACT-ROUTE-ID="docs/getting-started"></main>',
     '<script></script><div data-mreact-route-id="after-script"></div>',
     '<script><!--<script></script>text</script><div data-mreact-route-id="after"></div>',
+    "<script><!--<script>--></script><div data-mreact-route-id=x></script>",
     '<svg><![CDATA[<div data-mreact-route-id="cdata">]]></svg><div data-mreact-route-id="after"></div>',
   ])("accepts a value-bearing marker attribute on a start tag: %s", (html) => {
     expect(hasNavigationRouteMarker(html)).toBe(true);
@@ -29,7 +30,6 @@ describe("navigation route marker validation", () => {
     "<1 data-mreact-route-id=x>",
     "<svg><![CDATA[> <div data-mreact-route-id=x>]]></svg>",
     "<script><!--<script></script><div data-mreact-route-id=x></script>",
-    "<script><!--<script>--></script><div data-mreact-route-id=x></script>",
   ])("rejects text that is not a valid value-bearing marker attribute: %s", (html) => {
     expect(hasNavigationRouteMarker(html)).toBe(false);
   });
