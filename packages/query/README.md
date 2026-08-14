@@ -44,7 +44,7 @@ hydrate(getQueryClient(), state);
 - `createMutation()` handles mutations and invalidation.
 - `queryClient.setQueryData(queryKey, updater)` can derive a new cached value from the previous value without fetching.
 - Mutation lifecycle hooks run in this order: `onMutate`, `mutationFn`, state update, `onSuccess`, query invalidation, then `onSettled`. On failure, state updates before `onError` and `onSettled`. The value returned by `onMutate` is passed to `onError` and `onSettled`, which supports optimistic rollback without external bookkeeping.
-- `dehydrate()` and `hydrate()` move query state from server to client while preserving each successful query's `updatedAt` timestamp for `staleTime` checks.
+- `dehydrate()` and `hydrate()` move query state from server to client while preserving each successful query's `updatedAt` timestamp for `staleTime` checks. Successful queries are included by default and are visible in the delivered page source; pass `shouldDehydrateQuery` to exclude server-only or sensitive entries.
 - `getQueryClient()` returns the browser singleton query client.
 - `syncQueryClientAcrossTabs()` optionally coordinates same-origin browser tabs with `BroadcastChannel` and Web Locks. Query messages require a non-default scoped channel and an `includeQuery` allowlist; successful query data is shared only when `broadcastQueryData` or `singleFlight` is explicitly enabled within that scope.
 

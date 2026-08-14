@@ -893,6 +893,9 @@ export function middleware(request: Request) {
         ],
       },
       renderRoute: createCloudflareRouteModuleRenderer({
+        dehydrateOptions: {
+          shouldDehydrateQuery: (entry) => entry.queryKey[0] === "profile",
+        },
         modules: {
           "page.tsx": {
             async loader({ queryClient }) {
@@ -900,6 +903,7 @@ export function middleware(request: Request) {
                 queryKey: ["profile"],
                 queryFn: async () => ({ name: "Ada" }),
               });
+              queryClient.setQueryData(["private"], "secret-value");
 
               return { profile };
             },
@@ -930,6 +934,7 @@ export function middleware(request: Request) {
 
     expect(response.status).toBe(200);
     expect(html).toContain("<main>Ada</main>");
+    expect(html).not.toContain("secret-value");
     expect(JSON.parse(queryStateJson ?? "{}")).toMatchObject({
       queries: [
         {

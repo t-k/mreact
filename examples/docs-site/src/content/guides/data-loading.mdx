@@ -183,7 +183,7 @@ export async function loader(
 }
 ```
 
-After the route renders, Mreact can dehydrate the request query cache for client code that uses the same query key. Set a `staleTime` when the browser should reuse the server-fetched result during the initial mount instead of immediately revalidating it.
+After the route renders, Mreact can dehydrate the request query cache for client code that uses the same query key. Dehydrated data is embedded in the delivered HTML and is visible to the user. Pass `dehydrateOptions.shouldDehydrateQuery` to the render or adapter entry point to exclude server-only or sensitive queries. Set a `staleTime` when the browser should reuse the server-fetched result during the initial mount instead of immediately revalidating it.
 
 This is not a cross-request server cache. Each incoming request gets its own QueryClient. Use route cache or application-level caching when data should be reused across requests.
 

@@ -16,6 +16,7 @@ import {
   installQueryAsyncStorage,
   runWithQueryClient,
   type DehydratedQueryClient,
+  type DehydrateOptions,
   type QueryClient,
 } from "@reckona/mreact-query";
 import {
@@ -202,6 +203,7 @@ export interface RenderAppRequestOptions {
   clientStylesByFile?: ReadonlyMap<string, readonly string[]>;
   clientStyles?: ReadonlyMap<string, readonly string[]>;
   define?: UserConfig["define"] | undefined;
+  dehydrateOptions?: DehydrateOptions | undefined;
   env?: unknown;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
@@ -1324,7 +1326,7 @@ async function renderAppRequestInternal(
           html,
           originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
         );
-        html = injectQueryState(html, dehydrate(queryClient));
+        html = injectQueryState(html, dehydrate(queryClient, options.dehydrateOptions));
         const response = withOptionalActionCookie(
           htmlResponse(
             applyActionHtmlReplacements(
@@ -1615,7 +1617,7 @@ async function renderAppRequestInternal(
       html,
       originalAnalysis.authIncludesClaims ? currentAuthClaims() : undefined,
     );
-    html = injectQueryState(html, dehydrate(queryClient));
+    html = injectQueryState(html, dehydrate(queryClient, options.dehydrateOptions));
 
     const response = withOptionalActionCookie(
       htmlResponse(

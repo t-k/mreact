@@ -380,6 +380,22 @@ describe("createQueryClient", () => {
     expect(target.getQueryData(["profile"])).toEqual({ name: "Grace" });
   });
 
+  it("filters dehydrated queries and excludes entries when the predicate throws", () => {
+    const source = createQueryClient();
+    source.setQueryData(["public"], { value: "visible" });
+    source.setQueryData(["private"], { value: "secret" });
+    source.setQueryData(["throws"], { value: "also-secret" });
+
+    const dehydrated = dehydrate(source, {
+      shouldDehydrateQuery: (entry) => {
+        if (entry.queryKey[0] === "throws") throw new Error("policy failed");
+        return entry.queryKey[0] === "public";
+      },
+    });
+
+    expect(dehydrated.queries.map((query) => query.queryKey)).toEqual([["public"]]);
+  });
+
   it("preserves dehydrated updatedAt timestamps when hydrating query data", () => {
     const target = createQueryClient();
 

@@ -10,6 +10,7 @@ import {
   isQueryClientScopeUnavailableError,
   runWithQueryClient,
   type DehydratedQueryClient,
+  type DehydrateOptions,
   type QueryAsyncStorage,
   type QueryClient,
 } from "@reckona/mreact-query";
@@ -291,6 +292,7 @@ export type CloudflareRouteModuleRegistry<Env = unknown> = Record<
  * Configures the Cloudflare route module renderer.
  */
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
+  dehydrateOptions?: DehydrateOptions | undefined;
   document?:
     | ((
         context: CloudflareRouteModuleComponentProps<unknown, Env> & {
@@ -623,7 +625,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
           );
     const documentedWithQueryState = await injectCloudflareQueryState(
       documented,
-      dehydrate(queryClient),
+      dehydrate(queryClient, options.dehydrateOptions),
     );
 
     return withDefaultSecurityHeaders(

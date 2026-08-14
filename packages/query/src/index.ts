@@ -242,6 +242,11 @@ export interface DehydratedQueryClient {
   queries: DehydratedQuery[];
 }
 
+/** Selects successful query entries that may be serialized for browser hydration. */
+export interface DehydrateOptions {
+  shouldDehydrateQuery?: ((entry: QueryEntry) => boolean) | undefined;
+}
+
 /** Identifies the script element that carries dehydrated query state during hydration. */
 export const __MREACT_QUERY_STATE_SCRIPT_ID = "__mreact_query_state";
 
@@ -676,11 +681,17 @@ export function createMutation<TVariables = void, TData = unknown, TContext = un
 /**
  * Serializes successful query entries so they can be embedded in server-rendered HTML.
  */
-export function dehydrate(client: QueryClient): DehydratedQueryClient {
+export function dehydrate(
+  client: QueryClient,
+  options: DehydrateOptions = {},
+): DehydratedQueryClient {
   return {
     queries: client
       .entries()
-      .filter((entry) => entry.status === "success")
+      .filter(
+        (entry) =>
+          entry.status === "success" && safelyShouldDehydrateQuery(entry, options),
+      )
       .map((entry) => ({
         data: entry.data,
         queryHash: entry.queryHash,
@@ -688,6 +699,15 @@ export function dehydrate(client: QueryClient): DehydratedQueryClient {
         updatedAt: entry.updatedAt,
       })),
   };
+}
+
+function safelyShouldDehydrateQuery(entry: QueryEntry, options: DehydrateOptions): boolean {
+  if (options.shouldDehydrateQuery === undefined) return true;
+  try {
+    return options.shouldDehydrateQuery(entry);
+  } catch {
+    return false;
+  }
 }
 
 /**

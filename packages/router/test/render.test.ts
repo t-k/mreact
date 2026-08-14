@@ -378,6 +378,7 @@ export default function Page() {
     queryKey: ["profile"],
     queryFn: async () => ({ name: "Ada <Grace>" }),
   });
+
 }
 
 export default function Page(props) {
@@ -403,6 +404,30 @@ export default function Page(props) {
       ],
     });
     expect(html).not.toContain('{"name":"Ada <Grace>"}');
+  });
+
+  test("omits queries rejected by the render dehydration policy", async () => {
+    const fixture = await createAppFixture("mreact-app-query-filter");
+    await fixture.write(
+      "page.tsx",
+      `export async function loader({ queryClient }) {
+  queryClient.setQueryData(["public"], "visible");
+  queryClient.setQueryData(["private"], "secret-value");
+}
+export default function Page() { return <html><body><main>Ready</main></body></html>; }`,
+    );
+
+    const response = await fixture.render("/", {
+      dehydrateOptions: {
+        shouldDehydrateQuery: (entry) => entry.queryKey[0] === "public",
+      },
+    });
+    const html = await responseText(response);
+
+    expect(readQueryState(html).queries).toEqual([
+      expect.objectContaining({ data: "visible", queryKey: ["public"] }),
+    ]);
+    expect(html).not.toContain("secret-value");
   });
 
   test("injects dehydrated query state without replace-dollar expansion", async () => {

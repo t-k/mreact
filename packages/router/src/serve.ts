@@ -1,4 +1,5 @@
 import type { Server } from "node:http";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { BuiltPrerenderedRoute } from "./build.js";
@@ -99,6 +100,7 @@ let warnedImplicitHostTrust = false;
  * Configures rendering a request against a built app-router output directory.
  */
 export interface RenderBuiltAppRequestOptions {
+  dehydrateOptions?: DehydrateOptions | undefined;
   outDir: string;
   importPolicy?: AppRouterImportPolicy | undefined;
   instrumentation?: RouterInstrumentation | undefined;
@@ -156,6 +158,7 @@ export interface BuiltAppRuntimePreloadStrategy {
  * Configures the Node HTTP server used to serve a built app-router output.
  */
 export interface StartServerOptions {
+  dehydrateOptions?: DehydrateOptions | undefined;
   outDir: string;
   port: number;
   hostname?: string;
@@ -709,6 +712,7 @@ export async function startServer(
     trustForwardedProto: options.trustForwardedProto,
     render: (request) =>
       runtime.render(request, {
+        dehydrateOptions: options.dehydrateOptions,
         instrumentation: options.instrumentation,
         logger: options.logger,
         onResponse: options.onResponse,
@@ -927,6 +931,7 @@ function builtRenderAppRequestOptions(
     clientScripts: options.runtime.clientScripts,
     clientStylesByFile: options.runtime.clientStylesByFile,
     clientStyles: options.runtime.clientStyles,
+    dehydrateOptions: options.dehydrateOptions,
     importPolicy: {
       ...options.importPolicy,
       allowedSourceDirs: options.runtime.allowedSourceDirs,
