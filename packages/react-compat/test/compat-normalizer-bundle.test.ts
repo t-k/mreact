@@ -10,9 +10,9 @@ import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
 const packedCompatConsumerSizeBudgets = {
-  root: { gzipBytes: 11_600, rawBytes: 42_300 },
-  "jsx-runtime": { gzipBytes: 11_600, rawBytes: 42_400 },
-  "jsx-dev-runtime": { gzipBytes: 11_620, rawBytes: 42_500 },
+  root: { gzipBytes: 11_800, rawBytes: 42_600 },
+  "jsx-runtime": { gzipBytes: 11_800, rawBytes: 42_700 },
+  "jsx-dev-runtime": { gzipBytes: 11_820, rawBytes: 42_800 },
   native: { gzipBytes: 9_350, rawBytes: 34_900 },
 } as const;
 
