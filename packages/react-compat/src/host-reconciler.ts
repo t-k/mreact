@@ -87,6 +87,7 @@ import {
   withHydrationComponentStack,
 } from "./hydration.js";
 import { withBatchedDelegatedRootReleases } from "@reckona/mreact-reactive-dom";
+import { attachRef, detachRef } from "./ref-lifecycle.js";
 
 interface MemoFiberState {
   props: Record<string, unknown>;
@@ -108,7 +109,7 @@ interface SuspenseFiberState {
 }
 
 const committedPortalContainers = new Set<Element>();
-const pendingHostRefUpdates: { ref: unknown; node: unknown }[] = [];
+const pendingHostRefUpdates: { detach: boolean; ref: unknown; node: unknown }[] = [];
 const pendingReactiveDomBlockAfterCommits: (() => void)[] = [];
 const emptyInstanceKeys: string[] = [];
 
@@ -4972,14 +4973,7 @@ function hasUnflushedMountEffectInstance(runtime: RootRuntime, keys: readonly st
 }
 
 function applyRef(ref: unknown, node: unknown): void {
-  if (typeof ref === "function") {
-    ref(node);
-    return;
-  }
-
-  if (typeof ref === "object" && ref !== null && "current" in ref) {
-    (ref as { current: unknown }).current = node;
-  }
+  attachRef(ref, node);
 }
 
 function applyChangedRef(previousRef: unknown, nextRef: unknown, node: unknown): void {
@@ -4987,22 +4981,26 @@ function applyChangedRef(previousRef: unknown, nextRef: unknown, node: unknown):
     return;
   }
 
-  queueHostRefUpdate(previousRef, null);
-  queueHostRefUpdate(nextRef, node);
+  queueHostRefUpdate(previousRef, node, true);
+  queueHostRefUpdate(nextRef, node, false);
 }
 
-function queueHostRefUpdate(ref: unknown, node: unknown): void {
+function queueHostRefUpdate(ref: unknown, node: unknown, detach: boolean): void {
   if (ref === null || ref === undefined) {
     return;
   }
 
-  pendingHostRefUpdates.push({ ref, node });
+  pendingHostRefUpdates.push({ detach, ref, node });
 }
 
 function flushPendingHostRefUpdates(): void {
   const pending = pendingHostRefUpdates.splice(0);
-  for (const { ref, node } of pending) {
-    applyRef(ref, node);
+  for (const { detach, ref, node } of pending) {
+    if (detach) {
+      detachRef(ref, node);
+    } else {
+      attachRef(ref, node);
+    }
   }
 }
 

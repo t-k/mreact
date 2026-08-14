@@ -4,6 +4,7 @@ import { commitHostFiberRoot, disposeUnretainedHostFiberResources } from "./fibe
 import { markRootFinished } from "./fiber-lanes.js";
 import { runWithHostCommit } from "./hooks.js";
 import type { RenderOptions } from "./hydration.js";
+import { detachRef } from "./ref-lifecycle.js";
 
 interface RefRecord {
   ref: unknown;
@@ -47,7 +48,7 @@ export function commitFiberRoot(
 
 export function detachFiberRefs(fiber: Fiber): void {
   for (const record of collectRefRecords(fiber)) {
-    detachRef(record.ref);
+    detachRef(record.ref, record.node);
   }
 }
 
@@ -165,7 +166,7 @@ function cleanupDeletedRefs(previous: Fiber, next: Fiber): void {
 
   for (const record of collectRefRecords(previous)) {
     if (!nextRefs.has(record.ref)) {
-      detachRef(record.ref);
+      detachRef(record.ref, record.node);
     }
   }
 }
@@ -198,15 +199,4 @@ function getFiberRef(fiber: Fiber): unknown {
     | undefined;
 
   return props?.ref;
-}
-
-function detachRef(ref: unknown): void {
-  if (typeof ref === "function") {
-    ref(null);
-    return;
-  }
-
-  if (typeof ref === "object" && ref !== null && "current" in ref) {
-    (ref as { current: unknown }).current = null;
-  }
 }

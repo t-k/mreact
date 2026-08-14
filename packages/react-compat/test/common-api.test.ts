@@ -91,6 +91,33 @@ describe("react-compat common API subset", () => {
     expect(calls).toEqual(["first:A", "first:null", "second:B"]);
   });
 
+  test("uses callback ref cleanup functions on replacement and unmount", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    const firstRef = (node: HTMLButtonElement | null) => {
+      if (node === null) throw new Error("cleanup-returning refs must not receive null");
+      calls.push(`first:${node.textContent}`);
+      return () => calls.push("first:cleanup");
+    };
+    const secondRef = (node: HTMLButtonElement | null) => {
+      if (node === null) throw new Error("cleanup-returning refs must not receive null");
+      calls.push(`second:${node.textContent}`);
+      return () => calls.push("second:cleanup");
+    };
+
+    root.render(createElement("button", { ref: firstRef }, "A"));
+    root.render(createElement("button", { ref: secondRef }, "B"));
+    root.unmount();
+
+    expect(calls).toEqual([
+      "first:A",
+      "first:cleanup",
+      "second:B",
+      "second:cleanup",
+    ]);
+  });
+
   test("host callback refs attach after mounted nodes are connected", () => {
     const container = document.createElement("div");
     document.body.append(container);

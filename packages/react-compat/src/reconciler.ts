@@ -37,6 +37,7 @@ import { commitDevToolsRoot } from "./devtools.js";
 import { applyPostChildFormProps, applyProps } from "./dom-props.js";
 import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
+import { attachRef } from "./ref-lifecycle.js";
 import {
   createHostElement,
   hostElementMatches,
@@ -720,12 +721,5 @@ function isLazyType(
 }
 
 function applyRef(ref: unknown, node: unknown): void {
-  if (typeof ref === "function") {
-    ref(node);
-    return;
-  }
-
-  if (typeof ref === "object" && ref !== null && "current" in ref) {
-    (ref as { current: unknown }).current = node;
-  }
+  attachRef(ref, node);
 }
