@@ -101,7 +101,7 @@ export async function GET(
 ## Production notes
 
 - Use `clientSourceMaps: "hidden"` and upload `.mreact/source-maps/client/` from CI when you need Sentry symbolication.
-- Configure `nodejs_compat` only when your packaged Worker graph needs Cloudflare's Node.js compatibility runtime.
+- Configure `nodejs_compat` so the adapter can use native request-local storage. Without it, mreact serializes renders to preserve query-client isolation and emits a one-time warning.
 - Keep CSP, cache headers, and host behavior explicit because Cloudflare can also add edge headers.
 - Test route handlers, dynamic server-rendered pages, streaming pages, 404s, copied public files, generated route assets, and server action forms after deployment.
 

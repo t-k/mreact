@@ -3,10 +3,11 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { __resetQueryClientForTesting, getQueryClient } from "@reckona/mreact-query";
 import { buildApp } from "../src/build.js";
 import {
+  __resetCloudflareQueryClientFallbackForTesting,
   createCloudflareBuiltRequestHandler,
   createCloudflarePrerenderStore,
   createCloudflareRequestHandler,
@@ -1079,6 +1080,42 @@ export function middleware(request: Request) {
       } else {
         globalWithStorage.AsyncLocalStorage = previous;
       }
+      __resetQueryClientForTesting();
+    }
+  });
+
+  test("warns once when query scopes fall back to serialized rendering", async () => {
+    __resetQueryClientForTesting();
+    __resetCloudflareQueryClientFallbackForTesting();
+    const globalWithStorage = globalThis as { AsyncLocalStorage?: typeof AsyncLocalStorage };
+    const previous = globalWithStorage.AsyncLocalStorage;
+    delete globalWithStorage.AsyncLocalStorage;
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    try {
+      const handler = createCloudflareBuiltRequestHandler({
+        assets: {},
+        clientManifest: { routes: [] },
+        renderRoute: createCloudflareRouteModuleRenderer({
+          modules: { "page.tsx": { default: () => "<main>Home</main>" } },
+        }),
+        serverManifest: {
+          files: {},
+          routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+          version: 1,
+        },
+      });
+
+      await handler.fetch(new Request("https://app.example/"), {}, createExecutionContext());
+      await handler.fetch(new Request("https://app.example/"), {}, createExecutionContext());
+
+      expect(warning).toHaveBeenCalledTimes(1);
+      expect(warning).toHaveBeenCalledWith(expect.stringMatching(/nodejs_compat.*serial/i));
+    } finally {
+      warning.mockRestore();
+      if (previous === undefined) delete globalWithStorage.AsyncLocalStorage;
+      else globalWithStorage.AsyncLocalStorage = previous;
+      __resetCloudflareQueryClientFallbackForTesting();
       __resetQueryClientForTesting();
     }
   });

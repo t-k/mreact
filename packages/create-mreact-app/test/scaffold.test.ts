@@ -211,6 +211,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(page).toContain("count.set((value) => value + 1)");
     expect(page).not.toContain("export const prerender = true;");
     expect(wrangler).toContain('main = ".mreact/cloudflare/worker.mjs"');
+    expect(wrangler).toContain('compatibility_flags = ["nodejs_compat"]');
     expect(wrangler).toContain("[[r2_buckets]]");
     expect(workerEnv).toContain("interface Env");
     expect(workerEnv).toContain("ASSETS: Fetcher");

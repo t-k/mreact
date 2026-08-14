@@ -722,6 +722,9 @@ async function runWithCloudflareQueryClient<T>(
     if (isQueryClientScopeUnavailableError(error)) {
       installQueryAsyncStorage(cloudflareQueryClientStorage);
       cloudflareQueryClientFallbackInstalled = true;
+      console.warn(
+        '[mreact] Cloudflare AsyncLocalStorage is unavailable. Enable the "nodejs_compat" compatibility flag; rendering is serialized until native request-local storage is available.',
+      );
       return await runWithSerializedCloudflareQueryClient(queryClient, fn);
     }
 
@@ -732,6 +735,11 @@ async function runWithCloudflareQueryClient<T>(
 const cloudflareQueryClientStorage = createCloudflareQueryClientStorage();
 let cloudflareQueryClientFallbackQueue: Promise<void> = Promise.resolve();
 let cloudflareQueryClientFallbackInstalled = false;
+
+export function __resetCloudflareQueryClientFallbackForTesting(): void {
+  cloudflareQueryClientFallbackQueue = Promise.resolve();
+  cloudflareQueryClientFallbackInstalled = false;
+}
 
 async function runWithSerializedCloudflareQueryClient<T>(
   queryClient: QueryClient,

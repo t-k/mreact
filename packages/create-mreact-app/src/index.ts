@@ -1319,6 +1319,7 @@ function wranglerSource(name: string): string {
   return `name = "${name}"
 main = ".mreact/cloudflare/worker.mjs"
 compatibility_date = "2026-05-15"
+compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = ".mreact/client"

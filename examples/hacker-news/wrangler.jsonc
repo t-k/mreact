@@ -3,6 +3,7 @@
   "name": "mreact-hacker-news",
   "main": ".mreact/cloudflare/worker.mjs",
   "compatibility_date": "2026-06-11",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": ".mreact/client",
     "binding": "ASSETS",
