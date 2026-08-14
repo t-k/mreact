@@ -124,7 +124,11 @@ describe("bindEvent", () => {
   test("keeps adopted template nodes interactive when connection is delayed", async () => {
     const templateDocument = document.implementation.createHTMLDocument("template");
     const button = templateDocument.createElement("button");
+    const rootRetainer = document.createElement("button");
     let calls = 0;
+
+    document.body.append(rootRetainer);
+    const disposeRootRetainer = bindEvent(rootRetainer, "click", () => undefined);
 
     const dispose = bindEvent(button, "click", () => {
       calls += 1;
@@ -143,6 +147,8 @@ describe("bindEvent", () => {
     expect(calls).toBe(3);
 
     dispose();
+    disposeRootRetainer();
+    rootRetainer.remove();
   });
 
   test("batches disconnected delegated event promotion microtasks", async () => {

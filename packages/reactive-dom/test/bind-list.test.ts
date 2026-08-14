@@ -16,6 +16,38 @@ import {
 } from "../src/scope.js";
 
 describe("bindList", () => {
+  test("dispatches a late-connected row event once while another element retains the root", async () => {
+    const parent = document.createElement("div");
+    const marker = document.createComment("list");
+    const rootRetainer = document.createElement("button");
+    const calls: string[] = [];
+    parent.append(marker);
+    document.body.append(rootRetainer);
+    const disposeRootRetainer = bindEvent(rootRetainer, "click", () => undefined);
+    const disposeList = bindList(
+      parent,
+      marker,
+      () => ["a"],
+      (item) => {
+        const button = document.createElement("button");
+        bindEvent(button, "click", () => calls.push(item));
+        return button;
+      },
+      { itemMode: "static", key: (item) => item },
+    );
+
+    await Promise.resolve();
+    document.body.append(parent);
+    (parent.firstElementChild as HTMLButtonElement).click();
+
+    expect(calls).toEqual(["a"]);
+
+    disposeList();
+    disposeRootRetainer();
+    parent.remove();
+    rootRetainer.remove();
+  });
+
   test("owns a function-backed text binding once in a render scope", async () => {
     const value = cell("A");
     let disposeBinding: (() => void) | undefined;

@@ -30,6 +30,10 @@ const delegatedEventTypes =
 const delegatedListenerPrefix = "__mreactDelegatedEvent$";
 const delegatedRootsGlobalKey = Symbol.for("mreact.reactiveDom.delegatedRoots");
 const delegatedRootsGlobal = globalThis as typeof globalThis & Record<symbol, unknown>;
+const disconnectedFallbackHandledListeners = new WeakMap<
+  Event,
+  WeakMap<HTMLElement, Set<EventListener>>
+>();
 const delegatedRoots =
   delegatedRootsGlobal[delegatedRootsGlobalKey] instanceof WeakMap
     ? (delegatedRootsGlobal[delegatedRootsGlobalKey] as WeakMap<
@@ -368,6 +372,17 @@ function addDisconnectedFallback(
       return;
     }
 
+    if (element.isConnected) {
+      let handledByElement = disconnectedFallbackHandledListeners.get(event);
+      if (handledByElement === undefined) {
+        handledByElement = new WeakMap();
+        disconnectedFallbackHandledListeners.set(event, handledByElement);
+      }
+      const handledListeners = handledByElement.get(element) ?? new Set<EventListener>();
+      handledListeners.add(listener);
+      handledByElement.set(element, handledListeners);
+    }
+
     listener.call(element, event);
 
     if (element.isConnected) {
@@ -496,6 +511,7 @@ function releaseDelegatedRootCount(root: EventTarget, type: string, count: numbe
 
 function dispatchDelegatedEvent(root: EventTarget, type: string, event: Event): void {
   const key = delegatedListenerKey(type);
+  const fallbackHandledByElement = disconnectedFallbackHandledListeners.get(event);
 
   for (const target of event.composedPath()) {
     if (target === root) {
@@ -513,12 +529,16 @@ function dispatchDelegatedEvent(root: EventTarget, type: string, event: Event): 
     }
 
     if (typeof listeners === "function") {
-      callWithCurrentTarget(listeners, event, target);
+      if (fallbackHandledByElement?.get(target)?.has(listeners) !== true) {
+        callWithCurrentTarget(listeners, event, target);
+      }
     } else {
       const activeListeners = listeners.slice();
 
       for (const listener of activeListeners) {
-        callWithCurrentTarget(listener, event, target);
+        if (fallbackHandledByElement?.get(target)?.has(listener) !== true) {
+          callWithCurrentTarget(listener, event, target);
+        }
       }
     }
 
