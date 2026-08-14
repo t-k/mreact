@@ -93,7 +93,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
       return [];
     }
 
-    const name = String(readObject(object.name).name);
+    const name = readOxcJsxTagName(readObject(object.name));
     const domName = htmlAttributeAliases[name] ?? name;
     const value = readObject(object.value);
 

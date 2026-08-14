@@ -1,3 +1,4 @@
+import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import { readArray, readObject, readSource, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
 const UNSERIALIZABLE_CONSTRUCTORS = new Set([
@@ -150,7 +151,7 @@ export function readOxcExpressionAttributeNode(
   for (const attr of attributes) {
     const object = readObject(attr);
 
-    if (object.type !== "JSXAttribute" || String(readObject(object.name).name) !== name) {
+    if (object.type !== "JSXAttribute" || readOxcJsxTagName(readObject(object.name)) !== name) {
       continue;
     }
 

@@ -35,6 +35,18 @@ export function unsupportedComponentReferenceDiagnostic(
   };
 }
 
+export function unsupportedJsxNamespaceTagDiagnostic(
+  name: string,
+  loc?: SourceLocation,
+): Diagnostic {
+  return {
+    level: "error",
+    code: "MR_UNSUPPORTED_JSX_NAMESPACE_TAG",
+    message: `Namespaced JSX tag '${name}' is not supported. Use a standard SVG element name instead.`,
+    ...(loc === undefined ? {} : { loc }),
+  };
+}
+
 export function unsupportedServerEventHandlerDiagnostic(
   name: string,
   loc?: SourceLocation,

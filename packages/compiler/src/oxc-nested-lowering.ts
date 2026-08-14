@@ -211,7 +211,7 @@ function lowerOxcReactiveComponentProps(
       return [];
     }
 
-    const name = String(readObject(object.name).name);
+    const name = readOxcJsxTagName(readObject(object.name));
     const value = readObject(object.value);
 
     if (Object.keys(value).length === 0) {

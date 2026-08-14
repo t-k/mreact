@@ -14,6 +14,7 @@ import {
 } from "./oxc-node-utils.js";
 import { containsOxcJsxSyntax } from "./oxc-render-values.js";
 import { transformJsxWithOxc } from "./oxc-transform.js";
+import { readOxcJsxTagName } from "./oxc-jsx-attributes.js";
 import type { Diagnostic } from "./types.js";
 
 export type AnalyzeOxcJsxNodeCallback = (
@@ -42,7 +43,7 @@ export function analyzeOxcComponentProp(
     return [];
   }
 
-  const name = String(readObject(object.name).name);
+  const name = readOxcJsxTagName(readObject(object.name));
   const value = readObject(object.value);
 
   if (name === "ref" && options.allowRef !== true) {

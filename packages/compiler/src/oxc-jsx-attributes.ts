@@ -32,6 +32,12 @@ export function readOxcJsxTagName(node: Record<string, unknown>): string {
     return node.name;
   }
 
+  if (node.type === "JSXNamespacedName") {
+    const namespaceName = readOxcJsxTagName(readObject(node.namespace));
+    const localName = readOxcJsxTagName(readObject(node.name));
+    return `${namespaceName}:${localName}`;
+  }
+
   if (node.type === "JSXMemberExpression") {
     const objectName = readOxcJsxTagName(readObject(node.object));
     const propertyName = readOxcJsxTagName(readObject(node.property));
@@ -61,7 +67,7 @@ export function analyzeOxcAttribute(
     return [];
   }
 
-  const name = String(readObject(object.name).name);
+  const name = readOxcJsxTagName(readObject(object.name));
   const value = readObject(object.value);
   const isEventAttribute = isEventLikePropName(name);
 
@@ -146,7 +152,7 @@ export function findOxcJsxAttributeCode(
   for (const attr of attributes) {
     const object = readObject(attr);
 
-    if (object.type !== "JSXAttribute" || String(readObject(object.name).name) !== name) {
+    if (object.type !== "JSXAttribute" || readOxcJsxTagName(readObject(object.name)) !== name) {
       continue;
     }
 

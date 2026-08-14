@@ -2,6 +2,7 @@ import {
   invalidJsxExpressionDiagnostic,
   unserializableAwaitValueDiagnostic,
   unsupportedComponentReferenceDiagnostic,
+  unsupportedJsxNamespaceTagDiagnostic,
   unsupportedJsxSpreadChildDiagnostic,
 } from "./diagnostics.js";
 import type {
@@ -104,8 +105,15 @@ export function analyzeOxcJsxNode(
   }
 
   const openingElement = readObject(node.openingElement);
-  const tagName = readOxcJsxTagName(readObject(openingElement.name));
+  const openingElementName = readObject(openingElement.name);
+  const tagName = readOxcJsxTagName(openingElementName);
   const attributes = readArray(openingElement.attributes);
+
+  if (openingElementName.type === "JSXNamespacedName") {
+    context.diagnostics.push(
+      unsupportedJsxNamespaceTagDiagnostic(tagName, getOxcLocation(code, openingElementName)),
+    );
+  }
 
   if (tagName === "Await") {
     return analyzeOxcAsyncBoundary(
