@@ -27,6 +27,107 @@ describe("bindDomRef", () => {
     element.remove();
   });
 
+  test("attaches after the element connects in a later task", async () => {
+    const element = document.createElement("section");
+    const events: string[] = [];
+    const binding = bindDomRef(element, (target) => {
+      events.push(target === element ? "attach" : "unexpected");
+      return () => events.push("cleanup");
+    });
+
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    document.body.append(element);
+    await Promise.resolve();
+
+    expect(events).toEqual(["attach"]);
+    binding.dispose();
+    expect(events).toEqual(["attach", "cleanup"]);
+    element.remove();
+  });
+
+  test("attaches each pending ref once after a shared late connection", async () => {
+    const parent = document.createElement("div");
+    const first = document.createElement("section");
+    const second = document.createElement("section");
+    const attached: Element[] = [];
+    const firstBinding = bindDomRef(first, (target) => {
+      attached.push(target);
+    });
+    const secondBinding = bindDomRef(second, (target) => {
+      attached.push(target);
+    });
+    parent.append(first, second);
+
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    document.body.append(parent);
+    await Promise.resolve();
+    parent.append(document.createElement("span"));
+    await Promise.resolve();
+
+    expect(attached).toEqual([first, second]);
+    firstBinding.dispose();
+    secondBinding.dispose();
+    parent.remove();
+  });
+
+  test("does not attach after disposal while waiting for connection", async () => {
+    const element = document.createElement("section");
+    let attachCount = 0;
+    const binding = bindDomRef(element, () => {
+      attachCount += 1;
+    });
+
+    await Promise.resolve();
+    binding.dispose();
+    document.body.append(element);
+    await Promise.resolve();
+
+    expect(attachCount).toBe(0);
+    expect(getDomRefBindings(element)).toEqual([]);
+    element.remove();
+  });
+
+  test("moves a waiting ref to a connected retarget", async () => {
+    const detached = document.createElement("section");
+    const connected = document.createElement("section");
+    document.body.append(connected);
+    const attached: Element[] = [];
+    const binding = bindDomRef(detached, (target) => {
+      attached.push(target);
+    });
+
+    await Promise.resolve();
+    binding.retarget(connected);
+    await Promise.resolve();
+    document.body.append(detached);
+    await Promise.resolve();
+
+    expect(attached).toEqual([connected]);
+    expect(getDomRefBindings(detached)).toEqual([]);
+    binding.dispose();
+    detached.remove();
+    connected.remove();
+  });
+
+  test("observes a template document ref adopted into the main document", async () => {
+    const templateDocument = document.implementation.createHTMLDocument("template");
+    const element = templateDocument.createElement("section");
+    const attached: Element[] = [];
+    const binding = bindDomRef(element, (target) => {
+      attached.push(target);
+    });
+
+    await Promise.resolve();
+    document.body.append(element);
+    await Promise.resolve();
+
+    expect(attached).toEqual([element]);
+    binding.dispose();
+    element.remove();
+  });
+
   test("does not attach after its pending owner is disposed", async () => {
     const element = document.createElement("section");
     let attachCount = 0;
@@ -66,11 +167,15 @@ describe("bindDomRef", () => {
     let disposeOwner: (() => void) | undefined;
     let cleanupCount = 0;
 
-    withCleanupScope((dispose) => {
-      disposeOwner = dispose;
-    }, () => bindDomRef(element, () => () => {
-      cleanupCount += 1;
-    }));
+    withCleanupScope(
+      (dispose) => {
+        disposeOwner = dispose;
+      },
+      () =>
+        bindDomRef(element, () => () => {
+          cleanupCount += 1;
+        }),
+    );
 
     await Promise.resolve();
     disposeOwner?.();
@@ -213,12 +318,7 @@ describe("bindDomRef", () => {
 
     expect(events).toEqual(["attach:first", "cleanup:first", "attach:second"]);
     binding.dispose();
-    expect(events).toEqual([
-      "attach:first",
-      "cleanup:first",
-      "attach:second",
-      "cleanup:second",
-    ]);
+    expect(events).toEqual(["attach:first", "cleanup:first", "attach:second", "cleanup:second"]);
     first.remove();
     second.remove();
   });
