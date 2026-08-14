@@ -78,6 +78,7 @@ export interface BuildClientRouteOutputOptions {
   filename: string;
   minify?: boolean | undefined;
   routePath: string;
+  restoreRequestUrl?: boolean | undefined;
   sourceMap?: boolean | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
   clientNavigation?: boolean | undefined;
@@ -2881,6 +2882,8 @@ export async function buildClientRouteEntrySource(
   );
 
   const routeId = routeIdForPath(options.routePath);
+  const restoreRequestUrl =
+    options.restoreRequestUrl ?? (options.debugLabels === true || /\brequest\b/.test(options.code));
   const routeUsesCells = detectRouteCellStateHint(compiled.code);
   const routeUsesReactiveEffect = detectRouteReactiveEffectHint(compiled.code);
   const routeUsesDomRefs = compiled.metadata.imports.some(
@@ -3410,6 +3413,7 @@ ${routeOutOfOrderFragmentHydration}  const __mreactMarker = document.querySelect
   const __mreactProps = __mreactPropsText === undefined
     ? {}
     : JSON.parse(__mreactPropsText);
+${restoreRequestUrl ? "  if (__mreactProps.request) __mreactProps.request.url = document.URL;\n" : ""}
   const __mreactClientReferences = __mreactClientReferencesElement?.textContent === undefined
     ? []
     : JSON.parse(__mreactClientReferencesElement.textContent);

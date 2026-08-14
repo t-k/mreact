@@ -6283,6 +6283,10 @@ async function writeClientRouteBundles(options: {
             options.sourceAnalysis.byRouteFile.get(
               relative(options.projectRoot, route.file).split(sep).join("/"),
             )?.streamRoute === true,
+          restoreRequestUrl:
+            options.sourceAnalysis.byRouteFile.get(
+              relative(options.projectRoot, route.file).split(sep).join("/"),
+            )?.usesRequestInput === true,
           cacheDir: options.cacheDir,
           dropConsoleFunctions: options.clientConsolePureFunctions,
           filename: route.file,

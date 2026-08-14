@@ -417,6 +417,26 @@ export default function Page() {
     expect(entry.code).not.toContain("__mreactApplyOutOfOrderFragments(document);");
   });
 
+  test("restores the current browser URL before hydrating shared HTML", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-hydration-url-"));
+    const file = join(appDir, "page.mreact.tsx");
+    const code = `export const clientNavigation = false;
+
+export default function Page(props) {
+  return <main>{props.request.url}</main>;
+}`;
+    await writeFile(file, code);
+
+    const entry = await buildClientRouteEntrySource({
+      code,
+      clientNavigation: false,
+      filename: file,
+      routePath: "/",
+    });
+
+    expect(entry.code).toContain("__mreactProps.request.url = document.URL");
+  });
+
   test("keeps the hydration-time OOB fragment walk for routes that can stream fragments", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-oob-fragments-"));
     const file = join(appDir, "page.mreact.tsx");
