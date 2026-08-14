@@ -128,6 +128,27 @@ describe("bindDomRef", () => {
     element.remove();
   });
 
+  test("observes a detached ref adopted into a third document", async () => {
+    const sourceDocument = document.implementation.createHTMLDocument("source");
+    const targetDocument = document.implementation.createHTMLDocument("target");
+    const element = sourceDocument.createElement("section");
+    const attached: Element[] = [];
+    const binding = bindDomRef(element, (target) => {
+      attached.push(target);
+    });
+
+    await Promise.resolve();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    targetDocument.body.append(element);
+    await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+    expect(element.ownerDocument).toBe(targetDocument);
+    expect(element.isConnected).toBe(true);
+    expect(attached).toEqual([element]);
+    binding.dispose();
+    element.remove();
+  });
+
   test("does not attach after its pending owner is disposed", async () => {
     const element = document.createElement("section");
     let attachCount = 0;

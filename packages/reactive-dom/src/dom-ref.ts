@@ -31,6 +31,11 @@ const bindingsByElement = new WeakMap<Element, Set<InternalDomRefBinding>>();
 // an abandoned subtree can still be collected without an explicit dispose.
 const pendingConnectionsByBinding = new WeakMap<InternalDomRefBinding, PendingConnection>();
 const pendingConnectionObservers = new WeakMap<Document, PendingConnectionObserver>();
+// Automatic adoption does not notify the source document. A shared backoff poll
+// discovers moves into documents that were not reachable when the ref was bound.
+const pendingConnectionPolls = new Set<PendingConnection>();
+let pendingConnectionPoll: ReturnType<typeof setTimeout> | undefined;
+let pendingConnectionPollDelay = 16;
 const pendingConnectionFinalizer =
   typeof FinalizationRegistry === "undefined"
     ? undefined
@@ -100,12 +105,35 @@ function waitForConnection(binding: InternalDomRefBinding, element: Element): vo
     pending.documents.add(observedDocument);
   }
 
-  if (pending.documents.size === 0) {
+  pendingConnectionsByBinding.set(binding, pending);
+  pendingConnectionPolls.add(pending);
+  pendingConnectionFinalizer?.register(binding, pending, binding);
+  schedulePendingConnectionPoll();
+}
+
+function schedulePendingConnectionPoll(): void {
+  if (pendingConnectionPoll !== undefined || pendingConnectionPolls.size === 0) {
     return;
   }
 
-  pendingConnectionsByBinding.set(binding, pending);
-  pendingConnectionFinalizer?.register(binding, pending, binding);
+  pendingConnectionPoll = setTimeout(() => {
+    pendingConnectionPoll = undefined;
+    const bindings: InternalDomRefBinding[] = [];
+
+    for (const pending of Array.from(pendingConnectionPolls)) {
+      const binding = pending.binding.deref();
+      if (binding === undefined) {
+        removePendingConnection(pending);
+      } else {
+        bindings.push(binding);
+      }
+    }
+
+    commitBindings(bindings);
+    pendingConnectionPollDelay = Math.min(pendingConnectionPollDelay * 2, 250);
+    schedulePendingConnectionPoll();
+  }, pendingConnectionPollDelay);
+  (pendingConnectionPoll as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
 }
 
 function pendingConnectionObserver(
@@ -160,6 +188,7 @@ function stopWaitingForConnection(binding: InternalDomRefBinding): void {
 }
 
 function removePendingConnection(pending: PendingConnection): void {
+  pendingConnectionPolls.delete(pending);
   for (const observedDocument of pending.documents) {
     const state = pendingConnectionObservers.get(observedDocument);
     if (state === undefined) {
@@ -174,6 +203,11 @@ function removePendingConnection(pending: PendingConnection): void {
   }
 
   pending.documents.clear();
+  if (pendingConnectionPolls.size === 0 && pendingConnectionPoll !== undefined) {
+    clearTimeout(pendingConnectionPoll);
+    pendingConnectionPoll = undefined;
+    pendingConnectionPollDelay = 16;
+  }
 }
 
 function attachBinding(element: Element, binding: InternalDomRefBinding): void {
