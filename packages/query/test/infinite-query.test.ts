@@ -7,6 +7,32 @@ interface TimelinePage {
 }
 
 describe("createInfiniteQuery", () => {
+  it("issues one network request for each explicit refetch", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: true,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["single-infinite-refetch"],
+      queryFn: async () => {
+        calls += 1;
+        return { items: [`story-${calls}`], nextCursor: undefined };
+      },
+    });
+
+    await waitForTimer();
+    expect(calls).toBe(1);
+
+    await query.refetch();
+    await waitForTimer();
+
+    expect(calls).toBe(2);
+    expect(query.result.get().pages).toEqual([
+      { items: ["story-2"], nextCursor: undefined },
+    ]);
+  });
+
   it("stores cursor pages and page params without caller-managed page state", async () => {
     const client = createQueryClient();
     const query = createInfiniteQuery<TimelinePage, number>(client, {
@@ -152,3 +178,9 @@ describe("createInfiniteQuery", () => {
     expect(client.entries().map((entry) => entry.queryKey)).toEqual([["refetched-timeline"]]);
   });
 });
+
+function waitForTimer(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}

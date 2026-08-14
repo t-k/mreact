@@ -389,7 +389,15 @@ export function createQuery<TData>(
   }
 
   const refetch = async () => {
+    const revisionBeforeRefetch = queryInvalidationRevision(
+      client.getQueryEntry(options.queryKey),
+    );
     client.invalidateQueries({ queryKey: options.queryKey });
+    if (observedInvalidationRevision === revisionBeforeRefetch) {
+      observedInvalidationRevision = queryInvalidationRevision(
+        client.getQueryEntry(options.queryKey),
+      );
+    }
     await client.fetchQuery(options);
     const next = resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey));
     return updateResult(next);
@@ -501,7 +509,11 @@ export function createInfiniteQuery<TPage, TPageParam>(
     return updateResult();
   };
   const refetch = async () => {
+    const revisionBeforeRefetch = queryInvalidationRevision(readEntry());
     client.invalidateQueries({ queryKey: options.queryKey });
+    if (observedInvalidationRevision === revisionBeforeRefetch) {
+      observedInvalidationRevision = queryInvalidationRevision(readEntry());
+    }
     return fetchFirstPage();
   };
   refetchInvalidated = () => {

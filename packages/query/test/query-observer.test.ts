@@ -29,6 +29,28 @@ describe("createQuery", () => {
     expect(query.result.get().data).toBe(2);
   });
 
+  it("issues one network request for each explicit refetch", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const query = createQuery(client, {
+      autoFetch: true,
+      queryKey: ["single-refetch"],
+      queryFn: async () => {
+        calls += 1;
+        return calls;
+      },
+    });
+
+    await waitForTimer();
+    expect(calls).toBe(1);
+
+    await query.refetch();
+    await waitForTimer();
+
+    expect(calls).toBe(2);
+    expect(query.result.get().data).toBe(2);
+  });
+
   it("observes externally written query data", async () => {
     const client = createQueryClient();
     const query = createQuery(client, {
