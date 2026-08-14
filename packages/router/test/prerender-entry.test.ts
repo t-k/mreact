@@ -13,6 +13,17 @@ describe("prerender entry validation", () => {
     ).toBe(false);
   });
 
+  test("rejects a complete schema-2 entry after the HSTS storage contract changes", () => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: { "content-type": "text/html; charset=utf-8" },
+        html: "<main>legacy</main>",
+        schemaVersion: 2,
+        status: 200,
+      }),
+    ).toBe(false);
+  });
+
   test.each([
     ["Set-Cookie", "session=visitor-a"],
     ["Vary", "Cookie"],
@@ -25,7 +36,7 @@ describe("prerender entry validation", () => {
       isCurrentPrerenderedRoute({
         headers: { [name]: value },
         html: "<main>visitor A</main>",
-        schemaVersion: 2,
+        schemaVersion: 3,
         status: 200,
       }),
     ).toBe(false);
@@ -39,9 +50,42 @@ describe("prerender entry validation", () => {
           "content-type": "text/html; charset=utf-8",
         },
         html: "<main>shared</main>",
-        schemaVersion: 2,
+        schemaVersion: 3,
         status: 200,
       }),
     ).toBe(true);
+  });
+
+  test("accepts canonical HSTS in its scheme-independent field", () => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: { "content-type": "text/html; charset=utf-8" },
+        html: "<main>shared</main>",
+        schemaVersion: 3,
+        status: 200,
+        strictTransportSecurity: "max-age=31536000; includeSubDomains; preload",
+      }),
+    ).toBe(true);
+  });
+
+  test.each([
+    {
+      headers: { "Strict-Transport-Security": "max-age=31536000" },
+      strictTransportSecurity: undefined,
+    },
+    { headers: {}, strictTransportSecurity: "max-age=NaN" },
+    { headers: {}, strictTransportSecurity: "max-age=10\r\nx-injected: yes" },
+  ])("rejects HSTS that cannot be replayed safely: %#", (overrides) => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: overrides.headers,
+        html: "<main>shared</main>",
+        schemaVersion: 3,
+        status: 200,
+        ...(overrides.strictTransportSecurity === undefined
+          ? {}
+          : { strictTransportSecurity: overrides.strictTransportSecurity }),
+      }),
+    ).toBe(false);
   });
 });

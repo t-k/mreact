@@ -105,6 +105,7 @@ import { collectBuildInferredServerActions } from "./server-action-inference.js"
 import {
   isVisitorDependentResponse,
   PRERENDERED_ROUTE_SCHEMA_VERSION,
+  storedPrerenderedRouteHeaders,
 } from "./prerender-entry.js";
 import { prepareRouteServerActionPlaceholders } from "./actions.js";
 import { viteDefineCacheKey, vitePluginsCacheKey } from "./vite-plugin-cache-key.js";
@@ -424,8 +425,9 @@ export interface BuiltPrerenderedRoute {
   headers: Record<string, string>;
   html: string;
   /** Identifies entries that satisfy the complete current prerender contract. */
-  schemaVersion?: 2 | undefined;
+  schemaVersion?: 3 | undefined;
   status: number;
+  strictTransportSecurity?: string | undefined;
 }
 
 type StaticParams = Record<string, string | number | boolean | readonly string[]>;
@@ -2620,6 +2622,7 @@ async function prerenderStaticRoutes(options: {
       for (const pathname of await prerenderPathsForRoute(route, analysis, options.vitePlugins)) {
         const renderSignals = {
           headerDependent: () => true,
+          strictTransportSecurity: () => undefined as string | undefined,
         };
         const renderOptions = {
           appDir: options.appDir,
@@ -2642,11 +2645,8 @@ async function prerenderStaticRoutes(options: {
           continue;
         }
 
-        const headers: Record<string, string> = {};
-
-        response.headers.forEach((value, key) => {
-          headers[key] = value;
-        });
+        const headers = storedPrerenderedRouteHeaders(response.headers);
+        const strictTransportSecurity = renderSignals.strictTransportSecurity();
         entries.push([
           pathname,
           {
@@ -2654,6 +2654,7 @@ async function prerenderStaticRoutes(options: {
             html,
             schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
             status: response.status,
+            ...(strictTransportSecurity === undefined ? {} : { strictTransportSecurity }),
           },
         ]);
       }

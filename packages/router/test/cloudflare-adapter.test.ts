@@ -25,6 +25,9 @@ describe("mreact Cloudflare Workers adapter", () => {
     await writeFile(
       join(appDir, "page.tsx"),
       `export const prerender = true;
+export const metadata = {
+  security: { hsts: { maxAge: 31536000, includeSubDomains: true, preload: true } },
+};
 export default function Page() { return <main>Cloudflare route</main>; }`,
     );
     await buildApp({ appDir, outDir, targets: ["cloudflare"] });
@@ -60,9 +63,27 @@ export default function Page() { return <main>Cloudflare route</main>; }`,
       {},
       createExecutionContext(),
     );
+    const plainRouteResponse = await handler.fetch(
+      new Request("http://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+    const headRouteResponse = await handler.fetch(
+      new Request("https://app.example/", { method: "HEAD" }),
+      {},
+      createExecutionContext(),
+    );
 
     expect(routeResponse.status).toBe(200);
+    expect(routeResponse.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains; preload",
+    );
     expect(await routeResponse.text()).toContain("<main>Cloudflare route</main>");
+    expect(plainRouteResponse.headers.get("strict-transport-security")).toBeNull();
+    expect(headRouteResponse.headers.get("strict-transport-security")).toBe(
+      "max-age=31536000; includeSubDomains; preload",
+    );
+    expect(await headRouteResponse.text()).toBe("");
     expect(assetResponse.status).toBe(200);
     await expect(assetResponse.json()).resolves.toEqual(clientManifest);
   });
@@ -249,7 +270,7 @@ export async function POST(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-            schemaVersion: 2,
+            schemaVersion: 3,
             status: 200,
           },
         },
@@ -281,7 +302,7 @@ export async function POST(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: '<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>',
-            schemaVersion: 2,
+            schemaVersion: 3,
             status: 200,
           },
         },
@@ -335,7 +356,7 @@ export function middleware(request) {
             "/": {
               headers: { "content-type": "text/html; charset=utf-8" },
               html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-              schemaVersion: 2,
+              schemaVersion: 3,
               status: 200,
             },
           },
@@ -493,7 +514,7 @@ export function middleware(request: Request) {
           "/": {
             headers: { "content-type": "text/html; charset=utf-8" },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
-            schemaVersion: 2,
+            schemaVersion: 3,
             status: 200,
           },
         },

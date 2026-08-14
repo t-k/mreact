@@ -62,6 +62,8 @@ import {
   isCurrentPrerenderedRoute,
   isVisitorDependentResponse,
   PRERENDERED_ROUTE_SCHEMA_VERSION,
+  replayedPrerenderedRouteHeaders,
+  storedPrerenderedRouteHeaders,
 } from "./prerender-entry.js";
 
 interface BuiltRuntimeCacheEntry {
@@ -483,7 +485,7 @@ async function renderBuiltAppRequestWithRuntime(
             normalizedPath,
             options.prerenderStore,
           );
-    const prerenderedResponse = prerenderedRouteResponse(prerendered, request.method);
+    const prerenderedResponse = prerenderedRouteResponse(prerendered, request);
 
     if (prerenderedResponse !== undefined) {
       return prerenderedResponse;
@@ -518,7 +520,7 @@ async function renderBuiltAppRequestWithRuntime(
             normalizedPath,
             options.prerenderStore,
           );
-    const prerenderedResponse = prerenderedRouteResponse(prerendered, request.method);
+    const prerenderedResponse = prerenderedRouteResponse(prerendered, request);
 
     if (prerenderedResponse !== undefined) {
       emitBuiltRenderTiming(options, request, timing, prerenderedResponse.status);
@@ -556,21 +558,21 @@ async function renderBuiltAppRequestWithRuntime(
 
 function prerenderedRouteResponse(
   prerendered: BuiltPrerenderedRoute | undefined,
-  method: string,
+  request: Request,
 ): Response | undefined {
   if (!isCurrentPrerenderedRoute(prerendered)) {
     return undefined;
   }
 
-  if (method === "HEAD") {
+  if (request.method === "HEAD") {
     return new Response(null, {
-      headers: prerendered.headers,
+      headers: replayedPrerenderedRouteHeaders(prerendered, request),
       status: prerendered.status,
     });
   }
 
   return htmlResponse(prerendered.html, {
-    headers: prerendered.headers,
+    headers: replayedPrerenderedRouteHeaders(prerendered, request),
     status: prerendered.status,
   });
 }
@@ -1023,7 +1025,10 @@ async function runPrerenderRegeneration(
     // render that depended on this visitor's request headers must not become
     // one; it is returned to the caller without being stored. The signal starts
     // closed so that a render which never reports back is not stored either.
-    const renderSignals = { headerDependent: () => true };
+    const renderSignals = {
+      headerDependent: () => true,
+      strictTransportSecurity: () => undefined as string | undefined,
+    };
     const response = await renderBuiltDynamicResponse({ ...options, renderSignals });
 
     if (!response.ok) {
@@ -1050,6 +1055,7 @@ async function runPrerenderRegeneration(
           path,
           body,
           response,
+          renderSignals.strictTransportSecurity(),
           options.prerenderStore,
         ),
       shareable: true,
@@ -1084,18 +1090,16 @@ async function cacheRegeneratedPrerenderedRoute(
   path: string,
   body: string,
   response: Response,
+  strictTransportSecurity: string | undefined,
   store: AppRouterPrerenderStore | undefined,
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
-
-  response.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
+  const headers = storedPrerenderedRouteHeaders(response.headers);
   const entry: BuiltPrerenderedRoute = {
     headers,
     html: body,
     schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
     status: response.status,
+    ...(strictTransportSecurity === undefined ? {} : { strictTransportSecurity }),
   };
   runtime.prerenderedRoutes.set(path, entry);
   await store?.set(path, entry);

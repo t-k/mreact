@@ -3053,7 +3053,7 @@ export default function Page(props) {
       prerenderedRoutes?: Record<string, { html: string; schemaVersion?: number; status: number }>;
     };
 
-    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(2);
+    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(3);
     expect(serverManifest.prerenderedRoutes?.["/"]?.status).toBe(200);
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Policy OK</main>");
   });
@@ -8697,6 +8697,102 @@ export default function Page() { return <main>Prerendered route</main>; }`,
     // Response.
     expect(hasFastPathBody(response)).toBe(true);
     expect(await response.text()).toContain("<main>Prerendered route</main>");
+  });
+
+  test("applies prerendered HSTS by serving request scheme for GET and HEAD", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerendered-hsts-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export const metadata = {
+  security: { hsts: { maxAge: 31536000, includeSubDomains: true } },
+};
+export default function Page() { return <main>Secure prerender</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
+      prerenderedRoutes?: Record<
+        string,
+        { headers: Record<string, string>; strictTransportSecurity?: string }
+      >;
+    };
+    const entry = manifest.prerenderedRoutes?.["/"];
+
+    expect(entry?.headers["strict-transport-security"]).toBeUndefined();
+    expect(entry?.strictTransportSecurity).toBe("max-age=31536000; includeSubDomains");
+
+    for (const method of ["GET", "HEAD"]) {
+      const secure = await renderBuiltAppRequest({
+        outDir,
+        request: new Request("https://local.test/", { method }),
+      });
+      const plain = await renderBuiltAppRequest({
+        outDir,
+        request: new Request("http://local.test/", { method }),
+      });
+
+      expect(secure.headers.get("strict-transport-security")).toBe(
+        "max-age=31536000; includeSubDomains",
+      );
+      expect(plain.headers.get("strict-transport-security")).toBeNull();
+      if (method === "HEAD") {
+        expect(await secure.text()).toBe("");
+      }
+    }
+  });
+
+  test("does not bake a secure regeneration request into a shared prerender entry", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerendered-hsts-regeneration-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    const writes: Array<{
+      headers: Record<string, string>;
+      strictTransportSecurity?: string | undefined;
+    }> = [];
+    const entries = new Map<string, unknown>();
+    const store = {
+      delete(path: string) {
+        entries.delete(path);
+      },
+      get(path: string) {
+        return entries.get(path);
+      },
+      set(path: string, entry: (typeof writes)[number]) {
+        writes.push(entry);
+        entries.set(path, entry);
+      },
+    };
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export const metadata = { security: { hsts: { maxAge: 86400 } } };
+export default function Page() { return <main>Regenerated secure prerender</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const secure = await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("https://local.test/"),
+    });
+    const plain = await renderBuiltAppRequest({
+      outDir,
+      prerenderStore: store,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(secure.headers.get("strict-transport-security")).toBe("max-age=86400");
+    expect(plain.headers.get("strict-transport-security")).toBeNull();
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.headers["strict-transport-security"]).toBeUndefined();
+    expect(writes[0]?.strictTransportSecurity).toBe("max-age=86400");
   });
 
   test("runs middleware before serving a prerendered route", async () => {

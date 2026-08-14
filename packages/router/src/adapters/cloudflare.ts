@@ -39,7 +39,10 @@ import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
-import { isCurrentPrerenderedRoute } from "../prerender-entry.js";
+import {
+  isCurrentPrerenderedRoute,
+  replayedPrerenderedRouteHeaders,
+} from "../prerender-entry.js";
 
 /** Re-exports build manifest contracts used by Cloudflare handlers. */
 export type {
@@ -498,7 +501,7 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
     const prerendered = prerenderedResponse(
       context.serverManifest.prerenderedRoutes,
       normalizeRoutePath(new URL(request.url).pathname),
-      request.method,
+      request,
       isCloudflareNavigationRequest(request),
     );
 
@@ -1244,7 +1247,7 @@ async function handleCloudflareRequest<Env>(
     : prerenderedResponse(
         options.serverManifest.prerenderedRoutes,
         normalizeRoutePath(url.pathname),
-        request.method,
+        request,
         isCloudflareNavigationRequest(request),
       );
 
@@ -1387,10 +1390,10 @@ function builtServerManifestHasMiddleware(manifest: {
 function prerenderedResponse(
   prerenderedRoutes: Record<string, BuiltPrerenderedRoute> | undefined,
   path: string,
-  method: string,
+  request: Request,
   isNavigation: boolean,
 ): Response | undefined {
-  if (method !== "GET" && method !== "HEAD") {
+  if (request.method !== "GET" && request.method !== "HEAD") {
     return undefined;
   }
 
@@ -1404,8 +1407,8 @@ function prerenderedResponse(
     return cloudflareDocumentReloadNavigationResponse();
   }
 
-  return new Response(method === "HEAD" ? null : prerendered.html, {
-    headers: prerendered.headers,
+  return new Response(request.method === "HEAD" ? null : prerendered.html, {
+    headers: replayedPrerenderedRouteHeaders(prerendered, request),
     status: prerendered.status,
   });
 }

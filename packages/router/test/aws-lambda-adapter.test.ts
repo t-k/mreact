@@ -162,6 +162,26 @@ describe("mreact AWS Lambda adapter", () => {
     );
   });
 
+  test("applies prerendered HSTS from the Lambda event scheme", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-prerender-hsts-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export const metadata = { security: { hsts: { maxAge: 31536000 } } };
+export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaRequestHandler({ outDir });
+    const secure = await handler(lambdaEvent("/"));
+    const plain = await handler({
+      ...lambdaEvent("/"),
+      requestContext: { http: { method: "GET", protocol: "HTTP/1.1" } },
+    });
+
+    expect(secure.headers?.["strict-transport-security"]).toBe("max-age=31536000");
+    expect(plain.headers?.["strict-transport-security"]).toBeUndefined();
+  });
+
   test("does not trust forwarded host by default in production", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-forwarded-host-");
     await writeUrlEchoRoute(appDir);

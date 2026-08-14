@@ -245,7 +245,12 @@ export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions 
    * dependent. Call it only after draining the response body, because a
    * streamed render can read headers while its deferred parts resolve.
    */
-  renderSignals?: { headerDependent: () => boolean } | undefined;
+  renderSignals?:
+    | {
+        headerDependent: () => boolean;
+        strictTransportSecurity: () => string | undefined;
+      }
+    | undefined;
   serverRenderArtifactLoader?: AppRouterServerRenderArtifactLoader | undefined;
 }
 
@@ -1002,6 +1007,7 @@ async function renderAppRequestInternal(
   let trackedRequest: TrackedHeaderRequest | undefined;
   let sourceUsesRequestInput = true;
   let invalidConfiguredHsts = false;
+  let renderedStrictTransportSecurity: string | undefined;
   return (await withRouteCacheContext(options.routeCache, async () => {
   try {
     if (matched.route.kind === "asset") {
@@ -1641,6 +1647,7 @@ async function renderAppRequestInternal(
 
     const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
     const configuredHsts = configuredHstsHeader(metadata?.security);
+    renderedStrictTransportSecurity = configuredHsts;
     invalidConfiguredHsts = hasInvalidConfiguredHsts(metadata?.security);
 
     const finalResponse = preparedActions.hasFormActions
@@ -1739,6 +1746,7 @@ async function renderAppRequestInternal(
       const tracked = trackedRequest;
       options.renderSignals.headerDependent = () =>
         sourceUsesRequestInput || invalidConfiguredHsts || (tracked?.requestDependent() ?? true);
+      options.renderSignals.strictTransportSecurity = () => renderedStrictTransportSecurity;
     }
   }
   })).value;

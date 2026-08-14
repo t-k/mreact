@@ -39,6 +39,7 @@ describe("mreact deployment adapters", () => {
       "page.tsx": `export const metadata = {
   security: { hsts: { maxAge: 31536000 } },
 };
+export const prerender = true;
 export default function Page() { return <main>Secure proxy</main>; }`,
     });
 
@@ -119,7 +120,7 @@ export default function Page() { return <main>Static adapter</main>; }`,
           "../escape": {
             headers: {},
             html: "<main>escape</main>",
-            schemaVersion: 2,
+            schemaVersion: 3,
             status: 200,
           },
         },
@@ -139,7 +140,7 @@ export default function Page() { return <main>Static adapter</main>; }`,
   test.each([
     ["legacy schema", { schemaVersion: 1 }],
     ["missing schema", {}],
-    ["visitor-dependent headers", { schemaVersion: 2, headers: { vary: "Cookie" } }],
+    ["visitor-dependent headers", { schemaVersion: 3, headers: { vary: "Cookie" } }],
   ])("rejects %s prerender entries before replacing an existing export", async (_name, overrides) => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-adapter-unsafe-entry-"));
     const outDir = join(rootDir, "out");
