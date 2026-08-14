@@ -65,6 +65,7 @@ be classified before they can be ignored.</p>
 </tr>
 </tbody>
 </table>
+<p>Flight decoding restores the identity of repeated object references. Mutating one decoded alias therefore affects every path that referenced the same server-side object.</p>
 <p>Run the focused compatibility checks with:</p>
 <pre><code class="bash"><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">test:react-conformance</span><br/><span class="hl-0">pnpm</span><span class="hl-1"> </span><span class="hl-2">exec</span><span class="hl-1"> </span><span class="hl-2">vitest</span><span class="hl-1"> </span><span class="hl-2">run</span><span class="hl-1"> </span><span class="hl-2">packages/react-compat/test/react-official-conformance.test.ts</span><span class="hl-1"> </span><span class="hl-2">packages/react-compat/test/react-official-suite-gate.test.ts</span>
 </code><button type="button">Copy</button></pre>
@@ -73,6 +74,7 @@ be classified before they can be ignored.</p>
 <ul>
 <li>This is a React-like compatibility runtime, not a byte-for-byte React
 reconciler. The tests assert observable behavior for the supported surface.</li>
+<li>A bare reactive-core <code>effect()</code> created synchronously in a component render is owned by that root, replaced on the next committed render, and disposed on unmount. Effects created later in event handlers or asynchronous continuations must be disposed explicitly; use a React effect hook when the lifetime belongs to a component.</li>
 <li>The app-router compiler path is separate from the React-compatible runtime.
 Compiler and router behavior is covered by their own tests.</li>
 <li><code>useId()</code> returns opaque underscore-delimited ids such as <code>_R_0_</code> and <code>_r_0_</code> instead of React's colon-delimited internal shape. The runtime keeps SSR and hydration ids stable through its hydrated-id map, but code should not parse the id string.</li>
