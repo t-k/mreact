@@ -12174,7 +12174,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 197,
+											"line": 198,
 											"character": 4
 										}
 									],
@@ -12194,7 +12194,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 198,
+											"line": 199,
 											"character": 4
 										}
 									],
@@ -12225,7 +12225,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 196,
+									"line": 197,
 									"character": 17
 								}
 							]
@@ -12893,7 +12893,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 55,
+									"line": 56,
 									"character": 12
 								}
 							],
@@ -13755,7 +13755,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 295,
+									"line": 296,
 									"character": 12
 								}
 							],
@@ -13815,7 +13815,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 293,
+									"line": 294,
 									"character": 12
 								}
 							],
@@ -14667,7 +14667,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 181,
+									"line": 182,
 									"character": 21
 								}
 							],
@@ -14686,7 +14686,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 192,
+									"line": 193,
 									"character": 24
 								}
 							],
@@ -14708,7 +14708,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 192,
+											"line": 193,
 											"character": 24
 										}
 									],
@@ -14877,7 +14877,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 284,
+									"line": 285,
 									"character": 24
 								}
 							],
@@ -14899,7 +14899,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 284,
+											"line": 285,
 											"character": 24
 										}
 									],
@@ -15035,7 +15035,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 286,
+									"line": 287,
 									"character": 24
 								}
 							],
@@ -15057,7 +15057,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 286,
+											"line": 287,
 											"character": 24
 										}
 									],
@@ -15092,7 +15092,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 288,
+									"line": 289,
 									"character": 24
 								}
 							],
@@ -15114,7 +15114,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 288,
+											"line": 289,
 											"character": 24
 										}
 									],
@@ -17794,7 +17794,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 297,
+									"line": 298,
 									"character": 24
 								}
 							],
@@ -17816,7 +17816,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 297,
+											"line": 298,
 											"character": 24
 										}
 									],
@@ -17912,7 +17912,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 290,
+									"line": 291,
 									"character": 24
 								}
 							],
@@ -17934,7 +17934,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 290,
+											"line": 291,
 											"character": 24
 										}
 									],
@@ -17973,7 +17973,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 282,
+									"line": 283,
 									"character": 24
 								}
 							],
@@ -17995,7 +17995,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 282,
+											"line": 283,
 											"character": 24
 										}
 									],
@@ -18040,7 +18040,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 278,
+									"line": 279,
 									"character": 24
 								}
 							],
@@ -18062,7 +18062,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 278,
+											"line": 279,
 											"character": 24
 										}
 									],
@@ -18252,7 +18252,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 264,
+									"line": 265,
 									"character": 24
 								}
 							],
@@ -18274,7 +18274,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 264,
+											"line": 265,
 											"character": 24
 										}
 									],
@@ -18461,7 +18461,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 266,
+									"line": 267,
 									"character": 24
 								}
 							],
@@ -18483,7 +18483,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 266,
+											"line": 267,
 											"character": 24
 										}
 									],
@@ -18561,7 +18561,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 305,
+									"line": 306,
 									"character": 24
 								}
 							],
@@ -18583,7 +18583,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 305,
+											"line": 306,
 											"character": 24
 										}
 									],
@@ -18647,7 +18647,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 270,
+									"line": 271,
 									"character": 24
 								}
 							],
@@ -18669,7 +18669,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 270,
+											"line": 271,
 											"character": 24
 										}
 									],
@@ -18724,7 +18724,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 268,
+									"line": 269,
 									"character": 24
 								}
 							],
@@ -18746,7 +18746,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 268,
+											"line": 269,
 											"character": 24
 										}
 									],
@@ -18882,7 +18882,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 257,
+									"line": 258,
 									"character": 24
 								}
 							],
@@ -18904,7 +18904,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 257,
+											"line": 258,
 											"character": 24
 										}
 									],
@@ -18924,7 +18924,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 259,
+									"line": 260,
 									"character": 24
 								}
 							],
@@ -18946,7 +18946,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 259,
+											"line": 260,
 											"character": 24
 										}
 									],
@@ -19041,7 +19041,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 272,
+									"line": 273,
 									"character": 24
 								}
 							],
@@ -19063,7 +19063,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 272,
+											"line": 273,
 											"character": 24
 										}
 									],
@@ -19118,7 +19118,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 274,
+									"line": 275,
 									"character": 24
 								}
 							],
@@ -19140,7 +19140,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 274,
+											"line": 275,
 											"character": 24
 										}
 									],
@@ -19195,7 +19195,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 261,
+									"line": 262,
 									"character": 24
 								}
 							],
@@ -19217,7 +19217,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 261,
+											"line": 262,
 											"character": 24
 										}
 									],
@@ -19304,7 +19304,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 280,
+									"line": 281,
 									"character": 24
 								}
 							],
@@ -19326,7 +19326,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 280,
+											"line": 281,
 											"character": 24
 										}
 									],
@@ -19490,7 +19490,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 251,
+									"line": 252,
 									"character": 24
 								}
 							],
@@ -19512,7 +19512,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 251,
+											"line": 252,
 											"character": 24
 										}
 									],
@@ -19739,7 +19739,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 253,
+									"line": 254,
 									"character": 24
 								}
 							],
@@ -19761,7 +19761,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 253,
+											"line": 254,
 											"character": 24
 										}
 									],
@@ -19808,7 +19808,7 @@
 													"sources": [
 														{
 															"fileName": "react-compat/dist/hooks.d.ts",
-															"line": 254,
+															"line": 255,
 															"character": 4
 														}
 													],
@@ -19843,7 +19843,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 248,
+									"line": 249,
 									"character": 24
 								}
 							],
@@ -19865,7 +19865,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 248,
+											"line": 249,
 											"character": 24
 										}
 									],
@@ -20035,7 +20035,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 276,
+									"line": 277,
 									"character": 24
 								}
 							],
@@ -20057,7 +20057,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 276,
+											"line": 277,
 											"character": 24
 										}
 									],
@@ -20240,7 +20240,7 @@
 							"sources": [
 								{
 									"fileName": "react-compat/dist/hooks.d.ts",
-									"line": 303,
+									"line": 304,
 									"character": 24
 								}
 							],
@@ -20262,7 +20262,7 @@
 									"sources": [
 										{
 											"fileName": "react-compat/dist/hooks.d.ts",
-											"line": 303,
+											"line": 304,
 											"character": 24
 										}
 									],
@@ -35890,9 +35890,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 327,
+											"line": 328,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L327"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L328"
 										}
 									],
 									"type": {
@@ -35911,9 +35911,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 328,
+											"line": 329,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L328"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L329"
 										}
 									],
 									"type": {
@@ -35943,9 +35943,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 326,
+									"line": 327,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L326"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L327"
 								}
 							]
 						},
@@ -36580,9 +36580,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 75,
+									"line": 76,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L75"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L76"
 								}
 							],
 							"type": {
@@ -37152,9 +37152,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1757,
+									"line": 1753,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1757"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1753"
 								}
 							],
 							"type": {
@@ -37213,9 +37213,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1755,
+									"line": 1751,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1755"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1751"
 								}
 							],
 							"type": {
@@ -44032,9 +44032,9 @@
 																			"sources": [
 																				{
 																					"fileName": "hooks.ts",
-																					"line": 1143,
+																					"line": 1139,
 																					"character": 41,
-																					"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1143"
+																					"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1139"
 																				}
 																			],
 																			"type": {
@@ -44846,9 +44846,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 237,
+									"line": 238,
 									"character": 13,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L237"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L238"
 								}
 							],
 							"type": {
@@ -44866,9 +44866,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 254,
+									"line": 255,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L254"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L255"
 								}
 							],
 							"signatures": [
@@ -44889,9 +44889,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 254,
+											"line": 255,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L254"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L255"
 										}
 									],
 									"typeParameters": [
@@ -45060,9 +45060,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1661,
+									"line": 1657,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1661"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1657"
 								}
 							],
 							"signatures": [
@@ -45083,9 +45083,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1661,
+											"line": 1657,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1661"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1657"
 										}
 									],
 									"typeParameters": [
@@ -45220,9 +45220,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1695,
+									"line": 1691,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1695"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1691"
 								}
 							],
 							"signatures": [
@@ -45243,9 +45243,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1695,
+											"line": 1691,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1695"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1691"
 										}
 									],
 									"type": {
@@ -45279,9 +45279,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1700,
+									"line": 1696,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1700"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1696"
 								}
 							],
 							"signatures": [
@@ -45302,9 +45302,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1700,
+											"line": 1696,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1700"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1696"
 										}
 									],
 									"type": {
@@ -46116,9 +46116,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 391,
+									"line": 389,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L391"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L389"
 								}
 							],
 							"signatures": [
@@ -46139,9 +46139,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 391,
+											"line": 389,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L391"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L389"
 										}
 									],
 									"parameters": [
@@ -46395,9 +46395,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 274,
+									"line": 272,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L274"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L272"
 								}
 							],
 							"signatures": [
@@ -46418,9 +46418,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 274,
+											"line": 272,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L274"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L272"
 										}
 									],
 									"typeParameters": [
@@ -46768,9 +46768,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 279,
+									"line": 277,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L279"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L277"
 								}
 							],
 							"signatures": [
@@ -46791,9 +46791,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 279,
+											"line": 277,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L279"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L277"
 										}
 									],
 									"parameters": [
@@ -47422,9 +47422,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 267,
+									"line": 265,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L267"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L265"
 								}
 							],
 							"signatures": [
@@ -47445,9 +47445,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 267,
+											"line": 265,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L267"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L265"
 										}
 									],
 									"parameters": [
@@ -48038,9 +48038,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1760,
+									"line": 1756,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1760"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1756"
 								}
 							],
 							"signatures": [
@@ -48061,9 +48061,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1760,
+											"line": 1756,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1760"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1756"
 										}
 									],
 									"parameters": [
@@ -48097,9 +48097,9 @@
 							"sources": [
 								{
 									"fileName": "root.ts",
-									"line": 471,
+									"line": 469,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L471"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L469"
 								}
 							],
 							"signatures": [
@@ -48120,9 +48120,9 @@
 									"sources": [
 										{
 											"fileName": "root.ts",
-											"line": 471,
+											"line": 469,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L471"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/root.ts#L469"
 										}
 									],
 									"parameters": [
@@ -48160,9 +48160,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1706,
+									"line": 1702,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1706"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1702"
 								}
 							],
 							"signatures": [
@@ -48183,9 +48183,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1706,
+											"line": 1702,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1706"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1702"
 										}
 									],
 									"type": {
@@ -48223,9 +48223,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1648,
+									"line": 1644,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1648"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1644"
 								}
 							],
 							"signatures": [
@@ -48246,9 +48246,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1648,
+											"line": 1644,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1648"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1644"
 										}
 									],
 									"typeParameters": [
@@ -48292,9 +48292,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1548,
+									"line": 1544,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1548"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1544"
 								}
 							],
 							"signatures": [
@@ -48315,9 +48315,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1548,
+											"line": 1544,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1548"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1544"
 										}
 									],
 									"typeParameters": [
@@ -48506,9 +48506,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1366,
+									"line": 1362,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1366"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1362"
 								}
 							],
 							"signatures": [
@@ -48529,9 +48529,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1366,
+											"line": 1362,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1366"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1362"
 										}
 									],
 									"typeParameters": [
@@ -48719,9 +48719,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1378,
+									"line": 1374,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1378"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1374"
 								}
 							],
 							"signatures": [
@@ -48742,9 +48742,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1378,
+											"line": 1374,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1378"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1374"
 										}
 									],
 									"parameters": [
@@ -48821,9 +48821,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1870,
+									"line": 1866,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1870"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1866"
 								}
 							],
 							"signatures": [
@@ -48844,9 +48844,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1870,
+											"line": 1866,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1870"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1866"
 										}
 									],
 									"typeParameters": [
@@ -48909,9 +48909,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1426,
+									"line": 1422,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1426"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1422"
 								}
 							],
 							"signatures": [
@@ -48932,9 +48932,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1426,
+											"line": 1422,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1426"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1422"
 										}
 									],
 									"parameters": [
@@ -48988,9 +48988,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1408,
+									"line": 1404,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1408"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1404"
 								}
 							],
 							"signatures": [
@@ -49011,9 +49011,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1408,
+											"line": 1404,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1408"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1404"
 										}
 									],
 									"typeParameters": [
@@ -49148,9 +49148,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1168,
+									"line": 1164,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1168"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1164"
 								}
 							],
 							"signatures": [
@@ -49171,9 +49171,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1168,
+											"line": 1164,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1168"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1164"
 										}
 									],
 									"type": {
@@ -49192,9 +49192,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1205,
+									"line": 1201,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1205"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1201"
 								}
 							],
 							"signatures": [
@@ -49215,9 +49215,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1205,
+											"line": 1201,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1205"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1201"
 										}
 									],
 									"typeParameters": [
@@ -49311,9 +49311,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1437,
+									"line": 1433,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1437"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1433"
 								}
 							],
 							"signatures": [
@@ -49334,9 +49334,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1437,
+											"line": 1433,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1437"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1433"
 										}
 									],
 									"parameters": [
@@ -49390,9 +49390,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1448,
+									"line": 1444,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1448"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1444"
 								}
 							],
 							"signatures": [
@@ -49413,9 +49413,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1448,
+											"line": 1444,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1448"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1444"
 										}
 									],
 									"parameters": [
@@ -49469,9 +49469,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1225,
+									"line": 1221,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1225"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1221"
 								}
 							],
 							"signatures": [
@@ -49492,9 +49492,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1225,
+											"line": 1221,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1225"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1221"
 										}
 									],
 									"typeParameters": [
@@ -49580,9 +49580,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1597,
+									"line": 1593,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1597"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1593"
 								}
 							],
 							"signatures": [
@@ -49603,9 +49603,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1597,
+											"line": 1593,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1597"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1593"
 										}
 									],
 									"typeParameters": [
@@ -49768,9 +49768,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1094,
+									"line": 1090,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1094"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1090"
 								}
 							],
 							"signatures": [
@@ -49791,9 +49791,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1094,
+											"line": 1090,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1094"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1090"
 										}
 									],
 									"typeParameters": [
@@ -50019,9 +50019,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1143,
+									"line": 1139,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1143"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1139"
 								}
 							],
 							"signatures": [
@@ -50042,9 +50042,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1143,
+											"line": 1139,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1143"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1139"
 										}
 									],
 									"typeParameters": [
@@ -50090,9 +50090,9 @@
 													"sources": [
 														{
 															"fileName": "hooks.ts",
-															"line": 1143,
+															"line": 1139,
 															"character": 41,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1143"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1139"
 														}
 													],
 													"type": {
@@ -50126,9 +50126,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 897,
+									"line": 893,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L897"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L893"
 								}
 							],
 							"signatures": [
@@ -50149,9 +50149,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 897,
+											"line": 893,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L897"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L893"
 										}
 									],
 									"typeParameters": [
@@ -50320,9 +50320,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1459,
+									"line": 1455,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1459"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1455"
 								}
 							],
 							"signatures": [
@@ -50343,9 +50343,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1459,
+											"line": 1455,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1459"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1455"
 										}
 									],
 									"typeParameters": [
@@ -50527,9 +50527,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1829,
+									"line": 1825,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1829"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1825"
 								}
 							],
 							"signatures": [
@@ -50550,9 +50550,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1829,
+											"line": 1825,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1829"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1825"
 										}
 									],
 									"type": {
@@ -50831,9 +50831,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 318,
+									"line": 319,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L318"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L319"
 								}
 							],
 							"type": {
@@ -50871,9 +50871,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 1770,
+									"line": 1766,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1770"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1766"
 								}
 							],
 							"signatures": [
@@ -50894,9 +50894,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 1770,
+											"line": 1766,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1770"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L1766"
 										}
 									],
 									"typeParameters": [
@@ -55843,9 +55843,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 107,
+											"line": 108,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L107"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L108"
 										}
 									],
 									"type": {
@@ -55868,9 +55868,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 106,
+											"line": 107,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L106"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L107"
 										}
 									],
 									"type": {
@@ -55946,9 +55946,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 108,
+											"line": 109,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L108"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L109"
 										}
 									],
 									"type": {
@@ -55973,9 +55973,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 105,
+									"line": 106,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L105"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L106"
 								}
 							]
 						},
@@ -56118,9 +56118,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 2424,
+									"line": 2420,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2424"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2420"
 								}
 							],
 							"signatures": [
@@ -56133,9 +56133,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 2424,
+											"line": 2420,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2424"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L2420"
 										}
 									],
 									"parameters": [
@@ -56425,9 +56425,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 496,
+									"line": 478,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L496"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L478"
 								}
 							],
 							"signatures": [
@@ -56448,9 +56448,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 496,
+											"line": 478,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L496"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L478"
 										}
 									],
 									"type": {
@@ -56479,9 +56479,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 505,
+									"line": 487,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L505"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L487"
 								}
 							],
 							"signatures": [
@@ -56502,9 +56502,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 505,
+											"line": 487,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L505"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L487"
 										}
 									],
 									"parameters": [
@@ -56546,9 +56546,9 @@
 							"sources": [
 								{
 									"fileName": "hooks.ts",
-									"line": 512,
+									"line": 494,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L512"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L494"
 								}
 							],
 							"signatures": [
@@ -56569,9 +56569,9 @@
 									"sources": [
 										{
 											"fileName": "hooks.ts",
-											"line": 512,
+											"line": 494,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L512"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/react-compat/src/hooks.ts#L494"
 										}
 									],
 									"typeParameters": [
@@ -84547,7 +84547,7 @@
 							"sources": [
 								{
 									"fileName": "packages/react-compat/dist/hooks.d.ts",
-									"line": 278,
+									"line": 279,
 									"character": 24
 								}
 							],
@@ -84569,7 +84569,7 @@
 									"sources": [
 										{
 											"fileName": "packages/react-compat/dist/hooks.d.ts",
-											"line": 278,
+											"line": 279,
 											"character": 24
 										}
 									],
@@ -89794,7 +89794,7 @@
 							"sources": [
 								{
 									"fileName": "packages/react-compat/dist/hooks.d.ts",
-									"line": 192,
+									"line": 193,
 									"character": 24
 								}
 							],
@@ -89816,7 +89816,7 @@
 									"sources": [
 										{
 											"fileName": "packages/react-compat/dist/hooks.d.ts",
-											"line": 192,
+											"line": 193,
 											"character": 24
 										}
 									],
@@ -116715,9 +116715,9 @@
 							"sources": [
 								{
 									"fileName": "reactive-dom/src/dom-prop-application.ts",
-									"line": 141,
+									"line": 142,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/dom-prop-application.ts#L141"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/dom-prop-application.ts#L142"
 								}
 							],
 							"signatures": [
@@ -116730,9 +116730,9 @@
 									"sources": [
 										{
 											"fileName": "reactive-dom/src/dom-prop-application.ts",
-											"line": 141,
+											"line": 142,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/dom-prop-application.ts#L141"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/reactive-dom/src/dom-prop-application.ts#L142"
 										}
 									],
 									"parameters": [
@@ -117743,7 +117743,7 @@
 									"sources": [
 										{
 											"fileName": "server/dist/flight.d.ts",
-											"line": 49,
+											"line": 50,
 											"character": 4
 										}
 									],
@@ -117789,7 +117789,7 @@
 									"sources": [
 										{
 											"fileName": "server/dist/flight.d.ts",
-											"line": 48,
+											"line": 49,
 											"character": 4
 										}
 									],
@@ -185858,9 +185858,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 119,
+											"line": 120,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L119"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L120"
 										}
 									],
 									"type": {
@@ -185884,9 +185884,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 122,
+											"line": 123,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L122"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L123"
 										}
 									],
 									"type": {
@@ -185906,9 +185906,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 121,
+											"line": 122,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L121"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L122"
 										}
 									],
 									"type": {
@@ -185925,9 +185925,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 120,
+											"line": 121,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L120"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L121"
 										}
 									],
 									"type": {
@@ -185950,9 +185950,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 118,
+									"line": 119,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L118"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L119"
 								}
 							]
 						},
@@ -185980,9 +185980,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 267,
+											"line": 268,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L267"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L268"
 										}
 									],
 									"type": {
@@ -186002,9 +186002,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 266,
+											"line": 267,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L266"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L267"
 										}
 									],
 									"type": {
@@ -186025,9 +186025,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 265,
+									"line": 266,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L265"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L266"
 								}
 							]
 						},
@@ -186055,9 +186055,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 210,
+											"line": 211,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L210"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L211"
 										}
 									],
 									"type": {
@@ -186074,9 +186074,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 211,
+											"line": 212,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L211"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L212"
 										}
 									],
 									"type": {
@@ -186097,9 +186097,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 209,
+									"line": 210,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L209"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L210"
 								}
 							]
 						},
@@ -186487,9 +186487,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 187,
+											"line": 188,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L187"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L188"
 										}
 									],
 									"type": {
@@ -186506,9 +186506,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 186,
+											"line": 187,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L186"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L187"
 										}
 									],
 									"type": {
@@ -186529,9 +186529,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 185,
+									"line": 186,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L185"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L186"
 								}
 							]
 						},
@@ -186559,9 +186559,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 280,
+											"line": 281,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L280"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L281"
 										}
 									],
 									"type": {
@@ -186581,9 +186581,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 279,
+											"line": 280,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L279"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L280"
 										}
 									],
 									"type": {
@@ -186604,9 +186604,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 278,
+									"line": 279,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L278"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L279"
 								}
 							]
 						},
@@ -186634,9 +186634,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 204,
+											"line": 205,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L204"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L205"
 										}
 									],
 									"type": {
@@ -186653,9 +186653,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 205,
+											"line": 206,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L205"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L206"
 										}
 									],
 									"type": {
@@ -186676,9 +186676,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 203,
+									"line": 204,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L203"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L204"
 								}
 							]
 						},
@@ -186706,9 +186706,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 180,
+											"line": 181,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L180"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L181"
 										}
 									],
 									"type": {
@@ -186734,9 +186734,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 178,
+											"line": 179,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L178"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L179"
 										}
 									],
 									"type": {
@@ -186753,9 +186753,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 181,
+											"line": 182,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L181"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L182"
 										}
 									],
 									"type": {
@@ -186790,9 +186790,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 179,
+											"line": 180,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L179"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L180"
 										}
 									],
 									"type": {
@@ -186826,9 +186826,9 @@
 															"sources": [
 																{
 																	"fileName": "packages/server/src/flight.ts",
-																	"line": 179,
+																	"line": 180,
 																	"character": 48,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L179"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L180"
 																}
 															],
 															"type": {
@@ -186865,9 +186865,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 177,
+									"line": 178,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L177"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L178"
 								}
 							]
 						},
@@ -186897,9 +186897,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 255,
+											"line": 256,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L255"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L256"
 										}
 									],
 									"type": {
@@ -186916,9 +186916,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 252,
+											"line": 253,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L252"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L253"
 										}
 									],
 									"type": {
@@ -186935,9 +186935,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 254,
+											"line": 255,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L254"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L255"
 										}
 									],
 									"type": {
@@ -186954,9 +186954,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 253,
+											"line": 254,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L253"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L254"
 										}
 									],
 									"type": {
@@ -186979,9 +186979,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 251,
+									"line": 252,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L251"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L252"
 								}
 							]
 						},
@@ -187009,9 +187009,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 241,
+											"line": 242,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L241"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L242"
 										}
 									],
 									"type": {
@@ -187042,9 +187042,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 240,
+											"line": 241,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L240"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L241"
 										}
 									],
 									"type": {
@@ -187065,9 +187065,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 239,
+									"line": 240,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L239"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L240"
 								}
 							]
 						},
@@ -187095,9 +187095,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 246,
+											"line": 247,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L246"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L247"
 										}
 									],
 									"type": {
@@ -187114,9 +187114,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 247,
+											"line": 248,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L247"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L248"
 										}
 									],
 									"type": {
@@ -187142,9 +187142,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 245,
+									"line": 246,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L245"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L246"
 								}
 							]
 						},
@@ -187172,9 +187172,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 229,
+											"line": 230,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L229"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L230"
 										}
 									],
 									"type": {
@@ -187207,9 +187207,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 228,
+											"line": 229,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L228"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L229"
 										}
 									],
 									"type": {
@@ -187230,9 +187230,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 227,
+									"line": 228,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L227"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L228"
 								}
 							]
 						},
@@ -187260,9 +187260,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 216,
+											"line": 217,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L216"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L217"
 										}
 									],
 									"type": {
@@ -187279,9 +187279,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 217,
+											"line": 218,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L217"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L218"
 										}
 									],
 									"type": {
@@ -187319,9 +187319,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 215,
+									"line": 216,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L215"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L216"
 								}
 							]
 						},
@@ -187351,9 +187351,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 172,
+											"line": 173,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L172"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L173"
 										}
 									],
 									"type": {
@@ -187373,9 +187373,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 171,
+									"line": 172,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L171"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L172"
 								}
 							],
 							"indexSignatures": [
@@ -187388,9 +187388,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 173,
+											"line": 174,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L173"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L174"
 										}
 									],
 									"parameters": [
@@ -187448,9 +187448,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 199,
+											"line": 200,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L199"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L200"
 										}
 									],
 									"type": {
@@ -187467,9 +187467,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 198,
+											"line": 199,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L198"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L199"
 										}
 									],
 									"type": {
@@ -187490,9 +187490,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 197,
+									"line": 198,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L197"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L198"
 								}
 							]
 						},
@@ -187520,9 +187520,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 261,
+											"line": 262,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L261"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L262"
 										}
 									],
 									"type": {
@@ -187539,9 +187539,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 260,
+											"line": 261,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L260"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L261"
 										}
 									],
 									"type": {
@@ -187562,9 +187562,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 259,
+									"line": 260,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L259"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L260"
 								}
 							]
 						},
@@ -187592,9 +187592,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 137,
+											"line": 138,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L137"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L138"
 										}
 									],
 									"type": {
@@ -187626,9 +187626,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 140,
+											"line": 141,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L140"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L141"
 										}
 									],
 									"type": {
@@ -187650,9 +187650,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 136,
+											"line": 137,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L136"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L137"
 										}
 									],
 									"type": {
@@ -187671,9 +187671,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 138,
+											"line": 139,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L138"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L139"
 										}
 									],
 									"type": {
@@ -187695,9 +187695,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 135,
+											"line": 136,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L135"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L136"
 										}
 									],
 									"type": {
@@ -187721,9 +187721,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 134,
+									"line": 135,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L134"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L135"
 								}
 							]
 						},
@@ -187753,9 +187753,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 105,
+											"line": 106,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L105"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L106"
 										}
 									],
 									"type": {
@@ -187774,9 +187774,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 106,
+											"line": 107,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L106"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L107"
 										}
 									],
 									"type": {
@@ -187797,9 +187797,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 104,
+									"line": 105,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L104"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L105"
 								}
 							]
 						},
@@ -187829,9 +187829,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 114,
+											"line": 115,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L114"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L115"
 										}
 									],
 									"type": {
@@ -187853,9 +187853,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 113,
+											"line": 114,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L113"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L114"
 										}
 									],
 									"type": {
@@ -187872,9 +187872,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 111,
+											"line": 112,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L111"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L112"
 										}
 									],
 									"type": {
@@ -187891,9 +187891,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 112,
+											"line": 113,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L112"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L113"
 										}
 									],
 									"type": {
@@ -187916,9 +187916,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 110,
+									"line": 111,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L110"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L111"
 								}
 							]
 						},
@@ -187946,9 +187946,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 193,
+											"line": 194,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L193"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L194"
 										}
 									],
 									"type": {
@@ -187965,9 +187965,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 192,
+											"line": 193,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L192"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L193"
 										}
 									],
 									"type": {
@@ -187988,9 +187988,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 191,
+									"line": 192,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L191"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L192"
 								}
 							]
 						},
@@ -188018,9 +188018,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 234,
+											"line": 235,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L234"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L235"
 										}
 									],
 									"type": {
@@ -188037,9 +188037,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 235,
+											"line": 236,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L235"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L236"
 										}
 									],
 									"type": {
@@ -188065,9 +188065,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 233,
+									"line": 234,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L233"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L234"
 								}
 							]
 						},
@@ -188095,9 +188095,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 222,
+											"line": 223,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L222"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L223"
 										}
 									],
 									"type": {
@@ -188114,9 +188114,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 223,
+											"line": 224,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L223"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L224"
 										}
 									],
 									"type": {
@@ -188137,9 +188137,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 221,
+									"line": 222,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L221"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L222"
 								}
 							]
 						},
@@ -188167,9 +188167,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 273,
+											"line": 274,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L273"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L274"
 										}
 									],
 									"type": {
@@ -188188,9 +188188,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 274,
+											"line": 275,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L274"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L275"
 										}
 									],
 									"type": {
@@ -188210,9 +188210,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 272,
+											"line": 273,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L272"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L273"
 										}
 									],
 									"type": {
@@ -188234,9 +188234,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 271,
+									"line": 272,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L271"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L272"
 								}
 							]
 						},
@@ -188264,9 +188264,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 353,
+											"line": 354,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L353"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L354"
 										}
 									],
 									"type": {
@@ -188286,9 +188286,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 354,
+											"line": 355,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L354"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L355"
 										}
 									],
 									"type": {
@@ -188308,9 +188308,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 355,
+											"line": 356,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L355"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L356"
 										}
 									],
 									"type": {
@@ -188335,9 +188335,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 352,
+									"line": 353,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L352"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L353"
 								}
 							]
 						},
@@ -188480,9 +188480,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 76,
+											"line": 77,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L76"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L77"
 										}
 									],
 									"type": {
@@ -188510,9 +188510,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 70,
+											"line": 71,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L70"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L71"
 										}
 									],
 									"type": {
@@ -188547,9 +188547,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 71,
+											"line": 72,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L71"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L72"
 										}
 									],
 									"type": {
@@ -188658,9 +188658,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 79,
+											"line": 80,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L79"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L80"
 										}
 									],
 									"type": {
@@ -188690,9 +188690,9 @@
 															"sources": [
 																{
 																	"fileName": "packages/server/src/flight.ts",
-																	"line": 82,
+																	"line": 83,
 																	"character": 8,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L82"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L83"
 																}
 															],
 															"type": {
@@ -188711,9 +188711,9 @@
 															"sources": [
 																{
 																	"fileName": "packages/server/src/flight.ts",
-																	"line": 83,
+																	"line": 84,
 																	"character": 8,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L83"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L84"
 																}
 															],
 															"type": {
@@ -188747,9 +188747,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 94,
+											"line": 95,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L94"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L95"
 										}
 									],
 									"type": {
@@ -188768,9 +188768,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 85,
+											"line": 86,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L85"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L86"
 										}
 									],
 									"type": {
@@ -188793,9 +188793,9 @@
 													"sources": [
 														{
 															"fileName": "packages/server/src/flight.ts",
-															"line": 86,
+															"line": 87,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L86"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L87"
 														}
 													],
 													"type": {
@@ -188828,9 +188828,9 @@
 													"sources": [
 														{
 															"fileName": "packages/server/src/flight.ts",
-															"line": 89,
+															"line": 90,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L89"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L90"
 														}
 													],
 													"type": {
@@ -188861,9 +188861,9 @@
 													"sources": [
 														{
 															"fileName": "packages/server/src/flight.ts",
-															"line": 87,
+															"line": 88,
 															"character": 4,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L87"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L88"
 														}
 													],
 													"type": {
@@ -188904,9 +188904,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 65,
+									"line": 66,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L65"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L66"
 								}
 							]
 						},
@@ -188934,9 +188934,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 55,
+											"line": 56,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L55"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L56"
 										}
 									],
 									"signatures": [
@@ -188946,12 +188946,36 @@
 											"variant": "signature",
 											"kind": 4096,
 											"flags": {},
+											"comment": {
+												"summary": [
+													{
+														"kind": "text",
+														"text": "Atomically reserves a nonce. A store must return "
+													},
+													{
+														"kind": "code",
+														"text": "`replay`"
+													},
+													{
+														"kind": "text",
+														"text": " while the claim is in flight and after "
+													},
+													{
+														"kind": "code",
+														"text": "`finalize()`"
+													},
+													{
+														"kind": "text",
+														"text": " records its completed retention period."
+													}
+												]
+											},
 											"sources": [
 												{
 													"fileName": "packages/server/src/flight.ts",
-													"line": 55,
+													"line": 56,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L55"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L56"
 												}
 											],
 											"parameters": [
@@ -189041,9 +189065,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 61,
+											"line": 62,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L61"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L62"
 										}
 									],
 									"type": {
@@ -189060,9 +189084,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 60,
+											"line": 61,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L60"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L61"
 										}
 									],
 									"type": {
@@ -189083,9 +189107,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 59,
+									"line": 60,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L59"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L60"
 								}
 							],
 							"extendedBy": [
@@ -189120,9 +189144,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 127,
+											"line": 128,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L127"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L128"
 										}
 									],
 									"type": {
@@ -189146,9 +189170,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 130,
+											"line": 131,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L130"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L131"
 										}
 									],
 									"type": {
@@ -189168,9 +189192,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 129,
+											"line": 130,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L129"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L130"
 										}
 									],
 									"type": {
@@ -189187,9 +189211,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 128,
+											"line": 129,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L128"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L129"
 										}
 									],
 									"type": {
@@ -189212,9 +189236,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 126,
+									"line": 127,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L126"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L127"
 								}
 							]
 						},
@@ -189235,9 +189259,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 144,
+									"line": 145,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L144"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L145"
 								}
 							],
 							"type": {
@@ -189394,9 +189418,9 @@
 													"sources": [
 														{
 															"fileName": "packages/server/src/flight.ts",
-															"line": 168,
+															"line": 169,
 															"character": 6,
-															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L168"
+															"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L169"
 														}
 													],
 													"type": {
@@ -189435,9 +189459,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 284,
+									"line": 285,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L284"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L285"
 								}
 							],
 							"type": {
@@ -189954,9 +189978,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 388,
+									"line": 389,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L388"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L389"
 								}
 							],
 							"signatures": [
@@ -189977,9 +190001,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 388,
+											"line": 389,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L388"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L389"
 										}
 									],
 									"parameters": [
@@ -190041,9 +190065,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 865,
+									"line": 866,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L865"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L866"
 								}
 							],
 							"signatures": [
@@ -190064,9 +190088,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 865,
+											"line": 866,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L865"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L866"
 										}
 									],
 									"parameters": [
@@ -190160,9 +190184,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 495,
+									"line": 496,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L495"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L496"
 								}
 							],
 							"signatures": [
@@ -190183,9 +190207,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 495,
+											"line": 496,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L495"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L496"
 										}
 									],
 									"parameters": [
@@ -190289,9 +190313,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 402,
+									"line": 403,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L402"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L403"
 								}
 							],
 							"signatures": [
@@ -190312,9 +190336,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 402,
+											"line": 403,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L402"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L403"
 										}
 									],
 									"parameters": [
@@ -190376,9 +190400,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 714,
+									"line": 715,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L714"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L715"
 								}
 							],
 							"signatures": [
@@ -190399,9 +190423,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 714,
+											"line": 715,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L714"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L715"
 										}
 									],
 									"parameters": [
@@ -190435,9 +190459,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 359,
+									"line": 360,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L359"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L360"
 								}
 							],
 							"signatures": [
@@ -190458,9 +190482,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 359,
+											"line": 360,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L359"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L360"
 										}
 									],
 									"type": {
@@ -190481,9 +190505,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 416,
+									"line": 417,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L416"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L417"
 								}
 							],
 							"signatures": [
@@ -190504,9 +190528,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 416,
+											"line": 417,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L416"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L417"
 										}
 									],
 									"parameters": [
@@ -190545,9 +190569,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 425,
+									"line": 426,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L425"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L426"
 								}
 							],
 							"signatures": [
@@ -190568,9 +190592,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 425,
+											"line": 426,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L425"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L426"
 										}
 									],
 									"parameters": [
@@ -190609,9 +190633,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 809,
+									"line": 810,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L809"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L810"
 								}
 							],
 							"signatures": [
@@ -190632,9 +190656,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 809,
+											"line": 810,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L809"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L810"
 										}
 									],
 									"parameters": [
@@ -190681,9 +190705,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 876,
+									"line": 877,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L876"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L877"
 								}
 							],
 							"signatures": [
@@ -190704,9 +190728,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 876,
+											"line": 877,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L876"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L877"
 										}
 									],
 									"parameters": [
@@ -190749,9 +190773,9 @@
 															"sources": [
 																{
 																	"fileName": "packages/server/src/flight.ts",
-																	"line": 878,
+																	"line": 879,
 																	"character": 13,
-																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L878"
+																	"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L879"
 																}
 															],
 															"type": {
@@ -190789,9 +190813,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 483,
+									"line": 484,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L483"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L484"
 								}
 							],
 							"signatures": [
@@ -190812,9 +190836,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 483,
+											"line": 484,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L483"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L484"
 										}
 									],
 									"parameters": [
@@ -190862,9 +190886,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 434,
+									"line": 435,
 									"character": 22,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L434"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L435"
 								}
 							],
 							"signatures": [
@@ -190885,9 +190909,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 434,
+											"line": 435,
 											"character": 22,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L434"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L435"
 										}
 									],
 									"typeParameters": [
@@ -190977,9 +191001,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 478,
+									"line": 479,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L478"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L479"
 								}
 							],
 							"signatures": [
@@ -191000,9 +191024,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 478,
+											"line": 479,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L478"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L479"
 										}
 									],
 									"parameters": [
@@ -191036,9 +191060,9 @@
 							"sources": [
 								{
 									"fileName": "packages/server/src/flight.ts",
-									"line": 636,
+									"line": 637,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L636"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L637"
 								}
 							],
 							"signatures": [
@@ -191059,9 +191083,9 @@
 									"sources": [
 										{
 											"fileName": "packages/server/src/flight.ts",
-											"line": 636,
+											"line": 637,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L636"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/server/src/flight.ts#L637"
 										}
 									],
 									"parameters": [
