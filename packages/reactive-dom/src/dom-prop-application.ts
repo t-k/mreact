@@ -88,7 +88,7 @@ export function applyDomProp(
     isUnsafeUrlAttribute(attrName, value)
   ) {
     clearDomProperty(element, name, attrName);
-    element.removeAttribute(attrName);
+    removeDomAttribute(element, attrName);
     return;
   }
 
@@ -115,9 +115,9 @@ export function applyDomProp(
     (element as unknown as Record<string, unknown>)[name] = value;
     if (typeof value === "boolean") {
       if (value) {
-        element.setAttribute(attrName, "");
+        setDomAttribute(element, attrName, "");
       } else {
-        element.removeAttribute(attrName);
+        removeDomAttribute(element, attrName);
       }
     }
     return;
@@ -125,11 +125,11 @@ export function applyDomProp(
 
   if (value === true) {
     setBooleanDomProperty(element, name, true);
-    element.setAttribute(attrName, "");
+    setDomAttribute(element, attrName, "");
     return;
   }
 
-  element.setAttribute(attrName, String(value));
+  setDomAttribute(element, attrName, String(value));
 }
 
 export function removeDomProp(element: Element, name: string): void {
@@ -140,7 +140,7 @@ export function removeDomProp(element: Element, name: string): void {
 
   const attrName = toDomAttributeName(name);
   clearDomProperty(element, name, attrName);
-  element.removeAttribute(attrName);
+  removeDomAttribute(element, attrName);
 }
 
 function readDangerouslySetInnerHtml(value: unknown): string | undefined {
@@ -158,6 +158,45 @@ function readDangerouslySetInnerHtml(value: unknown): string | undefined {
     ? descriptor.value
     : undefined;
 }
+
+function setDomAttribute(element: Element, name: string, value: string): void {
+  const namespace = domAttributeNamespace(name);
+  if (namespace === undefined) {
+    element.setAttribute(name, value);
+    return;
+  }
+
+  element.setAttributeNS(namespace.uri, name, value);
+}
+
+function removeDomAttribute(element: Element, name: string): void {
+  const namespace = domAttributeNamespace(name);
+  if (namespace === undefined) {
+    element.removeAttribute(name);
+    return;
+  }
+
+  element.removeAttributeNS(namespace.uri, namespace.localName);
+}
+
+function domAttributeNamespace(
+  name: string,
+): { uri: string; localName: string } | undefined {
+  const separator = name.indexOf(":");
+  if (separator === -1) {
+    return undefined;
+  }
+
+  const prefix = name.slice(0, separator);
+  const uri = DOM_ATTRIBUTE_NAMESPACE_URIS[prefix];
+  return uri === undefined ? undefined : { uri, localName: name.slice(separator + 1) };
+}
+
+const DOM_ATTRIBUTE_NAMESPACE_URIS: Readonly<Record<string, string>> = {
+  xlink: "http://www.w3.org/1999/xlink",
+  xml: "http://www.w3.org/XML/1998/namespace",
+  xmlns: "http://www.w3.org/2000/xmlns/",
+};
 
 function applyStyleObject(element: HTMLElement, value: Record<string, unknown>): void {
   const nextNames = new Set(Object.keys(value).map(styleObjectKeyToCssName));

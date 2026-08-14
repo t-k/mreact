@@ -11,8 +11,11 @@ import {
 
 const source = `export function App() {
   const href = "#icon";
-  return <svg><use xlink:href={href} xml:lang="en" /></svg>;
+  const lang = "en";
+  return <svg><use xlink:href={href} xml:lang={lang} /></svg>;
 }`;
+const XLINK_NAMESPACE = "http://www.w3.org/1999/xlink";
+const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
 
 describe("namespaced JSX names", () => {
   test("preserves qualified attribute names on server string and stream output", async () => {
@@ -62,10 +65,13 @@ describe("namespaced JSX names", () => {
 
     const reactiveSvg = (await runClientComponent(reactiveOutput.code)) as SVGSVGElement;
     const compatContainer = await runCompatComponent(compatOutput.code);
-    expect(reactiveSvg.querySelector("use")?.getAttribute("xlink:href")).toBe("#icon");
-    expect(reactiveSvg.querySelector("use")?.getAttribute("xml:lang")).toBe("en");
-    expect(compatContainer.querySelector("use")?.getAttribute("xlink:href")).toBe("#icon");
-    expect(compatContainer.querySelector("use")?.getAttribute("xml:lang")).toBe("en");
+    const reactiveUse = reactiveSvg.querySelector("use");
+    const compatUse = compatContainer.querySelector("use");
+    expect(reactiveUse?.getAttribute("xlink:href")).toBe("#icon");
+    expect(reactiveUse?.getAttributeNS(XLINK_NAMESPACE, "href")).toBe("#icon");
+    expect(reactiveUse?.getAttributeNS(XML_NAMESPACE, "lang")).toBe("en");
+    expect(compatUse?.getAttribute("xlink:href")).toBe("#icon");
+    expect(compatUse?.getAttribute("xml:lang")).toBe("en");
   });
 
   test("preserves qualified attribute names in compat server mode", () => {
@@ -107,6 +113,7 @@ describe("namespaced JSX names", () => {
     expect(runServerComponent(serverOutput.code)).toBe("<svg><use></use></svg>");
     const svg = (await runClientComponent(clientOutput.code)) as SVGSVGElement;
     expect(svg.querySelector("use")?.hasAttribute("xlink:href")).toBe(false);
+    expect(svg.querySelector("use")?.hasAttributeNS(XLINK_NAMESPACE, "href")).toBe(false);
   });
 
   test("reports unsupported namespaced tag names without emitting a bare tag", () => {

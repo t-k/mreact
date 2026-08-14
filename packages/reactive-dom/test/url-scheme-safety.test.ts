@@ -6,6 +6,19 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindProp, bindSpreadProps } from "../src/index.js";
 
 describe("reactive-dom URL scheme guard (Issue 075)", () => {
+  test("bindProp applies and removes xlink:href in the XLink namespace", async () => {
+    const xlinkNamespace = "http://www.w3.org/1999/xlink";
+    const href = cell<string>("#icon");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    bindProp(use, "xlink:href", () => href.get());
+
+    expect(use.getAttributeNS(xlinkNamespace, "href")).toBe("#icon");
+
+    href.set("javascript:alert(1)");
+    await flushEffects();
+    expect(use.hasAttributeNS(xlinkNamespace, "href")).toBe(false);
+  });
+
   test("bindProp drops javascript: from anchor href", async () => {
     const href = cell<string>("https://example.com/");
     const link = document.createElement("a");
