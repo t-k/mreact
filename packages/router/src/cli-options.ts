@@ -335,6 +335,7 @@ export function formatCliHelp(command?: string | undefined): string {
       "",
       "Options:",
       "  --host <host>  Bind address. Default: 127.0.0.1. Use 0.0.0.0 inside containers behind explicit port publishing or a reverse proxy.",
+      "  --port <port>  TCP port. Overrides PORT. Default: 3001.",
       "  --host-policy=strict|trusted-proxy",
       "      Control Host header trust for request origin reconstruction.",
       "  --allowed-hosts <host[,host...]>",
@@ -469,6 +470,18 @@ export function resolveCliDevPort(
   return envValue === undefined || envValue === "" ? viteConfigPort : parseCliPort(envValue);
 }
 
+export function resolveCliStartPort(
+  flagValue: number | undefined,
+  env: { PORT?: string | undefined },
+): number {
+  if (flagValue !== undefined) {
+    return flagValue;
+  }
+
+  const envValue = env.PORT;
+  return envValue === undefined || envValue === "" ? 3001 : parseCliPort(envValue, "PORT");
+}
+
 export function resolveCliHostPolicy(
   flagValue: RequestHostPolicy | undefined,
   env: { MREACT_ROUTER_HOST_POLICY?: string | undefined },
@@ -527,7 +540,7 @@ function parseCliRequestLogMode(value: string): CliRequestLogMode {
   throw new Error(`Unsupported log mode ${JSON.stringify(value)}. Expected "requests".`);
 }
 
-function parseCliPort(value: string): number {
+function parseCliPort(value: string, source = "port"): number {
   const port = Number(value);
 
   if (Number.isInteger(port) && port >= 0 && port <= 65535) {
@@ -535,7 +548,7 @@ function parseCliPort(value: string): number {
   }
 
   throw new Error(
-    `Unsupported port ${JSON.stringify(value)}. Expected an integer from 0 to 65535.`,
+    `Unsupported ${source} ${JSON.stringify(value)}. Expected an integer from 0 to 65535.`,
   );
 }
 

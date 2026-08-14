@@ -25,6 +25,7 @@ import {
   resolveCliHost,
   resolveCliHostPolicy,
   resolveCliRequestLogMode,
+  resolveCliStartPort,
   resolveCliTrustForwardedProto,
 } from "./cli-options.js";
 import { startDevServer } from "./dev-server.js";
@@ -169,7 +170,7 @@ if (parsed !== undefined) {
           hostname: resolveCliHost(parsed.host, process.env),
           logger,
           outDir: resolve(routeArg ?? ".mreact"),
-          port: Number(process.env.PORT ?? 3001),
+          port: resolveCliStartPort(parsed.port, process.env),
           trustForwardedProto: resolveCliTrustForwardedProto(
             parsed.trustForwardedProto,
             process.env,

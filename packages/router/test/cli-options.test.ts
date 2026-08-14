@@ -10,6 +10,7 @@ import {
   resolveCliHost,
   resolveCliHostPolicy,
   resolveCliRequestLogMode,
+  resolveCliStartPort,
   resolveCliTrustForwardedProto,
 } from "../src/cli-options.js";
 
@@ -39,6 +40,14 @@ describe("router CLI options", () => {
       routeArg: "src/app",
     });
     expect(() => parseCliArguments(["dev", "--port", "abc"])).toThrow(/port/);
+  });
+
+  test("parses start port flags without treating them as route arguments", () => {
+    expect(parseCliArguments(["start", ".mreact", "--port", "8080"])).toEqual({
+      command: "start",
+      port: 8080,
+      routeArg: ".mreact",
+    });
   });
 
   test("parses start host binding flags without treating them as route arguments", () => {
@@ -191,6 +200,7 @@ describe("router CLI options", () => {
     expect(startHelp).toContain("--host-policy");
     expect(startHelp).toContain("--allowed-hosts");
     expect(startHelp).toContain("--trust-forwarded-proto");
+    expect(startHelp).toContain("--port <port>");
     expect(startHelp).toContain("MREACT_ROUTER_TRUST_FORWARDED_PROTO");
     expect(startHelp).toContain("127.0.0.1");
     expect(startHelp).toContain("0.0.0.0");
@@ -308,6 +318,16 @@ describe("router CLI options", () => {
     expect(resolveCliDevPort(undefined, { PORT: "15173" }, 3000)).toBe(15173);
     expect(resolveCliDevPort(undefined, {}, 3000)).toBe(3000);
     expect(resolveCliDevPort(undefined, {}, undefined)).toBeUndefined();
+  });
+
+  test("resolves start port from flag, PORT env, and the production default", () => {
+    expect(resolveCliStartPort(8080, { PORT: "9090" })).toBe(8080);
+    expect(resolveCliStartPort(undefined, { PORT: "9090" })).toBe(9090);
+    expect(resolveCliStartPort(undefined, { PORT: "" })).toBe(3001);
+    expect(resolveCliStartPort(undefined, {})).toBe(3001);
+    expect(() => resolveCliStartPort(undefined, { PORT: "8080abc" })).toThrow(
+      'Unsupported PORT "8080abc"',
+    );
   });
 
   test("resolves start Host header trust from flags and env", () => {

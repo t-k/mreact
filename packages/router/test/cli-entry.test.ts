@@ -301,6 +301,28 @@ export default function Page() {
     }
   });
 
+  test("passes the start port option to startServer", async () => {
+    const startServer = vi.fn(async () => ({
+      close: async () => undefined,
+      server: {},
+      url: "http://127.0.0.1:8080",
+    }));
+    vi.doMock("../src/serve.js", () => ({ startServer }));
+    process.argv = [process.argv[0]!, "cli.ts", "start", ".mreact", "--port", "8080"];
+    const previousExitCode = process.exitCode;
+    try {
+      await import("../src/cli.ts");
+      expect(startServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          outDir: expect.stringMatching(/\.mreact$/),
+          port: 8080,
+        }),
+      );
+    } finally {
+      process.exitCode = previousExitCode;
+    }
+  });
+
   test("passes the dev host and port options to startDevServer", async () => {
     const startDevServer = vi.fn(async () => ({
       close: async () => undefined,

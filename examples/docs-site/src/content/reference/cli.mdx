@@ -36,7 +36,7 @@ mreact-router package aws-lambda --from .mreact --out .lambda
 - `--target=node|cloudflare|aws-lambda|all` controls which production artifact is built.
 - `--client-source-maps=none|hidden` controls production browser source maps. Use `hidden` when you upload maps to Sentry or another error pipeline without publishing source map comments to browsers.
 - `mreact-router dev` reads `--host` and `--port`.
-- `mreact-router start` reads `--host`, `--host-policy`, and `--allowed-hosts`. Set `PORT` when you need a non-default start-server port.
+- `mreact-router start` reads `--host`, `--port`, `--host-policy`, and `--allowed-hosts`. The `--port` flag overrides `PORT`; the default is `3001`.
 - `--log requests` enables compact request logs. `MREACT_ROUTER_LOG=requests` enables the same mode from the environment.
 - `--from` and `--out` select packaging input and output directories after a build.
 - `--handler <entry>` bundles a custom AWS Lambda handler.
