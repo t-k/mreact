@@ -189,7 +189,7 @@ export interface FlightMapModel {
 }
 
 // @public
-export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
+export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightObjectReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
 };
 
@@ -210,6 +210,14 @@ export interface FlightObjectModel {
 }
 
 // @public
+export interface FlightObjectReferenceModel {
+    // (undocumented)
+    id: number;
+    // (undocumented)
+    kind: "object-reference";
+}
+
+// @public
 export interface FlightPromiseModel {
     // (undocumented)
     id: number;
@@ -221,6 +229,7 @@ export interface FlightPromiseModel {
 export interface FlightResponse {
     // (undocumented)
     clientReferences: FlightClientReference[];
+    objectReferences?: FlightModel[];
     // (undocumented)
     root: FlightModel;
     // (undocumented)
@@ -484,7 +493,8 @@ export interface ServerActionHandlerOptions {
     // (undocumented)
     replayProtection?: {
         headerName?: string;
-        seen: ServerActionReplayStore;
+        store?: ServerActionReplayStore;
+        seen?: Set<string>;
     };
 }
 
@@ -492,11 +502,19 @@ export interface ServerActionHandlerOptions {
 export type ServerActionRegistry = Record<string, ServerAction | ServerActionDescriptor>;
 
 // @public
+export type ServerActionReplayClaim = {
+    status: "claimed";
+    finalize(): void | Promise<void>;
+} | {
+    status: "replay";
+} | {
+    status: "capacity-exceeded";
+};
+
+// @public
 export interface ServerActionReplayStore {
     // (undocumented)
-    add(value: string): void;
-    // (undocumented)
-    has(value: string): boolean;
+    claim(value: string): ServerActionReplayClaim | Promise<ServerActionReplayClaim>;
 }
 
 // @public

@@ -6,6 +6,7 @@
 
 import { ClientRouteModuleAnalysis } from '@reckona/mreact-compiler';
 import { CompilerModuleContext } from '@reckona/mreact-compiler/internal';
+import { DehydrateOptions } from '@reckona/mreact-query';
 import type { Duplex } from 'node:stream';
 import type { HtmlSink } from '@reckona/mreact-shared/compiler-contract';
 import type { IncomingMessage } from 'node:http';
@@ -540,9 +541,13 @@ export interface BuiltPrerenderedRoute {
     headers: Record<string, string>;
     // (undocumented)
     html: string;
-    schemaVersion?: 2 | undefined;
+    // (undocumented)
+    navigationHtml?: string | undefined;
+    schemaVersion?: 4 | undefined;
     // (undocumented)
     status: number;
+    // (undocumented)
+    strictTransportSecurity?: string | undefined;
 }
 
 // @public (undocumented)
@@ -1330,6 +1335,8 @@ export interface RenderAppRequestOptions {
     // (undocumented)
     define?: UserConfig["define"] | undefined;
     // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
+    // (undocumented)
     dev?: boolean | undefined;
     // (undocumented)
     devServerModuleCacheVersion?: string | undefined;
@@ -1384,6 +1391,8 @@ export function renderBuiltAppRequest(options: RenderBuiltAppRequestOptions): Pr
 
 // @public
 export interface RenderBuiltAppRequestOptions {
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     immutableRuntime?: boolean | undefined;
     // (undocumented)
@@ -1840,6 +1849,8 @@ export function startServer(options: StartServerOptions): Promise<{
 export interface StartServerOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     errorHandler?: (error: unknown) => {
         body: string;

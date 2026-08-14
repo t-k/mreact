@@ -91,7 +91,7 @@ export interface CrossTabQuerySyncOptions {
 }
 
 // @public
-export function dehydrate(client: QueryClient): DehydratedQueryClient;
+export function dehydrate(client: QueryClient, options?: DehydrateOptions): DehydratedQueryClient;
 
 // @public
 export interface DehydratedQuery {
@@ -109,6 +109,12 @@ export interface DehydratedQuery {
 export interface DehydratedQueryClient {
     // (undocumented)
     queries: DehydratedQuery[];
+}
+
+// @public
+export interface DehydrateOptions {
+    // (undocumented)
+    shouldDehydrateQuery?: ((entry: QueryEntry) => boolean) | undefined;
 }
 
 // @public

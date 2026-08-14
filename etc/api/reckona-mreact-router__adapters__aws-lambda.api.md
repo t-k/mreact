@@ -327,9 +327,13 @@ export interface BuiltPrerenderedRoute {
     headers: Record<string, string>;
     // (undocumented)
     html: string;
-    schemaVersion?: 2 | undefined;
+    // (undocumented)
+    navigationHtml?: string | undefined;
+    schemaVersion?: 4 | undefined;
     // (undocumented)
     status: number;
+    // (undocumented)
+    strictTransportSecurity?: string | undefined;
 }
 
 // @public

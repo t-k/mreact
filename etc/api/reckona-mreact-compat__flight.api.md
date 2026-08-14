@@ -144,7 +144,7 @@ export interface FlightMapModel {
 }
 
 // @public
-export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
+export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightObjectReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
     kind: "undefined";
 };
 
@@ -165,6 +165,14 @@ export interface FlightObjectModel {
 }
 
 // @public
+export interface FlightObjectReferenceModel {
+    // (undocumented)
+    id: number;
+    // (undocumented)
+    kind: "object-reference";
+}
+
+// @public
 export interface FlightPromiseModel {
     // (undocumented)
     id: number;
@@ -176,6 +184,7 @@ export interface FlightPromiseModel {
 export interface FlightResponse {
     // (undocumented)
     clientReferences: FlightClientReference[];
+    objectReferences?: FlightModel[];
     // (undocumented)
     root: FlightModel;
     // (undocumented)

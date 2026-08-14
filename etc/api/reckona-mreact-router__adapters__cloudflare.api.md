@@ -5,8 +5,12 @@
 ```ts
 
 import type { ClientReferenceMetadata } from '@reckona/mreact-shared/compiler-contract';
+import { DehydrateOptions } from '@reckona/mreact-query';
 import type { ModuleMetadata } from '@reckona/mreact-compiler';
 import { QueryClient } from '@reckona/mreact-query';
+
+// @public (undocumented)
+export function __resetCloudflareQueryClientFallbackForTesting(): void;
 
 // @public
 export interface AppAssetRoute {
@@ -183,9 +187,13 @@ export interface BuiltPrerenderedRoute {
     headers: Record<string, string>;
     // (undocumented)
     html: string;
-    schemaVersion?: 2 | undefined;
+    // (undocumented)
+    navigationHtml?: string | undefined;
+    schemaVersion?: 4 | undefined;
     // (undocumented)
     status: number;
+    // (undocumented)
+    strictTransportSecurity?: string | undefined;
 }
 
 // @public (undocumented)
@@ -516,6 +524,8 @@ export type CloudflareRouteModuleRegistryEntry<Env = unknown> = CloudflareRouteM
 
 // @public
 export interface CloudflareRouteModuleRendererOptions<Env = unknown> {
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     document?: ((context: CloudflareRouteModuleComponentProps<unknown, Env> & {
         body: string;
