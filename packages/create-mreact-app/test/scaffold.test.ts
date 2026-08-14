@@ -28,6 +28,7 @@ describe("create-mreact-app scaffolder", () => {
     const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
     const readme = await readFile(join(directory, "README.md"), "utf8");
+    const gitignore = await readFile(join(directory, ".gitignore"), "utf8");
 
     expect(packageJson.scripts?.dev).toBe("mreact-router dev");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=node");
@@ -46,6 +47,9 @@ describe("create-mreact-app scaffolder", () => {
     expect(readme).toContain("Ignored build scripts");
     expect(readme).toContain("pnpm.onlyBuiltDependencies");
     expect(readme).toContain("counter starter");
+    expect(gitignore.split("\n")).toEqual(
+      expect.arrayContaining([".env", ".env.local", ".env.*.local", ".dev.vars", ".dev.vars.*"]),
+    );
   });
 
   test("does not include pnpm approve-builds guidance for npm projects", async () => {
@@ -624,6 +628,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(dockerfile).toContain('CMD ["pnpm", "start"]');
     expect(dockerignore).toContain("node_modules");
     expect(dockerignore).toContain(".mreact");
+    expect(dockerignore).toContain(".env.*");
+    expect(dockerignore).toContain(".dev.vars*");
     expect(deployDocs).toContain("Cloud Run");
     expect(deployDocs).toContain("AWS App Runner");
     expect(deployDocs).toContain("HOST=0.0.0.0");

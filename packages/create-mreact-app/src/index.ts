@@ -418,7 +418,7 @@ function appRouterTemplate(
     },
     {
       path: ".gitignore",
-      content: "node_modules\n.mreact\ndist\n.env\n",
+      content: "node_modules\n.mreact\ndist\n.env\n.env.local\n.env.*.local\n.dev.vars\n.dev.vars.*\n",
     },
     {
       path: "README.md",
@@ -1383,6 +1383,7 @@ dist
 .gitignore
 .env
 .env.*
+.dev.vars*
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
