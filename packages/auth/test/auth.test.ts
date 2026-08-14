@@ -289,6 +289,58 @@ describe("auth package", () => {
     });
   });
 
+  it("rejects empty role and permission requirements as programming errors", async () => {
+    const store = createMemorySessionStore<{
+      permissions: string[];
+      roles: string[];
+      userId: string;
+    }>();
+    const loginResponse = new Response(null);
+    await createSession(loginResponse, store, {
+      permissions: ["settings:write"],
+      roles: ["admin"],
+      userId: "ada",
+    });
+    const request = new Request("https://app.test/", {
+      headers: { cookie: cookiePair(loginResponse) },
+    });
+    const missingRequest = new Request("https://app.test/");
+
+    await expect(requireRole(missingRequest, store, [])).rejects.toThrow(
+      "Role requirement must contain at least one role.",
+    );
+    await expect(tryRequirePermission(missingRequest, store, [])).rejects.toThrow(
+      "Permission requirement must contain at least one permission.",
+    );
+    await expect(requireRole(request, store, [])).rejects.toThrow(
+      "Role requirement must contain at least one role.",
+    );
+    await expect(requirePermission(request, store, [])).rejects.toThrow(
+      "Permission requirement must contain at least one permission.",
+    );
+    await expect(tryRequireRole(request, store, [], { mode: "all" })).rejects.toThrow(
+      "Role requirement must contain at least one role.",
+    );
+    await expect(tryRequirePermission(request, store, [], { mode: "all" })).rejects.toThrow(
+      "Permission requirement must contain at least one permission.",
+    );
+    await expect(requireRole(request, store, "   ")).rejects.toThrow(
+      "Role requirement must contain at least one role.",
+    );
+    await expect(
+      requirePermission(request, store, undefined as never),
+    ).rejects.toThrow("Permission requirement must contain at least one permission.");
+  });
+
+  it("treats empty policy axes as unconstrained", () => {
+    expect(
+      authorizeSession(
+        { permissions: ["settings:write"], roles: ["admin"], userId: "ada" },
+        { permissions: [], roles: [] },
+      ),
+    ).toEqual({ authorized: true });
+  });
+
   it("tryRequireRole and tryRequirePermission return tagged results without redirects", async () => {
     const store = createMemorySessionStore<{
       permissions: string[];

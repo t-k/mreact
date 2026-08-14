@@ -184,6 +184,7 @@ export async function requireRole<TData extends AuthSessionClaims>(
   role: AuthRequirement,
   options: AuthGuardOptions = {},
 ): Promise<SessionRecord<TData>> {
+  assertValidAuthRequirement(role, "missing-role");
   const session = await requireSession(request, store, options);
   const result = authorizeRequirement(session.data.roles, role, "missing-role", options.mode);
 
@@ -203,6 +204,7 @@ export async function requirePermission<TData extends AuthSessionClaims>(
   permission: AuthRequirement,
   options: AuthGuardOptions = {},
 ): Promise<SessionRecord<TData>> {
+  assertValidAuthRequirement(permission, "missing-permission");
   const session = await requireSession(request, store, options);
   const result = authorizeRequirement(
     session.data.permissions,
@@ -227,6 +229,7 @@ export async function tryRequireRole<TData extends AuthSessionClaims>(
   role: AuthRequirement,
   options: Pick<AuthGuardOptions, "mode"> & SessionCookieOptions = {},
 ): Promise<TryAuthResult<TData>> {
+  assertValidAuthRequirement(role, "missing-role");
   const session = await getCurrentSession(request, store, options);
 
   if (session === undefined) {
@@ -247,6 +250,7 @@ export async function tryRequirePermission<TData extends AuthSessionClaims>(
   permission: AuthRequirement,
   options: Pick<AuthGuardOptions, "mode"> & SessionCookieOptions = {},
 ): Promise<TryAuthResult<TData>> {
+  assertValidAuthRequirement(permission, "missing-permission");
   const session = await getCurrentSession(request, store, options);
 
   if (session === undefined) {
@@ -364,10 +368,27 @@ function authorizeRequirement(
   reason: "missing-permission" | "missing-role",
   mode: AuthRequirementMode = "any",
 ): AuthorizationResult {
+  assertValidAuthRequirement(requirement, reason);
   const required = Array.isArray(requirement) ? requirement : [requirement];
   const authorized = mode === "all" ? hasAll(available, required) : hasAny(available, required);
 
   return authorized ? { authorized: true } : { authorized: false, reason };
+}
+
+function assertValidAuthRequirement(
+  requirement: AuthRequirement,
+  reason: "missing-permission" | "missing-role",
+): void {
+  if (
+    requirement === undefined ||
+    (typeof requirement === "string" && requirement.trim() === "") ||
+    (Array.isArray(requirement) &&
+      (requirement.length === 0 || requirement.some((value) => value.trim() === "")))
+  ) {
+    const label = reason === "missing-role" ? "Role" : "Permission";
+    const noun = reason === "missing-role" ? "role" : "permission";
+    throw new TypeError(`${label} requirement must contain at least one ${noun}.`);
+  }
 }
 
 function authRedirectTo(options: AuthGuardOptions): string {
@@ -400,7 +421,7 @@ function hasAny(
   required: readonly string[] | undefined,
 ): boolean {
   if (required === undefined || required.length === 0) {
-    return true;
+    return false;
   }
 
   if (available === undefined || available.length === 0) {
