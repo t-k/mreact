@@ -689,10 +689,25 @@ function isOxcRendererCallExpression(expression: Record<string, unknown>): boole
 
   const callee = readObject(expression.callee);
 
-  return (
+  if (
     callee.type === "Identifier" &&
     typeof callee.name === "string" &&
     /^render[A-Z0-9_$]/.test(callee.name)
+  ) {
+    return true;
+  }
+
+  if (callee.type !== "MemberExpression" || callee.computed === true) {
+    return false;
+  }
+
+  const object = readObject(callee.object);
+  const property = readObject(callee.property);
+  return (
+    object.type === "Identifier" &&
+    object.name === "props" &&
+    typeof property.name === "string" &&
+    /^render[A-Z0-9_$]/.test(property.name)
   );
 }
 

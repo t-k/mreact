@@ -4,7 +4,7 @@ import {
 } from "./diagnostics.js";
 import type { ComponentPropIr, JsxNodeIr } from "./ir.js";
 import type { OxcBodyStatementJsxMode } from "./oxc-analysis-types.js";
-import { stripOxcGeneratedImports } from "./oxc-code-utils.js";
+import { normalizeOxcExpressionCode, stripOxcGeneratedImports } from "./oxc-code-utils.js";
 import {
   getOxcLocation,
   readArray,
@@ -76,9 +76,12 @@ export function analyzeOxcComponentProp(
         kind: "prop",
         name,
         code:
-          expression.type === "ArrowFunctionExpression" && containsOxcJsxSyntax(expression)
-            ? stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression)))
-            : (options.resolveExpressionCode?.(expression) ?? readSource(code, expression)),
+          options.resolveExpressionCode?.(expression) ??
+          (expression.type === "ArrowFunctionExpression" && containsOxcJsxSyntax(expression)
+            ? normalizeOxcExpressionCode(
+                stripOxcGeneratedImports(transformJsxWithOxc(readSource(code, expression))),
+              )
+            : readSource(code, expression)),
       },
     ];
   }

@@ -1,8 +1,35 @@
 import { describe, expect, test } from "vitest";
+import { parseSync } from "oxc-parser";
 import { transform } from "../src/index.js";
 import { runAsyncServerComponent, runServerComponent } from "./helpers.js";
 
 describe("compiler server JSX transform", () => {
+  test("emits parseable render-prop arrows with concise and block JSX bodies", () => {
+    const source = `function List(props) {
+  return <ul><li>{props.renderItem()}</li><li>{props.renderFooter()}</li></ul>;
+}
+
+export function App() {
+  return <List renderItem={() => <div>item</div>} renderFooter={() => { return <footer>end</footer>; }} />;
+}`;
+
+    for (const options of [
+      { target: "server" as const },
+      { target: "client" as const },
+      { target: "client" as const, mode: "compat" as const },
+    ]) {
+      const output = transform({ code: source, filename: "App.tsx", dev: false, ...options });
+      expect(output.diagnostics).toEqual([]);
+      expect(parseSync("App.js", output.code, { sourceType: "module" }).errors).toEqual([]);
+
+      if (options.target === "server") {
+        expect(runServerComponent(output.code)).toBe(
+          "<ul><li><div>item</div></li><li><footer>end</footer></li></ul>",
+        );
+      }
+    }
+  });
+
   test("omits domRef without evaluating its callback expression", () => {
     const output = transform({
       code: `export function App() {

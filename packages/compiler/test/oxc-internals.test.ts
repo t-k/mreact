@@ -981,6 +981,21 @@ export default function Page() {
     ).toBe(false);
   });
 
+  test("recognizes render-prop calls without treating arbitrary prop calls as HTML", () => {
+    const memberCall = (property: string) => ({
+      type: "CallExpression",
+      callee: {
+        type: "MemberExpression",
+        computed: false,
+        object: { type: "Identifier", name: "props" },
+        property: { type: "Identifier", name: property },
+      },
+    });
+
+    expect(isOxcRenderValueExpression(memberCall("renderItem"))).toBe(true);
+    expect(isOxcRenderValueExpression(memberCall("compute"))).toBe(false);
+  });
+
   test("analyzes component props with callback-based JSX child analysis", () => {
     const code = '<Card title="Ada" count={total} header={<h1>Ada</h1>} {...rest} />';
     const countStart = code.indexOf("total");

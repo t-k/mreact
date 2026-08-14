@@ -129,8 +129,22 @@ export function analyzeOxcJsxNode(
         .flatMap((attr) =>
           analyzeOxcAttribute(code, attr, context.target, context.diagnostics, {
             allowRef,
-            resolveExpressionCode: (expression) =>
-              readOxcReactiveExpressionCode(code, expression, context),
+            resolveExpressionCode: (expression) => {
+              if (containsOxcJsxSyntax(expression)) {
+                const lowered = context.lowerNestedJsxExpression(
+                  code,
+                  expression,
+                  context.componentNames,
+                  context.target,
+                  context.diagnostics,
+                  bodyStatementJsx,
+                );
+                if (lowered !== undefined) {
+                  return normalizeOxcExpressionCode(lowered);
+                }
+              }
+              return readOxcReactiveExpressionCode(code, expression, context);
+            },
           }),
         )
         .filter((attribute) => attribute.kind === "spread-attr" || attribute.name !== "key"),
@@ -175,8 +189,22 @@ export function analyzeOxcJsxNode(
         .flatMap((attr) =>
           analyzeOxcComponentProp(code, attr, analyzeJsxNode, context.diagnostics, {
             allowRef,
-            resolveExpressionCode: (expression) =>
-              readOxcReactiveExpressionCode(code, expression, context),
+            resolveExpressionCode: (expression) => {
+              if (containsOxcJsxSyntax(expression)) {
+                const lowered = context.lowerNestedJsxExpression(
+                  code,
+                  expression,
+                  context.componentNames,
+                  context.target,
+                  context.diagnostics,
+                  bodyStatementJsx,
+                );
+                if (lowered !== undefined) {
+                  return normalizeOxcExpressionCode(lowered);
+                }
+              }
+              return readOxcReactiveExpressionCode(code, expression, context);
+            },
           }),
         )
         .filter((prop) => prop.kind === "spread-prop" || prop.name !== "key")
