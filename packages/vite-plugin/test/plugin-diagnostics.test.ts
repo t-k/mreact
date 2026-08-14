@@ -138,7 +138,7 @@ describe("modularReact diagnostics", () => {
         "/src/App.tsx",
         { ssr: true },
       ),
-    ).toEqual(expect.objectContaining({ code: expect.stringContaining("_value.__html") }));
+    ).toEqual(expect.objectContaining({ code: expect.stringContaining("_descriptor.value") }));
   });
 
   test("allows server spread attributes", () => {

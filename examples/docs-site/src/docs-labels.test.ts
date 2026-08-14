@@ -135,7 +135,7 @@ describe("docs-site content integrity", () => {
     expect(cli).toContain("Every production build prints the same full route-by-route report");
     expect(cli).toContain("`mreact-router dev` reads `--host` and `--port`.");
     expect(cli).toContain(
-      "`mreact-router start` reads `--host`, `--host-policy`, and `--allowed-hosts`.",
+      "`mreact-router start` reads `--host`, `--port`, `--host-policy`, and `--allowed-hosts`.",
     );
     expect(cloudflare).toContain(
       "`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`, and `ALL`",

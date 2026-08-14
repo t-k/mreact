@@ -19,6 +19,17 @@ describe("reactive-dom URL scheme guard (Issue 075)", () => {
     expect(use.hasAttributeNS(xlinkNamespace, "href")).toBe(false);
   });
 
+  test("bindProp rejects object-coerced javascript: in xlink:href", () => {
+    const xlinkNamespace = "http://www.w3.org/1999/xlink";
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+
+    bindProp(use, "xlink:href", () => ({
+      toString: () => "javascript:alert(1)",
+    }));
+
+    expect(use.hasAttributeNS(xlinkNamespace, "href")).toBe(false);
+  });
+
   test("bindProp drops javascript: from anchor href", async () => {
     const href = cell<string>("https://example.com/");
     const link = document.createElement("a");

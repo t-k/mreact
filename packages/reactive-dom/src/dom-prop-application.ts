@@ -78,18 +78,19 @@ export function applyDomProp(
 
   const attrName = toDomAttributeName(name);
 
-  if (
-    (isUrlAttribute(attrName) || isSrcsetAttribute(attrName)) &&
-    typeof value === "string" &&
-    isUnsafeUrlAttribute(attrName, value)
-  ) {
-    clearDomProperty(element, name, attrName);
-    element.removeAttribute(attrName);
+  if (value === null || value === undefined || value === false) {
+    removeDomProp(element, name);
     return;
   }
 
-  if (value === null || value === undefined || value === false) {
-    removeDomProp(element, name);
+  const stringAttributeValue =
+    isUrlAttribute(attrName) || isSrcsetAttribute(attrName) ? String(value) : undefined;
+  if (
+    stringAttributeValue !== undefined &&
+    isUnsafeUrlAttribute(attrName, stringAttributeValue)
+  ) {
+    clearDomProperty(element, name, attrName);
+    element.removeAttribute(attrName);
     return;
   }
 
@@ -108,7 +109,7 @@ export function applyDomProp(
   }
 
   if (preferProperty && shouldAssignDomProperty(element, name)) {
-    (element as unknown as Record<string, unknown>)[name] = value;
+    (element as unknown as Record<string, unknown>)[name] = stringAttributeValue ?? value;
     if (typeof value === "boolean") {
       if (value) {
         setDomAttribute(element, attrName, "");
@@ -125,7 +126,7 @@ export function applyDomProp(
     return;
   }
 
-  setDomAttribute(element, attrName, String(value));
+  setDomAttribute(element, attrName, stringAttributeValue ?? String(value));
 }
 
 export function removeDomProp(element: Element, name: string): void {

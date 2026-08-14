@@ -28,30 +28,38 @@ describe("router actions helpers", () => {
   test("__readDefaultReplayStore returns the bounded store and __clearDefaultReplayStore empties it", () => {
     const store = __readDefaultReplayStore();
     expect(store).toBeDefined();
-    expect(typeof store.has).toBe("function");
-    expect(typeof store.add).toBe("function");
+    expect(typeof store.claim).toBe("function");
+
+    const first = store.claim("anything");
+    expect(first.status).toBe("claimed");
 
     __clearDefaultReplayStore();
-    expect(store.has("anything")).toBe(false);
+    expect(store.claim("anything").status).toBe("claimed");
   });
 
-  test("__readDefaultReplayStore.has lazily evicts an entry whose TTL has elapsed", async () => {
+  test("__readDefaultReplayStore.claim lazily evicts an entry whose TTL has elapsed", () => {
     __clearDefaultReplayStore();
     const store = __readDefaultReplayStore();
     // The default TTL is 10 minutes; we cannot wait that long, so simulate
     // an expired entry by reaching into the internal map.
-    const internal = store as unknown as { entries: Map<string, number> };
-    internal.entries.set("expired-nonce", Date.now() - 1);
-    expect(store.has("expired-nonce")).toBe(false);
-    // After has(), the expired entry is purged.
-    expect(internal.entries.has("expired-nonce")).toBe(false);
+    const internal = store as unknown as {
+      entries: Map<string, { state: "completed"; expiresAt: number }>;
+    };
+    internal.entries.set("expired-nonce", {
+      state: "completed",
+      expiresAt: Date.now() - 1,
+    });
+    expect(store.claim("expired-nonce").status).toBe("claimed");
   });
 
-  test("__readDefaultReplayStore.has returns true for an unexpired entry", () => {
+  test("__readDefaultReplayStore.claim rejects an unexpired completed entry", () => {
     __clearDefaultReplayStore();
     const store = __readDefaultReplayStore();
-    store.add("live-nonce");
-    expect(store.has("live-nonce")).toBe(true);
+    const first = store.claim("live-nonce");
+    expect(first.status).toBe("claimed");
+    if (first.status !== "claimed") throw new Error("expected nonce claim");
+    first.finalize();
+    expect(store.claim("live-nonce").status).toBe("replay");
   });
 
   test("prepareRouteServerActions skips import resolution when there is no form action", async () => {
