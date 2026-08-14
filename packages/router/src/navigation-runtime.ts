@@ -7,6 +7,7 @@ export {
   clientScriptForPath,
   hydrationMarkerParts,
   navigationRuntimeScriptForDev,
+  routeMarkerParts,
   routeIdForPath,
   withHydrationMarkers,
   withRouteMarkers,

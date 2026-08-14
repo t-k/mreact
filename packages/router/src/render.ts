@@ -36,6 +36,7 @@ import {
 } from "./client-route-inference.js";
 import {
   hydrationMarkerParts,
+  routeMarkerParts,
   routeIdForPath,
   withHydrationMarkers,
   withRouteMarkers,
@@ -1184,7 +1185,7 @@ async function renderAppRequestInternal(
       clientRoute,
       props: {
         params: matched.params,
-        request: { url: options.request.url },
+        request: { url: url.pathname },
       },
       routePath: matched.route.path,
       script: clientScript,
@@ -1273,16 +1274,14 @@ async function renderAppRequestInternal(
               script: clientScript,
               props: {
                 params: matched.params,
-                request: { url: options.request.url },
+                request: { url: url.pathname },
                 data,
               },
             })
-          : isNavigationRequest(options.request)
-            ? withRouteMarkers({
-                html: pageHtml,
-                routePath: matched.route.path,
-              })
-            : pageHtml;
+          : withRouteMarkers({
+              html: pageHtml,
+              routePath: matched.route.path,
+            });
         let html = await runWithQueryClient(queryClient, () =>
           applyLayouts({
             appDir: options.appDir,
@@ -1424,6 +1423,7 @@ async function renderAppRequestInternal(
           params: matched.params,
           queryClient,
           request: appRequest,
+          requestUrl: url.pathname,
           trackedRequest,
           routePath: matched.route.path,
           routeScripts: options.clientScripts,
@@ -1461,6 +1461,7 @@ async function renderAppRequestInternal(
         assetBaseUrl: options.assetBaseUrl,
         pageFile: matched.route.file,
         props,
+        requestUrl: url.pathname,
         routePath: matched.route.path,
         routeScripts: options.clientScripts,
         serverModules: options.serverModules,
@@ -1560,16 +1561,14 @@ async function renderAppRequestInternal(
           script: clientScript,
           props: {
             params: matched.params,
-            request: { url: options.request.url },
+            request: { url: url.pathname },
             data,
           },
         })
-      : isNavigationRequest(options.request)
-        ? withRouteMarkers({
-            html: pageHtml,
-            routePath: matched.route.path,
-          })
-        : pageHtml;
+      : withRouteMarkers({
+          html: pageHtml,
+          routePath: matched.route.path,
+        });
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     let html = await runWithQueryClient(queryClient, () =>
       applyLayouts({
@@ -3411,6 +3410,7 @@ function runServerStreamModule(
     clientRouteInferenceCache: ClientRouteInferenceCache;
     pageFile: string;
     props: ServerComponentProps;
+    requestUrl: string;
     routePath: string;
     routeScripts?: ReadonlyMap<string, string> | undefined;
     clientRoute: boolean;
@@ -3455,11 +3455,11 @@ function runServerStreamModule(
           script: options.script,
           props: {
             params: options.props.params,
-            request: { url: options.props.request.url },
+            request: { url: options.requestUrl },
             data: options.props.data,
           },
         })
-      : undefined;
+      : routeMarkerParts(options.routePath);
 
     sink.append("<!DOCTYPE html>");
     sink.append(
@@ -3681,6 +3681,7 @@ async function runServerStreamModuleWithLoading(
     params: RouteParams;
     queryClient: QueryClient;
     request: Request;
+    requestUrl: string;
     trackedRequest?: TrackedHeaderRequest | undefined;
     routePath: string;
     routeScripts?: ReadonlyMap<string, string> | undefined;
@@ -3727,10 +3728,10 @@ async function runServerStreamModuleWithLoading(
         script: options.script,
         props: {
           params: options.params,
-          request: { url: options.request.url },
+          request: { url: options.requestUrl },
         },
       })
-    : undefined;
+    : routeMarkerParts(options.routePath);
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");

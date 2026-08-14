@@ -5166,7 +5166,8 @@ export default function Page() {
 export default function Page() { cell(0); return <><span>fragment</span><strong>root</strong></>; }`,
       },
       {
-        expected: "<!DOCTYPE html><span>array</span><strong>root</strong>",
+        expected:
+          '<!DOCTYPE html><div data-mreact-route-id="index"><span>array</span><strong>root</strong></div>',
         file: "page.tsx",
         name: "array",
         source: `export default function Page() { return [<span key="a">array</span>, <strong key="b">root</strong>]; }`,
@@ -6275,6 +6276,32 @@ export default function Page() {
     await expect(exportStaticApp({ exportDir, outDir })).resolves.toEqual({ routes: ["/"] });
     expect(await readFile(join(exportDir, "index.html"), "utf8")).not.toContain(
       `<script type="module" src="/_mreact/client/${home?.navigationScript}"></script>`,
+    );
+  });
+
+  test("serves build prerendered server routes with the client navigation marker contract", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-build-prerender-navigation-shape-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export default function Page() { return <main>Prerendered server route</main>; }`,
+    );
+
+    await buildApp({ appDir, outDir });
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/", {
+        headers: { "x-mreact-navigation": "1" },
+      }),
+    });
+    const html = await response.text();
+
+    expect(response.headers.get("x-mreact-navigation")).toBeNull();
+    expect(html).toContain(
+      '<div data-mreact-route-id="index"><main>Prerendered server route</main></div>',
     );
   });
 

@@ -2632,9 +2632,18 @@ export function withHydrationMarkers(options: {
 }
 
 export function withRouteMarkers(options: { html: string; routePath: string }): string {
-  const routeId = routeIdForPath(options.routePath);
+  const marker = routeMarkerParts(options.routePath);
 
-  return `<div ${routeHydrationContract.routeMarkerAttribute}="${escapeHtmlAttribute(routeId)}">${options.html}</div>`;
+  return `${marker.prefix}${options.html}${marker.suffix}`;
+}
+
+export function routeMarkerParts(routePath: string): { prefix: string; suffix: string } {
+  const routeId = routeIdForPath(routePath);
+
+  return {
+    prefix: `<div ${routeHydrationContract.routeMarkerAttribute}="${escapeHtmlAttribute(routeId)}">`,
+    suffix: "</div>",
+  };
 }
 
 export function hydrationMarkerParts(options: {

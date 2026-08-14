@@ -81,6 +81,8 @@ local import:
 
 Internal anchors are intercepted by the app-router client runtime and update the changed route payload instead of forcing a full document reload. The runtime keeps head metadata and route-data scripts synchronized, restores scroll on back/forward navigation, and prefetches client route scripts for likely navigations when the browser is not in reduced-data mode. Client route assets share app-local module instances across development and production route chunks, so app-local modules imported by multiple client routes use the browser's normal single ESM instance across SPA navigation.
 
+Rendered page content always uses the same `data-mreact-route-id` wrapper for document and client-navigation responses, including cached and prerendered server-only routes. Hydration payloads expose the request pathname rather than the absolute origin or query string, so shared HTML does not capture visitor-specific URL data; read the full URL from the server-side `request` when route logic needs it, which also makes request dependence visible to the cache tracker.
+
 Use `Link` or `linkProps()` when a route needs explicit navigation behavior:
 
 ```tsx
