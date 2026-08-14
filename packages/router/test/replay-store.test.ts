@@ -12,71 +12,50 @@ afterEach(() => {
 describe("BoundedReplayStore (Issue 069)", () => {
   test("blocks replay of the same nonce", () => {
     const store = __readDefaultReplayStore();
-    expect(store.has("nonce-1")).toBe(false);
-    store.add("nonce-1");
-    expect(store.has("nonce-1")).toBe(true);
+    const claim = store.claim("nonce-1");
+    expect(claim.status).toBe("claimed");
+    expect(store.claim("nonce-1")).toEqual({ status: "replay" });
   });
 
-  test("forgets entries after TTL expires", () => {
+  test("starts the TTL when an in-flight claim is finalized", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-13T00:00:00Z"));
     const store = __readDefaultReplayStore();
-    store.add("nonce-ttl");
-    expect(store.has("nonce-ttl")).toBe(true);
+    const claim = store.claim("nonce-ttl");
+    expect(claim.status).toBe("claimed");
 
-    // Just before TTL: still seen.
+    vi.advanceTimersByTime(11 * 60 * 1000);
+    expect(store.claim("nonce-ttl")).toEqual({ status: "replay" });
+    if (claim.status === "claimed") claim.finalize();
+
     vi.advanceTimersByTime(9 * 60 * 1000 + 59 * 1000);
-    expect(store.has("nonce-ttl")).toBe(true);
-
-    // After TTL: forgotten.
+    expect(store.claim("nonce-ttl")).toEqual({ status: "replay" });
     vi.advanceTimersByTime(2 * 1000);
-    expect(store.has("nonce-ttl")).toBe(false);
+    expect(store.claim("nonce-ttl").status).toBe("claimed");
   });
 
-  test("evicts old entries when max size is reached", () => {
+  test("fails closed at capacity without evicting active claims", () => {
     const store = __readDefaultReplayStore();
-    // Fill the store deliberately past the FIFO line; we don't depend on
-    // the exact size, only on the bound being enforced.
-    for (let i = 0; i < 50_010; i += 1) {
-      store.add(`flood-${i}`);
+    for (let i = 0; i < 50_000; i += 1) {
+      expect(store.claim(`flood-${i}`).status).toBe("claimed");
     }
-    // Oldest entries must have been evicted.
-    expect(store.has("flood-0")).toBe(false);
-    expect(store.has("flood-50009")).toBe(true);
-    // Total size is capped at the configured max.
+    expect(store.claim("flood-next")).toEqual({ status: "capacity-exceeded" });
+    expect(store.claim("flood-0")).toEqual({ status: "replay" });
     const sized = store as unknown as { size: () => number };
-    expect(sized.size()).toBeLessThanOrEqual(50_000);
+    expect(sized.size()).toBe(50_000);
   });
 
-  test("evicts from a saturated store without scanning every entry", () => {
+  test("reclaims expired completed entries before reporting capacity", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-06T00:00:00Z"));
     const store = __readDefaultReplayStore();
 
     for (let i = 0; i < 50_000; i += 1) {
-      store.add(`steady-${i}`);
+      const claim = store.claim(`steady-${i}`);
+      if (claim.status === "claimed") claim.finalize();
     }
-
-    const entries = (store as unknown as { entries: Map<string, number> }).entries;
-    const originalEntries = entries.entries.bind(entries);
-    let iteratedEntries = 0;
-    entries.entries = function countedEntries() {
-      const iterator = originalEntries();
-      return {
-        [Symbol.iterator]() {
-          return this;
-        },
-        next() {
-          iteratedEntries += 1;
-          return iterator.next();
-        },
-      };
-    } as typeof entries.entries;
-
-    store.add("steady-next");
-
-    expect(store.has("steady-0")).toBe(false);
-    expect(store.has("steady-next")).toBe(true);
-    expect(iteratedEntries).toBeLessThanOrEqual(2);
+    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+    expect(store.claim("steady-next").status).toBe("claimed");
+    expect(store.claim("steady-0").status).toBe("claimed");
   });
 });

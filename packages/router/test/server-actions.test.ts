@@ -1501,7 +1501,7 @@ export async function save() {
     });
 
     expect(response.status).toBe(200);
-    expect(replayStore.calls).toEqual(["has:nonce-json-store", "add:nonce-json-store"]);
+    expect(replayStore.calls).toEqual(["claim:nonce-json-store", "finalize:nonce-json-store"]);
   });
 
   test("rejects form action replay nonce reuse", async () => {
@@ -1577,7 +1577,7 @@ export async function save() {
     });
 
     expect(response.status).toBe(200);
-    expect(replayStore.calls).toEqual([`has:${nonce}`, `add:${nonce}`]);
+    expect(replayStore.calls).toEqual([`claim:${nonce}`, `finalize:${nonce}`]);
   });
 
   test("returns form action redirect responses without JSON wrapping", async () => {
@@ -1937,22 +1937,24 @@ export function invalidateHome() {
 });
 
 function createRecordingReplayStore(): {
-  add(value: string): void;
+  claim(value: string): { status: "claimed"; finalize(): void } | { status: "replay" };
   calls: string[];
-  has(value: string): boolean;
 } {
   const seen = new Set<string>();
   const calls: string[] = [];
 
   return {
     calls,
-    add(value) {
-      calls.push(`add:${value}`);
+    claim(value) {
+      calls.push(`claim:${value}`);
+      if (seen.has(value)) return { status: "replay" };
       seen.add(value);
-    },
-    has(value) {
-      calls.push(`has:${value}`);
-      return seen.has(value);
+      return {
+        status: "claimed",
+        finalize() {
+          calls.push(`finalize:${value}`);
+        },
+      };
     },
   };
 }

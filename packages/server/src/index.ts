@@ -62,6 +62,7 @@ export type {
   ServerActionHandlerOptions,
   ServerActionRegistry,
   ServerActionReplayStore,
+  ServerActionReplayClaim,
   ServerActionRequestReference,
   ServerActionValidationResult,
   ServerReference,

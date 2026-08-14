@@ -44,10 +44,15 @@ export interface ServerActionDescriptor {
 /** Registry mapping server action keys to handlers. */
 export type ServerActionRegistry = Record<string, ServerAction | ServerActionDescriptor>;
 
-/** Store used to reject replayed server action nonces. */
+/** Result of atomically claiming a server action nonce. */
+export type ServerActionReplayClaim =
+  | { status: "claimed"; finalize(): void | Promise<void> }
+  | { status: "replay" }
+  | { status: "capacity-exceeded" };
+
+/** Store used to atomically reject replayed server action nonces. */
 export interface ServerActionReplayStore {
-  has(value: string): boolean;
-  add(value: string): void;
+  claim(value: string): ServerActionReplayClaim | Promise<ServerActionReplayClaim>;
 }
 
 /** Module export reference requested by a server action request. */
@@ -79,7 +84,9 @@ export interface ServerActionHandlerOptions {
       };
   replayProtection?: {
     headerName?: string;
-    seen: ServerActionReplayStore;
+    store?: ServerActionReplayStore;
+    /** @deprecated Use an atomic store for shared or multi-process deployments. */
+    seen?: Set<string>;
   };
   // Issue 076: bound by default so a hostile client cannot drive RSS via
   // an unbounded request body. The default is 1 MiB; pass a larger value
@@ -478,9 +485,6 @@ export function createServerActionHandler(
       return csrfResponse;
     }
 
-    // Issue 076: mark the nonce as used only after the action runs.
-    // The validator now just reads + checks; the commit happens in a
-    // try/finally below.
     const nonceCheck = validateServerActionNonce(request, options.replayProtection);
 
     if (nonceCheck.response !== undefined) {
@@ -562,21 +566,36 @@ export function createServerActionHandler(
       );
     }
 
+    const replayClaim = await claimServerActionNonce(nonceCheck.nonce, options.replayProtection);
+    if (replayClaim instanceof Response) {
+      return replayClaim;
+    }
+
+    let value: unknown;
+    let actionError: unknown;
     try {
-      const value = await action(...args);
-      // Only commit the nonce on a successful run -- a flaky network
-      // retry can otherwise lose the request permanently (Issue 076).
-      if (nonceCheck.commit) nonceCheck.commit();
-      return jsonResponse({ ok: true, value }, 200);
+      value = await action(...args);
     } catch (error) {
+      actionError = error;
+    }
+
+    try {
+      await replayClaim?.finalize();
+    } catch {
+      return replayStoreUnavailableResponse();
+    }
+
+    if (actionError !== undefined) {
       return jsonResponse(
         {
           ok: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: actionError instanceof Error ? actionError.message : String(actionError),
         },
         500,
       );
     }
+
+    return jsonResponse({ ok: true, value }, 200);
   };
 }
 
@@ -2233,7 +2252,7 @@ function constantTimeStringEqual(left: string, right: string): boolean {
 function validateServerActionNonce(
   request: Request,
   replayProtection: ServerActionHandlerOptions["replayProtection"],
-): { response?: Response; commit?: () => void } {
+): { response?: Response; nonce?: string } {
   if (replayProtection === undefined) {
     return {};
   }
@@ -2247,18 +2266,47 @@ function validateServerActionNonce(
     };
   }
 
-  if (replayProtection.seen.has(nonce)) {
-    return {
-      response: jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409),
-    };
+  return { nonce };
+}
+
+async function claimServerActionNonce(
+  nonce: string | undefined,
+  replayProtection: ServerActionHandlerOptions["replayProtection"],
+): Promise<Extract<ServerActionReplayClaim, { status: "claimed" }> | Response | undefined> {
+  if (replayProtection === undefined || nonce === undefined) return undefined;
+
+  let claim: ServerActionReplayClaim;
+  try {
+    if (replayProtection.store !== undefined) {
+      claim = await replayProtection.store.claim(nonce);
+    } else {
+      const seen = replayProtection.seen;
+      if (seen === undefined) return undefined;
+      if (seen.has(nonce)) claim = { status: "replay" };
+      else {
+        seen.add(nonce);
+        claim = { status: "claimed", finalize() {} };
+      }
+    }
+  } catch {
+    return replayStoreUnavailableResponse();
   }
 
-  // Issue 076: defer the .add() until the action succeeds so a failed
-  // run does not consume a replay slot. The caller invokes `commit()`
-  // on the success path only.
-  return {
-    commit: () => replayProtection.seen.add(nonce),
-  };
+  if (claim.status === "replay") {
+    return jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409);
+  }
+  if (claim.status === "capacity-exceeded") return replayStoreUnavailableResponse();
+  return claim;
+}
+
+function replayStoreUnavailableResponse(): Response {
+  return new Response(
+    JSON.stringify({ ok: false, error: "Server action replay protection is unavailable." }),
+    {
+      status: 503,
+      headers: { "content-type": "application/json", "retry-after": "1" },
+    },
+  );
 }
 
 function readCookie(cookieHeader: string | null, name: string): string | undefined {

@@ -122,7 +122,7 @@ describe("createServerActionHandler secure defaults (Issue 076)", () => {
     });
   });
 
-  test("replay nonce is only consumed on successful action", async () => {
+  test("replay nonce remains consumed when an invoked action throws", async () => {
     const seen = new Set<string>();
     const handle = createServerActionHandler(
       {
@@ -150,8 +150,18 @@ describe("createServerActionHandler secure defaults (Issue 076)", () => {
       }),
     );
     expect(response.status).toBe(500);
-    // Nonce must NOT have been consumed because the action threw.
-    expect(seen.has("nonce-fail")).toBe(false);
+    expect(seen.has("nonce-fail")).toBe(true);
+    const replay = await handle(
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-mreact-action-nonce": "nonce-fail",
+        },
+        body: JSON.stringify({ moduleId: "actions/fail", exportName: "fail", args: [] }),
+      }),
+    );
+    expect(replay.status).toBe(409);
   });
 
   test("replay nonce is consumed on successful action", async () => {
@@ -176,6 +186,47 @@ describe("createServerActionHandler secure defaults (Issue 076)", () => {
     );
     expect(response.status).toBe(200);
     expect(seen.has("nonce-ok")).toBe(true);
+  });
+
+  test("allows exactly one concurrent action invocation for a nonce", async () => {
+    const seen = new Set<string>();
+    let calls = 0;
+    let release!: () => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const handle = createServerActionHandler(
+      {
+        "actions/save#save": async () => {
+          calls += 1;
+          markStarted();
+          await blocked;
+          return "saved";
+        },
+      },
+      { csrf: false, replayProtection: { seen } },
+    );
+    const request = () =>
+      new Request("https://app.test/_mreact/action", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-mreact-action-nonce": "nonce-concurrent",
+        },
+        body: JSON.stringify({ moduleId: "actions/save", exportName: "save", args: [] }),
+      });
+
+    const first = handle(request());
+    await started;
+    const second = handle(request());
+    release();
+
+    expect([(await first).status, (await second).status].sort()).toEqual([200, 409]);
+    expect(calls).toBe(1);
   });
 
   test("readCookie tolerates malformed percent-encoding (Issue 072 sibling)", async () => {

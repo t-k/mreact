@@ -172,7 +172,7 @@ This is a transport optimization, not an application idempotency system. It upda
 
 ## Application idempotency keys
 
-Server action nonce replay protection prevents the same rendered action nonce from being accepted twice. That protects the action transport from replay, but it is not a full business-level idempotency system. If two different rendered forms can submit the same logical mutation, or if a user can retry from another tab, add an application-level mutation key.
+Server action nonce replay protection atomically claims the same rendered action nonce before application code begins, so concurrent duplicates receive `409` and only one action is invoked. Once action code starts, the nonce remains consumed even if the action throws because the framework cannot know whether a side effect committed before the error. A custom `replayStore` must implement atomic `claim()` semantics in its backing datastore; capacity or datastore failures fail closed with `503`. This protects the action transport from replay, but it is not a full business-level idempotency system. If two different rendered forms can submit the same logical mutation, or if a user can retry from another tab, add an application-level mutation key.
 
 For a single Node process, a small in-flight map is enough to demonstrate the pattern. Use a durable store, queue, database unique constraint, Redis lock, Cloudflare Durable Object, or another shared primitive when the app runs on multiple instances.
 

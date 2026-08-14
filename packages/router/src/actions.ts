@@ -9,6 +9,7 @@ import {
 import {
   createServerActionHandler,
   type ServerActionHandlerOptions,
+  type ServerActionReplayClaim,
   type ServerActionRegistry,
   type ServerActionReplayStore,
   type ServerActionRequestReference,
@@ -112,42 +113,44 @@ function configuredActionTokenSecret(value: string | undefined): string {
 }
 
 class BoundedReplayStore {
-  private readonly entries = new Map<string, number>();
+  private readonly entries = new Map<
+    string,
+    { state: "in-flight" } | { state: "completed"; expiresAt: number }
+  >();
 
   constructor(
     private readonly ttlMs: number,
     private readonly maxEntries: number,
   ) {}
 
-  has(value: string): boolean {
-    const expiresAt = this.entries.get(value);
-    if (expiresAt === undefined) return false;
-    if (expiresAt < Date.now()) {
+  claim(value: string): ServerActionReplayClaim {
+    const existing = this.entries.get(value);
+    if (existing?.state === "completed" && existing.expiresAt < Date.now()) {
       this.entries.delete(value);
-      return false;
     }
-    return true;
-  }
 
-  add(value: string): void {
-    const now = Date.now();
+    if (this.entries.has(value)) return { status: "replay" };
     if (this.entries.size >= this.maxEntries) {
-      const oldest = this.entries.entries().next().value;
-      if (oldest !== undefined) {
-        const [key, expiresAt] = oldest;
-        this.entries.delete(key);
-        if (expiresAt < now) {
-          while (this.entries.size >= this.maxEntries) {
-            const nextOldest = this.entries.entries().next().value;
-            if (nextOldest === undefined || nextOldest[1] >= now) {
-              break;
-            }
-            this.entries.delete(nextOldest[0]);
-          }
-        }
+      const now = Date.now();
+      for (const [key, entry] of this.entries) {
+        if (entry.state === "completed" && entry.expiresAt < now) this.entries.delete(key);
       }
+      if (this.entries.size >= this.maxEntries) return { status: "capacity-exceeded" };
     }
-    this.entries.set(value, now + this.ttlMs);
+
+    const entry = { state: "in-flight" as const };
+    this.entries.set(value, entry);
+    let finalized = false;
+    return {
+      status: "claimed",
+      finalize: () => {
+        if (finalized) return;
+        finalized = true;
+        if (this.entries.get(value) === entry) {
+          this.entries.set(value, { state: "completed", expiresAt: Date.now() + this.ttlMs });
+        }
+      },
+    };
   }
 
   // Exposed for tests; not part of the ServerActionReplayStore interface.
@@ -456,7 +459,7 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
         : { allowedActions: jsonAllowedServerActions(options.serverActions.allowedActions) }),
       csrf: { cookieName: serverActionCookieName() },
       maxBodyBytes: options.serverActions?.maxBodyBytes ?? DEFAULT_ACTION_BODY_MAX_BYTES,
-      replayProtection: { seen: replayStore },
+      replayProtection: { store: replayStore },
     });
 
     return handle(options.request);
@@ -528,15 +531,6 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return jsonResponse({ ok: false, error: "Unknown server action." }, 404);
   }
 
-  const nonceResponse = validateFormNonce(
-    formData,
-    options.serverActions?.replayStore ?? usedFormActionNonces,
-  );
-
-  if (nonceResponse !== undefined) {
-    return nonceResponse;
-  }
-
   let registry: ServerActionRegistry;
   try {
     registry = await loadServerActionRegistry({
@@ -570,24 +564,40 @@ async function dispatchServerActionRequestWithoutCacheContext(options: {
     return authorizationResponse;
   }
 
+  const replayClaim = await claimFormNonce(
+    nonce,
+    options.serverActions?.replayStore ?? usedFormActionNonces,
+  );
+  if (replayClaim instanceof Response) return replayClaim;
+
+  let actionResponse: Response | undefined;
+  let actionError: unknown;
   try {
     const value = await action(actionFormData, createServerActionContext(options.request));
 
     if (value instanceof Response) {
-      return value;
+      actionResponse = value;
+    } else if (value === undefined || value === null) {
+      actionResponse = redirectToFormReferer(options.request);
+    } else {
+      actionResponse = jsonResponse({ ok: true, value }, 200);
     }
-
-    if (value === undefined || value === null) {
-      return redirectToFormReferer(options.request);
-    }
-
-    return jsonResponse({ ok: true, value }, 200);
   } catch (error) {
-    return jsonResponse(
-      { ok: false, error: error instanceof Error ? error.message : String(error) },
-      500,
-    );
+    actionError = error;
   }
+
+  try {
+    await replayClaim.finalize();
+  } catch {
+    return replayStoreUnavailableResponse();
+  }
+
+  return actionError === undefined
+    ? actionResponse!
+    : jsonResponse(
+        { ok: false, error: actionError instanceof Error ? actionError.message : String(actionError) },
+        500,
+      );
 }
 
 function createServerActionContext(request: Request): ServerActionContext {
@@ -1482,22 +1492,28 @@ function validateServerActionRequestOrigin(request: Request): Response | undefin
   }
 }
 
-function validateFormNonce(
-  formData: FormData,
+async function claimFormNonce(
+  nonce: string,
   replayStore: ServerActionReplayStore,
-): Response | undefined {
-  const nonce = stringFormValue(formData.get(formFieldNonce));
-
-  if (nonce === undefined || nonce.length === 0) {
-    return jsonResponse({ ok: false, error: "Missing server action nonce." }, 400);
+): Promise<Extract<Awaited<ReturnType<ServerActionReplayStore["claim"]>>, { status: "claimed" }> | Response> {
+  let claim: Awaited<ReturnType<ServerActionReplayStore["claim"]>>;
+  try {
+    claim = await replayStore.claim(nonce);
+  } catch {
+    return replayStoreUnavailableResponse();
   }
-
-  if (replayStore.has(nonce)) {
+  if (claim.status === "replay") {
     return jsonResponse({ ok: false, error: "Server action nonce was already used." }, 409);
   }
+  if (claim.status === "capacity-exceeded") return replayStoreUnavailableResponse();
+  return claim;
+}
 
-  replayStore.add(nonce);
-  return undefined;
+function replayStoreUnavailableResponse(): Response {
+  return new Response(
+    JSON.stringify({ ok: false, error: "Server action replay protection is unavailable." }),
+    { status: 503, headers: { "content-type": "application/json", "retry-after": "1" } },
+  );
 }
 
 function cleanActionFormData(formData: FormData): FormData {
