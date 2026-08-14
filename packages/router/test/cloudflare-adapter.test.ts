@@ -261,8 +261,11 @@ export default function Page() { return <main>Security parity</main>; }`,
       "x-frame-options",
     ];
 
-    expect(Object.fromEntries(securityHeaderNames.map((name) => [name, response.headers.get(name)])))
-      .toEqual(Object.fromEntries(securityHeaderNames.map((name) => [name, expected[name] ?? null])));
+    expect(
+      Object.fromEntries(securityHeaderNames.map((name) => [name, response.headers.get(name)])),
+    ).toEqual(
+      Object.fromEntries(securityHeaderNames.map((name) => [name, expected[name] ?? null])),
+    );
   });
 
   test.each([
@@ -458,6 +461,42 @@ export async function POST(request: Request) {
     expect(response.headers.get("x-mreact-navigation")).toBeNull();
     expect(response.headers.get("vary")).toContain("x-mreact-navigation");
     expect(await response.text()).toContain('data-mreact-route-id="index"');
+  });
+
+  test("reloads for a false prerendered navigation marker", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      serverManifest: {
+        files: {},
+        prerenderedRoutes: {
+          "/": {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              vary: "x-mreact-navigation",
+            },
+            html: "<!DOCTYPE html><main>Prerendered</main>",
+            navigationHtml: '<!-- <div data-mreact-route-id="index"> --><main>Prerendered</main>',
+            schemaVersion: 4,
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/", {
+        headers: { "x-mreact-navigation": "1" },
+      }),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("x-mreact-navigation")).toBe("reload");
+    expect(await response.text()).toBe("");
   });
 
   // A real Cloudflare build keys `serverManifest.files` on paths relative to

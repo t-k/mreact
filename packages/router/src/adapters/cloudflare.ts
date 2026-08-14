@@ -39,10 +39,8 @@ import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
-import {
-  isCurrentPrerenderedRoute,
-  replayedPrerenderedRouteHeaders,
-} from "../prerender-entry.js";
+import { isCurrentPrerenderedRoute, replayedPrerenderedRouteHeaders } from "../prerender-entry.js";
+import { hasNavigationRouteMarker } from "../navigation-marker.js";
 
 /** Re-exports build manifest contracts used by Cloudflare handlers. */
 export type {
@@ -605,9 +603,11 @@ export function createCloudflareRouteModuleRenderer<Env = unknown>(
 
     if (rendered instanceof Response) {
       if (
-        (pageModule as CloudflareRouteModule<unknown, Env> & {
-          __mreactSecurityHeadersApplied?: boolean | undefined;
-        }).__mreactSecurityHeadersApplied === true
+        (
+          pageModule as CloudflareRouteModule<unknown, Env> & {
+            __mreactSecurityHeadersApplied?: boolean | undefined;
+          }
+        ).__mreactSecurityHeadersApplied === true
       ) {
         return rendered;
       }
@@ -1406,13 +1406,22 @@ function prerenderedResponse(
   }
 
   const prerendered = prerenderedRoutes?.[path];
+  const candidateNavigationHtml = prerendered?.navigationHtml;
+
+  if (
+    isNavigation &&
+    typeof candidateNavigationHtml === "string" &&
+    !hasNavigationRouteMarker(candidateNavigationHtml)
+  ) {
+    return cloudflareDocumentReloadNavigationResponse();
+  }
 
   if (!isCurrentPrerenderedRoute(prerendered)) {
     return undefined;
   }
 
   const html = isNavigation ? prerendered.navigationHtml : prerendered.html;
-  if (html === undefined || (isNavigation && !html.includes("data-mreact-route-id"))) {
+  if (html === undefined || (isNavigation && !hasNavigationRouteMarker(html))) {
     return cloudflareDocumentReloadNavigationResponse();
   }
 
