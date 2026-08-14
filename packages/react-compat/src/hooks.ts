@@ -53,7 +53,6 @@ export interface RootRuntime {
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
-  withCleanupScope<T>(run: () => T): T;
   flushEffects(): void;
   dispose(): void;
 }
@@ -69,6 +68,8 @@ interface ComponentInstance {
   devToolsHooks?: DevToolsHookValue[];
   devToolsHookTypes?: string[];
   devToolsHookSuppressionDepth: number;
+  committedReactiveCleanups?: Set<() => void>;
+  pendingReactiveCleanups?: Set<() => void>;
 }
 
 /** Effect callback that may return a cleanup function. */
@@ -354,9 +355,6 @@ export function createRootRuntime(
   rerender: (priority?: RenderPriority) => void,
   options: RootRuntimeOptions = {},
 ): RootRuntime {
-  let committedRootCleanups = new Set<() => void>();
-  let pendingRootCleanups: Set<() => void> | undefined;
-
   return {
     instances: new Map(),
     instanceKeysByPrefix: new Map(),
@@ -387,7 +385,6 @@ export function createRootRuntime(
     renderPhaseUpdate: false,
     rerender,
     beginRender() {
-      pendingRootCleanups = new Set();
       this.activeInstanceKeys = new Set();
       this.activeProfilerPaths = new Set();
       this.pendingProfilerCommits = [];
@@ -399,15 +396,15 @@ export function createRootRuntime(
       this.renderPhaseUpdate = false;
     },
     endRender(committed = true) {
-      const renderCleanups = pendingRootCleanups;
-      pendingRootCleanups = undefined;
       const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
       const activeProfilerPaths = this.activeProfilerPaths;
       if (committed) {
+        commitReactiveCleanups(this);
         cleanupInactiveInstances(this);
         this.mountedProfilerPaths =
           activeProfilerPaths === undefined ? new Set() : new Set(activeProfilerPaths);
       } else {
+        discardPendingReactiveCleanups(this);
         this.pendingProfilerCommits = [];
       }
       this.activeInstanceKeys = undefined;
@@ -415,18 +412,8 @@ export function createRootRuntime(
       hookRenderState.currentRuntime = undefined;
       hookRenderState.currentInstance = undefined;
       if (committed) {
-        disposeRootCleanups(committedRootCleanups);
-        committedRootCleanups = renderCleanups ?? new Set();
         flushProfilerCommits(this, profilerCommits);
-      } else if (renderCleanups !== undefined) {
-        disposeRootCleanups(renderCleanups);
       }
-    },
-    withCleanupScope<T>(run: () => T): T {
-      const cleanups = pendingRootCleanups;
-      return cleanups === undefined
-        ? run()
-        : withReactiveCleanupScope((dispose) => cleanups.add(dispose), run);
     },
     flushEffects() {
       this.profilerFlushDepth += 1;
@@ -457,12 +444,6 @@ export function createRootRuntime(
       }
     },
     dispose() {
-      disposeRootCleanups(committedRootCleanups);
-      committedRootCleanups = new Set();
-      if (pendingRootCleanups !== undefined) {
-        disposeRootCleanups(pendingRootCleanups);
-        pendingRootCleanups = undefined;
-      }
       for (const instance of this.instances.values()) {
         cleanupInstance(instance);
       }
@@ -479,7 +460,8 @@ export function createRootRuntime(
   };
 }
 
-function disposeRootCleanups(cleanups: Set<() => void>): void {
+function disposeRootCleanups(cleanups: Set<() => void> | undefined): void {
+  if (cleanups === undefined) return;
   let firstError: unknown;
   for (const dispose of cleanups) {
     try {
@@ -611,9 +593,23 @@ export function renderWithRootRuntime<T>(
   hookRenderState.currentRuntime = runtime;
   hookRenderState.currentInstance = undefined;
   hookRenderState.pendingInstance = { runtime, path, owner, existing };
+  const reactiveCleanups = new Set<() => void>();
 
   try {
-    return withContextReadObserver(recordContextDependency, render);
+    const value = withReactiveCleanupScope(
+      (dispose) => reactiveCleanups.add(dispose),
+      () => withContextReadObserver(recordContextDependency, render),
+    );
+    const instance = hookRenderState.currentInstance;
+    if (instance !== undefined || existing !== undefined || reactiveCleanups.size > 0) {
+      const target = instance ?? materializeInstance();
+      disposeRootCleanups(target.pendingReactiveCleanups);
+      target.pendingReactiveCleanups = reactiveCleanups;
+    }
+    return value;
+  } catch (error) {
+    disposeRootCleanups(reactiveCleanups);
+    throw error;
   } finally {
     hookRenderState.currentRuntime = previousRuntime;
     hookRenderState.currentInstance = previousInstance;
@@ -2507,6 +2503,10 @@ function forEachInstanceKeyPrefix(
 
 function cleanupInstance(instance: ComponentInstance): void {
   instance.disposed = true;
+  disposeRootCleanups(instance.committedReactiveCleanups);
+  delete instance.committedReactiveCleanups;
+  disposeRootCleanups(instance.pendingReactiveCleanups);
+  delete instance.pendingReactiveCleanups;
   for (const slot of instance.hooks) {
     if (slot?.kind === "effect") {
       slot.disposed = true;
@@ -2516,6 +2516,23 @@ function cleanupInstance(instance: ComponentInstance): void {
     } else if (slot?.kind === "state" && slot.textBinding !== undefined) {
       clearReactiveTextBindingSubscribers(slot.textBinding);
     }
+  }
+}
+
+function commitReactiveCleanups(runtime: RootRuntime): void {
+  for (const instance of runtime.instances.values()) {
+    const pending = instance.pendingReactiveCleanups;
+    if (pending === undefined) continue;
+    disposeRootCleanups(instance.committedReactiveCleanups);
+    instance.committedReactiveCleanups = pending;
+    delete instance.pendingReactiveCleanups;
+  }
+}
+
+function discardPendingReactiveCleanups(runtime: RootRuntime): void {
+  for (const instance of runtime.instances.values()) {
+    disposeRootCleanups(instance.pendingReactiveCleanups);
+    delete instance.pendingReactiveCleanups;
   }
 }
 
