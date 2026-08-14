@@ -1408,20 +1408,19 @@ function prerenderedResponse(
   const prerendered = prerenderedRoutes?.[path];
   const candidateNavigationHtml = prerendered?.navigationHtml;
 
-  if (
-    isNavigation &&
-    typeof candidateNavigationHtml === "string" &&
-    !hasNavigationRouteMarker(candidateNavigationHtml)
-  ) {
-    return cloudflareDocumentReloadNavigationResponse();
-  }
-
   if (!isCurrentPrerenderedRoute(prerendered)) {
+    if (
+      isNavigation &&
+      typeof candidateNavigationHtml === "string" &&
+      !hasNavigationRouteMarker(candidateNavigationHtml)
+    ) {
+      return cloudflareDocumentReloadNavigationResponse();
+    }
     return undefined;
   }
 
   const html = isNavigation ? prerendered.navigationHtml : prerendered.html;
-  if (html === undefined || (isNavigation && !hasNavigationRouteMarker(html))) {
+  if (html === undefined) {
     return cloudflareDocumentReloadNavigationResponse();
   }
 
