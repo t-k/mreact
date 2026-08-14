@@ -6,7 +6,6 @@ const rawTextElementNames = new Set([
   "noembed",
   "noframes",
   "noscript",
-  "script",
   "style",
   "textarea",
   "title",
@@ -33,9 +32,18 @@ export function hasNavigationRouteMarker(html: string): boolean {
       continue;
     }
 
+    if (html.startsWith("<![CDATA[", openingBracket)) {
+      cursor = skipCdataSection(html, openingBracket + 9);
+      continue;
+    }
+
     const discriminator = html[openingBracket + 1];
     if (discriminator === "!" || discriminator === "?" || discriminator === "/") {
       cursor = skipTagTail(html, openingBracket + 2);
+      continue;
+    }
+    if (!isAsciiLetter(discriminator)) {
+      cursor = openingBracket + 1;
       continue;
     }
 
@@ -52,9 +60,12 @@ export function hasNavigationRouteMarker(html: string): boolean {
       return false;
     }
 
-    cursor = rawTextElementNames.has(tag.name)
-      ? skipRawTextElement(html, tag.end, tag.name)
-      : tag.end;
+    cursor =
+      tag.name === "script"
+        ? skipScriptElement(html, tag.end)
+        : rawTextElementNames.has(tag.name)
+          ? skipRawTextElement(html, tag.end, tag.name)
+          : tag.end;
   }
 
   return false;
@@ -153,6 +164,11 @@ function skipComment(html: string, cursor: number): number {
   return end < 0 ? html.length : end + (end === abruptEnd ? 4 : 3);
 }
 
+function skipCdataSection(html: string, cursor: number): number {
+  const end = html.indexOf("]]>", cursor);
+  return end < 0 ? html.length : end + 3;
+}
+
 function skipTagTail(html: string, cursor: number): number {
   let quote: '"' | "'" | undefined;
   while (cursor < html.length) {
@@ -184,6 +200,66 @@ function skipRawTextElement(html: string, cursor: number, name: string): number 
     }
     cursor = closingStart + 2;
   }
+}
+
+function skipScriptElement(html: string, cursor: number): number {
+  let state: "data" | "double-escaped" | "escaped" = "data";
+
+  while (cursor < html.length) {
+    if (state === "data" && html.startsWith("<!--", cursor)) {
+      state = "escaped";
+      cursor += 4;
+      continue;
+    }
+
+    if (state !== "data" && html.startsWith("-->", cursor)) {
+      state = "data";
+      cursor += 3;
+      continue;
+    }
+
+    if (html[cursor] === "<") {
+      if (isScriptTagAt(html, cursor, true)) {
+        if (state === "double-escaped") {
+          state = "escaped";
+          cursor += 8;
+          continue;
+        }
+        return skipTagTail(html, cursor + 8);
+      }
+
+      if (state === "escaped" && isScriptTagAt(html, cursor, false)) {
+        state = "double-escaped";
+        cursor += 7;
+        continue;
+      }
+    }
+
+    cursor += 1;
+  }
+
+  return html.length;
+}
+
+function isScriptTagAt(html: string, cursor: number, closing: boolean): boolean {
+  const prefix = closing ? "</script" : "<script";
+  if (!matchesAsciiCaseInsensitive(html, prefix, cursor)) {
+    return false;
+  }
+  const delimiter = html[cursor + prefix.length];
+  return delimiter === ">" || delimiter === "/" || isAsciiWhitespace(delimiter);
+}
+
+function matchesAsciiCaseInsensitive(html: string, needle: string, start: number): boolean {
+  if (start + needle.length > html.length) {
+    return false;
+  }
+  for (let offset = 0; offset < needle.length; offset += 1) {
+    if (html.charAt(start + offset).toLowerCase() !== needle.charAt(offset)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function indexOfAsciiCaseInsensitive(html: string, needle: string, start: number): number {
@@ -218,6 +294,14 @@ function isAsciiWhitespace(character: string | undefined): boolean {
     character === "\f" ||
     character === "\r"
   );
+}
+
+function isAsciiLetter(character: string | undefined): boolean {
+  if (character === undefined) {
+    return false;
+  }
+  const code = character.charCodeAt(0);
+  return (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
 }
 
 function isTagNameTerminator(character: string | undefined): boolean {

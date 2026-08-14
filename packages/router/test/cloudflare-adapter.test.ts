@@ -463,7 +463,15 @@ export async function POST(request: Request) {
     expect(await response.text()).toContain('data-mreact-route-id="index"');
   });
 
-  test("reloads for a false prerendered navigation marker", async () => {
+  test.each([
+    ["comment text", '<!-- <div data-mreact-route-id="index"> --><main>Prerendered</main>'],
+    ["a non-alphabetic tag opener", "<1 data-mreact-route-id=index>"],
+    ["foreign-content CDATA", "<svg><![CDATA[> <div data-mreact-route-id=index>]]></svg>"],
+    [
+      "double-escaped script data",
+      "<script><!--<script></script><div data-mreact-route-id=index></script>",
+    ],
+  ])("reloads for a false prerendered navigation marker in %s", async (_label, navigationHtml) => {
     const handler = createCloudflareRequestHandler({
       assets: {},
       clientManifest: { routes: [] },
@@ -476,7 +484,7 @@ export async function POST(request: Request) {
               vary: "x-mreact-navigation",
             },
             html: "<!DOCTYPE html><main>Prerendered</main>",
-            navigationHtml: '<!-- <div data-mreact-route-id="index"> --><main>Prerendered</main>',
+            navigationHtml,
             schemaVersion: 4,
             status: 200,
           },
