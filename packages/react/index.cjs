@@ -61,6 +61,7 @@ exports.cache = React.cache;
 exports.cacheSignal = React.cacheSignal;
 exports.captureOwnerStack = React.captureOwnerStack;
 exports.renderToString = React.renderToString;
+exports.renderChildToString = React.renderChildToString;
 exports.startTransition = React.startTransition;
 exports.unstable_useCacheRefresh = React.unstable_useCacheRefresh;
 exports.useTransition = React.useTransition;

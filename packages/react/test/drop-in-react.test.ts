@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -12,8 +13,23 @@ import {
 } from "../src/index.js";
 import { jsx, jsxs } from "../src/jsx-runtime.js";
 import { jsxDEV } from "../src/jsx-dev-runtime.js";
+import * as esmReact from "../src/index.js";
+import * as esmJsxRuntime from "../src/jsx-runtime.js";
+import * as esmJsxDevRuntime from "../src/jsx-dev-runtime.js";
+
+const require = createRequire(import.meta.url);
 
 describe("react drop-in entrypoint", () => {
+  test("keeps CommonJS wrapper exports in parity with the ESM runtime surfaces", () => {
+    const cjsReact = require("../index.cjs") as Record<string, unknown>;
+    const cjsJsxRuntime = require("../jsx-runtime.cjs") as Record<string, unknown>;
+    const cjsJsxDevRuntime = require("../jsx-dev-runtime.cjs") as Record<string, unknown>;
+
+    expect(Object.keys(cjsReact).sort()).toEqual(Object.keys(esmReact).sort());
+    expect(Object.keys(cjsJsxRuntime).sort()).toEqual(Object.keys(esmJsxRuntime).sort());
+    expect(Object.keys(cjsJsxDevRuntime).sort()).toEqual(Object.keys(esmJsxDevRuntime).sort());
+  });
+
   test("exports React-compatible core and JSX runtime shape", () => {
     expect(createElement("span", null, "Ada").type).toBe("span");
     expect(Fragment).toBeDefined();
