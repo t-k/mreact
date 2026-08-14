@@ -1,4 +1,5 @@
 import type { BuiltPrerenderedRoute } from "./build.js";
+import { hasNavigationRouteMarker } from "./navigation-marker.js";
 
 export const PRERENDERED_ROUTE_SCHEMA_VERSION = 4;
 
@@ -18,7 +19,7 @@ export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerend
     typeof entry.html === "string" &&
     (entry.navigationHtml === undefined ||
       (typeof entry.navigationHtml === "string" &&
-        entry.navigationHtml.includes("data-mreact-route-id"))) &&
+        hasNavigationRouteMarker(entry.navigationHtml))) &&
     typeof entry.status === "number" &&
     Number.isInteger(entry.status) &&
     entry.status >= 100 &&
@@ -105,12 +106,10 @@ function isVisitorDependentHeaders(headers: Headers): boolean {
   const vary = headers.get("vary");
   const hasVisitorDependentVary =
     vary !== null &&
-    vary
-      .split(",")
-      .some((value) => value.trim().toLowerCase() !== "x-mreact-navigation");
-  const forbidsSharedStorage = cacheControl.split(",").some((directive) =>
-    /^(?:private|no-cache|no-store)(?:=|$)/i.test(directive.trim()),
-  );
+    vary.split(",").some((value) => value.trim().toLowerCase() !== "x-mreact-navigation");
+  const forbidsSharedStorage = cacheControl
+    .split(",")
+    .some((directive) => /^(?:private|no-cache|no-store)(?:=|$)/i.test(directive.trim()));
 
   return (
     headers.get("x-mreact-cache")?.toUpperCase() === "DYNAMIC" ||

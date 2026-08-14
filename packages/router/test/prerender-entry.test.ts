@@ -86,6 +86,22 @@ describe("prerender entry validation", () => {
     ).toBe(false);
   });
 
+  test.each([
+    '<!-- <div data-mreact-route-id="comment"> -->',
+    '<script>const marker = "data-mreact-route-id=script";</script>',
+    '<main data-note="data-mreact-route-id=other"></main>',
+  ])("rejects navigation HTML without a syntactic route marker: %s", (navigationHtml) => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: { vary: "x-mreact-navigation" },
+        html: "<main>document</main>",
+        navigationHtml,
+        schemaVersion: 4,
+        status: 200,
+      }),
+    ).toBe(false);
+  });
+
   test("accepts canonical HSTS in its scheme-independent field", () => {
     expect(
       isCurrentPrerenderedRoute({
