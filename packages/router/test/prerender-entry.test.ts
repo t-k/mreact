@@ -34,7 +34,10 @@ describe("prerender entry validation", () => {
   ])("rejects a current-schema entry with visitor-dependent %s", (name, value) => {
     expect(
       isCurrentPrerenderedRoute({
-        headers: { [name]: value },
+        headers:
+          name.toLowerCase() === "vary"
+            ? { [name]: `${value}, x-mreact-navigation` }
+            : { [name]: value, vary: "x-mreact-navigation" },
         html: "<main>visitor A</main>",
         schemaVersion: 4,
         status: 200,
@@ -48,6 +51,7 @@ describe("prerender entry validation", () => {
         headers: {
           "cache-control": "public, max-age=60",
           "content-type": "text/html; charset=utf-8",
+          vary: "x-mreact-navigation",
         },
         html: "<main>shared</main>",
         schemaVersion: 4,
@@ -56,12 +60,11 @@ describe("prerender entry validation", () => {
     ).toBe(true);
   });
 
-  test("rejects navigation variants without the required Vary header", () => {
+  test("rejects current entries without the required Vary header", () => {
     expect(
       isCurrentPrerenderedRoute({
         headers: { "content-type": "text/html; charset=utf-8" },
         html: "<main>document</main>",
-        navigationHtml: '<div data-mreact-route-id="index"><main>navigation</main></div>',
         schemaVersion: 4,
         status: 200,
       }),
@@ -86,7 +89,10 @@ describe("prerender entry validation", () => {
   test("accepts canonical HSTS in its scheme-independent field", () => {
     expect(
       isCurrentPrerenderedRoute({
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          vary: "x-mreact-navigation",
+        },
         html: "<main>shared</main>",
         schemaVersion: 4,
         status: 200,
@@ -105,7 +111,7 @@ describe("prerender entry validation", () => {
   ])("rejects HSTS that cannot be replayed safely: %#", (overrides) => {
     expect(
       isCurrentPrerenderedRoute({
-        headers: overrides.headers,
+        headers: { vary: "x-mreact-navigation", ...overrides.headers },
         html: "<main>shared</main>",
         schemaVersion: 4,
         status: 200,

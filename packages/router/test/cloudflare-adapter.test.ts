@@ -395,7 +395,10 @@ export async function POST(request: Request) {
         files: {},
         prerenderedRoutes: {
           "/": {
-            headers: { "content-type": "text/html; charset=utf-8" },
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              vary: "x-mreact-navigation",
+            },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
             schemaVersion: 4,
             status: 200,
@@ -427,7 +430,10 @@ export async function POST(request: Request) {
         files: {},
         prerenderedRoutes: {
           "/": {
-            headers: { "content-type": "text/html; charset=utf-8" },
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              vary: "x-mreact-navigation",
+            },
             html: "<!DOCTYPE html><main>Prerendered</main>",
             navigationHtml:
               '<!DOCTYPE html><div data-mreact-route-id="index"><main>Prerendered</main></div>',
@@ -450,6 +456,7 @@ export async function POST(request: Request) {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-navigation")).toBeNull();
+    expect(response.headers.get("vary")).toContain("x-mreact-navigation");
     expect(await response.text()).toContain('data-mreact-route-id="index"');
   });
 
@@ -483,7 +490,10 @@ export function middleware(request) {
           },
           prerenderedRoutes: {
             "/": {
-              headers: { "content-type": "text/html; charset=utf-8" },
+              headers: {
+                "content-type": "text/html; charset=utf-8",
+                vary: "x-mreact-navigation",
+              },
               html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
               schemaVersion: 4,
               status: 200,
@@ -641,7 +651,10 @@ export function middleware(request: Request) {
         files: {},
         prerenderedRoutes: {
           "/": {
-            headers: { "content-type": "text/html; charset=utf-8" },
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              vary: "x-mreact-navigation",
+            },
             html: "<!DOCTYPE html><html><body><main>Prerendered</main></body></html>",
             schemaVersion: 4,
             status: 200,
@@ -659,6 +672,7 @@ export function middleware(request: Request) {
     );
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("vary")).toContain("x-mreact-navigation");
     expect(await response.text()).toContain("<main>Prerendered</main>");
   });
 

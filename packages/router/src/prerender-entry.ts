@@ -12,7 +12,7 @@ export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerend
     entry.schemaVersion === PRERENDERED_ROUTE_SCHEMA_VERSION &&
     isStringRecord(entry.headers) &&
     isShareableHeaderRecord(entry.headers) &&
-    hasRequiredNavigationVary(entry) &&
+    hasRequiredNavigationVary(entry.headers) &&
     !hasStoredHstsHeader(entry.headers) &&
     isCanonicalHstsHeader(entry.strictTransportSecurity) &&
     typeof entry.html === "string" &&
@@ -64,7 +64,7 @@ export function replayedPrerenderedRouteHeaders(
 ): Headers {
   const headers = new Headers(entry.headers);
 
-  if (entry.navigationHtml !== undefined && !hasNavigationVary(headers)) {
+  if (!hasNavigationVary(headers)) {
     headers.append("vary", "x-mreact-navigation");
   }
 
@@ -75,10 +75,9 @@ export function replayedPrerenderedRouteHeaders(
   return headers;
 }
 
-function hasRequiredNavigationVary(entry: Partial<BuiltPrerenderedRoute>): boolean {
-  if (entry.navigationHtml === undefined) return true;
+function hasRequiredNavigationVary(headers: Record<string, string>): boolean {
   try {
-    return hasNavigationVary(new Headers(entry.headers));
+    return hasNavigationVary(new Headers(headers));
   } catch {
     return false;
   }
