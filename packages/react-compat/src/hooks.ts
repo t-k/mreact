@@ -3,6 +3,7 @@ import {
   flushQueuedComputations,
   notifySubscribers,
   trackSource,
+  withCleanupScope as withReactiveCleanupScope,
   type Source,
 } from "@reckona/mreact-reactive-core/internal";
 import { scheduleCallback } from "./fiber-scheduler.js";
@@ -52,6 +53,7 @@ export interface RootRuntime {
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
   endRender(committed?: boolean): void;
+  withCleanupScope<T>(run: () => T): T;
   flushEffects(): void;
   dispose(): void;
 }
@@ -352,6 +354,9 @@ export function createRootRuntime(
   rerender: (priority?: RenderPriority) => void,
   options: RootRuntimeOptions = {},
 ): RootRuntime {
+  let committedRootCleanups = new Set<() => void>();
+  let pendingRootCleanups: Set<() => void> | undefined;
+
   return {
     instances: new Map(),
     instanceKeysByPrefix: new Map(),
@@ -382,6 +387,7 @@ export function createRootRuntime(
     renderPhaseUpdate: false,
     rerender,
     beginRender() {
+      pendingRootCleanups = new Set();
       this.activeInstanceKeys = new Set();
       this.activeProfilerPaths = new Set();
       this.pendingProfilerCommits = [];
@@ -393,6 +399,8 @@ export function createRootRuntime(
       this.renderPhaseUpdate = false;
     },
     endRender(committed = true) {
+      const renderCleanups = pendingRootCleanups;
+      pendingRootCleanups = undefined;
       const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
       const activeProfilerPaths = this.activeProfilerPaths;
       if (committed) {
@@ -407,8 +415,18 @@ export function createRootRuntime(
       hookRenderState.currentRuntime = undefined;
       hookRenderState.currentInstance = undefined;
       if (committed) {
+        disposeRootCleanups(committedRootCleanups);
+        committedRootCleanups = renderCleanups ?? new Set();
         flushProfilerCommits(this, profilerCommits);
+      } else if (renderCleanups !== undefined) {
+        disposeRootCleanups(renderCleanups);
       }
+    },
+    withCleanupScope<T>(run: () => T): T {
+      const cleanups = pendingRootCleanups;
+      return cleanups === undefined
+        ? run()
+        : withReactiveCleanupScope((dispose) => cleanups.add(dispose), run);
     },
     flushEffects() {
       this.profilerFlushDepth += 1;
@@ -439,6 +457,12 @@ export function createRootRuntime(
       }
     },
     dispose() {
+      disposeRootCleanups(committedRootCleanups);
+      committedRootCleanups = new Set();
+      if (pendingRootCleanups !== undefined) {
+        disposeRootCleanups(pendingRootCleanups);
+        pendingRootCleanups = undefined;
+      }
       for (const instance of this.instances.values()) {
         cleanupInstance(instance);
       }
@@ -453,6 +477,19 @@ export function createRootRuntime(
       clearRuntimePortalNodes(this);
     },
   };
+}
+
+function disposeRootCleanups(cleanups: Set<() => void>): void {
+  let firstError: unknown;
+  for (const dispose of cleanups) {
+    try {
+      dispose();
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  cleanups.clear();
+  if (firstError !== undefined) throw firstError;
 }
 
 /** Creates an isolated cache scope for cache() and cacheSignal(). */

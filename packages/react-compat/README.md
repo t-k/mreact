@@ -57,6 +57,7 @@ Known limits:
 
 - This is a React-like compatibility runtime, not a byte-for-byte React
   reconciler. The tests assert observable behavior for the supported surface.
+- A bare reactive-core `effect()` created synchronously in a component render is owned by that root, replaced on the next committed render, and disposed on unmount. Effects created later in event handlers or asynchronous continuations must be disposed explicitly; use a React effect hook when the lifetime belongs to a component.
 - The app-router compiler path is separate from the React-compatible runtime.
   Compiler and router behavior is covered by their own tests.
 - `useId()` returns opaque underscore-delimited ids such as `_R_0_` and `_r_0_` instead of React's colon-delimited internal shape. The runtime keeps SSR and hydration ids stable through its hydrated-id map, but code should not parse the id string.

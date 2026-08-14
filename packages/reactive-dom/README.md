@@ -18,11 +18,7 @@ createRoot(document.body, () => {
 });
 ```
 
-Keep the dispose function returned by `createRoot()` when you mount manually.
-`bindText()`, `bindList()`, `effect()`, and the other low-level bindings use an
-explicit lifetime model. Bindings created inside a `createRoot()` scope are
-cleaned up when that root is disposed; bindings created outside a root must be
-disposed manually.
+Keep the dispose function returned by `createRoot()` when you mount manually. `bindText()`, `bindList()`, `effect()`, and the other low-level bindings use an explicit lifetime model. Bindings and effects created synchronously inside a `createRoot()` render are cleaned up when that root is disposed. An effect created later in an event handler or asynchronous continuation is outside that render scope, so retain and invoke its disposer explicitly.
 
 ## Core APIs
 

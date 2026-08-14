@@ -159,7 +159,7 @@ function renderHostFiberIntoContainer(
 
     try {
       const deferred = withDeferredDelegatedEventPromotions(() =>
-        renderHostFiberRoot(fiberRoot, element, runtime)
+        runtime.withCleanupScope(() => renderHostFiberRoot(fiberRoot, element, runtime)),
       );
       const finishedWork = deferred.value;
 
@@ -213,13 +213,15 @@ function renderHydratingHostFiberIntoContainer(
     try {
       const scope = getHydrationScope(container, options.resumeId);
       const deferred = withDeferredDelegatedEventPromotions(() =>
-        renderHydratingHostFiberRoot(
-          fiberRoot,
-          element,
-          runtime,
-          scope,
-          options,
-        )
+        runtime.withCleanupScope(() =>
+          renderHydratingHostFiberRoot(
+            fiberRoot,
+            element,
+            runtime,
+            scope,
+            options,
+          ),
+        ),
       );
       const finishedWork = deferred.value;
 

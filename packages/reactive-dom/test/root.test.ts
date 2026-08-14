@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { cell } from "@reckona/mreact-reactive-core";
+import { cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindText, createRoot } from "../src/index.js";
 import { installCompatRenderValueNormalizer } from "../src/compat-normalize.js";
@@ -11,6 +11,31 @@ const reactCompatElementType = Symbol.for("react.transitional.element");
 installCompatRenderValueNormalizer();
 
 describe("createRoot", () => {
+  test("disposes bare effects created by the root render", async () => {
+    const container = document.createElement("main");
+    const source = cell(0);
+    let runs = 0;
+    let cleanups = 0;
+    const dispose = createRoot(container, () => {
+      effect(() => {
+        source.get();
+        runs += 1;
+        return () => {
+          cleanups += 1;
+        };
+      });
+      return document.createElement("p");
+    });
+
+    expect(runs).toBe(1);
+    dispose();
+    source.set(1);
+    await flushEffects();
+
+    expect(runs).toBe(1);
+    expect(cleanups).toBe(1);
+  });
+
   test("mounts render output and clears it on dispose", () => {
     const container = document.createElement("main");
 

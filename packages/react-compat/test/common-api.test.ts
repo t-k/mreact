@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
+import { cell, effect } from "@reckona/mreact-reactive-core";
+import { flushEffects as flushReactiveEffects } from "@reckona/mreact-reactive-core/testing";
 import {
   Activity,
   act,
@@ -55,6 +57,40 @@ import { runWithEventPriority } from "../src/event-priority.js";
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat common API subset", () => {
+  test("disposes bare component effects on rerender and root unmount", async () => {
+    const container = document.createElement("div");
+    const source = cell(0);
+    const root = createRoot(container);
+    let runs = 0;
+    let cleanups = 0;
+
+    function App({ label }: { label: string }) {
+      effect(() => {
+        source.get();
+        runs += 1;
+        return () => {
+          cleanups += 1;
+        };
+      });
+      return createElement("p", null, label);
+    }
+
+    root.render(createElement(App, { label: "first" }));
+    root.render(createElement(App, { label: "second" }));
+    expect(runs).toBe(2);
+    expect(cleanups).toBe(1);
+
+    source.set(1);
+    await flushReactiveEffects();
+    expect(runs).toBe(3);
+
+    root.unmount();
+    source.set(2);
+    await flushReactiveEffects();
+    expect(runs).toBe(3);
+    expect(cleanups).toBe(3);
+  });
+
   test("forwardRef passes ref as second argument", () => {
     const container = document.createElement("div");
     const ref = { current: null as HTMLButtonElement | null };
