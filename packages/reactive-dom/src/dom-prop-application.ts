@@ -190,11 +190,7 @@ function styleObjectKeyToCssName(name: string): string {
 }
 
 export function toDomAttributeName(name: string): string {
-  if (!HTML_ATTRIBUTE_ALIASES.test(name)) return name;
-  if (name === "acceptCharset") return "accept-charset";
-  if (name === "className") return "class";
-  if (name === "htmlFor") return "for";
-  return name === "httpEquiv" ? "http-equiv" : name.toLowerCase();
+  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
 }
 
 function clearDomProperty(element: Element, name: string, attrName: string): void {
@@ -235,4 +231,30 @@ function shouldAssignDomProperty(element: Element, name: string): boolean {
   );
 }
 
-const HTML_ATTRIBUTE_ALIASES = /^(acceptCharset|className|formAction|htmlFor|httpEquiv|imageSrcSet|srcDoc|srcSet|tabIndex)$/;
+const HTML_ATTRIBUTE_ALIASES: Readonly<Record<string, string>> = {
+  acceptCharset: "accept-charset",
+  autoFocus: "autofocus",
+  autoPlay: "autoplay",
+  charSet: "charset",
+  className: "class",
+  colSpan: "colspan",
+  contentEditable: "contenteditable",
+  crossOrigin: "crossorigin",
+  encType: "enctype",
+  formAction: "formaction",
+  frameBorder: "frameborder",
+  htmlFor: "for",
+  httpEquiv: "http-equiv",
+  imageSrcSet: "imagesrcset",
+  maxLength: "maxlength",
+  minLength: "minlength",
+  noValidate: "novalidate",
+  playsInline: "playsinline",
+  readOnly: "readonly",
+  rowSpan: "rowspan",
+  spellCheck: "spellcheck",
+  srcDoc: "srcdoc",
+  srcSet: "srcset",
+  tabIndex: "tabindex",
+  useMap: "usemap",
+};

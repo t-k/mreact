@@ -5386,6 +5386,7 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-mreact-stream")).toBe("1");
+    expect(response.headers.get("vary")).toContain("x-mreact-navigation");
     expect(html).toContain(
       '<main><svg aria-hidden="true"><path d="M4 6h16v12H4z"></path></svg></main>',
     );

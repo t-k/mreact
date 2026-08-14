@@ -52,6 +52,7 @@ export type ServerActionReplayClaim =
 
 /** Store used to atomically reject replayed server action nonces. */
 export interface ServerActionReplayStore {
+  /** Atomically reserves a nonce. A store must return `replay` while the claim is in flight and after `finalize()` records its completed retention period. */
   claim(value: string): ServerActionReplayClaim | Promise<ServerActionReplayClaim>;
 }
 

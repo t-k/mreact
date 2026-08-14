@@ -56,6 +56,33 @@ describe("prerender entry validation", () => {
     ).toBe(true);
   });
 
+  test("rejects navigation variants without the required Vary header", () => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: { "content-type": "text/html; charset=utf-8" },
+        html: "<main>document</main>",
+        navigationHtml: '<div data-mreact-route-id="index"><main>navigation</main></div>',
+        schemaVersion: 4,
+        status: 200,
+      }),
+    ).toBe(false);
+  });
+
+  test("rejects navigation variants without a route marker", () => {
+    expect(
+      isCurrentPrerenderedRoute({
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          vary: "x-mreact-navigation",
+        },
+        html: "<main>document</main>",
+        navigationHtml: "<main>unmarked navigation</main>",
+        schemaVersion: 4,
+        status: 200,
+      }),
+    ).toBe(false);
+  });
+
   test("accepts canonical HSTS in its scheme-independent field", () => {
     expect(
       isCurrentPrerenderedRoute({

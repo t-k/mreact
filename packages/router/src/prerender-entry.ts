@@ -12,10 +12,13 @@ export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerend
     entry.schemaVersion === PRERENDERED_ROUTE_SCHEMA_VERSION &&
     isStringRecord(entry.headers) &&
     isShareableHeaderRecord(entry.headers) &&
+    hasRequiredNavigationVary(entry) &&
     !hasStoredHstsHeader(entry.headers) &&
     isCanonicalHstsHeader(entry.strictTransportSecurity) &&
     typeof entry.html === "string" &&
-    (entry.navigationHtml === undefined || typeof entry.navigationHtml === "string") &&
+    (entry.navigationHtml === undefined ||
+      (typeof entry.navigationHtml === "string" &&
+        entry.navigationHtml.includes("data-mreact-route-id"))) &&
     typeof entry.status === "number" &&
     Number.isInteger(entry.status) &&
     entry.status >= 100 &&
@@ -61,11 +64,33 @@ export function replayedPrerenderedRouteHeaders(
 ): Headers {
   const headers = new Headers(entry.headers);
 
+  if (entry.navigationHtml !== undefined && !hasNavigationVary(headers)) {
+    headers.append("vary", "x-mreact-navigation");
+  }
+
   if (entry.strictTransportSecurity !== undefined && request.url.startsWith("https://")) {
     headers.set("strict-transport-security", entry.strictTransportSecurity);
   }
 
   return headers;
+}
+
+function hasRequiredNavigationVary(entry: Partial<BuiltPrerenderedRoute>): boolean {
+  if (entry.navigationHtml === undefined) return true;
+  try {
+    return hasNavigationVary(new Headers(entry.headers));
+  } catch {
+    return false;
+  }
+}
+
+function hasNavigationVary(headers: Headers): boolean {
+  return (
+    headers
+      .get("vary")
+      ?.split(",")
+      .some((value) => value.trim().toLowerCase() === "x-mreact-navigation") === true
+  );
 }
 
 function isShareableHeaderRecord(headers: Record<string, string>): boolean {

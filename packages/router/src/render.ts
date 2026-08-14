@@ -1355,6 +1355,7 @@ async function renderAppRequestInternal(
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
+        appendNavigationVary(response.headers);
         emitRenderTiming(options, timing, response.status);
         return response;
       }

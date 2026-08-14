@@ -51,6 +51,15 @@ describe("DOM prop application policy", () => {
     expect(meta.hasAttribute("httpEquiv")).toBe(false);
   });
 
+  test("normalizes camel-cased JSX aliases on SVG elements", () => {
+    const image = document.createElementNS("http://www.w3.org/2000/svg", "image");
+
+    applyDomProp(image, "crossOrigin", "anonymous", { preferProperty: false });
+
+    expect(image.getAttribute("crossorigin")).toBe("anonymous");
+    expect(image.hasAttribute("crossOrigin")).toBe(false);
+  });
+
   test("removes falsey values and clears reflected boolean DOM properties", () => {
     const button = document.createElement("button");
 
