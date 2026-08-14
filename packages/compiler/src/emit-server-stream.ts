@@ -1723,10 +1723,14 @@ function collectHtmlParts(
 }
 
 function emitDangerouslySetInnerHtmlPart(attrs: readonly AttributeIr[]): HtmlSyncPart | undefined {
-  const attr = attrs.find(
-    (candidate): candidate is Extract<AttributeIr, { kind: "dynamic-attr" }> =>
-      candidate.kind === "dynamic-attr" && candidate.name === "dangerouslySetInnerHTML",
-  );
+  let attr: Extract<AttributeIr, { kind: "dynamic-attr" }> | undefined;
+  for (let index = attrs.length - 1; index >= 0; index -= 1) {
+    const candidate = attrs[index];
+    if (candidate?.kind === "dynamic-attr" && candidate.name === "dangerouslySetInnerHTML") {
+      attr = candidate;
+      break;
+    }
+  }
 
   if (attr === undefined) {
     return undefined;
@@ -1734,8 +1738,12 @@ function emitDangerouslySetInnerHtmlPart(attrs: readonly AttributeIr[]): HtmlSyn
 
   return {
     kind: "raw-dynamic",
-    code: `(() => { const _value = (${attr.code}); return typeof _value === "object" && _value !== null && typeof _value.__html === "string" ? _value.__html : ""; })()`,
+    code: emitExactDangerouslySetInnerHtmlExpression(attr.code),
   };
+}
+
+function emitExactDangerouslySetInnerHtmlExpression(code: string): string {
+  return `(() => { const _value = (${code}); if (typeof _value !== "object" || _value === null) return ""; const _keys = Reflect.ownKeys(_value); if (_keys.length !== 1 || _keys[0] !== "__html") return ""; const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); return _descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string" ? _descriptor.value : ""; })()`;
 }
 
 function isChildrenExpressionCode(code: string): boolean {

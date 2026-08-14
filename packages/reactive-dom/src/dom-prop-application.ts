@@ -75,6 +75,11 @@ export function applyDomProp(
   value: unknown,
   options: DomPropApplicationOptions,
 ): void {
+  if (name === "dangerouslySetInnerHTML") {
+    element.innerHTML = readDangerouslySetInnerHtml(value) ?? "";
+    return;
+  }
+
   const attrName = toDomAttributeName(name);
 
   if (
@@ -128,9 +133,30 @@ export function applyDomProp(
 }
 
 export function removeDomProp(element: Element, name: string): void {
+  if (name === "dangerouslySetInnerHTML") {
+    element.innerHTML = "";
+    return;
+  }
+
   const attrName = toDomAttributeName(name);
   clearDomProperty(element, name, attrName);
   element.removeAttribute(attrName);
+}
+
+function readDangerouslySetInnerHtml(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+
+  const keys = Reflect.ownKeys(value);
+  if (keys.length !== 1 || keys[0] !== "__html") {
+    return undefined;
+  }
+
+  const descriptor = Object.getOwnPropertyDescriptor(value, "__html");
+  return descriptor !== undefined && "value" in descriptor && typeof descriptor.value === "string"
+    ? descriptor.value
+    : undefined;
 }
 
 function applyStyleObject(element: HTMLElement, value: Record<string, unknown>): void {

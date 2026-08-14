@@ -102,7 +102,7 @@ describe("bindSpreadProps", () => {
     dispose();
   });
 
-  test("ignores dangerous spread-only props", async () => {
+  test("applies opted-in inner HTML while ignoring unsupported spread-only props", async () => {
     const props = cell<Record<string, unknown>>({
       dangerouslySetInnerHTML: { __html: "<span>bad</span>" },
       onClick: "alert(1)",
@@ -115,7 +115,7 @@ describe("bindSpreadProps", () => {
 
     await flushEffects();
 
-    expect(element.innerHTML).toBe("");
+    expect(element.innerHTML).toBe("<span>bad</span>");
     expect(element.hasAttribute("onClick")).toBe(false);
     expect(element.hasAttribute("onclick")).toBe(false);
     expect(element.hasAttribute("suppressHydrationWarning")).toBe(false);

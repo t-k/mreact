@@ -522,7 +522,9 @@ function renderStaticHtml(node: JsxNodeIr): string {
     .filter((attr) => attr.kind === "static-attr")
     .map((attr) => ` ${attr.name}="${escapeHtml(attr.value)}"`)
     .join("");
-  const children = renderStaticChildren(node.children);
+  const children = hasDirectDangerouslySetInnerHtml(node)
+    ? ""
+    : renderStaticChildren(node.children);
 
   return `<${node.tagName}${attrs}>${children}</${node.tagName}>`;
 }
@@ -636,6 +638,10 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
           );
         }
       }
+    }
+
+    if (hasDirectDangerouslySetInnerHtml(node)) {
+      return lines.join("\n");
     }
   }
 
@@ -829,6 +835,13 @@ function emitSetup(node: JsxNodeIr, path: string, state: EmitSetupState): string
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function hasDirectDangerouslySetInnerHtml(node: Extract<JsxNodeIr, { kind: "element" }>): boolean {
+  return node.attributes.some(
+    (attribute) =>
+      attribute.kind === "dynamic-attr" && attribute.name === "dangerouslySetInnerHTML",
+  );
 }
 
 function shouldCacheCompilerKeyedElementPath(

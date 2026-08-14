@@ -119,7 +119,6 @@ function clearSpreadProps(
 function shouldSkipSpreadProp(name: string, value: unknown): boolean {
   return (
     name === "children" ||
-    name === "dangerouslySetInnerHTML" ||
     name === "checked" ||
     name === "defaultChecked" ||
     name === "defaultValue" ||
