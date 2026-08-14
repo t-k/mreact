@@ -212,7 +212,7 @@ function skipScriptElement(html: string, cursor: number): number {
       continue;
     }
 
-    if (state !== "data" && html.startsWith("-->", cursor)) {
+    if (state === "escaped" && html.startsWith("-->", cursor)) {
       state = "data";
       cursor += 3;
       continue;

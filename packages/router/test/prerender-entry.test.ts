@@ -93,6 +93,7 @@ describe("prerender entry validation", () => {
     "<1 data-mreact-route-id=x>",
     "<svg><![CDATA[> <div data-mreact-route-id=x>]]></svg>",
     "<script><!--<script></script><div data-mreact-route-id=x></script>",
+    "<script><!--<script>--></script><div data-mreact-route-id=x></script>",
   ])("rejects navigation HTML without a syntactic route marker: %s", (navigationHtml) => {
     expect(
       isCurrentPrerenderedRoute({

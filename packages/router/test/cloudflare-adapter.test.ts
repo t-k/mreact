@@ -471,6 +471,10 @@ export async function POST(request: Request) {
       "double-escaped script data",
       "<script><!--<script></script><div data-mreact-route-id=index></script>",
     ],
+    [
+      "double-escaped script comment-like text",
+      "<script><!--<script>--></script><div data-mreact-route-id=index></script>",
+    ],
   ])("reloads for a false prerendered navigation marker in %s", async (_label, navigationHtml) => {
     const handler = createCloudflareRequestHandler({
       assets: {},

@@ -29,6 +29,7 @@ describe("navigation route marker validation", () => {
     "<1 data-mreact-route-id=x>",
     "<svg><![CDATA[> <div data-mreact-route-id=x>]]></svg>",
     "<script><!--<script></script><div data-mreact-route-id=x></script>",
+    "<script><!--<script>--></script><div data-mreact-route-id=x></script>",
   ])("rejects text that is not a valid value-bearing marker attribute: %s", (html) => {
     expect(hasNavigationRouteMarker(html)).toBe(false);
   });
