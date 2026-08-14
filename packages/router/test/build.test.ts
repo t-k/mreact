@@ -3054,7 +3054,7 @@ export default function Page(props) {
       prerenderedRoutes?: Record<string, { html: string; schemaVersion?: number; status: number }>;
     };
 
-    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(3);
+    expect(serverManifest.prerenderedRoutes?.["/"]?.schemaVersion).toBe(4);
     expect(serverManifest.prerenderedRoutes?.["/"]?.status).toBe(200);
     expect(serverManifest.prerenderedRoutes?.["/"]?.html).toContain("<main>Policy OK</main>");
   });
@@ -5167,8 +5167,7 @@ export default function Page() {
 export default function Page() { cell(0); return <><span>fragment</span><strong>root</strong></>; }`,
       },
       {
-        expected:
-          '<!DOCTYPE html><div data-mreact-route-id="index"><span>array</span><strong>root</strong></div>',
+        expected: "<!DOCTYPE html><span>array</span><strong>root</strong>",
         file: "page.tsx",
         name: "array",
         source: `export default function Page() { return [<span key="a">array</span>, <strong key="b">root</strong>]; }`,
@@ -6292,6 +6291,10 @@ export default function Page() { return <main>Prerendered server route</main>; }
     );
 
     await buildApp({ appDir, outDir });
+    const documentResponse = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
     const response = await renderBuiltAppRequest({
       outDir,
       request: new Request("http://local.test/", {
@@ -6299,8 +6302,12 @@ export default function Page() { return <main>Prerendered server route</main>; }
       }),
     });
     const html = await response.text();
+    const documentHtml = await documentResponse.text();
 
     expect(response.headers.get("x-mreact-navigation")).toBeNull();
+    expect(response.headers.get("vary")).toContain("x-mreact-navigation");
+    expect(documentHtml).toContain("<main>Prerendered server route</main>");
+    expect(documentHtml).not.toContain("data-mreact-route-id");
     expect(html).toContain(
       '<div data-mreact-route-id="index"><main>Prerendered server route</main></div>',
     );

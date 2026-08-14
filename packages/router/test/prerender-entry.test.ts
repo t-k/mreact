@@ -36,7 +36,7 @@ describe("prerender entry validation", () => {
       isCurrentPrerenderedRoute({
         headers: { [name]: value },
         html: "<main>visitor A</main>",
-        schemaVersion: 3,
+        schemaVersion: 4,
         status: 200,
       }),
     ).toBe(false);
@@ -50,7 +50,7 @@ describe("prerender entry validation", () => {
           "content-type": "text/html; charset=utf-8",
         },
         html: "<main>shared</main>",
-        schemaVersion: 3,
+        schemaVersion: 4,
         status: 200,
       }),
     ).toBe(true);
@@ -61,7 +61,7 @@ describe("prerender entry validation", () => {
       isCurrentPrerenderedRoute({
         headers: { "content-type": "text/html; charset=utf-8" },
         html: "<main>shared</main>",
-        schemaVersion: 3,
+        schemaVersion: 4,
         status: 200,
         strictTransportSecurity: "max-age=31536000; includeSubDomains; preload",
       }),
@@ -80,7 +80,7 @@ describe("prerender entry validation", () => {
       isCurrentPrerenderedRoute({
         headers: overrides.headers,
         html: "<main>shared</main>",
-        schemaVersion: 3,
+        schemaVersion: 4,
         status: 200,
         ...(overrides.strictTransportSecurity === undefined
           ? {}

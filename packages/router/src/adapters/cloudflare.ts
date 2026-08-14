@@ -1411,11 +1411,12 @@ function prerenderedResponse(
     return undefined;
   }
 
-  if (isNavigation && !prerendered.html.includes("data-mreact-route-id")) {
+  const html = isNavigation ? prerendered.navigationHtml : prerendered.html;
+  if (html === undefined || (isNavigation && !html.includes("data-mreact-route-id"))) {
     return cloudflareDocumentReloadNavigationResponse();
   }
 
-  return new Response(request.method === "HEAD" ? null : prerendered.html, {
+  return new Response(request.method === "HEAD" ? null : html, {
     headers: replayedPrerenderedRouteHeaders(prerendered, request),
     status: prerendered.status,
   });

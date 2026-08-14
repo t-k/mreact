@@ -46,6 +46,7 @@ import {
   buildNavigationRuntimeBundle,
   clientScriptForPath,
   routeIdForPath,
+  routeMarkerParts,
   type BuildClientRouteOutputOptions,
 } from "./navigation-runtime.js";
 import {
@@ -72,6 +73,7 @@ import type { RouteCachePolicy } from "./cache.js";
 import { routeCachePolicyFromSource } from "./cache.js";
 import {
   bundleMiddlewareModuleCode,
+  prerenderVariantMarkerParts,
   renderAppRequest,
   type RenderAppRequestRuntimeOptions,
 } from "./render.js";
@@ -424,8 +426,9 @@ export interface BuiltServerModuleOutput {
 export interface BuiltPrerenderedRoute {
   headers: Record<string, string>;
   html: string;
+  navigationHtml?: string | undefined;
   /** Identifies entries that satisfy the complete current prerender contract. */
-  schemaVersion?: 3 | undefined;
+  schemaVersion?: 4 | undefined;
   status: number;
   strictTransportSecurity?: string | undefined;
 }
@@ -2632,17 +2635,38 @@ async function prerenderStaticRoutes(options: {
           define: options.define,
           importPolicy,
           navigationScripts,
-          request: new Request(`http://mreact.local${pathname}`),
+          request: new Request(`http://mreact.local${pathname}`, {
+            headers: analysis.clientRoute
+              ? undefined
+              : { "x-mreact-prerender-variant-capture": "1" },
+          }),
           renderSignals,
           serverModuleCacheVersion,
           serverModules: serverModuleMap,
           vitePlugins: options.vitePlugins,
         } satisfies RenderAppRequestRuntimeOptions;
         const response = await renderAppRequest(renderOptions);
-        const html = await response.text();
+        const renderedHtml = await response.text();
 
         if (renderSignals.headerDependent() || isVisitorDependentResponse(response)) {
           continue;
+        }
+
+        let html = renderedHtml;
+        let navigationHtml = renderedHtml;
+        if (!analysis.clientRoute) {
+          const capture = prerenderVariantMarkerParts(route.path);
+          const start = renderedHtml.indexOf(capture.prefix);
+          const end = renderedHtml.lastIndexOf(capture.suffix);
+          if (start === -1 || end < start + capture.prefix.length) {
+            throw new Error(`Failed to capture prerender response variants for ${pathname}.`);
+          }
+          const before = renderedHtml.slice(0, start);
+          const content = renderedHtml.slice(start + capture.prefix.length, end);
+          const after = renderedHtml.slice(end + capture.suffix.length);
+          const navigationMarker = routeMarkerParts(route.path);
+          html = `${before}${content}${after}`;
+          navigationHtml = `${before}${navigationMarker.prefix}${content}${navigationMarker.suffix}${after}`;
         }
 
         const headers = storedPrerenderedRouteHeaders(response.headers);
@@ -2652,6 +2676,7 @@ async function prerenderStaticRoutes(options: {
           {
             headers,
             html,
+            navigationHtml,
             schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
             status: response.status,
             ...(strictTransportSecurity === undefined ? {} : { strictTransportSecurity }),

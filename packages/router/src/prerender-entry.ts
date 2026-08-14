@@ -1,6 +1,6 @@
 import type { BuiltPrerenderedRoute } from "./build.js";
 
-export const PRERENDERED_ROUTE_SCHEMA_VERSION = 3;
+export const PRERENDERED_ROUTE_SCHEMA_VERSION = 4;
 
 export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerenderedRoute {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -15,6 +15,7 @@ export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerend
     !hasStoredHstsHeader(entry.headers) &&
     isCanonicalHstsHeader(entry.strictTransportSecurity) &&
     typeof entry.html === "string" &&
+    (entry.navigationHtml === undefined || typeof entry.navigationHtml === "string") &&
     typeof entry.status === "number" &&
     Number.isInteger(entry.status) &&
     entry.status >= 100 &&
@@ -77,6 +78,12 @@ function isShareableHeaderRecord(headers: Record<string, string>): boolean {
 
 function isVisitorDependentHeaders(headers: Headers): boolean {
   const cacheControl = headers.get("cache-control") ?? "";
+  const vary = headers.get("vary");
+  const hasVisitorDependentVary =
+    vary !== null &&
+    vary
+      .split(",")
+      .some((value) => value.trim().toLowerCase() !== "x-mreact-navigation");
   const forbidsSharedStorage = cacheControl.split(",").some((directive) =>
     /^(?:private|no-cache|no-store)(?:=|$)/i.test(directive.trim()),
   );
@@ -84,7 +91,7 @@ function isVisitorDependentHeaders(headers: Headers): boolean {
   return (
     headers.get("x-mreact-cache")?.toUpperCase() === "DYNAMIC" ||
     headers.has("set-cookie") ||
-    headers.has("vary") ||
+    hasVisitorDependentVary ||
     forbidsSharedStorage
   );
 }

@@ -2521,7 +2521,7 @@ export default function Page(props) {
   });
 
   test.each([false, true])(
-    "uses one cache-safe route marker shape when navigation=%s populates the cache",
+    "keeps cache-safe document and navigation variants when navigation=%s populates first",
     async (navigationFirst) => {
       const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-navigation-shape-"));
       await writeFile(
@@ -2536,13 +2536,31 @@ export default function Page() { return <main>cache shape</main>; }`,
 
       const first = await renderAppRequest({ appDir, request: request(navigationFirst) });
       const second = await renderAppRequest({ appDir, request: request(!navigationFirst) });
+      const firstHit = await renderAppRequest({ appDir, request: request(navigationFirst) });
+      const secondHit = await renderAppRequest({ appDir, request: request(!navigationFirst) });
       const firstHtml = await first.text();
       const secondHtml = await second.text();
+      const firstHitHtml = await firstHit.text();
+      const secondHitHtml = await secondHit.text();
 
       expect(first.headers.get("x-mreact-cache")).toBe("MISS");
-      expect(second.headers.get("x-mreact-cache")).toBe("HIT");
-      expect(firstHtml).toContain('<div data-mreact-route-id="index"><main>cache shape</main></div>');
-      expect(secondHtml).toContain('<div data-mreact-route-id="index"><main>cache shape</main></div>');
+      expect(second.headers.get("x-mreact-cache")).toBe("MISS");
+      expect(firstHit.headers.get("x-mreact-cache")).toBe("HIT");
+      expect(secondHit.headers.get("x-mreact-cache")).toBe("HIT");
+      expect(first.headers.get("vary")).toContain("x-mreact-navigation");
+      const expected = (navigation: boolean) =>
+        navigation
+          ? '<div data-mreact-route-id="index"><main>cache shape</main></div>'
+          : "<main>cache shape</main>";
+      expect(firstHtml).toContain(expected(navigationFirst));
+      expect(secondHtml).toContain(expected(!navigationFirst));
+      expect(firstHitHtml).toContain(expected(navigationFirst));
+      expect(secondHitHtml).toContain(expected(!navigationFirst));
+      if (!navigationFirst) {
+        expect(firstHtml).not.toContain("data-mreact-route-id");
+      } else {
+        expect(secondHtml).not.toContain("data-mreact-route-id");
+      }
     },
   );
 
@@ -2573,6 +2591,27 @@ export default function Page() { return <button onClick={() => undefined}>client
       expect(html).not.toContain("tenant-b.test");
       expect(html).not.toContain("shared-secret");
     }
+  });
+
+  test("preserves parser-sensitive server-only document structure", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-server-document-structure-"));
+    await writeFile(
+      join(appDir, "layout.mreact.tsx"),
+      `export default function Layout() { return <html><body><table><tbody><Slot /></tbody></table></body></html>; }`,
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export default function Page() { return <tr><td>cell</td></tr>; }`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await response.text();
+
+    expect(html).toContain("<tbody><tr><td>cell</td></tr></tbody>");
+    expect(html).not.toContain("data-mreact-route-id");
   });
 
   test("keeps security headers on cached route responses", async () => {
@@ -3773,7 +3812,7 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
-      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header>Root</header><section data-mreact-layout-boundary="docs"><h1>Docs</h1><div data-mreact-route-id="docs"><article>Nested page</article></div></section></body></html>',
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header>Root</header><section data-mreact-layout-boundary="docs"><h1>Docs</h1><article>Nested page</article></section></body></html>',
     );
   });
 
@@ -3798,7 +3837,7 @@ export default function Page() { return <article>Main page</article>; }`,
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
-      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header><h1>Named title</h1></header><aside><nav>Docs nav</nav></aside><main><div data-mreact-route-id="index"><article>Main page</article></div></main></body></html>',
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><header><h1>Named title</h1></header><aside><nav>Docs nav</nav></aside><main><article>Main page</article></main></body></html>',
     );
   });
 
@@ -3825,9 +3864,7 @@ export default function Page() { return <article>Docs body</article>; }`,
     expect(response.status).toBe(200);
     expect(html).toContain("<header><h1>Docs title</h1></header>");
     expect(html).toContain("<aside><nav>Docs nav</nav></aside>");
-    expect(html).toContain(
-      '<main><div data-mreact-route-id="index"><article>Docs body</article></div></main>',
-    );
+    expect(html).toContain("<main><article>Docs body</article></main>");
     expect(html).not.toContain("<slot");
   });
 
@@ -3861,7 +3898,7 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
-      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><div data-mreact-route-id="index"><main><h1>Home</h1><p>Body</p><span>A</span><span>B</span></main></div></body></html>',
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><main><h1>Home</h1><p>Body</p><span>A</span><span>B</span></main></body></html>',
     );
   });
 
@@ -4458,7 +4495,7 @@ export default function Page(props) {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain(
-      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><div data-template="root" data-mreact-template-boundary="root"><section data-mreact-layout-boundary="docs"><article data-template="docs" data-mreact-template-boundary="docs"><div data-mreact-route-id="docs"><p>Template page</p></div></article></section></div></body></html>',
+      '<!DOCTYPE html><html data-mreact-layout-boundary="root"><body><div data-template="root" data-mreact-template-boundary="root"><section data-mreact-layout-boundary="docs"><article data-template="docs" data-mreact-template-boundary="docs"><p>Template page</p></article></section></div></body></html>',
     );
   });
 
@@ -6149,7 +6186,7 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(html).toContain("<header><h1>Stream title</h1></header>");
-    expect(html).toContain('<main><div data-mreact-route-id="index"><section>');
+    expect(html).toContain("<main><section>");
     expect(html).toContain("<strong>Ada</strong>");
   });
 
@@ -6178,7 +6215,7 @@ export default function Page() {
 
     expect(response.status).toBe(200);
     expect(html).toContain("<header><h1>Stream title</h1></header>");
-    expect(html).toContain('<main><div data-mreact-route-id="index"><section>');
+    expect(html).toContain("<main><section>");
     expect(html).not.toContain("<slot");
   });
 });

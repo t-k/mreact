@@ -120,7 +120,7 @@ export default function Page() { return <main>Static adapter</main>; }`,
           "../escape": {
             headers: {},
             html: "<main>escape</main>",
-            schemaVersion: 3,
+            schemaVersion: 4,
             status: 200,
           },
         },
@@ -140,7 +140,7 @@ export default function Page() { return <main>Static adapter</main>; }`,
   test.each([
     ["legacy schema", { schemaVersion: 1 }],
     ["missing schema", {}],
-    ["visitor-dependent headers", { schemaVersion: 3, headers: { vary: "Cookie" } }],
+    ["visitor-dependent headers", { schemaVersion: 4, headers: { vary: "Cookie" } }],
   ])("rejects %s prerender entries before replacing an existing export", async (_name, overrides) => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-static-adapter-unsafe-entry-"));
     const outDir = join(rootDir, "out");

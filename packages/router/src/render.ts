@@ -39,7 +39,6 @@ import {
   routeMarkerParts,
   routeIdForPath,
   withHydrationMarkers,
-  withRouteMarkers,
 } from "./navigation-runtime.js";
 import { assetPath } from "./assets.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
@@ -1085,7 +1084,13 @@ async function renderAppRequestInternal(
     finishRenderTimingPhase(timing, phaseStartedAt, "sourceAnalysisMs");
     const cachePolicy = originalAnalysis.cachePolicy;
     const navigationScript = options.navigationScripts?.get(matched.route.path);
-    const cacheKey = routeCacheKey(options.appDir, matched.route.path, url);
+    const navigationRequest = isNavigationRequest(options.request);
+    const cacheKey = routeCacheKey(
+      options.appDir,
+      matched.route.path,
+      url,
+      navigationRequest ? "navigation" : "document",
+    );
     const mayUseRouteCache =
       !sourceUsesRequestInput &&
       (cachePolicy === undefined
@@ -1278,10 +1283,7 @@ async function renderAppRequestInternal(
                 data,
               },
             })
-          : withRouteMarkers({
-              html: pageHtml,
-              routePath: matched.route.path,
-            });
+          : withServerOnlyRouteMarkers(pageHtml, matched.route.path, options.request);
         let html = await runWithQueryClient(queryClient, () =>
           applyLayouts({
             appDir: options.appDir,
@@ -1419,6 +1421,7 @@ async function renderAppRequestInternal(
           data: streamDataPromise,
           define: options.define,
           loadingFile,
+          markerRequest: options.request,
           pageFile: matched.route.file,
           params: matched.params,
           queryClient,
@@ -1445,6 +1448,7 @@ async function renderAppRequestInternal(
           preparedActions.csrfToken,
           preparedActions.csrfTokenIsNew === true,
         );
+        appendNavigationVary(response.headers);
         emitRenderTiming(options, timing, response.status);
         return response;
       }
@@ -1460,6 +1464,7 @@ async function renderAppRequestInternal(
         appDir: options.appDir,
         assetBaseUrl: options.assetBaseUrl,
         pageFile: matched.route.file,
+        markerRequest: options.request,
         props,
         requestUrl: url.pathname,
         routePath: matched.route.path,
@@ -1484,6 +1489,7 @@ async function renderAppRequestInternal(
         preparedActions.csrfToken,
         preparedActions.csrfTokenIsNew === true,
       );
+      appendNavigationVary(response.headers);
       emitRenderTiming(options, timing, response.status);
       return response;
     }
@@ -1565,10 +1571,7 @@ async function renderAppRequestInternal(
             data,
           },
         })
-      : withRouteMarkers({
-          html: pageHtml,
-          routePath: matched.route.path,
-        });
+      : withServerOnlyRouteMarkers(pageHtml, matched.route.path, options.request);
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     let html = await runWithQueryClient(queryClient, () =>
       applyLayouts({
@@ -1643,6 +1646,7 @@ async function renderAppRequestInternal(
       preparedActions.csrfToken,
       preparedActions.csrfTokenIsNew === true,
     );
+    appendNavigationVary(response.headers);
 
     const effectiveCachePolicy = cachePolicy ?? activeRouteCacheContext()?.cachePolicy;
     const configuredHsts = configuredHstsHeader(metadata?.security);
@@ -1973,6 +1977,44 @@ function routePrefetchManifestScript(
 
 function isNavigationRequest(request: Request): boolean {
   return request.headers.get("x-mreact-navigation") === "1";
+}
+
+function withServerOnlyRouteMarkers(html: string, routePath: string, request: Request): string {
+  const marker = serverOnlyRouteMarkerParts(routePath, request);
+  return marker === undefined ? html : `${marker.prefix}${html}${marker.suffix}`;
+}
+
+function serverOnlyRouteMarkerParts(
+  routePath: string,
+  request: Request,
+): { prefix: string; suffix: string } | undefined {
+  if (request.headers.get("x-mreact-prerender-variant-capture") === "1") {
+    return prerenderVariantMarkerParts(routePath);
+  }
+  return isNavigationRequest(request) ? routeMarkerParts(routePath) : undefined;
+}
+
+export function prerenderVariantMarkerParts(routePath: string): {
+  prefix: string;
+  suffix: string;
+} {
+  const routeId = routeIdForPath(routePath);
+  return {
+    prefix: `<!--mreact-route-variant-start:${routeId}-->`,
+    suffix: `<!--mreact-route-variant-end:${routeId}-->`,
+  };
+}
+
+function appendNavigationVary(headers: Headers): void {
+  const vary = headers.get("vary");
+  if (
+    vary
+      ?.split(",")
+      .some((value) => value.trim().toLowerCase() === "x-mreact-navigation") === true
+  ) {
+    return;
+  }
+  headers.append("vary", "x-mreact-navigation");
 }
 
 function isNavigationRouteCacheReloadRequest(request: Request): boolean {
@@ -3408,6 +3450,7 @@ function runServerStreamModule(
     appDir: string;
     assetBaseUrl?: string | undefined;
     clientRouteInferenceCache: ClientRouteInferenceCache;
+    markerRequest: Request;
     pageFile: string;
     props: ServerComponentProps;
     requestUrl: string;
@@ -3459,7 +3502,7 @@ function runServerStreamModule(
             data: options.props.data,
           },
         })
-      : routeMarkerParts(options.routePath);
+      : serverOnlyRouteMarkerParts(options.routePath, options.markerRequest);
 
     sink.append("<!DOCTYPE html>");
     sink.append(
@@ -3677,6 +3720,7 @@ async function runServerStreamModuleWithLoading(
     data: Promise<unknown>;
     define?: UserConfig["define"] | undefined;
     loadingFile: string;
+    markerRequest: Request;
     pageFile: string;
     params: RouteParams;
     queryClient: QueryClient;
@@ -3731,7 +3775,7 @@ async function runServerStreamModuleWithLoading(
           request: { url: options.requestUrl },
         },
       })
-    : routeMarkerParts(options.routePath);
+    : serverOnlyRouteMarkerParts(options.routePath, options.markerRequest);
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");

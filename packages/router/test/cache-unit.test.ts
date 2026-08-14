@@ -80,6 +80,14 @@ describe("router cache helpers", () => {
     expect(routeCacheKey("/app", "/items", url1)).toBe(routeCacheKey("/app", "/items", url2));
   });
 
+  test("routeCacheKey separates document and navigation response variants", () => {
+    const url = new URL("https://a.test/items?id=1");
+
+    expect(routeCacheKey("/app", "/items", url, "document")).not.toBe(
+      routeCacheKey("/app", "/items", url, "navigation"),
+    );
+  });
+
   test("cachedRouteResponse returns undefined when the cache is empty", async () => {
     const cache = createMemoryRouteCache();
     await expect(cachedRouteResponse({ cache, key: "missing" })).resolves.toBeUndefined();

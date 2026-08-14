@@ -564,6 +564,12 @@ function prerenderedRouteResponse(
     return undefined;
   }
 
+  const navigation = request.headers.get("x-mreact-navigation") === "1";
+  const html = navigation ? prerendered.navigationHtml : prerendered.html;
+  if (html === undefined) {
+    return undefined;
+  }
+
   if (request.method === "HEAD") {
     return new Response(null, {
       headers: replayedPrerenderedRouteHeaders(prerendered, request),
@@ -571,7 +577,7 @@ function prerenderedRouteResponse(
     });
   }
 
-  return htmlResponse(prerendered.html, {
+  return htmlResponse(html, {
     headers: replayedPrerenderedRouteHeaders(prerendered, request),
     status: prerendered.status,
   });
@@ -983,7 +989,11 @@ async function renderAndCachePrerenderWithLock(
   options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
   path: string,
 ): Promise<Response> {
-  const existing = options.runtime.prerenderLocks.get(path);
+  const lockKey =
+    options.request.headers.get("x-mreact-navigation") === "1"
+      ? `${path}\0navigation`
+      : path;
+  const existing = options.runtime.prerenderLocks.get(lockKey);
 
   if (existing !== undefined) {
     const result = await existing;
@@ -995,12 +1005,12 @@ async function renderAndCachePrerenderWithLock(
   }
 
   const task = runPrerenderRegeneration(options, path);
-  options.runtime.prerenderLocks.set(path, task);
+  options.runtime.prerenderLocks.set(lockKey, task);
 
   try {
     return cloneResponse((await task).response);
   } finally {
-    options.runtime.prerenderLocks.delete(path);
+    options.runtime.prerenderLocks.delete(lockKey);
   }
 }
 
@@ -1008,15 +1018,17 @@ async function runPrerenderRegeneration(
   options: RenderBuiltAppRequestOptions & { runtime: BuiltRuntime },
   path: string,
 ): Promise<{ response: Response; shareable: boolean }> {
+  const lockKey =
+    options.request.headers.get("x-mreact-navigation") === "1"
+      ? `${path}\0navigation`
+      : path;
   const regenerate = async () => {
     const stored = await readPrerenderedRoute(options.runtime, path, options.prerenderStore);
+    const storedResponse = prerenderedRouteResponse(stored, options.request);
 
-    if (stored !== undefined) {
+    if (storedResponse !== undefined) {
       return {
-        response: htmlResponse(stored.html, {
-          headers: stored.headers,
-          status: stored.status,
-        }),
+        response: storedResponse,
         shareable: true,
       };
     }
@@ -1049,22 +1061,34 @@ async function runPrerenderRegeneration(
       };
     }
 
+    const navigation = options.request.headers.get("x-mreact-navigation") === "1";
+    if (navigation && stored === undefined) {
+      return {
+        response: htmlResponse(body, {
+          headers: response.headers,
+          status: response.status,
+        }),
+        shareable: false,
+      };
+    }
+
     return {
       response: await cacheRegeneratedPrerenderedRoute(
-          options.runtime,
-          path,
-          body,
-          response,
-          renderSignals.strictTransportSecurity(),
-          options.prerenderStore,
-        ),
+        options.runtime,
+        path,
+        body,
+        response,
+        renderSignals.strictTransportSecurity(),
+        options.prerenderStore,
+        navigation ? stored : undefined,
+      ),
       shareable: true,
     };
   };
 
   return options.prerenderStore?.withLock === undefined
     ? await regenerate()
-    : await options.prerenderStore.withLock(path, regenerate);
+    : await options.prerenderStore.withLock(lockKey, regenerate);
 }
 
 async function applyBuiltPrerenderInvalidations(
@@ -1092,15 +1116,19 @@ async function cacheRegeneratedPrerenderedRoute(
   response: Response,
   strictTransportSecurity: string | undefined,
   store: AppRouterPrerenderStore | undefined,
+  existing?: BuiltPrerenderedRoute | undefined,
 ): Promise<Response> {
   const headers = storedPrerenderedRouteHeaders(response.headers);
-  const entry: BuiltPrerenderedRoute = {
-    headers,
-    html: body,
-    schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
-    status: response.status,
-    ...(strictTransportSecurity === undefined ? {} : { strictTransportSecurity }),
-  };
+  const entry: BuiltPrerenderedRoute =
+    existing === undefined
+      ? {
+          headers,
+          html: body,
+          schemaVersion: PRERENDERED_ROUTE_SCHEMA_VERSION,
+          status: response.status,
+          ...(strictTransportSecurity === undefined ? {} : { strictTransportSecurity }),
+        }
+      : { ...existing, navigationHtml: body };
   runtime.prerenderedRoutes.set(path, entry);
   await store?.set(path, entry);
 
