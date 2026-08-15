@@ -94,6 +94,38 @@ describe("browser query client hand-off", () => {
     });
   });
 
+  it("revalidates hydrated data whose server timestamp is ahead of the client clock", () => {
+    __resetQueryClientForTesting();
+    injectQueryState({
+      queries: [
+        {
+          data: "server",
+          queryHash: hashQueryKey(["future-time"]),
+          queryKey: ["future-time"],
+          updatedAt: Date.now() + 60_000,
+        },
+      ],
+    });
+    const client = getQueryClient();
+    let calls = 0;
+
+    const query = createQuery(client, {
+      queryKey: ["future-time"],
+      staleTime: 0,
+      queryFn: () => {
+        calls += 1;
+        return "client";
+      },
+    });
+
+    expect(calls).toBe(1);
+    expect(query.result.get()).toMatchObject({
+      data: "server",
+      isFetching: true,
+      status: "success",
+    });
+  });
+
   it("keeps fresh hydrated query data on mount when staleTime covers the server timestamp", () => {
     __resetQueryClientForTesting();
     injectQueryState({

@@ -82,6 +82,29 @@ describe("createQueryClient", () => {
     });
   });
 
+  it("does not cache a late result after cancellation when the query ignores its signal", async () => {
+    const client = createQueryClient();
+    let resolve!: (value: string) => void;
+    const pending = client.fetchQuery({
+      queryKey: ["signal-ignoring"],
+      queryFn: () =>
+        new Promise<string>((nextResolve) => {
+          resolve = nextResolve;
+        }),
+    });
+
+    client.cancelQueries({ queryKey: ["signal-ignoring"] });
+    resolve("late result");
+
+    await expect(pending).resolves.toBe("late result");
+    expect(client.getQueryEntry(["signal-ignoring"])).toMatchObject({
+      data: undefined,
+      errorReason: "aborted",
+      isFetching: false,
+      status: "pending",
+    });
+  });
+
   it("retries failed queries up to the configured retry count", async () => {
     const client = createQueryClient();
     let calls = 0;

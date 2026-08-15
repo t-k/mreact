@@ -423,6 +423,7 @@ function markCanceled(
   entry: InternalQueryEntry,
   notify: (entry: InternalQueryEntry) => void,
 ): void {
+  entry.version += 1;
   entry.error = undefined;
   entry.errorReason = "aborted";
   entry.isFetching = false;
@@ -554,7 +555,8 @@ function toPublicEntry<TData>(entry: InternalQueryEntry<TData>): QueryEntry<TDat
 }
 
 function isFresh(entry: InternalQueryEntry, staleTime: number | undefined): boolean {
-  return Date.now() - entry.updatedAt < (staleTime ?? 0);
+  const age = Date.now() - entry.updatedAt;
+  return age >= 0 && age < (staleTime ?? 0);
 }
 
 function hashQueryKeySegments(queryKey: QueryKey): readonly string[] {

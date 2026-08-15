@@ -7,6 +7,29 @@ interface TimelinePage {
 }
 
 describe("createInfiniteQuery", () => {
+  it("does not advertise another page after the first page fails", async () => {
+    const client = createQueryClient();
+    let calls = 0;
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: false,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["failing-first-page"],
+      queryFn: async () => {
+        calls += 1;
+        throw new Error("endpoint failed");
+      },
+    });
+
+    await expect(query.refetch()).rejects.toThrow("endpoint failed");
+
+    expect(query.result.get()).toMatchObject({
+      hasNextPage: false,
+      status: "error",
+    });
+    expect(calls).toBe(1);
+  });
+
   it("issues one network request for each explicit refetch", async () => {
     const client = createQueryClient();
     let calls = 0;

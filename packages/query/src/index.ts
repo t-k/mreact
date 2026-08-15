@@ -788,7 +788,9 @@ function infiniteResultFromQueryEntry<TPage, TPageParam>(
   return {
     error: entry?.error,
     errorReason: entry?.errorReason,
-    hasNextPage: data.pages.length === 0 || (nextPageParam !== null && nextPageParam !== undefined),
+    hasNextPage:
+      entry?.status !== "error" &&
+      (data.pages.length === 0 || (nextPageParam !== null && nextPageParam !== undefined)),
     isFetching: (entry?.isFetching ?? false) || isFetchingNextPage,
     isFetchingNextPage,
     pages: data.pages,
