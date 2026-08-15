@@ -120,31 +120,54 @@ describe("fiber scheduler", () => {
     expect(calls).toEqual(["kept"]);
   });
 
-  test("does not expose a cancelled ready task as the first callback", () => {
+  test("inspects a cancelled root without mutating the queue", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const cancelled = scheduleCallback("user-blocking", () => {});
-    const kept = scheduleCallback("normal", () => {});
+    scheduleCallback("normal", () => {});
 
     cancelCallback(cancelled);
 
-    expect(getFirstCallbackNode()).toBe(kept);
+    expect(getFirstCallbackNode()).toBe(cancelled);
+    expect(getFirstCallbackNode()).toBe(cancelled);
+
+    host.flushOneHostCallback();
+    expect(getFirstCallbackNode()).toBeNull();
   });
 
-  test("does not expose cancelled ready tasks at either the root or below it", () => {
+  test("does not execute cancelled ready tasks at either the root or below it", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
     const root = scheduleCallback("user-blocking", () => calls.push("root"));
-    const kept = scheduleCallback("normal", () => calls.push("kept"));
+    scheduleCallback("normal", () => calls.push("kept"));
     const belowRoot = scheduleCallback("low", () => calls.push("below-root"));
 
     cancelCallback(root);
     cancelCallback(belowRoot);
 
-    expect(getFirstCallbackNode()).toBe(kept);
+    expect(getFirstCallbackNode()).toBe(root);
     host.flushAllHostCallbacks();
     expect(calls).toEqual(["kept"]);
+  });
+
+  test("preserves a continuation when the running task inspects the queue", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    const calls: string[] = [];
+
+    scheduleCallback("normal", () => {
+      calls.push("first");
+      expect(getFirstCallbackNode()).not.toBeNull();
+      expect(getFirstCallbackNode()).not.toBeNull();
+      return () => {
+        calls.push("continuation");
+      };
+    });
+
+    host.flushAllHostCallbacks();
+
+    expect(calls).toEqual(["first", "continuation"]);
   });
 
   test("promotes delayed tasks only when their start time is reached", () => {
@@ -255,13 +278,33 @@ describe("fiber scheduler", () => {
     expect(yields).toEqual([false, true]);
   });
 
-  test("yields to pending input after the current task", () => {
+  test("makes progress when input is already pending at the start of a slice", () => {
+    const host = createTestHost();
+    setSchedulerHostForTesting(host);
+    host.setInputPending(true);
+    const calls: string[] = [];
+
+    scheduleCallback("normal", () => {
+      calls.push("first");
+    });
+    scheduleCallback("normal", () => {
+      calls.push("second");
+    });
+
+    host.flushOneHostCallback();
+
+    expect(calls).toEqual(["first", "second"]);
+    expect(host.scheduledHostCallbackCount()).toBe(0);
+  });
+
+  test("yields after the frame interval even when input is pending", () => {
     const host = createTestHost();
     setSchedulerHostForTesting(host);
     const calls: string[] = [];
 
     scheduleCallback("normal", () => {
       calls.push("first");
+      host.advance(5);
       host.setInputPending(true);
     });
     scheduleCallback("normal", () => {

@@ -1,13 +1,6 @@
-export type SchedulerPriority =
-  | "immediate"
-  | "user-blocking"
-  | "normal"
-  | "low"
-  | "idle";
+export type SchedulerPriority = "immediate" | "user-blocking" | "normal" | "low" | "idle";
 
-export type SchedulerCallback = (
-  didTimeout: boolean,
-) => SchedulerCallback | void;
+export type SchedulerCallback = (didTimeout: boolean) => SchedulerCallback | void;
 
 export interface SchedulerTask {
   id: number;
@@ -73,8 +66,7 @@ export function scheduleCallback(
 ): SchedulerTask {
   const currentTime = now();
   const delay = options?.delay;
-  const start =
-    typeof delay === "number" && delay > 0 ? currentTime + delay : currentTime;
+  const start = typeof delay === "number" && delay > 0 ? currentTime + delay : currentTime;
   const timeout = priorityTimeouts[priority];
   const expirationTime = start + timeout;
   const task: SchedulerTask = {
@@ -94,10 +86,7 @@ export function scheduleCallback(
         getHost().cancelHostTimeout(taskTimeoutId);
       }
       isHostTimeoutScheduled = true;
-      taskTimeoutId = getHost().scheduleHostTimeout(
-        handleTimeout,
-        start - currentTime,
-      );
+      taskTimeoutId = getHost().scheduleHostTimeout(handleTimeout, start - currentTime);
     }
   } else {
     pushHeap(taskQueue, task, compareTasks);
@@ -114,7 +103,6 @@ export function cancelCallback(task: SchedulerTask): void {
 }
 
 export function getFirstCallbackNode(): SchedulerTask | null {
-  discardCancelledRoots(taskQueue);
   return peek(taskQueue);
 }
 
@@ -128,10 +116,6 @@ export function shouldYieldToHost(): boolean {
   }
 
   if (needsPaint) {
-    return true;
-  }
-
-  if (getHost().isInputPending?.() === true) {
     return true;
   }
 
@@ -154,9 +138,7 @@ export function now(): number {
   return getHost().now();
 }
 
-export function setSchedulerHostForTesting(
-  host: SchedulerHost | undefined,
-): void {
+export function setSchedulerHostForTesting(host: SchedulerHost | undefined): void {
   testHost = host;
   resetSchedulerState();
 }
@@ -165,9 +147,7 @@ export function startLoggingSchedulerProfilingEvents(): void {
   profilingEvents = [];
 }
 
-export function stopLoggingSchedulerProfilingEvents():
-  | SchedulerProfilingEvent[]
-  | null {
+export function stopLoggingSchedulerProfilingEvents(): SchedulerProfilingEvent[] | null {
   const events = profilingEvents;
   profilingEvents = undefined;
   return events ?? null;
@@ -197,10 +177,7 @@ function workLoop(initialTime: number): boolean {
   currentTask = peek(taskQueue);
 
   while (currentTask !== null) {
-    if (
-      currentTask.expirationTime > currentTime &&
-      shouldYieldToHost()
-    ) {
+    if (currentTask.expirationTime > currentTime && shouldYieldToHost()) {
       break;
     }
 
@@ -269,10 +246,7 @@ function handleTimeout(): void {
     const firstTimer = peek(timerQueue);
     if (firstTimer !== null) {
       isHostTimeoutScheduled = true;
-      taskTimeoutId = getHost().scheduleHostTimeout(
-        handleTimeout,
-        firstTimer.startTime - now(),
-      );
+      taskTimeoutId = getHost().scheduleHostTimeout(handleTimeout, firstTimer.startTime - now());
     }
   }
 }
@@ -340,14 +314,6 @@ function compareTasks(left: SchedulerTask, right: SchedulerTask): number {
   return left.sortIndex - right.sortIndex || left.id - right.id;
 }
 
-function discardCancelledRoots(queue: SchedulerTask[]): void {
-  let task = peek(queue);
-  while (task?.callback === null) {
-    popHeap(queue, compareTasks);
-    task = peek(queue);
-  }
-}
-
 function getHost(): SchedulerHost {
   return testHost ?? defaultHost;
 }
@@ -365,10 +331,7 @@ function resetSchedulerState(): void {
   needsPaint = false;
 }
 
-function recordProfilingEvent(
-  type: SchedulerProfilingEventType,
-  task: SchedulerTask,
-): void {
+function recordProfilingEvent(type: SchedulerProfilingEventType, task: SchedulerTask): void {
   profilingEvents?.push({
     type,
     taskId: task.id,
@@ -377,13 +340,9 @@ function recordProfilingEvent(
   });
 }
 
-const defaultInputPendingChecker = createInputPendingChecker();
 const defaultHost: SchedulerHost = {
   now() {
-    if (
-      typeof performance === "object" &&
-      typeof performance.now === "function"
-    ) {
+    if (typeof performance === "object" && typeof performance.now === "function") {
       return performance.now();
     }
 
@@ -396,14 +355,9 @@ const defaultHost: SchedulerHost = {
   cancelHostTimeout(id) {
     clearTimeout(id as ReturnType<typeof setTimeout>);
   },
-  ...(defaultInputPendingChecker === undefined
-    ? {}
-    : { isInputPending: defaultInputPendingChecker }),
 };
 
-function createDefaultHostCallbackScheduler(): (
-  callback: () => void,
-) => unknown {
+function createDefaultHostCallbackScheduler(): (callback: () => void) => unknown {
   const immediate = (globalThis as { setImmediate?: (callback: () => void) => unknown })
     .setImmediate;
 
@@ -428,19 +382,4 @@ function createDefaultHostCallbackScheduler(): (
   return (callback) => setTimeout(callback, 0);
 }
 
-function createInputPendingChecker(): (() => boolean) | undefined {
-  const scheduling = (globalThis.navigator as
-    | { scheduling?: { isInputPending?: () => boolean } }
-    | undefined)?.scheduling;
-
-  if (typeof scheduling?.isInputPending === "function") {
-    return () => scheduling.isInputPending?.() === true;
-  }
-
-  return undefined;
-}
-import {
-  peek as peekHeap,
-  pop as popHeap,
-  push as pushHeap,
-} from "./scheduler-heap.js";
+import { peek as peekHeap, pop as popHeap, push as pushHeap } from "./scheduler-heap.js";
