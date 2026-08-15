@@ -1,4 +1,4 @@
-import { isEventLikePropName } from "@reckona/mreact-shared";
+import { isBooleanishStringAttribute, isEventLikePropName } from "@reckona/mreact-shared";
 import type { AttributeIr, JsxNodeIr } from "./ir.js";
 import { formatStatement } from "./oxc-bindings.js";
 import { findOxcKeyCodeInChildren } from "./oxc-expression-utils.js";
@@ -113,8 +113,6 @@ const COMPAT_HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   useMap: "usemap",
 };
 
-const COMPAT_BOOLEANISH_STRING_ATTRIBUTES = new Set(["contenteditable", "draggable", "spellcheck"]);
-
 // URL-bearing attributes always emit through the dynamic path so the runtime
 // scheme guard applies; static literal lowering must not bypass it.
 const URL_ATTRIBUTE_NAMES = new Set([
@@ -140,8 +138,7 @@ function isActiveCreateElementName(scope: CompatCreateElementScope, name: string
 }
 
 function isBooleanishStringAttributeName(attributeName: string): boolean {
-  const lowerCased = attributeName.toLowerCase();
-  return lowerCased.startsWith("aria-") || COMPAT_BOOLEANISH_STRING_ATTRIBUTES.has(lowerCased);
+  return isBooleanishStringAttribute(attributeName);
 }
 
 function isDataAttributeName(attributeName: string): boolean {
@@ -283,7 +280,9 @@ function lowerCreateElementProps(
       continue;
     }
 
-    const attributeName = COMPAT_HTML_ATTRIBUTE_ALIASES[name] ?? name;
+    const attributeName = Object.hasOwn(COMPAT_HTML_ATTRIBUTE_ALIASES, name)
+      ? COMPAT_HTML_ATTRIBUTE_ALIASES[name]!
+      : name;
 
     if (!VALID_ATTRIBUTE_NAME.test(attributeName) || isEventLikePropName(attributeName)) {
       // The interpreter drops these at runtime; keeping them out of the

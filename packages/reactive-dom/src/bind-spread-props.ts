@@ -1,10 +1,11 @@
 import { effect } from "@reckona/mreact-reactive-core";
-import { isEventLikePropName } from "@reckona/mreact-shared";
+import { isBooleanishStringAttribute, isEventLikePropName } from "@reckona/mreact-shared";
 import { bindEvent } from "./bind-event.js";
 import {
   applyDomProp,
   registerReactivePropBinding,
   removeDomProp,
+  toDomAttributeName,
   type PropBinding,
 } from "./dom-prop-application.js";
 import type { Dispose } from "./types.js";
@@ -68,13 +69,21 @@ function applySpreadProps(
         }
         eventDisposers.set(
           name,
-          bindEvent(element as HTMLElement, eventName as keyof HTMLElementEventMap, value as EventListener),
+          bindEvent(
+            element as HTMLElement,
+            eventName as keyof HTMLElementEventMap,
+            value as EventListener,
+          ),
         );
       } else {
         applyDomProp(element, name, value, false);
       }
 
-      if (value === false || value === null || value === undefined) {
+      if (
+        value === null ||
+        value === undefined ||
+        (value === false && !isBooleanishStringAttribute(toDomAttributeName(name)))
+      ) {
         eventDisposers.get(name)?.();
         eventDisposers.delete(name);
         previousProps.delete(name);

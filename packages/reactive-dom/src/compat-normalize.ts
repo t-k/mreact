@@ -1,8 +1,6 @@
 import { applyDomProp } from "./dom-prop-application.js";
-import {
-  normalizeRenderValue,
-  registerRenderValueNormalizer,
-} from "./normalize.js";
+import { isEventLikePropName } from "@reckona/mreact-shared";
+import { normalizeRenderValue, registerRenderValueNormalizer } from "./normalize.js";
 import { registerDispose } from "./scope.js";
 import type { RenderValue } from "./types.js";
 
@@ -54,10 +52,12 @@ function normalizeCompatElement(element: CompatElement, depth: number): Node[] {
       return [];
     }
 
-    const result = (render as (props: Record<string, unknown>) => {
-      node?: ChildNode | undefined;
-      dispose?: (() => void) | undefined;
-    })(props.blockProps as Record<string, unknown>);
+    const result = (
+      render as (props: Record<string, unknown>) => {
+        node?: ChildNode | undefined;
+        dispose?: (() => void) | undefined;
+      }
+    )(props.blockProps as Record<string, unknown>);
 
     if (result.dispose !== undefined) {
       registerDispose(result.dispose);
@@ -88,10 +88,7 @@ function normalizeCompatElement(element: CompatElement, depth: number): Node[] {
   return [node];
 }
 
-function applyCompatElementProps(
-  node: HTMLElement,
-  props: Record<string, unknown>,
-): void {
+function applyCompatElementProps(node: HTMLElement, props: Record<string, unknown>): void {
   for (const [name, value] of Object.entries(props)) {
     if (
       name === "children" ||
@@ -104,8 +101,10 @@ function applyCompatElementProps(
       continue;
     }
 
-    if (/^on[A-Z]/.test(name) && typeof value === "function") {
-      node.addEventListener(name.slice(2).toLowerCase(), value as EventListener);
+    if (isEventLikePropName(name)) {
+      if (typeof value === "function") {
+        node.addEventListener(name.slice(2).toLowerCase(), value as EventListener);
+      }
       continue;
     }
 

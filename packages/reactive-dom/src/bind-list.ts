@@ -5,21 +5,19 @@ import {
   trackSource,
   type Source,
 } from "@reckona/mreact-reactive-core/internal";
-import {
-  isDynamicHydrationEnabled,
-  markDynamicNode,
-  markDynamicNodes,
-} from "./dynamic-node.js";
+import { isDynamicHydrationEnabled, markDynamicNode, markDynamicNodes } from "./dynamic-node.js";
 import {
   withBatchedDelegatedRootReleases,
   withDeferredDelegatedEventPromotions,
 } from "./bind-event.js";
+import { createDuplicateKeyWarning } from "./duplicate-key-warning.js";
 import { createScopedRenderNodes } from "./render-scope.js";
 import { registerDispose } from "./scope.js";
 import type { Dispose, RenderValue } from "./types.js";
 
 export interface BindListOptions<T> {
   itemMode?: "reactive" | "static";
+  /** Selects stable row identity. Later rows with a duplicate key are skipped and warn once in development. */
   key?: (item: T, index: number, items: readonly T[]) => unknown;
   nestedObjectFallback?: boolean;
 }
@@ -160,6 +158,7 @@ function bindKeyedList<T>(
   // Function.length is stable for the lifetime of the list; reading it per
   // row update is avoidable property-access overhead.
   const renderArity = renderItem.length;
+  const warnDuplicateKey = import.meta.env.DEV ? createDuplicateKeyWarning() : undefined;
 
   const dispose = effect(() => {
     const currentItems = items();
@@ -222,7 +221,7 @@ function bindKeyedList<T>(
       }
     }
 
-    const currentKeyedItems = uniqueKeyedItems(currentItems, key);
+    const currentKeyedItems = uniqueKeyedItems(currentItems, key, warnDuplicateKey);
     const currentKeys = currentKeyedItems.keys;
 
     if (records.size === currentKeys.length && records.size > 0) {
@@ -378,9 +377,7 @@ function bindKeyedList<T>(
     }
 
     const canClaimEmptyParent =
-      records.size === 0 &&
-      insertionParent.childNodes.length === 1 &&
-      marker.nextSibling === null;
+      records.size === 0 && insertionParent.childNodes.length === 1 && marker.nextSibling === null;
 
     if (canClaimEmptyParent) {
       const disposeError = disposeStaleRecords(records, nextRecords);
@@ -391,10 +388,7 @@ function bindKeyedList<T>(
       }
       ownsParent = true;
     } else if (ownsCurrentParent) {
-      if (
-        reusedAllRecords &&
-        nextRecords.size === records.size
-      ) {
+      if (reusedAllRecords && nextRecords.size === records.size) {
         reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords);
         records = nextRecords;
         recordNodeCount = orderedNodeCount;
@@ -417,8 +411,7 @@ function bindKeyedList<T>(
       reconcileKeyedRecordOrder(insertionParent, marker, orderedRecords);
       promoteRecordEvents(nextRecords.values());
       ownsParent =
-        insertionParent.childNodes.length === orderedNodeCount + 1 &&
-        marker.nextSibling === null;
+        insertionParent.childNodes.length === orderedNodeCount + 1 && marker.nextSibling === null;
     }
     recordNodeCount = orderedNodeCount;
 
@@ -453,6 +446,7 @@ function replaceWithOrderedRecords(
 function uniqueKeyedItems<T>(
   items: readonly T[],
   key: (item: T, index: number, items: readonly T[]) => unknown,
+  warnDuplicateKey: ((key: unknown) => void) | undefined,
 ): KeyedItems<T> {
   const length = items.length;
   // oxlint-disable-next-line unicorn/no-new-array -- a sparse preallocated keys array avoids per-slot callbacks on the hot list path.
@@ -463,7 +457,8 @@ function uniqueKeyedItems<T>(
     const itemKey = key(items[index] as T, index, items);
 
     if (seenKeys.has(itemKey)) {
-      return dedupedKeyedItems(items, key, keys, seenKeys, index);
+      warnDuplicateKey?.(itemKey);
+      return dedupedKeyedItems(items, key, keys, seenKeys, index, warnDuplicateKey);
     }
 
     seenKeys.add(itemKey);
@@ -481,6 +476,7 @@ function dedupedKeyedItems<T>(
   prefixKeys: readonly unknown[],
   seenKeys: Set<unknown>,
   duplicateIndex: number,
+  warnDuplicateKey: ((key: unknown) => void) | undefined,
 ): KeyedItems<T> {
   const keys: unknown[] = prefixKeys.slice(0, duplicateIndex);
   const dedupedItems: T[] = items.slice(0, duplicateIndex);
@@ -494,6 +490,7 @@ function dedupedKeyedItems<T>(
     const itemKey = key(items[index] as T, index, items);
 
     if (seenKeys.has(itemKey)) {
+      warnDuplicateKey?.(itemKey);
       continue;
     }
 
@@ -1119,9 +1116,7 @@ function createKeyedRecord<T>(
     : undefined;
   const scoped =
     deferred?.value ??
-    untrack(() =>
-      createScopedRenderNodes(() => renderItem(renderedItem, index, items)),
-    );
+    untrack(() => createScopedRenderNodes(() => renderItem(renderedItem, index, items)));
   const nodes = markRecordsForHydration ? markDynamicNodes(scoped.nodes) : scoped.nodes;
 
   return {
@@ -1158,7 +1153,9 @@ const ITEM_PROXY_HANDLER: ProxyHandler<KeyedItemCell> = {
   },
   getOwnPropertyDescriptor(target, property) {
     const value = getKeyedItemValue(target);
-    return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
+    return isObjectLike(value)
+      ? configurableProxyDescriptor(Reflect.getOwnPropertyDescriptor(value, property))
+      : undefined;
   },
   has(target, property) {
     const value = getKeyedItemValue(target);
@@ -1223,9 +1220,7 @@ function createNestedFallbackItemProxy<T extends object>(current: KeyedItemCell)
 
       if (next === null || typeof next !== "object") {
         const existingChildProxy =
-          next == null && childProxies !== undefined
-            ? childProxies.get(property)
-            : undefined;
+          next == null && childProxies !== undefined ? childProxies.get(property) : undefined;
 
         if (existingChildProxy !== undefined) {
           return existingChildProxy;
@@ -1256,7 +1251,9 @@ function createNestedFallbackItemProxy<T extends object>(current: KeyedItemCell)
     },
     getOwnPropertyDescriptor(_target, property) {
       const value = getKeyedItemValue(current);
-      return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
+      return isObjectLike(value)
+        ? configurableProxyDescriptor(Reflect.getOwnPropertyDescriptor(value, property))
+        : undefined;
     },
     has(_target, property) {
       const value = getKeyedItemValue(current);
@@ -1292,9 +1289,7 @@ function createNestedItemProxy(current: KeyedItemCell, path: readonly PropertyKe
 
       if (next === null || typeof next !== "object") {
         const existingChildProxy =
-          next == null && childProxies !== undefined
-            ? childProxies.get(property)
-            : undefined;
+          next == null && childProxies !== undefined ? childProxies.get(property) : undefined;
 
         if (existingChildProxy !== undefined) {
           return existingChildProxy;
@@ -1325,7 +1320,9 @@ function createNestedItemProxy(current: KeyedItemCell, path: readonly PropertyKe
     },
     getOwnPropertyDescriptor(_target, property) {
       const value = valueAtPath(getKeyedItemValue(current), path);
-      return isObjectLike(value) ? Reflect.getOwnPropertyDescriptor(value, property) : undefined;
+      return isObjectLike(value)
+        ? configurableProxyDescriptor(Reflect.getOwnPropertyDescriptor(value, property))
+        : undefined;
     },
     has(_target, property) {
       const value = valueAtPath(getKeyedItemValue(current), path);
@@ -1343,6 +1340,12 @@ function createNestedItemProxy(current: KeyedItemCell, path: readonly PropertyKe
       return Reflect.set(value, property, nextValue, value);
     },
   });
+}
+
+function configurableProxyDescriptor(
+  descriptor: PropertyDescriptor | undefined,
+): PropertyDescriptor | undefined {
+  return descriptor === undefined ? undefined : { ...descriptor, configurable: true };
 }
 
 function valueAtPath(value: unknown, path: readonly PropertyKey[]): unknown {
@@ -1495,9 +1498,7 @@ function tryRemoveKeyedRecords<T>(
     staleRecords.push(record);
   }
 
-  return previousIndex === keys.length
-    ? { nextRecords, staleRecords }
-    : undefined;
+  return previousIndex === keys.length ? { nextRecords, staleRecords } : undefined;
 }
 
 function removeStaleRecords(
@@ -1629,8 +1630,5 @@ function ownsWholeParent(
 }
 
 function isSameNodeList(left: readonly Node[], right: readonly Node[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((node, index) => node === right[index])
-  );
+  return left.length === right.length && left.every((node, index) => node === right[index]);
 }

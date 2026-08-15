@@ -94,7 +94,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
     }
 
     const name = readOxcJsxTagName(readObject(object.name));
-    const domName = htmlAttributeAliases[name] ?? name;
+    const domName = Object.hasOwn(htmlAttributeAliases, name) ? htmlAttributeAliases[name]! : name;
     const value = readObject(object.value);
 
     if (name === "key") {
@@ -168,6 +168,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
 function safeDomAttributeHelperLines(): string[] {
   return [
     "  const __mreactSafeDomUrlAttribute = (name, value) => {",
+    "    name = name.toLowerCase();",
     '    if (name === "srcset" || name === "imagesrcset") {',
     '      const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, "").replace(/[\\t\\r\\n]/g, "");',
     '      for (const _candidate of _canonicalSet.split(",")) {',
@@ -188,15 +189,15 @@ function safeDomAttributeHelperLines(): string[] {
 }
 
 function isUrlAttribute(name: string): boolean {
-  return urlAttributeNames.has(name);
+  return urlAttributeNames.has(name.toLowerCase());
 }
 
 function isSrcsetAttribute(name: string): boolean {
-  return srcsetAttributeNames.has(name);
+  return srcsetAttributeNames.has(name.toLowerCase());
 }
 
 function isDangerousHtmlAttribute(name: string): boolean {
-  return dangerousHtmlAttributeNames.has(name);
+  return dangerousHtmlAttributeNames.has(name.toLowerCase());
 }
 
 function isUnsafeStaticUrlAttribute(name: string, value: string): boolean {
@@ -204,6 +205,7 @@ function isUnsafeStaticUrlAttribute(name: string, value: string): boolean {
 }
 
 function safeDomUrlAttributeValue(name: string, value: string): string | undefined {
+  name = name.toLowerCase();
   if (isSrcsetAttribute(name)) {
     const canonical = canonicalizeUrl(value);
     for (const candidate of canonical.split(",")) {

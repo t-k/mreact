@@ -4,12 +4,7 @@ import { cell, effect } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
-import {
-  bindList,
-  bindProp,
-  bindSpreadProps,
-  bindText,
-} from "../src/index.js";
+import { bindList, bindProp, bindSpreadProps, bindText } from "../src/index.js";
 import { createScopedRenderNodes } from "../src/render-scope.js";
 import { createScope, disposeScope, registerDispose, withScope } from "../src/scope.js";
 
@@ -39,17 +34,38 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     dispose();
   });
 
-  test("bindProp uses removeAttribute for null / false on aria attributes", async () => {
+  test("bindProp preserves literal boolean tokens on aria attributes", async () => {
     const div = document.createElement("div");
     const ariaPressed = cell<boolean | null>(true);
     const dispose = bindProp(div, "aria-pressed", () => ariaPressed.get());
-    expect(div.getAttribute("aria-pressed")).toBe("");
+    expect(div.getAttribute("aria-pressed")).toBe("true");
     ariaPressed.set(null);
     await flushEffects();
     expect(div.getAttribute("aria-pressed")).toBeNull();
     ariaPressed.set(false);
     await flushEffects();
-    expect(div.getAttribute("aria-pressed")).toBeNull();
+    expect(div.getAttribute("aria-pressed")).toBe("false");
+    dispose();
+  });
+
+  test("bindSpreadProps handles Object prototype member names", async () => {
+    const div = document.createElement("div");
+    const props = cell<Record<string, unknown>>(
+      JSON.parse(
+        '{"constructor":"ctor","toString":"string","__proto__":"proto","valueOf":"value"}',
+      ) as Record<string, unknown>,
+    );
+    const dispose = bindSpreadProps(div, () => props.get());
+
+    expect(div.getAttribute("constructor")).toBe("ctor");
+    expect(div.getAttribute("toString")).toBe("string");
+    expect(div.getAttribute("__proto__")).toBe("proto");
+    expect(div.getAttribute("valueOf")).toBe("value");
+
+    props.set({});
+    await flushEffects();
+    expect(div.getAttribute("constructor")).toBeNull();
+    expect(div.getAttribute("__proto__")).toBeNull();
     dispose();
   });
 
@@ -74,7 +90,7 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     dispose();
   });
 
-  test("bindSpreadProps removes a previously-set attribute when an update sets the value to null/undefined/false", async () => {
+  test("bindSpreadProps removes null props and preserves false data tokens", async () => {
     const div = document.createElement("div");
     const props = cell<Record<string, unknown>>({ id: "kept", "data-x": "1" });
     const dispose = bindSpreadProps(div, () => props.get());
@@ -85,7 +101,7 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     props.set({ id: null, "data-x": false });
     await flushEffects();
     expect(div.getAttribute("id")).toBeNull();
-    expect(div.getAttribute("data-x")).toBeNull();
+    expect(div.getAttribute("data-x")).toBe("false");
     dispose();
   });
 
@@ -109,11 +125,16 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     const marker = document.createComment("end");
     parent.appendChild(marker);
     const items = cell<readonly string[]>(["a", "b"]);
-    const dispose = bindList(parent, marker, () => items.get(), (item) => {
-      const li = document.createElement("li");
-      li.textContent = item;
-      return li;
-    });
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        return li;
+      },
+    );
     expect(parent.querySelectorAll("li").length).toBe(2);
     items.set(["a"]);
     await flushEffects();
@@ -156,13 +177,18 @@ describe("reactive-dom: edge branches in bind helpers", () => {
     parent.appendChild(marker);
     const selected = cell<{ role: string } | null>({ role: "owner" });
     const items = cell([1]);
-    const dispose = bindList(parent, marker, () => items.get(), () => {
-      const li = document.createElement("li");
-      const text = document.createTextNode("");
-      li.append(text);
-      bindText(text, () => selected.get()!.role);
-      return li;
-    });
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      () => {
+        const li = document.createElement("li");
+        const text = document.createTextNode("");
+        li.append(text);
+        bindText(text, () => selected.get()!.role);
+        return li;
+      },
+    );
 
     expect(parent.textContent).toBe("owner");
 

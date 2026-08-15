@@ -2,7 +2,7 @@
 
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindList, bindText } from "../src/index.js";
@@ -14,6 +14,11 @@ import {
   registerIdempotentDispose,
   withScope,
 } from "../src/scope.js";
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 
 describe("bindList", () => {
   test("dispatches a late-connected row event once while another element retains the root", async () => {
@@ -142,11 +147,16 @@ describe("bindList", () => {
     const marker = document.createComment("list");
     parent.append(marker);
 
-    const dispose = bindList(parent, marker, () => items.get(), (item, index) => {
-      const li = document.createElement("li");
-      li.textContent = `${index}:${item}`;
-      return li;
-    });
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item, index) => {
+        const li = document.createElement("li");
+        li.textContent = `${index}:${item}`;
+        return li;
+      },
+    );
 
     expect(parent.innerHTML).toBe("<li>0:A</li><li>1:B</li><!--list-->");
 
@@ -369,6 +379,121 @@ describe("bindList", () => {
     dispose();
   });
 
+  test("warns once per duplicate key in development", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const items = cell([
+      { id: "a", label: "A1" },
+      { id: "a", label: "A2" },
+    ]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item.label;
+        return li;
+      },
+      { key: (item) => item.id },
+    );
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('duplicate key "a"'));
+
+    items.set([...items.get()]);
+    await flushEffects();
+    expect(warn).toHaveBeenCalledOnce();
+    dispose();
+  });
+
+  test("does not let duplicate-key formatting failures abort rendering", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const key = {
+      toString(): string {
+        throw new Error("unprintable key");
+      },
+    };
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+
+    let dispose: (() => void) | undefined;
+    expect(() => {
+      dispose = bindList(
+        parent,
+        marker,
+        () => [{ key }, { key }],
+        () => document.createElement("li"),
+        { key: (item) => item.key },
+      );
+    }).not.toThrow();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("<unprintable>"));
+    expect(parent.querySelectorAll("li")).toHaveLength(1);
+    dispose?.();
+  });
+
+  test("does not warn for duplicate keys in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    const dispose = bindList(
+      parent,
+      marker,
+      () => [{ id: "a" }, { id: "a" }],
+      (item) => document.createTextNode(item.id),
+      { key: (item) => item.id },
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+    dispose();
+  });
+
+  test("enumerates frozen and sealed keyed items, including nested fallback proxies", () => {
+    const nonConfigurable = Object.defineProperty(
+      { id: "defined", details: { name: "Defined" } },
+      "label",
+      { configurable: false, enumerable: true, value: "Defined" },
+    );
+    const items = [
+      Object.freeze({ id: "frozen", label: "Frozen", details: Object.freeze({ name: "Frozen" }) }),
+      Object.seal({ id: "sealed", label: "Sealed", details: Object.seal({ name: "Sealed" }) }),
+      nonConfigurable,
+    ];
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items,
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = JSON.stringify({
+          copy: { ...item },
+          entries: Object.entries(item),
+          keys: Object.keys(item),
+          nested: { ...item.details },
+        });
+        return li;
+      },
+      { key: (item) => item.id, nestedObjectFallback: true },
+    );
+
+    expect(parent.querySelectorAll("li")).toHaveLength(3);
+    expect(parent.textContent).toContain("Frozen");
+    expect(parent.textContent).toContain("Sealed");
+    expect(parent.textContent).toContain("Defined");
+    dispose();
+  });
+
   test("removes stale keyed row nodes even when their disposer throws", async () => {
     const items = cell([{ id: "a", label: "A" }]);
     const parent = document.createElement("ul");
@@ -573,7 +698,9 @@ describe("bindList", () => {
     expect(parent.childNodes[4]).toBe(originalNodes[3]);
     expect(parent.childNodes[5]).toBe(originalNodes[5]);
     expect(parent.childNodes[6]).toBe(marker);
-    expect(parent.innerHTML).toBe("<h1>Rows</h1><p>0</p><p>1</p><p>3</p><p>2</p><p>4</p><!--list-->");
+    expect(parent.innerHTML).toBe(
+      "<h1>Rows</h1><p>0</p><p>1</p><p>3</p><p>2</p><p>4</p><!--list-->",
+    );
 
     dispose();
   });
@@ -1105,10 +1232,7 @@ describe("bindList", () => {
         const li = document.createElement("li");
         const name = document.createTextNode("");
         li.append(name);
-        bindText(
-          name,
-          () => ((member as { user: { displayName: string } }).user.displayName),
-        );
+        bindText(name, () => (member as { user: { displayName: string } }).user.displayName);
         return li;
       },
       { key: () => "u1", nestedObjectFallback: true },
@@ -1140,11 +1264,16 @@ describe("bindList", () => {
     const marker = document.createComment("list");
     parent.append(marker);
 
-    const dispose = bindList(parent, marker, () => items.get(), (item) => {
-      const li = document.createElement("li");
-      li.textContent = item;
-      return li;
-    });
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        return li;
+      },
+    );
     expect(parent.innerHTML).toBe("<li>A</li><!--list-->");
 
     marker.remove();
@@ -1213,12 +1342,8 @@ describe("bindList", () => {
     expect(appendedNodes.some((node) => node instanceof DocumentFragment)).toBe(true);
     expect(parentReplacements).toBe(0);
     expect(parentRemovals).toBe(0);
-    expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(
-      originalNodes,
-    );
-    expect(parent.innerHTML).toBe(
-      "<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->",
-    );
+    expect(Array.from(parent.childNodes).slice(0, values.length)).toEqual(originalNodes);
+    expect(parent.innerHTML).toBe("<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->");
 
     dispose();
   });
@@ -1479,10 +1604,7 @@ describe("bindList", () => {
 
       return arrayFrom.call(Array, source, mapFn as never, thisArg) as T[];
     } as typeof Array.from;
-    Array.prototype.push = function countedArrayPush<T>(
-      this: T[],
-      ...valuesToPush: T[]
-    ): number {
+    Array.prototype.push = function countedArrayPush<T>(this: T[], ...valuesToPush: T[]): number {
       if (valuesToPush.every((value) => value instanceof Node)) {
         orderedNodePushes += valuesToPush.length;
       } else if (
@@ -1829,10 +1951,7 @@ describe("bindList", () => {
     let mapGetCalls = 0;
 
     try {
-      Map.prototype.get = function countedGet<K, V>(
-        this: Map<K, V>,
-        key: K,
-      ): V | undefined {
+      Map.prototype.get = function countedGet<K, V>(this: Map<K, V>, key: K): V | undefined {
         if (typeof key === "symbol" && probedKeys.has(key)) {
           mapGetCalls += 1;
         }
@@ -1907,11 +2026,7 @@ describe("bindList", () => {
       { id: 1, label: "1" },
       { id: 2, label: "2" },
     ];
-    const appendedRows = [
-      ...initialRows,
-      { id: 3, label: "3" },
-      { id: 4, label: "4" },
-    ];
+    const appendedRows = [...initialRows, { id: 3, label: "3" }, { id: 4, label: "4" }];
     const prefixKeys = new Set(initialRows.map((row) => row.id));
     const items = cell(initialRows);
     const parent = document.createElement("ul");
@@ -1934,10 +2049,7 @@ describe("bindList", () => {
     let prefixMapGetCalls = 0;
 
     try {
-      Map.prototype.get = function countedGet<K, V>(
-        this: Map<K, V>,
-        key: K,
-      ): V | undefined {
+      Map.prototype.get = function countedGet<K, V>(this: Map<K, V>, key: K): V | undefined {
         if (typeof key === "number" && prefixKeys.has(key)) {
           prefixMapGetCalls += 1;
         }
@@ -1951,9 +2063,7 @@ describe("bindList", () => {
     }
 
     expect(prefixMapGetCalls).toBe(0);
-    expect(parent.innerHTML).toBe(
-      "<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->",
-    );
+    expect(parent.innerHTML).toBe("<li>0</li><li>1</li><li>2</li><li>3</li><li>4</li><!--list-->");
     dispose();
   });
 });

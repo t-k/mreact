@@ -337,9 +337,10 @@ function appendRawTextNodeList(
   return chain;
 }
 
-function renderRawTextNodeToBufferedString(
-  node: unknown,
-): { result: void | PromiseLike<void>; sink: ReturnType<typeof createStringSink> } {
+function renderRawTextNodeToBufferedString(node: unknown): {
+  result: void | PromiseLike<void>;
+  sink: ReturnType<typeof createStringSink>;
+} {
   const sink = createStringSink();
 
   return {
@@ -444,9 +445,7 @@ function renderHtmlAttributes(props: Record<string, unknown>): string {
     .join("");
 }
 
-function sanitizeMetaRefreshProps(
-  props: Record<string, unknown>,
-): Record<string, unknown> {
+function sanitizeMetaRefreshProps(props: Record<string, unknown>): Record<string, unknown> {
   const httpEquiv = props["http-equiv"] ?? props.httpEquiv;
   const content = props["content"];
   if (typeof httpEquiv !== "string" || typeof content !== "string") return props;
@@ -527,11 +526,12 @@ function renderHtmlAttribute(name: string, value: unknown): string {
 }
 
 function toHtmlAttributeName(name: string): string {
-  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+  return Object.hasOwn(HTML_ATTRIBUTE_ALIASES, name) ? HTML_ATTRIBUTE_ALIASES[name]! : name;
 }
 
 const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   acceptCharset: "accept-charset",
+  autoCapitalize: "autocapitalize",
   autoFocus: "autofocus",
   autoPlay: "autoplay",
   charSet: "charset",
@@ -581,9 +581,11 @@ function isBooleanishStringAttribute(name: string): boolean {
 }
 
 const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
+  "autocapitalize",
   "contenteditable",
   "draggable",
   "spellcheck",
+  "translate",
 ]);
 
 function hasAsciiUppercase(value: string): boolean {

@@ -21,13 +21,9 @@ export const HOST_CHILDREN_ONLY_PROPS_META = Symbol.for(
   "modular.react.host_children_only_props_meta",
 );
 /** Metadata key that links a state value to a reactive text binding. */
-export const REACTIVE_TEXT_BINDING_META = Symbol.for(
-  "modular.react.reactive_text_binding_meta",
-);
+export const REACTIVE_TEXT_BINDING_META = Symbol.for("modular.react.reactive_text_binding_meta");
 /** Metadata key that links compiler-owned DOM blocks to component state. */
-export const REACTIVE_STATE_BINDING_META = Symbol.for(
-  "modular.react.reactive_state_binding_meta",
-);
+export const REACTIVE_STATE_BINDING_META = Symbol.for("modular.react.reactive_state_binding_meta");
 const hasOwnProperty = Object.prototype.hasOwnProperty;
 
 export interface ReactCompatProviderType {
@@ -154,10 +150,7 @@ export function createElement<P extends object>(
     typeof type === "object" && type !== null ? normalizeElementType(type) : type;
   const key = config?.key === undefined ? null : String(config.key);
   const ref = config?.ref ?? null;
-  const props = applyDefaultProps(
-    normalizedType,
-    copyCreateElementProps(config),
-  ) as P & {
+  const props = applyDefaultProps(normalizedType, copyCreateElementProps(config)) as P & {
     children?: ReactCompatNode;
   };
 
@@ -208,9 +201,12 @@ export function createElementFromJsxConfig<P extends object>(
 ): ReactCompatElement<P> {
   const normalizedType =
     typeof type === "object" && type !== null ? normalizeElementType(type) : type;
-  const key = keyArgument !== undefined
-    ? String(keyArgument)
-    : config?.key === undefined ? null : String(config.key);
+  const key =
+    keyArgument !== undefined
+      ? String(keyArgument)
+      : config?.key === undefined
+        ? null
+        : String(config.key);
   const ref = config?.ref ?? null;
   if (canReuseJsxConfigAsComponentProps(normalizedType, config)) {
     return {
@@ -222,12 +218,15 @@ export function createElementFromJsxConfig<P extends object>(
     };
   }
 
-  const hasChildren = config !== null && config !== undefined && hasOwnProperty.call(config, "children");
+  const hasChildren =
+    config !== null && config !== undefined && hasOwnProperty.call(config, "children");
   const children = config?.children;
   const copiedProps = copyElementProps(config, undefined, true);
-  const props = (typeof normalizedType === "string"
-    ? copiedProps
-    : applyDefaultProps(normalizedType, copiedProps)) as P & {
+  const props = (
+    typeof normalizedType === "string"
+      ? copiedProps
+      : applyDefaultProps(normalizedType, copiedProps)
+  ) as P & {
     children?: ReactCompatNode;
   };
 
@@ -264,10 +263,7 @@ function canReuseJsxConfigAsComponentProps(
   for (const name in config) {
     if (
       hasOwnProperty.call(config, name) &&
-      (name === "key" ||
-        name === "ref" ||
-        name === "__self" ||
-        name === "__source")
+      (name === "key" || name === "ref" || name === "__self" || name === "__source")
     ) {
       return false;
     }
@@ -277,9 +273,7 @@ function canReuseJsxConfigAsComponentProps(
 }
 
 /** Returns true when a value is a React-compatible element record. */
-export function isReactCompatElement(
-  value: unknown,
-): value is ReactCompatElement {
+export function isReactCompatElement(value: unknown): value is ReactCompatElement {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -341,7 +335,10 @@ export interface LazyType<P = Record<string, unknown>> {
 
 /** Wraps a component so it can receive a ref as the second render argument. */
 export function forwardRef<P, T>(
-  render: (props: P, ref: { current: T | null } | ((value: T | null) => void) | null) => ReactCompatNode,
+  render: (
+    props: P,
+    ref: { current: T | null } | ((value: T | null) => void) | null,
+  ) => ReactCompatNode,
 ): ForwardRefType<P & { ref?: unknown }> {
   return { $$typeof: FORWARD_REF_TYPE, render: render as ForwardRefType<P>["render"] };
 }
@@ -357,9 +354,7 @@ export function memo<P>(
 }
 
 /** Creates a lazy element type that resolves its implementation on demand. */
-export function lazy<P>(
-  load: () => Promise<{ default: ElementType<P> }>,
-): LazyType<P> {
+export function lazy<P>(load: () => Promise<{ default: ElementType<P> }>): LazyType<P> {
   return {
     $$typeof: LAZY_TYPE,
     load,
@@ -422,9 +417,7 @@ function copyElementProps(
   return props as Record<string, unknown>;
 }
 
-function copyCreateElementProps(
-  source: object | null | undefined,
-): Record<string, unknown> {
+function copyCreateElementProps(source: object | null | undefined): Record<string, unknown> {
   const props: Record<PropertyKey, unknown> = {};
 
   if (source === null || source === undefined) {
@@ -437,13 +430,8 @@ function copyCreateElementProps(
       continue;
     }
 
-    if (
-      name !== "key" &&
-      name !== "ref" &&
-      name !== "__self" &&
-      name !== "__source"
-    ) {
-      props[name] = stringSource[name];
+    if (name !== "key" && name !== "ref" && name !== "__self" && name !== "__source") {
+      setOwnStringProp(props, name, stringSource[name]);
     }
   }
 
@@ -451,9 +439,7 @@ function copyCreateElementProps(
   return props as Record<string, unknown>;
 }
 
-function copyHostCreateElementProps(
-  source: object | null | undefined,
-): Record<string, unknown> {
+function copyHostCreateElementProps(source: object | null | undefined): Record<string, unknown> {
   const props: Record<PropertyKey, unknown> = {};
 
   if (source === null || source === undefined) {
@@ -468,13 +454,8 @@ function copyHostCreateElementProps(
       continue;
     }
 
-    if (
-      name !== "key" &&
-      name !== "ref" &&
-      name !== "__self" &&
-      name !== "__source"
-    ) {
-      props[name] = stringSource[name];
+    if (name !== "key" && name !== "ref" && name !== "__self" && name !== "__source") {
+      setOwnStringProp(props, name, stringSource[name]);
       hasNonChildrenProp ||= name !== "children";
     }
   }
@@ -504,15 +485,26 @@ function copyOwnStringElementProps(
       name !== "__source" &&
       (!omitChildren || name !== "children")
     ) {
-      target[name] = stringSource[name];
+      setOwnStringProp(target, name, stringSource[name]);
     }
   }
 }
 
-function copyOwnSymbolElementProps(
-  source: object,
-  target: Record<PropertyKey, unknown>,
-): void {
+function setOwnStringProp(target: Record<string, unknown>, name: string, value: unknown): void {
+  if (name === "__proto__") {
+    Object.defineProperty(target, name, {
+      configurable: true,
+      enumerable: true,
+      value,
+      writable: true,
+    });
+    return;
+  }
+
+  target[name] = value;
+}
+
+function copyOwnSymbolElementProps(source: object, target: Record<PropertyKey, unknown>): void {
   const symbolSource = source as Record<PropertyKey, unknown>;
   for (const symbol of Object.getOwnPropertySymbols(source)) {
     target[symbol] = symbolSource[symbol];
@@ -533,10 +525,7 @@ function normalizeElementType<P>(type: ElementType<P>): ElementType<P> {
   return isReactCompatContextProviderShorthand(type) ? (type.Provider as ElementType<P>) : type;
 }
 
-function applyDefaultProps(
-  type: unknown,
-  props: Record<string, unknown>,
-): Record<string, unknown> {
+function applyDefaultProps(type: unknown, props: Record<string, unknown>): Record<string, unknown> {
   if (!canHaveDefaultProps(type)) {
     return props;
   }
@@ -558,8 +547,10 @@ function applyDefaultProps(
 }
 
 function hasDefaultProps(type: unknown): boolean {
-  return canHaveDefaultProps(type) &&
-    (type as { defaultProps?: Record<string, unknown> }).defaultProps !== undefined;
+  return (
+    canHaveDefaultProps(type) &&
+    (type as { defaultProps?: Record<string, unknown> }).defaultProps !== undefined
+  );
 }
 
 function canHaveDefaultProps(type: unknown): boolean {
@@ -592,9 +583,7 @@ function isReactCompatContextProviderShorthand(
 
 function setHostOwnPropsMeta(props: Record<string, unknown>): void {
   if (hostPropsAreChildrenOnly(props)) {
-    (props as { [HOST_CHILDREN_ONLY_PROPS_META]?: true })[
-      HOST_CHILDREN_ONLY_PROPS_META
-    ] = true;
+    (props as { [HOST_CHILDREN_ONLY_PROPS_META]?: true })[HOST_CHILDREN_ONLY_PROPS_META] = true;
   }
 }
 

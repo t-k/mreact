@@ -5,6 +5,7 @@ import {
   isUnsafeUrlAttribute,
   isUrlAttribute,
 } from "./url-safety.js";
+import { isBooleanishStringAttribute, isEventLikePropName } from "@reckona/mreact-shared";
 import { registerDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
@@ -76,19 +77,27 @@ export function applyDomProp(
     return;
   }
 
-  const attrName = toDomAttributeName(name);
+  if (isEventLikePropName(name)) {
+    clearEventLikeDomProp(element, name);
+    return;
+  }
 
-  if (value === null || value === undefined || value === false) {
+  const attrName = toDomAttributeName(name);
+  const booleanishString = typeof value === "boolean" && isBooleanishStringAttribute(attrName);
+
+  if (value === null || value === undefined || (value === false && !booleanishString)) {
     removeDomProp(element, name);
+    return;
+  }
+
+  if (booleanishString) {
+    setDomAttribute(element, attrName, value ? "true" : "false");
     return;
   }
 
   const stringAttributeValue =
     isUrlAttribute(attrName) || isSrcsetAttribute(attrName) ? String(value) : undefined;
-  if (
-    stringAttributeValue !== undefined &&
-    isUnsafeUrlAttribute(attrName, stringAttributeValue)
-  ) {
+  if (stringAttributeValue !== undefined && isUnsafeUrlAttribute(attrName, stringAttributeValue)) {
     clearDomProperty(element, name, attrName);
     element.removeAttribute(attrName);
     return;
@@ -134,12 +143,32 @@ export function removeDomProp(element: Element, name: string): void {
     element.innerHTML = "";
     return;
   }
+  if (isEventLikePropName(name)) {
+    clearEventLikeDomProp(element, name);
+    return;
+  }
   const attrName = toDomAttributeName(name);
   clearDomProperty(element, name, attrName);
-  element.removeAttribute(attrName);
+  if (isValidDomAttributeName(attrName)) {
+    element.removeAttribute(attrName);
+  }
+}
+
+function clearEventLikeDomProp(element: Element, name: string): void {
+  const attributeName = name.toLowerCase();
+  const record = element as unknown as Record<string, unknown>;
+  if (attributeName in element) {
+    record[attributeName] = null;
+  }
+  if (isValidDomAttributeName(attributeName)) {
+    element.removeAttribute(attributeName);
+  }
 }
 
 export function setDomAttribute(element: Element, name: string, value: string): void {
+  if (!isValidDomAttributeName(name)) {
+    return;
+  }
   const prefix = name.split(":", 1)[0];
   const namespace =
     prefix === "xlink"
@@ -184,16 +213,20 @@ function applyStyleObject(element: HTMLElement, value: Record<string, unknown>):
 }
 
 function styleObjectKeyToCssName(name: string): string {
-  return name.startsWith("--")
-    ? name
-    : name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+  return name.startsWith("--") ? name : name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }
 
 export function toDomAttributeName(name: string): string {
-  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+  return Object.hasOwn(HTML_ATTRIBUTE_ALIASES, name)
+    ? (HTML_ATTRIBUTE_ALIASES[name] as string)
+    : name;
 }
 
 function clearDomProperty(element: Element, name: string, attrName: string): void {
+  if (isConstrainedDomProperty(attrName)) {
+    return;
+  }
+
   if (clearAssignableDomProperty(element, name)) {
     return;
   }
@@ -201,6 +234,17 @@ function clearDomProperty(element: Element, name: string, attrName: string): voi
   if (attrName !== name) {
     clearAssignableDomProperty(element, attrName);
   }
+}
+
+function isConstrainedDomProperty(name: string): boolean {
+  const propertyName = name.toLowerCase();
+  return (
+    propertyName === "cols" ||
+    propertyName === "contenteditable" ||
+    propertyName === "rows" ||
+    propertyName === "size" ||
+    propertyName === "span"
+  );
 }
 
 function clearAssignableDomProperty(element: Element, name: string): boolean {
@@ -226,13 +270,19 @@ function shouldAssignDomProperty(element: Element, name: string): boolean {
   return (
     element.namespaceURI !== "http://www.w3.org/2000/svg" &&
     name in element &&
+    !Object.hasOwn(Object.prototype, name) &&
     !name.startsWith("aria-") &&
     !name.startsWith("data-")
   );
 }
 
+function isValidDomAttributeName(name: string): boolean {
+  return /^[A-Za-z_][\w.\-:]*$/.test(name);
+}
+
 const HTML_ATTRIBUTE_ALIASES: Readonly<Record<string, string>> = {
   acceptCharset: "accept-charset",
+  autoCapitalize: "autocapitalize",
   autoFocus: "autofocus",
   autoPlay: "autoplay",
   charSet: "charset",

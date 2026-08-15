@@ -1,7 +1,6 @@
 # @reckona/mreact-reactive-dom
 
-`@reckona/mreact-reactive-dom` binds fine-grained reactive values to DOM nodes.
-It is the low-level DOM runtime used by compiled client output.
+`@reckona/mreact-reactive-dom` binds fine-grained reactive values to DOM nodes. It is the low-level DOM runtime used by compiled client output.
 
 ## Basic Usage
 
@@ -27,10 +26,9 @@ Keep the dispose function returned by `createRoot()` when you mount manually. `b
 - `bindText()` and `bindTextBatch()` update text nodes.
 - `bindProp()` and `bindSpreadProps()` update element properties and attributes.
 - `bindEvent()` attaches event handlers.
-- `bindList()` updates keyed list DOM and passes `(item, index, items)` to list item renderers and key functions.
+- `bindList()` updates keyed list DOM and passes `(item, index, items)` to list item renderers and key functions. When keys are duplicated, later rows are skipped and each duplicated key produces one development warning per list.
 - `insertDynamic()` inserts runtime values into a parent node.
 
 ## Notes
 
-Application code should usually use JSX and the router. This package is for
-compiler output and low-level runtime integration.
+Application code should usually use JSX and the router. This package is for compiler output and low-level runtime integration.

@@ -102,6 +102,21 @@ describe("bindSpreadProps", () => {
     dispose();
   });
 
+  test("removes a false booleanish attribute when the spread prop is omitted", async () => {
+    const props = cell<Record<string, unknown>>({ "aria-expanded": false });
+    const element = document.createElement("div");
+    const dispose = bindSpreadProps(element, () => props.get());
+
+    await flushEffects();
+    expect(element.getAttribute("aria-expanded")).toBe("false");
+
+    props.set({});
+    await flushEffects();
+    expect(element.hasAttribute("aria-expanded")).toBe(false);
+
+    dispose();
+  });
+
   test("applies opted-in inner HTML while ignoring unsupported spread-only props", async () => {
     const props = cell<Record<string, unknown>>({
       dangerouslySetInnerHTML: { __html: "<span>bad</span>" },

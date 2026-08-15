@@ -13,6 +13,7 @@ import {
   withBatchedDelegatedRootReleases,
   withDeferredDelegatedEventPromotions,
 } from "./bind-event.js";
+import { createDuplicateKeyWarning } from "./duplicate-key-warning.js";
 import {
   setupCompilerKeyedEvents,
   type CompilerKeyedEventProgram,
@@ -27,6 +28,7 @@ import type { Dispose } from "./types.js";
 export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode = ChildNode> {
   /** Set to false when the item renderer never binds delegated events on row nodes. */
   deferEventPromotion?: boolean;
+  /** Selects stable row identity. Later rows with a duplicate key are skipped and warn once in development. */
   key: (item: T, index: number, items: readonly T[]) => unknown;
   selectedClass?: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>;
 }
@@ -59,8 +61,10 @@ interface InternalSelectedClassOptions<
   initialClassValue?: "";
 }
 
-interface InternalStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode>
-  extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
+interface InternalStaticKeyedSingleNodeListOptions<
+  T,
+  TNode extends ChildNode,
+> extends BindStaticKeyedSingleNodeListOptions<T, TNode> {
   compilerEventOwner?: object;
   compilerEvents?: readonly CompilerKeyedEventProgram<T>[];
 }
@@ -116,10 +120,7 @@ type InternalCompilerKeyedRowContext = CompilerKeyedRowContext<unknown> & {
   [compilerRowItems]: readonly unknown[];
   [compilerRowReads]: number;
   [compilerRowSource]?: Source | undefined;
-  [compilerRowTextSubscriptions]?:
-    | RefreshableSubscription
-    | RefreshableSubscription[]
-    | undefined;
+  [compilerRowTextSubscriptions]?: RefreshableSubscription | RefreshableSubscription[] | undefined;
   [compilerRowStaticPropertyTextNode]?: Text | undefined;
   [compilerRowStaticPropertyTextKey]?: PropertyKey | undefined;
   [compilerRowStaticPropertyTexts]?: Array<Text | PropertyKey> | undefined;
@@ -182,6 +183,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
   let ownsParent = false;
   const deferEventPromotion = options.deferEventPromotion !== false;
   const renderArity = renderItem.length;
+  const warnDuplicateKey = import.meta.env.DEV ? createDuplicateKeyWarning() : undefined;
   const selectedClass = options.selectedClass as
     | BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>
     | undefined;
@@ -302,7 +304,7 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       return;
     }
 
-    const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key);
+    const keyedItems = uniqueSingleNodeKeyedItems(currentItems, options.key, warnDuplicateKey);
     const keys = keyedItems.keys;
 
     if (records.size === keys.length && records.size > 0) {
@@ -451,18 +453,13 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(
       insertionParent.childNodes.length === records.size + 1 && marker.nextSibling === null;
   });
 
-  const disposeCompilerEvents = setupCompilerKeyedEvents(
-    parent,
-    compilerEvents ?? [],
-    (node) => {
-      const context = (node as CompilerKeyedRowNode)[activeCompilerRowContext];
-      return context !== undefined &&
-        (compilerEventOwner === undefined ||
-          context[compilerRowEventOwner] === compilerEventOwner)
-        ? (context as CompilerKeyedRowContext<T>)
-        : undefined;
-    },
-  );
+  const disposeCompilerEvents = setupCompilerKeyedEvents(parent, compilerEvents ?? [], (node) => {
+    const context = (node as CompilerKeyedRowNode)[activeCompilerRowContext];
+    return context !== undefined &&
+      (compilerEventOwner === undefined || context[compilerRowEventOwner] === compilerEventOwner)
+      ? (context as CompilerKeyedRowContext<T>)
+      : undefined;
+  });
 
   return registerDispose(() => {
     dispose();
@@ -502,11 +499,7 @@ export function bindCompilerKeyedSingleNodeList<T, TNode extends ChildNode>(
     markDynamicNode(marker);
   }
 
-  const compilerRenderer: InternalSingleNodeRenderer<T, TNode> = (
-    item,
-    index,
-    currentItems,
-  ) => {
+  const compilerRenderer: InternalSingleNodeRenderer<T, TNode> = (item, index, currentItems) => {
     const context = Object.create(compilerRowContextPrototype) as InternalCompilerKeyedRowContext;
     context[compilerRowIndex] = index;
     context[compilerRowItem] = item;
@@ -701,6 +694,7 @@ export function bindCompilerKeyedCellText<T, K extends keyof T>(
 function uniqueSingleNodeKeyedItems<T>(
   items: readonly T[],
   key: (item: T, index: number, items: readonly T[]) => unknown,
+  warnDuplicateKey: ((key: unknown) => void) | undefined,
 ): SingleNodeKeyedItems<T> {
   const length = items.length;
   // oxlint-disable-next-line unicorn/no-new-array -- a sparse preallocated keys array avoids per-slot callbacks on the hot list path.
@@ -711,7 +705,8 @@ function uniqueSingleNodeKeyedItems<T>(
     const itemKey = key(items[index] as T, index, items);
 
     if (seenKeys.has(itemKey)) {
-      return dedupedSingleNodeKeyedItems(items, key, keys, seenKeys, index);
+      warnDuplicateKey?.(itemKey);
+      return dedupedSingleNodeKeyedItems(items, key, keys, seenKeys, index, warnDuplicateKey);
     }
 
     seenKeys.add(itemKey);
@@ -727,6 +722,7 @@ function dedupedSingleNodeKeyedItems<T>(
   prefixKeys: readonly unknown[],
   seenKeys: Set<unknown>,
   duplicateIndex: number,
+  warnDuplicateKey: ((key: unknown) => void) | undefined,
 ): SingleNodeKeyedItems<T> {
   const keys: unknown[] = prefixKeys.slice(0, duplicateIndex);
   const dedupedItems: T[] = items.slice(0, duplicateIndex);
@@ -740,6 +736,7 @@ function dedupedSingleNodeKeyedItems<T>(
     const itemKey = key(items[index] as T, index, items);
 
     if (seenKeys.has(itemKey)) {
+      warnDuplicateKey?.(itemKey);
       continue;
     }
 
@@ -839,9 +836,7 @@ function createSingleNodeRecord<T, TNode extends ChildNode>(
   if (compilerOwnsTextCleanup) {
     const deferred =
       deferEventPromotion && parent.isConnected === true
-        ? untrack(() =>
-            withDeferredDelegatedEventPromotions(() => renderItem(item, index, items)),
-          )
+        ? untrack(() => withDeferredDelegatedEventPromotions(() => renderItem(item, index, items)))
         : undefined;
     node = deferred?.value ?? untrack(() => renderItem(item, index, items));
     promoteEvents = deferred?.promote;
@@ -1198,11 +1193,7 @@ function trySwapSingleNodeItems<T>(
     return records;
   }
 
-  if (
-    secondIndex === -1 ||
-    firstRecord === undefined ||
-    secondRecord === undefined
-  ) {
+  if (secondIndex === -1 || firstRecord === undefined || secondRecord === undefined) {
     return undefined;
   }
 
@@ -1396,9 +1387,7 @@ function refreshCompilerStaticPropertyText(
     activeCompilerTextContext = context;
 
     try {
-      node.data = normalizeText(
-        (context.item as Record<PropertyKey, unknown>)[property],
-      );
+      node.data = normalizeText((context.item as Record<PropertyKey, unknown>)[property]);
     } finally {
       activeCompilerTextContext = previousContext;
     }

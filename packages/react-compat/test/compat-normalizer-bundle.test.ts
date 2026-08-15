@@ -10,19 +10,28 @@ import { describe, expect, test } from "vitest";
 import { build as viteBuild, type Rollup } from "vite";
 
 const packedCompatConsumerSizeBudgets = {
-  root: { gzipBytes: 11_800, rawBytes: 42_600 },
-  "jsx-runtime": { gzipBytes: 11_800, rawBytes: 42_700 },
-  "jsx-dev-runtime": { gzipBytes: 11_820, rawBytes: 42_800 },
-  native: { gzipBytes: 9_350, rawBytes: 34_900 },
+  root: { gzipBytes: 12_150, rawBytes: 44_100 },
+  "jsx-runtime": { gzipBytes: 12_150, rawBytes: 44_200 },
+  "jsx-dev-runtime": { gzipBytes: 12_150, rawBytes: 44_300 },
+  native: { gzipBytes: 9_425, rawBytes: 35_100 },
 } as const;
 
 const packedMemoConsumerSizeBudget = { gzipBytes: 3_875, rawBytes: 11_950 } as const;
 
 describe("react-compat production bundle", () => {
   test.each([
-    ["root", 'import { createElement } from "@reckona/mreact-compat"; void createElement("div", null);'],
-    ["jsx runtime", 'import { jsx } from "@reckona/mreact-compat/jsx-runtime"; void jsx("div", {});'],
-    ["jsx dev runtime", 'import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime"; void jsxDEV("div", {}, undefined, false, undefined, undefined);'],
+    [
+      "root",
+      'import { createElement } from "@reckona/mreact-compat"; void createElement("div", null);',
+    ],
+    [
+      "jsx runtime",
+      'import { jsx } from "@reckona/mreact-compat/jsx-runtime"; void jsx("div", {});',
+    ],
+    [
+      "jsx dev runtime",
+      'import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime"; void jsxDEV("div", {}, undefined, false, undefined, undefined);',
+    ],
   ])("retains compat normalizer installation for a %s entrypoint import", async (_name, source) => {
     const root = await mkdtemp(join(tmpdir(), "mreact-compat-normalizer-bundle-"));
     const entry = join(root, "entry.ts");
@@ -30,22 +39,62 @@ describe("react-compat production bundle", () => {
 
     try {
       const result = await viteBuild({
-        build: { lib: { entry, formats: ["es"] }, minify: false, rollupOptions: { treeshake: true }, write: false },
+        build: {
+          lib: { entry, formats: ["es"] },
+          minify: false,
+          rollupOptions: { treeshake: true },
+          write: false,
+        },
         configFile: false,
         logLevel: "silent",
-        resolve: { alias: [
-          { find: "@reckona/mreact-compat/jsx-runtime", replacement: join(process.cwd(), "packages/react-compat/src/jsx-runtime.ts") },
-          { find: "@reckona/mreact-compat/jsx-dev-runtime", replacement: join(process.cwd(), "packages/react-compat/src/jsx-dev-runtime.ts") },
-          { find: "@reckona/mreact-reactive-dom/compat-normalize", replacement: join(process.cwd(), "packages/reactive-dom/src/compat-normalize.ts") },
-          { find: "@reckona/mreact-reactive-dom/internal", replacement: join(process.cwd(), "packages/reactive-dom/src/internal.ts") },
-          { find: "@reckona/mreact-reactive-core/internal", replacement: join(process.cwd(), "packages/reactive-core/src/internal.ts") },
-          { find: "@reckona/mreact-shared/html-escape", replacement: join(process.cwd(), "packages/shared/src/html-escape.ts") },
-          { find: "@reckona/mreact-shared/url-safety", replacement: join(process.cwd(), "packages/shared/src/url-safety.ts") },
-          { find: "@reckona/mreact-compat", replacement: join(process.cwd(), "packages/react-compat/src/index.ts") },
-          { find: "@reckona/mreact-reactive-dom", replacement: join(process.cwd(), "packages/reactive-dom/src/index.ts") },
-          { find: "@reckona/mreact-reactive-core", replacement: join(process.cwd(), "packages/reactive-core/src/index.ts") },
-          { find: "@reckona/mreact-shared", replacement: join(process.cwd(), "packages/shared/src/index.ts") },
-        ] },
+        resolve: {
+          alias: [
+            {
+              find: "@reckona/mreact-compat/jsx-runtime",
+              replacement: join(process.cwd(), "packages/react-compat/src/jsx-runtime.ts"),
+            },
+            {
+              find: "@reckona/mreact-compat/jsx-dev-runtime",
+              replacement: join(process.cwd(), "packages/react-compat/src/jsx-dev-runtime.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom/compat-normalize",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/compat-normalize.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom/internal",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/internal.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-core/internal",
+              replacement: join(process.cwd(), "packages/reactive-core/src/internal.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared/html-escape",
+              replacement: join(process.cwd(), "packages/shared/src/html-escape.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared/url-safety",
+              replacement: join(process.cwd(), "packages/shared/src/url-safety.ts"),
+            },
+            {
+              find: "@reckona/mreact-compat",
+              replacement: join(process.cwd(), "packages/react-compat/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-core",
+              replacement: join(process.cwd(), "packages/reactive-core/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared",
+              replacement: join(process.cwd(), "packages/shared/src/index.ts"),
+            },
+          ],
+        },
       });
       const code = (Array.isArray(result) ? result : [result])
         .flatMap((output) => output.output)
@@ -62,20 +111,45 @@ describe("react-compat production bundle", () => {
   test("keeps compat normalizer code out of a native reactive-dom bundle", async () => {
     const root = await mkdtemp(join(tmpdir(), "mreact-native-normalizer-bundle-"));
     const entry = join(root, "entry.ts");
-    await writeFile(entry, 'import { insertDynamic } from "@reckona/mreact-reactive-dom"; void insertDynamic;');
+    await writeFile(
+      entry,
+      'import { insertDynamic } from "@reckona/mreact-reactive-dom"; void insertDynamic;',
+    );
 
     try {
       const result = await viteBuild({
-        build: { lib: { entry, formats: ["es"] }, minify: false, rollupOptions: { treeshake: true }, write: false },
+        build: {
+          lib: { entry, formats: ["es"] },
+          minify: false,
+          rollupOptions: { treeshake: true },
+          write: false,
+        },
         configFile: false,
         logLevel: "silent",
-        resolve: { alias: [
-          { find: "@reckona/mreact-reactive-core/internal", replacement: join(process.cwd(), "packages/reactive-core/src/internal.ts") },
-          { find: "@reckona/mreact-shared/url-safety", replacement: join(process.cwd(), "packages/shared/src/url-safety.ts") },
-          { find: "@reckona/mreact-reactive-dom", replacement: join(process.cwd(), "packages/reactive-dom/src/index.ts") },
-          { find: "@reckona/mreact-reactive-core", replacement: join(process.cwd(), "packages/reactive-core/src/index.ts") },
-          { find: "@reckona/mreact-shared", replacement: join(process.cwd(), "packages/shared/src/index.ts") },
-        ] },
+        resolve: {
+          alias: [
+            {
+              find: "@reckona/mreact-reactive-core/internal",
+              replacement: join(process.cwd(), "packages/reactive-core/src/internal.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared/url-safety",
+              replacement: join(process.cwd(), "packages/shared/src/url-safety.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-core",
+              replacement: join(process.cwd(), "packages/reactive-core/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared",
+              replacement: join(process.cwd(), "packages/shared/src/index.ts"),
+            },
+          ],
+        },
       });
       const code = (Array.isArray(result) ? result : [result])
         .flatMap((output) => output.output)
@@ -95,11 +169,13 @@ describe("react-compat production bundle", () => {
       await readFile(join(process.cwd(), "packages/react-compat/package.json"), "utf8"),
     ) as { sideEffects?: unknown };
 
-    expect(manifest.sideEffects).toEqual(expect.arrayContaining([
-      "./dist/index.js",
-      "./dist/jsx-runtime.js",
-      "./dist/jsx-dev-runtime.js",
-    ]));
+    expect(manifest.sideEffects).toEqual(
+      expect.arrayContaining([
+        "./dist/index.js",
+        "./dist/jsx-runtime.js",
+        "./dist/jsx-dev-runtime.js",
+      ]),
+    );
   });
 
   test("preserves side-effect metadata in the packed compat tarball", async () => {
@@ -121,16 +197,18 @@ describe("react-compat production bundle", () => {
           "tar",
           ["-xOf", isAbsolute(tarball) ? tarball : join(packDir, tarball), "package/package.json"],
           {
-          encoding: "utf8",
+            encoding: "utf8",
           },
         ),
       ) as { sideEffects?: unknown };
 
-      expect(manifest.sideEffects).toEqual(expect.arrayContaining([
-        "./dist/index.js",
-        "./dist/jsx-runtime.js",
-        "./dist/jsx-dev-runtime.js",
-      ]));
+      expect(manifest.sideEffects).toEqual(
+        expect.arrayContaining([
+          "./dist/index.js",
+          "./dist/jsx-runtime.js",
+          "./dist/jsx-dev-runtime.js",
+        ]),
+      );
     } finally {
       await rm(packDir, { force: true, recursive: true });
     }
@@ -142,25 +220,26 @@ describe("react-compat production bundle", () => {
 
     try {
       await writePackedConsumerPackage(root, packDir);
-      execFileSync(
-        "corepack",
-        ["pnpm", "--dir", root, "install", "--ignore-scripts=false"],
-        { encoding: "utf8" },
-      );
+      execFileSync("corepack", ["pnpm", "--dir", root, "install", "--ignore-scripts=false"], {
+        encoding: "utf8",
+      });
       const scenarios = [
         {
           name: "root",
-          factory: 'import { createElement as createCompatElement } from "@reckona/mreact-compat";\nconst createValue = () => createCompatElement("main", null, "packed root");',
+          factory:
+            'import { createElement as createCompatElement } from "@reckona/mreact-compat";\nconst createValue = () => createCompatElement("main", null, "packed root");',
           text: "packed root",
         },
         {
           name: "jsx-runtime",
-          factory: 'import { jsx } from "@reckona/mreact-compat/jsx-runtime";\nconst createValue = () => jsx("main", { children: "packed jsx" });',
+          factory:
+            'import { jsx } from "@reckona/mreact-compat/jsx-runtime";\nconst createValue = () => jsx("main", { children: "packed jsx" });',
           text: "packed jsx",
         },
         {
           name: "jsx-dev-runtime",
-          factory: 'import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";\nconst createValue = () => jsxDEV("main", { children: "packed jsx dev" }, undefined, false, undefined, undefined);',
+          factory:
+            'import { jsxDEV } from "@reckona/mreact-compat/jsx-dev-runtime";\nconst createValue = () => jsxDEV("main", { children: "packed jsx dev" }, undefined, false, undefined, undefined);',
           text: "packed jsx dev",
         },
       ] as const;
@@ -171,13 +250,17 @@ describe("react-compat production bundle", () => {
       }> = [];
 
       for (const scenario of scenarios) {
-        const chunk = await bundlePackedScenario(root, scenario.name, `${scenario.factory}
+        const chunk = await bundlePackedScenario(
+          root,
+          scenario.name,
+          `${scenario.factory}
 import { insertDynamic } from "@reckona/mreact-reactive-dom";
 export function mount(container) {
   const marker = document.createComment("");
   container.append(marker);
   insertDynamic(container, marker, createValue);
-}`);
+}`,
+        );
         const result = executePackedBundle(root, scenario.name, chunk.code);
 
         expect(result.tagName).toBe("MAIN");
@@ -221,9 +304,9 @@ export function mount(parent, marker) {
       expect(Object.keys(memo.modules).some((moduleId) => moduleId.endsWith("bind-list.js"))).toBe(
         false,
       );
-      expect(Object.keys(memo.modules).some((moduleId) => moduleId.endsWith("create-list.js"))).toBe(
-        false,
-      );
+      expect(
+        Object.keys(memo.modules).some((moduleId) => moduleId.endsWith("create-list.js")),
+      ).toBe(false);
       expect(sizes).toHaveLength(3);
       expect(sizes.every((size) => size.rawBytes > size.gzipBytes)).toBe(true);
       for (const size of sizes) {
@@ -235,18 +318,21 @@ export function mount(parent, marker) {
           budget.gzipBytes,
         );
       }
-      expect(Buffer.byteLength(native.code), "native packed consumer raw bytes").toBeLessThanOrEqual(
-        packedCompatConsumerSizeBudgets.native.rawBytes,
-      );
+      expect(
+        Buffer.byteLength(native.code),
+        "native packed consumer raw bytes",
+      ).toBeLessThanOrEqual(packedCompatConsumerSizeBudgets.native.rawBytes);
       expect(gzipSync(native.code).length, "native packed consumer gzip bytes").toBeLessThanOrEqual(
         packedCompatConsumerSizeBudgets.native.gzipBytes,
       );
-      expect(Buffer.byteLength(memo.code), "memo-only packed consumer raw bytes").toBeLessThanOrEqual(
-        packedMemoConsumerSizeBudget.rawBytes,
-      );
-      expect(gzipSync(memo.code).length, "memo-only packed consumer gzip bytes").toBeLessThanOrEqual(
-        packedMemoConsumerSizeBudget.gzipBytes,
-      );
+      expect(
+        Buffer.byteLength(memo.code),
+        "memo-only packed consumer raw bytes",
+      ).toBeLessThanOrEqual(packedMemoConsumerSizeBudget.rawBytes);
+      expect(
+        gzipSync(memo.code).length,
+        "memo-only packed consumer gzip bytes",
+      ).toBeLessThanOrEqual(packedMemoConsumerSizeBudget.gzipBytes);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -266,22 +352,63 @@ export function mount(container: Element) {
 
     try {
       const result = await viteBuild({
-        build: { lib: { entry, formats: ["es"] }, minify: false, outDir, rollupOptions: { treeshake: true }, write: false },
+        build: {
+          lib: { entry, formats: ["es"] },
+          minify: false,
+          outDir,
+          rollupOptions: { treeshake: true },
+          write: false,
+        },
         configFile: false,
         logLevel: "silent",
-        resolve: { alias: [
-          { find: "@reckona/mreact-compat/jsx-runtime", replacement: join(process.cwd(), "packages/react-compat/src/jsx-runtime.ts") },
-          { find: "@reckona/mreact-compat/jsx-dev-runtime", replacement: join(process.cwd(), "packages/react-compat/src/jsx-dev-runtime.ts") },
-          { find: "@reckona/mreact-reactive-dom/compat-normalize", replacement: join(process.cwd(), "packages/reactive-dom/src/compat-normalize.ts") },
-          { find: "@reckona/mreact-reactive-dom/internal", replacement: join(process.cwd(), "packages/reactive-dom/src/internal.ts") },
-          { find: "@reckona/mreact-reactive-core/internal", replacement: join(process.cwd(), "packages/reactive-core/src/internal.ts") },
-          { find: "@reckona/mreact-shared/html-escape", replacement: join(process.cwd(), "packages/shared/src/html-escape.ts") },
-          { find: "@reckona/mreact-shared/url-safety", replacement: join(process.cwd(), "packages/shared/src/url-safety.ts") },
-          { find: "@reckona/mreact-compat", replacement: join(process.cwd(), "packages/react-compat/src/index.ts") },
-          { find: "@reckona/mreact-reactive-dom", replacement: join(process.cwd(), "packages/reactive-dom/src/index.ts") },
-          { find: "@reckona/mreact-reactive-core", replacement: join(process.cwd(), "packages/reactive-core/src/index.ts") },
-          { find: "@reckona/mreact-shared", replacement: join(process.cwd(), "packages/shared/src/index.ts") },
-        ] },
+        resolve: {
+          alias: [
+            {
+              find: "@reckona/mreact-compat/jsx-runtime",
+              replacement: join(process.cwd(), "packages/react-compat/src/jsx-runtime.ts"),
+            },
+            {
+              find: "@reckona/mreact-compat/jsx-dev-runtime",
+              replacement: join(process.cwd(), "packages/react-compat/src/jsx-dev-runtime.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom/compat-normalize",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/compat-normalize.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom/internal",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/internal.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-core/internal",
+              replacement: join(process.cwd(), "packages/reactive-core/src/internal.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared/html-escape",
+              replacement: join(process.cwd(), "packages/shared/src/html-escape.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared/url-safety",
+              replacement: join(process.cwd(), "packages/shared/src/url-safety.ts"),
+            },
+            {
+              find: "@reckona/mreact-compat",
+              replacement: join(process.cwd(), "packages/react-compat/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-dom",
+              replacement: join(process.cwd(), "packages/reactive-dom/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-reactive-core",
+              replacement: join(process.cwd(), "packages/reactive-core/src/index.ts"),
+            },
+            {
+              find: "@reckona/mreact-shared",
+              replacement: join(process.cwd(), "packages/shared/src/index.ts"),
+            },
+          ],
+        },
       });
       const chunk = (Array.isArray(result) ? result : [result])
         .flatMap((output) => output.output)
@@ -290,7 +417,7 @@ export function mount(container: Element) {
         throw new Error("expected Vite to emit a compat bundle chunk");
       }
       const bundled = await import(
-        `data:text/javascript;base64,${Buffer.from(chunk.code).toString("base64")}`,
+        `data:text/javascript;base64,${Buffer.from(chunk.code).toString("base64")}`
       );
       const container = document.createElement("div");
 
@@ -336,11 +463,9 @@ async function writePackedConsumerPackage(root: string, packDir: string): Promis
 
   for (const packageName of ["reactive-core", "reactive-dom", "shared", "react-compat"]) {
     const packageDir = join(process.cwd(), "packages", packageName);
-    execFileSync(
-      "corepack",
-      ["pnpm", "--dir", packageDir, "pack", "--pack-destination", packDir],
-      { encoding: "utf8" },
-    );
+    execFileSync("corepack", ["pnpm", "--dir", packageDir, "pack", "--pack-destination", packDir], {
+      encoding: "utf8",
+    });
   }
 
   const tarballs = await readdir(packDir);
@@ -354,7 +479,10 @@ async function writePackedConsumerPackage(root: string, packDir: string): Promis
     if (tarball === undefined) {
       throw new Error(`expected packed tarball for ${packageName}`);
     }
-    await writeFile(join(packDir, `reckona-${tarballPrefix}.tgz`), await readFile(join(packDir, tarball)));
+    await writeFile(
+      join(packDir, `reckona-${tarballPrefix}.tgz`),
+      await readFile(join(packDir, tarball)),
+    );
   }
 }
 
@@ -373,7 +501,12 @@ async function bundlePackedScenario(
       write: false,
     },
     configFile: false,
+    define: {
+      "import.meta.env.DEV": "false",
+      "import.meta.env.PROD": "true",
+    },
     logLevel: "silent",
+    mode: "production",
     root,
   });
   const chunk = (Array.isArray(result) ? result : [result])
@@ -415,7 +548,9 @@ console.log(JSON.stringify({
 `,
   );
 
-  return JSON.parse(
-    execFileSync(process.execPath, [runner], { cwd: root, encoding: "utf8" }),
-  ) as { html: string; tagName: string | undefined; text: string | null | undefined };
+  return JSON.parse(execFileSync(process.execPath, [runner], { cwd: root, encoding: "utf8" })) as {
+    html: string;
+    tagName: string | undefined;
+    text: string | null | undefined;
+  };
 }

@@ -76,6 +76,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
   // start, to match the browser's URL parser.
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
+    `  name = name.toLowerCase();`,
     `  value = String(value);`,
     `  if (name === "srcset" || name === "imagesrcset") {`,
     `    const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, "").replace(/[\\t\\r\\n]/g, "");`,
@@ -1126,7 +1127,9 @@ function emitDangerouslySetInnerHtmlExpression(
   attrs: readonly AttributeIr[],
   fallbackCode: string,
 ): string | undefined {
-  if (!attrs.some((attr) => attr.kind === "spread-attr" || attr.name === "dangerouslySetInnerHTML")) {
+  if (
+    !attrs.some((attr) => attr.kind === "spread-attr" || attr.name === "dangerouslySetInnerHTML")
+  ) {
     return undefined;
   }
 
@@ -1427,10 +1430,7 @@ function emitCompatDynamicAttributeExpression(
 // Mirrors packages/react-compat/src/server-render.ts renderStyleAttribute and
 // renderCssValue: skips null/boolean/empty entries and appends px to nonzero
 // numeric values outside the react unitless list.
-function emitCompatDynamicStyleAttributeExpression(
-  code: string,
-  escapeHelperName: string,
-): string {
+function emitCompatDynamicStyleAttributeExpression(code: string, escapeHelperName: string): string {
   const unitlessCheck =
     '_styleName === "flex" || _styleName === "fontWeight" || _styleName === "lineHeight" || _styleName === "opacity" || _styleName === "order" || _styleName === "zIndex" || _styleName === "zoom"';
 
@@ -2113,20 +2113,21 @@ function emitSpreadAttributesHelper(
     `    if (_value == null) continue;`,
     `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (${name}$aliases[_rawName] ?? _rawName);`,
     `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
-    `    const _booleanish = _name.startsWith("aria-") || _name.startsWith("data-") || _name === "contenteditable" || _name === "draggable" || _name === "spellcheck";`,
+    `    const _lowerName = _name.toLowerCase();`,
+    `    const _booleanish = _lowerName.startsWith("aria-") || _lowerName.startsWith("data-") || _lowerName === "autocapitalize" || _lowerName === "contenteditable" || _lowerName === "draggable" || _lowerName === "spellcheck" || _lowerName === "translate";`,
     `    if (_value === false && !_booleanish) continue;`,
     `    if (_name === "style") {`,
     `      const _style = ${name}$style(_value);`,
     `      if (_style !== "") _out += " style=\\"" + ${escapeHelperName}(_style) + "\\"";`,
     `      continue;`,
     `    }`,
-    `    if (${name}$dangerousAttributes.has(_name)) {`,
+    `    if (${name}$dangerousAttributes.has(_lowerName)) {`,
     `      if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") {`,
     `        _out += " " + _name + "=\\"" + ${escapeHelperName}(_value.__html) + "\\"";`,
     `      }`,
     `      continue;`,
     `    }`,
-    `    if (${name}$urlAttributes.has(_name)) {`,
+    `    if (${name}$urlAttributes.has(_lowerName)) {`,
     `      _value = ${urlSafeHelperName}(_name, _value === true ? "" : _value);`,
     `      if (_value === undefined) continue;`,
     `    }`,

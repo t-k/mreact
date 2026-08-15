@@ -60,6 +60,102 @@ describe("DOM prop application policy", () => {
     expect(image.hasAttribute("crossOrigin")).toBe(false);
   });
 
+  test("treats Object prototype member names as ordinary attributes", () => {
+    const div = document.createElement("div");
+    const names = [
+      "constructor",
+      "toString",
+      "__proto__",
+      "valueOf",
+      "hasOwnProperty",
+      "isPrototypeOf",
+      "propertyIsEnumerable",
+      "toLocaleString",
+    ];
+
+    for (const preferProperty of [false, true]) {
+      for (const name of names) {
+        const inheritedValue = (div as unknown as Record<string, unknown>)[name];
+        expect(() => applyDomProp(div, name, `value:${name}`, preferProperty)).not.toThrow();
+        expect(div.getAttribute(name)).toBe(`value:${name}`);
+        expect(Object.hasOwn(div, name)).toBe(false);
+        expect((div as unknown as Record<string, unknown>)[name]).toBe(inheritedValue);
+        expect(() => removeDomProp(div, name)).not.toThrow();
+        expect(div.getAttribute(name)).toBeNull();
+        expect(Object.hasOwn(div, name)).toBe(false);
+        expect((div as unknown as Record<string, unknown>)[name]).toBe(inheritedValue);
+      }
+    }
+  });
+
+  test("drops unsafe mixed-case URL and HTML attributes", () => {
+    const link = document.createElement("a");
+    const frame = document.createElement("iframe");
+
+    applyDomProp(link, "HREF", "javascript:alert(1)", false);
+    applyDomProp(frame, "SRCDOC", "<script>1</script>", false);
+
+    expect(link.hasAttribute("href")).toBe(false);
+    expect(frame.hasAttribute("srcdoc")).toBe(false);
+  });
+
+  test("ignores invalid attribute names without throwing", () => {
+    const div = document.createElement("div");
+
+    expect(() => applyDomProp(div, "bad name", "value", false)).not.toThrow();
+    expect(() => removeDomProp(div, "bad name")).not.toThrow();
+    expect(div.outerHTML).toBe("<div></div>");
+  });
+
+  test("drops event-like props regardless of name casing", () => {
+    const image = document.createElement("img");
+    image.setAttribute("onerror", "oldHandler() ");
+    image.onerror = () => undefined;
+
+    for (const name of ["onError", "onerror", "ONERROR", "OnErRoR"]) {
+      expect(() => applyDomProp(image, name, "globalThis.__pwned = true", true)).not.toThrow();
+      expect(image.hasAttribute("onerror")).toBe(false);
+      expect(image.onerror).toBeNull();
+    }
+  });
+
+  test("serializes booleanish attributes as literal tokens", () => {
+    const div = document.createElement("div");
+
+    for (const name of [
+      "aria-expanded",
+      "data-open",
+      "spellCheck",
+      "draggable",
+      "contentEditable",
+      "translate",
+      "autoCapitalize",
+    ]) {
+      applyDomProp(div, name, true, true);
+      expect(div.getAttribute(name)).toBe("true");
+      applyDomProp(div, name, false, true);
+      expect(div.getAttribute(name)).toBe("false");
+    }
+
+    applyDomProp(div, "hidden", true, true);
+    expect(div.getAttribute("hidden")).toBe("");
+    applyDomProp(div, "hidden", false, true);
+    expect(div.getAttribute("hidden")).toBeNull();
+  });
+
+  test("clears constrained DOM properties by removing their attributes", () => {
+    const editable = document.createElement("div");
+    const input = document.createElement("input");
+
+    applyDomProp(editable, "contentEditable", true, true);
+    expect(() => applyDomProp(editable, "contentEditable", null, true)).not.toThrow();
+    expect(editable.hasAttribute("contenteditable")).toBe(false);
+
+    applyDomProp(input, "size", 12, true);
+    expect(() => applyDomProp(input, "size", undefined, true)).not.toThrow();
+    expect(input.hasAttribute("size")).toBe(false);
+  });
+
   test("removes falsey values and clears reflected boolean DOM properties", () => {
     const button = document.createElement("button");
 

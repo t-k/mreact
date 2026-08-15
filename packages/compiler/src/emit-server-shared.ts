@@ -1,4 +1,5 @@
 import { parseSync } from "oxc-parser";
+import { isBooleanishStringAttribute as isSharedBooleanishStringAttribute } from "@reckona/mreact-shared";
 import { readArray, readObject, unwrapOxcParentheses } from "./oxc-node-utils.js";
 
 export interface StaticStyleObjectEntry {
@@ -48,6 +49,7 @@ const SIMPLE_SINGLE_QUOTE_RE = /^'(?:[^'\\]|\\.)*'$/;
 
 const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   acceptCharset: "accept-charset",
+  autoCapitalize: "autocapitalize",
   autoFocus: "autofocus",
   autoPlay: "autoplay",
   charSet: "charset",
@@ -75,11 +77,11 @@ const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
 };
 
 export function isUrlAttribute(name: string): boolean {
-  return URL_ATTRIBUTE_NAMES.has(name);
+  return URL_ATTRIBUTE_NAMES.has(name.toLowerCase());
 }
 
 export function isDangerousHtmlAttribute(name: string): boolean {
-  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name);
+  return DANGEROUS_HTML_ATTRIBUTE_NAMES.has(name.toLowerCase());
 }
 
 export function isVoidHtmlElement(tagName: string): boolean {
@@ -87,7 +89,8 @@ export function isVoidHtmlElement(tagName: string): boolean {
 }
 
 export function isStaticUrlValueUnsafe(name: string, value: string): boolean {
-  if (name === "srcset" || name === "imagesrcset") {
+  const attributeName = name.toLowerCase();
+  if (attributeName === "srcset" || attributeName === "imagesrcset") {
     const canonicalSet = canonicalizeUrlForSchemeCheck(value);
     for (const candidate of canonicalSet.split(",")) {
       const url = candidate.trim().split(/\s+/)[0] ?? "";
@@ -102,9 +105,20 @@ export function isStaticUrlValueUnsafe(name: string, value: string): boolean {
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(canonical);
   if (match === null || match[1] === undefined) return false;
   const scheme = match[1].toLowerCase();
-  if (scheme === "javascript" || scheme === "vbscript" || scheme === "livescript" || scheme === "mhtml" || scheme === "file") return true;
+  if (
+    scheme === "javascript" ||
+    scheme === "vbscript" ||
+    scheme === "livescript" ||
+    scheme === "mhtml" ||
+    scheme === "file"
+  )
+    return true;
   if (scheme === "data") {
-    if ((name === "src" || name === "poster") && /^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)) return false;
+    if (
+      (attributeName === "src" || attributeName === "poster") &&
+      /^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)
+    )
+      return false;
     return true;
   }
   return false;
@@ -146,9 +160,7 @@ export function parseStyleLiteralValue(code: string): string | number | null | u
   return undefined;
 }
 
-export function parseStaticStyleObjectLiteral(
-  code: string,
-): StaticStyleObjectEntry[] | undefined {
+export function parseStaticStyleObjectLiteral(code: string): StaticStyleObjectEntry[] | undefined {
   const objectCode = unwrapParenthesized(code.trim());
   const stringParsedEntries = parseStaticStyleObjectLiteralFromString(objectCode);
 
@@ -286,12 +298,7 @@ export function simpleSideEffectFreeExpression(code: string): string | undefined
     return undefined;
   }
 
-  if (
-    trimmed === "true" ||
-    trimmed === "false" ||
-    trimmed === "null" ||
-    trimmed === "undefined"
-  ) {
+  if (trimmed === "true" || trimmed === "false" || trimmed === "null" || trimmed === "undefined") {
     return trimmed;
   }
 
@@ -308,28 +315,23 @@ export function simpleSideEffectFreeExpression(code: string): string | undefined
 }
 
 export function htmlAttributeName(name: string): string {
-  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+  return Object.hasOwn(HTML_ATTRIBUTE_ALIASES, name)
+    ? (HTML_ATTRIBUTE_ALIASES[name] as string)
+    : name;
 }
 
 export function isBooleanishStringAttribute(name: string): boolean {
-  const attributeName = htmlAttributeName(name).toLowerCase();
-  return (
-    attributeName.startsWith("aria-") ||
-    attributeName.startsWith("data-") ||
-    BOOLEANISH_STRING_ATTRIBUTES.has(attributeName)
-  );
+  return isSharedBooleanishStringAttribute(htmlAttributeName(name));
 }
-
-const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
-  "contenteditable",
-  "draggable",
-  "spellcheck",
-]);
 
 function unwrapParenthesized(code: string): string {
   let current = code;
 
-  while (current.startsWith("(") && current.endsWith(")") && findMatchingClose(current, 0) === current.length - 1) {
+  while (
+    current.startsWith("(") &&
+    current.endsWith(")") &&
+    findMatchingClose(current, 0) === current.length - 1
+  ) {
     current = current.slice(1, -1).trim();
   }
 
@@ -354,7 +356,7 @@ function splitTopLevel(code: string, separator: string): string[] {
       continue;
     }
 
-    if (char === "\"" || char === "'" || char === "`") {
+    if (char === '"' || char === "'" || char === "`") {
       quote = char;
       continue;
     }
@@ -399,7 +401,7 @@ function findMatchingClose(code: string, openIndex: number): number {
       continue;
     }
 
-    if (char === "\"" || char === "'" || char === "`") {
+    if (char === '"' || char === "'" || char === "`") {
       quote = char;
       continue;
     }
@@ -424,7 +426,7 @@ function parseStaticObjectKey(rawKey: string): string | undefined {
   }
 
   if (
-    (rawKey.startsWith("\"") && rawKey.endsWith("\"")) ||
+    (rawKey.startsWith('"') && rawKey.endsWith('"')) ||
     (rawKey.startsWith("'") && rawKey.endsWith("'"))
   ) {
     return rawKey.slice(1, -1);
@@ -434,7 +436,5 @@ function parseStaticObjectKey(rawKey: string): string | undefined {
 }
 
 function cssPropertyName(name: string): string {
-  return name.startsWith("--")
-    ? name
-    : name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
+  return name.startsWith("--") ? name : name.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`);
 }

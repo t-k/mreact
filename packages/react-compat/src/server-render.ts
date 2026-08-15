@@ -10,6 +10,7 @@ import {
   type ReactCompatElement,
   type ReactCompatNode,
 } from "./element.js";
+import { isBooleanishStringAttribute } from "@reckona/mreact-shared";
 import {
   consumerContext,
   isReactCompatConsumer,
@@ -57,9 +58,7 @@ export function renderToString<TProps>(
 
         return (component as (props: TProps) => ReactCompatNode)(props as TProps);
       });
-      return typeof rendered === "string"
-        ? rendered
-        : renderNodeToString(rendered, runtime, "0.0");
+      return typeof rendered === "string" ? rendered : renderNodeToString(rendered, runtime, "0.0");
     } catch (error) {
       if (isThenable(error)) {
         throw new Error(
@@ -106,11 +105,7 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
   );
 }
 
-function renderNodeToString(
-  node: ReactCompatNode,
-  runtime: RootRuntime,
-  path: string,
-): string {
+function renderNodeToString(node: ReactCompatNode, runtime: RootRuntime, path: string): string {
   if (node === null || node === undefined || typeof node === "boolean") {
     return "";
   }
@@ -195,7 +190,9 @@ function renderElementToString(
 
     if (typeof children === "function") {
       return renderNodeToString(
-        (children as (value: unknown) => ReactCompatNode)(useContext(consumerContext(element.type))),
+        (children as (value: unknown) => ReactCompatNode)(
+          useContext(consumerContext(element.type)),
+        ),
         runtime,
         `${path}.consumer`,
       );
@@ -207,9 +204,7 @@ function renderElementToString(
   if (isForwardRefType(element.type)) {
     const forwardRefType = element.type;
     return renderNodeToString(
-      renderWithRootRuntime(runtime, path, () =>
-        forwardRefType.render(element.props, element.ref),
-      ),
+      renderWithRootRuntime(runtime, path, () => forwardRefType.render(element.props, element.ref)),
       runtime,
       `${path}.forwardRef`,
     );
@@ -327,21 +322,19 @@ function renderSelectChildrenToString(
 ): string {
   const childArray = Array.isArray(children) ? children : [children];
 
-  return childArray.map((child, index) => {
-    if (!isReactCompatElement(child) || child.type !== "option") {
-      return renderNodeToString(child, runtime, `${path}.${index}`);
-    }
+  return childArray
+    .map((child, index) => {
+      if (!isReactCompatElement(child) || child.type !== "option") {
+        return renderNodeToString(child, runtime, `${path}.${index}`);
+      }
 
-    const optionValue =
-      (child.props as { value?: unknown }).value ?? child.props.children;
-    const selected =
-      selectedValue !== undefined && String(optionValue) === String(selectedValue);
-    const props = selected
-      ? { ...child.props, selected: true }
-      : child.props;
+      const optionValue = (child.props as { value?: unknown }).value ?? child.props.children;
+      const selected = selectedValue !== undefined && String(optionValue) === String(selectedValue);
+      const props = selected ? { ...child.props, selected: true } : child.props;
 
-    return renderElementToString({ ...child, props }, runtime, `${path}.${index}`);
-  }).join("");
+      return renderElementToString({ ...child, props }, runtime, `${path}.${index}`);
+    })
+    .join("");
 }
 
 function renderInputAttributesToString(props: Record<string, unknown>): string {
@@ -349,11 +342,13 @@ function renderInputAttributesToString(props: Record<string, unknown>): string {
   const hasChecked = props.checked !== undefined;
 
   return Object.entries(props)
-    .filter(([name]) =>
-      !((name === "defaultValue" && hasValue) || (name === "defaultChecked" && hasChecked))
+    .filter(
+      ([name]) =>
+        !((name === "defaultValue" && hasValue) || (name === "defaultChecked" && hasChecked)),
     )
-    .sort(([leftName], [rightName]) =>
-      Number(isInputValueAttribute(leftName)) - Number(isInputValueAttribute(rightName))
+    .sort(
+      ([leftName], [rightName]) =>
+        Number(isInputValueAttribute(leftName)) - Number(isInputValueAttribute(rightName)),
     )
     .map(([name, value]) => renderHtmlAttribute(toInputHtmlAttributeName(name), value))
     .filter((attribute) => attribute !== "")
@@ -389,11 +384,7 @@ export const __serverRenderAttributeCacheForTesting = {
 };
 
 function renderHtmlAttribute(name: string, value: unknown): string {
-  if (
-    value === null ||
-    value === undefined ||
-    typeof value === "function"
-  ) {
+  if (value === null || value === undefined || typeof value === "function") {
     return "";
   }
 
@@ -423,9 +414,7 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   if (classification.dangerousHtml) {
-    return isDangerousHtmlOptIn(value)
-      ? ` ${attributeName}="${escapeHtml(value.__html)}"`
-      : "";
+    return isDangerousHtmlOptIn(value) ? ` ${attributeName}="${escapeHtml(value.__html)}"` : "";
   }
 
   if (typeof value === "object") {
@@ -463,12 +452,7 @@ function classifyAttributeName(name: string): AttributeNameClassification {
 }
 
 function createAttributeNameClassification(name: string): AttributeNameClassification {
-  if (
-    name === "children" ||
-    name === "key" ||
-    name === "ref" ||
-    isEventLikePropName(name)
-  ) {
+  if (name === "children" || name === "key" || name === "ref" || isEventLikePropName(name)) {
     return { kind: "skip" };
   }
 
@@ -491,21 +475,9 @@ function createAttributeNameClassification(name: string): AttributeNameClassific
   };
 }
 
-function isBooleanishStringAttribute(attributeName: string): boolean {
-  // Callers pass the already-mapped HTML attribute name.
-  const lowerCased = attributeName.toLowerCase();
-  return lowerCased.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(lowerCased);
-}
-
 function isDataAttribute(attributeName: string): boolean {
   return attributeName.toLowerCase().startsWith("data-");
 }
-
-const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
-  "contenteditable",
-  "draggable",
-  "spellcheck",
-]);
 
 function isInputValueAttribute(name: string): boolean {
   return name === "value" || name === "defaultValue";
@@ -524,11 +496,14 @@ function toInputHtmlAttributeName(name: string): string {
 }
 
 function toHtmlAttributeName(name: string): string {
-  return HTML_ATTRIBUTE_ALIASES[name] ?? name;
+  return Object.hasOwn(HTML_ATTRIBUTE_ALIASES, name)
+    ? (HTML_ATTRIBUTE_ALIASES[name] as string)
+    : name;
 }
 
 const HTML_ATTRIBUTE_ALIASES: Record<string, string> = {
   acceptCharset: "accept-charset",
+  autoCapitalize: "autocapitalize",
   autoFocus: "autofocus",
   autoPlay: "autoplay",
   charSet: "charset",
@@ -572,9 +547,10 @@ function renderStyleAttribute(value: unknown): string {
       continue;
     }
 
-    css += css === ""
-      ? `${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`
-      : `;${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`;
+    css +=
+      css === ""
+        ? `${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`
+        : `;${toKebabCase(name)}:${renderCssValue(name, propertyValue)}`;
   }
   return css;
 }

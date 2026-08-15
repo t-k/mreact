@@ -6,6 +6,8 @@ import { bindDomRef, getDomRefBindings } from "../src/dom-ref.js";
 import { createRoot } from "../src/root.js";
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
@@ -147,6 +149,46 @@ describe("bindDomRef", () => {
     expect(attached).toEqual([element]);
     binding.dispose();
     element.remove();
+  });
+
+  test("drops a never-connected ref after a bounded polling budget", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const element = document.createElement("section");
+    const binding = bindDomRef(element, () => {});
+
+    await Promise.resolve();
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.runAllTimersAsync();
+
+    expect(vi.getTimerCount()).toBe(0);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("never connected"));
+    binding.dispose();
+  });
+
+  test("gives a later pending ref an independent initial polling delay", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("NODE_ENV", "production");
+    const abandoned = document.createElement("section");
+    const abandonedBinding = bindDomRef(abandoned, () => {});
+    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(240);
+
+    const targetDocument = document.implementation.createHTMLDocument("target");
+    const later = document.createElement("section");
+    let attached = false;
+    const laterBinding = bindDomRef(later, () => {
+      attached = true;
+    });
+    await Promise.resolve();
+    targetDocument.body.append(later);
+    await vi.advanceTimersByTimeAsync(16);
+
+    expect(attached).toBe(true);
+    laterBinding.dispose();
+    abandonedBinding.dispose();
   });
 
   test("does not attach after its pending owner is disposed", async () => {

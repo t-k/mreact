@@ -43,7 +43,8 @@ describe("server emit shared behavior", () => {
   );
 }`;
     const compiled = compileServerPair(source);
-    const expected = '<label class="field" for="name" style="background-color:red;--gap:4">Name</label>';
+    const expected =
+      '<label class="field" for="name" style="background-color:red;--gap:4">Name</label>';
 
     expect(runServerComponent(compiled.string)).toBe(expected);
     await expect(runServerStreamComponent(compiled.stream)).resolves.toBe(expected);
@@ -60,10 +61,21 @@ describe("server emit shared behavior", () => {
   );
 }`;
     const compiled = compileServerPair(source);
-    const expected = '<main><a>link</a><img alt="bad"><img src="data:image/png;base64,abc" alt="ok"></main>';
+    const expected =
+      '<main><a>link</a><img alt="bad"><img src="data:image/png;base64,abc" alt="ok"></main>';
 
     expect(runServerComponent(compiled.string)).toBe(expected);
     await expect(runServerStreamComponent(compiled.stream)).resolves.toBe(expected);
+  });
+
+  test("string and stream emitters drop mixed-case unsafe attributes", async () => {
+    await expectServerPairHtml(
+      `export function App() {
+  const props = { HREF: "javascript:alert(1)", SRCDOC: "<script>1</script>" };
+  return <iframe {...props} HREF="javascript:alert(2)" SRCDOC="<script>2</script>" />;
+}`,
+      "<iframe></iframe>",
+    );
   });
 
   test("string and stream emitters serialize dynamic style objects the same way", async () => {
@@ -137,7 +149,8 @@ export function SunIcon(props: { class?: string }) {
       filename: "App.tsx",
       target: "server",
     });
-    const expected = '<svg viewBox="0 0 24 24" class="sun" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2"></path></svg>';
+    const expected =
+      '<svg viewBox="0 0 24 24" class="sun" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2"></path></svg>';
 
     expect(output.diagnostics).toEqual([]);
     expect(runServerComponent(output.code, "SunIcon", { class: "sun" })).toBe(expected);
@@ -151,7 +164,9 @@ export function SunIcon(props: { class?: string }) {
   return <div {...{ className: "override", id: "x" }} className="base">x</div>;
 }`);
 
-    expect(runServerComponent(staticThenSpread.string)).toBe('<div class="override" id="x">x</div>');
+    expect(runServerComponent(staticThenSpread.string)).toBe(
+      '<div class="override" id="x">x</div>',
+    );
     await expect(runServerStreamComponent(staticThenSpread.stream)).resolves.toBe(
       '<div class="override" id="x">x</div>',
     );
@@ -244,11 +259,11 @@ export function SunIcon(props: { class?: string }) {
       <button disabled={false}>off</button>
       <button disabled={true}>on</button>
       <a download={true}>download</a>
-      <div aria-hidden={false} data-ready={false} contentEditable={true} draggable={false} />
+      <div aria-hidden={false} data-ready={false} autoCapitalize={false} contentEditable={true} draggable={false} spellCheck={true} translate={false} />
     </main>
   );
 }`,
-      '<main><button>off</button><button disabled="">on</button><a download="">download</a><div aria-hidden="false" data-ready="false" contenteditable="true" draggable="false"></div></main>',
+      '<main><button>off</button><button disabled="">on</button><a download="">download</a><div aria-hidden="false" data-ready="false" autocapitalize="false" contenteditable="true" draggable="false" spellcheck="true" translate="false"></div></main>',
     );
   });
 
@@ -271,7 +286,7 @@ export function SunIcon(props: { class?: string }) {
         bio: "Ada & Grace",
         note: "line\rnext",
         theme: "dark",
-        title: "\"<&>\n\t",
+        title: '"<&>\n\t',
       },
     );
   });

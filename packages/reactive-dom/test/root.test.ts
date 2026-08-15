@@ -128,6 +128,44 @@ describe("createRoot", () => {
     dispose();
   });
 
+  test("drops event-like non-function props from compat elements", () => {
+    const container = document.createElement("main");
+
+    const dispose = createRoot(container, () => ({
+      $$typeof: reactCompatElementType,
+      type: "img",
+      props: {
+        onClick: "alert(1)",
+        onerror: "alert(2)",
+      },
+    }));
+
+    const image = container.querySelector("img");
+    expect(image?.hasAttribute("onclick")).toBe(false);
+    expect(image?.hasAttribute("onerror")).toBe(false);
+
+    dispose();
+  });
+
+  test("drops mixed-case unsafe URL and HTML props from compat elements", () => {
+    const container = document.createElement("main");
+
+    const dispose = createRoot(container, () => ({
+      $$typeof: reactCompatElementType,
+      type: "iframe",
+      props: {
+        HREF: "javascript:alert(1)",
+        SRCDOC: "<script>1</script>",
+      },
+    }));
+
+    const frame = container.querySelector("iframe");
+    expect(frame?.hasAttribute("href")).toBe(false);
+    expect(frame?.hasAttribute("srcdoc")).toBe(false);
+
+    dispose();
+  });
+
   test("requires dangerous HTML opt-in for compat srcDoc props", () => {
     const container = document.createElement("main");
 

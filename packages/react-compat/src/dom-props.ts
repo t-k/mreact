@@ -18,6 +18,7 @@ import {
   type HostElement,
 } from "./dom-host-rules.js";
 import {
+  isBooleanishStringAttribute,
   isEventLikePropName,
   isReactEventHandlerPropName,
 } from "@reckona/mreact-shared";
@@ -200,14 +201,7 @@ function applyInitialProps(
     }
 
     if (name === "htmlFor") {
-      applyInitialOrHydrationAttribute(
-        element,
-        "for",
-        value,
-        path,
-        options,
-        useAttributeFastPath,
-      );
+      applyInitialOrHydrationAttribute(element, "for", value, path, options, useAttributeFastPath);
       continue;
     }
 
@@ -279,9 +273,7 @@ function applyInitialProps(
       useAttributeFastPath,
     );
   }
-
 }
-
 
 export function applyPostChildFormProps(
   element: Element,
@@ -294,7 +286,8 @@ export function applyPostChildFormProps(
 
   if (element instanceof HTMLInputElement) {
     if (hasOwnProp(props, "checked")) {
-      const checked = props.checked !== null && props.checked !== undefined && props.checked !== false;
+      const checked =
+        props.checked !== null && props.checked !== undefined && props.checked !== false;
       element.checked = checked;
       element.defaultChecked = checked;
       if (checked) {
@@ -462,11 +455,7 @@ function applyAttribute(
   setDomAttribute(element, name, stringValue);
 }
 
-function applyInitialAttribute(
-  element: Element,
-  name: string,
-  value: unknown,
-): void {
+function applyInitialAttribute(element: Element, name: string, value: unknown): void {
   if (isDangerousHtmlAttribute(name) && !isDangerousHtmlOptIn(value)) {
     return;
   }
@@ -581,10 +570,7 @@ function applyFormValueProp(
 
 function isFormValuePropName(name: string): boolean {
   return (
-    name === "value" ||
-    name === "defaultValue" ||
-    name === "checked" ||
-    name === "defaultChecked"
+    name === "value" || name === "defaultValue" || name === "checked" || name === "defaultChecked"
   );
 }
 
@@ -715,7 +701,10 @@ function collectAttributeNames(props: Record<string, unknown>): string[] {
     pushUniqueAttributeName(names, attributeName);
   }
 
-  if (cacheKey !== undefined && ATTRIBUTE_NAME_SHAPE_CACHE.size < ATTRIBUTE_NAME_SHAPE_CACHE_LIMIT) {
+  if (
+    cacheKey !== undefined &&
+    ATTRIBUTE_NAME_SHAPE_CACHE.size < ATTRIBUTE_NAME_SHAPE_CACHE_LIMIT
+  ) {
     ATTRIBUTE_NAME_SHAPE_CACHE.set(cacheKey, names);
   }
 
@@ -779,27 +768,19 @@ function sanitizeMetaRefreshElementProps(
   return sanitized;
 }
 
-function isBooleanishStringAttribute(name: string): boolean {
-  const attributeName = toDomAttributeName(name).toLowerCase();
-  return attributeName.startsWith("aria-") || BOOLEANISH_STRING_ATTRIBUTES.has(attributeName);
-}
-
 function isDataAttribute(name: string): boolean {
   return toDomAttributeName(name).toLowerCase().startsWith("data-");
 }
 
-const BOOLEANISH_STRING_ATTRIBUTES = new Set<string>([
-  "contenteditable",
-  "draggable",
-  "spellcheck",
-]);
-
 function toDomAttributeName(name: string): string {
-  return DOM_ATTRIBUTE_ALIASES[name] ?? name;
+  return Object.hasOwn(DOM_ATTRIBUTE_ALIASES, name)
+    ? (DOM_ATTRIBUTE_ALIASES[name] as string)
+    : name;
 }
 
 const DOM_ATTRIBUTE_ALIASES: Record<string, string> = {
   acceptCharset: "accept-charset",
+  autoCapitalize: "autocapitalize",
   autoFocus: "autofocus",
   autoPlay: "autoplay",
   charSet: "charset",

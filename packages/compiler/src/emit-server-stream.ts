@@ -102,6 +102,7 @@ export function emitServerStream(
   const helper = emitEscapeHtmlHelper(escapeHelperName);
   const urlSafeHelper = [
     `function ${urlSafeHelperName}(name, value) {`,
+    `  name = name.toLowerCase();`,
     `  value = String(value);`,
     `  if (name === "srcset" || name === "imagesrcset") {`,
     `    const _canonicalSet = value.replace(/^[\\x00-\\x20]+/u, "").replace(/[\\t\\r\\n]/g, "");`,
@@ -172,9 +173,7 @@ export function emitServerStream(
     renderReactSuspenseBoundary: reactSuspenseBoundaryHelperName,
     renderReactSuspenseOutOfOrderBoundary: reactSuspenseOutOfOrderBoundaryHelperName,
     renderToString: compatRenderToStringHelperName,
-    ...(compatChildHelperName === undefined
-      ? {}
-      : { renderChildToString: compatChildHelperName }),
+    ...(compatChildHelperName === undefined ? {} : { renderChildToString: compatChildHelperName }),
   };
   const importLine = imports
     .map(
@@ -497,20 +496,21 @@ function emitSpreadAttributesHelper(
     `    if (_value == null) continue;`,
     `    let _name = tagName === "input" && _rawName === "defaultValue" ? "value" : tagName === "input" && _rawName === "defaultChecked" ? "checked" : (${name}$aliases[_rawName] ?? _rawName);`,
     `    if (!/^[A-Za-z_:][A-Za-z0-9:_.-]*$/.test(_name)) continue;`,
-    `    const _booleanish = _name.startsWith("aria-") || _name.startsWith("data-") || _name === "contenteditable" || _name === "draggable" || _name === "spellcheck";`,
+    `    const _lowerName = _name.toLowerCase();`,
+    `    const _booleanish = _lowerName.startsWith("aria-") || _lowerName.startsWith("data-") || _lowerName === "autocapitalize" || _lowerName === "contenteditable" || _lowerName === "draggable" || _lowerName === "spellcheck" || _lowerName === "translate";`,
     `    if (_value === false && !_booleanish) continue;`,
     `    if (_name === "style") {`,
     `      const _style = ${name}$style(_value);`,
     `      if (_style !== "") _out += " style=\\"" + ${escapeHelperName}(_style) + "\\"";`,
     `      continue;`,
     `    }`,
-    `    if (${name}$dangerousAttributes.has(_name)) {`,
+    `    if (${name}$dangerousAttributes.has(_lowerName)) {`,
     `      if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") {`,
     `        _out += " " + _name + "=\\"" + ${escapeHelperName}(_value.__html) + "\\"";`,
     `      }`,
     `      continue;`,
     `    }`,
-    `    if (${name}$urlAttributes.has(_name)) {`,
+    `    if (${name}$urlAttributes.has(_lowerName)) {`,
     `      _value = ${urlSafeHelperName}(_name, _value === true ? "" : _value);`,
     `      if (_value === undefined) continue;`,
     `    }`,
@@ -1292,9 +1292,10 @@ function collectHtmlParts(
 
     if (whenTrue === undefined || whenFalse === undefined) {
       const condition = node.conditionValueName ?? node.conditionCode;
-      const conditionStatement = node.conditionValueName === undefined
-        ? ""
-        : `  const ${node.conditionValueName} = (${node.conditionCode});\n`;
+      const conditionStatement =
+        node.conditionValueName === undefined
+          ? ""
+          : `  const ${node.conditionValueName} = (${node.conditionCode});\n`;
       const trueStatements = emitNestedStreamAppendStatements(
         trueParts,
         "$sink",
@@ -1826,10 +1827,7 @@ function emitMergedSpreadElementPart(
   const selectedExpression =
     selectedAttributePart === undefined
       ? undefined
-      : tryEmitPartAsStringExpression(
-          selectedAttributePart,
-          currentCompatRenderToStringHelperName,
-        );
+      : tryEmitPartAsStringExpression(selectedAttributePart, currentCompatRenderToStringHelperName);
   const opening = `${stringLiteral(`<${tagName}`)} + ${currentSpreadAttributesHelperName}(${stringLiteral(tagName)}, ${propsName})${selectedExpression === undefined ? "" : ` + (${selectedExpression})`} + ">"`;
   const closing = stringLiteral(`</${tagName}>`);
   const fallbackExpressions = fallbackParts.map((part) =>
@@ -2152,10 +2150,7 @@ function emitCompatDynamicAttributeExpression(
   return `(() => { const _value = (${code}); if (_value == null || typeof _value === "function") return ""; if (typeof _value === "boolean") { ${booleanBranch} } if (typeof _value === "object") return ""; return ${stringLiteral(` ${name}="`)} + ${escapeHelperName}(_value) + ${stringLiteral('"')}; })()`;
 }
 
-function emitCompatDynamicStyleAttributeExpression(
-  code: string,
-  escapeHelperName: string,
-): string {
+function emitCompatDynamicStyleAttributeExpression(code: string, escapeHelperName: string): string {
   const unitlessCheck =
     '_styleName === "flex" || _styleName === "fontWeight" || _styleName === "lineHeight" || _styleName === "opacity" || _styleName === "order" || _styleName === "zIndex" || _styleName === "zoom"';
 
@@ -2613,8 +2608,10 @@ function containsAsyncBoundary(node: JsxNodeIr, outOfOrder: boolean): boolean {
 
   if (node.kind === "component") {
     if (isClientBoundaryPlaceholder(node)) {
-      return shouldRenderClientBoundaryFallback(node) &&
-        node.children.some((child) => containsAsyncBoundary(child, outOfOrder));
+      return (
+        shouldRenderClientBoundaryFallback(node) &&
+        node.children.some((child) => containsAsyncBoundary(child, outOfOrder))
+      );
     }
 
     return node.name === "Suspense" ? false : true;
@@ -2669,8 +2666,10 @@ function containsReactSuspense(node: JsxNodeIr, outOfOrder: boolean): boolean {
   }
 
   if (node.kind === "component" && isClientBoundaryPlaceholder(node)) {
-    return shouldRenderClientBoundaryFallback(node) &&
-      node.children.some((child) => containsReactSuspense(child, outOfOrder));
+    return (
+      shouldRenderClientBoundaryFallback(node) &&
+      node.children.some((child) => containsReactSuspense(child, outOfOrder))
+    );
   }
 
   if (node.kind === "conditional") {

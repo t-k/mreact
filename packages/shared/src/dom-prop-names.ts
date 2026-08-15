@@ -6,9 +6,19 @@ export function isReactEventHandlerPropName(name: string): boolean {
 
 /** Returns true for any event-like prop name with an on prefix, including lowercase DOM handlers. */
 export function isEventLikePropName(name: string): boolean {
+  return name.length > 1 && (name.charCodeAt(0) | 32) === 111 && (name.charCodeAt(1) | 32) === 110;
+}
+
+/** Returns true when a boolean DOM prop must be serialized as a literal string token. */
+export function isBooleanishStringAttribute(name: string): boolean {
+  const attributeName = name.toLowerCase();
   return (
-    name.length > 1 &&
-    (name.charCodeAt(0) | 32) === 111 &&
-    (name.charCodeAt(1) | 32) === 110
+    attributeName.startsWith("aria-") ||
+    attributeName.startsWith("data-") ||
+    attributeName === "autocapitalize" ||
+    attributeName === "contenteditable" ||
+    attributeName === "draggable" ||
+    attributeName === "spellcheck" ||
+    attributeName === "translate"
   );
 }

@@ -3,13 +3,11 @@
 
 /** Returns true for HTML attributes that require explicit unsafe-HTML opt-in handling. */
 export function isDangerousHtmlAttribute(name: string): boolean {
-  return name === "srcdoc";
+  return name.toLowerCase() === "srcdoc";
 }
 
 /** Narrows a value to an explicit raw HTML opt-in payload. */
-export function isDangerousHtmlOptIn(
-  value: unknown,
-): value is { __html: string } {
+export function isDangerousHtmlOptIn(value: unknown): value is { __html: string } {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -20,20 +18,24 @@ export function isDangerousHtmlOptIn(
 
 /** Returns true when an attribute name normally carries a single URL value. */
 export function isUrlAttribute(name: string): boolean {
-  return /^(href|src|action|formaction|xlink:href|ping|poster|background|manifest|data|codebase)$/.test(name);
+  return /^(href|src|action|formaction|xlink:href|ping|poster|background|manifest|data|codebase)$/.test(
+    name.toLowerCase(),
+  );
 }
 
 /** Returns true when an attribute name carries a srcset-style URL list. */
 export function isSrcsetAttribute(name: string): boolean {
-  return name === "srcset" || name === "imagesrcset";
+  const attributeName = name.toLowerCase();
+  return attributeName === "srcset" || attributeName === "imagesrcset";
 }
 
 /** Checks whether an HTML URL-bearing attribute value uses a blocked scheme. */
 export function isUnsafeUrlAttribute(name: string, value: string): boolean {
-  if (isUrlAttribute(name)) {
-    return isUnsafeUrlValueForName(name, value);
+  const attributeName = name.toLowerCase();
+  if (isUrlAttribute(attributeName)) {
+    return isUnsafeUrlValueForName(attributeName, value);
   }
-  if (isSrcsetAttribute(name)) {
+  if (isSrcsetAttribute(attributeName)) {
     const canonical = canonicalizeUrlForSchemeCheck(value);
     for (const candidate of canonical.split(",")) {
       const url = candidate.trim().split(/\s+/)[0] ?? "";

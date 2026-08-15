@@ -91,13 +91,7 @@ describe("react-compat server render", () => {
 
     function App() {
       const child = createElement(Label, { name: "<Ada>" });
-      return [
-        "Hello ",
-        cloneElement(child, { name: "Ada" }),
-        null,
-        false,
-        2,
-      ];
+      return ["Hello ", cloneElement(child, { name: "Ada" }), null, false, 2];
     }
 
     expect(renderToString(App)).toBe('Hello <strong id="name">ADA</strong>2');
@@ -132,9 +126,7 @@ describe("react-compat server render", () => {
       }
     }
 
-    expect(renderToString(Panel, { title: "Revenue" })).toBe(
-      "<section><h2>Revenue</h2></section>",
-    );
+    expect(renderToString(Panel, { title: "Revenue" })).toBe("<section><h2>Revenue</h2></section>");
   });
 
   test("renders input default props as HTML initial state attributes", () => {
@@ -165,9 +157,7 @@ describe("react-compat server render", () => {
       );
     }
 
-    expect(renderToString(App)).toBe(
-      "<p><strong>Company</strong><br/>Address<br/>Email</p>",
-    );
+    expect(renderToString(App)).toBe("<p><strong>Company</strong><br/>Address<br/>Email</p>");
   });
 
   test("normalizes non-form JSX HTML attribute aliases", () => {
@@ -194,14 +184,16 @@ describe("react-compat server render", () => {
       return createElement("div", {
         "aria-expanded": true,
         "aria-invalid": false,
+        autoCapitalize: false,
         contentEditable: true,
         disabled: true,
         spellCheck: true,
+        translate: false,
       });
     }
 
     expect(renderToString(App)).toBe(
-      '<div aria-expanded="true" aria-invalid="false" contenteditable="true" disabled="" spellcheck="true"></div>',
+      '<div aria-expanded="true" aria-invalid="false" autocapitalize="false" contenteditable="true" disabled="" spellcheck="true" translate="false"></div>',
     );
   });
 
@@ -213,9 +205,7 @@ describe("react-compat server render", () => {
       });
     }
 
-    expect(renderToString(App)).toBe(
-      '<div data-enabled="true" data-ready="false"></div>',
-    );
+    expect(renderToString(App)).toBe('<div data-enabled="true" data-ready="false"></div>');
   });
 
   test("serializes readOnly with React DOM server casing", () => {
@@ -236,9 +226,7 @@ describe("react-compat server render", () => {
     }
 
     expect(renderToString(Dropped)).toBe("<iframe></iframe>");
-    expect(renderToString(OptIn)).toBe(
-      '<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>',
-    );
+    expect(renderToString(OptIn)).toBe('<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>');
   });
 
   test("does not emit string event handler attributes", () => {
@@ -263,12 +251,16 @@ describe("react-compat server render", () => {
         "main",
         null,
         Array.from({ length: 20 }, (_, index) =>
-          createElement("a", {
-            key: index,
-            className: "row",
-            "data-active": index % 2 === 0,
-            href: index % 2 === 0 ? `/safe-${index}` : "javascript:alert(1)",
-          }, `row ${index}`),
+          createElement(
+            "a",
+            {
+              key: index,
+              className: "row",
+              "data-active": index % 2 === 0,
+              href: index % 2 === 0 ? `/safe-${index}` : "javascript:alert(1)",
+            },
+            `row ${index}`,
+          ),
         ),
       );
     }

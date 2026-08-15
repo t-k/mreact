@@ -1,13 +1,36 @@
 // @vitest-environment happy-dom
 
 import { readFile } from "node:fs/promises";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { cell } from "@reckona/mreact-reactive-core";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindEvent, bindStaticKeyedSingleNodeList, bindText } from "../src/index.js";
 import { bindCompilerKeyedSingleNodeList, bindCompilerKeyedText } from "../src/internal.js";
 
 describe("bindStaticKeyedSingleNodeList", () => {
+  test("warns once when compiler-fast rows contain a duplicate key", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const items = cell([{ id: "a" }, { id: "a" }]);
+    const parent = document.createElement("ul");
+    const marker = document.createComment("rows");
+    parent.append(marker);
+    const dispose = bindStaticKeyedSingleNodeList(
+      parent,
+      marker,
+      () => items.get(),
+      (item) => document.createTextNode(item.id),
+      { key: (item) => item.id },
+    );
+
+    expect(warn).toHaveBeenCalledOnce();
+    items.set([...items.get()]);
+    await flushEffects();
+    expect(warn).toHaveBeenCalledOnce();
+
+    dispose();
+    warn.mockRestore();
+  });
+
   test("compiler-owned text cleanup disposes subscriptions when row rendering throws", async () => {
     const external = cell("A");
     const parent = document.createElement("tbody");
@@ -720,10 +743,7 @@ describe("bindStaticKeyedSingleNodeList", () => {
       },
     );
 
-    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual([
-      "",
-      "danger",
-    ]);
+    expect(Array.from(parent.children, (row) => row.getAttribute("class"))).toEqual(["", "danger"]);
     expect(classWrites).toBe(1);
 
     classWrites = 0;

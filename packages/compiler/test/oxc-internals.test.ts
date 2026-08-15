@@ -1461,6 +1461,16 @@ export default function Page() {
             name: { name: "formAction" },
             value: { type: "Literal", value: "javascript:alert(1)" },
           },
+          {
+            type: "JSXAttribute",
+            name: { name: "HREF" },
+            value: { type: "Literal", value: "javascript:alert(2)" },
+          },
+          {
+            type: "JSXAttribute",
+            name: { name: "SRCDOC" },
+            value: { type: "Literal", value: "<script>1</script>" },
+          },
         ],
       },
       children: [
@@ -1505,6 +1515,8 @@ export default function Page() {
 
     expect(lowered).toContain("__mreactSafeDomUrlAttribute");
     expect(lowered).not.toContain('setAttribute("formaction", "javascript:alert(1)")');
+    expect(lowered).not.toContain('setAttribute("HREF", "javascript:alert(2)")');
+    expect(lowered).not.toContain('setAttribute("SRCDOC", "<script>1</script>")');
     expect(lowered).not.toContain('setAttribute("srcset", "javascript:alert(1) 1x")');
     expect(lowered).not.toContain('setAttribute("imagesrcset", "javascript:alert(2) 1x")');
 

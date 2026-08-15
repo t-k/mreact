@@ -1844,13 +1844,13 @@ export function App() {
       const select = node.querySelector<HTMLButtonElement>("#select");
       const submit = node.querySelector<HTMLButtonElement>("#submit");
 
-      expect(select?.getAttribute("aria-pressed")).toBeNull();
+      expect(select?.getAttribute("aria-pressed")).toBe("false");
       expect(submit?.disabled).toBe(true);
 
       select?.click();
       await flushEffects();
 
-      expect(select?.getAttribute("aria-pressed")).toBe("");
+      expect(select?.getAttribute("aria-pressed")).toBe("true");
       expect(submit?.disabled).toBe(false);
     },
   );

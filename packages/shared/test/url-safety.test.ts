@@ -9,14 +9,7 @@ import {
   safeUrlAttributeValue,
 } from "../src/url-safety.js";
 
-const unsafeSchemes = [
-  "javascript",
-  "data",
-  "vbscript",
-  "livescript",
-  "mhtml",
-  "file",
-] as const;
+const unsafeSchemes = ["javascript", "data", "vbscript", "livescript", "mhtml", "file"] as const;
 
 const urlAttributes = [
   "href",
@@ -43,7 +36,10 @@ describe("URL safety helpers", () => {
     expect(isSrcsetAttribute("imagesrcset")).toBe(true);
     expect(isSrcsetAttribute("src")).toBe(false);
     expect(isDangerousHtmlAttribute("srcdoc")).toBe(true);
-    expect(isDangerousHtmlAttribute("srcDoc")).toBe(false);
+    expect(isDangerousHtmlAttribute("srcDoc")).toBe(true);
+    expect(isDangerousHtmlAttribute("SRCDOC")).toBe(true);
+    expect(isUrlAttribute("HREF")).toBe(true);
+    expect(isSrcsetAttribute("SRCSET")).toBe(true);
   });
 
   test("requires an explicit string __html opt-in for dangerous HTML attributes", () => {
@@ -77,6 +73,12 @@ describe("URL safety helpers", () => {
     }
   });
 
+  test("rejects unsafe URL schemes for mixed-case attribute names", () => {
+    expect(isUnsafeUrlAttribute("HREF", "javascript:alert(1)")).toBe(true);
+    expect(isUnsafeUrlAttribute("Src", "data:text/html,<script>1</script>")).toBe(true);
+    expect(isUnsafeUrlAttribute("SRCSET", "/safe.png 1x, javascript:alert(1) 2x")).toBe(true);
+  });
+
   test("keeps relative, http, https, mailto, and tel URL values", () => {
     for (const value of ["/local", "./asset.png", "?q=1", "#section", "https://example.test/x"]) {
       expect(isUnsafeUrlAttribute("href", value), value).toBe(false);
@@ -100,28 +102,18 @@ describe("URL safety helpers", () => {
 
   test("taints srcset and imagesrcset when any candidate URL is unsafe", () => {
     expect(
-      isUnsafeUrlAttribute(
-        "srcset",
-        "https://safe.test/a.png 1x, java\nscript:alert(1) 2x",
-      ),
+      isUnsafeUrlAttribute("srcset", "https://safe.test/a.png 1x, java\nscript:alert(1) 2x"),
     ).toBe(true);
-    expect(
-      isUnsafeUrlAttribute(
-        "imagesrcset",
-        "/local.png 1x, data:image/png;base64,AAA 2x",
-      ),
-    ).toBe(false);
+    expect(isUnsafeUrlAttribute("imagesrcset", "/local.png 1x, data:image/png;base64,AAA 2x")).toBe(
+      false,
+    );
     expect(isUnsafeUrlAttribute("srcset", ",, , /safe.png 1x")).toBe(false);
   });
 
   test("safeUrlAttributeValue drops unsafe values and preserves safe values", () => {
     expect(safeUrlAttributeValue("href", "javascript:alert(1)")).toBeUndefined();
-    expect(safeUrlAttributeValue("href", "https://example.test/")).toBe(
-      "https://example.test/",
-    );
-    expect(safeUrlAttributeValue("class", "javascript:alert(1)")).toBe(
-      "javascript:alert(1)",
-    );
+    expect(safeUrlAttributeValue("href", "https://example.test/")).toBe("https://example.test/");
+    expect(safeUrlAttributeValue("class", "javascript:alert(1)")).toBe("javascript:alert(1)");
   });
 
   test("detects unsafe meta refresh redirects including quoted URL values", () => {

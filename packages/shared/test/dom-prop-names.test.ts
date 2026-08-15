@@ -1,7 +1,27 @@
 import { describe, expect, test } from "vitest";
-import { isEventLikePropName, isReactEventHandlerPropName } from "../src/dom-prop-names.js";
+import {
+  isBooleanishStringAttribute,
+  isEventLikePropName,
+  isReactEventHandlerPropName,
+} from "../src/dom-prop-names.js";
 
 describe("DOM prop name classifiers", () => {
+  test("classifies booleanish string attributes", () => {
+    for (const name of [
+      "aria-expanded",
+      "data-open",
+      "autoCapitalize",
+      "contentEditable",
+      "draggable",
+      "spellCheck",
+      "translate",
+    ]) {
+      expect(isBooleanishStringAttribute(name)).toBe(true);
+    }
+
+    expect(isBooleanishStringAttribute("disabled")).toBe(false);
+  });
+
   test("classifies event-like names consistently", () => {
     expect(isEventLikePropName("on")).toBe(true);
     expect(isEventLikePropName("once")).toBe(true);

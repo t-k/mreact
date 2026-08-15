@@ -2,6 +2,8 @@ import { registerCleanup } from "@reckona/mreact-reactive-core/internal";
 import { registerIdempotentDispose } from "./scope.js";
 import type { Dispose } from "./types.js";
 
+declare const process: { env: { NODE_ENV?: string | undefined } } | undefined;
+
 export type DomRefCallback = (element: Element) => void | Dispose;
 
 export interface DomRefBinding {
@@ -14,8 +16,11 @@ interface InternalDomRefBinding extends DomRefBinding {
 }
 
 interface PendingConnection {
+  attempts: number;
   binding: WeakRef<InternalDomRefBinding>;
+  delay: number;
   documents: Set<Document>;
+  nextPollAt: number;
 }
 
 interface PendingConnectionObserver {
@@ -35,7 +40,10 @@ const pendingConnectionObservers = new WeakMap<Document, PendingConnectionObserv
 // discovers moves into documents that were not reachable when the ref was bound.
 const pendingConnectionPolls = new Set<PendingConnection>();
 let pendingConnectionPoll: ReturnType<typeof setTimeout> | undefined;
-let pendingConnectionPollDelay = 16;
+let pendingConnectionPollAt: number | undefined;
+const INITIAL_CONNECTION_POLL_DELAY = 16;
+const MAX_CONNECTION_POLL_DELAY = 250;
+const MAX_CONNECTION_POLL_ATTEMPTS = 8;
 const pendingConnectionFinalizer =
   typeof FinalizationRegistry === "undefined"
     ? undefined
@@ -91,8 +99,11 @@ function waitForConnection(binding: InternalDomRefBinding, element: Element): vo
   }
 
   const pending: PendingConnection = {
+    attempts: 0,
     binding: new WeakRef(binding),
+    delay: INITIAL_CONNECTION_POLL_DELAY,
     documents: new Set(),
+    nextPollAt: Date.now() + INITIAL_CONNECTION_POLL_DELAY,
   };
 
   for (const observedDocument of documents) {
@@ -108,32 +119,105 @@ function waitForConnection(binding: InternalDomRefBinding, element: Element): vo
   pendingConnectionsByBinding.set(binding, pending);
   pendingConnectionPolls.add(pending);
   pendingConnectionFinalizer?.register(binding, pending, binding);
-  schedulePendingConnectionPoll();
+  schedulePendingConnectionPoll(pending.nextPollAt);
 }
 
-function schedulePendingConnectionPoll(): void {
-  if (pendingConnectionPoll !== undefined || pendingConnectionPolls.size === 0) {
+function schedulePendingConnectionPoll(candidatePollAt?: number): void {
+  if (pendingConnectionPolls.size === 0) {
     return;
   }
 
-  pendingConnectionPoll = setTimeout(() => {
-    pendingConnectionPoll = undefined;
-    const bindings: InternalDomRefBinding[] = [];
+  if (
+    candidatePollAt !== undefined &&
+    pendingConnectionPoll !== undefined &&
+    pendingConnectionPollAt !== undefined &&
+    pendingConnectionPollAt <= candidatePollAt
+  ) {
+    return;
+  }
 
-    for (const pending of Array.from(pendingConnectionPolls)) {
-      const binding = pending.binding.deref();
-      if (binding === undefined) {
-        removePendingConnection(pending);
-      } else {
-        bindings.push(binding);
-      }
+  let nextPollAt = candidatePollAt ?? Number.POSITIVE_INFINITY;
+  if (candidatePollAt === undefined) {
+    for (const pending of pendingConnectionPolls) {
+      nextPollAt = Math.min(nextPollAt, pending.nextPollAt);
     }
+  }
 
-    commitBindings(bindings);
-    pendingConnectionPollDelay = Math.min(pendingConnectionPollDelay * 2, 250);
-    schedulePendingConnectionPoll();
-  }, pendingConnectionPollDelay);
+  if (
+    pendingConnectionPoll !== undefined &&
+    pendingConnectionPollAt !== undefined &&
+    pendingConnectionPollAt <= nextPollAt
+  ) {
+    return;
+  }
+
+  if (pendingConnectionPoll !== undefined) {
+    clearTimeout(pendingConnectionPoll);
+  }
+
+  pendingConnectionPollAt = nextPollAt;
+  pendingConnectionPoll = setTimeout(
+    () => {
+      pendingConnectionPoll = undefined;
+      pendingConnectionPollAt = undefined;
+      const now = Date.now();
+      const bindings: InternalDomRefBinding[] = [];
+      const attempted: Array<{
+        binding: InternalDomRefBinding;
+        pending: PendingConnection;
+      }> = [];
+
+      for (const pending of Array.from(pendingConnectionPolls)) {
+        if (pending.nextPollAt > now) {
+          continue;
+        }
+
+        const binding = pending.binding.deref();
+        if (binding === undefined) {
+          removePendingConnection(pending);
+        } else {
+          pending.attempts += 1;
+          bindings.push(binding);
+          attempted.push({ binding, pending });
+        }
+      }
+
+      commitBindings(bindings);
+
+      for (const { binding, pending } of attempted) {
+        if (!pendingConnectionPolls.has(pending)) {
+          continue;
+        }
+
+        if (pending.attempts >= MAX_CONNECTION_POLL_ATTEMPTS) {
+          dropPendingConnection(binding, pending);
+          warnDroppedPendingConnection();
+          continue;
+        }
+
+        pending.delay = Math.min(pending.delay * 2, MAX_CONNECTION_POLL_DELAY);
+        pending.nextPollAt = now + pending.delay;
+      }
+
+      schedulePendingConnectionPoll();
+    },
+    Math.max(0, nextPollAt - Date.now()),
+  );
   (pendingConnectionPoll as ReturnType<typeof setTimeout> & { unref?: () => void }).unref?.();
+}
+
+function dropPendingConnection(binding: InternalDomRefBinding, pending: PendingConnection): void {
+  pendingConnectionsByBinding.delete(binding);
+  pendingConnectionFinalizer?.unregister(binding);
+  removePendingConnection(pending);
+}
+
+function warnDroppedPendingConnection(): void {
+  if (typeof process !== "undefined" && process.env.NODE_ENV === "production") {
+    return;
+  }
+
+  console.warn("[mreact] A domRef target never connected and was dropped after bounded retries.");
 }
 
 function pendingConnectionObserver(
@@ -206,7 +290,7 @@ function removePendingConnection(pending: PendingConnection): void {
   if (pendingConnectionPolls.size === 0 && pendingConnectionPoll !== undefined) {
     clearTimeout(pendingConnectionPoll);
     pendingConnectionPoll = undefined;
-    pendingConnectionPollDelay = 16;
+    pendingConnectionPollAt = undefined;
   }
 }
 

@@ -199,8 +199,10 @@ describe("react-compat render", () => {
         "data-enabled": true,
         "data-ready": false,
         contentEditable: true,
+        autoCapitalize: false,
         disabled: true,
         spellCheck: true,
+        translate: false,
       }),
       container,
     );
@@ -208,12 +210,35 @@ describe("react-compat render", () => {
     const element = container.querySelector("div")!;
     expect(element.getAttribute("contenteditable")).toBe("true");
     expect(element.getAttribute("spellcheck")).toBe("true");
+    expect(element.getAttribute("autocapitalize")).toBe("false");
+    expect(element.getAttribute("translate")).toBe("false");
     expect(element.getAttribute("aria-expanded")).toBe("true");
     expect(element.getAttribute("aria-invalid")).toBe("false");
     expect(element.getAttribute("aria-required")).toBe("false");
     expect(element.getAttribute("data-enabled")).toBe("true");
     expect(element.getAttribute("data-ready")).toBe("false");
     expect(element.getAttribute("disabled")).toBe("");
+  });
+
+  test("treats Object prototype member prop names as ordinary attributes", () => {
+    const container = document.createElement("div");
+    const props = JSON.parse(
+      '{"constructor":"constructor","toString":"toString","__proto__":"__proto__","valueOf":"valueOf","hasOwnProperty":"hasOwnProperty","isPrototypeOf":"isPrototypeOf","propertyIsEnumerable":"propertyIsEnumerable","toLocaleString":"toLocaleString"}',
+    ) as Record<string, unknown>;
+
+    expect(() => render(createElement("div", props), container)).not.toThrow();
+    const element = container.querySelector("div")!;
+    for (const [name, value] of Object.entries(props)) {
+      expect(element.getAttribute(name)).toBe(value);
+      expect(Object.hasOwn(element, name)).toBe(false);
+    }
+
+    expect(typeof element.constructor).toBe("function");
+    expect(typeof element.toString).toBe("function");
+
+    expect(() => render(createElement("div"), container)).not.toThrow();
+    expect(container.querySelector("div")?.getAttribute("constructor")).toBeNull();
+    expect(container.querySelector("div")?.getAttribute("__proto__")).toBeNull();
   });
 
   test("preserves contentEditable children inserted by a ref initializer", () => {
@@ -1978,7 +2003,11 @@ describe("react-compat render", () => {
       return createElement(
         "div",
         null,
-        createElement("svg", null, createElement("g", null, createElement(MixedSvgPortal, { target }))),
+        createElement(
+          "svg",
+          null,
+          createElement("g", null, createElement(MixedSvgPortal, { target })),
+        ),
         createElement("div", { ref: setTarget, className: "mixed-html-portal-target" }),
       );
     }
@@ -2193,10 +2222,7 @@ describe("react-compat render", () => {
     const firstRows = Array.from({ length: 3 }, (_, index) =>
       createElement("div", { key: index, "data-key": index }, String(index)),
     );
-    const nextRows = [
-      ...firstRows,
-      createElement("div", { key: 3, "data-key": 3 }, "3"),
-    ];
+    const nextRows = [...firstRows, createElement("div", { key: 3, "data-key": 3 }, "3")];
 
     root.render(createElement(Fragment, null, firstRows));
 
@@ -2236,7 +2262,13 @@ describe("react-compat render", () => {
     );
 
     root.render(createElement(Fragment, null, rows));
-    root.render(createElement(Fragment, null, rows.filter((row) => row.key !== "10")));
+    root.render(
+      createElement(
+        Fragment,
+        null,
+        rows.filter((row) => row.key !== "10"),
+      ),
+    );
 
     const deletedFiber = findFiberByKey(
       getFiberRootForContainer(container)?.current.alternate?.child?.child,
