@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -860,11 +860,22 @@ export default function Layout(props) {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-app-vite-tailwind-dev-"));
     const appDir = join(projectRoot, "src", "app");
     const stylesDir = join(projectRoot, "src", "styles");
+    const tailwindRequire = createRequire(require.resolve("@tailwindcss/vite"));
+    const tailwindPackageDir = join(
+      tailwindRequire.resolve("tailwindcss/package.json"),
+      "..",
+    );
     const backgroundClass = ["bg", "[#123456]"].join("-");
     const darkBackgroundClass = ["dark", "bg-[#654321]"].join(":");
     const responsiveClass = ["lg", "grid"].join(":");
     await mkdir(appDir, { recursive: true });
     await mkdir(stylesDir, { recursive: true });
+    await mkdir(join(projectRoot, "node_modules"), { recursive: true });
+    await symlink(
+      tailwindPackageDir,
+      join(projectRoot, "node_modules", "tailwindcss"),
+      "dir",
+    );
     await writeFile(
       join(stylesDir, "global.css"),
       `@import "tailwindcss";

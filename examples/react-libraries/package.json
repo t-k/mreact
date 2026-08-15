@@ -6,7 +6,7 @@
     "dev": "tsx ../../packages/router/src/cli.ts dev",
     "build": "tsx ../../packages/router/src/cli.ts build --target=node",
     "start": "tsx ../../packages/router/src/cli.ts start .mreact",
-    "test:e2e": "playwright test examples/e2e/react-libraries.spec.ts"
+    "test:e2e": "playwright test --config=../../playwright.config.ts examples/e2e/react-libraries.spec.ts"
   },
   "dependencies": {
     "@reckona/mreact-compat": "workspace:*",

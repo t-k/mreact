@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { flushEffects } from "@reckona/mreact-reactive-core/testing";
@@ -169,6 +170,35 @@ describe("ssr-streaming examples", () => {
 });
 
 describe("example configuration contracts", () => {
+  test("workspace installs the native dependencies required by examples", async () => {
+    const packageJson = JSON.parse(
+      await readFile(join(process.cwd(), "package.json"), "utf8"),
+    ) as {
+      pnpm?: { onlyBuiltDependencies?: string[] };
+    };
+
+    expect(packageJson.pnpm?.onlyBuiltDependencies).toEqual(
+      expect.arrayContaining(["better-sqlite3", "esbuild"]),
+    );
+  });
+
+  test("react-libraries discovers its E2E suite from the package directory", () => {
+    const result = spawnSync(
+      "pnpm",
+      [
+        "--filter",
+        "@reckona/example-react-libraries",
+        "test:e2e",
+        "--list",
+      ],
+      { cwd: process.cwd(), encoding: "utf8" },
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("examples/e2e/react-libraries.spec.ts");
+    expect(result.stdout).not.toContain("Total: 0 tests");
+  });
+
   test("react-compat aliases React imports to mreact packages", async () => {
     const viteConfig = await readExample("react-compat/vite.config.ts");
 

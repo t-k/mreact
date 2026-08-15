@@ -150854,9 +150854,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 356,
+											"line": 354,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L356"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L354"
 										}
 									],
 									"signatures": [
@@ -150869,9 +150869,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 356,
+													"line": 354,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L356"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L354"
 												}
 											],
 											"parameters": [
@@ -150945,9 +150945,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 355,
+									"line": 353,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L355"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L353"
 								}
 							]
 						},
@@ -150977,9 +150977,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 118,
+											"line": 116,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L118"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L116"
 										}
 									],
 									"type": {
@@ -151122,9 +151122,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 117,
+									"line": 115,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L117"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L115"
 								}
 							],
 							"typeParameters": [
@@ -151168,9 +151168,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 142,
+											"line": 140,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L142"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L140"
 										}
 									],
 									"type": {
@@ -151207,9 +151207,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 143,
+											"line": 141,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L143"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L141"
 										}
 									],
 									"type": {
@@ -151237,9 +151237,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 144,
+											"line": 142,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L144"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L142"
 										}
 									],
 									"type": {
@@ -151267,9 +151267,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 146,
+											"line": 144,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L146"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L144"
 										}
 									],
 									"type": {
@@ -151405,9 +151405,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 145,
+											"line": 143,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L145"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L143"
 										}
 									],
 									"type": {
@@ -151434,9 +151434,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 335,
+											"line": 333,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L335"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L333"
 										}
 									],
 									"type": {
@@ -151549,9 +151549,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 157,
+											"line": 155,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L157"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L155"
 										}
 									],
 									"type": {
@@ -151585,9 +151585,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 331,
+									"line": 329,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L331"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L329"
 								}
 							],
 							"typeParameters": [
@@ -151664,9 +151664,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 132,
+											"line": 130,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L130"
 										}
 									],
 									"type": {
@@ -151692,9 +151692,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 133,
+											"line": 131,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L131"
 										}
 									],
 									"type": {
@@ -151720,9 +151720,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 134,
+											"line": 132,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L134"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
 										}
 									],
 									"type": {
@@ -151748,9 +151748,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 173,
+											"line": 171,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L173"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L171"
 										}
 									],
 									"type": {
@@ -151799,9 +151799,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 174,
+											"line": 172,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L174"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L172"
 										}
 									],
 									"type": {
@@ -151822,9 +151822,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 135,
+											"line": 133,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L135"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
 										}
 									],
 									"type": {
@@ -151856,9 +151856,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 170,
+									"line": 168,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L170"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L168"
 								}
 							],
 							"typeParameters": [
@@ -151934,9 +151934,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 377,
+											"line": 375,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L377"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L375"
 										}
 									],
 									"signatures": [
@@ -151949,9 +151949,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 377,
+													"line": 375,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L377"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L375"
 												}
 											],
 											"parameters": [
@@ -152019,9 +152019,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 378,
+											"line": 376,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L378"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L376"
 										}
 									],
 									"signatures": [
@@ -152034,9 +152034,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 378,
+													"line": 376,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L378"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L376"
 												}
 											],
 											"parameters": [
@@ -152129,9 +152129,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 379,
+											"line": 377,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L379"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L377"
 										}
 									],
 									"signatures": [
@@ -152144,9 +152144,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 379,
+													"line": 377,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L379"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L377"
 												}
 											],
 											"parameters": [
@@ -152236,9 +152236,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 376,
+									"line": 374,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L376"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L374"
 								}
 							]
 						},
@@ -152268,9 +152268,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 347,
+											"line": 345,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L347"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L345"
 										}
 									],
 									"type": {
@@ -152296,9 +152296,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 348,
+											"line": 346,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L348"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L346"
 										}
 									],
 									"type": {
@@ -152322,9 +152322,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 349,
+											"line": 347,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L349"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L347"
 										}
 									],
 									"type": {
@@ -152351,9 +152351,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 346,
+									"line": 344,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L346"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L344"
 								}
 							]
 						},
@@ -152381,9 +152381,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 110,
+											"line": 108,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L110"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L108"
 										}
 									],
 									"signatures": [
@@ -152396,9 +152396,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 110,
+													"line": 108,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L110"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L108"
 												}
 											],
 											"type": {
@@ -152417,9 +152417,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 111,
+											"line": 109,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L111"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L109"
 										}
 									],
 									"signatures": [
@@ -152432,9 +152432,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 111,
+													"line": 109,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L111"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L109"
 												}
 											],
 											"parameters": [
@@ -152482,9 +152482,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 109,
+									"line": 107,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L109"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L107"
 								}
 							]
 						},
@@ -152512,9 +152512,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 260,
+											"line": 258,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L260"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L258"
 										}
 									],
 									"type": {
@@ -152531,9 +152531,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 261,
+											"line": 259,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L261"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L259"
 										}
 									],
 									"type": {
@@ -152550,9 +152550,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 262,
+											"line": 260,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L262"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L260"
 										}
 									],
 									"type": {
@@ -152601,9 +152601,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 263,
+											"line": 261,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L263"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L261"
 										}
 									],
 									"type": {
@@ -152632,9 +152632,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 259,
+									"line": 257,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L259"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L257"
 								}
 							]
 						},
@@ -152664,9 +152664,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 270,
+											"line": 268,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L270"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L268"
 										}
 									],
 									"type": {
@@ -152720,9 +152720,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 269,
+									"line": 267,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L269"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L267"
 								}
 							]
 						},
@@ -152750,9 +152750,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 386,
+											"line": 384,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L386"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L384"
 										}
 									],
 									"type": {
@@ -152773,9 +152773,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 387,
+											"line": 385,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L387"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L385"
 										}
 									],
 									"type": {
@@ -152794,9 +152794,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 388,
+											"line": 386,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L388"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L386"
 										}
 									],
 									"type": {
@@ -152818,9 +152818,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 385,
+									"line": 383,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L385"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L383"
 								}
 							]
 						},
@@ -152848,9 +152848,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 132,
+											"line": 130,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L130"
 										}
 									],
 									"type": {
@@ -152869,9 +152869,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 133,
+											"line": 131,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L131"
 										}
 									],
 									"type": {
@@ -152890,9 +152890,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 134,
+											"line": 132,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L134"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
 										}
 									],
 									"type": {
@@ -152913,9 +152913,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 135,
+											"line": 133,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L135"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
 										}
 									],
 									"type": {
@@ -152940,9 +152940,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 131,
+									"line": 129,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L131"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L129"
 								}
 							],
 							"typeParameters": [
@@ -152998,9 +152998,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 164,
+											"line": 162,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L164"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L162"
 										}
 									],
 									"signatures": [
@@ -153013,9 +153013,9 @@
 											"sources": [
 												{
 													"fileName": "router/src/adapters/cloudflare.ts",
-													"line": 164,
+													"line": 162,
 													"character": 2,
-													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L164"
+													"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L162"
 												}
 											],
 											"parameters": [
@@ -153102,9 +153102,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 163,
+									"line": 161,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L163"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L161"
 								}
 							],
 							"typeParameters": [
@@ -153147,9 +153147,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 142,
+											"line": 140,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L142"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L140"
 										}
 									],
 									"type": {
@@ -153178,9 +153178,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 143,
+											"line": 141,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L143"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L141"
 										}
 									],
 									"type": {
@@ -153201,9 +153201,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 144,
+											"line": 142,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L144"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L142"
 										}
 									],
 									"type": {
@@ -153224,9 +153224,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 146,
+											"line": 144,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L146"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L144"
 										}
 									],
 									"type": {
@@ -153355,9 +153355,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 145,
+											"line": 143,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L145"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L143"
 										}
 									],
 									"type": {
@@ -153378,9 +153378,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 154,
+											"line": 152,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L154"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L152"
 										}
 									],
 									"type": {
@@ -153491,9 +153491,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 157,
+											"line": 155,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L157"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L155"
 										}
 									],
 									"type": {
@@ -153521,9 +153521,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 141,
+									"line": 139,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L141"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L139"
 								}
 							],
 							"typeParameters": [
@@ -153566,9 +153566,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 219,
+											"line": 217,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L219"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L217"
 										}
 									],
 									"type": {
@@ -153607,9 +153607,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 220,
+											"line": 218,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L220"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L218"
 										}
 									],
 									"type": {
@@ -153648,9 +153648,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 221,
+											"line": 219,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L221"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L219"
 										}
 									],
 									"type": {
@@ -153689,9 +153689,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 222,
+											"line": 220,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L222"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L220"
 										}
 									],
 									"type": {
@@ -153792,9 +153792,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 227,
+											"line": 225,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L227"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L225"
 										}
 									],
 									"type": {
@@ -153886,9 +153886,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 230,
+											"line": 228,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L230"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L228"
 										}
 									],
 									"type": {
@@ -153915,9 +153915,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 218,
+									"line": 216,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L218"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L216"
 								}
 							],
 							"typeParameters": [
@@ -153971,9 +153971,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 132,
+											"line": 130,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L130"
 										}
 									],
 									"type": {
@@ -153999,9 +153999,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 133,
+											"line": 131,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L131"
 										}
 									],
 									"type": {
@@ -154025,9 +154025,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 203,
+											"line": 201,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L203"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L201"
 										}
 									],
 									"type": {
@@ -154050,9 +154050,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 134,
+											"line": 132,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L134"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
 										}
 									],
 									"type": {
@@ -154080,9 +154080,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 173,
+											"line": 171,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L173"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L171"
 										}
 									],
 									"type": {
@@ -154136,9 +154136,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 204,
+											"line": 202,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L204"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L202"
 										}
 									],
 									"type": {
@@ -154157,9 +154157,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 205,
+											"line": 203,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L205"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L203"
 										}
 									],
 									"type": {
@@ -154184,9 +154184,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 174,
+											"line": 172,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L174"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L172"
 										}
 									],
 									"type": {
@@ -154212,9 +154212,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 135,
+											"line": 133,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L135"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
 										}
 									],
 									"type": {
@@ -154249,9 +154249,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 199,
+									"line": 197,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L199"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L197"
 								}
 							],
 							"typeParameters": [
@@ -154323,9 +154323,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 132,
+											"line": 130,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L130"
 										}
 									],
 									"type": {
@@ -154351,9 +154351,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 133,
+											"line": 131,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L131"
 										}
 									],
 									"type": {
@@ -154379,9 +154379,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 134,
+											"line": 132,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L134"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
 										}
 									],
 									"type": {
@@ -154409,9 +154409,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 173,
+											"line": 171,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L173"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L171"
 										}
 									],
 									"type": {
@@ -154465,9 +154465,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 183,
+											"line": 181,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L183"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L181"
 										}
 									],
 									"type": {
@@ -154486,9 +154486,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 184,
+											"line": 182,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L184"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L182"
 										}
 									],
 									"type": {
@@ -154513,9 +154513,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 174,
+											"line": 172,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L174"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L172"
 										}
 									],
 									"type": {
@@ -154541,9 +154541,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 135,
+											"line": 133,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L135"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
 										}
 									],
 									"type": {
@@ -154577,9 +154577,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 180,
+									"line": 178,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L180"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L178"
 								}
 							],
 							"typeParameters": [
@@ -154640,9 +154640,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 298,
+											"line": 296,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L298"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L296"
 										}
 									],
 									"type": {
@@ -154663,9 +154663,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 299,
+											"line": 297,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L299"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L297"
 										}
 									],
 									"type": {
@@ -154731,9 +154731,9 @@
 																					"sources": [
 																						{
 																							"fileName": "router/src/adapters/cloudflare.ts",
-																							"line": 302,
+																							"line": 300,
 																							"character": 10,
-																							"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L302"
+																							"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L300"
 																						}
 																					],
 																					"type": {
@@ -154750,9 +154750,9 @@
 																					"sources": [
 																						{
 																							"fileName": "router/src/adapters/cloudflare.ts",
-																							"line": 303,
+																							"line": 301,
 																							"character": 10,
-																							"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L303"
+																							"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L301"
 																						}
 																					],
 																					"type": {
@@ -154840,9 +154840,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 307,
+											"line": 305,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L307"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L305"
 										}
 									],
 									"type": {
@@ -154876,9 +154876,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 297,
+									"line": 295,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L297"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L295"
 								}
 							],
 							"typeParameters": [
@@ -154921,9 +154921,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 132,
+											"line": 130,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L130"
 										}
 									],
 									"type": {
@@ -154949,9 +154949,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 133,
+											"line": 131,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L131"
 										}
 									],
 									"type": {
@@ -154977,9 +154977,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 134,
+											"line": 132,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L134"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L132"
 										}
 									],
 									"type": {
@@ -155007,9 +155007,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 173,
+											"line": 171,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L173"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L171"
 										}
 									],
 									"type": {
@@ -155063,9 +155063,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 193,
+											"line": 191,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L193"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L191"
 										}
 									],
 									"type": {
@@ -155090,9 +155090,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 174,
+											"line": 172,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L174"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L172"
 										}
 									],
 									"type": {
@@ -155118,9 +155118,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 135,
+											"line": 133,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L135"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L133"
 										}
 									],
 									"type": {
@@ -155153,9 +155153,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 190,
+									"line": 188,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L190"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L188"
 								}
 							],
 							"typeParameters": [
@@ -155216,9 +155216,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 245,
+											"line": 243,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L245"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L243"
 										}
 									],
 									"type": {
@@ -155249,9 +155249,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 247,
+											"line": 245,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L247"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L245"
 										}
 									],
 									"type": {
@@ -155274,6 +155274,39 @@
 								{
 									"id": 15569,
 									"name": "DELETE",
+									"variant": "declaration",
+									"kind": 1024,
+									"flags": {
+										"isOptional": true
+									},
+									"sources": [
+										{
+											"fileName": "router/src/adapters/cloudflare.ts",
+											"line": 244,
+											"character": 2,
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L244"
+										}
+									],
+									"type": {
+										"type": "reference",
+										"target": 15614,
+										"typeArguments": [
+											{
+												"type": "reference",
+												"target": 15576,
+												"name": "Env",
+												"package": "@reckona/mreact-router",
+												"qualifiedName": "CloudflareServerRouteModule.Env",
+												"refersToTypeParameter": true
+											}
+										],
+										"name": "CloudflareServerRouteHandler",
+										"package": "@reckona/mreact-router"
+									}
+								},
+								{
+									"id": 15570,
+									"name": "GET",
 									"variant": "declaration",
 									"kind": 1024,
 									"flags": {
@@ -155305,8 +155338,41 @@
 									}
 								},
 								{
-									"id": 15570,
-									"name": "GET",
+									"id": 15571,
+									"name": "HEAD",
+									"variant": "declaration",
+									"kind": 1024,
+									"flags": {
+										"isOptional": true
+									},
+									"sources": [
+										{
+											"fileName": "router/src/adapters/cloudflare.ts",
+											"line": 247,
+											"character": 2,
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L247"
+										}
+									],
+									"type": {
+										"type": "reference",
+										"target": 15614,
+										"typeArguments": [
+											{
+												"type": "reference",
+												"target": 15576,
+												"name": "Env",
+												"package": "@reckona/mreact-router",
+												"qualifiedName": "CloudflareServerRouteModule.Env",
+												"refersToTypeParameter": true
+											}
+										],
+										"name": "CloudflareServerRouteHandler",
+										"package": "@reckona/mreact-router"
+									}
+								},
+								{
+									"id": 15572,
+									"name": "OPTIONS",
 									"variant": "declaration",
 									"kind": 1024,
 									"flags": {
@@ -155338,8 +155404,8 @@
 									}
 								},
 								{
-									"id": 15571,
-									"name": "HEAD",
+									"id": 15573,
+									"name": "PATCH",
 									"variant": "declaration",
 									"kind": 1024,
 									"flags": {
@@ -155371,8 +155437,8 @@
 									}
 								},
 								{
-									"id": 15572,
-									"name": "OPTIONS",
+									"id": 15574,
+									"name": "POST",
 									"variant": "declaration",
 									"kind": 1024,
 									"flags": {
@@ -155404,8 +155470,8 @@
 									}
 								},
 								{
-									"id": 15573,
-									"name": "PATCH",
+									"id": 15575,
+									"name": "PUT",
 									"variant": "declaration",
 									"kind": 1024,
 									"flags": {
@@ -155417,72 +155483,6 @@
 											"line": 251,
 											"character": 2,
 											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L251"
-										}
-									],
-									"type": {
-										"type": "reference",
-										"target": 15614,
-										"typeArguments": [
-											{
-												"type": "reference",
-												"target": 15576,
-												"name": "Env",
-												"package": "@reckona/mreact-router",
-												"qualifiedName": "CloudflareServerRouteModule.Env",
-												"refersToTypeParameter": true
-											}
-										],
-										"name": "CloudflareServerRouteHandler",
-										"package": "@reckona/mreact-router"
-									}
-								},
-								{
-									"id": 15574,
-									"name": "POST",
-									"variant": "declaration",
-									"kind": 1024,
-									"flags": {
-										"isOptional": true
-									},
-									"sources": [
-										{
-											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 252,
-											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L252"
-										}
-									],
-									"type": {
-										"type": "reference",
-										"target": 15614,
-										"typeArguments": [
-											{
-												"type": "reference",
-												"target": 15576,
-												"name": "Env",
-												"package": "@reckona/mreact-router",
-												"qualifiedName": "CloudflareServerRouteModule.Env",
-												"refersToTypeParameter": true
-											}
-										],
-										"name": "CloudflareServerRouteHandler",
-										"package": "@reckona/mreact-router"
-									}
-								},
-								{
-									"id": 15575,
-									"name": "PUT",
-									"variant": "declaration",
-									"kind": 1024,
-									"flags": {
-										"isOptional": true
-									},
-									"sources": [
-										{
-											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 253,
-											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L253"
 										}
 									],
 									"type": {
@@ -155522,9 +155522,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 244,
+									"line": 242,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L244"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L242"
 								}
 							],
 							"typeParameters": [
@@ -155565,9 +155565,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 363,
+											"line": 361,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L363"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L361"
 										}
 									],
 									"type": {
@@ -155669,9 +155669,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 368,
+											"line": 366,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L368"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L366"
 										}
 									],
 									"type": {
@@ -155692,9 +155692,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 369,
+											"line": 367,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L369"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L367"
 										}
 									],
 									"type": {
@@ -155720,9 +155720,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 370,
+											"line": 368,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L370"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L368"
 										}
 									],
 									"type": {
@@ -155745,9 +155745,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 362,
+									"line": 360,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L362"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L360"
 								}
 							],
 							"typeParameters": [
@@ -155788,9 +155788,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 325,
+											"line": 323,
 											"character": 2,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L325"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L323"
 										}
 									],
 									"type": {
@@ -155812,9 +155812,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 324,
+									"line": 322,
 									"character": 17,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L324"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L322"
 								}
 							]
 						},
@@ -156089,9 +156089,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 211,
+									"line": 209,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L211"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L209"
 								}
 							],
 							"typeParameters": [
@@ -156236,9 +156236,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 313,
+									"line": 311,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L313"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L311"
 								}
 							],
 							"typeParameters": [
@@ -156374,9 +156374,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 286,
+									"line": 284,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L286"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L284"
 								}
 							],
 							"typeParameters": [
@@ -156512,9 +156512,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 278,
+									"line": 276,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L278"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L276"
 								}
 							],
 							"typeParameters": [
@@ -156593,9 +156593,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 236,
+									"line": 234,
 									"character": 12,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L236"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L234"
 								}
 							],
 							"typeParameters": [
@@ -157209,9 +157209,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 443,
+									"line": 441,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L443"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L441"
 								}
 							],
 							"signatures": [
@@ -157240,9 +157240,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 443,
+											"line": 441,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L443"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L441"
 										}
 									],
 									"typeParameters": [
@@ -157370,9 +157370,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 401,
+									"line": 399,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L401"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L399"
 								}
 							],
 							"signatures": [
@@ -157417,9 +157417,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 401,
+											"line": 399,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L401"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L399"
 										}
 									],
 									"typeParameters": [
@@ -157486,9 +157486,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 471,
+									"line": 469,
 									"character": 16,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L471"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L469"
 								}
 							],
 							"signatures": [
@@ -157509,9 +157509,9 @@
 									"sources": [
 										{
 											"fileName": "router/src/adapters/cloudflare.ts",
-											"line": 471,
+											"line": 469,
 											"character": 16,
-											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L471"
+											"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L469"
 										}
 									],
 									"typeParameters": [
@@ -157768,9 +157768,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 78,
+									"line": 76,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L78"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L76"
 								}
 							],
 							"target": 14096
@@ -157792,9 +157792,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 104,
+									"line": 102,
 									"character": 14,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L104"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L102"
 								}
 							],
 							"target": 14844
@@ -157816,9 +157816,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 79,
+									"line": 77,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L79"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L77"
 								}
 							],
 							"target": 14102
@@ -157840,9 +157840,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 80,
+									"line": 78,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L80"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L78"
 								}
 							],
 							"target": 14845
@@ -157864,9 +157864,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 63,
+									"line": 61,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L63"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L61"
 								}
 							],
 							"target": 14133
@@ -157888,9 +157888,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 65,
+									"line": 63,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L65"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L63"
 								}
 							],
 							"target": 14142
@@ -157912,9 +157912,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 66,
+									"line": 64,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L66"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L64"
 								}
 							],
 							"target": 14867
@@ -157936,9 +157936,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 64,
+									"line": 62,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L64"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L62"
 								}
 							],
 							"target": 14145
@@ -157960,9 +157960,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 89,
+									"line": 87,
 									"character": 14,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L89"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L87"
 								}
 							],
 							"target": 14162
@@ -157984,9 +157984,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 67,
+									"line": 65,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L67"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L65"
 								}
 							],
 							"target": 14197
@@ -158008,9 +158008,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 68,
+									"line": 66,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L68"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L66"
 								}
 							],
 							"target": 14203
@@ -158032,9 +158032,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 69,
+									"line": 67,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L69"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L67"
 								}
 							],
 							"target": 14210
@@ -158056,9 +158056,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 70,
+									"line": 68,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L70"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L68"
 								}
 							],
 							"target": 14217
@@ -158080,9 +158080,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 71,
+									"line": 69,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L71"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L69"
 								}
 							],
 							"target": 14222
@@ -158104,9 +158104,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 75,
+									"line": 73,
 									"character": 14,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L75"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L73"
 								}
 							],
 							"target": 14869
@@ -158128,9 +158128,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 75,
+									"line": 73,
 									"character": 37,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L75"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L73"
 								}
 							],
 							"target": 14230
@@ -158152,9 +158152,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 72,
+									"line": 70,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L72"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L70"
 								}
 							],
 							"target": 14874
@@ -158176,9 +158176,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 49,
+									"line": 47,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L49"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L47"
 								}
 							],
 							"target": 14327
@@ -158200,9 +158200,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 50,
+									"line": 48,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L50"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L48"
 								}
 							],
 							"target": 14334
@@ -158224,9 +158224,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 54,
+									"line": 52,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L54"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L52"
 								}
 							],
 							"target": 14347
@@ -158248,9 +158248,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 55,
+									"line": 53,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L55"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L53"
 								}
 							],
 							"target": 14354
@@ -158272,9 +158272,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 92,
+									"line": 90,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L92"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L90"
 								}
 							],
 							"target": 14426
@@ -158296,9 +158296,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 93,
+									"line": 91,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L93"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L91"
 								}
 							],
 							"target": 14495
@@ -158320,9 +158320,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 94,
+									"line": 92,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L94"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L92"
 								}
 							],
 							"target": 14921
@@ -158344,9 +158344,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 95,
+									"line": 93,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L95"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L93"
 								}
 							],
 							"target": 14501
@@ -158368,9 +158368,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 96,
+									"line": 94,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L96"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L94"
 								}
 							],
 							"target": 14922
@@ -158392,9 +158392,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 84,
+									"line": 82,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L84"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L82"
 								}
 							],
 							"target": 14545
@@ -158416,9 +158416,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 60,
+									"line": 58,
 									"character": 14,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L60"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L58"
 								}
 							],
 							"target": 14639
@@ -158440,9 +158440,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 97,
+									"line": 95,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L97"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L95"
 								}
 							],
 							"target": 14646
@@ -158464,9 +158464,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 98,
+									"line": 96,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L98"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L96"
 								}
 							],
 							"target": 14655
@@ -158488,9 +158488,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 99,
+									"line": 97,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L99"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L97"
 								}
 							],
 							"target": 14936
@@ -158512,9 +158512,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 100,
+									"line": 98,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L100"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L98"
 								}
 							],
 							"target": 14764
@@ -158536,9 +158536,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 86,
+									"line": 84,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L86"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L84"
 								}
 							],
 							"target": 14941
@@ -158560,9 +158560,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 101,
+									"line": 99,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L101"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L99"
 								}
 							],
 							"target": 14770
@@ -158584,9 +158584,9 @@
 							"sources": [
 								{
 									"fileName": "router/src/adapters/cloudflare.ts",
-									"line": 85,
+									"line": 83,
 									"character": 2,
-									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L85"
+									"url": "https://github.com/t-k/mreact/blob/main/packages/router/src/adapters/cloudflare.ts#L83"
 								}
 							],
 							"target": 14781
@@ -205358,7 +205358,7 @@
 		}
 	],
 	"packageName": "mreact",
-	"packageVersion": "0.0.202",
+	"packageVersion": "0.0.203",
 	"readme": [
 		{
 			"kind": "text",

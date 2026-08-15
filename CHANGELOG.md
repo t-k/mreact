@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.0.203 - 2026-08-15
+
+### Added
+
+- Added `shouldDehydrateQuery` filtering to query dehydration and router render or adapter options so applications can exclude server-only or sensitive successful queries from delivered HTML.
+- Added namespace-preserving compiler and reactive DOM support for qualified JSX attributes such as `xlink:href`, `xml:lang`, and `xmlns:xlink`, including unsafe URL filtering for URL-bearing namespaced attributes.
+
+### Changed
+
+- Changed custom server action replay stores to an atomic asynchronous `claim()` contract. Claimed nonces are consumed once application code begins, concurrent replays return `409`, and capacity or store failures fail closed with `503`.
+- Changed generated Cloudflare projects to enable `nodejs_compat` so the adapter can use native request-local storage. Without that runtime support, Cloudflare rendering is serialized with a one-time warning to preserve request query isolation.
+- Changed external prerender and route cache entries to schema version 4 with separate document and client-navigation HTML plus request-scheme-aware HSTS metadata. Older entries are treated as misses, and custom stores must persist the new fields passed to `set`.
+- Changed Flight serialization and decoding to preserve repeated object identity through shared references while rejecting cyclic object and server-reference graphs.
+
+### Fixed
+
+- Fixed React-compatible callback ref cleanup, component-owned bare effect replacement and disposal, late DOM ref adoption, delegated event deduplication, and CommonJS export parity.
+- Fixed compiler and reactive DOM handling for JSX returned from arrow props, merged server prop evaluation, exact `dangerouslySetInnerHTML` payloads and source order, qualified attributes, and coerced unsafe URL values.
+- Fixed prerendered and cached navigation responses so document and client-navigation variants cannot be confused, request origins and queries are not captured in shared hydration HTML, HSTS follows the consuming request scheme, and invalid navigation markers or security metadata fail closed across Node, Lambda, and Cloudflare adapters.
+- Fixed query invalidation so explicit refetches do not duplicate in-flight work, auth guards so empty requirements fail closed, `mreact-router start` so `--port` overrides `PORT`, Cloudflare query-client isolation when native request-local storage is unavailable, and generated apps so local secret files are ignored.
+
 ## 0.0.202 - 2026-08-09
 
 ### Added
