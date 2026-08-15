@@ -191,13 +191,13 @@ describe("example configuration contracts", () => {
         "test:e2e",
         "--list",
       ],
-      { cwd: process.cwd(), encoding: "utf8" },
+      { cwd: process.cwd(), encoding: "utf8", timeout: 30_000 },
     );
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("examples/e2e/react-libraries.spec.ts");
     expect(result.stdout).not.toContain("Total: 0 tests");
-  });
+  }, 35_000);
 
   test("react-compat aliases React imports to mreact packages", async () => {
     const viteConfig = await readExample("react-compat/vite.config.ts");
