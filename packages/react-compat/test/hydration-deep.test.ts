@@ -43,6 +43,69 @@ describe("react-compat deep hydration", () => {
     expect(recoveries.length).toBeGreaterThan(0);
   });
 
+  test("falls back once when a client-only same-tag child shifts hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<div><span class="first" id="one">1</span><span class="second" id="two">2</span></div>';
+    const serverSpans = Array.from(container.querySelectorAll("span"));
+    const recoveries: Array<{ kind: string; path: string }> = [];
+
+    hydrateRoot(
+      container,
+      createElement(
+        "div",
+        null,
+        createElement("span", { className: "banner", id: "banner" }, "NEW"),
+        createElement("span", { className: "first", id: "one" }, "1"),
+        createElement("span", { className: "second", id: "two" }, "2"),
+      ),
+      {
+        onRecoverableError(_error, info) {
+          recoveries.push({ kind: info.kind, path: info.path });
+        },
+      },
+    );
+
+    expect(container.innerHTML).toBe(
+      '<div><span class="banner" id="banner">NEW</span><span class="first" id="one">1</span><span class="second" id="two">2</span></div>',
+    );
+    const ids = Array.from(container.querySelectorAll("span"), (span) => span.id);
+    expect(ids).toEqual(["banner", "one", "two"]);
+    expect(new Set(ids).size).toBe(3);
+    expect(serverSpans.every((span) => !container.contains(span))).toBe(true);
+    expect(recoveries).toHaveLength(1);
+    expect(recoveries[0]?.kind).toBe("text");
+  });
+
+  test("falls back once when a same-length same-tag shift only reports text mismatches", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<div><span class="first" id="one">1</span><span class="second" id="two">2</span></div>';
+    const serverSpans = Array.from(container.querySelectorAll("span"));
+    const recoveries: string[] = [];
+
+    hydrateRoot(
+      container,
+      createElement(
+        "div",
+        null,
+        createElement("span", { className: "banner", id: "banner" }, "NEW"),
+        createElement("span", { className: "first", id: "one" }, "1"),
+      ),
+      {
+        onRecoverableError(_error, info) {
+          recoveries.push(info.kind);
+        },
+      },
+    );
+
+    expect(container.innerHTML).toBe(
+      '<div><span class="banner" id="banner">NEW</span><span class="first" id="one">1</span></div>',
+    );
+    expect(serverSpans.every((span) => !container.contains(span))).toBe(true);
+    expect(recoveries).toEqual(["text"]);
+  });
+
   test("hydrates dangerouslySetInnerHTML without removing its owned children", () => {
     const container = document.createElement("div");
     container.innerHTML = "<article><strong>server</strong></article>";
@@ -292,7 +355,7 @@ describe("react-compat deep hydration", () => {
     expect(container.querySelector("input")?.id).toBe("_app-r_0_");
   });
 
-  test("reports and recovers text, attribute, and tag mismatches", () => {
+  test("reports one boundary recovery for a structural tag mismatch", () => {
     const container = document.createElement("div");
     container.innerHTML = '<span id="server">server</span>';
     const recoveries: string[] = [];
@@ -304,13 +367,34 @@ describe("react-compat deep hydration", () => {
     });
 
     expect(container.innerHTML).toBe('<p id="client">client</p>');
-    expect(recoveries).toEqual(
-      expect.arrayContaining([
-        "tag:0:Hydration tag mismatch: expected <p> but found <span>.",
-        "attribute:0:Hydration attribute mismatch: id.",
-        "text:0.c:Hydration text mismatch.",
-      ]),
-    );
+    expect(recoveries).toEqual([
+      "tag:0:Hydration tag mismatch: expected <p> but found <span>.",
+    ]);
+  });
+
+  test("publishes structural recoveries after the hydrated root becomes current", () => {
+    const container = document.createElement("div");
+    container.innerHTML = "<span>server</span>";
+    const recoveries: string[] = [];
+    let update!: (value: number) => void;
+
+    function App() {
+      const [value, setValue] = useState(0);
+      update = setValue;
+      return createElement("div", null, String(value));
+    }
+
+    hydrateRoot(container, createElement(App, null), {
+      onRecoverableError(_error, info) {
+        recoveries.push(info.kind);
+        if (recoveries.length === 1) {
+          update(1);
+        }
+      },
+    });
+
+    expect(container.innerHTML).toBe("<div>1</div>");
+    expect(recoveries).toEqual(["tag"]);
   });
 
   test("preserves style mismatches during hydration like React", () => {
@@ -613,7 +697,7 @@ describe("react-compat deep hydration", () => {
   test("uses resume boundary markers as hydration scope", () => {
     const container = document.createElement("div");
     container.innerHTML =
-      "<span>outside</span><!--mreact-h:start:app--><button>server</button><!--mreact-h:end:app-->";
+      "<span>outside</span><!--mreact-h:start:app--><button>client</button><!--mreact-h:end:app-->";
     const outside = container.querySelector("span");
     const serverButton = container.querySelector("button");
 
@@ -633,7 +717,7 @@ describe("react-compat deep hydration", () => {
   test("reuses keyed list DOM nodes inside resume hydration scope and replays events", () => {
     const container = document.createElement("div");
     container.innerHTML =
-      "<!--mreact-h:start:catalog--><div><ul><li>A <button>add</button></li><li>B <button>add</button></li></ul><p>in cart: 0</p></div><!--mreact-h:end:catalog-->";
+      "<!--mreact-h:start:catalog--><div><ul><li>A<!-- --> <button>add</button></li><li>B<!-- --> <button>add</button></li></ul><p>in cart: <!-- -->0</p></div><!--mreact-h:end:catalog-->";
     const beforeItems = Array.from(container.querySelectorAll("li"));
     const beforeButtons = Array.from(container.querySelectorAll("button"));
     let clicks = 0;
@@ -699,6 +783,50 @@ describe("react-compat deep hydration", () => {
     });
 
     expect(container.innerHTML).toBe("<span>outside</span><button>client</button>");
+  });
+
+  test("keeps a consumed resume scope across repeated updates and unmount", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<header id="hdr">HEADER</header><!--mreact-h:start:app--><button>0</button><!--mreact-h:end:app--><footer id="ftr">FOOTER</footer>';
+    const header = container.querySelector("header");
+    const footer = container.querySelector("footer");
+
+    function Counter() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        count,
+      );
+    }
+
+    const root = hydrateRoot(container, createElement(Counter, null), {
+      resumeId: "app",
+      consumeResumeMarkers: true,
+    });
+    const button = container.querySelector("button")!;
+
+    expect(container.querySelector("header")).toBe(header);
+    expect(container.querySelector("footer")).toBe(footer);
+    expect(container.innerHTML).not.toContain("mreact-h:");
+
+    button.click();
+    expect(button.textContent).toBe("1");
+    expect(container.querySelector("header")).toBe(header);
+    expect(container.querySelector("footer")).toBe(footer);
+
+    button.click();
+    expect(button.textContent).toBe("2");
+    expect(container.querySelector("header")).toBe(header);
+    expect(container.querySelector("footer")).toBe(footer);
+
+    root.unmount();
+    expect(container.innerHTML).toBe(
+      '<header id="hdr">HEADER</header><footer id="ftr">FOOTER</footer>',
+    );
+    expect(container.querySelector("header")).toBe(header);
+    expect(container.querySelector("footer")).toBe(footer);
   });
 
   test("keeps resume boundary scope when a hydrated Suspense boundary retries", async () => {
@@ -872,28 +1000,29 @@ describe("react-compat deep hydration", () => {
   test("selectively hydrates only the event target resume boundary from a manifest event", () => {
     const container = document.createElement("div");
     container.innerHTML =
-      '<!--mreact-h:start:left--><button>left</button><!--mreact-h:end:left--><!--mreact-h:start:right--><button>right</button><!--mreact-h:end:right--><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"left:0","event":"click","handler":"onClick"},{"id":"right:0","event":"click","handler":"onClick"}]}</script>';
+      '<!--mreact-h:start:left--><button>left 0</button><!--mreact-h:end:left--><!--mreact-h:start:right--><button>right</button><!--mreact-h:end:right--><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"left:0","event":"click","handler":"onClick"},{"id":"right:0","event":"click","handler":"onClick"}]}</script>';
     const leftButton = container.querySelector("button");
-    let leftClicks = 0;
+    const rightButton = container.querySelectorAll("button")[1];
     let rightClicks = 0;
 
     if (leftButton === null) {
       throw new Error("Expected left button.");
     }
 
+    function LeftCounter() {
+      const [count, setCount] = useState(0);
+      return createElement(
+        "button",
+        { onClick: () => setCount((value) => value + 1) },
+        `left ${count}`,
+      );
+    }
+
     const streamingRoot = createStreamingHydrationRoot(container, {
       selectiveHydration: {
         boundaries: {
           left: {
-            element: createElement(
-              "button",
-              {
-                onClick: () => {
-                  leftClicks += 1;
-                },
-              },
-              "left",
-            ),
+            element: createElement(LeftCounter, null),
           },
           right: {
             element: createElement(
@@ -912,12 +1041,109 @@ describe("react-compat deep hydration", () => {
 
     leftButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
-    expect(leftClicks).toBe(1);
+    expect(leftButton.textContent).toBe("left 1");
     expect(rightClicks).toBe(0);
-    expect(container.innerHTML).toContain("<button>left</button>");
+    expect(container.innerHTML).not.toContain("<!--mreact-h:start:left-->");
+    expect(container.innerHTML).not.toContain("<!--mreact-h:end:left-->");
     expect(container.innerHTML).toContain("<!--mreact-h:start:right-->");
     expect(container.innerHTML).toContain("<!--mreact-h:end:right-->");
+    expect(container.querySelectorAll("button")[1]).toBe(rightButton);
 
+    leftButton.click();
+    expect(leftButton.textContent).toBe("left 2");
+    expect(container.querySelectorAll("button")[1]).toBe(rightButton);
+    expect(container.innerHTML).toContain("<!--mreact-h:start:right-->");
+
+    streamingRoot.dispose();
+  });
+
+  test("replays the triggering event on a structurally recovered resume boundary", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<!--mreact-h:start:action--><div><button id="one">one</button><button id="two">two</button></div><!--mreact-h:end:action--><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"action:0","event":"click","handler":"onClick"}]}</script>';
+    const serverButton = container.querySelector<HTMLButtonElement>("#one");
+    let clicks = 0;
+
+    if (serverButton === null) {
+      throw new Error("Expected server button.");
+    }
+
+    const streamingRoot = createStreamingHydrationRoot(container, {
+      selectiveHydration: {
+        boundaries: {
+          action: {
+            element: createElement("div", null, [
+              createElement("button", { id: "banner" }, "new"),
+              createElement(
+                "button",
+                {
+                  id: "one",
+                  onClick: () => {
+                    clicks += 1;
+                  },
+                },
+                "one",
+              ),
+              createElement("button", { id: "two" }, "two"),
+            ]),
+          },
+        },
+      },
+    });
+
+    serverButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(container.querySelector("div")?.textContent).toBe("newonetwo");
+    expect(container.querySelector("#one")).not.toBe(serverButton);
+    expect(clicks).toBe(1);
+    streamingRoot.dispose();
+  });
+
+  test("does not retarget a recovered event by a shifted element index", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<!--mreact-h:start:action--><div><button>one</button><button>two</button></div><!--mreact-h:end:action--><script type="application/json" data-mreact-event-manifest>{"version":1,"events":[{"id":"action:0","event":"click","handler":"onClick"}]}</script>';
+    const serverButton = container.querySelector("button");
+    let bannerClicks = 0;
+    let originalClicks = 0;
+
+    if (serverButton === null) {
+      throw new Error("Expected server button.");
+    }
+
+    const streamingRoot = createStreamingHydrationRoot(container, {
+      selectiveHydration: {
+        boundaries: {
+          action: {
+            element: createElement("div", null, [
+              createElement(
+                "button",
+                {
+                  onClick: () => {
+                    bannerClicks += 1;
+                  },
+                },
+                "new",
+              ),
+              createElement(
+                "button",
+                {
+                  onClick: () => {
+                    originalClicks += 1;
+                  },
+                },
+                "one",
+              ),
+            ]),
+          },
+        },
+      },
+    });
+
+    serverButton.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    expect(bannerClicks).toBe(0);
+    expect(originalClicks).toBe(0);
     streamingRoot.dispose();
   });
 

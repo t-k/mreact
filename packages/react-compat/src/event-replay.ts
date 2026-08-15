@@ -18,6 +18,11 @@ export interface EventHydrationManifestEntry {
 interface QueuedHydrationEvent {
   target: EventTarget;
   event: Event;
+  identity: QueuedHydrationTargetIdentity | undefined;
+}
+
+interface QueuedHydrationTargetIdentity {
+  id: string | undefined;
 }
 
 export interface HydrationEventReplayOptions {
@@ -39,7 +44,11 @@ export function queueHydrationEvent(
   }
 
   const events = queuedHydrationEvents.get(container) ?? [];
-  events.push({ event, target });
+  events.push({
+    event,
+    target,
+    identity: captureHydrationTargetIdentity(target),
+  });
   queuedHydrationEvents.set(container, events);
 }
 
@@ -93,9 +102,61 @@ export function replayQueuedHydrationEvents(container: Element): void {
   queuedHydrationEvents.delete(container);
 
   for (const { event, target } of events) {
+    if (!(target instanceof Node) || !container.contains(target)) {
+      continue;
+    }
+
     replayedEvents.add(event);
     target.dispatchEvent(event);
   }
+}
+
+export function retargetQueuedHydrationEvents(
+  container: Element,
+  replacementRoots: readonly Node[],
+): void {
+  const events = queuedHydrationEvents.get(container);
+  if (events === undefined) return;
+
+  for (const queued of events) {
+    if (queued.identity?.id === undefined) {
+      continue;
+    }
+
+    const matches = findElementsByExactId(replacementRoots, queued.identity.id);
+    if (matches.length === 1) {
+      queued.target = matches[0]!;
+    }
+  }
+}
+
+function captureHydrationTargetIdentity(
+  target: EventTarget,
+): QueuedHydrationTargetIdentity | undefined {
+  if (!(target instanceof Element)) {
+    return undefined;
+  }
+
+  const id = target.getAttribute("id") ?? undefined;
+  return { id: id === "" ? undefined : id };
+}
+
+function findElementsByExactId(roots: readonly Node[], id: string): Element[] {
+  const matches: Element[] = [];
+  for (const root of roots) {
+    if (!(root instanceof Element)) {
+      continue;
+    }
+    if (root.getAttribute("id") === id) {
+      matches.push(root);
+    }
+    for (const candidate of root.querySelectorAll<Element>("[id]")) {
+      if (candidate.getAttribute("id") === id) {
+        matches.push(candidate);
+      }
+    }
+  }
+  return matches;
 }
 
 function enableHydrationEventReplayForTypes(

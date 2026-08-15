@@ -352,6 +352,29 @@ export function commitHydratingHostFiberRoot(
   scope: HydrationScope,
   options: FiberHydrationOptions = {},
 ): void {
+  commitScopedHostFiberRoot(root, finishedWork, scope, options);
+}
+
+export function consumeHydrationScopeResumeMarkers(scope: HydrationScope): void {
+  if (
+    isResumeScopeStartMarker(scope.before) &&
+    isResumeScopeEndMarker(scope.after)
+  ) {
+    const before = scope.before.previousSibling;
+    const after = scope.after.nextSibling;
+    scope.before.remove();
+    scope.after.remove();
+    scope.before = before;
+    scope.after = after;
+  }
+}
+
+export function commitScopedHostFiberRoot(
+  root: FiberRoot,
+  finishedWork: Fiber,
+  scope: HydrationScope,
+  options: RenderOptions = {},
+): void {
   runWithHostCommit(() => {
     let committed = false;
     try {
@@ -361,6 +384,7 @@ export function commitHydratingHostFiberRoot(
       const eventRoot = root.container;
       const nodes = commitHostChildren(finishedWork.child, scope.parent, eventRoot, "", options);
       syncScopedChildNodes(scope.parent, scope.before, scope.after, nodes);
+      scope.previousNodes = nodes;
       flushPendingReactiveDomBlockAfterCommits();
       committed = true;
     } finally {
@@ -373,11 +397,14 @@ export function commitHydratingHostFiberRoot(
       committedPortalContainers.clear();
     }
   });
+}
 
-  if (options.consumeResumeMarkers === true) {
-    scope.before?.parentNode?.removeChild(scope.before);
-    scope.after?.parentNode?.removeChild(scope.after);
-  }
+function isResumeScopeStartMarker(node: ChildNode | null): node is Comment {
+  return node instanceof Comment && node.data.startsWith("mreact-h:start:");
+}
+
+function isResumeScopeEndMarker(node: ChildNode | null): node is Comment {
+  return node instanceof Comment && node.data.startsWith("mreact-h:end:");
 }
 
 export function disposeHostFiberResources(fiber: Fiber | undefined): void {
@@ -1849,6 +1876,8 @@ function createHostFiberImpl(
       reportRecoverable(options, "text", path, new Error("Hydration text mismatch."));
     }
 
+    fiber.hydrateExisting = existing instanceof Text;
+
     return { fiber, consumed: existing instanceof Text ? textHydration.consumed : 0 };
   }
 
@@ -2425,6 +2454,46 @@ function findHydrationTextNode(previousNodes: readonly Node[] | undefined): {
   }
 
   return { node: first, consumed: first instanceof Text ? 1 : 0 };
+}
+
+export function recoverStructurallyMismatchedHostFiberRoot(finishedWork: Fiber): void {
+  const stack: Fiber[] = [];
+  if (finishedWork.child !== undefined) {
+    stack.push(finishedWork.child);
+  }
+
+  while (stack.length > 0) {
+    const fiber = stack.pop();
+    if (fiber === undefined) continue;
+
+    if (fiber.sibling !== undefined) {
+      stack.push(fiber.sibling);
+    }
+    if (fiber.child !== undefined) {
+      stack.push(fiber.child);
+    }
+    if (fiber.hydrateExisting !== true) {
+      continue;
+    }
+
+    if (fiber.tag === "host-component" && isDomHostElement(fiber.stateNode)) {
+      const element = fiber.stateNode;
+      fiber.stateNode = element.ownerDocument.createElementNS(
+        element.namespaceURI,
+        element.localName,
+      );
+      fiber.hydrateExisting = false;
+      fiber.flags |= Placement | Update;
+      fiber.hostChildListChanged = true;
+      continue;
+    }
+
+    if (fiber.tag === "host-text" && fiber.stateNode instanceof Text) {
+      fiber.stateNode = fiber.stateNode.ownerDocument.createTextNode(String(fiber.pendingProps));
+      fiber.hydrateExisting = false;
+      fiber.flags |= Placement | Update;
+    }
+  }
 }
 
 // The host-component reconcile, split out of createHostFiberImpl so host

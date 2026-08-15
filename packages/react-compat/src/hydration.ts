@@ -15,6 +15,19 @@ export interface HydrationContext {
   componentStack?: string;
 }
 
+interface BufferedHydrationRecovery {
+  error: Error;
+  info: HydrationRecoverableErrorInfo;
+}
+
+interface HydrationRecoveryState {
+  buffering: boolean;
+  structuralMismatch: boolean;
+  recoveries: BufferedHydrationRecovery[];
+}
+
+const hydrationRecoveryStates = new WeakMap<HydrationContext, HydrationRecoveryState>();
+
 export interface RenderOptions {
   hydration?: HydrationContext;
   eventRoot?: Element;
@@ -168,11 +181,66 @@ export function reportRecoverable(
   error: Error,
 ): void {
   const componentStack = options.hydration?.componentStack;
-  options.hydration?.onRecoverableError?.(error, {
+  const info: HydrationRecoverableErrorInfo = {
     kind,
     path,
     ...(componentStack === undefined ? {} : { componentStack }),
-  });
+  };
+  const recoveryState =
+    options.hydration === undefined ? undefined : hydrationRecoveryStates.get(options.hydration);
+
+  if (recoveryState?.buffering === true) {
+    recoveryState.recoveries.push({ error, info });
+    recoveryState.structuralMismatch ||=
+      kind === "node" || kind === "tag" || kind === "text";
+    return;
+  }
+
+  options.hydration?.onRecoverableError?.(error, info);
+}
+
+export function beginHydrationRecovery(options: RenderOptions): void {
+  const hydration = options.hydration;
+  if (hydration === undefined) return;
+
+  const state = hydrationRecoveryStates.get(hydration) ?? {
+    buffering: true,
+    structuralMismatch: false,
+    recoveries: [],
+  };
+  state.buffering = true;
+  state.structuralMismatch = false;
+  state.recoveries.length = 0;
+  hydrationRecoveryStates.set(hydration, state);
+}
+
+export function hasStructuralHydrationMismatch(options: RenderOptions): boolean {
+  return options.hydration === undefined
+    ? false
+    : hydrationRecoveryStates.get(options.hydration)?.structuralMismatch === true;
+}
+
+export function flushHydrationRecoveries(options: RenderOptions): void {
+  const hydration = options.hydration;
+  if (hydration === undefined) return;
+
+  const state = hydrationRecoveryStates.get(hydration);
+  if (state === undefined) return;
+
+  state.buffering = false;
+  const recoveries = state.structuralMismatch
+    ? state.recoveries
+        .filter(
+          ({ info }) =>
+            info.kind === "node" || info.kind === "tag" || info.kind === "text",
+        )
+        .slice(0, 1)
+    : state.recoveries;
+  state.recoveries = [];
+
+  for (const recovery of recoveries) {
+    hydration.onRecoverableError?.(recovery.error, recovery.info);
+  }
 }
 
 export function reportMissingHydrationNode(
@@ -225,12 +293,18 @@ export function withHydrationComponentStack(
   }
 
   const frame = `\n    at ${componentName}`;
+  const hydration = {
+    ...options.hydration,
+    componentStack: `${options.hydration.componentStack ?? ""}${frame}`,
+  };
+  const recoveryState = hydrationRecoveryStates.get(options.hydration);
+  if (recoveryState !== undefined) {
+    hydrationRecoveryStates.set(hydration, recoveryState);
+  }
+
   return {
     ...options,
-    hydration: {
-      ...options.hydration,
-      componentStack: `${options.hydration.componentStack ?? ""}${frame}`,
-    },
+    hydration,
   };
 }
 

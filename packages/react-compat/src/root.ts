@@ -6,12 +6,20 @@ import {
   type RenderPriority,
   type RootRuntime,
 } from "./hooks.js";
-import { collectOwnedChildNodes, removeChildIfPresent } from "./dom-children.js";
+import {
+  collectOwnedChildNodes,
+  removeChildIfPresent,
+  syncScopedChildNodes,
+} from "./dom-children.js";
 import { commitDevToolsRoot, unmountDevToolsRoot } from "./devtools.js";
 import {
   applyStreamingHydrationFragments,
+  beginHydrationRecovery,
   findContainingResumeBoundaryId,
+  flushHydrationRecoveries,
   getHydrationScope,
+  hasStructuralHydrationMismatch,
+  type HydrationScope,
   type HydrationRecoverableErrorInfo,
   type RenderOptions,
 } from "./hydration.js";
@@ -19,6 +27,7 @@ import {
   enableEventHydrationManifestReplay,
   readEventHydrationManifest,
   replayQueuedHydrationEvents,
+  retargetQueuedHydrationEvents,
   type EventHydrationManifest,
 } from "./event-replay.js";
 import {
@@ -39,9 +48,11 @@ import {
 import {
   canRenderHostFiber,
   commitHydratingHostFiberRoot,
+  consumeHydrationScopeResumeMarkers,
   disposeHostFiberResources,
   renderHydratingHostFiberRoot,
   renderHostFiberRoot,
+  recoverStructurallyMismatchedHostFiberRoot,
 } from "./fiber-host.js";
 import type { Fiber, FiberRoot } from "./fiber.js";
 
@@ -151,6 +162,7 @@ function renderHostFiberIntoContainer(
   fiberRoot: FiberRoot,
   runtime: RootRuntime,
   element: ReactCompatNode,
+  scope?: HydrationScope,
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const portalSnapshot = beginPortalRender(runtime);
@@ -173,7 +185,7 @@ function renderHostFiberIntoContainer(
       }
 
       fiberRoot.finishedWork = finishedWork;
-      withBatchedDelegatedRootReleases(() => commitFiberRoot(fiberRoot));
+      withBatchedDelegatedRootReleases(() => commitFiberRoot(fiberRoot, {}, scope));
       collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
       removeStalePortalNodes(portalSnapshot, runtime);
       deferred.promote?.();
@@ -200,6 +212,7 @@ function renderHydratingHostFiberIntoContainer(
   fiberRoot: FiberRoot,
   runtime: RootRuntime,
   element: ReactCompatNode,
+  scope: HydrationScope,
   options: RenderOptions & {
     resumeId?: string;
     consumeResumeMarkers?: boolean;
@@ -211,7 +224,7 @@ function renderHydratingHostFiberIntoContainer(
     let committed = false;
 
     try {
-      const scope = getHydrationScope(container, options.resumeId);
+      beginHydrationRecovery(options);
       const deferred = withDeferredDelegatedEventPromotions(() =>
         renderHydratingHostFiberRoot(
           fiberRoot,
@@ -232,9 +245,20 @@ function renderHydratingHostFiberIntoContainer(
         continue;
       }
 
+      const structuralMismatch = hasStructuralHydrationMismatch(options);
+      if (structuralMismatch) {
+        recoverStructurallyMismatchedHostFiberRoot(finishedWork);
+      }
+
       withBatchedDelegatedRootReleases(() =>
         commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options)
       );
+      if (structuralMismatch) {
+        retargetQueuedHydrationEvents(container, scope.previousNodes);
+      }
+      if (options.consumeResumeMarkers === true) {
+        consumeHydrationScopeResumeMarkers(scope);
+      }
       fiberRoot.current = finishedWork;
       fiberRoot.current.stateNode = fiberRoot;
       fiberRoot.finishedWork = undefined;
@@ -246,6 +270,7 @@ function renderHydratingHostFiberIntoContainer(
       commitDevToolsRoot(container, fiberRoot);
       runtime.idMode = "client";
       committed = true;
+      flushHydrationRecoveries(options);
       return finishedWork;
     } finally {
       if (!committed) {
@@ -293,20 +318,19 @@ export function hydrateRoot(
       ? {}
       : { consumeResumeMarkers: options.consumeResumeMarkers }),
   };
+  const hydrationScope = getHydrationScope(container, renderOptions.resumeId);
+  const selectiveScope = renderOptions.resumeId === undefined ? undefined : hydrationScope;
   const runtime = createRootRuntime((priority = "sync") => {
     if (runtime.currentElement !== undefined) {
       enqueueRootRender(fiberRoot, runtime.currentElement, laneForRenderPriority(priority), () => {
-        const useHydratingRerender =
-          runtime.idMode === "server" ||
-          renderOptions.resumeId !== undefined ||
-          renderOptions.consumeResumeMarkers !== undefined;
         if (canRenderHostFiber(runtime.currentElement as ReactCompatNode)) {
-          return useHydratingRerender
+          return runtime.idMode === "server"
             ? renderHydratingHostFiberIntoContainer(
                 container,
                 fiberRoot,
                 runtime,
                 runtime.currentElement as ReactCompatNode,
+                hydrationScope,
                 renderOptions,
               )
             : renderHostFiberIntoContainer(
@@ -314,6 +338,7 @@ export function hydrateRoot(
                 fiberRoot,
                 runtime,
                 runtime.currentElement as ReactCompatNode,
+                selectiveScope,
               );
         }
 
@@ -332,7 +357,13 @@ export function hydrateRoot(
       runtime.currentElement = nextElement;
       enqueueRootRender(fiberRoot, nextElement, SyncLane, () => {
         if (canRenderHostFiber(nextElement)) {
-          return renderHostFiberIntoContainer(container, fiberRoot, runtime, nextElement);
+          return renderHostFiberIntoContainer(
+            container,
+            fiberRoot,
+            runtime,
+            nextElement,
+            selectiveScope,
+          );
         }
 
         throwUnsupportedRootNode();
@@ -346,7 +377,17 @@ export function hydrateRoot(
         disposeHostFiberResources(fiberRoot.current);
         runtime.instances.clear();
         unmountDevToolsRoot(container);
-        clearElementChildren(container);
+        if (selectiveScope === undefined) {
+          clearElementChildren(container);
+        } else {
+          syncScopedChildNodes(
+            selectiveScope.parent,
+            selectiveScope.before,
+            selectiveScope.after,
+            [],
+          );
+          selectiveScope.previousNodes = [];
+        }
       });
     },
   };
@@ -359,6 +400,7 @@ export function hydrateRoot(
         fiberRoot,
         runtime,
         element,
+        hydrationScope,
         renderOptions,
     );
   }

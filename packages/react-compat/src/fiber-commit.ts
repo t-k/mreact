@@ -1,9 +1,13 @@
 import type { Fiber, FiberRoot } from "./fiber.js";
 import { ChildDeletion } from "./fiber-flags.js";
-import { commitHostFiberRoot, disposeUnretainedHostFiberResources } from "./fiber-host.js";
+import {
+  commitHostFiberRoot,
+  commitScopedHostFiberRoot,
+  disposeUnretainedHostFiberResources,
+} from "./fiber-host.js";
 import { markRootFinished } from "./fiber-lanes.js";
 import { runWithHostCommit } from "./hooks.js";
-import type { RenderOptions } from "./hydration.js";
+import type { HydrationScope, RenderOptions } from "./hydration.js";
 import { detachRef } from "./ref-lifecycle.js";
 
 interface RefRecord {
@@ -11,7 +15,11 @@ interface RefRecord {
   node: unknown;
 }
 
-export function commitFiberRoot(root: FiberRoot, options: RenderOptions = {}): void {
+export function commitFiberRoot(
+  root: FiberRoot,
+  options: RenderOptions = {},
+  scope?: HydrationScope,
+): void {
   const finishedWork = root.finishedWork;
 
   if (finishedWork === undefined) {
@@ -24,7 +32,11 @@ export function commitFiberRoot(root: FiberRoot, options: RenderOptions = {}): v
     });
   }
   const shouldCleanupDeletedSubtrees = mayHaveDeletedFiberSubtrees(finishedWork);
-  commitHostFiberRoot(root, finishedWork, options);
+  if (scope === undefined) {
+    commitHostFiberRoot(root, finishedWork, options);
+  } else {
+    commitScopedHostFiberRoot(root, finishedWork, scope, options);
+  }
   if (shouldCleanupDeletedSubtrees) {
     const retainedFibers = collectRetainedFiberPairs(finishedWork);
     detachUnretainedFiberSubtrees(root.current.child, retainedFibers);

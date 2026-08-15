@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, test } from "vitest";
-import { createElement, createRoot } from "../src/index.js";
+import { createElement, createRoot, useState } from "../src/index.js";
 import {
   decodeFlightResponse,
   createFetchServerReferenceCaller,
@@ -503,16 +503,16 @@ describe("react-compat Flight client", () => {
   test("hydrates Flight client references inside a resume marker scope", () => {
     const container = document.createElement("div");
     container.innerHTML =
-      '<span>outside</span><!--mreact-h:start:flight-root--><button>Ada</button><!--mreact-h:end:flight-root-->';
+      "<span>outside</span><!--mreact-h:start:flight-root--><button>Ada 0</button><!--mreact-h:end:flight-root-->";
     const outside = container.querySelector("span");
     const serverButton = container.querySelector("button");
-    let clicks = 0;
 
     function Button(props: { name: string }) {
+      const [count, setCount] = useState(0);
       return createElement(
         "button",
-        { onClick: () => { clicks += 1; } },
-        props.name,
+        { onClick: () => setCount((value) => value + 1) },
+        `${props.name} ${count}`,
       );
     }
 
@@ -547,8 +547,13 @@ describe("react-compat Flight client", () => {
     expect(container.querySelector("span")).toBe(outside);
     expect(container.querySelector("button")).toBe(serverButton);
     container.querySelector("button")?.click();
-    expect(clicks).toBe(1);
-    expect(container.innerHTML).toBe("<span>outside</span><button>Ada</button>");
+    expect(container.querySelector("button")?.textContent).toBe("Ada 1");
+    container.querySelector("button")?.click();
+    expect(container.querySelector("button")?.textContent).toBe("Ada 2");
+    expect(container.querySelector("span")).toBe(outside);
+    expect(container.innerHTML).toBe(
+      "<span>outside</span><button>Ada 2</button>",
+    );
   });
 
   test("creates fetch-backed server reference caller", async () => {

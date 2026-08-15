@@ -2185,7 +2185,7 @@ describe("react-compat render", () => {
 
   test("hydrateRoot reuses matching DOM nodes and attaches event handlers", () => {
     const container = document.createElement("div");
-    container.innerHTML = "<button>server</button>";
+    container.innerHTML = "<button>client</button>";
     const button = container.firstChild;
     let clicks = 0;
 
