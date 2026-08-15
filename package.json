@@ -131,6 +131,7 @@
     "oxfmt": "^0.54.0",
     "oxlint": "^1.69.0",
     "oxlint-tsgolint": "^0.23.0",
+    "parse5": "8.0.1",
     "react": "^19.2.7",
     "react-aria-components": "^1.18.0",
     "react-dom": "^19.2.7",

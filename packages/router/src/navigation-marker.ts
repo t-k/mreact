@@ -16,10 +16,13 @@ interface ParsedStartTag {
   end: number;
   hasMarker: boolean;
   name: string;
+  selfClosing: boolean;
 }
 
 export function hasNavigationRouteMarker(html: string): boolean {
   let cursor = 0;
+  let foreignContentDepth = 0;
+  let templateDepth = 0;
 
   while (cursor < html.length) {
     const openingBracket = html.indexOf("<", cursor);
@@ -33,12 +36,28 @@ export function hasNavigationRouteMarker(html: string): boolean {
     }
 
     if (html.startsWith("<![CDATA[", openingBracket)) {
-      cursor = skipCdataSection(html, openingBracket + 9);
+      cursor =
+        foreignContentDepth > 0
+          ? skipCdataSection(html, openingBracket + 9)
+          : skipBogusComment(html, openingBracket + 2);
       continue;
     }
 
     const discriminator = html[openingBracket + 1];
-    if (discriminator === "!" || discriminator === "?" || discriminator === "/") {
+    if (discriminator === "/") {
+      const endTag = parseEndTag(html, openingBracket);
+      if (endTag.name === "template" && templateDepth > 0) {
+        templateDepth -= 1;
+      } else if (
+        (endTag.name === "svg" || endTag.name === "math") &&
+        foreignContentDepth > 0
+      ) {
+        foreignContentDepth -= 1;
+      }
+      cursor = endTag.end;
+      continue;
+    }
+    if (discriminator === "!" || discriminator === "?") {
       cursor = skipTagTail(html, openingBracket + 2);
       continue;
     }
@@ -52,7 +71,14 @@ export function hasNavigationRouteMarker(html: string): boolean {
       cursor = openingBracket + 1;
       continue;
     }
-    if (tag.hasMarker) {
+    if (
+      tag.hasMarker &&
+      templateDepth === 0 &&
+      tag.name !== "html" &&
+      tag.name !== "head" &&
+      tag.name !== "body" &&
+      tag.name !== "frameset"
+    ) {
       return true;
     }
 
@@ -60,10 +86,16 @@ export function hasNavigationRouteMarker(html: string): boolean {
       return false;
     }
 
+    if (!tag.selfClosing && tag.name === "template") {
+      templateDepth += 1;
+    } else if (!tag.selfClosing && (tag.name === "svg" || tag.name === "math")) {
+      foreignContentDepth += 1;
+    }
+
     cursor =
       tag.name === "script"
         ? skipScriptElement(html, tag.end)
-        : rawTextElementNames.has(tag.name)
+        : foreignContentDepth === 0 && rawTextElementNames.has(tag.name)
           ? skipRawTextElement(html, tag.end, tag.name)
           : tag.end;
   }
@@ -92,13 +124,23 @@ function parseStartTag(html: string, openingBracket: number): ParsedStartTag | u
   for (;;) {
     cursor = skipAsciiWhitespace(html, cursor);
     if (cursor >= html.length) {
-      return { end: html.length, hasMarker: false, name };
+      return { end: html.length, hasMarker: false, name, selfClosing: false };
     }
     if (html[cursor] === ">") {
-      return { end: cursor + 1, hasMarker: markerValueIsNonEmpty === true, name };
+      return {
+        end: cursor + 1,
+        hasMarker: markerValueIsNonEmpty === true,
+        name,
+        selfClosing: false,
+      };
     }
     if (html[cursor] === "/" && html[cursor + 1] === ">") {
-      return { end: cursor + 2, hasMarker: markerValueIsNonEmpty === true, name };
+      return {
+        end: cursor + 2,
+        hasMarker: markerValueIsNonEmpty === true,
+        name,
+        selfClosing: true,
+      };
     }
     if (html[cursor] === "/") {
       return invalidStartTag(html, cursor, name);
@@ -127,7 +169,7 @@ function parseStartTag(html: string, openingBracket: number): ParsedStartTag | u
         const valueStart = cursor + 1;
         const valueEnd = html.indexOf(quote, valueStart);
         if (valueEnd < 0) {
-          return { end: html.length, hasMarker: false, name };
+          return { end: html.length, hasMarker: false, name, selfClosing: false };
         }
         valueIsNonEmpty = valueEnd > valueStart;
         cursor = valueEnd + 1;
@@ -153,15 +195,43 @@ function parseStartTag(html: string, openingBracket: number): ParsedStartTag | u
 }
 
 function invalidStartTag(html: string, cursor: number, name: string): ParsedStartTag {
-  return { end: skipTagTail(html, cursor), hasMarker: false, name };
+  return { end: skipMalformedTagTail(html, cursor), hasMarker: false, name, selfClosing: false };
 }
 
 function skipComment(html: string, cursor: number): number {
+  if (html[cursor] === ">") {
+    return cursor + 1;
+  }
+  if (html.startsWith("->", cursor)) {
+    return cursor + 2;
+  }
   const standardEnd = html.indexOf("-->", cursor);
   const abruptEnd = html.indexOf("--!>", cursor);
   const end =
     standardEnd < 0 ? abruptEnd : abruptEnd < 0 ? standardEnd : Math.min(standardEnd, abruptEnd);
   return end < 0 ? html.length : end + (end === abruptEnd ? 4 : 3);
+}
+
+function skipBogusComment(html: string, cursor: number): number {
+  const end = html.indexOf(">", cursor);
+  return end < 0 ? html.length : end + 1;
+}
+
+function parseEndTag(html: string, openingBracket: number): { end: number; name: string } {
+  let cursor = openingBracket + 2;
+  const nameStart = cursor;
+  while (isAsciiLetter(html[cursor])) {
+    cursor += 1;
+  }
+  return {
+    end: skipTagTail(html, cursor),
+    name: html.slice(nameStart, cursor).toLowerCase(),
+  };
+}
+
+function skipMalformedTagTail(html: string, cursor: number): number {
+  const end = html.indexOf(">", cursor);
+  return end < 0 ? html.length : end + 1;
 }
 
 function skipCdataSection(html: string, cursor: number): number {

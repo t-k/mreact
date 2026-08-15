@@ -230,6 +230,9 @@ importers:
       oxlint-tsgolint:
         specifier: ^0.23.0
         version: 0.23.0
+      parse5:
+        specifier: 8.0.1
+        version: 8.0.1
       react:
         specifier: ^19.2.7
         version: 19.2.7
