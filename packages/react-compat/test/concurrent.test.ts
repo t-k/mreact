@@ -12,6 +12,8 @@ import {
   SuspenseList,
   useDeferredValue,
   useEffect,
+  useActionState,
+  useOptimistic,
   useState,
   useSyncExternalStore,
   useTransition,
@@ -24,6 +26,17 @@ import {
 
 interface TestSchedulerHost extends SchedulerHost {
   flushOneHostCallback(): void;
+  pendingHostCallbackCount(): number;
+}
+
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  let reject: (reason: unknown) => void = () => {};
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
 }
 
 function createTestSchedulerHost(): TestSchedulerHost {
@@ -43,6 +56,9 @@ function createTestSchedulerHost(): TestSchedulerHost {
     cancelHostTimeout() {},
     flushOneHostCallback() {
       callbacks.shift()?.();
+    },
+    pendingHostCallbackCount() {
+      return callbacks.length;
     },
   };
 }
@@ -125,11 +141,7 @@ describe("react-compat concurrent subset", () => {
         calls.push("after");
       };
 
-      return createElement(
-        "p",
-        null,
-        `${pending ? "pending" : "settled"}:${value}`,
-      );
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${value}`);
     }
 
     root.render(createElement(App, null));
@@ -224,11 +236,7 @@ describe("react-compat concurrent subset", () => {
       const [pending, start] = useTransition();
       beginTransition = () => start(() => setQuery("B"));
       increment = () => setCount((value) => value + 1);
-      return createElement(
-        "p",
-        null,
-        `${count}/${query}/${pending ? "pending" : "ready"}`,
-      );
+      return createElement("p", null, `${count}/${query}/${pending ? "pending" : "ready"}`);
     }
 
     root.render(createElement(App, null));
@@ -282,11 +290,7 @@ describe("react-compat concurrent subset", () => {
         start(() => setLeft("B"));
         start(() => setRight("Y"));
       };
-      return createElement(
-        "p",
-        null,
-        `${pending ? "pending" : "settled"}:${left}/${right}`,
-      );
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${left}/${right}`);
     }
 
     root.render(createElement(App, null));
@@ -331,16 +335,20 @@ describe("react-compat concurrent subset", () => {
 
     function App() {
       const [count, setCount] = useState(0);
-      return createElement("button", {
-        ref: (node: HTMLButtonElement | null) => {
-          if (node === null || scheduled) {
-            return;
-          }
-          scheduled = true;
-          setCount(1);
-          startTransition(() => setCount(0));
+      return createElement(
+        "button",
+        {
+          ref: (node: HTMLButtonElement | null) => {
+            if (node === null || scheduled) {
+              return;
+            }
+            scheduled = true;
+            setCount(1);
+            startTransition(() => setCount(0));
+          },
         },
-      }, count);
+        count,
+      );
     }
 
     root.render(createElement(App, null));
@@ -348,6 +356,852 @@ describe("react-compat concurrent subset", () => {
 
     host.flushOneHostCallback();
     expect(container.innerHTML).toBe("<button>0</button>");
+  });
+
+  test("an optimistic update from an attached ref survives commit-time rerendering", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let attached = false;
+    let rerender = () => undefined;
+    let renders = 0;
+    const renderedOptimistic: string[][] = [];
+    const base: string[] = [];
+
+    function App() {
+      renders += 1;
+      const [count, setCount] = useState(0);
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
+        (state, value) => [...state, value]
+      );
+      renderedOptimistic.push(optimistic);
+      rerender = () => setCount((previous) => previous + 1);
+      return createElement("button", {
+        ref: (node: HTMLButtonElement | null) => {
+          if (node !== null && !attached) {
+            attached = true;
+            addOptimistic("mounted");
+          }
+        },
+      }, `${count}:${optimistic.join(",")}`);
+    }
+
+    root.render(createElement(App, null));
+    expect(renders).toBe(2);
+    expect(renderedOptimistic).toEqual([[], ["mounted"]]);
+    expect(container.innerHTML).toBe("<button>0:mounted</button>");
+
+    rerender();
+    return Promise.resolve().then(() => {
+      expect(container.innerHTML).toBe("<button>1:mounted</button>");
+    });
+  });
+
+  test("an optimistic update appended by an attached ref survives draft publication", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    const base: string[] = [];
+    let attached = false;
+    let launch = () => undefined;
+
+    function App() {
+      const [showButton, setShowButton] = useState(false);
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
+        (state, value) => [...state, value]
+      );
+      const [, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("first");
+        setShowButton(true);
+        return action.promise;
+      });
+      if (!showButton) {
+        return createElement("p", null, optimistic.join(","));
+      }
+      return createElement("button", {
+        ref: (node: HTMLButtonElement | null) => {
+          if (node !== null && !attached) {
+            attached = true;
+            addOptimistic("second");
+          }
+        },
+      }, optimistic.join(","));
+    }
+
+    root.render(createElement(App, null));
+    launch();
+    expect(container.innerHTML).toBe("<p>first</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<button>first,second</button>");
+  });
+
+  test("useOptimistic reverts when an async transition handles a rejection", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    let launch = () => undefined;
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic(
+        "hello",
+        (state, value: string) => `${state},${value}`,
+      );
+      const [pending, start] = useTransition();
+      launch = () =>
+        start(() => {
+          addOptimistic("sending");
+          return action.promise.catch(() => undefined);
+        });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    launch();
+    expect(container.innerHTML).toBe("<p>pending:hello,sending</p>");
+
+    action.reject(new Error("offline"));
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(container.innerHTML).toBe("<p>settled:hello</p>");
+  });
+
+  test("useOptimistic settles after its transition scope throws synchronously", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let launch = () => undefined;
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
+      const [pending, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("temp");
+        throw new Error("scope boom");
+      });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    expect(launch).not.toThrow();
+    expect(container.innerHTML).toBe("<p>pending:temp</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<strong>scope boom</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("useTransition reports a scope thenable whose registration throws", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const brokenThenable = {
+      then() {
+        throw new Error("scope then boom");
+      },
+    } as PromiseLike<void>;
+    let launch = () => undefined;
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
+      const [pending, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("temp");
+        return brokenThenable;
+      });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    launch();
+    expect(container.innerHTML).toBe("<p>pending:temp</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<strong>scope then boom</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("useTransition reports a scope thenable whose then getter throws", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const brokenThenable = Object.defineProperty({}, "then", {
+      get() {
+        throw new Error("scope getter boom");
+      },
+    }) as PromiseLike<void>;
+    let launch = () => undefined;
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
+      const [pending, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("temp");
+        return brokenThenable;
+      });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    expect(launch).not.toThrow();
+    expect(container.innerHTML).toBe("<p>pending:temp</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<strong>scope getter boom</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("useActionState reports an action thenable whose registration throws", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const brokenThenable = {
+      then() {
+        throw new Error("action then boom");
+      },
+    } as PromiseLike<string>;
+    let launch = () => undefined;
+
+    function App() {
+      const [base, dispatch, actionPending] = useActionState(
+        () => brokenThenable,
+        "base",
+      );
+      const [optimistic, addOptimistic] = useOptimistic(base, (_state, value: string) => value);
+      const [transitionPending, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("temp");
+        dispatch(undefined);
+      });
+      return createElement("p", null, `${transitionPending}:${actionPending}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    launch();
+    expect(container.innerHTML).toBe("<strong>action then boom</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("useActionState reports an action thenable whose then getter throws", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const brokenThenable = Object.defineProperty({}, "then", {
+      get() {
+        throw new Error("action getter boom");
+      },
+    }) as PromiseLike<string>;
+    let launch = () => undefined;
+
+    function App() {
+      const [base, dispatch, actionPending] = useActionState(
+        () => brokenThenable,
+        "base",
+      );
+      const [optimistic, addOptimistic] = useOptimistic(base, (_state, value: string) => value);
+      const [transitionPending, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("temp");
+        dispatch(undefined);
+      });
+      return createElement("p", null, `${transitionPending}:${actionPending}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    launch();
+    expect(container.innerHTML).toBe("<strong>action getter boom</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("an optimistic sync commit waits until its transition scope returns", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    const calls: string[] = [];
+    const base: string[] = [];
+    let attached = false;
+    let launch = () => undefined;
+
+    function App() {
+      const [refState, setRefState] = useState(false);
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
+        (state, value) => [...state, value]
+      );
+      launch = () => startTransition(() => {
+        calls.push("before");
+        addOptimistic("scope");
+        calls.push("after");
+        return action.promise;
+      });
+      if (optimistic.includes("scope")) {
+        return createElement("button", {
+          ref: (node: HTMLButtonElement | null) => {
+            if (node !== null && !attached) {
+              attached = true;
+              calls.push("ref");
+              addOptimistic("ref");
+              setRefState(true);
+            }
+          },
+        }, `${optimistic.join(",")}:${refState}`);
+      }
+      return createElement("p", null, `${refState}:${optimistic.join(",")}`);
+    }
+
+    root.render(createElement(App, null));
+    launch();
+
+    expect(calls).toEqual(["before", "after", "ref"]);
+    expect(container.innerHTML).toBe("<button>scope,ref:true</button>");
+
+    action.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>true:</p>");
+  });
+
+  test("a synchronous useActionState action remains pending until its transition commits", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let launch = () => undefined;
+
+    function App() {
+      const [count, dispatch, actionPending] = useActionState(
+        (previous: number) => previous + 1,
+        0,
+      );
+      const [transitionPending, start] = useTransition();
+      launch = () => start(() => dispatch(undefined));
+      return createElement("p", null, `${transitionPending}:${actionPending}:${count}`);
+    }
+
+    root.render(createElement(App, null));
+    expect(container.innerHTML).toBe("<p>false:false:0</p>");
+
+    launch();
+    expect(container.innerHTML).toBe("<p>true:true:0</p>");
+
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>false:false:1</p>");
+  });
+
+  test("useOptimistic settles when its raw async transition scope rejects", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    let launch = () => undefined;
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
+      const [pending, start] = useTransition();
+      launch = () => start(() => {
+        addOptimistic("temp");
+        return action.promise;
+      });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    launch();
+    expect(container.innerHTML).toBe("<p>pending:temp</p>");
+
+    action.reject(new Error("action boom"));
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(container.innerHTML).toBe("<strong>action boom</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("useOptimistic reverts when an async transition commits the same base state", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    let launch = () => undefined;
+
+    function App() {
+      const [base, setBase] = useState("hello");
+      const [optimistic, addOptimistic] = useOptimistic(
+        base,
+        (state, value: string) => `${state},${value}`,
+      );
+      const [pending, start] = useTransition();
+      launch = () =>
+        start(() => {
+          addOptimistic("sending");
+          return action.promise.then(() => {
+            startTransition(() => setBase("hello"));
+          });
+        });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(createElement(App, null));
+    launch();
+    expect(container.innerHTML).toBe("<p>pending:hello,sending</p>");
+
+    action.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(container.innerHTML).toBe("<p>settled:hello</p>");
+  });
+
+  test("useOptimistic replaces a settled entry with the new base state", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<string>();
+    let launch = () => undefined;
+
+    function App() {
+      const [base, setBase] = useState("hello");
+      const [optimistic, addOptimistic] = useOptimistic(
+        base,
+        (state, value: string) => `${state},${value}`,
+      );
+      const [pending, start] = useTransition();
+      launch = () =>
+        start(() => {
+          addOptimistic("sending");
+          return action.promise.then((nextBase) => {
+            startTransition(() => setBase(nextBase));
+          });
+        });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic}`);
+    }
+
+    root.render(createElement(App, null));
+    launch();
+    expect(container.innerHTML).toBe("<p>pending:hello,sending</p>");
+
+    action.resolve("hello,sent");
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(container.innerHTML).toBe("<p>settled:hello,sent</p>");
+  });
+
+  test("concurrent optimistic entries settle independently", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const first = createDeferred<void>();
+    const second = createDeferred<void>();
+    let launch: (label: string, action: Promise<void>) => void = () => {};
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>([], (state, value) => [
+        ...state,
+        value,
+      ]);
+      const [pending, start] = useTransition();
+      launch = (label, action) =>
+        start(() => {
+          addOptimistic(label);
+          return action;
+        });
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${optimistic.join(",")}`);
+    }
+
+    root.render(createElement(App, null));
+    launch("A", first.promise);
+    launch("B", second.promise);
+    expect(container.innerHTML).toBe("<p>pending:A,B</p>");
+
+    second.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>pending:A</p>");
+
+    first.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:</p>");
+  });
+
+  test("a committed base rebases an independently pending optimistic entry", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const first = createDeferred<string[]>();
+    const second = createDeferred<void>();
+    let launchFirst = () => undefined;
+    let launchSecond = () => undefined;
+
+    function App() {
+      const [base, setBase] = useState(["base"]);
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
+        (state, value) => [...state, `${value}:sending`]
+      );
+      const [pending, start] = useTransition();
+      launchFirst = () => start(() => {
+        addOptimistic("A");
+        return first.promise.then((nextBase) => {
+          startTransition(() => setBase(nextBase));
+        });
+      });
+      launchSecond = () => start(() => {
+        addOptimistic("B");
+        return second.promise;
+      });
+      return createElement(
+        "p",
+        null,
+        `${pending ? "pending" : "settled"}:${optimistic.join(",")}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    launchFirst();
+    launchSecond();
+    expect(container.innerHTML).toBe("<p>pending:base,A:sending,B:sending</p>");
+
+    first.resolve(["base", "A:sent"]);
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>pending:base,A:sent,B:sending</p>");
+
+    second.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:base,A:sent</p>");
+  });
+
+  test("useOptimistic follows the lifecycle of useActionState work", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<string>();
+    let launch = () => undefined;
+
+    function App() {
+      const [base, dispatch, actionPending] = useActionState(
+        (_previous: string, _payload: undefined) => action.promise,
+        "hello",
+      );
+      const [optimistic, addOptimistic] = useOptimistic(
+        base,
+        (state, value: string) => `${state},${value}`,
+      );
+      const [transitionPending, start] = useTransition();
+      launch = () =>
+        start(() => {
+          addOptimistic("sending");
+          dispatch(undefined);
+        });
+      return createElement("p", null, `${transitionPending}:${actionPending}:${optimistic}`);
+    }
+
+    root.render(createElement(App, null));
+    launch();
+    expect(container.innerHTML).toBe("<p>true:true:hello,sending</p>");
+
+    action.resolve("hello");
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(container.innerHTML).toBe("<p>false:false:hello</p>");
+  });
+
+  test("queued useActionState work receives the preceding result while optimistic entries settle", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const first = createDeferred<string[]>();
+    const second = createDeferred<string[]>();
+    const calls: string[] = [];
+    let launch: (label: "A" | "B") => void = () => {};
+
+    function App() {
+      const [base, dispatch, actionPending] = useActionState(
+        (previous: string[], label: "A" | "B") => {
+          calls.push(`${label}:${previous.join(",")}`);
+          return label === "A" ? first.promise : second.promise;
+        },
+        ["base"],
+      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
+        (state, value) => [...state, `${value}:sending`]
+      );
+      const [firstPending, startFirst] = useTransition();
+      const [secondPending, startSecond] = useTransition();
+      launch = (label) => (label === "A" ? startFirst : startSecond)(() => {
+        addOptimistic(label);
+        dispatch(label);
+      });
+      return createElement(
+        "p",
+        null,
+        `${firstPending}:${secondPending}:${actionPending}:${optimistic.join(",")}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    launch("A");
+    launch("B");
+    expect(container.innerHTML).toBe("<p>true:true:true:base,A:sending,B:sending</p>");
+    expect(calls).toEqual(["A:base"]);
+
+    first.resolve(["base", "A:sent"]);
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(calls).toEqual(["A:base", "B:base,A:sent"]);
+    expect(container.innerHTML).toBe("<p>false:true:true:base,A:sent,B:sending</p>");
+
+    second.resolve(["base", "A:sent", "B:sent"]);
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>false:false:false:base,A:sent,B:sent</p>");
+  });
+
+  test("a failed queued action cancels later work and releases its transition", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const first = createDeferred<string[]>();
+    const calls: string[] = [];
+    let launch: (label: "A" | "B") => void = () => {};
+
+    function App() {
+      const [base, dispatch] = useActionState(
+        (previous: string[], label: "A" | "B") => {
+          calls.push(`${label}:${previous.join(",")}`);
+          return first.promise;
+        },
+        ["base"],
+      );
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>(base,
+        (state, value) => [...state, value]
+      );
+      const [, startFirst] = useTransition();
+      const [, startSecond] = useTransition();
+      launch = (label) => (label === "A" ? startFirst : startSecond)(() => {
+        addOptimistic(label);
+        dispatch(label);
+      });
+      return createElement("p", null, optimistic.join(","));
+    }
+
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, null),
+      ),
+    );
+    launch("A");
+    launch("B");
+    expect(calls).toEqual(["A:base"]);
+    expect(container.innerHTML).toBe("<p>base,A,B</p>");
+
+    first.reject(new Error("A failed"));
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(calls).toEqual(["A:base"]);
+    expect(container.innerHTML).toBe("<strong>A failed</strong>");
+    while (host.pendingHostCallbackCount() > 0) {
+      host.flushOneHostCallback();
+    }
+  });
+
+  test("unmounting cancels queued action work without starting it later", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const first = createDeferred<string>();
+    const calls: string[] = [];
+    let launch: (label: "A" | "B") => void = () => {};
+
+    function App() {
+      const [, dispatch] = useActionState(
+        (previous: string, label: "A" | "B") => {
+          calls.push(`${label}:${previous}`);
+          return first.promise;
+        },
+        "base",
+      );
+      const [, startFirst] = useTransition();
+      const [, startSecond] = useTransition();
+      launch = (label) => (label === "A" ? startFirst : startSecond)(() => {
+        dispatch(label);
+      });
+      return createElement("p", null, "mounted");
+    }
+
+    root.render(createElement(App, null));
+    launch("A");
+    launch("B");
+    expect(calls).toEqual(["A:base"]);
+
+    root.unmount();
+    first.resolve("A:done");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(calls).toEqual(["A:base"]);
+    expect(container.innerHTML).toBe("");
+    expect(host.pendingHostCallbackCount()).toBe(0);
+  });
+
+  test("an intervening sync render preserves active optimistic entries", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    let launch = () => undefined;
+    let bump = () => undefined;
+
+    function App() {
+      const [count, setCount] = useState(0);
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>([], (state, value) => [
+        ...state,
+        value,
+      ]);
+      const [pending, start] = useTransition();
+      launch = () =>
+        start(() => {
+          addOptimistic("A");
+          return action.promise;
+        });
+      bump = () => flushSync(() => setCount((previous) => previous + 1));
+      return createElement(
+        "p",
+        null,
+        `${pending ? "pending" : "settled"}:${count}:${optimistic.join(",")}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    launch();
+    bump();
+    expect(container.innerHTML).toBe("<p>pending:1:A</p>");
+
+    action.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:1:</p>");
+  });
+
+  test("settling optimistic work after unmount does not schedule a render", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const action = createDeferred<void>();
+    let launch = () => undefined;
+
+    function App() {
+      const [optimistic, addOptimistic] = useOptimistic("base", (_state, value: string) => value);
+      const [, start] = useTransition();
+      launch = () =>
+        start(() => {
+          addOptimistic("pending");
+          return action.promise;
+        });
+      return createElement("p", null, optimistic);
+    }
+
+    root.render(createElement(App, null));
+    launch();
+    expect(container.innerHTML).toBe("<p>pending</p>");
+
+    root.unmount();
+    expect(host.pendingHostCallbackCount()).toBe(0);
+    action.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(container.innerHTML).toBe("");
+    expect(host.pendingHostCallbackCount()).toBe(0);
   });
 
   test("a torn transition render retries a functional update exactly once", () => {
@@ -380,7 +1234,8 @@ describe("react-compat concurrent subset", () => {
       const state = useState(0) as unknown as [
         number,
         (value: number | ((previous: number) => number)) => void,
-      ] & Record<PropertyKey, unknown>;
+      ] &
+        Record<PropertyKey, unknown>;
       const [count, setCount] = state;
       binding = state[reactiveStateBindingMeta] as { get(): unknown };
       bindingValuesDuringRender.push(binding.get());
@@ -392,11 +1247,7 @@ describe("react-compat concurrent subset", () => {
           reads = 0;
           setCount((value) => value + 1);
         });
-      return createElement(
-        "p",
-        null,
-        `${pending ? "pending" : "settled"}:${count}:${snapshot}`,
-      );
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${count}:${snapshot}`);
     }
 
     root.render(createElement(App, null));
@@ -408,6 +1259,64 @@ describe("react-compat concurrent subset", () => {
     expect(reads).toBeGreaterThan(2);
     expect(bindingValuesDuringRender.every((value) => value === 0)).toBe(true);
     expect(binding?.get()).toBe(1);
+  });
+
+  test("a torn optimistic settlement render retains independently pending entries", async () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const first = createDeferred<void>();
+    const second = createDeferred<void>();
+    let tear = false;
+    let reads = 0;
+    let launch: (label: string, action: Promise<void>) => void = () => {};
+
+    function getSnapshot() {
+      if (!tear) {
+        return 0;
+      }
+      reads += 1;
+      if (reads === 2) {
+        return 1;
+      }
+      if (reads > 2) {
+        tear = false;
+      }
+      return 0;
+    }
+
+    function App() {
+      const snapshot = useSyncExternalStore(() => () => undefined, getSnapshot);
+      const [optimistic, addOptimistic] = useOptimistic<string[], string>([],
+        (state, value) => [...state, value]
+      );
+      const [pending, start] = useTransition();
+      launch = (label, action) => start(() => {
+        addOptimistic(label);
+        return action;
+      });
+      return createElement(
+        "p",
+        null,
+        `${pending ? "pending" : "settled"}:${optimistic.join(",")}:${snapshot}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    launch("A", first.promise);
+    launch("B", second.promise);
+    expect(container.innerHTML).toBe("<p>pending:A,B:0</p>");
+
+    tear = true;
+    reads = 0;
+    first.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    host.flushOneHostCallback();
+
+    expect(container.innerHTML).toBe("<p>pending:B:0</p>");
+    expect(reads).toBeGreaterThan(2);
   });
 
   test("useDeferredValue keeps the previous value until the transition lane commits", async () => {
@@ -565,18 +1474,14 @@ describe("react-compat concurrent subset", () => {
     }
 
     root.render(
-      createElement(
-        SuspenseList,
-        { revealOrder: "forwards" },
-        [
-          createElement(
-            Suspense,
-            { fallback: createElement("em", null, "loading") },
-            createElement(Pending, null),
-          ),
-          createElement(Suspense, { fallback: null }, createElement("strong", null, "later")),
-        ],
-      ),
+      createElement(SuspenseList, { revealOrder: "forwards" }, [
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement(Pending, null),
+        ),
+        createElement(Suspense, { fallback: null }, createElement("strong", null, "later")),
+      ]),
     );
 
     expect(container.innerHTML).toBe("<em>loading</em>");
@@ -592,14 +1497,10 @@ describe("react-compat concurrent subset", () => {
     }
 
     root.render(
-      createElement(
-        SuspenseList,
-        { revealOrder: "forwards" },
-        [
-          createElement(Suspense, { fallback: null }, createElement(Pending, null)),
-          createElement("strong", null, "later"),
-        ],
-      ),
+      createElement(SuspenseList, { revealOrder: "forwards" }, [
+        createElement(Suspense, { fallback: null }, createElement(Pending, null)),
+        createElement("strong", null, "later"),
+      ]),
     );
 
     expect(container.innerHTML).toBe("");
@@ -615,18 +1516,14 @@ describe("react-compat concurrent subset", () => {
     }
 
     root.render(
-      createElement(
-        SuspenseList,
-        { revealOrder: "backwards" },
-        [
-          createElement(Suspense, { fallback: null }, createElement("strong", null, "first")),
-          createElement(
-            Suspense,
-            { fallback: createElement("em", null, "loading") },
-            createElement(Pending, null),
-          ),
-        ],
-      ),
+      createElement(SuspenseList, { revealOrder: "backwards" }, [
+        createElement(Suspense, { fallback: null }, createElement("strong", null, "first")),
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement(Pending, null),
+        ),
+      ]),
     );
 
     expect(container.innerHTML).toBe("<em>loading</em>");
@@ -642,18 +1539,14 @@ describe("react-compat concurrent subset", () => {
     }
 
     root.render(
-      createElement(
-        SuspenseList,
-        { revealOrder: "together" },
-        [
-          createElement(
-            Suspense,
-            { fallback: createElement("em", null, "loading") },
-            createElement(Pending, null),
-          ),
-          createElement(Suspense, { fallback: null }, createElement("strong", null, "later")),
-        ],
-      ),
+      createElement(SuspenseList, { revealOrder: "together" }, [
+        createElement(
+          Suspense,
+          { fallback: createElement("em", null, "loading") },
+          createElement(Pending, null),
+        ),
+        createElement(Suspense, { fallback: null }, createElement("strong", null, "later")),
+      ]),
     );
 
     expect(container.innerHTML).toBe("<em>loading</em><strong>later</strong>");

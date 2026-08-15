@@ -79,6 +79,7 @@ interface ComponentInstance {
   devToolsHookSuppressionDepth: number;
   committedReactiveCleanups?: Set<() => void>;
   pendingReactiveCleanups?: Set<() => void>;
+  transitionListeners?: Map<TransitionContext, () => boolean>;
 }
 
 /** Effect callback that may return a cleanup function. */
@@ -136,6 +137,33 @@ interface StateRenderDraft {
   processedUpdateCount: number;
 }
 
+interface OptimisticUpdate {
+  payload: unknown;
+  context?: TransitionContext;
+}
+
+interface ActionStateDispatch {
+  payload: unknown;
+  action: (previousState: unknown, payload: unknown) => unknown;
+  context?: TransitionContext;
+  completed: boolean;
+}
+
+type ThenFunction = (
+  this: unknown,
+  onFulfilled: (value: unknown) => void,
+  onRejected: (reason: unknown) => void,
+) => unknown;
+
+interface OptimisticRenderDraft {
+  instance: ComponentInstance;
+  slot: Extract<HookSlot, { kind: "optimistic" }>;
+  baseState: unknown;
+  optimisticState: unknown;
+  remainingUpdates: OptimisticUpdate[];
+  processedUpdateCount: number;
+}
+
 /** Cache scope that stores memoized cache() results and cancellation state. */
 export interface CacheScope {
   functionCaches: WeakMap<(...args: never[]) => unknown, CacheTrieNode>;
@@ -188,11 +216,14 @@ type HookSlot =
       action: (previousState: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
       error?: unknown;
+      queue: ActionStateDispatch[];
+      running: boolean;
     }
   | {
       kind: "optimistic";
       baseState: unknown;
       optimisticState: unknown;
+      updates: OptimisticUpdate[];
       update: (state: unknown, payload: unknown) => unknown;
       dispatch?: (payload: unknown) => void;
     }
@@ -252,6 +283,7 @@ const hookRenderState =
     queuedEffectFlushRerenders: new Set<RootRuntime>(),
   });
 const CACHE_SCOPE_SYMBOL = Symbol.for("modular.react.cache_scope");
+const NO_TRANSITION_ERROR = Symbol("mreact.no-transition-error");
 let cacheScopeStorage = createCacheScopeStorage();
 let fallbackAsyncCacheScopeActive = false;
 const emptyCacheOwnerStack: string[] = [];
@@ -259,6 +291,7 @@ let syncVersion = 0;
 let transitionVersion = 0;
 let transitionDepth = 0;
 let currentTransitionContext: TransitionContext | undefined;
+let currentCommitTransitionContext: TransitionContext | undefined;
 let transitionRerenderScheduled = false;
 let eventBatchDepth = 0;
 let currentEventPriority: EventPriority = "default";
@@ -270,6 +303,7 @@ let strictMemoOwnerId = 0;
 const strictMemoObjectOwnerIds = new WeakMap<object, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
+const queuedForcedSyncRerenders = new Map<RootRuntime, TransitionContext | undefined>();
 const SYNC_STATE_DISPATCH = Symbol("mreact.sync-state-dispatch");
 type InternalStateDispatch = ((value: unknown) => void) & {
   [SYNC_STATE_DISPATCH]: (value: unknown) => void;
@@ -278,6 +312,10 @@ const renderPriorities = new WeakMap<RootRuntime, RenderPriority>();
 const stateRenderDrafts = new WeakMap<
   RootRuntime,
   Map<Extract<HookSlot, { kind: "state" }>, StateRenderDraft>
+>();
+const optimisticRenderDrafts = new WeakMap<
+  RootRuntime,
+  Map<Extract<HookSlot, { kind: "optimistic" }>, OptimisticRenderDraft>
 >();
 /** React version string matched by the compatibility layer. */
 export const version = "19.2.6";
@@ -367,6 +405,15 @@ export type RenderPriority = "sync" | "transition" | "continuous";
 interface TransitionContext {
   syncVersion: number;
   transitionVersion: number;
+  pendingTasks: number;
+  scopeClosed: boolean;
+  settled: boolean;
+  optimisticTargets: Map<
+    Extract<HookSlot, { kind: "optimistic" }>,
+    { runtime: RootRuntime; instance: ComponentInstance }
+  >;
+  settlementListeners: Set<() => boolean>;
+  rejection?: unknown;
 }
 
 export interface RootRuntimeOptions {
@@ -492,6 +539,8 @@ export function createRootRuntime(
     },
     endRender(committed = true) {
       const shouldFlushStateBindings = finishStateRender(this, committed);
+      finishOptimisticRender(this, committed);
+      optimisticRenderDrafts.get(this)?.clear();
       const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
       const activeProfilerPaths = this.activeProfilerPaths;
       if (committed) {
@@ -1224,6 +1273,33 @@ function finishStateRender(runtime: RootRuntime, committed: boolean): boolean {
   return committed && publishedStateBinding;
 }
 
+function finishOptimisticRender(runtime: RootRuntime, committed: boolean): void {
+  const drafts = optimisticRenderDrafts.get(runtime);
+  if (drafts === undefined || drafts.size === 0) {
+    return;
+  }
+
+  const touchedInstances = new Set<ComponentInstance>();
+  for (const draft of drafts.values()) {
+    touchedInstances.add(draft.instance);
+    if (!committed) {
+      draft.instance.dirty = true;
+      continue;
+    }
+
+    const appendedUpdates = draft.slot.updates.slice(draft.processedUpdateCount);
+    draft.slot.baseState = draft.baseState;
+    draft.slot.optimisticState = draft.optimisticState;
+    draft.slot.updates = [...draft.remainingUpdates, ...appendedUpdates];
+  }
+
+  if (committed) {
+    for (const instance of touchedInstances) {
+      updateHostCommitDirtyState(instance);
+    }
+  }
+}
+
 function compactLiteralNoopUpdates(
   state: unknown,
   updates: readonly StateUpdate[],
@@ -1818,7 +1894,7 @@ export function useSyncExternalStore<T>(
 
 /** Tracks state and pending status for an action that receives the previous state. */
 export function useActionState<TState, TPayload>(
-  action: (previousState: TState, payload: TPayload) => TState | Promise<TState>,
+  action: (previousState: TState, payload: TPayload) => TState | PromiseLike<TState>,
   initialState: TState,
 ): [TState, (payload: TPayload) => void, boolean] {
   const runtime = requireRuntime();
@@ -1837,6 +1913,8 @@ export function useActionState<TState, TPayload>(
       state: initialState,
       pendingCount: 0,
       action: action as (previousState: unknown, payload: unknown) => unknown,
+      queue: [],
+      running: false,
     };
     instance.hooks[index] = slot;
   }
@@ -1849,7 +1927,7 @@ export function useActionState<TState, TPayload>(
 
   if (slot.dispatch === undefined) {
     slot.dispatch = (payload: unknown): void => {
-      runActionStateDispatch(slot, runtime, instance, payload);
+      enqueueActionStateDispatch(slot, runtime, instance, payload);
     };
   }
 
@@ -1889,6 +1967,7 @@ export function useOptimistic<TState, TPayload>(
       kind: "optimistic",
       baseState: state,
       optimisticState: state,
+      updates: [],
       update: updateFn,
     };
     instance.hooks[index] = slot;
@@ -1896,24 +1975,66 @@ export function useOptimistic<TState, TPayload>(
 
   slot.update = updateFn;
 
-  if (!Object.is(slot.baseState, state)) {
-    slot.baseState = state;
-    slot.optimisticState = state;
-  }
+  const baseChanged = !Object.is(slot.baseState, state);
+  const updatesForBase = !baseChanged
+    ? slot.updates
+    : slot.updates.filter((optimisticUpdate) =>
+      optimisticUpdate.context !== undefined
+    );
 
   if (slot.dispatch === undefined) {
     slot.dispatch = (payload: unknown): void => {
-      slot.optimisticState = slot.update(slot.optimisticState, payload);
-      scheduleInstanceUpdate(runtime, instance);
+      const context = currentTransitionContext ?? currentCommitTransitionContext;
+      const hasHostCommitDraft = hookRenderState.hostCommitDepth > 0 &&
+        optimisticRenderDrafts.get(runtime)?.has(slot) === true;
+      if (context === undefined && slot.updates.length === 0 && !hasHostCommitDraft) {
+        slot.optimisticState = slot.update(slot.optimisticState, payload);
+        scheduleInstanceUpdate(runtime, instance, { forceSync: true });
+        return;
+      }
+      slot.updates.push(context === undefined ? { payload } : { payload, context });
+      if (context !== undefined) {
+        context.optimisticTargets.set(slot, { runtime, instance });
+      }
+      scheduleInstanceUpdate(runtime, instance, { forceSync: true });
     };
   }
 
-  recordDevToolsHook("useOptimistic", {
-    kind: "state",
-    value: slot.optimisticState,
+  const priority = renderPriorities.get(runtime) ?? "sync";
+  const remainingUpdates = priority === "transition"
+    ? updatesForBase.filter((optimisticUpdate) => optimisticUpdate.context?.settled !== true)
+    : [...updatesForBase];
+  let optimisticState: unknown = baseChanged ? state : slot.optimisticState;
+  for (const optimisticUpdate of remainingUpdates) {
+    optimisticState = slot.update(optimisticState, optimisticUpdate.payload);
+  }
+  if (!baseChanged && slot.updates.length === 0) {
+    recordDevToolsHook("useOptimistic", {
+      kind: "state",
+      value: optimisticState,
+    });
+    return [optimisticState as TState, slot.dispatch as (payload: TPayload) => void];
+  }
+  let drafts = optimisticRenderDrafts.get(runtime);
+  if (drafts === undefined) {
+    drafts = new Map();
+    optimisticRenderDrafts.set(runtime, drafts);
+  }
+  drafts.set(slot, {
+    instance,
+    slot,
+    baseState: state,
+    optimisticState: baseChanged ? state : slot.optimisticState,
+    remainingUpdates,
+    processedUpdateCount: slot.updates.length,
   });
 
-  return [slot.optimisticState as TState, slot.dispatch as (payload: TPayload) => void];
+  recordDevToolsHook("useOptimistic", {
+    kind: "state",
+    value: optimisticState,
+  });
+
+  return [optimisticState as TState, slot.dispatch as (payload: TPayload) => void];
 }
 
 /** Reads a context-like value or suspends on a thenable until it resolves. */
@@ -2024,18 +2145,13 @@ function readThenable<T>(thenable: PromiseLike<T>): T {
 }
 
 /** Callback body scheduled as transition work. */
-export type TransitionScope = () => void;
+export type TransitionScope = () => void | PromiseLike<void>;
 /** Function that schedules a transition scope. */
 export type StartTransition = (scope: TransitionScope) => void;
 
 /** Schedules non-urgent updates produced inside a transition scope. */
 export function startTransition(scope: TransitionScope): void {
-  const context = {
-    syncVersion,
-    transitionVersion: ++transitionVersion,
-  };
-
-  runTransitionScope(scope, context);
+  executeTransitionScope(scope, createTransitionContext());
 }
 
 /** Runs a callback while updates are batched at the requested event priority. */
@@ -2100,29 +2216,46 @@ export function runWithHostCommit<T>(callback: () => T): T {
 /** Returns transition pending state and a function that starts transition work. */
 export function useTransition(): [boolean, StartTransition] {
   const instance = requireInstance();
-  const [pending, setPending] = runWithoutDevToolsHookTracking(() => useState(false));
+  const pendingCount = runWithoutDevToolsHookTracking(() => useRef(0));
+  const transitionError = runWithoutDevToolsHookTracking(() =>
+    useRef<unknown>(NO_TRANSITION_ERROR)
+  );
+  const [renderedPendingCount, setRenderedPendingCount] = runWithoutDevToolsHookTracking(() =>
+    useState(0)
+  );
+  if (transitionError.current !== NO_TRANSITION_ERROR) {
+    throw transitionError.current;
+  }
   const startTransitionWithPending: StartTransition = (scope) => {
-    setPending(true);
-    const context = {
-      syncVersion,
-      transitionVersion: ++transitionVersion,
-    };
-    runTransitionScope(() => {
-      scope();
+    pendingCount.current += 1;
+    setRenderedPendingCount(pendingCount.current);
+    const context = createTransitionContext();
+    const settlementListener = (): boolean => {
+      instance.transitionListeners?.delete(context);
+      pendingCount.current = Math.max(0, pendingCount.current - 1);
       if (instance.disposed === true) {
-        return;
+        return false;
       }
-      setPending(false);
-    }, context);
+      if (Object.hasOwn(context, "rejection")) {
+        transitionError.current = context.rejection;
+      }
+      runTransitionScope(() => {
+        setRenderedPendingCount(pendingCount.current);
+      }, context);
+      return true;
+    };
+    context.settlementListeners.add(settlementListener);
+    (instance.transitionListeners ??= new Map()).set(context, settlementListener);
+    executeTransitionScope(scope, context);
   };
 
   recordDevToolsHook("useTransition", {
     kind: "transition",
-    value: pending,
+    value: renderedPendingCount > 0,
   });
 
   return [
-    pending,
+    renderedPendingCount > 0,
     startTransitionWithPending,
   ];
 }
@@ -2155,20 +2288,127 @@ export function useDeferredValue<T>(value: T, initialValue?: T): T {
   return currentValue;
 }
 
-function runTransitionScope(
-  scope: TransitionScope,
+function createTransitionContext(): TransitionContext {
+  return {
+    syncVersion,
+    transitionVersion: ++transitionVersion,
+    pendingTasks: 0,
+    scopeClosed: false,
+    settled: false,
+    optimisticTargets: new Map(),
+    settlementListeners: new Set(),
+  };
+}
+
+function executeTransitionScope(scope: TransitionScope, context: TransitionContext): void {
+  try {
+    try {
+      const result = runTransitionScope(scope, context);
+      const then = getThenFunction(result);
+      if (then !== undefined) {
+        registerTransitionTask(context, result, then);
+      }
+    } catch (error) {
+      context.rejection = error;
+    }
+  } finally {
+    context.scopeClosed = true;
+    settleTransitionContextIfReady(context);
+  }
+}
+
+function runTransitionScope<T>(
+  scope: () => T,
   context: TransitionContext,
-): void {
+): T {
   transitionDepth += 1;
   const previousContext = currentTransitionContext;
   currentTransitionContext = context;
 
   try {
-    scope();
+    return scope();
   } finally {
     currentTransitionContext = previousContext;
     transitionDepth -= 1;
+    if (transitionDepth === 0) {
+      flushQueuedForcedSyncRerenders();
+    }
   }
+}
+
+function registerTransitionTask(
+  context: TransitionContext,
+  task: unknown,
+  then: ThenFunction,
+): void {
+  context.pendingTasks += 1;
+  let completed = false;
+  const complete = (): void => {
+    if (completed) {
+      return;
+    }
+    completed = true;
+    context.pendingTasks = Math.max(0, context.pendingTasks - 1);
+    settleTransitionContextIfReady(context);
+  };
+  const reject = (reason: unknown): void => {
+    if (completed) {
+      return;
+    }
+    context.rejection = reason;
+    complete();
+  };
+  try {
+    then.call(task, complete, reject);
+  } catch (error) {
+    reject(error);
+  }
+}
+
+function getThenFunction(value: unknown): ThenFunction | undefined {
+  if ((typeof value !== "object" && typeof value !== "function") || value === null) {
+    return undefined;
+  }
+  const then = (value as { then?: unknown }).then;
+  return typeof then === "function" ? then as ThenFunction : undefined;
+}
+
+function settleTransitionContextIfReady(context: TransitionContext): void {
+  if (context.settled || !context.scopeClosed || context.pendingTasks > 0) {
+    return;
+  }
+
+  context.settled = true;
+  for (const { runtime, instance } of context.optimisticTargets.values()) {
+    if (instance.disposed === true) {
+      continue;
+    }
+    instance.dirty = true;
+    instance.nonStateDirty = true;
+    queueTransitionRerender(runtime, context);
+  }
+  context.optimisticTargets.clear();
+
+  const listeners = [...context.settlementListeners];
+  context.settlementListeners.clear();
+  let rejectionHandled = false;
+  for (const listener of listeners) {
+    rejectionHandled = listener() || rejectionHandled;
+  }
+  if (Object.hasOwn(context, "rejection") && !rejectionHandled) {
+    reportGlobalTransitionError(context.rejection);
+  }
+}
+
+function reportGlobalTransitionError(error: unknown): void {
+  const reportError = (globalThis as { reportError?: (reason: unknown) => void }).reportError;
+  if (typeof reportError === "function") {
+    reportError(error);
+    return;
+  }
+  queueMicrotask(() => {
+    throw error;
+  });
 }
 
 function queueTransitionRerender(
@@ -2187,6 +2427,24 @@ function queueTransitionRerender(
 
 function queueEventRerender(runtime: RootRuntime): void {
   queuedEventRerenders.add(runtime);
+}
+
+function flushQueuedForcedSyncRerenders(): void {
+  if (queuedForcedSyncRerenders.size === 0) {
+    return;
+  }
+
+  const rerenders = [...queuedForcedSyncRerenders];
+  queuedForcedSyncRerenders.clear();
+  for (const [runtime, context] of rerenders) {
+    const previousContext = currentCommitTransitionContext;
+    currentCommitTransitionContext = context;
+    try {
+      scheduleRuntimeRerender(runtime, { forceSync: true });
+    } finally {
+      currentCommitTransitionContext = previousContext;
+    }
+  }
 }
 
 function queueAutomaticRerender(runtime: RootRuntime): void {
@@ -2425,49 +2683,180 @@ function flushProfilerCommits(
   }
 }
 
-function runActionStateDispatch(
+function enqueueActionStateDispatch(
   slot: Extract<HookSlot, { kind: "action-state" }>,
   runtime: RootRuntime,
   instance: ComponentInstance,
   payload: unknown,
 ): void {
-  let result: unknown;
+  if (instance.disposed === true || "error" in slot) {
+    return;
+  }
+  const context = currentTransitionContext ?? currentCommitTransitionContext;
+  const dispatch: ActionStateDispatch = {
+    payload,
+    action: slot.action,
+    ...(context === undefined ? {} : { context }),
+    completed: false,
+  };
+  if (context !== undefined) {
+    context.pendingTasks += 1;
+  }
+  slot.queue.push(dispatch);
+  runNextActionStateDispatch(slot, runtime, instance);
+}
 
-  try {
-    result = slot.action(slot.state, payload);
-  } catch (error) {
-    slot.error = error;
-    scheduleInstanceUpdate(runtime, instance);
+function runNextActionStateDispatch(
+  slot: Extract<HookSlot, { kind: "action-state" }>,
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+): void {
+  if (slot.running || instance.disposed === true) {
     return;
   }
 
-  if (!isThenable(result)) {
-    slot.state = result;
-    scheduleInstanceUpdate(runtime, instance);
+  const dispatch = slot.queue[0];
+  if (dispatch === undefined) {
+    return;
+  }
+
+  slot.running = true;
+  let result: unknown;
+  let then: ThenFunction | undefined;
+
+  try {
+    result = dispatch.context === undefined
+      ? dispatch.action(slot.state, dispatch.payload)
+      : runTransitionScope(
+        () => dispatch.action(slot.state, dispatch.payload),
+        dispatch.context,
+      );
+    then = getThenFunction(result);
+    if (then === undefined) {
+      if (dispatch.context !== undefined) {
+        slot.pendingCount += 1;
+        scheduleInstanceUpdate(runtime, instance, { forceSync: true });
+        queueMicrotask(() => {
+          settleActionStateDispatch(slot, runtime, instance, dispatch, true, () => {
+            slot.state = result;
+          });
+        });
+        return;
+      }
+      settleActionStateDispatch(slot, runtime, instance, dispatch, false, () => {
+        slot.state = result;
+      });
+      return;
+    }
+  } catch (error) {
+    settleActionStateDispatch(slot, runtime, instance, dispatch, false, () => {
+      slot.error = error;
+    }, true);
     return;
   }
 
   slot.pendingCount += 1;
-  scheduleInstanceUpdate(runtime, instance);
-  result.then(
-    (nextState) => {
-      slot.state = nextState;
-      slot.pendingCount = Math.max(0, slot.pendingCount - 1);
-      scheduleInstanceUpdate(runtime, instance);
-    },
-    (error) => {
+  scheduleInstanceUpdate(runtime, instance, { forceSync: true });
+  try {
+    then.call(
+      result,
+      (nextState) => {
+        settleActionStateDispatch(slot, runtime, instance, dispatch, true, () => {
+          slot.state = nextState;
+        });
+      },
+      (error) => {
+        settleActionStateDispatch(slot, runtime, instance, dispatch, true, () => {
+          slot.error = error;
+        }, true);
+      },
+    );
+  } catch (error) {
+    settleActionStateDispatch(slot, runtime, instance, dispatch, true, () => {
       slot.error = error;
+    }, true);
+  }
+}
+
+function settleActionStateDispatch(
+  slot: Extract<HookSlot, { kind: "action-state" }>,
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+  dispatch: ActionStateDispatch,
+  wasPending: boolean,
+  apply: () => void,
+  failed = false,
+): void {
+  if (dispatch.completed) {
+    return;
+  }
+
+  dispatch.completed = true;
+  const applyResult = (): void => {
+    apply();
+    if (wasPending) {
       slot.pendingCount = Math.max(0, slot.pendingCount - 1);
-      scheduleInstanceUpdate(runtime, instance);
-    },
-  );
+    }
+    scheduleInstanceUpdate(runtime, instance);
+  };
+  let didApplyThrow = false;
+  let applyError: unknown;
+  try {
+    if (dispatch.context === undefined) {
+      applyResult();
+    } else {
+      runTransitionScope(applyResult, dispatch.context);
+    }
+  } catch (error) {
+    didApplyThrow = true;
+    applyError = error;
+  }
+
+  completeActionStateContextTask(dispatch);
+  if (slot.queue[0] === dispatch) {
+    slot.queue.shift();
+  } else {
+    const index = slot.queue.indexOf(dispatch);
+    if (index >= 0) {
+      slot.queue.splice(index, 1);
+    }
+  }
+  slot.running = false;
+
+  if (failed || didApplyThrow || instance.disposed === true) {
+    for (const queuedDispatch of slot.queue) {
+      completeActionStateContextTask(queuedDispatch);
+    }
+    slot.queue = [];
+  } else {
+    runNextActionStateDispatch(slot, runtime, instance);
+  }
+
+  if (didApplyThrow) {
+    throw applyError;
+  }
+}
+
+function completeActionStateContextTask(dispatch: ActionStateDispatch): void {
+  const context = dispatch.context;
+  dispatch.completed = true;
+  if (context === undefined) {
+    return;
+  }
+  delete dispatch.context;
+  context.pendingTasks = Math.max(0, context.pendingTasks - 1);
+  settleTransitionContextIfReady(context);
 }
 
 export function scheduleRuntimeRerender(
   runtime: RootRuntime,
-  options: { deferSync?: boolean } = {},
+  options: { deferSync?: boolean; forceSync?: boolean } = {},
 ): void {
-  if (transitionDepth === 0) {
+  if (options.forceSync === true && transitionDepth > 0) {
+    queuedForcedSyncRerenders.set(runtime, currentTransitionContext);
+    return;
+  }
+  if (transitionDepth === 0 || options.forceSync === true) {
     syncVersion += 1;
     if (hookRenderState.hostCommitDepth > 0) {
       hookRenderState.queuedHostCommitRerenders.add(runtime);
@@ -2497,7 +2886,7 @@ export function scheduleRuntimeRerender(
 function scheduleInstanceUpdate(
   runtime: RootRuntime,
   instance: ComponentInstance,
-  options: { deferSync?: boolean; stateUpdate?: boolean } = {},
+  options: { deferSync?: boolean; forceSync?: boolean; stateUpdate?: boolean } = {},
 ): void {
   if (instance.disposed === true) {
     return;
@@ -2508,6 +2897,7 @@ function scheduleInstanceUpdate(
     instance.nonStateDirty = true;
   }
   if (
+    hookRenderState.hostCommitDepth === 0 &&
     hookRenderState.currentRuntime === runtime &&
     hookRenderState.currentInstance === instance
   ) {
@@ -2608,6 +2998,8 @@ function updateHostCommitDirtyState(
   instance.dirty = instance.nonStateDirty || instance.hooks.some(
     (slot) =>
       (slot.kind === "state" && (slot.updates?.length ?? 0) > 0) ||
+      (slot.kind === "optimistic" &&
+        slot.updates.some((update) => update.context?.settled === true)) ||
       ((slot.kind === "state" || slot.kind === "store") &&
         Object.hasOwn(slot, "hostCommitValue") &&
         !Object.is(slot.hostCommitValue, slot.value)),
@@ -2855,6 +3247,13 @@ function forEachInstanceKeyPrefix(
 
 function cleanupInstance(instance: ComponentInstance): void {
   instance.disposed = true;
+  if (instance.transitionListeners !== undefined) {
+    for (const [context, listener] of instance.transitionListeners) {
+      context.settlementListeners.delete(listener);
+    }
+    instance.transitionListeners.clear();
+    delete instance.transitionListeners;
+  }
   disposeRootCleanups(instance.committedReactiveCleanups);
   delete instance.committedReactiveCleanups;
   disposeRootCleanups(instance.pendingReactiveCleanups);
@@ -2867,6 +3266,18 @@ function cleanupInstance(instance: ComponentInstance): void {
       delete slot.cleanup;
     } else if (slot?.kind === "state" && slot.textBinding !== undefined) {
       clearReactiveTextBindingSubscribers(slot.textBinding);
+    } else if (slot?.kind === "action-state") {
+      for (const dispatch of slot.queue) {
+        completeActionStateContextTask(dispatch);
+      }
+      slot.queue = [];
+      slot.running = false;
+      slot.pendingCount = 0;
+    } else if (slot?.kind === "optimistic") {
+      for (const update of slot.updates) {
+        update.context?.optimisticTargets.delete(slot);
+      }
+      slot.updates = [];
     }
   }
 }
