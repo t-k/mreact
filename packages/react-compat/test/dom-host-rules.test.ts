@@ -3,6 +3,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createHostElement,
+  isHostElement,
   serializeClientStyleValue,
   styleNameToCssName,
 } from "../src/dom-host-rules.js";
@@ -36,5 +37,11 @@ describe("react-compat DOM host rules", () => {
     expect(rect.namespaceURI).toBe("http://www.w3.org/2000/svg");
     expect(html.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
     expect(foreignDiv.namespaceURI).toBe("http://www.w3.org/1999/xhtml");
+  });
+
+  test("does not admit DOM text or comment nodes as custom host elements", () => {
+    expect(isHostElement(document.createElement("div"))).toBe(true);
+    expect(isHostElement(document.createTextNode("text"))).toBe(false);
+    expect(isHostElement(document.createComment("marker"))).toBe(false);
   });
 });

@@ -79,11 +79,18 @@ export function createHostElement(
 }
 
 export function isHostElement(value: unknown): value is HostElement {
+  if (typeof Node !== "undefined" && value instanceof Node) {
+    return isDomHostElement(value);
+  }
+
   return isDomHostElement(value) || isCustomHostElement(value);
 }
 
 export function isDomHostElement(value: unknown): value is HTMLElement | SVGElement {
-  return value instanceof HTMLElement || value instanceof SVGElement;
+  return (
+    (typeof HTMLElement !== "undefined" && value instanceof HTMLElement) ||
+    (typeof SVGElement !== "undefined" && value instanceof SVGElement)
+  );
 }
 
 export function namespaceForHostElement(

@@ -17,6 +17,32 @@ import {
 import { getFiberRootForContainer } from "../src/fiber-work-loop.js";
 
 describe("react-compat deep hydration", () => {
+  test.each([
+    ["text node", "server text", createElement("div", null, "client"), "<div>client</div>"],
+    ["comment node", "<!--extension-->", createElement("div", null, "client"), "<div>client</div>"],
+    [
+      "pretty-printed whitespace",
+      "\n<div>client</div>",
+      createElement("div", null, "client"),
+      "<div>client</div>",
+    ],
+  ])("recovers when an element position contains a %s", (_name, serverHtml, element, expected) => {
+    const container = document.createElement("div");
+    container.innerHTML = serverHtml;
+    const recoveries: string[] = [];
+
+    expect(() => {
+      hydrateRoot(container, element, {
+        onRecoverableError(error) {
+          recoveries.push(error.message);
+        },
+      });
+    }).not.toThrow();
+
+    expect(container.innerHTML).toBe(expected);
+    expect(recoveries.length).toBeGreaterThan(0);
+  });
+
   test("hydrates dangerouslySetInnerHTML without removing its owned children", () => {
     const container = document.createElement("div");
     container.innerHTML = "<article><strong>server</strong></article>";
