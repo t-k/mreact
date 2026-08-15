@@ -2172,6 +2172,319 @@ describe("react-compat render", () => {
     expect(calls).toEqual(["inner", "outer"]);
   });
 
+  test.each([
+    ["img", "load", "onLoad"],
+    ["img", "error", "onError"],
+    ["div", "scroll", "onScroll"],
+    ["video", "ended", "onEnded"],
+    ["details", "beforetoggle", "onBeforeToggle"],
+    ["details", "toggle", "onToggle"],
+    ["input", "invalid", "onInvalid"],
+    ["dialog", "cancel", "onCancel"],
+    ["dialog", "close", "onClose"],
+  ] as const)("dispatches non-bubbling %s %s exactly once", (tagName, eventName, propName) => {
+    const container = document.createElement("div");
+    const calls: Array<{ currentTarget: EventTarget | null; nativeEvent: Event }> = [];
+
+    render(
+      createElement(tagName, {
+        [propName]: (event: { currentTarget: EventTarget | null; nativeEvent: Event }) => {
+          calls.push({ currentTarget: event.currentTarget, nativeEvent: event.nativeEvent });
+        },
+      }),
+      container,
+    );
+    const target = container.firstElementChild!;
+    const event = new Event(eventName, { bubbles: false });
+    target.dispatchEvent(event);
+
+    expect(calls).toEqual([{ currentTarget: target, nativeEvent: event }]);
+  });
+
+  test.each([
+    ["img", "load", "onLoad"],
+    ["image", "error", "onError"],
+    ["iframe", "load", "onLoad"],
+    ["object", "load", "onLoad"],
+    ["embed", "error", "onError"],
+    ["source", "load", "onLoad"],
+    ["link", "error", "onError"],
+    ["video", "ended", "onEnded"],
+    ["audio", "waiting", "onWaiting"],
+    ["input", "invalid", "onInvalid"],
+    ["select", "invalid", "onInvalid"],
+    ["textarea", "invalid", "onInvalid"],
+    ["dialog", "beforetoggle", "onBeforeToggle"],
+    ["dialog", "close", "onClose"],
+    ["details", "toggle", "onToggle"],
+  ] as const)(
+    "bubbles non-bubbling %s %s to a parent-only handler",
+    (tagName, eventName, propName) => {
+      const container = document.createElement("div");
+      const handler = vi.fn();
+
+      render(
+        createElement("section", { [propName]: handler }, createElement(tagName, null)),
+        container,
+      );
+      handler.mockClear();
+      container.firstElementChild?.firstElementChild?.dispatchEvent(
+        new Event(eventName, { bubbles: false }),
+      );
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  test("bubbles popover toggle events to a parent-only handler", () => {
+    const container = document.createElement("div");
+    const handler = vi.fn();
+
+    render(
+      createElement(
+        "section",
+        { onBeforeToggle: handler },
+        createElement("div", { popover: "auto" }),
+      ),
+      container,
+    );
+    container.querySelector("section > div")?.dispatchEvent(
+      new Event("beforetoggle", { bubbles: false }),
+    );
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  test("orders non-bubbling load capture and bubble handlers through the owner path", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    const record = (name: string) => () => calls.push(name);
+
+    render(
+      createElement(
+        "section",
+        { onLoadCapture: record("parent:capture"), onLoad: record("parent:bubble") },
+        createElement("img", {
+          onLoadCapture: record("target:capture"),
+          onLoad: record("target:bubble"),
+        }),
+      ),
+      container,
+    );
+    container.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
+
+    expect(calls).toEqual([
+      "parent:capture",
+      "target:capture",
+      "target:bubble",
+      "parent:bubble",
+    ]);
+  });
+
+  test("defers capture updates until direct bubble dispatch completes", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+
+    function App() {
+      const [revision, setRevision] = useState("initial");
+      return createElement(
+        "section",
+        {
+          onLoadCapture: () => {
+            calls.push("capture");
+            setRevision("updated");
+          },
+        },
+        createElement("img", { onLoad: () => calls.push(`bubble:${revision}`) }),
+      );
+    }
+
+    render(createElement(App, null), container);
+    container.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
+
+    expect(calls).toEqual(["capture", "bubble:initial"]);
+  });
+
+  test("keeps non-bubbling scroll bubble handlers target-only", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    const record = (name: string) => () => calls.push(name);
+
+    render(
+      createElement(
+        "section",
+        { onScrollCapture: record("parent:capture"), onScroll: record("parent:bubble") },
+        createElement("div", {
+          onScrollCapture: record("target:capture"),
+          onScroll: record("target:bubble"),
+        }),
+      ),
+      container,
+    );
+    container.querySelector("section > div")?.dispatchEvent(
+      new Event("scroll", { bubbles: false }),
+    );
+
+    expect(calls).toEqual(["parent:capture", "target:capture", "target:bubble"]);
+  });
+
+  test("updates and disposes stable direct event listeners", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    const added: Array<{ target: Element; listener: EventListenerOrEventListenerObject }> = [];
+    const removed: Array<{ target: Element; listener: EventListenerOrEventListenerObject }> = [];
+    const originalAddEventListener = HTMLElement.prototype.addEventListener;
+    const originalRemoveEventListener = HTMLElement.prototype.removeEventListener;
+
+    HTMLElement.prototype.addEventListener = function addEventListenerSpy(
+      this: HTMLElement,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      if (this !== container && this.tagName === "DIV" && type === "scroll") {
+        added.push({ target: this, listener });
+      }
+      return originalAddEventListener.call(this, type, listener, options);
+    };
+    HTMLElement.prototype.removeEventListener = function removeEventListenerSpy(
+      this: HTMLElement,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | EventListenerOptions,
+    ) {
+      if (this !== container && this.tagName === "DIV" && type === "scroll") {
+        removed.push({ target: this, listener });
+      }
+      return originalRemoveEventListener.call(this, type, listener, options);
+    };
+
+    try {
+      root.render(createElement("div", { onScroll: () => calls.push("first") }));
+      const target = container.querySelector("div")!;
+      target.dispatchEvent(new Event("scroll", { bubbles: false }));
+
+      root.render(createElement("div", { onScroll: () => calls.push("second") }));
+      expect(container.querySelector("div")).toBe(target);
+      target.dispatchEvent(new Event("scroll", { bubbles: false }));
+
+      root.render(createElement("div", null));
+      target.dispatchEvent(new Event("scroll", { bubbles: false }));
+
+      root.render(createElement("div", { onScroll: () => calls.push("third") }));
+      root.unmount();
+      target.dispatchEvent(new Event("scroll", { bubbles: false }));
+
+      expect(calls).toEqual(["first", "second"]);
+      expect(added).toHaveLength(2);
+      expect(removed).toHaveLength(2);
+      expect(removed).toEqual(added);
+    } finally {
+      HTMLElement.prototype.addEventListener = originalAddEventListener;
+      HTMLElement.prototype.removeEventListener = originalRemoveEventListener;
+    }
+  });
+
+  test("disposes direct listeners when their host subtree is deleted", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const onLoad = vi.fn();
+
+    root.render(createElement("section", null, createElement("img", { onLoad })));
+    const image = container.querySelector("img")!;
+    root.render(createElement("section", null));
+    image.dispatchEvent(new Event("load", { bubbles: false }));
+
+    expect(onLoad).not.toHaveBeenCalled();
+  });
+
+  test("dispatches direct portal events through their logical owner", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const calls: string[] = [];
+    const record = (name: string) => () => calls.push(name);
+
+    try {
+      root.render(
+        createElement(
+          "section",
+          { onLoadCapture: record("owner:capture"), onLoad: record("owner:bubble") },
+          createPortal(
+            createElement("img", {
+              onLoadCapture: record("portal:capture"),
+              onLoad: record("portal:bubble"),
+            }),
+            document.body,
+          ),
+        ),
+      );
+      document.body.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
+
+      expect(calls).toEqual([
+        "owner:capture",
+        "portal:capture",
+        "portal:bubble",
+        "owner:bubble",
+      ]);
+    } finally {
+      root.unmount();
+      container.remove();
+      document.body.querySelector("img")?.remove();
+    }
+  });
+
+  test("bubbles a prop-less portal target event to its logical owner", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    try {
+      root.render(
+        createElement(
+          "section",
+          { onLoad: () => calls.push("owner") },
+          createPortal(createElement("img", null), document.body),
+        ),
+      );
+      document.body.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
+
+      expect(calls).toEqual(["owner"]);
+    } finally {
+      root.unmount();
+      container.remove();
+      document.body.querySelector("img")?.remove();
+    }
+  });
+
+  test("keeps direct nested-root bubble dispatch inside the inner root", () => {
+    const outerContainer = document.createElement("div");
+    const calls: string[] = [];
+    const record = (name: string) => () => calls.push(name);
+
+    render(
+      createElement(
+        "section",
+        { onLoadCapture: record("outer:capture"), onLoad: record("outer:bubble") },
+        createElement("div", { id: "direct-inner-root" }),
+      ),
+      outerContainer,
+    );
+    const innerContainer = outerContainer.querySelector<HTMLElement>("#direct-inner-root")!;
+    const innerRoot = createRoot(innerContainer);
+    innerRoot.render(
+      createElement("img", {
+        onLoadCapture: record("inner:capture"),
+        onLoad: record("inner:bubble"),
+      }),
+    );
+    innerContainer.querySelector("img")?.dispatchEvent(new Event("load", { bubbles: false }));
+
+    expect(calls).toEqual(["outer:capture", "inner:capture", "inner:bubble"]);
+  });
+
   test("preserves foreign document.body children when rendering a portal", () => {
     const container = document.createElement("div");
     const foreign = document.createElement("div");

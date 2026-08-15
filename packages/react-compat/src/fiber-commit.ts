@@ -9,6 +9,7 @@ import { markRootFinished } from "./fiber-lanes.js";
 import { runWithHostCommit } from "./hooks.js";
 import type { HydrationScope, RenderOptions } from "./hydration.js";
 import { detachRef } from "./ref-lifecycle.js";
+import { disposeDirectEventListeners } from "./events.js";
 
 interface RefRecord {
   ref: unknown;
@@ -54,6 +55,27 @@ export function commitFiberRoot(
 export function detachFiberRefs(fiber: Fiber): void {
   for (const record of collectRefRecords(fiber)) {
     detachRef(record.ref, record.node);
+  }
+}
+
+export function disposeFiberEventListeners(fiber: Fiber): void {
+  const stack = [fiber];
+  const seen = new Set<Fiber>();
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === undefined || seen.has(current)) {
+      continue;
+    }
+    seen.add(current);
+    disposeHostFiberEventListeners(current);
+
+    if (current.sibling !== undefined) {
+      stack.push(current.sibling);
+    }
+    if (current.child !== undefined) {
+      stack.push(current.child);
+    }
   }
 }
 
@@ -138,6 +160,7 @@ function detachFiberSubtree(fiber: Fiber, retained: ReadonlySet<Fiber>): void {
     }
 
     seen.add(current);
+    disposeHostFiberEventListeners(current);
 
     let child = current.child;
     while (child !== undefined) {
@@ -158,6 +181,16 @@ function detachFiberSubtree(fiber: Fiber, retained: ReadonlySet<Fiber>): void {
     current.memoizedState = undefined;
     current.stateNode = undefined;
     current.deletions = undefined;
+  }
+}
+
+function disposeHostFiberEventListeners(fiber: Fiber): void {
+  if (
+    fiber.tag === "host-component" &&
+    typeof fiber.stateNode === "object" &&
+    fiber.stateNode !== null
+  ) {
+    disposeDirectEventListeners(fiber.stateNode as Element);
   }
 }
 

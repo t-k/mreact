@@ -6,10 +6,16 @@ export {
   type AppliedProps,
 } from "./event-listeners.js";
 export {
+  beginDirectEventListenerUpdate,
+  disposeDirectEventListeners,
   ensureDelegatedEventListener,
   ensureDelegatedEventListenersForProp,
+  ensureEventListenersForProp,
+  ensureMandatoryNonDelegatedElementListeners,
+  finishDirectEventListenerUpdate,
   forEachEventName,
   getEventPriority,
+  isNonDelegatedEventName,
   setLogicalEventParent,
   toEventNames,
   toEventPropNames,

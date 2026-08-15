@@ -6,6 +6,11 @@ import {
 import type { SyntheticEvent } from "./event-types.js";
 
 const delegatedRootListeners = new WeakMap<Element, Set<string>>();
+const nonDelegatedRootCaptureListeners = new WeakMap<Element, Set<string>>();
+const nonDelegatedElementListeners = new WeakMap<
+  Element,
+  Map<string, { eventRoot: Element; listener: EventListener }>
+>();
 // A synthetic update can mount another delegated root before the native event
 // finishes bubbling. Track both the delegated root and handlers already visited.
 const dispatchedDelegatedEvents = new WeakMap<Event, Map<string, WeakSet<Element>>>();
@@ -95,6 +100,75 @@ const nativeEventToReactProps = new Map<string, string[]>([
   ["transitionend", ["onTransitionEnd"]],
 ]);
 
+const nonDelegatedEventDescriptors = [
+  ["abort", "onAbort"],
+  ["beforetoggle", "onBeforeToggle"],
+  ["cancel", "onCancel"],
+  ["canplay", "onCanPlay"],
+  ["canplaythrough", "onCanPlayThrough"],
+  ["close", "onClose"],
+  ["durationchange", "onDurationChange"],
+  ["emptied", "onEmptied"],
+  ["encrypted", "onEncrypted"],
+  ["ended", "onEnded"],
+  ["error", "onError"],
+  ["invalid", "onInvalid"],
+  ["load", "onLoad"],
+  ["loadeddata", "onLoadedData"],
+  ["loadedmetadata", "onLoadedMetadata"],
+  ["loadstart", "onLoadStart"],
+  ["pause", "onPause"],
+  ["play", "onPlay"],
+  ["playing", "onPlaying"],
+  ["progress", "onProgress"],
+  ["ratechange", "onRateChange"],
+  ["resize", "onResize"],
+  ["scroll", "onScroll"],
+  ["scrollend", "onScrollEnd"],
+  ["seeked", "onSeeked"],
+  ["seeking", "onSeeking"],
+  ["stalled", "onStalled"],
+  ["suspend", "onSuspend"],
+  ["timeupdate", "onTimeUpdate"],
+  ["toggle", "onToggle"],
+  ["volumechange", "onVolumeChange"],
+  ["waiting", "onWaiting"],
+] as const;
+
+const mediaEventNames = [
+  "abort",
+  "canplay",
+  "canplaythrough",
+  "durationchange",
+  "emptied",
+  "encrypted",
+  "ended",
+  "error",
+  "loadeddata",
+  "loadedmetadata",
+  "loadstart",
+  "pause",
+  "play",
+  "playing",
+  "progress",
+  "ratechange",
+  "resize",
+  "seeked",
+  "seeking",
+  "stalled",
+  "suspend",
+  "timeupdate",
+  "volumechange",
+  "waiting",
+] as const;
+
+const nonDelegatedEventNames = new Set<string>();
+for (const [eventName, propName] of nonDelegatedEventDescriptors) {
+  nonDelegatedEventNames.add(eventName);
+  reactPropToNativeEvent.set(propName, [eventName]);
+  nativeEventToReactProps.set(eventName, [propName]);
+}
+
 export function toEventNames(propName: string): string[] {
   const eventNames: string[] = [];
   forEachEventName(propName, (eventName) => {
@@ -125,24 +199,108 @@ export function forEachEventName(propName: string, callback: (eventName: string)
 }
 
 export function ensureDelegatedEventListenersForProp(root: Element, propName: string): void {
-  const directEventName = directNativeEventName(propName);
+  forEachEventName(propName, (eventName) => {
+    if (!isNonDelegatedEventName(eventName)) {
+      ensureDelegatedEventListener(root, eventName);
+    }
+  });
+}
 
-  if (directEventName !== undefined) {
-    ensureDelegatedEventListener(root, directEventName);
+export function beginDirectEventListenerUpdate(element: Element): Set<string> | undefined {
+  const listeners = nonDelegatedElementListeners.get(element);
+  return listeners === undefined ? undefined : new Set(listeners.keys());
+}
+
+export function ensureEventListenersForProp(
+  element: Element,
+  eventRoot: Element,
+  propName: string,
+  staleDirectEventNames?: Set<string>,
+): void {
+  forEachEventName(propName, (eventName) => {
+    if (isNonDelegatedEventName(eventName)) {
+      ensureNonDelegatedEventListener(element, eventRoot, eventName, staleDirectEventNames);
+      return;
+    }
+
+    ensureDelegatedEventListener(eventRoot, eventName);
+  });
+}
+
+export function ensureMandatoryNonDelegatedElementListeners(
+  element: Element,
+  eventRoot: Element,
+  props: Record<string, unknown>,
+  staleDirectEventNames?: Set<string>,
+): void {
+  switch (element.localName) {
+    case "dialog":
+      ensureNonDelegatedEventListener(element, eventRoot, "beforetoggle", staleDirectEventNames);
+      ensureNonDelegatedEventListener(element, eventRoot, "toggle", staleDirectEventNames);
+      ensureNonDelegatedEventListener(element, eventRoot, "cancel", staleDirectEventNames);
+      ensureNonDelegatedEventListener(element, eventRoot, "close", staleDirectEventNames);
+      break;
+    case "iframe":
+    case "object":
+      ensureNonDelegatedEventListener(element, eventRoot, "load", staleDirectEventNames);
+      break;
+    case "embed":
+    case "source":
+    case "link":
+    case "img":
+    case "image":
+      ensureNonDelegatedEventListener(element, eventRoot, "error", staleDirectEventNames);
+      ensureNonDelegatedEventListener(element, eventRoot, "load", staleDirectEventNames);
+      break;
+    case "video":
+    case "audio":
+      for (const eventName of mediaEventNames) {
+        ensureNonDelegatedEventListener(element, eventRoot, eventName, staleDirectEventNames);
+      }
+      break;
+    case "details":
+      ensureNonDelegatedEventListener(element, eventRoot, "toggle", staleDirectEventNames);
+      break;
+    case "input":
+    case "select":
+    case "textarea":
+      ensureNonDelegatedEventListener(element, eventRoot, "invalid", staleDirectEventNames);
+      break;
+  }
+
+  if (props.popover !== null && props.popover !== undefined) {
+    ensureNonDelegatedEventListener(element, eventRoot, "beforetoggle", staleDirectEventNames);
+    ensureNonDelegatedEventListener(element, eventRoot, "toggle", staleDirectEventNames);
+  }
+}
+
+export function finishDirectEventListenerUpdate(
+  element: Element,
+  staleDirectEventNames: Set<string> | undefined,
+): void {
+  if (staleDirectEventNames === undefined) {
     return;
   }
 
-  const basePropName = toBaseEventPropName(propName);
-  const mappedEventNames = reactPropToNativeEvent.get(basePropName);
+  for (const eventName of staleDirectEventNames) {
+    removeNonDelegatedElementListener(element, eventName);
+  }
+}
 
-  if (mappedEventNames === undefined) {
-    ensureDelegatedEventListener(root, basePropName.slice(2).toLowerCase());
+export function disposeDirectEventListeners(element: Element): void {
+  const listeners = nonDelegatedElementListeners.get(element);
+  if (listeners === undefined) {
     return;
   }
 
-  for (let index = 0; index < mappedEventNames.length; index += 1) {
-    ensureDelegatedEventListener(root, mappedEventNames[index]!);
+  for (const [eventName, registration] of listeners) {
+    element.removeEventListener(eventName, registration.listener);
   }
+  nonDelegatedElementListeners.delete(element);
+}
+
+export function isNonDelegatedEventName(eventName: string): boolean {
+  return nonDelegatedEventNames.has(eventName);
 }
 
 function directNativeEventName(propName: string): string | undefined {
@@ -288,6 +446,80 @@ export function ensureDelegatedEventListener(root: Element, eventName: string): 
   });
 }
 
+function ensureNonDelegatedRootCaptureListener(root: Element, eventName: string): void {
+  const listeners = nonDelegatedRootCaptureListeners.get(root) ?? new Set<string>();
+  if (listeners.has(eventName)) {
+    return;
+  }
+
+  listeners.add(eventName);
+  nonDelegatedRootCaptureListeners.set(root, listeners);
+  root.addEventListener(
+    eventName,
+    (event) => {
+      const priority = getEventPriority(eventName);
+      runWithEventPriority(priority, () => {
+        dispatchNonDelegatedCaptureEvent(root, eventName, event);
+      });
+    },
+    true,
+  );
+}
+
+function ensureNonDelegatedEventListener(
+  element: Element,
+  eventRoot: Element,
+  eventName: string,
+  staleDirectEventNames: Set<string> | undefined,
+): void {
+  staleDirectEventNames?.delete(eventName);
+  ensureNonDelegatedRootCaptureListener(eventRoot, eventName);
+  ensureNonDelegatedElementListener(element, eventRoot, eventName);
+}
+
+function ensureNonDelegatedElementListener(
+  element: Element,
+  eventRoot: Element,
+  eventName: string,
+): void {
+  const listeners = nonDelegatedElementListeners.get(element) ?? new Map();
+  const current = listeners.get(eventName);
+  if (current?.eventRoot === eventRoot) {
+    return;
+  }
+  if (current !== undefined) {
+    element.removeEventListener(eventName, current.listener);
+  }
+
+  const listener = (event: Event): void => {
+    if (event.target !== element) {
+      return;
+    }
+
+    const priority = getEventPriority(eventName);
+    runWithEventPriority(priority, () => {
+      dispatchNonDelegatedBubbleEvent(eventRoot, eventName, event);
+    });
+  };
+  listeners.set(eventName, { eventRoot, listener });
+  nonDelegatedElementListeners.set(element, listeners);
+  element.addEventListener(eventName, listener);
+}
+
+function removeNonDelegatedElementListener(element: Element, eventName: string): void {
+  const listeners = nonDelegatedElementListeners.get(element);
+  const registration = listeners?.get(eventName);
+  if (listeners === undefined || registration === undefined) {
+    return;
+  }
+
+  element.removeEventListener(eventName, registration.listener);
+  listeners.delete(eventName);
+  if (listeners.size === 0) {
+    nonDelegatedElementListeners.delete(element);
+  }
+}
+
 function shouldDeferDiscreteEventFlush(eventName: string): boolean {
   return eventName === "pointerdown" || eventName === "mousedown" || eventName === "touchstart";
 }
@@ -320,6 +552,43 @@ function markDispatchedDelegatedEvent(root: Element, event: Event, eventName: st
   roots.add(root);
   events.set(eventName, roots);
   dispatchedDelegatedEvents.set(event, events);
+}
+
+function dispatchNonDelegatedCaptureEvent(
+  root: Element,
+  eventName: string,
+  event: Event,
+): void {
+  const path = getEventPath(root, event);
+  const propNames = toEventPropNames(eventName);
+  const state = {
+    defaultPrevented: event.defaultPrevented,
+    propagationStopped: false,
+  };
+
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    dispatchEventPropNames(propNames, "capture", event, path[index]!, state);
+    if (state.propagationStopped) {
+      return;
+    }
+  }
+}
+
+function dispatchNonDelegatedBubbleEvent(root: Element, eventName: string, event: Event): void {
+  const path = getEventPath(root, event);
+  const propNames = toEventPropNames(eventName);
+  const state = {
+    defaultPrevented: event.defaultPrevented,
+    propagationStopped: false,
+  };
+  const bubblePath = eventName === "scroll" || eventName === "scrollend" ? path.slice(0, 1) : path;
+
+  for (const target of bubblePath) {
+    dispatchEventPropNames(propNames, "bubble", event, target, state);
+    if (state.propagationStopped) {
+      return;
+    }
+  }
 }
 
 function dispatchDelegatedEvent(root: Element, eventName: string, event: Event): void {

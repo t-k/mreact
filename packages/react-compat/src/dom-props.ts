@@ -1,7 +1,10 @@
 import {
+  beginDirectEventListenerUpdate,
   getAppliedProps,
   setAppliedProps,
-  ensureDelegatedEventListenersForProp,
+  ensureEventListenersForProp,
+  ensureMandatoryNonDelegatedElementListeners,
+  finishDirectEventListenerUpdate,
 } from "./host-event-binder.js";
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import {
@@ -44,6 +47,13 @@ export function applyProps(
   }
 
   const previousProps = previous?.props ?? {};
+  const staleDirectEventNames = beginDirectEventListenerUpdate(element);
+  ensureMandatoryNonDelegatedElementListeners(
+    element,
+    options.eventRoot ?? element,
+    nextProps,
+    staleDirectEventNames,
+  );
   const previousAttributeNames = previous?.attributeNames ?? collectAttributeNames(previousProps);
   const nextAttributeNames = collectAttributeNames(nextProps);
 
@@ -104,11 +114,16 @@ export function applyProps(
     }
 
     if (isReactEventHandlerPropName(name) && typeof value === "function") {
-      if (previousProps[name] === value) {
+      if (previousProps[name] === value && staleDirectEventNames === undefined) {
         continue;
       }
 
-      ensureDelegatedEventListenersForProp(options.eventRoot ?? element, name);
+      ensureEventListenersForProp(
+        element,
+        options.eventRoot ?? element,
+        name,
+        staleDirectEventNames,
+      );
       continue;
     }
 
@@ -161,6 +176,7 @@ export function applyProps(
     applyAttribute(element, toDomAttributeName(name), value, path, options);
   }
 
+  finishDirectEventListenerUpdate(element, staleDirectEventNames);
   setAppliedProps(element, {
     attributeNames: nextAttributeNames,
     props: nextProps,
@@ -174,6 +190,13 @@ function applyInitialProps(
   options: RenderOptions,
 ): void {
   const useAttributeFastPath = options.hydration === undefined;
+  const staleDirectEventNames = beginDirectEventListenerUpdate(element);
+  ensureMandatoryNonDelegatedElementListeners(
+    element,
+    options.eventRoot ?? element,
+    props,
+    staleDirectEventNames,
+  );
 
   for (const name in props) {
     if (!Object.prototype.hasOwnProperty.call(props, name)) {
@@ -222,7 +245,12 @@ function applyInitialProps(
     }
 
     if (isReactEventHandlerPropName(name) && typeof value === "function") {
-      ensureDelegatedEventListenersForProp(options.eventRoot ?? element, name);
+      ensureEventListenersForProp(
+        element,
+        options.eventRoot ?? element,
+        name,
+        staleDirectEventNames,
+      );
       continue;
     }
 
@@ -284,6 +312,8 @@ function applyInitialProps(
       useAttributeFastPath,
     );
   }
+
+  finishDirectEventListenerUpdate(element, staleDirectEventNames);
 }
 
 export function applyPostChildFormProps(

@@ -193,6 +193,48 @@ describe("react-compat DOM prop performance", () => {
     expect(toLowerCaseCalls).toBe(0);
   });
 
+  test("keeps ordinary click listeners delegated while direct events are enabled", () => {
+    const root = document.createElement("div");
+    const listenerTargets: string[] = [];
+    const originalAddEventListener = HTMLElement.prototype.addEventListener;
+
+    HTMLElement.prototype.addEventListener = function addEventListenerSpy(
+      this: HTMLElement,
+      type: string,
+      listener: EventListenerOrEventListenerObject,
+      options?: boolean | AddEventListenerOptions,
+    ) {
+      if (type === "click" || type === "load") {
+        listenerTargets.push(`${this.tagName.toLowerCase()}:${type}:${String(options === true)}`);
+      }
+      return originalAddEventListener.call(this, type, listener, options);
+    };
+
+    try {
+      for (let index = 0; index < 100; index += 1) {
+        applyProps(
+          document.createElement("button"),
+          { onClick: () => undefined },
+          String(index),
+          { eventRoot: root },
+        );
+      }
+      applyProps(
+        document.createElement("img"),
+        {},
+        "image",
+        { eventRoot: root },
+      );
+    } finally {
+      HTMLElement.prototype.addEventListener = originalAddEventListener;
+    }
+
+    expect(listenerTargets.filter((entry) => entry === "div:click:false")).toHaveLength(1);
+    expect(listenerTargets.filter((entry) => entry === "button:click:false")).toHaveLength(0);
+    expect(listenerTargets.filter((entry) => entry === "div:load:true")).toHaveLength(1);
+    expect(listenerTargets.filter((entry) => entry === "img:load:false")).toHaveLength(1);
+  });
+
   test("post-child form props do not inspect ordinary element props", () => {
     const div = document.createElement("div");
     let propDescriptorReads = 0;

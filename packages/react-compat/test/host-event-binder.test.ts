@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import {
   getEventPriority,
+  isNonDelegatedEventName,
   toEventNames,
   toEventPropNames,
 } from "../src/host-event-binder.js";
@@ -24,6 +25,65 @@ describe("host event binder", () => {
     expect(toEventPropNames("focusin")).toEqual(["onFocus"]);
     expect(toEventPropNames("input")).toEqual(["onInput", "onChange"]);
     expect(toEventPropNames("drag")).toEqual(["onDrag"]);
+  });
+
+  test("classifies and normalizes every React non-delegated event", () => {
+    const events = [
+      ["abort", "onAbort"],
+      ["beforetoggle", "onBeforeToggle"],
+      ["cancel", "onCancel"],
+      ["canplay", "onCanPlay"],
+      ["canplaythrough", "onCanPlayThrough"],
+      ["close", "onClose"],
+      ["durationchange", "onDurationChange"],
+      ["emptied", "onEmptied"],
+      ["encrypted", "onEncrypted"],
+      ["ended", "onEnded"],
+      ["error", "onError"],
+      ["invalid", "onInvalid"],
+      ["load", "onLoad"],
+      ["loadeddata", "onLoadedData"],
+      ["loadedmetadata", "onLoadedMetadata"],
+      ["loadstart", "onLoadStart"],
+      ["pause", "onPause"],
+      ["play", "onPlay"],
+      ["playing", "onPlaying"],
+      ["progress", "onProgress"],
+      ["ratechange", "onRateChange"],
+      ["resize", "onResize"],
+      ["scroll", "onScroll"],
+      ["scrollend", "onScrollEnd"],
+      ["seeked", "onSeeked"],
+      ["seeking", "onSeeking"],
+      ["stalled", "onStalled"],
+      ["suspend", "onSuspend"],
+      ["timeupdate", "onTimeUpdate"],
+      ["toggle", "onToggle"],
+      ["volumechange", "onVolumeChange"],
+      ["waiting", "onWaiting"],
+    ] as const;
+
+    for (const [eventName, propName] of events) {
+      expect(isNonDelegatedEventName(eventName), eventName).toBe(true);
+      expect(toEventNames(propName), propName).toEqual([eventName]);
+      expect(toEventNames(`${propName}Capture`), `${propName}Capture`).toEqual([eventName]);
+      expect(toEventPropNames(eventName), eventName).toEqual([propName]);
+    }
+
+    for (const eventName of [
+      "animationend",
+      "change",
+      "click",
+      "focusin",
+      "focusout",
+      "input",
+      "mouseout",
+      "mouseover",
+      "submit",
+      "wheel",
+    ]) {
+      expect(isNonDelegatedEventName(eventName), eventName).toBe(false);
+    }
   });
 
   test("classifies event priority without pulling in host reconciliation", () => {

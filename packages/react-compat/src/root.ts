@@ -40,7 +40,11 @@ import {
   createContainerFiberRoot,
   enqueueRootRender,
 } from "./fiber-work-loop.js";
-import { commitFiberRoot, detachFiberRefs } from "./fiber-commit.js";
+import {
+  commitFiberRoot,
+  detachFiberRefs,
+  disposeFiberEventListeners,
+} from "./fiber-commit.js";
 import {
   withBatchedDelegatedRootReleases,
   withDeferredDelegatedEventPromotions,
@@ -148,6 +152,7 @@ export function createRoot(
         runtime.currentElement = undefined;
         runtime.dispose();
         detachFiberRefs(fiberRoot.current);
+        disposeFiberEventListeners(fiberRoot.current);
         disposeHostFiberResources(fiberRoot.current);
         runtime.instances.clear();
         unmountDevToolsRoot(container);
@@ -374,6 +379,7 @@ export function hydrateRoot(
         runtime.currentElement = undefined;
         runtime.dispose();
         detachFiberRefs(fiberRoot.current);
+        disposeFiberEventListeners(fiberRoot.current);
         disposeHostFiberResources(fiberRoot.current);
         runtime.instances.clear();
         unmountDevToolsRoot(container);
