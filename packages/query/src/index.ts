@@ -459,11 +459,30 @@ export function createInfiniteQuery<TPage, TPageParam>(
 
   let isFetchingNextPage = false;
   let nextPagePromise: Promise<InfiniteQueryResult<TPage, TPageParam>> | undefined;
+  let hasNextPageError = false;
+  let nextPageError: unknown;
+  let nextPageErrorReason: QueryErrorReason | undefined;
   const readEntry = () =>
     client.getQueryEntry<InfiniteQueryData<TPage, TPageParam>>(options.queryKey);
-  const result = cell(infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage));
+  const result = cell(
+    infiniteResultFromQueryEntry(
+      readEntry(),
+      options,
+      isFetchingNextPage,
+      hasNextPageError,
+      nextPageError,
+      nextPageErrorReason,
+    ),
+  );
   const updateResult = () => {
-    const next = infiniteResultFromQueryEntry(readEntry(), options, isFetchingNextPage);
+    const next = infiniteResultFromQueryEntry(
+      readEntry(),
+      options,
+      isFetchingNextPage,
+      hasNextPageError,
+      nextPageError,
+      nextPageErrorReason,
+    );
     result.set(next);
     return next;
   };
@@ -508,6 +527,9 @@ export function createInfiniteQuery<TPage, TPageParam>(
     });
 
   const fetchFirstPage = async () => {
+    hasNextPageError = false;
+    nextPageError = undefined;
+    nextPageErrorReason = undefined;
     removeInfinitePageEntries(client, options.queryKey);
     await client.fetchQuery(firstPageOptions());
     removeInfinitePageEntries(client, options.queryKey);
@@ -577,6 +599,9 @@ export function createInfiniteQuery<TPage, TPageParam>(
       }
 
       isFetchingNextPage = true;
+      hasNextPageError = false;
+      nextPageError = undefined;
+      nextPageErrorReason = undefined;
       updateResult();
       nextPagePromise = (async () => {
         const nextPageKey = pageQueryKey(options.queryKey, nextPageParam);
@@ -602,10 +627,15 @@ export function createInfiniteQuery<TPage, TPageParam>(
               pageParams: [...latestData.pageParams, nextPageParam],
             });
           }
-          client.removeQueries({ queryKey: nextPageKey });
-
           return updateResult();
+        } catch (error) {
+          const pageEntry = client.getQueryEntry<TPage>(nextPageKey);
+          hasNextPageError = true;
+          nextPageError = error;
+          nextPageErrorReason = pageEntry?.errorReason ?? "unknown";
+          throw error;
         } finally {
+          client.removeQueries({ queryKey: nextPageKey });
           isFetchingNextPage = false;
           nextPagePromise = undefined;
           updateResult();
@@ -777,6 +807,9 @@ function infiniteResultFromQueryEntry<TPage, TPageParam>(
   entry: QueryEntry<InfiniteQueryData<TPage, TPageParam>> | undefined,
   options: CreateInfiniteQueryOptions<TPage, TPageParam>,
   isFetchingNextPage: boolean,
+  hasNextPageError: boolean,
+  nextPageError: unknown,
+  nextPageErrorReason: QueryErrorReason | undefined,
 ): InfiniteQueryResult<TPage, TPageParam> {
   const data = entry?.data ?? { pages: [], pageParams: [] };
   const lastPage = data.pages[data.pages.length - 1];
@@ -786,16 +819,17 @@ function infiniteResultFromQueryEntry<TPage, TPageParam>(
       : options.getNextPageParam(lastPage, data.pages);
 
   return {
-    error: entry?.error,
-    errorReason: entry?.errorReason,
+    error: hasNextPageError ? nextPageError : entry?.error,
+    errorReason: hasNextPageError ? nextPageErrorReason : entry?.errorReason,
     hasNextPage:
+      !hasNextPageError &&
       entry?.status !== "error" &&
       (data.pages.length === 0 || (nextPageParam !== null && nextPageParam !== undefined)),
     isFetching: (entry?.isFetching ?? false) || isFetchingNextPage,
     isFetchingNextPage,
     pages: data.pages,
     pageParams: data.pageParams,
-    status: entry?.status ?? "pending",
+    status: hasNextPageError ? "error" : (entry?.status ?? "pending"),
     updatedAt: entry?.updatedAt ?? 0,
   };
 }

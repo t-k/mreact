@@ -172,6 +172,79 @@ describe("createInfiniteQuery", () => {
     expect(client.entries().map((entry) => entry.queryKey)).toEqual([["retained-timeline"]]);
   });
 
+  it("surfaces a next-page failure without retaining its temporary cache entry", async () => {
+    const client = createQueryClient();
+    const pageError = new Error("next page failed");
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: false,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["failed-next-page"],
+      queryFn: async ({ pageParam }) => {
+        if (pageParam === 0) {
+          return { items: ["story-0"], nextCursor: 1 };
+        }
+        throw pageError;
+      },
+    });
+
+    await query.refetch();
+    await expect(query.fetchNextPage()).rejects.toBe(pageError);
+
+    expect(query.result.get()).toMatchObject({
+      error: pageError,
+      errorReason: "unknown",
+      hasNextPage: false,
+      pages: [{ items: ["story-0"], nextCursor: 1 }],
+      pageParams: [0],
+      status: "error",
+    });
+    expect(client.entries().map((entry) => entry.queryKey)).toEqual([["failed-next-page"]]);
+  });
+
+  it("applies the configured retry policy to a next-page fetch", async () => {
+    const client = createQueryClient();
+    const retryAttempts: number[] = [];
+    let nextPageCalls = 0;
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: false,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["retried-next-page"],
+      queryFn: async ({ pageParam }) => {
+        if (pageParam === 0) {
+          return { items: ["story-0"], nextCursor: 1 };
+        }
+        nextPageCalls += 1;
+        if (nextPageCalls === 1) {
+          throw new Error("transient failure");
+        }
+        return { items: ["story-1"], nextCursor: undefined };
+      },
+      retry: 1,
+      retryDelay: (attempt) => {
+        retryAttempts.push(attempt);
+        return 0;
+      },
+    });
+
+    await query.refetch();
+    await query.fetchNextPage();
+
+    expect(nextPageCalls).toBe(2);
+    expect(retryAttempts).toEqual([1]);
+    expect(query.result.get()).toMatchObject({
+      error: undefined,
+      hasNextPage: false,
+      pages: [
+        { items: ["story-0"], nextCursor: 1 },
+        { items: ["story-1"], nextCursor: undefined },
+      ],
+      status: "success",
+    });
+    expect(client.entries().map((entry) => entry.queryKey)).toEqual([["retried-next-page"]]);
+  });
+
   it("cleans stale per-page entries when the aggregate infinite query refetches", async () => {
     const client = createQueryClient();
     const query = createInfiniteQuery<TimelinePage, number>(client, {
