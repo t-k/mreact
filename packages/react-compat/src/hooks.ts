@@ -58,6 +58,8 @@ export interface RootRuntime {
   renderPhaseUpdate: boolean;
   rerender(priority?: RenderPriority): void;
   beginRender(): void;
+  prepareInactiveMutationEffectCleanups(): void;
+  reportMutationEffectErrors(errors: readonly unknown[]): void;
   endRender(committed?: boolean): void;
   flushEffects(): void;
   dispose(): void;
@@ -108,6 +110,15 @@ interface PendingProfilerCommit {
 interface ExternalStoreCheck {
   getSnapshot: () => unknown;
   value: unknown;
+}
+
+interface PreparedMutationEffectState {
+  instance: ComponentInstance;
+  slots: Array<{
+    slot: Extract<HookSlot, { kind: "effect" }>;
+    mounted: boolean | undefined;
+    cleanupRan: boolean;
+  }>;
 }
 
 /** Cache scope that stores memoized cache() results and cancellation state. */
@@ -363,6 +374,11 @@ export function createRootRuntime(
   rerender: (priority?: RenderPriority) => void,
   options: RootRuntimeOptions = {},
 ): RootRuntime {
+  let preparedInactiveInstances: Array<[string, ComponentInstance]> | undefined;
+  let preparedMutationEffectStates: PreparedMutationEffectState[] | undefined;
+  let preparedMutationEffectErrorStart: number | undefined;
+  const pendingMutationEffectErrors: unknown[] = [];
+
   return {
     instances: new Map(),
     instanceKeysByPrefix: new Map(),
@@ -402,19 +418,70 @@ export function createRootRuntime(
       this.pendingEffects = [];
       this.externalStoreChecks = [];
       this.renderPhaseUpdate = false;
+      preparedInactiveInstances = undefined;
+      preparedMutationEffectStates = undefined;
+      preparedMutationEffectErrorStart = undefined;
+    },
+    prepareInactiveMutationEffectCleanups() {
+      preparedInactiveInstances = collectInactiveInstances(this);
+      preparedMutationEffectStates = [];
+      preparedMutationEffectErrorStart = pendingMutationEffectErrors.length;
+
+      for (const [, instance] of preparedInactiveInstances) {
+        const state: PreparedMutationEffectState = {
+          instance,
+          slots: [],
+        };
+        preparedMutationEffectStates.push(state);
+        instance.disposed = true;
+        for (const slot of instance.hooks) {
+          if (
+            slot?.kind !== "effect" ||
+            (slot.effectKind !== "imperative-handle" && slot.effectKind !== "layout")
+          ) {
+            continue;
+          }
+
+          const cleanup = slot.cleanup;
+          state.slots.push({
+            slot,
+            mounted: slot.mounted,
+            cleanupRan: cleanup !== undefined,
+          });
+          slot.disposed = true;
+          slot.mounted = false;
+          delete slot.cleanup;
+          try {
+            cleanup?.();
+          } catch (error) {
+            pendingMutationEffectErrors.push(error);
+          }
+        }
+      }
+    },
+    reportMutationEffectErrors(errors) {
+      pendingMutationEffectErrors.push(...errors);
     },
     endRender(committed = true) {
       const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
       const activeProfilerPaths = this.activeProfilerPaths;
       if (committed) {
         commitReactiveCleanups(this);
-        cleanupInactiveInstances(this);
+        cleanupInactiveInstances(this, preparedInactiveInstances);
         this.mountedProfilerPaths =
           activeProfilerPaths === undefined ? new Set() : new Set(activeProfilerPaths);
       } else {
+        restorePreparedMutationEffectStates(
+          preparedMutationEffectStates,
+          pendingMutationEffectErrors,
+          preparedMutationEffectErrorStart,
+        );
         discardPendingReactiveCleanups(this);
         this.pendingProfilerCommits = [];
       }
+      preparedInactiveInstances = undefined;
+      preparedMutationEffectStates = undefined;
+      preparedMutationEffectErrorStart = undefined;
       this.activeInstanceKeys = undefined;
       this.activeProfilerPaths = undefined;
       hookRenderState.currentRuntime = undefined;
@@ -424,7 +491,7 @@ export function createRootRuntime(
       }
     },
     flushEffects() {
-      const effectErrors: unknown[] = [];
+      const effectErrors = pendingMutationEffectErrors.splice(0);
       const reportEffectError = (error: unknown): void => {
         effectErrors.push(error);
       };
@@ -2506,20 +2573,64 @@ function cleanupStrictEffects(
   }
 }
 
-function cleanupInactiveInstances(runtime: RootRuntime): void {
+function collectInactiveInstances(
+  runtime: RootRuntime,
+): Array<[string, ComponentInstance]> {
   const activeInstanceKeys = runtime.activeInstanceKeys;
 
   if (activeInstanceKeys === undefined) {
-    return;
+    return [];
   }
 
   if (activeInstanceKeys.size === runtime.instances.size) {
-    return;
+    return [];
   }
 
+  const inactiveInstances: Array<[string, ComponentInstance]> = [];
   for (const [key, instance] of runtime.instances) {
     if (!activeInstanceKeys.has(key)) {
-      cleanupInstance(instance);
+      inactiveInstances.push([key, instance]);
+    }
+  }
+
+  return inactiveInstances;
+}
+
+function restorePreparedMutationEffectStates(
+  states: readonly PreparedMutationEffectState[] | undefined,
+  errors: unknown[],
+  errorStart: number | undefined,
+): void {
+  if (states !== undefined) {
+    for (const { instance, slots } of states) {
+      instance.disposed = false;
+      for (const { slot, mounted, cleanupRan } of slots) {
+        slot.disposed = false;
+        if (cleanupRan) {
+          slot.mounted = false;
+        } else if (mounted === undefined) {
+          delete slot.mounted;
+        } else {
+          slot.mounted = mounted;
+        }
+      }
+    }
+  }
+
+  if (errorStart !== undefined) {
+    errors.length = errorStart;
+  }
+}
+
+function cleanupInactiveInstances(
+  runtime: RootRuntime,
+  preparedInstances?: ReadonlyArray<readonly [string, ComponentInstance]>,
+): void {
+  const inactiveInstances = preparedInstances ?? collectInactiveInstances(runtime);
+
+  for (const [key, instance] of inactiveInstances) {
+    cleanupInstance(instance);
+    if (runtime.instances.get(key) === instance) {
       runtime.instances.delete(key);
       removeInstanceKeyFromIndex(runtime, key);
     }

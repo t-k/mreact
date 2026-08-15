@@ -272,7 +272,8 @@ export function commitHostFiberRoot(
   root: FiberRoot,
   finishedWork: Fiber,
   options: RenderOptions = {},
-): void {
+): unknown[] {
+  const refErrors: unknown[] = [];
   runWithHostCommit(() => {
     let committed = false;
     try {
@@ -337,13 +338,14 @@ export function commitHostFiberRoot(
       committed = true;
     } finally {
       if (committed) {
-        flushPendingHostRefUpdates();
+        refErrors.push(...flushPendingHostRefUpdates());
       } else {
         pendingHostRefUpdates.length = 0;
       }
       committedPortalContainers.clear();
     }
   });
+  return refErrors;
 }
 
 export function commitHydratingHostFiberRoot(
@@ -351,8 +353,8 @@ export function commitHydratingHostFiberRoot(
   finishedWork: Fiber,
   scope: HydrationScope,
   options: FiberHydrationOptions = {},
-): void {
-  commitScopedHostFiberRoot(root, finishedWork, scope, options);
+): unknown[] {
+  return commitScopedHostFiberRoot(root, finishedWork, scope, options);
 }
 
 export function consumeHydrationScopeResumeMarkers(scope: HydrationScope): void {
@@ -374,7 +376,8 @@ export function commitScopedHostFiberRoot(
   finishedWork: Fiber,
   scope: HydrationScope,
   options: RenderOptions = {},
-): void {
+): unknown[] {
+  const refErrors: unknown[] = [];
   runWithHostCommit(() => {
     let committed = false;
     try {
@@ -389,7 +392,7 @@ export function commitScopedHostFiberRoot(
       committed = true;
     } finally {
       if (committed) {
-        flushPendingHostRefUpdates();
+        refErrors.push(...flushPendingHostRefUpdates());
       } else {
         pendingHostRefUpdates.length = 0;
         pendingReactiveDomBlockAfterCommits.length = 0;
@@ -397,6 +400,7 @@ export function commitScopedHostFiberRoot(
       committedPortalContainers.clear();
     }
   });
+  return refErrors;
 }
 
 function isResumeScopeStartMarker(node: ChildNode | null): node is Comment {
@@ -4980,15 +4984,21 @@ function queueHostRefUpdate(ref: unknown, node: unknown, detach: boolean): void 
   pendingHostRefUpdates.push({ detach, ref, node });
 }
 
-function flushPendingHostRefUpdates(): void {
+function flushPendingHostRefUpdates(): unknown[] {
+  const errors: unknown[] = [];
   const pending = pendingHostRefUpdates.splice(0);
   for (const { detach, ref, node } of pending) {
-    if (detach) {
-      detachRef(ref, node);
-    } else {
-      attachRef(ref, node);
+    try {
+      if (detach) {
+        detachRef(ref, node);
+      } else {
+        attachRef(ref, node);
+      }
+    } catch (error) {
+      errors.push(error);
     }
   }
+  return errors;
 }
 
 function isPortalHostContainer(value: unknown): value is ParentNode {

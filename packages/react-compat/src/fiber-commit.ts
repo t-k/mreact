@@ -20,23 +20,24 @@ export function commitFiberRoot(
   root: FiberRoot,
   options: RenderOptions = {},
   scope?: HydrationScope,
-): void {
+): unknown[] {
   const finishedWork = root.finishedWork;
 
   if (finishedWork === undefined) {
-    return;
+    return [];
   }
 
+  const mutationEffectErrors: unknown[] = [];
   if (root.refCleanupKnown !== true || root.current.hasRefSubtree || finishedWork.hasRefSubtree) {
     runWithHostCommit(() => {
-      cleanupDeletedRefs(root.current, finishedWork);
+      mutationEffectErrors.push(...cleanupDeletedRefs(root.current, finishedWork));
     });
   }
   const shouldCleanupDeletedSubtrees = mayHaveDeletedFiberSubtrees(finishedWork);
   if (scope === undefined) {
-    commitHostFiberRoot(root, finishedWork, options);
+    mutationEffectErrors.push(...commitHostFiberRoot(root, finishedWork, options));
   } else {
-    commitScopedHostFiberRoot(root, finishedWork, scope, options);
+    mutationEffectErrors.push(...commitScopedHostFiberRoot(root, finishedWork, scope, options));
   }
   if (shouldCleanupDeletedSubtrees) {
     const retainedFibers = collectRetainedFiberPairs(finishedWork);
@@ -50,6 +51,7 @@ export function commitFiberRoot(
   root.finishedWork = undefined;
   root.workInProgress = undefined;
   root.workInProgressRootRenderLanes = 0;
+  return mutationEffectErrors;
 }
 
 export function detachFiberRefs(fiber: Fiber): void {
@@ -194,7 +196,8 @@ function disposeHostFiberEventListeners(fiber: Fiber): void {
   }
 }
 
-function cleanupDeletedRefs(previous: Fiber, next: Fiber): void {
+function cleanupDeletedRefs(previous: Fiber, next: Fiber): unknown[] {
+  const errors: unknown[] = [];
   const nextRefNodes = new Map<unknown, Set<unknown>>();
   for (const record of collectRefRecords(next)) {
     const nodes = nextRefNodes.get(record.ref) ?? new Set<unknown>();
@@ -204,9 +207,15 @@ function cleanupDeletedRefs(previous: Fiber, next: Fiber): void {
 
   for (const record of collectRefRecords(previous)) {
     if (nextRefNodes.get(record.ref)?.has(record.node) !== true) {
-      detachRef(record.ref, record.node);
+      try {
+        detachRef(record.ref, record.node);
+      } catch (error) {
+        errors.push(error);
+      }
     }
   }
+
+  return errors;
 }
 
 function collectRefRecords(fiber: Fiber | undefined): RefRecord[] {

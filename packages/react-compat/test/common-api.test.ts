@@ -1875,6 +1875,59 @@ describe("react-compat common API subset", () => {
     expect(committedHtml).toEqual(["<div><span>B</span><span>B</span></div>"]);
   });
 
+  test("an aborted torn render does not clean a retained layout effect", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const listeners = new Set<() => void>();
+    const ref = { current: null as HTMLDivElement | null };
+    let value: "show" | "hide" = "show";
+    let armTear = false;
+    let cleanups = 0;
+
+    function subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    function Child() {
+      useLayoutEffect(() => {
+        return () => {
+          cleanups += 1;
+        };
+      }, []);
+      return createElement("div", { ref }, "child");
+    }
+
+    function App() {
+      const snapshot = useSyncExternalStore(subscribe, () => {
+        const current = value;
+        if (armTear) {
+          armTear = false;
+          value = "show";
+        }
+        return current;
+      });
+      return snapshot === "show" ? createElement(Child, null) : null;
+    }
+
+    try {
+      root.render(createElement(App, null));
+      const node = ref.current;
+      value = "hide";
+      armTear = true;
+      root.render(createElement(App, null));
+
+      expect(cleanups).toBe(0);
+      expect(ref.current).toBe(node);
+      expect(node?.isConnected).toBe(true);
+      expect(container.innerHTML).toBe("<div>child</div>");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
   test("hydrateRoot restarts hydration instead of committing torn snapshots", () => {
     const container = document.createElement("div");
     container.innerHTML = "<div><span>A</span><span>A</span></div>";

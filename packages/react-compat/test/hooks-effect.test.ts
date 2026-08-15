@@ -4,6 +4,8 @@ import { describe, expect, test, vi } from "vitest";
 import {
   StrictMode,
   createElement,
+  createPortal,
+  forwardRef,
   memo,
   createRoot,
   render,
@@ -575,5 +577,452 @@ describe("react-compat effect hooks", () => {
     createRoot(container).render(createElement(App, null));
 
     expect(calls).toEqual(["layout", "effect"]);
+  });
+
+  test("runs deleted subtree layout cleanup before ref detach and DOM removal", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let hide = () => undefined;
+    let current: HTMLDivElement | null = null;
+    let captured: HTMLDivElement | null = null;
+
+    function Child() {
+      useLayoutEffect(() => {
+        captured = current;
+        return () => calls.push(`layout:${current === captured}:${captured?.isConnected}`);
+      }, []);
+      useEffect(() => {
+        return () => calls.push(`passive:${current === null}:${captured?.isConnected}`);
+      }, []);
+      return createElement(
+        "div",
+        {
+          ref: (node: HTMLDivElement | null) => {
+            current = node;
+            if (node === null) {
+              calls.push("ref:detach");
+            }
+          },
+        },
+        "child",
+      );
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hide = () => setVisible(false);
+      return createElement("section", null, visible ? createElement(Child, null) : null);
+    }
+
+    try {
+      root.render(createElement(App, null));
+      hide();
+
+      expect(calls).toEqual(["layout:true:true", "ref:detach", "passive:true:false"]);
+      expect(captured?.isConnected).toBe(false);
+      expect(container.innerHTML).toBe("<section></section>");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("runs parent deletion layout cleanup before connected child cleanup", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+    let hide = () => undefined;
+
+    function Child() {
+      const ref = useRef<HTMLSpanElement | null>(null);
+      useLayoutEffect(() => {
+        const node = ref.current;
+        return () => calls.push(`child:${ref.current === node}:${node?.isConnected}`);
+      }, []);
+      return createElement("span", { ref }, "child");
+    }
+
+    function Parent() {
+      const ref = useRef<HTMLElement | null>(null);
+      useLayoutEffect(() => {
+        const node = ref.current;
+        return () => calls.push(`parent:${ref.current === node}:${node?.isConnected}`);
+      }, []);
+      return createElement("article", { ref }, createElement(Child, null));
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hide = () => setVisible(false);
+      return createElement("main", null, visible ? createElement(Parent, null) : null);
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+      hide();
+
+      expect(calls).toEqual(["parent:true:true", "child:true:true"]);
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("cleans only the removed keyed item while its node is connected", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+    let removeMiddle = () => undefined;
+
+    function Item(props: { label: string }) {
+      const ref = useRef<HTMLLIElement | null>(null);
+      useLayoutEffect(() => {
+        const node = ref.current;
+        return () => calls.push(`${props.label}:${ref.current === node}:${node?.isConnected}`);
+      }, []);
+      return createElement("li", { ref, "data-label": props.label }, props.label);
+    }
+
+    function App() {
+      const [items, setItems] = useState(["a", "b", "c"]);
+      removeMiddle = () => setItems(["a", "c"]);
+      return createElement(
+        "ul",
+        null,
+        items.map((label) => createElement(Item, { key: label, label })),
+      );
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+      const first = container.querySelector('[data-label="a"]');
+      const last = container.querySelector('[data-label="c"]');
+      removeMiddle();
+
+      expect(calls).toEqual(["b:true:true"]);
+      expect(container.querySelector('[data-label="a"]')).toBe(first);
+      expect(container.querySelector('[data-label="c"]')).toBe(last);
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("runs portal subtree layout cleanup before removing the portal node", () => {
+    const container = document.createElement("div");
+    const portalContainer = document.createElement("div");
+    document.body.append(container, portalContainer);
+    const calls: string[] = [];
+    const ref = { current: null as HTMLButtonElement | null };
+    let hide = () => undefined;
+
+    function PortalChild() {
+      useLayoutEffect(() => {
+        const node = ref.current;
+        return () => calls.push(`layout:${ref.current === node}:${node?.isConnected}`);
+      }, []);
+      return createPortal(createElement("button", { ref }, "portal"), portalContainer);
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hide = () => setVisible(false);
+      return visible ? createElement(PortalChild, null) : null;
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+      hide();
+
+      expect(calls).toEqual(["layout:true:true"]);
+      expect(ref.current).toBeNull();
+      expect(portalContainer.innerHTML).toBe("");
+    } finally {
+      root.unmount();
+      container.remove();
+      portalContainer.remove();
+    }
+  });
+
+  test("runs a deleted forwardRef layout cleanup before host removal", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+    let hide = () => undefined;
+
+    const Child = forwardRef(function Child() {
+      const ref = useRef<HTMLDivElement | null>(null);
+      useLayoutEffect(() => {
+        const node = ref.current;
+        return () => calls.push(`layout:${ref.current === node}:${node?.isConnected}`);
+      }, []);
+      return createElement("div", { ref }, "forwarded");
+    });
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hide = () => setVisible(false);
+      return visible ? createElement(Child, null) : null;
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+      hide();
+
+      expect(calls).toEqual(["layout:true:true"]);
+      expect(container.innerHTML).toBe("");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("commits deletion after a layout cleanup throws and continues sibling cleanup", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+    let hide = () => undefined;
+
+    function Child(props: { label: string; shouldThrow?: boolean }) {
+      const ref = useRef<HTMLDivElement | null>(null);
+      useLayoutEffect(() => {
+        return () => {
+          calls.push(`layout:${props.label}:${ref.current?.isConnected}`);
+          if (props.shouldThrow === true) {
+            throw new Error("deletion cleanup boom");
+          }
+        };
+      }, []);
+      return createElement("div", { ref }, props.label);
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hide = () => setVisible(false);
+      return visible
+        ? createElement(
+            "section",
+            null,
+            createElement(Child, { label: "first", shouldThrow: true }),
+            createElement(Child, { label: "second" }),
+          )
+        : null;
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+
+      expect(() => hide()).toThrow("deletion cleanup boom");
+      expect(calls).toEqual(["layout:first:true", "layout:second:true"]);
+      expect(container.innerHTML).toBe("");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("commits deletion and reports layout and callback-ref cleanup errors together", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+    let hide = () => undefined;
+    let thrown: unknown;
+
+    function Child() {
+      useLayoutEffect(() => {
+        return () => {
+          calls.push("layout");
+          throw new Error("layout boom");
+        };
+      }, []);
+      return createElement(
+        "div",
+        {
+          ref: (node: HTMLDivElement | null) => {
+            if (node === null) {
+              calls.push("ref:null");
+              return;
+            }
+            return () => {
+              calls.push("ref:cleanup");
+              throw new Error("ref boom");
+            };
+          },
+        },
+        "child",
+      );
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      hide = () => setVisible(false);
+      return visible ? createElement(Child, null) : null;
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+      try {
+        hide();
+      } catch (error) {
+        thrown = error;
+      }
+
+      expect(thrown).toBeInstanceOf(AggregateError);
+      expect((thrown as AggregateError).errors).toEqual([
+        new Error("layout boom"),
+        new Error("ref boom"),
+      ]);
+      expect(calls).toEqual(["layout", "ref:cleanup"]);
+      expect(container.innerHTML).toBe("");
+      expect(() => root.render(createElement("p", null, "next"))).not.toThrow();
+      expect(container.innerHTML).toBe("<p>next</p>");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("recovers a prepared layout effect after a host mutation aborts", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    let setups = 0;
+    let cleanups = 0;
+    let throwCleanup = true;
+
+    function Child() {
+      useLayoutEffect(() => {
+        setups += 1;
+        return () => {
+          cleanups += 1;
+          if (throwCleanup) {
+            throwCleanup = false;
+            throw new Error("aborted cleanup boom");
+          }
+        };
+      }, []);
+      return createElement("span", null, "child");
+    }
+
+    const MemoChild = memo(Child);
+
+    function App(props: { show: boolean; title: string }) {
+      return createElement(
+        "section",
+        null,
+        props.show ? createElement(MemoChild, null) : null,
+        createElement("div", { title: props.title }, "tail"),
+      );
+    }
+
+    const original = createElement(App, { show: true, title: "ok" });
+    const throwingTitle = {
+      toString() {
+        throw new Error("prop boom");
+      },
+    };
+
+    try {
+      root.render(original);
+
+      expect(() =>
+        root.render(
+          createElement(App, {
+            show: false,
+            title: throwingTitle as unknown as string,
+          }),
+        )
+      ).toThrow("prop boom");
+      expect(container.innerHTML).toBe(
+        '<section><span>child</span><div title="ok">tail</div></section>',
+      );
+      expect({ setups, cleanups }).toEqual({ setups: 1, cleanups: 1 });
+
+      expect(() => root.render(original)).not.toThrow();
+      expect({ setups, cleanups }).toEqual({ setups: 2, cleanups: 1 });
+
+      root.render(createElement(App, { show: false, title: "ok" }));
+      expect({ setups, cleanups }).toEqual({ setups: 2, cleanups: 2 });
+      expect(container.innerHTML).toBe('<section><div title="ok">tail</div></section>');
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("keeps route-like replacement layout cleanup before host mutation", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+
+    function Home() {
+      const ref = useRef<HTMLElement | null>(null);
+      useLayoutEffect(() => {
+        const node = ref.current;
+        return () => calls.push(`home:${ref.current === node}:${node?.isConnected}`);
+      }, []);
+      return createElement("article", { ref }, "home");
+    }
+
+    function About() {
+      return createElement("article", null, "about");
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(Home, null));
+      root.render(createElement(About, null));
+
+      expect(calls).toEqual(["home:true:true"]);
+      expect(container.innerHTML).toBe("<article>about</article>");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("preserves full-root cleanup ordering", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const calls: string[] = [];
+    let current: HTMLDivElement | null = null;
+    let captured: HTMLDivElement | null = null;
+
+    function App() {
+      useLayoutEffect(() => {
+        captured = current;
+        return () => calls.push(`layout:${current === captured}:${captured?.isConnected}`);
+      }, []);
+      useEffect(() => {
+        return () => calls.push(`passive:${current === captured}:${captured?.isConnected}`);
+      }, []);
+      return createElement("div", {
+        ref: (node: HTMLDivElement | null) => {
+          current = node;
+          if (node === null) {
+            calls.push("ref:detach");
+          }
+        },
+      });
+    }
+
+    const root = createRoot(container);
+    try {
+      root.render(createElement(App, null));
+      root.unmount();
+
+      expect(calls).toEqual(["layout:true:true", "passive:true:true", "ref:detach"]);
+      expect(captured?.isConnected).toBe(false);
+    } finally {
+      container.remove();
+    }
   });
 });

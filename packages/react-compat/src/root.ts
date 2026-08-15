@@ -190,7 +190,11 @@ function renderHostFiberIntoContainer(
       }
 
       fiberRoot.finishedWork = finishedWork;
-      withBatchedDelegatedRootReleases(() => commitFiberRoot(fiberRoot, {}, scope));
+      runtime.prepareInactiveMutationEffectCleanups();
+      const mutationEffectErrors = withBatchedDelegatedRootReleases(() =>
+        commitFiberRoot(fiberRoot, {}, scope)
+      );
+      runtime.reportMutationEffectErrors(mutationEffectErrors);
       collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
       removeStalePortalNodes(portalSnapshot, runtime);
       deferred.promote?.();
@@ -255,9 +259,11 @@ function renderHydratingHostFiberIntoContainer(
         recoverStructurallyMismatchedHostFiberRoot(finishedWork);
       }
 
-      withBatchedDelegatedRootReleases(() =>
+      runtime.prepareInactiveMutationEffectCleanups();
+      const mutationEffectErrors = withBatchedDelegatedRootReleases(() =>
         commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options)
       );
+      runtime.reportMutationEffectErrors(mutationEffectErrors);
       if (structuralMismatch) {
         retargetQueuedHydrationEvents(container, scope.previousNodes);
       }
