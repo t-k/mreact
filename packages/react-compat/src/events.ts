@@ -1,5 +1,8 @@
 import { runWithEventPriority } from "./hooks.js";
-import { getAppliedEventHandler } from "./event-listeners.js";
+import {
+  getAppliedEventHandler,
+  restoreAppliedControlledFormState,
+} from "./event-listeners.js";
 import type { SyntheticEvent } from "./event-types.js";
 
 const delegatedRootListeners = new WeakMap<Element, Set<string>>();
@@ -267,11 +270,20 @@ export function ensureDelegatedEventListener(root: Element, eventName: string): 
     }
     markDispatchedDelegatedEvent(event, eventName);
     const priority = getEventPriority(eventName);
-    runWithEventPriority(priority, () => {
-      dispatchDelegatedEvent(root, eventName, event);
-    }, priority === "discrete" && shouldDeferDiscreteEventFlush(eventName) ? (flush) => {
-      deferFlushUntilNativeEventComplete(root, event, flush);
-    } : undefined);
+    try {
+      runWithEventPriority(priority, () => {
+        dispatchDelegatedEvent(root, eventName, event);
+      }, priority === "discrete" && shouldDeferDiscreteEventFlush(eventName) ? (flush) => {
+        deferFlushUntilNativeEventComplete(root, event, flush);
+      } : undefined);
+    } finally {
+      if (
+        event.target instanceof Element &&
+        isControlledRestoreEvent(eventName, event.target)
+      ) {
+        restoreAppliedControlledFormState(event.target);
+      }
+    }
   });
 }
 
@@ -400,7 +412,11 @@ function dispatchEventPropNames(
   state: { defaultPrevented: boolean; propagationStopped: boolean },
 ): void {
   for (const propName of propNames) {
-    if (propName === "onChange" && event.type === "change" && isTextInputChangeTarget(target)) {
+    if (
+      propName === "onChange" &&
+      ((event.type === "change" && isTextInputChangeTarget(target)) ||
+        (event.type === "input" && isChangeEventControl(target)))
+    ) {
       continue;
     }
 
@@ -415,6 +431,20 @@ function dispatchEventPropNames(
       return;
     }
   }
+}
+
+function isChangeEventControl(target: Element): boolean {
+  return (
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLInputElement && nonTextInputTypes.has(target.type))
+  );
+}
+
+function isControlledRestoreEvent(eventName: string, target: Element): boolean {
+  return (
+    (eventName === "input" && isTextInputChangeTarget(target)) ||
+    (eventName === "change" && isChangeEventControl(target))
+  );
 }
 
 function isTextInputChangeTarget(target: Element): boolean {

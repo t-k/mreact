@@ -735,6 +735,139 @@ describe("react-compat render", () => {
     expect(checkbox.checked).toBe(true);
   });
 
+  test("updates every controlled value in a multiple select", () => {
+    const container = document.createElement("div");
+    const options = ["a", "b", "c"];
+    const renderSelect = (value: string[]) =>
+      createElement(
+        "select",
+        { multiple: true, value, onChange: () => undefined },
+        options.map((option) =>
+          createElement("option", { key: option, value: option }, option.toUpperCase()),
+        ),
+      );
+
+    render(renderSelect(["a", "c"]), container);
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    const selectedValues = () =>
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value);
+    expect(selectedValues()).toEqual(["a", "c"]);
+
+    render(renderSelect(["b"]), container);
+    expect(Array.from(select.options, (option) => [option.value, option.selected])).toEqual([
+      ["a", false],
+      ["b", true],
+      ["c", false],
+    ]);
+    expect(selectedValues()).toEqual(["b"]);
+
+    render(renderSelect([]), container);
+    expect(selectedValues()).toEqual([]);
+  });
+
+  test("applies array defaultValue to an uncontrolled multiple select", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement(
+        "select",
+        { multiple: true, defaultValue: ["a", "c"] },
+        createElement("option", { value: "a" }, "A"),
+        createElement("option", { value: "b" }, "B"),
+        createElement("option", { value: "c" }, "C"),
+      ),
+      container,
+    );
+
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    expect(
+      Array.from(select.options)
+        .filter((option) => option.selected)
+        .map((option) => option.value),
+    ).toEqual(["a", "c"]);
+  });
+
+  test("restores rejected controlled form changes without rendering", () => {
+    const container = document.createElement("div");
+    let renders = 0;
+
+    function Form() {
+      renders += 1;
+      return createElement(
+        "form",
+        null,
+        createElement("input", {
+          name: "value",
+          value: "12",
+          onChange: () => undefined,
+        }),
+        createElement("input", {
+          name: "checked",
+          type: "checkbox",
+          checked: false,
+          onChange: () => undefined,
+        }),
+        createElement(
+          "select",
+          { value: "a", onChange: () => undefined },
+          createElement("option", { value: "a" }, "A"),
+          createElement("option", { value: "b" }, "B"),
+        ),
+      );
+    }
+
+    render(createElement(Form, null), container);
+    const input = container.querySelector<HTMLInputElement>('input[name="value"]')!;
+    const checkbox = container.querySelector<HTMLInputElement>('input[name="checked"]')!;
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+
+    input.value = "12a";
+    input.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    checkbox.checked = true;
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+    select.value = "b";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+
+    expect(input.value).toBe("12");
+    expect(checkbox.checked).toBe(false);
+    expect(select.value).toBe("a");
+    expect(renders).toBe(1);
+  });
+
+  test("keeps accepted controlled and user-edited uncontrolled values after dispatch", () => {
+    const container = document.createElement("div");
+
+    function Form() {
+      const [value, setValue] = useState("a");
+      return createElement(
+        "form",
+        null,
+        createElement("input", {
+          name: "controlled",
+          value,
+          onChange: (event: { currentTarget: HTMLInputElement }) => {
+            setValue(event.currentTarget.value);
+          },
+        }),
+        createElement("input", { name: "uncontrolled", defaultValue: "initial" }),
+      );
+    }
+
+    render(createElement(Form, null), container);
+    const controlled = container.querySelector<HTMLInputElement>('input[name="controlled"]')!;
+    const uncontrolled = container.querySelector<HTMLInputElement>('input[name="uncontrolled"]')!;
+    controlled.value = "accepted";
+    uncontrolled.value = "user";
+
+    controlled.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    uncontrolled.dispatchEvent(new InputEvent("input", { bubbles: true }));
+
+    expect(controlled.value).toBe("accepted");
+    expect(uncontrolled.value).toBe("user");
+  });
+
   test("passes a synthetic event wrapper to event handlers", () => {
     const container = document.createElement("div");
     let seen:
@@ -1236,6 +1369,47 @@ describe("react-compat render", () => {
 
     expect(calls).toEqual(["Ada"]);
   });
+
+  test.each([
+    ["checkbox", "input", { type: "checkbox" }],
+    ["radio", "input", { type: "radio" }],
+    ["range", "input", { type: "range" }],
+    ["color", "input", { type: "color" }],
+    ["file", "input", { type: "file" }],
+    ["select", "select", {}],
+  ] as const)(
+    "fires onChange once across the native input/change pair for %s controls",
+    (_name, tagName, props) => {
+      const container = document.createElement("div");
+      let inputCalls = 0;
+      let changeCalls = 0;
+      const eventProps = {
+        ...props,
+        onInput: () => {
+          inputCalls += 1;
+        },
+        onChange: () => {
+          changeCalls += 1;
+        },
+      };
+      const element =
+        tagName === "select"
+          ? createElement(
+              "select",
+              eventProps,
+              createElement("option", { value: "a" }, "A"),
+            )
+          : createElement("input", eventProps);
+
+      render(element, container);
+      const control = container.firstElementChild;
+      control?.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      control?.dispatchEvent(new Event("change", { bubbles: true }));
+
+      expect(inputCalls).toBe(1);
+      expect(changeCalls).toBe(1);
+    },
+  );
 
   test("normalizes camel-case mouse over and out events", () => {
     const container = document.createElement("div");

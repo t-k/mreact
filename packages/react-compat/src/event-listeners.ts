@@ -1,4 +1,5 @@
 import type { SyntheticEvent } from "./event-types.js";
+import { restoreControlledFormState } from "./form-state.js";
 
 export interface AppliedProps {
   attributeNames?: string[];
@@ -23,4 +24,11 @@ export function getAppliedEventHandler(
 ): ((event: SyntheticEvent) => void) | undefined {
   const handler = appliedProps.get(element)?.props[name];
   return typeof handler === "function" ? (handler as (event: SyntheticEvent) => void) : undefined;
+}
+
+export function restoreAppliedControlledFormState(element: Element): void {
+  const props = appliedProps.get(element)?.props;
+  if (props !== undefined) {
+    restoreControlledFormState(element, props);
+  }
 }

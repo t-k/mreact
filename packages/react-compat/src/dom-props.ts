@@ -23,6 +23,7 @@ import {
   isReactEventHandlerPropName,
 } from "@reckona/mreact-shared";
 import { setDomAttribute } from "@reckona/mreact-reactive-dom/internal";
+import { applySelectValue } from "./form-state.js";
 
 export function applyProps(
   element: HostElement,
@@ -316,6 +317,14 @@ export function applyPostChildFormProps(
     return;
   }
 
+  if (element instanceof HTMLSelectElement) {
+    const value = postChildSelectValue(props, previousProps, preserveHydrationState);
+    if (value !== noPostChildFormValue) {
+      applySelectValue(element, value);
+    }
+    return;
+  }
+
   const value = postChildFormValue(props, previousProps, preserveHydrationState);
 
   if (value === undefined) {
@@ -328,11 +337,6 @@ export function applyPostChildFormProps(
     return;
   }
 
-  if (element instanceof HTMLSelectElement) {
-    for (const option of Array.from(element.options)) {
-      option.selected = option.value === value;
-    }
-  }
 }
 
 function isPostChildFormElement(
@@ -365,6 +369,28 @@ function postChildFormValue(
   }
 
   return undefined;
+}
+
+const noPostChildFormValue = Symbol("no-post-child-form-value");
+
+function postChildSelectValue(
+  props: Record<string, unknown>,
+  previousProps: Record<string, unknown> | undefined,
+  preserveHydrationState: boolean,
+): unknown | typeof noPostChildFormValue {
+  if (hasOwnProp(props, "value")) {
+    return props.value;
+  }
+
+  if (
+    !preserveHydrationState &&
+    previousProps === undefined &&
+    hasOwnProp(props, "defaultValue")
+  ) {
+    return props.defaultValue;
+  }
+
+  return noPostChildFormValue;
 }
 
 function hasOwnProp(props: Record<string, unknown>, name: string): boolean {
@@ -585,15 +611,11 @@ function applyFormValueProp(
   }
 
   if (element instanceof HTMLSelectElement && (name === "value" || name === "defaultValue")) {
-    const nextValue = value === null || value === undefined ? undefined : String(value);
-
     if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
       return true;
     }
 
-    for (const option of Array.from(element.options)) {
-      option.selected = nextValue !== undefined && option.value === nextValue;
-    }
+    applySelectValue(element, value);
 
     return true;
   }
