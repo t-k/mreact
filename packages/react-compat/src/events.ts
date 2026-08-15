@@ -510,7 +510,10 @@ function createSyntheticEvent(
     "pointerId" in nativeEvent || "pointerType" in nativeEvent
       ? (nativeEvent as PointerEvent)
       : undefined;
-  const touchEvent = nativeEvent instanceof TouchEvent ? nativeEvent : undefined;
+  const touchEvent =
+    typeof TouchEvent !== "undefined" && nativeEvent instanceof TouchEvent
+      ? nativeEvent
+      : undefined;
   const keyboardEvent = nativeEvent instanceof KeyboardEvent ? nativeEvent : undefined;
 
   return {

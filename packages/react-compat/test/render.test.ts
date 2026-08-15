@@ -778,6 +778,80 @@ describe("react-compat render", () => {
     });
   });
 
+  test("dispatches synthetic event categories when TouchEvent is unavailable", () => {
+    const container = document.createElement("div");
+    const calls: string[] = [];
+    const touchEventDescriptor = Object.getOwnPropertyDescriptor(globalThis, "TouchEvent");
+
+    render(
+      createElement(
+        "div",
+        null,
+        createElement(
+          "button",
+          {
+            onClick: () => {
+              calls.push("click");
+            },
+          },
+          "Click",
+        ),
+        createElement("input", {
+          onInput: () => {
+            calls.push("input");
+          },
+          onKeyDown: () => {
+            calls.push("keydown");
+          },
+        }),
+      ),
+      container,
+    );
+
+    try {
+      Reflect.deleteProperty(globalThis, "TouchEvent");
+      container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      container.querySelector("input")?.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      container
+        .querySelector("input")
+        ?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }));
+    } finally {
+      if (touchEventDescriptor !== undefined) {
+        Object.defineProperty(globalThis, "TouchEvent", touchEventDescriptor);
+      }
+    }
+
+    expect(calls).toEqual(["click", "input", "keydown"]);
+  });
+
+  test("copies touch fields when TouchEvent is available", () => {
+    const container = document.createElement("div");
+    const touches = [{ identifier: 1 }] as unknown as TouchList;
+    const changedTouches = [{ identifier: 2 }] as unknown as TouchList;
+    let seen: { touches: TouchList; changedTouches: TouchList } | undefined;
+
+    render(
+      createElement("button", {
+        onTouchStart: (event: { touches: TouchList; changedTouches: TouchList }) => {
+          seen = {
+            touches: event.touches,
+            changedTouches: event.changedTouches,
+          };
+        },
+      }),
+      container,
+    );
+
+    const event = new TouchEvent("touchstart", { bubbles: true });
+    Object.defineProperties(event, {
+      touches: { value: touches },
+      changedTouches: { value: changedTouches },
+    });
+    container.querySelector("button")?.dispatchEvent(event);
+
+    expect(seen).toEqual({ touches, changedTouches });
+  });
+
   test("copies pointer, mouse button, and modifier fields onto pointer synthetic events", () => {
     const container = document.createElement("div");
     let seen:
