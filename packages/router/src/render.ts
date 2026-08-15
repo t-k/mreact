@@ -22,7 +22,7 @@ import {
 import {
   createStringSink,
   type HtmlSink,
-  renderAsyncBoundary,
+  renderOutOfOrderBoundary,
   renderOutOfOrderReorderScript,
   renderReactNodeToString,
   renderToReadableStream,
@@ -743,6 +743,26 @@ async function readSettledPromiseAtNextTask<T>(
   ]);
 }
 
+type ObservedPromiseSettlement<T> =
+  | { status: "pending" }
+  | { status: "fulfilled"; value: T }
+  | { error: unknown; status: "rejected" };
+
+function observePromiseSettlement<T>(promise: Promise<T>): () => ObservedPromiseSettlement<T> {
+  let settlement: ObservedPromiseSettlement<T> = { status: "pending" };
+
+  void promise.then(
+    (value) => {
+      settlement = { status: "fulfilled", value };
+    },
+    (error: unknown) => {
+      settlement = { error, status: "rejected" };
+    },
+  );
+
+  return () => settlement;
+}
+
 function createDeferredSignal(): {
   promise: Promise<void>;
   resolve(): void;
@@ -1389,6 +1409,7 @@ async function renderAppRequestInternal(
         streamDataPromise = Promise.resolve(streamData);
       } else {
         try {
+          await waitForLoaderReadyOrSettled(streamDataPromise, loaderReady?.promise);
           const settledData = await readSettledPromiseAtNextTask(streamDataPromise);
           if (settledData.settled) {
             if (settledData.value instanceof Response) {
@@ -1396,13 +1417,14 @@ async function renderAppRequestInternal(
               return settledData.value;
             }
             streamDataPromise = Promise.resolve(settledData.value);
-          } else {
-            await waitForLoaderReadyOrSettled(streamDataPromise, loaderReady?.promise);
           }
         } finally {
           finishRenderTimingPhase(timing, phaseStartedAt, "loaderWaitMs");
         }
       }
+
+      const streamDataSettlement =
+        loadingFile === undefined ? undefined : observePromiseSettlement(streamDataPromise);
 
       await waitForRenderPreload(options, timing);
       await loadServerRenderArtifacts(options, matched.route.file, timing);
@@ -1426,16 +1448,25 @@ async function renderAppRequestInternal(
         });
       }
 
-      if (loadingFile !== undefined) {
+      if (loadingFile !== undefined && streamDataSettlement !== undefined) {
         phaseStartedAt = renderTimingPhaseStartedAt(timing);
-        const stream = await runServerStreamModuleWithLoading(output.code, {
+        const errorFile = await nearestExistingBoundaryFileForPage({
+          appDir: options.appDir,
+          filename: "error.mreact.tsx",
+          pageFile: matched.route.file,
+          serverSourceFiles: options.serverSourceFiles,
+        });
+        const streamResult = await runServerStreamModuleWithLoading(output.code, {
           appDir: options.appDir,
           assetBaseUrl: options.assetBaseUrl,
           clientRoute,
           data: streamDataPromise,
+          dataSettlement: streamDataSettlement,
           define: options.define,
+          errorFile,
           loadingFile,
           markerRequest: options.request,
+          onRenderError: options.onRenderError,
           prerenderVariantCapture: options.prerenderVariantCapture,
           pageFile: matched.route.file,
           params: matched.params,
@@ -1456,8 +1487,13 @@ async function renderAppRequestInternal(
         });
         finishRenderTimingPhase(timing, phaseStartedAt, "streamConstructionMs");
 
+        if (streamResult instanceof Response) {
+          emitRenderTiming(options, timing, streamResult.status);
+          return streamResult;
+        }
+
         const response = withOptionalActionCookie(
-          new Response(stream, {
+          new Response(streamResult, {
             headers: streamShellResponseHeaders,
           }),
           preparedActions.csrfToken,
@@ -2226,15 +2262,7 @@ async function renderSpecialRoute(options: {
   }
 
   const props = {
-    data: undefined,
-    debug: errorDebugContext(options.error, options.routePath),
-    error: normalizeErrorForProps(options.error),
-    params: {},
-    queryClient: createQueryClient(),
-    request: options.request,
-    requestId: requestIdForErrorContext(options.request),
-    routeId: routeIdForPath(options.routePath ?? new URL(options.request.url).pathname),
-    traceId: traceContextFromRequest(options.request)?.traceId,
+    ...errorBoundaryProps(options.error, options.request, options.routePath),
   };
   const pageHtml = await renderServerFileToHtml(
     options.routeFile,
@@ -2281,6 +2309,24 @@ async function renderSpecialRoute(options: {
       status: options.status,
     },
   );
+}
+
+function errorBoundaryProps(
+  error: unknown,
+  request: Request,
+  routePath: string | undefined,
+) {
+  return {
+    data: undefined,
+    debug: errorDebugContext(error, routePath),
+    error: normalizeErrorForProps(error),
+    params: {},
+    queryClient: createQueryClient(),
+    request,
+    requestId: requestIdForErrorContext(request),
+    routeId: routeIdForPath(routePath ?? new URL(request.url).pathname),
+    traceId: traceContextFromRequest(request)?.traceId,
+  };
 }
 
 async function renderServerFileToHtml(
@@ -3750,9 +3796,12 @@ async function runServerStreamModuleWithLoading(
     clientRoute: boolean;
     clientReferenceManifest?: readonly ClientReferenceMetadata[] | undefined;
     data: Promise<unknown>;
+    dataSettlement: () => ObservedPromiseSettlement<unknown>;
     define?: UserConfig["define"] | undefined;
+    errorFile?: string | undefined;
     loadingFile: string;
     markerRequest: Request;
+    onRenderError?: ((error: unknown) => void) | undefined;
     prerenderVariantCapture?: boolean | undefined;
     pageFile: string;
     params: RouteParams;
@@ -3769,7 +3818,7 @@ async function runServerStreamModuleWithLoading(
     vitePlugins?: readonly PluginOption[] | undefined;
     importPolicy?: AppRouterImportPolicy | undefined;
   },
-): Promise<ReadableStream<Uint8Array>> {
+): Promise<ReadableStream<Uint8Array> | Response> {
   const loadingProps = withTrackedRequest({
     data: undefined,
     params: options.params,
@@ -3814,6 +3863,16 @@ async function runServerStreamModuleWithLoading(
         options.prerenderVariantCapture === true,
       );
 
+  const dataSettlement = options.dataSettlement();
+
+  if (dataSettlement.status === "rejected") {
+    throw dataSettlement.error;
+  }
+
+  if (dataSettlement.status === "fulfilled" && dataSettlement.value instanceof Response) {
+    return dataSettlement.value;
+  }
+
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
     sink.append(
@@ -3830,7 +3889,7 @@ async function runServerStreamModuleWithLoading(
 
     sink.append(marker?.prefix ?? "");
 
-    renderVisibleOutOfOrderBoundary(
+    renderOutOfOrderBoundary(
       sink,
       "mreact-route",
       options.data,
@@ -3852,6 +3911,34 @@ async function runServerStreamModuleWithLoading(
         );
       },
       {
+        async catch(boundarySink, error) {
+          try {
+            options.onRenderError?.(error);
+          } catch {
+            // Error reporting is best-effort and must not truncate a response that already flushed.
+          }
+
+          if (options.errorFile === undefined) {
+            boundarySink.append("Internal Server Error");
+            return;
+          }
+
+          try {
+            boundarySink.append(
+              await renderServerFileToHtml(
+                options.errorFile,
+                errorBoundaryProps(error, options.request, options.routePath),
+                options.serverModules,
+                options.serverModuleCacheVersion,
+                options.serverSourceFiles,
+                options.define,
+                options.vitePlugins,
+              ),
+            );
+          } catch {
+            boundarySink.append("Internal Server Error");
+          }
+        },
         placeholder(boundarySink) {
           boundarySink.append(loadingHtml);
         },
@@ -3867,70 +3954,6 @@ async function runServerStreamModuleWithLoading(
 
     renderOutOfOrderReorderScript(sink);
   });
-}
-
-function renderVisibleOutOfOrderBoundary<T>(
-  sink: HtmlSink,
-  id: string,
-  value: T,
-  render: (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>,
-  options: {
-    catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
-    placeholder?: (sink: HtmlSink) => void | PromiseLike<void>;
-    placeholderTag?: string;
-  } = {},
-): void {
-  const placeholderSink = createStringSink();
-  void options.placeholder?.(placeholderSink);
-  const placeholderTag = normalizeVisibleOutOfOrderPlaceholderTag(options.placeholderTag);
-  sink.append(
-    `<${placeholderTag} data-mreact-oob-placeholder="${escapeHtmlAttribute(id)}">${placeholderSink.toString()}</${placeholderTag}>`,
-  );
-
-  const task = renderVisibleOutOfOrderFragment(sink, id, value, render, options);
-
-  if (sink.defer === undefined) {
-    void task;
-    return;
-  }
-
-  sink.defer(task);
-}
-
-function normalizeVisibleOutOfOrderPlaceholderTag(tag: unknown): string {
-  if (typeof tag !== "string") {
-    return "span";
-  }
-
-  const normalized = tag.trim().toLowerCase();
-  return /^[a-z][a-z0-9-]*$/.test(normalized) ? normalized : "span";
-}
-
-async function renderVisibleOutOfOrderFragment<T>(
-  sink: HtmlSink,
-  id: string,
-  value: T,
-  render: (sink: HtmlSink, value: Awaited<T>) => void | PromiseLike<void>,
-  options: {
-    catch?: (sink: HtmlSink, error: unknown) => void | PromiseLike<void>;
-  },
-): Promise<void> {
-  const fragmentSink = createStringSink();
-
-  await renderAsyncBoundary(
-    fragmentSink,
-    value,
-    render,
-    options.catch === undefined ? {} : { catch: options.catch },
-  );
-  await fragmentSink.drain();
-
-  sink.append(renderVisibleOutOfOrderFragmentHtml(id, fragmentSink.toString()));
-}
-
-function renderVisibleOutOfOrderFragmentHtml(id: string, html: string): string {
-  const escapedId = escapeHtmlAttribute(id);
-  return `<template data-mreact-oob-fragment="${escapedId}">${html}</template><mreact-oob-complete hidden data-mreact-oob-complete="${escapedId}"></mreact-oob-complete>`;
 }
 
 async function appendServerStreamModule(

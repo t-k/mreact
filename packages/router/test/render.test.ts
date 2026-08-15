@@ -5887,6 +5887,228 @@ export default function Page(props) {
     }
   });
 
+  test("renders the nearest error boundary and closes after a streamed loader rejects", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-error-boundary-"));
+    const state = globalThis as {
+      __mreactRejectLoadingRoute?: (error: Error) => void;
+    };
+    const onRenderError = vi.fn();
+    await mkdir(join(appDir, "docs"), { recursive: true });
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function RootError() { return <main>Root error</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "error.mreact.tsx"),
+      "export default function DocsError(props) { return <main>Docs error: {props.error.message}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading docs...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "docs", "page.mreact.tsx"),
+      `export const stream = true;
+
+export async function loader() {
+  return await new Promise((_resolve, reject) => {
+    globalThis.__mreactRejectLoadingRoute = reject;
+  });
+}
+
+export default function Page() {
+  return <main>Docs</main>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        onRenderError,
+        request: new Request("http://local.test/docs"),
+      });
+      const fullResponse = response.clone();
+      const firstChunk = await expectResolvesWithin(
+        readUntilChunkIncludes(response, "Loading docs"),
+        1000,
+        "stream loading error boundary first chunk",
+      );
+
+      expect(response.status).toBe(200);
+      expect(firstChunk).toContain("Loading docs");
+      state.__mreactRejectLoadingRoute?.(new Error("database unavailable"));
+
+      const html = await expectResolvesWithin(
+        fullResponse.text(),
+        1000,
+        "stream loading error boundary completion",
+      );
+      expect(html).toContain("Docs error:");
+      expect(html).toContain("database unavailable</main>");
+      expect(onRenderError).toHaveBeenCalledOnce();
+      expect(onRenderError).toHaveBeenCalledWith(expect.objectContaining({ message: "database unavailable" }));
+    } finally {
+      state.__mreactRejectLoadingRoute?.(new Error("test cleanup"));
+      delete state.__mreactRejectLoadingRoute;
+    }
+  });
+
+  test("renders a 500 error response when a loading route rejects before the shell flushes", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-preflush-error-"));
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function ErrorPage(props) { return <main>Error: {props.error.message}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export function loader() {
+  throw new Error("preflush failure");
+}
+
+export default function Page() {
+  return <main>Page</main>;
+}`,
+    );
+
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+
+    expect(response.status).toBe(500);
+    const html = await response.text();
+    expect(html).toContain("<main>Error:");
+    expect(html).toContain("preflush failure</main>");
+  });
+
+  test("keeps a loading route rejection as a 500 while render preload delays shell commit", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-preload-error-"));
+    const state = globalThis as {
+      __mreactNotifyPreloadLoader?: () => void;
+      __mreactRejectPreloadLoader?: (error: Error) => void;
+    };
+    let notifyLoaderStarted: (() => void) | undefined;
+    const loaderStarted = new Promise<void>((resolve) => {
+      notifyLoaderStarted = resolve;
+    });
+    let releasePreload: (() => void) | undefined;
+    const preload = new Promise<void>((resolve) => {
+      releasePreload = resolve;
+    });
+    state.__mreactNotifyPreloadLoader = notifyLoaderStarted;
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function ErrorPage(props) { return <main>Error: {props.error.message}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export async function loader() {
+  return await new Promise((_resolve, reject) => {
+    globalThis.__mreactRejectPreloadLoader = reject;
+    globalThis.__mreactNotifyPreloadLoader();
+  });
+}
+
+export default function Page() {
+  return <main>Page</main>;
+}`,
+    );
+
+    try {
+      const responsePromise = renderAppRequest({
+        appDir,
+        preload: { promise: preload, wait: "before-render" },
+        request: new Request("http://local.test/"),
+      });
+      await expectResolvesWithin(loaderStarted, 1000, "preload-delayed loader start");
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      state.__mreactRejectPreloadLoader?.(new Error("failed during preload"));
+      await Promise.resolve();
+      releasePreload?.();
+
+      const response = await responsePromise;
+      const html = await response.text();
+      expect(response.status).toBe(500);
+      expect(html).toContain("Error:");
+      expect(html).toContain("failed during preload</main>");
+      expect(html).not.toContain("Loading...");
+    } finally {
+      state.__mreactRejectPreloadLoader?.(new Error("test cleanup"));
+      releasePreload?.();
+      delete state.__mreactNotifyPreloadLoader;
+      delete state.__mreactRejectPreloadLoader;
+    }
+  });
+
+  test("closes a streamed loading error boundary when onRenderError throws", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-error-observer-"));
+    const state = globalThis as {
+      __mreactRejectObservedLoadingRoute?: (error: Error) => void;
+    };
+    await writeFile(
+      join(appDir, "error.mreact.tsx"),
+      "export default function ErrorPage(props) { return <main>Observed error: {props.error.message}</main>; }",
+    );
+    await writeFile(
+      join(appDir, "loading.mreact.tsx"),
+      "export default function Loading() { return <p>Loading...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const stream = true;
+
+export async function loader() {
+  return await new Promise((_resolve, reject) => {
+    globalThis.__mreactRejectObservedLoadingRoute = reject;
+  });
+}
+
+export default function Page() {
+  return <main>Page</main>;
+}`,
+    );
+
+    try {
+      const response = await renderAppRequest({
+        appDir,
+        onRenderError() {
+          throw new Error("observer failed");
+        },
+        request: new Request("http://local.test/"),
+      });
+      const fullResponse = response.clone();
+      await expectResolvesWithin(
+        readUntilChunkIncludes(response, "Loading..."),
+        1000,
+        "throwing error observer first chunk",
+      );
+      state.__mreactRejectObservedLoadingRoute?.(new Error("loader failed"));
+
+      const html = await expectResolvesWithin(
+        fullResponse.text(),
+        1000,
+        "throwing error observer stream completion",
+      );
+      expect(html).toContain("Observed error:");
+      expect(html).toContain("loader failed</main>");
+    } finally {
+      state.__mreactRejectObservedLoadingRoute?.(new Error("test cleanup"));
+      delete state.__mreactRejectObservedLoadingRoute;
+    }
+  });
+
   test("flushes nested Await fragments inside a streamed loading route boundary", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-loading-nested-await-"));
     await mkdir(join(appDir, "conversation", "$id"), { recursive: true });

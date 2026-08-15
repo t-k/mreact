@@ -34,6 +34,54 @@ describe("mreact deployment adapters", () => {
     }
   });
 
+  test("closes a Node streaming response after a loading route loader rejects", async () => {
+    const state = globalThis as {
+      __mreactRejectNodeLoadingRoute?: (error: Error) => void;
+    };
+    const { outDir } = await buildFixture("mreact-node-loading-error-adapter-", {
+      "error.tsx":
+        "export default function ErrorPage(props) { return <main>Stream error: {props.error.message}</main>; }",
+      "loading.tsx": "export default function Loading() { return <p>Loading...</p>; }",
+      "page.tsx": `export const stream = true;
+
+export async function loader() {
+  return await new Promise((_resolve, reject) => {
+    globalThis.__mreactRejectNodeLoadingRoute = reject;
+  });
+}
+
+export default function Page() {
+  return <main>Page</main>;
+}`,
+    });
+    const handler = createNodeRequestHandler({ outDir });
+    const server = createServer(handler);
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/`);
+      expect(response.status).toBe(200);
+      state.__mreactRejectNodeLoadingRoute?.(new Error("database unavailable"));
+      const html = await expectResolvesWithin(
+        response.text(),
+        1000,
+        "Node loading error response completion",
+      );
+      expect(html).toContain("Loading...");
+      expect(html).toContain("Stream error:");
+      expect(html).toContain("database unavailable</main>");
+    } finally {
+      state.__mreactRejectNodeLoadingRoute?.(new Error("test cleanup"));
+      delete state.__mreactRejectNodeLoadingRoute;
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
+    }
+  });
+
   test("applies query dehydration filtering through the Node request handler", async () => {
     const { outDir } = await buildFixture("mreact-node-adapter-dehydrate-", {
       "page.tsx": queryDehydrationPageSource(),
@@ -262,4 +310,26 @@ function queryDehydrationPageSource(): string {
   queryClient.setQueryData(["private"], "secret-value");
 }
 export default function Page() { return <main>Query state</main>; }`;
+}
+
+async function expectResolvesWithin<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  description: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`${description} did not resolve within ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
