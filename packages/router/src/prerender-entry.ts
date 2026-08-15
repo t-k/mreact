@@ -3,6 +3,8 @@ import { hasNavigationRouteMarker } from "./navigation-marker.js";
 
 export const PRERENDERED_ROUTE_SCHEMA_VERSION = 4;
 
+const validatedNavigationHtmlByEntry = new WeakMap<object, string | null>();
+
 export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerenderedRoute {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return false;
@@ -17,14 +19,44 @@ export function isCurrentPrerenderedRoute(value: unknown): value is BuiltPrerend
     !hasStoredHstsHeader(entry.headers) &&
     isCanonicalHstsHeader(entry.strictTransportSecurity) &&
     typeof entry.html === "string" &&
-    (entry.navigationHtml === undefined ||
-      (typeof entry.navigationHtml === "string" &&
-        hasNavigationRouteMarker(entry.navigationHtml))) &&
     typeof entry.status === "number" &&
     Number.isInteger(entry.status) &&
     entry.status >= 100 &&
     entry.status <= 599
   );
+}
+
+/**
+ * Returns a navigation variant only after validating its route marker.
+ *
+ * Stored entries are stable objects during a runtime's lifetime, so the
+ * marker scan is cached by identity. Document requests never call this
+ * function and therefore never inspect navigation HTML.
+ */
+export function validatedPrerenderedNavigationHtml(
+  entry: BuiltPrerenderedRoute,
+): string | undefined {
+  const cached = validatedNavigationHtmlByEntry.get(entry);
+  if (cached !== undefined) {
+    return cached === null ? undefined : cached;
+  }
+
+  const candidate = entry.navigationHtml;
+  const validated =
+    typeof candidate === "string" && hasNavigationRouteMarker(candidate) ? candidate : null;
+  validatedNavigationHtmlByEntry.set(entry, validated);
+  return validated === null ? undefined : validated;
+}
+
+/**
+ * Adds a regenerated navigation variant only when it satisfies the marker
+ * contract. Invalid navigation output must not replace a valid document.
+ */
+export function mergePrerenderedNavigationHtml(
+  entry: BuiltPrerenderedRoute,
+  navigationHtml: string,
+): BuiltPrerenderedRoute {
+  return hasNavigationRouteMarker(navigationHtml) ? { ...entry, navigationHtml } : entry;
 }
 
 function hasStoredHstsHeader(headers: Record<string, string>): boolean {

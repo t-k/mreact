@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { isCurrentPrerenderedRoute } from "../src/prerender-entry.js";
+import {
+  isCurrentPrerenderedRoute,
+  mergePrerenderedNavigationHtml,
+  validatedPrerenderedNavigationHtml,
+} from "../src/prerender-entry.js";
 
 describe("prerender entry validation", () => {
   test("rejects a complete schema-1 entry", () => {
@@ -71,19 +75,20 @@ describe("prerender entry validation", () => {
     ).toBe(false);
   });
 
-  test("rejects navigation variants without a route marker", () => {
-    expect(
-      isCurrentPrerenderedRoute({
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-          vary: "x-mreact-navigation",
-        },
-        html: "<main>document</main>",
-        navigationHtml: "<main>unmarked navigation</main>",
-        schemaVersion: 4,
-        status: 200,
-      }),
-    ).toBe(false);
+  test("degrades an unmarked navigation variant without rejecting its document", () => {
+    const entry = {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        vary: "x-mreact-navigation",
+      },
+      html: "<main>document</main>",
+      navigationHtml: "<main>unmarked navigation</main>",
+      schemaVersion: 4 as const,
+      status: 200,
+    };
+
+    expect(isCurrentPrerenderedRoute(entry)).toBe(true);
+    expect(validatedPrerenderedNavigationHtml(entry)).toBeUndefined();
   });
 
   test.each([
@@ -94,27 +99,81 @@ describe("prerender entry validation", () => {
     "<svg><![CDATA[> <div data-mreact-route-id=x>]]></svg>",
     "<script><!--<script></script><div data-mreact-route-id=x></script>",
   ])("rejects navigation HTML without a syntactic route marker: %s", (navigationHtml) => {
-    expect(
-      isCurrentPrerenderedRoute({
-        headers: { vary: "x-mreact-navigation" },
-        html: "<main>document</main>",
-        navigationHtml,
-        schemaVersion: 4,
-        status: 200,
-      }),
-    ).toBe(false);
+    const entry = {
+      headers: { vary: "x-mreact-navigation" },
+      html: "<main>document</main>",
+      navigationHtml,
+      schemaVersion: 4 as const,
+      status: 200,
+    };
+
+    expect(isCurrentPrerenderedRoute(entry)).toBe(true);
+    expect(validatedPrerenderedNavigationHtml(entry)).toBeUndefined();
   });
 
   test("accepts a marker after double-escaped script data returns to script data", () => {
+    const entry = {
+      headers: { vary: "x-mreact-navigation" },
+      html: "<main>document</main>",
+      navigationHtml: "<script><!--<script>--></script><div data-mreact-route-id=index></script>",
+      schemaVersion: 4 as const,
+      status: 200,
+    };
+
+    expect(isCurrentPrerenderedRoute(entry)).toBe(true);
+    expect(validatedPrerenderedNavigationHtml(entry)).toBe(entry.navigationHtml);
+  });
+
+  test("does not inspect navigation HTML while validating the document contract", () => {
+    const entry = {
+      headers: { vary: "x-mreact-navigation" },
+      html: "<main>document</main>",
+      get navigationHtml(): string {
+        throw new Error("document validation read navigation HTML");
+      },
+      schemaVersion: 4 as const,
+      status: 200,
+    };
+
+    expect(isCurrentPrerenderedRoute(entry)).toBe(true);
+  });
+
+  test("validates navigation HTML once per stable entry", () => {
+    let reads = 0;
+    const entry = {
+      headers: { vary: "x-mreact-navigation" },
+      html: "<main>document</main>",
+      get navigationHtml(): string {
+        reads += 1;
+        return '<div data-mreact-route-id="index"><main>navigation</main></div>';
+      },
+      schemaVersion: 4 as const,
+      status: 200,
+    };
+
+    expect(validatedPrerenderedNavigationHtml(entry)).toContain("data-mreact-route-id");
+    expect(validatedPrerenderedNavigationHtml(entry)).toContain("data-mreact-route-id");
+    expect(reads).toBe(1);
+  });
+
+  test("keeps an existing document when regenerated navigation HTML is invalid", () => {
+    const entry = {
+      headers: { vary: "x-mreact-navigation" },
+      html: "<main>document</main>",
+      schemaVersion: 4 as const,
+      status: 200,
+    };
+
+    expect(mergePrerenderedNavigationHtml(entry, "<main>unmarked</main>")).toBe(entry);
     expect(
-      isCurrentPrerenderedRoute({
-        headers: { vary: "x-mreact-navigation" },
-        html: "<main>document</main>",
-        navigationHtml: "<script><!--<script>--></script><div data-mreact-route-id=index></script>",
-        schemaVersion: 4,
-        status: 200,
-      }),
-    ).toBe(true);
+      mergePrerenderedNavigationHtml(
+        entry,
+        '<div data-mreact-route-id="index"><main>navigation</main></div>',
+      ),
+    ).toEqual({
+      ...entry,
+      navigationHtml: '<div data-mreact-route-id="index"><main>navigation</main></div>',
+    });
   });
 
   test("accepts canonical HSTS in its scheme-independent field", () => {

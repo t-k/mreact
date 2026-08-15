@@ -61,9 +61,11 @@ import type { HttpUpgradeHandler } from "./upgrade.js";
 import {
   isCurrentPrerenderedRoute,
   isVisitorDependentResponse,
+  mergePrerenderedNavigationHtml,
   PRERENDERED_ROUTE_SCHEMA_VERSION,
   replayedPrerenderedRouteHeaders,
   storedPrerenderedRouteHeaders,
+  validatedPrerenderedNavigationHtml,
 } from "./prerender-entry.js";
 
 interface BuiltRuntimeCacheEntry {
@@ -565,7 +567,7 @@ function prerenderedRouteResponse(
   }
 
   const navigation = request.headers.get("x-mreact-navigation") === "1";
-  const html = navigation ? prerendered.navigationHtml : prerendered.html;
+  const html = navigation ? validatedPrerenderedNavigationHtml(prerendered) : prerendered.html;
   if (html === undefined) {
     return undefined;
   }
@@ -1128,7 +1130,13 @@ async function cacheRegeneratedPrerenderedRoute(
           status: response.status,
           ...(strictTransportSecurity === undefined ? {} : { strictTransportSecurity }),
         }
-      : { ...existing, navigationHtml: body };
+      : mergePrerenderedNavigationHtml(existing, body);
+  if (entry === existing) {
+    return htmlResponse(body, {
+      headers: response.headers,
+      status: response.status,
+    });
+  }
   runtime.prerenderedRoutes.set(path, entry);
   await store?.set(path, entry);
 

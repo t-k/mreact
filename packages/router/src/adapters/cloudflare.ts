@@ -39,8 +39,11 @@ import { routeSecurityHeaders } from "../security-headers.js";
 import type { AppRouterPrerenderStore } from "../serve.js";
 import { emitRouterDevtoolsEvent } from "./devtools.js";
 import { escapeHtmlAttribute, escapeHtmlText } from "@reckona/mreact-shared/html-escape";
-import { isCurrentPrerenderedRoute, replayedPrerenderedRouteHeaders } from "../prerender-entry.js";
-import { hasNavigationRouteMarker } from "../navigation-marker.js";
+import {
+  isCurrentPrerenderedRoute,
+  replayedPrerenderedRouteHeaders,
+  validatedPrerenderedNavigationHtml,
+} from "../prerender-entry.js";
 
 /** Re-exports build manifest contracts used by Cloudflare handlers. */
 export type {
@@ -1406,20 +1409,13 @@ function prerenderedResponse(
   }
 
   const prerendered = prerenderedRoutes?.[path];
-  const candidateNavigationHtml = prerendered?.navigationHtml;
-
   if (!isCurrentPrerenderedRoute(prerendered)) {
-    if (
-      isNavigation &&
-      typeof candidateNavigationHtml === "string" &&
-      !hasNavigationRouteMarker(candidateNavigationHtml)
-    ) {
-      return cloudflareDocumentReloadNavigationResponse();
-    }
     return undefined;
   }
 
-  const html = isNavigation ? prerendered.navigationHtml : prerendered.html;
+  const html = isNavigation
+    ? validatedPrerenderedNavigationHtml(prerendered)
+    : prerendered.html;
   if (html === undefined) {
     return cloudflareDocumentReloadNavigationResponse();
   }

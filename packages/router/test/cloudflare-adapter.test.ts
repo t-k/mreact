@@ -512,6 +512,39 @@ export async function POST(request: Request) {
     expect(await response.text()).toBe("");
   });
 
+  test("serves a valid Cloudflare document when only its navigation variant is invalid", async () => {
+    const handler = createCloudflareRequestHandler({
+      assets: {},
+      clientManifest: { routes: [] },
+      serverManifest: {
+        files: {},
+        prerenderedRoutes: {
+          "/": {
+            headers: {
+              "content-type": "text/html; charset=utf-8",
+              vary: "x-mreact-navigation",
+            },
+            html: "<!DOCTYPE html><main>Valid document</main>",
+            navigationHtml: "<main>Invalid navigation</main>",
+            schemaVersion: 4,
+            status: 200,
+          },
+        },
+        routes: [{ file: "page.tsx", kind: "page", path: "/", segments: [] }],
+        version: 1,
+      },
+    });
+
+    const response = await handler.fetch(
+      new Request("https://app.example/"),
+      {},
+      createExecutionContext(),
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("<main>Valid document</main>");
+  });
+
   // A real Cloudflare build keys `serverManifest.files` on paths relative to
   // the project root, so a default `src/app` project stores the middleware as
   // "src/app/middleware.ts" and declares `routesDir: "src/app"`.
