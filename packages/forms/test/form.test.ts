@@ -329,6 +329,61 @@ describe("createForm", () => {
     });
   });
 
+  it("discards blur validation when the field value changes without change validation", async () => {
+    let resolveValidation: ((errors: string[]) => void) | undefined;
+    const form = createForm({
+      initialValues: { username: "ada" },
+      validate: {
+        username() {
+          return new Promise<string[]>((resolve) => {
+            resolveValidation = resolve;
+          });
+        },
+      },
+      validateOn: ["blur", "submit"],
+    });
+
+    const pending = form.field("username").blur();
+    expect(form.field("username").state.get().validating).toBe(true);
+
+    await form.field("username").setValue("grace");
+    expect(form.field("username").state.get().validating).toBe(false);
+    resolveValidation?.(["ada is already taken"]);
+    await pending;
+
+    expect(form.field("username").state.get()).toMatchObject({
+      errors: [],
+      validating: false,
+      value: "grace",
+    });
+  });
+
+  it("keeps blur validation current when setValue receives the same value", async () => {
+    let resolveValidation: ((errors: string[]) => void) | undefined;
+    const form = createForm({
+      initialValues: { username: "ada" },
+      validate: {
+        username() {
+          return new Promise<string[]>((resolve) => {
+            resolveValidation = resolve;
+          });
+        },
+      },
+      validateOn: ["blur", "submit"],
+    });
+
+    const pending = form.field("username").blur();
+    await form.field("username").setValue("ada");
+    resolveValidation?.(["ada is already taken"]);
+    await pending;
+
+    expect(form.field("username").state.get()).toMatchObject({
+      errors: ["ada is already taken"],
+      validating: false,
+      value: "ada",
+    });
+  });
+
   it("reset restores initial values and clears touched, errors, and submit state", async () => {
     const form = createForm({
       initialValues: { email: "", name: "" },

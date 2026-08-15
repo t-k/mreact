@@ -301,6 +301,10 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     value: TValues[Name],
   ): Promise<void> {
     const previous = state.get();
+    const valueChanged = !Object.is(previous.values[name], value);
+    if (valueChanged) {
+      invalidateFieldValidations([name, ...dependentFieldsFor(name)]);
+    }
     updateDirtyField(name, value);
     commit({
       values: {
