@@ -19,7 +19,8 @@ export function createDuplicateKeyWarning(): ((key: unknown) => void) | undefine
       warnedObjects.add(key);
     } else {
       if (warnedPrimitives.has(key)) return;
-      if (warnedPrimitives.size < 100) warnedPrimitives.add(key);
+      if (warnedPrimitives.size >= 100) return;
+      warnedPrimitives.add(key);
     }
 
     console.warn(`[mreact] List contains duplicate key ${formatKey(key)}; later rows are skipped.`);

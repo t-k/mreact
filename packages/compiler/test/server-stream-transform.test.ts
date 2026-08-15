@@ -85,6 +85,29 @@ describe("compiler server stream JSX transform", () => {
     );
   });
 
+  test("preserves Object prototype member names in streamed spread attributes", async () => {
+    const output = transform({
+      code: `export function App(props) { return <div {...props} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+      serverOutput: "stream",
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    await expect(
+      runServerStreamComponent(
+        output.code,
+        "App",
+        JSON.parse(
+          '{"constructor":"ctor","toString":"string","__proto__":"proto","valueOf":"value"}',
+        ),
+      ),
+    ).resolves.toBe(
+      '<div constructor="ctor" toString="string" __proto__="proto" valueOf="value"></div>',
+    );
+  });
+
   test("emitted server stream component renders router Link imports as native server components", () => {
     const output = transform({
       code: `import { Link } from "@reckona/mreact-router/link";
@@ -101,7 +124,9 @@ describe("compiler server stream JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
     expect(output.metadata.clientReferences).toBeUndefined();
     expect(output.code).not.toContain("renderToString as _renderCompatToString");
-    expect(output.code).toContain('await Link($sink, { href: ("/newest"), prefetch: ("viewport"), children: Link.trustedHtml("New") })');
+    expect(output.code).toContain(
+      'await Link($sink, { href: ("/newest"), prefetch: ("viewport"), children: Link.trustedHtml("New") })',
+    );
   });
 
   test("emitted server stream component passes router Link children as native HTML strings", () => {
@@ -119,7 +144,7 @@ describe("compiler server stream JSX transform", () => {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("await Link($sink, { href: (\"/next\"), children:");
+    expect(output.code).toContain('await Link($sink, { href: ("/next"), children:');
     expect(output.code).toContain('"<span" + " class=\\"dir\\""');
     expect(output.code).toContain("_escapeHtml(label)");
     expect(output.code).not.toContain("_renderCompatToString(Link,");
@@ -1030,7 +1055,9 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(output.code).toContain("Link({ href: (`/user/${value.name}`), children: Link.trustedHtml(_escapeHtml(value.name)) })");
+    expect(output.code).toContain(
+      "Link({ href: (`/user/${value.name}`), children: Link.trustedHtml(_escapeHtml(value.name)) })",
+    );
     expect(output.code).not.toContain("_renderCompatToString(Link,");
   });
 
@@ -1362,7 +1389,9 @@ export function App() {
       }
     }
 
-    expect(html).toContain("<main><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></main>");
+    expect(html).toContain(
+      "<main><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></main>",
+    );
     expect(html).not.toContain('data-mreact-client-boundary-children="AppShell"');
     expect(html).not.toContain("async ($sink)");
   });
@@ -1406,8 +1435,12 @@ export function App() {
       }
     }
 
-    expect(html).toContain("<main><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></main>");
-    expect(html).toContain("<!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end-->");
+    expect(html).toContain(
+      "<main><!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end--></main>",
+    );
+    expect(html).toContain(
+      "<!--mreact-client-boundary-children-start--><h1>Ready</h1><!--mreact-client-boundary-children-end-->",
+    );
     expect(html).not.toContain("data-mreact-oob-placeholder");
     expect(html).not.toContain("data-mreact-oob-fragment");
   });
@@ -1501,10 +1534,14 @@ export function App() {
         });
         const label = index === 0 ? "Logical" : "Ternary";
 
-        expect(visibleHtml).toContain(`<main><!--mreact-client-boundary-children-start-->${label}<!--mreact-client-boundary-children-end--></main>`);
+        expect(visibleHtml).toContain(
+          `<main><!--mreact-client-boundary-children-start-->${label}<!--mreact-client-boundary-children-end--></main>`,
+        );
         expect(visibleHtml).not.toContain(`data-mreact-client-boundary-children="AppShell"`);
         expect(hiddenHtml).not.toContain("data-mreact-client-boundary-fallback");
-        expect(hiddenHtml).toBe(index === 0 ? "<section></section>" : "<section><p>Hidden</p></section>");
+        expect(hiddenHtml).toBe(
+          index === 0 ? "<section></section>" : "<section><p>Hidden</p></section>",
+        );
       }
     } finally {
       if (previousShell === undefined) {
@@ -1516,7 +1553,8 @@ export function App() {
   });
 
   test("emitted server stream component escapes hostile client boundary props JSON", async () => {
-    const payload = "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
+    const payload =
+      "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
     const output = transform({
       code: `import Chart from "./Chart.compat.tsx";
 
@@ -1532,9 +1570,10 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
     const html = await runServerStreamComponent(output.code);
-    const propsJson = /<script type="application\/json" data-mreact-client-boundary-props="Chart">([\s\S]*?)<\/script>/.exec(
-      html,
-    )?.[1];
+    const propsJson =
+      /<script type="application\/json" data-mreact-client-boundary-props="Chart">([\s\S]*?)<\/script>/.exec(
+        html,
+      )?.[1];
     expect(propsJson).toBeDefined();
     expect(propsJson).not.toMatch(/[<>&]/);
     expect(propsJson).not.toContain("\u2028");

@@ -166,6 +166,27 @@ describe("createRoot", () => {
     dispose();
   });
 
+  test("preserves false booleanish props from compat elements", () => {
+    const container = document.createElement("main");
+
+    const dispose = createRoot(container, () => ({
+      $$typeof: reactCompatElementType,
+      type: "div",
+      props: {
+        "aria-expanded": false,
+        contentEditable: false,
+        disabled: false,
+      },
+    }));
+
+    const element = container.querySelector("div");
+    expect(element?.getAttribute("aria-expanded")).toBe("false");
+    expect(element?.getAttribute("contenteditable")).toBe("false");
+    expect(element?.hasAttribute("disabled")).toBe(false);
+
+    dispose();
+  });
+
   test("requires dangerous HTML opt-in for compat srcDoc props", () => {
     const container = document.createElement("main");
 

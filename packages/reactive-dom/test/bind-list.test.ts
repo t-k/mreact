@@ -438,6 +438,28 @@ describe("bindList", () => {
     dispose?.();
   });
 
+  test("bounds duplicate-key warnings after many distinct primitive keys", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const parent = document.createElement("ul");
+    const marker = document.createComment("list");
+    parent.append(marker);
+    const items = Array.from({ length: 101 }, (_, key) => [{ key }, { key }]).flat();
+
+    const dispose = bindList(
+      parent,
+      marker,
+      () => items,
+      () => document.createElement("li"),
+      {
+        key: (item) => item.key,
+      },
+    );
+
+    expect(warn).toHaveBeenCalledTimes(100);
+    dispose();
+  });
+
   test("does not warn for duplicate keys in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

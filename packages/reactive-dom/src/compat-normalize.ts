@@ -95,8 +95,7 @@ function applyCompatElementProps(node: HTMLElement, props: Record<string, unknow
       name === "key" ||
       name === "ref" ||
       value === null ||
-      value === undefined ||
-      value === false
+      value === undefined
     ) {
       continue;
     }

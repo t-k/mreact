@@ -183,6 +183,26 @@ export function App() {
     );
   });
 
+  test("preserves Object prototype member names in server spread attributes", () => {
+    const output = transform({
+      code: `export function App(props) { return <div {...props} />; }`,
+      filename: "App.tsx",
+      target: "server",
+      dev: true,
+    });
+
+    expect(output.diagnostics).toEqual([]);
+    expect(
+      runServerComponent(
+        output.code,
+        "App",
+        JSON.parse(
+          '{"constructor":"ctor","toString":"string","__proto__":"proto","valueOf":"value"}',
+        ),
+      ),
+    ).toBe('<div constructor="ctor" toString="string" __proto__="proto" valueOf="value"></div>');
+  });
+
   test("does not emit static lowercase event attributes in server output", () => {
     const output = transform({
       code: 'export function App() { return <button onclick="alert(1)">Open</button>; }',
@@ -1594,7 +1614,8 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
     const previousShell = globalWithShell.AppShell;
 
     try {
-      globalWithShell.AppShell = (props) => props.children ? "<p>has children</p>" : "<p>empty</p>";
+      globalWithShell.AppShell = (props) =>
+        props.children ? "<p>has children</p>" : "<p>empty</p>";
       const emptyHtml = runServerComponent(output.code, "App", { children: "" });
 
       expect(emptyHtml).toContain("<p>empty</p>");
@@ -1645,7 +1666,8 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
   });
 
   test("emitted server component escapes hostile client boundary props JSON", () => {
-    const payload = "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
+    const payload =
+      "</script><script>globalThis.__mreactPwned=1</script><!--&>" + "\u2028" + "\u2029" + "\ud800";
     const output = transform({
       code: `import Chart from "./Chart.compat.tsx";
 
@@ -1660,9 +1682,10 @@ export function App(props: { readonly data: { readonly kind: string; readonly po
 
     expect(output.diagnostics).toEqual([]);
     const html = runServerComponent(output.code);
-    const propsJson = /<script type="application\/json" data-mreact-client-boundary-props="Chart">([\s\S]*?)<\/script>/.exec(
-      html,
-    )?.[1];
+    const propsJson =
+      /<script type="application\/json" data-mreact-client-boundary-props="Chart">([\s\S]*?)<\/script>/.exec(
+        html,
+      )?.[1];
     expect(propsJson).toBeDefined();
     expect(propsJson).not.toMatch(/[<>&]/);
     expect(propsJson).not.toContain("\u2028");
