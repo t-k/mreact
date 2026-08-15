@@ -96,11 +96,11 @@ await exportStaticApp({
 });
 ```
 
-`exportStaticApp()` writes one `index.html` file per prerendered route and copies the client build into the export directory. It only exports prerendered routes. If you pass a route that was not prerendered, export fails with `Cannot export non-prerendered route`.
+`exportStaticApp()` writes one document `index.html` and one marker-bearing `_mreact/navigation/.../index.html` artifact per prerendered route, then copies the client build into the export directory. Exported documents direct client navigation to the dedicated artifact because a static host cannot vary one URL by the `x-mreact-navigation` header. Keep the `_mreact/navigation/` directory unchanged when applying host-specific path rewrites. The adapter only exports prerendered routes. If you pass a route that was not prerendered, export fails with `Cannot export non-prerendered route`.
 
 ## Static host details
 
-The exported directory contains route HTML and client assets. Client assets are copied under `dist/_mreact/client/`, and public assets are copied to the export root.
+The exported directory contains route HTML, navigation HTML, and client assets. Navigation HTML is written under `dist/_mreact/navigation/`, client assets are copied under `dist/_mreact/client/`, and public assets are copied to the export root.
 
 Static hosts often need small deployment-specific adjustments:
 

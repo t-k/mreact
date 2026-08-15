@@ -1,7 +1,13 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { BuiltPrerenderedRoute, BuiltServerManifest } from "../build.js";
-import { isCurrentPrerenderedRoute } from "../prerender-entry.js";
+import {
+  isCurrentPrerenderedRoute,
+  validatedPrerenderedNavigationHtml,
+} from "../prerender-entry.js";
+
+const staticNavigationBase = "/_mreact/navigation";
+const staticNavigationMetadata = `<meta name="mreact-static-navigation" content="${staticNavigationBase}">`;
 
 /**
  * Configures static export from a built app-router output directory.
@@ -104,8 +110,31 @@ async function writePrerenderedRoute(
   }
 
   const file = routeToHtmlFile(exportDir, route);
+  const navigationHtml = validatedPrerenderedNavigationHtml(entry);
+  if (navigationHtml === undefined) {
+    throw new Error(`Cannot export route ${route} without a valid navigation variant.`);
+  }
+  const navigationFile = routeToHtmlFile(join(exportDir, staticNavigationBase), route);
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, entry.html);
+  await mkdir(dirname(navigationFile), { recursive: true });
+  await writeFile(file, withStaticNavigationMetadata(entry.html));
+  await writeFile(navigationFile, navigationHtml);
+}
+
+function withStaticNavigationMetadata(html: string): string {
+  const head = /<head(?:\s[^>]*)?>/i.exec(html);
+  if (head?.index !== undefined) {
+    const insertion = head.index + head[0].length;
+    return `${html.slice(0, insertion)}${staticNavigationMetadata}${html.slice(insertion)}`;
+  }
+
+  const doctype = /^\s*<!doctype\s+html\s*>/i.exec(html);
+  if (doctype !== null) {
+    const insertion = doctype[0].length;
+    return `${html.slice(0, insertion)}${staticNavigationMetadata}${html.slice(insertion)}`;
+  }
+
+  return `${staticNavigationMetadata}${html}`;
 }
 
 function routeToHtmlFile(exportDir: string, route: string): string {

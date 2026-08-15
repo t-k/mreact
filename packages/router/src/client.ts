@@ -3937,7 +3937,7 @@ function __mreactFetchNavigationHtml(href) {
     ? { "x-mreact-navigation": "1", "x-mreact-navigation-cache": "reload" }
     : { "x-mreact-navigation": "1" };
 
-  return fetch(href, {
+  return fetch(__mreactStaticNavigationRequestHref(href), {
     headers,
   }).then((response) => {
     __mreactApplyRevalidationHeader(response);
@@ -3947,6 +3947,37 @@ function __mreactFetchNavigationHtml(href) {
 
     return response.text();
   });
+}
+
+function __mreactStaticNavigationRequestHref(href) {
+  if (typeof document === "undefined" || typeof location === "undefined") {
+    return href;
+  }
+
+  const base = document
+    .querySelector('meta[name="mreact-static-navigation"]')
+    ?.getAttribute("content")
+    ?.trim();
+  if (base === undefined || base === "") {
+    return href;
+  }
+
+  try {
+    const destination = new URL(href, location.href);
+    if (destination.origin !== location.origin) {
+      return href;
+    }
+    const routePath = destination.pathname.replace(/^\\/+|\\/+$/g, "");
+    const artifactPath = routePath === "" ? "index.html" : routePath + "/index.html";
+    const artifact = new URL(
+      base.replace(/\\/+$/g, "") + "/" + artifactPath,
+      location.origin,
+    );
+    artifact.search = destination.search;
+    return artifact.href;
+  } catch {
+    return href;
+  }
 }
 
 function __mreactNavigationResponseRequiresDocumentReload(response) {

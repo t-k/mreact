@@ -51,6 +51,7 @@ async function flattenHtmlRouteDirectories(directory: string): Promise<void> {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
+    if (entry.name === "_mreact") continue;
     const path = join(directory, entry.name);
     if (entry.name.endsWith(".html")) {
       const tempFile = `${path}.tmp`;
@@ -79,9 +80,9 @@ async function rewriteHtmlBasePaths(directory: string, base: string): Promise<vo
 }
 ```
 
-`exportStaticApp()` writes one `index.html` per prerendered route and copies generated client assets into the export directory. Only prerendered routes are exported. Before replacing the existing export directory, Mreact validates every selected path, the current prerender schema, shared-cache-safe response headers, and a successful status code; an invalid or legacy entry fails the export and leaves the previous directory intact. Dynamic runtime APIs, route handlers, request-time auth, cookies, and middleware decisions need a server, Worker, or Lambda target.
+`exportStaticApp()` writes one document `index.html` and one marker-bearing navigation artifact per prerendered route. Navigation artifacts live under `_mreact/navigation/`; exported document HTML tells the client runtime to fetch that address, so a static host does not need to vary one route URL by the `x-mreact-navigation` request header. Client navigation therefore uses one fetch instead of fetching document HTML and falling back to a second full-page request. Generated client assets remain under `_mreact/client/`. Only prerendered routes are exported. Before replacing the existing export directory, Mreact validates every selected path, the current prerender schema, shared-cache-safe response headers, a valid navigation variant, and a successful status code; an invalid or legacy entry fails the export and leaves the previous directory intact. Dynamic runtime APIs, route handlers, request-time auth, cookies, and middleware decisions need a server, Worker, or Lambda target.
 
-The directory-flattening step is only needed for static hosts that expect `/about.html` instead of `/about.html/index.html`. Hosts that serve directory indexes correctly can keep the default route-directory output. Keep this step outside `exportStaticApp()` so the framework export remains host-neutral and the host recipe stays explicit.
+The directory-flattening step is only needed for static hosts that expect `/about.html` instead of `/about.html/index.html`. Hosts that serve directory indexes correctly can keep the default route-directory output. Keep this step outside `exportStaticApp()` so the framework export remains host-neutral and the host recipe stays explicit. Never flatten or relocate `_mreact/navigation/`; those URLs are part of the exported client-navigation contract.
 
 ## GitHub Pages
 

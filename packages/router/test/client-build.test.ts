@@ -6798,6 +6798,40 @@ export default function Page() {
     ]);
   });
 
+  test("fetches the dedicated navigation artifact for a static export", async () => {
+    const fetchCalls: Array<{ navigation: string | null; url: string }> = [];
+    document.head.insertAdjacentHTML(
+      "beforeend",
+      '<meta name="mreact-static-navigation" content="/_mreact/navigation">',
+    );
+    globalThis.fetch = async (input: string | URL | Request, init?: RequestInit) => {
+      const request = input instanceof Request ? input : undefined;
+      const headers = new Headers(init?.headers ?? request?.headers);
+      fetchCalls.push({
+        navigation: headers.get("x-mreact-navigation"),
+        url: String(input),
+      });
+      return new Response(
+        [
+          "<!DOCTYPE html>",
+          '<div data-mreact-route-id="about"><main>About</main></div>',
+          '<script type="application/json" id="mreact-props-about">{}</script>',
+        ].join(""),
+      );
+    };
+    const { routeModule } = await importRouteRuntime("static-navigation-artifact");
+
+    await expect(routeModule.__mreactNavigate("/about?tab=profile")).resolves.toBe(true);
+
+    expect(fetchCalls).toEqual([
+      {
+        navigation: "1",
+        url: `${location.origin}/_mreact/navigation/about/index.html?tab=profile`,
+      },
+    ]);
+    expect(document.querySelector("main")?.textContent).toBe("About");
+  });
+
   test("applies server action single-flight HTML without a follow-up GET", async () => {
     const fetchCalls: Array<{
       bodyTitle: string | null;

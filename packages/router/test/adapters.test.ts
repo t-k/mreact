@@ -102,6 +102,12 @@ export default function Page() { return <main>Static adapter</main>; }`,
     expect(await readFile(join(exportDir, "index.html"), "utf8")).toContain(
       "<main>Static adapter</main>",
     );
+    expect(await readFile(join(exportDir, "index.html"), "utf8")).toContain(
+      '<meta name="mreact-static-navigation" content="/_mreact/navigation">',
+    );
+    expect(
+      await readFile(join(exportDir, "_mreact", "navigation", "index.html"), "utf8"),
+    ).toContain('data-mreact-route-id="index"');
     expect(await readFile(join(exportDir, "_mreact", "client", "manifest.json"), "utf8")).toContain(
       '"routes"',
     );
