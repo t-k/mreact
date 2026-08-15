@@ -3,6 +3,7 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "@playwright/test";
 import { createServer, type ViteDevServer } from "vite";
+import { assertCompatLabPassed } from "../shared/assert-run-passed.js";
 import type { DomSummary } from "./dom-summary.js";
 import { rechartsFixtures } from "./fixtures.js";
 import { diffPngWithBrowserCanvas } from "./image-diff.js";
@@ -72,12 +73,7 @@ async function main(): Promise<void> {
       );
     }
     await writeRunSummary({ outputDir, runId, results });
-    const failedFixtures = failedFixtureIds(results);
-    if (failedFixtures.length > 0) {
-      throw new Error(
-        `Recharts compat lab failed for ${failedFixtures.join(", ")}. Results: ${outputDir}`,
-      );
-    }
+    assertCompatLabPassed({ labName: "Recharts", outputDir, results });
     console.log(`Recharts compat lab results: ${outputDir}`);
   } finally {
     await Promise.all([
@@ -250,12 +246,6 @@ export function fixtureDomSummaryMatches(
   return Object.entries(expected ?? {}).every(
     ([key, value]) => summary[key as keyof DomSummary] === value,
   );
-}
-
-export function failedFixtureIds(
-  results: readonly Pick<FixtureRunResult, "fixtureId" | "ok">[],
-): string[] {
-  return results.filter((result) => !result.ok).map((result) => result.fixtureId);
 }
 
 async function runInteractions(page: Page, interactions: CompatInteraction[]): Promise<void> {

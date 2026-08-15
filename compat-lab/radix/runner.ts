@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type ConsoleMessage, type Page } from "@playwright/test";
 import { createServer, type ViteDevServer } from "vite";
 import { diffPngWithBrowserCanvas } from "../recharts/image-diff.js";
+import { assertCompatLabPassed } from "../shared/assert-run-passed.js";
 import { radixFixtures } from "./fixtures.js";
 import { writeRunSummary, type FixtureRunResult } from "./result-writer.js";
 import type { RadixDomSummary, RadixFixture, RadixInteraction } from "./types.js";
@@ -88,6 +89,7 @@ async function main(): Promise<void> {
     }
 
     await writeRunSummary({ outputDir, runId, results });
+    assertCompatLabPassed({ labName: "Radix", outputDir, results });
     console.log(`Radix compat lab results: ${outputDir}`);
   } finally {
     await Promise.all([

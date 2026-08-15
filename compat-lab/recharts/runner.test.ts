@@ -1,9 +1,5 @@
 import { describe, expect, test } from "vitest";
-import {
-  failedFixtureIds,
-  fixtureDomSummaryMatches,
-  parseRunnerArgs,
-} from "./runner.js";
+import { fixtureDomSummaryMatches, parseRunnerArgs } from "./runner.js";
 
 describe("recharts compat runner arguments", () => {
   test("defaults to all fixtures in headless mode", () => {
@@ -47,17 +43,5 @@ describe("recharts compat runner DOM requirements", () => {
 
   test("accepts a bar fixture with the required data path count", () => {
     expect(fixtureDomSummaryMatches(summary, { barPathCount: 6 })).toBe(true);
-  });
-});
-
-describe("recharts compat runner result gate", () => {
-  test("returns every failed fixture id", () => {
-    expect(
-      failedFixtureIds([
-        { fixtureId: "passing", ok: true },
-        { fixtureId: "missing-bars", ok: false },
-        { fixtureId: "render-error", ok: false },
-      ]),
-    ).toEqual(["missing-bars", "render-error"]);
   });
 });
