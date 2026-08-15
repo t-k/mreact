@@ -7,6 +7,7 @@ const rawUrlByRequest = new WeakMap<Request, string>();
 export function nodeRequestToWebRequest(
   incoming: IncomingMessage,
   origin: string,
+  outgoing?: ServerResponse,
 ): Request {
   const method = incoming.method ?? "GET";
   const rawUrl = incoming.url ?? "/";
@@ -30,6 +31,10 @@ export function nodeRequestToWebRequest(
     method,
   };
 
+  if (outgoing !== undefined) {
+    init.signal = nodeRequestSignal(incoming, outgoing);
+  }
+
   if (method !== "GET" && method !== "HEAD") {
     init.body = Readable.toWeb(incoming) as ReadableStream<Uint8Array>;
     init.duplex = "half";
@@ -38,6 +43,55 @@ export function nodeRequestToWebRequest(
   const request = new Request(nodeRequestUrl(rawUrl, origin), init);
   rawUrlByRequest.set(request, rawUrl);
   return request;
+}
+
+function nodeRequestSignal(incoming: IncomingMessage, outgoing: ServerResponse): AbortSignal {
+  const controller = new AbortController();
+  let disposed = false;
+
+  const dispose = (): void => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    incoming.off("aborted", onIncomingAborted);
+    outgoing.off("close", onOutgoingClose);
+    outgoing.off("error", onOutgoingError);
+    outgoing.off("finish", onOutgoingFinish);
+  };
+  const abort = (reason: Error): void => {
+    controller.abort(reason);
+    dispose();
+  };
+  const onIncomingAborted = (): void => {
+    abort(new Error("The incoming HTTP request was aborted."));
+  };
+  const onOutgoingClose = (): void => {
+    if (!outgoing.writableFinished) {
+      abort(new Error("The outgoing HTTP response closed before completion."));
+      return;
+    }
+    dispose();
+  };
+  const onOutgoingError = (error: Error): void => {
+    abort(error);
+  };
+  const onOutgoingFinish = (): void => {
+    dispose();
+  };
+
+  incoming.once("aborted", onIncomingAborted);
+  outgoing.once("close", onOutgoingClose);
+  outgoing.once("error", onOutgoingError);
+  outgoing.once("finish", onOutgoingFinish);
+
+  if (incoming.aborted) {
+    onIncomingAborted();
+  } else if (outgoing.destroyed && !outgoing.writableFinished) {
+    onOutgoingClose();
+  }
+
+  return controller.signal;
 }
 
 function nodeRequestUrl(rawUrl: string, origin: string): URL {
@@ -134,12 +188,13 @@ export async function sendResponse(
     return;
   }
 
-  outgoing.flushHeaders();
   const reader = response.body.getReader();
+  const lifecycle = observeOutgoingFailure(outgoing);
+  outgoing.flushHeaders();
 
   try {
     while (true) {
-      const result = await reader.read();
+      const result = await readWithAbort(reader, lifecycle.signal);
 
       if (result.done) {
         outgoing.end();
@@ -147,14 +202,112 @@ export async function sendResponse(
       }
 
       if (!outgoing.write(result.value)) {
-        await new Promise<void>((resolve) => outgoing.once("drain", resolve));
+        await waitForDrain(outgoing, lifecycle.signal);
       }
     }
   } catch (error) {
-    outgoing.destroy(error instanceof Error ? error : new Error(String(error)));
+    const reason = error instanceof Error ? error : new Error(String(error));
+    try {
+      await reader.cancel(reason);
+    } catch {
+      // The stream may already be errored or cancelled.
+    }
+    if (!outgoing.destroyed) {
+      outgoing.destroy(reason);
+    }
   } finally {
+    lifecycle.dispose();
     reader.releaseLock();
   }
+}
+
+function observeOutgoingFailure(outgoing: ServerResponse): {
+  dispose(): void;
+  signal: AbortSignal;
+} {
+  const controller = new AbortController();
+  let disposed = false;
+
+  const dispose = (): void => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    outgoing.off("close", onClose);
+    outgoing.off("error", onError);
+  };
+  const abort = (reason: Error): void => {
+    controller.abort(reason);
+    dispose();
+  };
+  const onClose = (): void => {
+    abort(new Error("The outgoing HTTP response closed during streaming."));
+  };
+  const onError = (error: Error): void => {
+    abort(error);
+  };
+
+  outgoing.once("close", onClose);
+  outgoing.once("error", onError);
+  if (outgoing.destroyed) {
+    onClose();
+  }
+
+  return { dispose, signal: controller.signal };
+}
+
+function readWithAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) {
+    return Promise.reject(abortReason(signal));
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      reject(abortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    void reader.read().then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function waitForDrain(outgoing: ServerResponse, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(abortReason(signal));
+  }
+
+  return new Promise((resolve, reject) => {
+    const dispose = (): void => {
+      outgoing.off("drain", onDrain);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onDrain = (): void => {
+      dispose();
+      resolve();
+    };
+    const onAbort = (): void => {
+      dispose();
+      reject(abortReason(signal));
+    };
+    outgoing.once("drain", onDrain);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error("HTTP streaming was aborted.");
 }
 
 function responseSetCookieHeaders(headers: Headers): string[] {

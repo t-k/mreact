@@ -30,24 +30,41 @@ function fakeIncomingMessage(options: {
 
 interface FakeServerResponse extends ServerResponse {
   __body: Buffer[];
+  __emit(event: string, error?: Error): void;
   __headers: Record<string, string | number | readonly string[]>;
   __ended: boolean;
   __events: string[];
   __flushed: boolean;
+  __listenerCount(event: string): number;
 }
 
-function fakeServerResponse(): FakeServerResponse {
+function fakeServerResponse(
+  options: { writeResults?: readonly boolean[] } = {},
+): FakeServerResponse {
   const headers: Record<string, string | number | readonly string[]> = {};
   const body: Buffer[] = [];
   const events: string[] = [];
-  const handlers: Record<string, Array<() => void>> = {};
+  const handlers: Record<string, Array<(error?: Error) => void>> = {};
+  const writeResults = [...(options.writeResults ?? [])];
   const fake = {
     statusCode: 200,
+    destroyed: false,
+    writableFinished: false,
     __body: body,
     __headers: headers,
     __ended: false,
     __events: events,
     __flushed: false,
+    __emit(event: string, error?: Error) {
+      if (event === "close") {
+        this.destroyed = true;
+      }
+      const listeners = handlers[event]?.splice(0) ?? [];
+      listeners.forEach((listener) => listener(error));
+    },
+    __listenerCount(event: string) {
+      return handlers[event]?.length ?? 0;
+    },
     setHeader(name: string, value: string | number | readonly string[]) {
       headers[name] = value;
     },
@@ -58,7 +75,7 @@ function fakeServerResponse(): FakeServerResponse {
     write(chunk: string | Uint8Array): boolean {
       events.push("write");
       body.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array));
-      return true;
+      return writeResults.shift() ?? true;
     },
     end(chunk?: string | Uint8Array) {
       events.push("end");
@@ -72,15 +89,24 @@ function fakeServerResponse(): FakeServerResponse {
         );
       }
       this.__ended = true;
-      (handlers["finish"] ?? []).forEach((fn) => fn());
+      this.writableFinished = true;
+      this.__emit("finish");
     },
-    once(event: string, handler: () => void) {
+    once(event: string, handler: (error?: Error) => void) {
       handlers[event] ??= [];
       handlers[event].push(handler);
       return this;
     },
-    destroy(_error: Error) {
+    off(event: string, handler: (error?: Error) => void) {
+      handlers[event] = (handlers[event] ?? []).filter((candidate) => candidate !== handler);
+      return this;
+    },
+    removeListener(event: string, handler: (error?: Error) => void) {
+      return this.off(event, handler);
+    },
+    destroy(_error?: Error) {
       this.__ended = true;
+      this.destroyed = true;
     },
   } as unknown as FakeServerResponse;
   return fake;
@@ -122,6 +148,108 @@ describe("router http helpers", () => {
     const request = nodeRequestToWebRequest(incoming, "https://app.test");
 
     expect(request.url).toBe("https://app.test/echo?x=%2Fvalue&name=a%20b");
+  });
+
+  test("aborts the Request signal on premature response close and incoming abort", () => {
+    for (const event of ["close", "aborted"] as const) {
+      const incoming = fakeIncomingMessage({ method: "GET", url: "/" });
+      const outgoing = fakeServerResponse();
+      const request = nodeRequestToWebRequest(incoming, "https://app.test", outgoing);
+
+      if (event === "close") {
+        outgoing.__emit("close");
+      } else {
+        incoming.emit("aborted");
+      }
+
+      expect(request.signal.aborted).toBe(true);
+    }
+  });
+
+  test("does not abort the Request signal after a normally finished response", () => {
+    const incoming = fakeIncomingMessage({ method: "GET", url: "/" });
+    const outgoing = fakeServerResponse();
+    const request = nodeRequestToWebRequest(incoming, "https://app.test", outgoing);
+
+    outgoing.end();
+    outgoing.__emit("close");
+
+    expect(request.signal.aborted).toBe(false);
+    expect(incoming.listenerCount("aborted")).toBe(0);
+    expect(outgoing.__listenerCount("close")).toBe(0);
+    expect(outgoing.__listenerCount("error")).toBe(0);
+  });
+
+  test("sendResponse cancels a locked body when the client closes during drain", async () => {
+    let cancelCalls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelCalls += 1;
+      },
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("shell"));
+      },
+    });
+    const outgoing = fakeServerResponse({ writeResults: [false] });
+    const sending = sendResponse(outgoing, new Response(body));
+
+    await waitFor(() => outgoing.__listenerCount("drain") === 1);
+    outgoing.__emit("close");
+    await sending;
+
+    expect(cancelCalls).toBe(1);
+    expect(outgoing.__listenerCount("close")).toBe(0);
+    expect(outgoing.__listenerCount("drain")).toBe(0);
+    expect(outgoing.__listenerCount("error")).toBe(0);
+  });
+
+  test("sendResponse cancels a body when the client closes during a pending read", async () => {
+    let cancelCalls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelCalls += 1;
+      },
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("shell"));
+      },
+    });
+    const outgoing = fakeServerResponse();
+    const sending = sendResponse(outgoing, new Response(body));
+
+    await waitFor(() => outgoing.__events.includes("write"));
+    outgoing.__emit("close");
+    await sending;
+
+    expect(cancelCalls).toBe(1);
+    expect(outgoing.__listenerCount("close")).toBe(0);
+    expect(outgoing.__listenerCount("error")).toBe(0);
+  });
+
+  test("sendResponse resumes a normally drained response without cancelling the body", async () => {
+    let cancelCalls = 0;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelCalls += 1;
+      },
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("shell"));
+        controller.enqueue(new TextEncoder().encode("tail"));
+        controller.close();
+      },
+    });
+    const outgoing = fakeServerResponse({ writeResults: [false, true] });
+    const sending = sendResponse(outgoing, new Response(body));
+
+    await waitFor(() => outgoing.__listenerCount("drain") === 1);
+    outgoing.__emit("drain");
+    await sending;
+
+    expect(Buffer.concat(outgoing.__body).toString("utf8")).toBe("shelltail");
+    expect(outgoing.__ended).toBe(true);
+    expect(cancelCalls).toBe(0);
+    expect(outgoing.__listenerCount("close")).toBe(0);
+    expect(outgoing.__listenerCount("drain")).toBe(0);
+    expect(outgoing.__listenerCount("error")).toBe(0);
   });
 
   test("nodeRequestToWebRequest attaches the incoming body for non-GET methods", async () => {
@@ -233,3 +361,14 @@ describe("router http helpers", () => {
     expect(outgoing.__events.slice(0, 2)).toEqual(["flushHeaders", "write"]);
   });
 });
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error("Timed out waiting for HTTP lifecycle state.");
+}

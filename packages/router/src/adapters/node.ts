@@ -141,7 +141,7 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
         forwardedProto: incoming.headers["x-forwarded-proto"],
         trustForwardedProto: options.trustForwardedProto,
       });
-      const request = nodeRequestToWebRequest(incoming, `${protocol}://${host}`);
+      const request = nodeRequestToWebRequest(incoming, `${protocol}://${host}`, outgoing);
       const logFields = requestLogFields(request, "node");
       emitRouterLog(options.logger, "info", {
         ...logFields,

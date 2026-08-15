@@ -1,4 +1,4 @@
-import { createServer } from "node:http";
+import { createServer, request as nodeRequest } from "node:http";
 import { mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,6 +81,61 @@ export default function Page() {
       );
     }
   });
+
+  test.each(["createNodeRequestHandler", "startServer"] as const)(
+    "%s aborts a streaming loader when the client disconnects",
+    async (entryPoint) => {
+      const state = globalThis as {
+        __mreactDisconnectedLoaderAborts?: number;
+        __mreactDisconnectedLoaderStarted?: boolean;
+      };
+      state.__mreactDisconnectedLoaderAborts = 0;
+      state.__mreactDisconnectedLoaderStarted = false;
+      const { outDir } = await buildFixture("mreact-node-disconnect-adapter-", {
+        "loading.tsx": "export default function Loading() { return <p>Loading...</p>; }",
+        "page.tsx": `export const stream = true;
+
+export async function loader({ request }) {
+  globalThis.__mreactDisconnectedLoaderStarted = true;
+  return await new Promise((_resolve, reject) => {
+    const abort = () => {
+      globalThis.__mreactDisconnectedLoaderAborts += 1;
+      reject(request.signal.reason);
+    };
+    if (request.signal.aborted) {
+      abort();
+      return;
+    }
+    request.signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+export default function Page() {
+  return <main>Page</main>;
+}`,
+      });
+      const server =
+        entryPoint === "startServer"
+          ? await startServer({ outDir, port: 0 })
+          : await startAdapterServer(outDir);
+
+      try {
+        await disconnectAfterFirstChunk(server.url);
+        await waitForCondition(
+          () => state.__mreactDisconnectedLoaderAborts === 1,
+          1000,
+          `${entryPoint} loader abort`,
+        );
+
+        expect(state.__mreactDisconnectedLoaderStarted).toBe(true);
+        expect(state.__mreactDisconnectedLoaderAborts).toBe(1);
+      } finally {
+        delete state.__mreactDisconnectedLoaderAborts;
+        delete state.__mreactDisconnectedLoaderStarted;
+        await server.close();
+      }
+    },
+  );
 
   test("applies query dehydration filtering through the Node request handler", async () => {
     const { outDir } = await buildFixture("mreact-node-adapter-dehydrate-", {
@@ -302,6 +357,60 @@ async function buildFixture(
   await buildApp({ appDir, outDir });
 
   return { outDir };
+}
+
+async function startAdapterServer(
+  outDir: string,
+): Promise<{ close(): Promise<void>; url: string }> {
+  const server = createServer(createNodeRequestHandler({ outDir }));
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address !== null ? address.port : 0;
+
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) =>
+        server.close((error) => (error === undefined ? resolve() : reject(error))),
+      ),
+    url: `http://127.0.0.1:${port}`,
+  };
+}
+
+async function disconnectAfterFirstChunk(origin: string): Promise<void> {
+  const url = new URL(origin);
+
+  await new Promise<void>((resolve, reject) => {
+    const request = nodeRequest(
+      {
+        hostname: url.hostname,
+        path: "/",
+        port: url.port,
+      },
+      (response) => {
+        response.once("data", () => {
+          response.destroy();
+          resolve();
+        });
+        response.once("error", () => resolve());
+      },
+    );
+    request.once("error", reject);
+    request.end();
+  });
+}
+
+async function waitForCondition(
+  predicate: () => boolean,
+  timeoutMs: number,
+  description: string,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (!predicate()) {
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error(`${description} did not complete within ${timeoutMs}ms`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
 }
 
 function queryDehydrationPageSource(): string {

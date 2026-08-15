@@ -77,7 +77,7 @@ export async function startNodeRequestServer(
         forwardedProto: incoming.headers["x-forwarded-proto"],
         trustForwardedProto: options.trustForwardedProto,
       });
-      const request = nodeRequestToWebRequest(incoming, `${protocol}://${host}`);
+      const request = nodeRequestToWebRequest(incoming, `${protocol}://${host}`, outgoing);
       const logFields = requestLogFields(request, "node");
       emitRouterLog(options.logger, "info", {
         ...logFields,

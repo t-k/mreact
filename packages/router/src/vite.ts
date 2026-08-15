@@ -645,7 +645,7 @@ async function handleAppRouterViteRequest(
       return;
     }
 
-    const request = nodeRequestToWebRequest(incoming, origin);
+    const request = nodeRequestToWebRequest(incoming, origin, outgoing);
     const dehydrateOptions = await resolveDevDehydrateOptions(project, options);
     const routeTransformPlugins = options.navigationScanVitePlugins ?? options.vitePlugins;
     const routes = await scanAppRoutes({ appDir: project.routesDir });
