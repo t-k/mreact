@@ -51,6 +51,54 @@ describe("createQuery", () => {
     expect(query.result.get().data).toBe(2);
   });
 
+  it("runs a fresh request when refetch is called during an in-flight fetch", async () => {
+    const client = createQueryClient();
+    const releases: Array<(value: string) => void> = [];
+    let calls = 0;
+    const query = createQuery(client, {
+      autoFetch: true,
+      queryKey: ["in-flight-refetch"],
+      queryFn: () => {
+        calls += 1;
+        return new Promise<string>((resolve) => releases.push(resolve));
+      },
+    });
+
+    expect(calls).toBe(1);
+    const refetch = query.refetch();
+    releases[0]?.("before-refetch");
+    await waitForMicrotasks();
+
+    expect(calls).toBe(2);
+    releases[1]?.("after-refetch");
+    await expect(refetch).resolves.toMatchObject({ data: "after-refetch" });
+    expect(query.result.get().data).toBe("after-refetch");
+    expect(client.getQueryEntry(["in-flight-refetch"])?.stale).toBe(false);
+  });
+
+  it("coalesces one explicit refetch across observers sharing a key", async () => {
+    const client = createQueryClient();
+    client.setQueryData(["shared-refetch"], 0);
+    let calls = 0;
+    const observers = Array.from({ length: 5 }, () =>
+      createQuery(client, {
+        autoFetch: true,
+        queryKey: ["shared-refetch"],
+        queryFn: async () => ++calls,
+        staleTime: 60_000,
+      }),
+    );
+
+    await observers[0]?.refetch();
+    await waitForMicrotasks();
+
+    expect(calls).toBe(1);
+    for (const observer of observers) {
+      expect(observer.result.get().data).toBe(1);
+      observer.dispose();
+    }
+  });
+
   it("observes externally written query data", async () => {
     const client = createQueryClient();
     const query = createQuery(client, {
@@ -309,4 +357,10 @@ function waitForTimer(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
+}
+
+async function waitForMicrotasks(): Promise<void> {
+  for (let index = 0; index < 12; index += 1) {
+    await Promise.resolve();
+  }
 }

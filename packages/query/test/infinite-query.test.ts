@@ -56,6 +56,34 @@ describe("createInfiniteQuery", () => {
     ]);
   });
 
+  it("runs a fresh first-page request when refetch overlaps an in-flight fetch", async () => {
+    const client = createQueryClient();
+    const releases: Array<(value: TimelinePage) => void> = [];
+    let calls = 0;
+    const query = createInfiniteQuery<TimelinePage, number>(client, {
+      autoFetch: true,
+      getNextPageParam: (lastPage) => lastPage.nextCursor,
+      initialPageParam: 0,
+      queryKey: ["in-flight-infinite-refetch"],
+      queryFn: () => {
+        calls += 1;
+        return new Promise<TimelinePage>((resolve) => releases.push(resolve));
+      },
+    });
+
+    expect(calls).toBe(1);
+    const refetch = query.refetch();
+    releases[0]?.({ items: ["before-refetch"], nextCursor: undefined });
+    await waitForMicrotasks();
+
+    expect(calls).toBe(2);
+    releases[1]?.({ items: ["after-refetch"], nextCursor: undefined });
+    await expect(refetch).resolves.toMatchObject({
+      pages: [{ items: ["after-refetch"], nextCursor: undefined }],
+    });
+    expect(client.getQueryEntry(["in-flight-infinite-refetch"])?.stale).toBe(false);
+  });
+
   it("stores cursor pages and page params without caller-managed page state", async () => {
     const client = createQueryClient();
     const query = createInfiniteQuery<TimelinePage, number>(client, {
@@ -279,4 +307,10 @@ function waitForTimer(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
+}
+
+async function waitForMicrotasks(): Promise<void> {
+  for (let index = 0; index < 12; index += 1) {
+    await Promise.resolve();
+  }
 }

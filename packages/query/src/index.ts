@@ -381,6 +381,10 @@ export function createQuery<TData>(
             // The observer receives the error state through the query cache. Avoid an
             // unhandled rejection for fire-and-forget invalidation refetches.
           });
+        } else if (
+          explicitRefetchOwnsCurrentFetch(client, queryHash, invalidationRevision)
+        ) {
+          observedInvalidationRevision = invalidationRevision;
         }
       }
     },
@@ -394,16 +398,7 @@ export function createQuery<TData>(
   }
 
   const refetch = async () => {
-    const revisionBeforeRefetch = queryInvalidationRevision(
-      client.getQueryEntry(options.queryKey),
-    );
-    client.invalidateQueries({ queryKey: options.queryKey });
-    if (observedInvalidationRevision === revisionBeforeRefetch) {
-      observedInvalidationRevision = queryInvalidationRevision(
-        client.getQueryEntry(options.queryKey),
-      );
-    }
-    await client.fetchQuery(options);
+    await runExplicitRefetch(client, options.queryKey, () => client.fetchQuery(options));
     const next = resultFromQueryEntry<TData>(client.getQueryEntry<TData>(options.queryKey));
     return updateResult(next);
   };
@@ -444,6 +439,76 @@ function queryResultsEqual<TData>(previous: QueryResult<TData>, next: QueryResul
   );
 }
 
+interface ExplicitRefetchState {
+  invalidationRevision: number;
+  promise: Promise<void>;
+  wasFetching: boolean;
+}
+
+const explicitRefetches = new WeakMap<QueryClient, Map<string, ExplicitRefetchState>>();
+
+function explicitRefetchOwnsCurrentFetch(
+  client: QueryClient,
+  queryHash: string,
+  invalidationRevision: number,
+): boolean {
+  const state = explicitRefetches.get(client)?.get(queryHash);
+  return (
+    state !== undefined &&
+    !state.wasFetching &&
+    state.invalidationRevision === invalidationRevision
+  );
+}
+
+function runExplicitRefetch(
+  client: QueryClient,
+  queryKey: QueryKey,
+  fetch: () => Promise<unknown>,
+): Promise<void> {
+  const queryHash = hashQueryKey(queryKey);
+  let clientRefetches = explicitRefetches.get(client);
+  if (clientRefetches === undefined) {
+    clientRefetches = new Map();
+    explicitRefetches.set(client, clientRefetches);
+  }
+
+  const existing = clientRefetches.get(queryHash);
+  if (existing !== undefined) {
+    return existing.promise;
+  }
+
+  const wasFetching = client.getQueryEntry(queryKey)?.isFetching === true;
+  client.invalidateQueries({ queryKey });
+  const state: ExplicitRefetchState = {
+    invalidationRevision: queryInvalidationRevision(client.getQueryEntry(queryKey)),
+    promise: Promise.resolve(),
+    wasFetching,
+  };
+  clientRefetches.set(queryHash, state);
+
+  state.promise = (async () => {
+    try {
+      try {
+        await fetch();
+      } catch (error) {
+        if (!wasFetching) {
+          throw error;
+        }
+      }
+
+      if (wasFetching) {
+        await fetch();
+      }
+    } finally {
+      if (clientRefetches?.get(queryHash) === state) {
+        clientRefetches.delete(queryHash);
+      }
+    }
+  })();
+
+  return state.promise;
+}
+
 /**
  * Creates a reactive infinite-query observer backed by a `QueryClient`.
  *
@@ -453,6 +518,7 @@ export function createInfiniteQuery<TPage, TPageParam>(
   client: QueryClient,
   options: CreateInfiniteQueryOptions<TPage, TPageParam>,
 ): InfiniteQueryObserver<TPage, TPageParam> {
+  const queryHash = hashQueryKey(options.queryKey);
   if (options.initialData !== undefined && client.getQueryData(options.queryKey) === undefined) {
     client.setQueryData(options.queryKey, options.initialData);
   }
@@ -505,6 +571,10 @@ export function createInfiniteQuery<TPage, TPageParam>(
       if (!entry.isFetching) {
         observedInvalidationRevision = invalidationRevision;
         refetchInvalidated();
+      } else if (
+        explicitRefetchOwnsCurrentFetch(client, queryHash, invalidationRevision)
+      ) {
+        observedInvalidationRevision = invalidationRevision;
       }
     },
     { exact: true },
@@ -536,12 +606,8 @@ export function createInfiniteQuery<TPage, TPageParam>(
     return updateResult();
   };
   const refetch = async () => {
-    const revisionBeforeRefetch = queryInvalidationRevision(readEntry());
-    client.invalidateQueries({ queryKey: options.queryKey });
-    if (observedInvalidationRevision === revisionBeforeRefetch) {
-      observedInvalidationRevision = queryInvalidationRevision(readEntry());
-    }
-    return fetchFirstPage();
+    await runExplicitRefetch(client, options.queryKey, fetchFirstPage);
+    return updateResult();
   };
   refetchInvalidated = () => {
     void fetchFirstPage().catch(() => {
