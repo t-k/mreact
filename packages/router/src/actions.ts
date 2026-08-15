@@ -8,6 +8,7 @@ import {
 } from "@reckona/mreact-compiler";
 import {
   createServerActionHandler,
+  ensureServerActionReplayStoreContract,
   type ServerActionHandlerOptions,
   type ServerActionReplayClaim,
   type ServerActionRegistry,
@@ -115,8 +116,11 @@ function configuredActionTokenSecret(value: string | undefined): string {
 class BoundedReplayStore {
   private readonly entries = new Map<
     string,
-    { state: "in-flight" } | { state: "completed"; expiresAt: number }
+    | { state: "in-flight"; leaseExpiresAt: number }
+    | { state: "completed"; expiresAt: number }
   >();
+  private capacityWarningActive = false;
+  private warnedLeaseReclamation = false;
 
   constructor(
     private readonly ttlMs: number,
@@ -124,21 +128,42 @@ class BoundedReplayStore {
   ) {}
 
   claim(value: string): ServerActionReplayClaim {
+    const now = Date.now();
+    if (this.entries.size < this.maxEntries) {
+      this.capacityWarningActive = false;
+    }
+
     const existing = this.entries.get(value);
-    if (existing?.state === "completed" && existing.expiresAt < Date.now()) {
+    if (existing?.state === "completed" && existing.expiresAt <= now) {
       this.entries.delete(value);
+    } else if (existing?.state === "in-flight" && existing.leaseExpiresAt <= now) {
+      this.entries.delete(value);
+      this.warnLeaseReclamation();
     }
 
     if (this.entries.has(value)) return { status: "replay" };
     if (this.entries.size >= this.maxEntries) {
-      const now = Date.now();
+      this.warnCapacity();
       for (const [key, entry] of this.entries) {
-        if (entry.state === "completed" && entry.expiresAt < now) this.entries.delete(key);
+        if (
+          (entry.state === "completed" && entry.expiresAt <= now) ||
+          (entry.state === "in-flight" && entry.leaseExpiresAt <= now)
+        ) {
+          this.entries.delete(key);
+        }
+      }
+      if (this.entries.size >= this.maxEntries) {
+        const oldestCompleted = Array.from(this.entries).find(
+          ([, entry]) => entry.state === "completed",
+        );
+        if (oldestCompleted !== undefined) {
+          this.entries.delete(oldestCompleted[0]);
+        }
       }
       if (this.entries.size >= this.maxEntries) return { status: "capacity-exceeded" };
     }
 
-    const entry = { state: "in-flight" as const };
+    const entry = { state: "in-flight" as const, leaseExpiresAt: now + this.ttlMs };
     this.entries.set(value, entry);
     let finalized = false;
     return {
@@ -147,6 +172,7 @@ class BoundedReplayStore {
         if (finalized) return;
         finalized = true;
         if (this.entries.get(value) === entry) {
+          this.entries.delete(value);
           this.entries.set(value, { state: "completed", expiresAt: Date.now() + this.ttlMs });
         }
       },
@@ -154,8 +180,37 @@ class BoundedReplayStore {
   }
 
   // Exposed for tests; not part of the ServerActionReplayStore interface.
+  clear(): void {
+    this.entries.clear();
+    this.capacityWarningActive = false;
+    this.warnedLeaseReclamation = false;
+  }
+
+  // Exposed for tests; not part of the ServerActionReplayStore interface.
   size(): number {
     return this.entries.size;
+  }
+
+  private warnCapacity(): void {
+    if (this.capacityWarningActive) return;
+    this.capacityWarningActive = true;
+    let completed = 0;
+    let inFlight = 0;
+    for (const entry of this.entries.values()) {
+      if (entry.state === "completed") completed += 1;
+      else inFlight += 1;
+    }
+    console.error(
+      `mreact-router: default server action replay store reached capacity (size=${this.entries.size}, maxEntries=${this.maxEntries}, completed=${completed}, inFlight=${inFlight}). Expired in-flight leases may be reclaimed; exact duplicate-execution protection no longer applies after the lease boundary.`,
+    );
+  }
+
+  private warnLeaseReclamation(): void {
+    if (this.warnedLeaseReclamation) return;
+    this.warnedLeaseReclamation = true;
+    console.error(
+      `mreact-router: default server action replay store reclaimed an expired in-flight claim after leaseMs=${this.ttlMs}; exact duplicate-execution protection no longer applies to that abandoned claim.`,
+    );
   }
 }
 
@@ -168,7 +223,7 @@ const usedFormActionNonces = new BoundedReplayStore(
 // so tests can drive its eviction semantics directly. Not part of the
 // public surface (prefixed with `__`).
 export function __clearDefaultReplayStore(): void {
-  (usedFormActionNonces as unknown as { entries: Map<string, number> }).entries.clear();
+  usedFormActionNonces.clear();
 }
 
 export function __readDefaultReplayStore(): BoundedReplayStore {
@@ -1497,6 +1552,9 @@ async function claimFormNonce(
   replayStore: ServerActionReplayStore,
 ): Promise<Extract<Awaited<ReturnType<ServerActionReplayStore["claim"]>>, { status: "claimed" }> | Response> {
   let claim: Awaited<ReturnType<ServerActionReplayStore["claim"]>>;
+  if (!ensureServerActionReplayStoreContract(replayStore)) {
+    return replayStoreUnavailableResponse();
+  }
   try {
     claim = await replayStore.claim(nonce);
   } catch {

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
+import type { ServerActionReplayStore } from "@reckona/mreact-server";
 import type { AppRouterCache } from "../src/cache.js";
 import { dispatchServerActionRequest } from "../src/actions.js";
 import { renderAppRequest } from "../src/render.js";
@@ -1502,6 +1503,43 @@ export async function save() {
 
     expect(response.status).toBe(200);
     expect(replayStore.calls).toEqual(["claim:nonce-json-store", "finalize:nonce-json-store"]);
+  });
+
+  test("diagnoses a legacy app-router replay store once", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-legacy-store-"));
+    await writeActionFixture(appDir);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const replayStore = {
+      add() {},
+      has() {
+        return false;
+      },
+    } as unknown as ServerActionReplayStore;
+    const request = (nonce: string) =>
+      renderAppRequest({
+        appDir,
+        serverActions: { replayStore },
+        request: new Request("http://local.test/_mreact/actions", {
+          body: JSON.stringify({
+            args: ["JSON title"],
+            exportName: "echo",
+            moduleId: "actions.ts",
+          }),
+          headers: {
+            "content-type": "application/json",
+            cookie: `mreact.csrf=${nonce}`,
+            "x-mreact-action-nonce": nonce,
+            "x-mreact-csrf": nonce,
+          },
+          method: "POST",
+        }),
+      });
+
+    expect((await request("legacy-json-one")).status).toBe(503);
+    expect((await request("legacy-json-two")).status).toBe(503);
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(expect.stringMatching(/claim\(\).*0\.0\.203/i));
+    error.mockRestore();
   });
 
   test("rejects form action replay nonce reuse", async () => {

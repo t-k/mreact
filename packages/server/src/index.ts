@@ -18,6 +18,7 @@ export {
   createFlightClientManifest,
   createServerReference,
   createServerActionHandler,
+  ensureServerActionReplayStoreContract,
   fromReactFlightRows,
   getReactFlightProtocolCoverage,
   isClientReference,

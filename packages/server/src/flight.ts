@@ -52,8 +52,46 @@ export type ServerActionReplayClaim =
 
 /** Store used to atomically reject replayed server action nonces. */
 export interface ServerActionReplayStore {
-  /** Atomically reserves a nonce. A store must return `replay` while the claim is in flight and after `finalize()` records its completed retention period. */
+  /**
+   * Atomically reserves a nonce. Shared production stores should return `replay` until `finalize()` records its completed retention period.
+   *
+   * A bounded local implementation may document an in-flight lease for abandoned actions. Once that lease expires, exact duplicate-execution protection no longer applies, so applications requiring strict guarantees must use a shared store whose reservation lifetime covers action execution.
+   */
   claim(value: string): ServerActionReplayClaim | Promise<ServerActionReplayClaim>;
+}
+
+const diagnosedLegacyReplayStores = new WeakSet<object>();
+let diagnosedPrimitiveReplayStore = false;
+
+/** Checks the atomic replay-store contract and emits one fixed migration diagnostic for legacy stores. */
+export function ensureServerActionReplayStoreContract(
+  store: unknown,
+): store is ServerActionReplayStore {
+  if (
+    store !== null &&
+    (typeof store === "object" || typeof store === "function") &&
+    typeof (store as { claim?: unknown }).claim === "function"
+  ) {
+    return true;
+  }
+
+  const objectStore =
+    store !== null && (typeof store === "object" || typeof store === "function")
+      ? (store as object)
+      : undefined;
+  if (
+    (objectStore !== undefined && diagnosedLegacyReplayStores.has(objectStore)) ||
+    (objectStore === undefined && diagnosedPrimitiveReplayStore)
+  ) {
+    return false;
+  }
+
+  if (objectStore === undefined) diagnosedPrimitiveReplayStore = true;
+  else diagnosedLegacyReplayStores.add(objectStore);
+  console.error(
+    "mreact-server: ServerActionReplayStore must implement claim(). The atomic claim() contract was introduced in mreact 0.0.203; update the configured replay store.",
+  );
+  return false;
 }
 
 /** Module export reference requested by a server action request. */
@@ -497,6 +535,9 @@ export function createServerActionHandler(
   actions: ServerActionRegistry,
   options: ServerActionHandlerOptions = {},
 ) {
+  if (options.replayProtection?.store !== undefined) {
+    ensureServerActionReplayStoreContract(options.replayProtection.store);
+  }
   const allowedActionKeys = options.allowedActions?.map((reference) =>
     serverActionKey(reference.moduleId, reference.exportName),
   );
@@ -2426,6 +2467,9 @@ async function claimServerActionNonce(
   let claim: ServerActionReplayClaim;
   try {
     if (replayProtection.store !== undefined) {
+      if (!ensureServerActionReplayStoreContract(replayProtection.store)) {
+        return replayStoreUnavailableResponse();
+      }
       claim = await replayProtection.store.claim(nonce);
     } else {
       const seen = replayProtection.seen;

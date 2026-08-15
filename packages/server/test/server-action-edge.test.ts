@@ -1,5 +1,8 @@
-import { describe, expect, test } from "vitest";
-import { createServerActionHandler } from "../src/index.js";
+import { describe, expect, test, vi } from "vitest";
+import {
+  createServerActionHandler,
+  type ServerActionReplayStore,
+} from "../src/index.js";
 
 const actions = {
   "actions/save#save": (...args: unknown[]) => ({ ok: true, args }),
@@ -127,6 +130,56 @@ describe("createServerActionHandler edge branches (issues 069 / 076 / 078)", () 
     expect(seen.has("fresh-nonce")).toBe(true);
   });
 
+  test("diagnoses a legacy replay store once without changing the external 503", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const legacyStore = {
+      add() {},
+      has() {
+        return false;
+      },
+    } as unknown as ServerActionReplayStore;
+    const handle = createServerActionHandler(actions, {
+      csrf: false,
+      replayProtection: { store: legacyStore },
+    });
+
+    const first = await handle(replayRequest("legacy-one"));
+    const second = await handle(replayRequest("legacy-two"));
+
+    expect(first.status).toBe(503);
+    expect(second.status).toBe(503);
+    await expect(first.json()).resolves.toEqual({
+      ok: false,
+      error: "Server action replay protection is unavailable.",
+    });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      expect.stringMatching(/claim\(\).*0\.0\.203/i),
+    );
+    error.mockRestore();
+  });
+
+  test("does not log or expose a replay backend error", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const store: ServerActionReplayStore = {
+      claim() {
+        throw new Error("redis password=top-secret");
+      },
+    };
+    const handle = createServerActionHandler(actions, {
+      csrf: false,
+      replayProtection: { store },
+    });
+
+    const response = await handle(replayRequest("backend-failure"));
+    const body = await response.text();
+
+    expect(response.status).toBe(503);
+    expect(body).not.toContain("top-secret");
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   test("CSRF allows a request whose header token matches the cookie token", async () => {
     const handle = createServerActionHandler(actions);
     const response = await handle(
@@ -226,3 +279,18 @@ describe("createServerActionHandler edge branches (issues 069 / 076 / 078)", () 
     expect(response.status).toBe(403);
   });
 });
+
+function replayRequest(nonce: string): Request {
+  return new Request("https://app.test/_mreact/action", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-mreact-action-nonce": nonce,
+    },
+    body: JSON.stringify({
+      moduleId: "actions/save",
+      exportName: "save",
+      args: [],
+    }),
+  });
+}
