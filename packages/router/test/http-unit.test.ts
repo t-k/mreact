@@ -101,6 +101,29 @@ describe("router http helpers", () => {
     expect(request.headers.get("x-multi")).toContain("b");
   });
 
+  test.each([
+    "//evil.test/echo",
+    "///evil.test/echo?x=1",
+    "//user@evil.test:8443/echo",
+    "http://evil.test/echo",
+    "\\\\evil.test/echo",
+  ])("keeps the validated origin authoritative for request target %s", (target) => {
+    const incoming = fakeIncomingMessage({ method: "GET", url: target });
+    const request = nodeRequestToWebRequest(incoming, "https://app.test");
+
+    expect(new URL(request.url).origin).toBe("https://app.test");
+  });
+
+  test("preserves ordinary request path queries and encoded bytes", () => {
+    const incoming = fakeIncomingMessage({
+      method: "GET",
+      url: "/echo?x=%2Fvalue&name=a%20b",
+    });
+    const request = nodeRequestToWebRequest(incoming, "https://app.test");
+
+    expect(request.url).toBe("https://app.test/echo?x=%2Fvalue&name=a%20b");
+  });
+
   test("nodeRequestToWebRequest attaches the incoming body for non-GET methods", async () => {
     const incoming = fakeIncomingMessage({
       method: "POST",

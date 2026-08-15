@@ -9,6 +9,7 @@ export function nodeRequestToWebRequest(
   origin: string,
 ): Request {
   const method = incoming.method ?? "GET";
+  const rawUrl = incoming.url ?? "/";
   const headers = new Headers();
 
   for (const [name, value] of Object.entries(incoming.headers)) {
@@ -34,9 +35,21 @@ export function nodeRequestToWebRequest(
     init.duplex = "half";
   }
 
-  const request = new Request(new URL(incoming.url ?? "/", origin), init);
-  rawUrlByRequest.set(request, incoming.url ?? "/");
+  const request = new Request(nodeRequestUrl(rawUrl, origin), init);
+  rawUrlByRequest.set(request, rawUrl);
   return request;
+}
+
+function nodeRequestUrl(rawUrl: string, origin: string): URL {
+  const validatedOrigin = new URL(origin).origin;
+  const rootedPath = rawUrl.startsWith("/") ? rawUrl : `/${rawUrl}`;
+  const requestUrl = new URL(`${validatedOrigin}${rootedPath}`);
+
+  if (requestUrl.origin !== validatedOrigin) {
+    throw new TypeError("Node request target changed the validated request origin.");
+  }
+
+  return requestUrl;
 }
 
 export function rawNodeRequestUrl(request: Request): string | undefined {
