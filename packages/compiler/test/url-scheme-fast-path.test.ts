@@ -81,6 +81,14 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(Page({ html: { __html: "<p>safe</p>" } })).toBe(
       '<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>',
     );
+    expect(Page({ html: { __html: "<p>extra</p>", revision: 2 } })).toBe(
+      '<iframe srcdoc="&lt;p&gt;extra&lt;/p&gt;"></iframe>',
+    );
+    expect(
+      Page({
+        html: Object.defineProperty({}, "__html", { get: () => "<p>getter</p>" }),
+      }),
+    ).toBe("<iframe></iframe>");
   });
 
   test("dynamic href={...} preserves https URLs", async () => {
@@ -147,8 +155,9 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     });
 
     expect(out).not.toMatch(/javascript:|alert\(/i);
-    expect(Page({ srcset: "/safe.png 1x, https://example.test/a.png 2x", url: "/plugin.swf" }))
-      .toContain('data="/plugin.swf"');
+    expect(
+      Page({ srcset: "/safe.png 1x, https://example.test/a.png 2x", url: "/plugin.swf" }),
+    ).toContain('data="/plugin.swf"');
   });
 
   test("dynamic URL object srcset and object URL attributes drop unsafe schemes", async () => {
@@ -203,7 +212,7 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     expect(out).not.toMatch(/javascript:/i);
   });
 
-  test("static href=\"javascript:...\" is dropped at compile time", async () => {
+  test('static href="javascript:..." is dropped at compile time', async () => {
     const code = compileServer(
       `export default function Page() { return <a href="javascript:alert(1)">x</a>; }`,
     );
@@ -224,7 +233,9 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     const Page = mod.default as () => string;
     const out = Page();
 
-    expect(out).not.toMatch(/srcset|imagesrcset|data=|codebase=|javascript:|data:text\/html|alert\(/i);
+    expect(out).not.toMatch(
+      /srcset|imagesrcset|data=|codebase=|javascript:|data:text\/html|alert\(/i,
+    );
   });
 
   test("non-URL attributes are unaffected", async () => {
@@ -247,9 +258,7 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     const Page = mod.default as (props: { url: string }) => string;
 
     expect(Page({ url: "javascript:alert(1)" })).not.toMatch(/javascript:|alert\(1\)/i);
-    expect(Page({ url: "https://example.com/ok" })).toContain(
-      'href="https://example.com/ok"',
-    );
+    expect(Page({ url: "https://example.com/ok" })).toContain('href="https://example.com/ok"');
   });
 
   test("body-statement JSX variables drop dynamic srcdoc without explicit opt-in", async () => {
@@ -259,12 +268,8 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     const mod = await evaluateCompiled(code);
     const Page = mod.default as (props: { html: unknown }) => string;
 
-    expect(Page({ html: "<img src=x onerror=alert(1)>" })).toBe(
-      "<div><iframe></iframe></div>",
-    );
-    expect(Page({ html: { __html: "<p>safe</p>" } })).toContain(
-      'srcdoc="&lt;p&gt;safe&lt;/p&gt;"',
-    );
+    expect(Page({ html: "<img src=x onerror=alert(1)>" })).toBe("<div><iframe></iframe></div>");
+    expect(Page({ html: { __html: "<p>safe</p>" } })).toContain('srcdoc="&lt;p&gt;safe&lt;/p&gt;"');
   });
 
   test("server stream body-statement JSX variables drop unsafe URL attributes", async () => {
@@ -273,7 +278,7 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     );
 
     expect(code).toContain("_urlAttrSafe");
-    expect(code).not.toContain('href={url}');
+    expect(code).not.toContain("href={url}");
   });
 
   test("server stream emit guards srcset and object URL attributes", async () => {
@@ -284,8 +289,8 @@ describe("compiler-emitted SSR URL scheme safety (Issue 073)", () => {
     );
 
     expect(code).toContain("_urlAttrSafe");
-    expect(code).toContain('srcset');
-    expect(code).not.toContain('javascript:alert(1)');
-    expect(code).not.toContain('data:text/html');
+    expect(code).toContain("srcset");
+    expect(code).not.toContain("javascript:alert(1)");
+    expect(code).not.toContain("data:text/html");
   });
 });

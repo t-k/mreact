@@ -6,6 +6,7 @@ import {
   isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
   isUrlAttribute,
+  readDangerousHtmlOptIn,
   safeUrlAttributeValue,
 } from "../src/url-safety.js";
 
@@ -44,10 +45,59 @@ describe("URL safety helpers", () => {
 
   test("requires an explicit string __html opt-in for dangerous HTML attributes", () => {
     expect(isDangerousHtmlOptIn({ __html: "<p>trusted</p>" })).toBe(true);
+    expect(isDangerousHtmlOptIn({ __html: "<p>trusted</p>", revision: 2 })).toBe(true);
     expect(isDangerousHtmlOptIn({ __html: 1 })).toBe(false);
     expect(isDangerousHtmlOptIn({})).toBe(false);
     expect(isDangerousHtmlOptIn(null)).toBe(false);
     expect(isDangerousHtmlOptIn("<p>trusted</p>")).toBe(false);
+    expect(
+      isDangerousHtmlOptIn(
+        Object.create({ __html: "<p>prototype</p>" }) as Record<string, unknown>,
+      ),
+    ).toBe(false);
+    expect(
+      isDangerousHtmlOptIn(
+        Object.defineProperty({}, "__html", {
+          get: () => "<p>getter</p>",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("extracts raw HTML without reading getters or Proxy values", () => {
+    let extraGetterCalls = 0;
+    const payload = {
+      __html: "<p>trusted</p>",
+      get metadata() {
+        extraGetterCalls += 1;
+        return "unused";
+      },
+    };
+    expect(readDangerousHtmlOptIn(payload)).toBe("<p>trusted</p>");
+    expect(extraGetterCalls).toBe(0);
+
+    let getCalls = 0;
+    const proxy = new Proxy(
+      { __html: "<p>descriptor</p>" },
+      {
+        get(target, property, receiver) {
+          getCalls += 1;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    expect(readDangerousHtmlOptIn(proxy)).toBe("<p>descriptor</p>");
+    expect(getCalls).toBe(0);
+
+    const throwingDescriptor = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error("blocked descriptor");
+        },
+      },
+    );
+    expect(readDangerousHtmlOptIn(throwingDescriptor)).toBeUndefined();
   });
 
   test("property-like matrix rejects unsafe URL schemes across URL attributes", () => {

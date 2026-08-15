@@ -1,6 +1,7 @@
 export {
   isDangerousHtmlAttribute,
   isDangerousHtmlOptIn,
+  readDangerousHtmlOptIn,
   isSrcsetAttribute,
   isUnsafeUrlAttribute,
   isUrlAttribute,

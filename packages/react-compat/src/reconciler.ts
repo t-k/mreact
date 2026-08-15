@@ -157,20 +157,14 @@ function reconcileNode(
 
   if (typeof node === "string" || typeof node === "number") {
     const existing = previousNodes[0];
-    const text =
-      existing instanceof Text ? existing : document.createTextNode("");
+    const text = existing instanceof Text ? existing : document.createTextNode("");
     if (existing === undefined) {
       reportMissingHydrationNode(options, path);
     } else if (!(existing instanceof Text)) {
       reportHydrationNodeTypeMismatch(options, path, "text", existing);
     }
     if (existing instanceof Text && existing.data !== String(node)) {
-      reportRecoverable(
-        options,
-        "text",
-        path,
-        new Error("Hydration text mismatch."),
-      );
+      reportRecoverable(options, "text", path, new Error("Hydration text mismatch."));
     }
     text.data = String(node);
     return { nodes: [text], consumed: existing instanceof Text ? 1 : 0 };
@@ -234,8 +228,8 @@ function reconcileSequence(
         : keyedNodes.size === 0
           ? previousNodes.slice(previousIndex)
           : keyedNodes.get(key) === undefined
-          ? []
-          : [keyedNodes.get(key) as Node];
+            ? []
+            : [keyedNodes.get(key) as Node];
     const result = reconcileNode(
       parent,
       previousForChild,
@@ -282,47 +276,27 @@ function reconcileElement(
 
   if (element.type === Activity) {
     const children =
-      (element.props as { mode?: unknown }).mode === "hidden"
-        ? null
-        : element.props.children;
-    return reconcileNode(
-      parent,
-      previousNodes,
-      children,
-      runtime,
-      `${path}.activity`,
-      options,
-    );
+      (element.props as { mode?: unknown }).mode === "hidden" ? null : element.props.children;
+    return reconcileNode(parent, previousNodes, children, runtime, `${path}.activity`, options);
   }
 
   if (element.type === Profiler) {
-    return renderWithProfiler(
-      runtime,
-      `${path}.profiler`,
-      element.props,
-      () =>
-        reconcileNode(
-          parent,
-          previousNodes,
-          element.props.children,
-          runtime,
-          `${path}.profiler`,
-          options,
-        ),
+    return renderWithProfiler(runtime, `${path}.profiler`, element.props, () =>
+      reconcileNode(
+        parent,
+        previousNodes,
+        element.props.children,
+        runtime,
+        `${path}.profiler`,
+        options,
+      ),
     );
   }
 
   if (element.type === STRICT_MODE_TYPE) {
     const snapshot = takeRuntimeSnapshot(runtime);
     try {
-      reconcileNode(
-        parent,
-        [],
-        element.props.children,
-        runtime,
-        `${path}.strict.preview`,
-        options,
-      );
+      reconcileNode(parent, [], element.props.children, runtime, `${path}.strict.preview`, options);
     } finally {
       restoreRuntimeSnapshot(runtime, snapshot);
     }
@@ -340,15 +314,7 @@ function reconcileElement(
   }
 
   if (element.type === Suspense) {
-    return reconcileSuspense(
-      parent,
-      previousNodes,
-      element,
-      runtime,
-      path,
-      options,
-      reconcileNode,
-    );
+    return reconcileSuspense(parent, previousNodes, element, runtime, path, options, reconcileNode);
   }
 
   if (element.type === SuspenseList) {
@@ -379,18 +345,8 @@ function reconcileElement(
   const elementType = element.type;
 
   if (isReactCompatProvider(elementType)) {
-    return renderWithContextProvider(
-      elementType,
-      element.props.value,
-      () =>
-        reconcileNode(
-          parent,
-          previousNodes,
-          element.props.children,
-          runtime,
-          `${path}.p`,
-          options,
-        ),
+    return renderWithContextProvider(elementType, element.props.value, () =>
+      reconcileNode(parent, previousNodes, element.props.children, runtime, `${path}.p`, options),
     );
   }
 
@@ -411,15 +367,18 @@ function reconcileElement(
   }
 
   if (isForwardRefType(elementType)) {
-    return renderWithRootRuntime(runtime, path, () =>
-      reconcileNode(
-        parent,
-        previousNodes,
-        elementType.render(element.props, element.ref),
-        runtime,
-        `${path}.forwardRef`,
-        options,
-      ),
+    return renderWithRootRuntime(
+      runtime,
+      path,
+      () =>
+        reconcileNode(
+          parent,
+          previousNodes,
+          elementType.render(element.props, element.ref),
+          runtime,
+          `${path}.forwardRef`,
+          options,
+        ),
       elementType,
     );
   }
@@ -517,18 +476,19 @@ function reconcileElement(
   }
 
   if (typeof elementType === "function") {
-    const functionComponent = elementType as (
-      props: Record<string, unknown>,
-    ) => ReactCompatNode;
-    return renderWithRootRuntime(runtime, path, () =>
-      reconcileNode(
-        parent,
-        previousNodes,
-        functionComponent(element.props),
-        runtime,
-        `${path}.0`,
-        withHydrationComponentStack(options, getComponentName(functionComponent)),
-      ),
+    const functionComponent = elementType as (props: Record<string, unknown>) => ReactCompatNode;
+    return renderWithRootRuntime(
+      runtime,
+      path,
+      () =>
+        reconcileNode(
+          parent,
+          previousNodes,
+          functionComponent(element.props),
+          runtime,
+          `${path}.0`,
+          withHydrationComponentStack(options, getComponentName(functionComponent)),
+        ),
       functionComponent,
     );
   }
@@ -545,10 +505,7 @@ function reconcileElement(
   } else if (!isHostElement(existing)) {
     reportHydrationNodeTypeMismatch(options, path, `<${elementType}>`, existing);
   }
-  if (
-    isHostElement(existing) &&
-    !hostElementMatches(existing, elementType, elementNamespace)
-  ) {
+  if (isHostElement(existing) && !hostElementMatches(existing, elementType, elementNamespace)) {
     reportRecoverable(
       options,
       "tag",
@@ -560,8 +517,7 @@ function reconcileElement(
     reportElementTextMismatch(options, `${path}.c`, existing, element.props.children);
   }
   const domElement =
-    isHostElement(existing) &&
-    hostElementMatches(existing, elementType, elementNamespace)
+    isHostElement(existing) && hostElementMatches(existing, elementType, elementNamespace)
       ? existing
       : createHostElement(document, elementType, options.namespace ?? "html");
 
@@ -581,12 +537,7 @@ function reconcileElement(
     `${path}.c`,
     { ...options, namespace: childNamespace },
   );
-  reportExtraHydrationNodes(
-    options,
-    `${path}.c`,
-    previousChildNodes,
-    childResult.consumed,
-  );
+  reportExtraHydrationNodes(options, `${path}.c`, previousChildNodes, childResult.consumed);
   if (!shouldPreserveContentEditableChildren(domElement, element.props, childResult.nodes)) {
     syncChildNodes(domElement, childResult.nodes);
   }
@@ -638,9 +589,7 @@ function getNodePathSegment(node: ReactCompatNode, index: number): string {
 }
 
 function getNodeKey(node: ReactCompatNode): string | undefined {
-  return isReactCompatElement(node) && node.key !== null
-    ? node.key
-    : undefined;
+  return isReactCompatElement(node) && node.key !== null ? node.key : undefined;
 }
 
 function getComponentName(component: Function): string {
@@ -649,7 +598,10 @@ function getComponentName(component: Function): string {
 
 function isForwardRefType(
   value: unknown,
-): value is { $$typeof: typeof FORWARD_REF_TYPE; render: (props: Record<string, unknown>, ref: unknown) => ReactCompatNode } {
+): value is {
+  $$typeof: typeof FORWARD_REF_TYPE;
+  render: (props: Record<string, unknown>, ref: unknown) => ReactCompatNode;
+} {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -657,15 +609,10 @@ function isForwardRefType(
   );
 }
 
-function isMemoType(
-  value: unknown,
-): value is {
+function isMemoType(value: unknown): value is {
   $$typeof: typeof MEMO_TYPE;
   type: ReactCompatElement["type"];
-  compare?: (
-    previous: Record<string, unknown>,
-    next: Record<string, unknown>,
-  ) => boolean;
+  compare?: (previous: Record<string, unknown>, next: Record<string, unknown>) => boolean;
 } {
   return (
     typeof value === "object" &&
@@ -698,14 +645,11 @@ function markActiveInstanceKeys(runtime: RootRuntime, keys: readonly string[]): 
 
 function hasDirtyInstance(runtime: RootRuntime, keys: readonly string[]): boolean {
   return keys.some(
-    (key) =>
-      (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
+    (key) => (runtime.instances.get(key) as { dirty?: boolean } | undefined)?.dirty === true,
   );
 }
 
-function isLazyType(
-  value: unknown,
-): value is {
+function isLazyType(value: unknown): value is {
   $$typeof: typeof LAZY_TYPE;
   load: () => Promise<{ default: ReactCompatElement["type"] }>;
   status: "uninitialized" | "pending" | "resolved" | "rejected";
@@ -721,5 +665,8 @@ function isLazyType(
 }
 
 function applyRef(ref: unknown, node: unknown): void {
+  // This legacy one-shot renderer has no production call sites and does not
+  // own an update or unmount lifecycle. Public roots use the Fiber commit path,
+  // where refs are detached by their (ref, node) pair before replacement.
   attachRef(ref, node);
 }

@@ -203,8 +203,16 @@ describe("DOM prop application policy", () => {
     applyDomProp(iframe, "srcDoc", "<script>1</script>", false);
     expect(iframe.hasAttribute("srcdoc")).toBe(false);
 
-    applyDomProp(iframe, "srcDoc", { __html: "<p>safe</p>" }, false);
+    applyDomProp(iframe, "srcDoc", { __html: "<p>safe</p>", revision: 2 }, false);
     expect(iframe.getAttribute("srcdoc")).toBe("<p>safe</p>");
+
+    applyDomProp(
+      iframe,
+      "srcDoc",
+      Object.defineProperty({}, "__html", { get: () => "<p>getter</p>" }),
+      false,
+    );
+    expect(iframe.hasAttribute("srcdoc")).toBe(false);
   });
 
   test("applies style objects through the style declaration and removes attributes consistently", () => {

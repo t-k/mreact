@@ -24,31 +24,31 @@ afterEach(() => {
 });
 
 describe("compiler dangerouslySetInnerHTML", () => {
-  test.each([
-    'dangerouslySetInnerHTML="<em>invalid</em>"',
-    "dangerouslySetInnerHTML",
-  ])("clears children for invalid static %s", async (attribute) => {
-    const source = `export function App() {
+  test.each(['dangerouslySetInnerHTML="<em>invalid</em>"', "dangerouslySetInnerHTML"])(
+    "clears children for invalid static %s",
+    async (attribute) => {
+      const source = `export function App() {
       return <div ${attribute}><span>child</span></div>;
     }`;
-    const serverOutput = transform({
-      code: source,
-      filename: "App.tsx",
-      target: "server",
-      dev: false,
-    });
-    const clientOutput = transform({
-      code: source,
-      filename: "App.tsx",
-      target: "client",
-      dev: false,
-    });
+      const serverOutput = transform({
+        code: source,
+        filename: "App.tsx",
+        target: "server",
+        dev: false,
+      });
+      const clientOutput = transform({
+        code: source,
+        filename: "App.tsx",
+        target: "client",
+        dev: false,
+      });
 
-    expect(runServerComponent(serverOutput.code)).toBe("<div></div>");
-    const element = (await runClientComponent(clientOutput.code)) as HTMLElement;
-    expect(element.innerHTML).toBe("");
-    expect(element.hasAttribute("dangerouslySetInnerHTML")).toBe(false);
-  });
+      expect(runServerComponent(serverOutput.code)).toBe("<div></div>");
+      const element = (await runClientComponent(clientOutput.code)) as HTMLElement;
+      expect(element.innerHTML).toBe("");
+      expect(element.hasAttribute("dangerouslySetInnerHTML")).toBe(false);
+    },
+  );
 
   test("reactive client applies direct HTML and clears invalid or null values", async () => {
     const output = transform({
@@ -201,16 +201,16 @@ describe("compiler dangerouslySetInnerHTML", () => {
     expect(runServerComponent(stringOutput.code, "App", withoutHtml)).toContain(
       '<div data-case="spread-only">child</div>',
     );
-    const invalidSpread = {
+    const extraKeySpread = {
       direct: null,
-      spread: { dangerouslySetInnerHTML: { __html: "<b>invalid</b>", extra: true } },
+      spread: { dangerouslySetInnerHTML: { __html: "<b>extra</b>", extra: true } },
     };
-    expect(runServerComponent(stringOutput.code, "App", invalidSpread)).toContain(
-      '<div data-case="spread-only"></div>',
+    expect(runServerComponent(stringOutput.code, "App", extraKeySpread)).toContain(
+      '<div data-case="spread-only"><b>extra</b></div>',
     );
     await expect(
-      runServerStreamComponent(streamOutput.code, "App", invalidSpread),
-    ).resolves.toContain('<div data-case="spread-only"></div>');
+      runServerStreamComponent(streamOutput.code, "App", extraKeySpread),
+    ).resolves.toContain('<div data-case="spread-only"><b>extra</b></div>');
   });
 
   test("server string and stream evaluate merged HTML attributes once in source order", async () => {
@@ -256,8 +256,7 @@ describe("compiler dangerouslySetInnerHTML", () => {
     };
     const stringCase = createProps();
     const streamCase = createProps();
-    const expected =
-      '<div data-first="first" title="spread" data-last="last"><i>spread</i></div>';
+    const expected = '<div data-first="first" title="spread" data-last="last"><i>spread</i></div>';
 
     expect(runServerComponent(stringOutput.code, "App", stringCase.props)).toBe(expected);
     expect(stringCase.calls).toEqual(["attribute", "direct", "spread", "trailing"]);
@@ -297,7 +296,7 @@ describe("compiler dangerouslySetInnerHTML", () => {
     );
   });
 
-  test("server string and stream output reject non-exact opt-in objects without coercion", async () => {
+  test("server string and stream accept extra keys but reject accessors and inherited HTML", async () => {
     const output = transform({
       code: `export function App(props) {
         return <div dangerouslySetInnerHTML={props.value}>children</div>;
@@ -323,7 +322,7 @@ describe("compiler dangerouslySetInnerHTML", () => {
       runServerComponent(output.code, "App", {
         value: { __html: "<b>extra</b>", extra: true },
       }),
-    ).toBe("<div></div>");
+    ).toBe("<div><b>extra</b></div>");
     expect(runServerComponent(output.code, "App", { value: { __html: 1 } })).toBe("<div></div>");
     expect(runServerComponent(output.code, "App", { value: null })).toBe("<div></div>");
     await expect(
@@ -335,6 +334,44 @@ describe("compiler dangerouslySetInnerHTML", () => {
       runServerStreamComponent(streamOutput.code, "App", {
         value: { __html: "<b>extra</b>", extra: true },
       }),
-    ).resolves.toBe("<div></div>");
+    ).resolves.toBe("<div><b>extra</b></div>");
+
+    const getterPayload = Object.defineProperty({}, "__html", {
+      get: () => "<b>getter</b>",
+    });
+    const inheritedPayload = Object.create({ __html: "<b>inherited</b>" }) as object;
+    expect(runServerComponent(output.code, "App", { value: getterPayload })).toBe("<div></div>");
+    expect(runServerComponent(output.code, "App", { value: inheritedPayload })).toBe("<div></div>");
+  });
+
+  test.each([
+    ["dangerouslySetInnerHTML", "<div dangerouslySetInnerHTML={next()} />"],
+    ["srcDoc", "<iframe srcDoc={next()} />"],
+  ])("does not swallow user expression errors for %s", async (_name, elementSource) => {
+    const source = `function next() { throw new Error("expression failed"); }
+export function App() { return ${elementSource}; }`;
+    const stringOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      dev: false,
+    });
+    const streamOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "server",
+      serverOutput: "stream",
+      dev: false,
+    });
+    const clientOutput = transform({
+      code: source,
+      filename: "App.tsx",
+      target: "client",
+      dev: false,
+    });
+
+    expect(() => runServerComponent(stringOutput.code)).toThrow("expression failed");
+    await expect(runServerStreamComponent(streamOutput.code)).rejects.toThrow("expression failed");
+    await expect(runClientComponent(clientOutput.code)).rejects.toThrow("expression failed");
   });
 });

@@ -1,6 +1,6 @@
 import {
   isDangerousHtmlAttribute,
-  isDangerousHtmlOptIn,
+  readDangerousHtmlOptIn,
   isSrcsetAttribute,
   isUnsafeUrlAttribute,
   isUrlAttribute,
@@ -73,7 +73,7 @@ export function applyDomProp(
   preferProperty: boolean,
 ): void {
   if (name === "dangerouslySetInnerHTML") {
-    element.innerHTML = isDangerousHtmlOptIn(value) ? value.__html : "";
+    element.innerHTML = readDangerousHtmlOptIn(value) ?? "";
     return;
   }
 
@@ -109,8 +109,9 @@ export function applyDomProp(
   }
 
   if (isDangerousHtmlAttribute(attrName)) {
-    if (isDangerousHtmlOptIn(value)) {
-      element.setAttribute(attrName, value.__html);
+    const html = readDangerousHtmlOptIn(value);
+    if (html !== undefined) {
+      element.setAttribute(attrName, html);
     } else {
       removeDomProp(element, name);
     }

@@ -5,6 +5,9 @@
 ```ts
 
 // @public
+export function isBooleanishStringAttribute(name: string): boolean;
+
+// @public
 export function isEventLikePropName(name: string): boolean;
 
 // @public

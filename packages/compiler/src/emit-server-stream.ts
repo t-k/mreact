@@ -468,6 +468,13 @@ function emitSpreadAttributesHelper(
     `const ${name}$aliases = ${aliases};`,
     `const ${name}$urlAttributes = new Set(${urlAttributes});`,
     `const ${name}$dangerousAttributes = new Set(${dangerousAttributes});`,
+    `function ${name}$html(value) {`,
+    `  try {`,
+    `    if (typeof value !== "object" || value === null) return undefined;`,
+    `    const _descriptor = Object.getOwnPropertyDescriptor(value, "__html");`,
+    `    return _descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string" ? _descriptor.value : undefined;`,
+    `  } catch { return undefined; }`,
+    `}`,
     `function ${name}$assign(target, source) {`,
     `  for (const _rawName of Object.keys(source)) {`,
     `    if (_rawName === "key" || _rawName === "ref" || _rawName === "domRef" || _rawName === "children" || /^on/i.test(_rawName)) continue;`,
@@ -506,8 +513,9 @@ function emitSpreadAttributesHelper(
     `      continue;`,
     `    }`,
     `    if (${name}$dangerousAttributes.has(_lowerName)) {`,
-    `      if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") {`,
-    `        _out += " " + _name + "=\\"" + ${escapeHelperName}(_value.__html) + "\\"";`,
+    `      const _html = ${name}$html(_value);`,
+    `      if (_html !== undefined) {`,
+    `        _out += " " + _name + "=\\"" + ${escapeHelperName}(_html) + "\\"";`,
     `      }`,
     `      continue;`,
     `    }`,
@@ -1859,7 +1867,7 @@ function emitMergedSpreadElementPart(
 }
 
 function emitExactDangerouslySetInnerHtmlExpression(code: string): string {
-  return `(() => { const _value = (${code}); if (typeof _value !== "object" || _value === null) return ""; const _keys = Reflect.ownKeys(_value); if (_keys.length !== 1 || _keys[0] !== "__html") return ""; const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); return _descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string" ? _descriptor.value : ""; })()`;
+  return `(() => { const _value = (${code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); return _descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string" ? _descriptor.value : ""; } catch { return ""; } })()`;
 }
 
 function isChildrenExpressionCode(code: string): boolean {
@@ -1952,7 +1960,7 @@ function collectHtmlAttributeParts(
     return [
       {
         kind: "raw-dynamic",
-        code: `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_value.__html) + ${stringLiteral('"')}; return ""; })()`,
+        code: `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${stringLiteral(` ${dynamicHtmlName}="`)} + ${escapeHelperName}(_descriptor.value) + ${stringLiteral('"')}; return ""; } catch { return ""; } })()`,
       },
     ];
   }

@@ -6,7 +6,7 @@ import { flushEffects } from "@reckona/mreact-reactive-core/testing";
 import { bindProp, bindSpreadProps } from "../src/index.js";
 
 describe("dangerouslySetInnerHTML", () => {
-  test("bindProp applies and reactively updates an exact __html string object", async () => {
+  test("bindProp applies and reactively updates an own __html string data property", async () => {
     const value = cell<unknown>({ __html: "<strong>first</strong>" });
     const element = document.createElement("div");
 
@@ -14,12 +14,12 @@ describe("dangerouslySetInnerHTML", () => {
     expect(element.innerHTML).toBe("<strong>first</strong>");
     expect(element.hasAttribute("dangerouslySetInnerHTML")).toBe(false);
 
-    value.set({ __html: "<em>second</em>" });
+    value.set({ __html: "<em>second</em>", revision: 2 });
     await flushEffects();
     expect(element.innerHTML).toBe("<em>second</em>");
   });
 
-  test("bindProp clears previous HTML for null, non-string, and non-exact values", async () => {
+  test("bindProp clears previous HTML for null, non-string, accessor, and inherited values", async () => {
     const value = cell<unknown>({ __html: "<strong>first</strong>" });
     const element = document.createElement("div");
     bindProp(element, "dangerouslySetInnerHTML", () => value.get());
@@ -30,7 +30,8 @@ describe("dangerouslySetInnerHTML", () => {
       false,
       "<em>string</em>",
       { __html: 42 },
-      { __html: "<em>extra</em>", extra: true },
+      Object.defineProperty({}, "__html", { get: () => "<em>getter</em>" }),
+      Object.create({ __html: "<em>inherited</em>" }),
     ]) {
       value.set(invalid);
       await flushEffects();

@@ -6,7 +6,7 @@ import {
 import { reportRecoverable, type RenderOptions } from "./hydration.js";
 import {
   isDangerousHtmlAttribute,
-  isDangerousHtmlOptIn,
+  readDangerousHtmlOptIn,
   isSrcsetAttribute,
   isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
@@ -75,6 +75,11 @@ export function applyProps(
     const value = nextProps[name];
 
     if (name === "children" || name === "ref" || name === "key") {
+      continue;
+    }
+
+    if (name === "dangerouslySetInnerHTML") {
+      applyDangerousInnerHtml(element, value, path, options);
       continue;
     }
 
@@ -177,6 +182,11 @@ function applyInitialProps(
     const value = props[name];
 
     if (name === "children" || name === "ref" || name === "key") {
+      continue;
+    }
+
+    if (name === "dangerouslySetInnerHTML") {
+      applyDangerousInnerHtml(element, value, path, options);
       continue;
     }
 
@@ -368,7 +378,8 @@ function applyAttribute(
   // explicit `{ __html: "..." }` opt-in. A plain value -- string,
   // number, boolean -- is treated as if it were null (drop the
   // attribute and log a recoverable mismatch).
-  if (isDangerousHtmlAttribute(name) && !isDangerousHtmlOptIn(value)) {
+  const dangerousHtml = isDangerousHtmlAttribute(name) ? readDangerousHtmlOptIn(value) : undefined;
+  if (isDangerousHtmlAttribute(name) && dangerousHtml === undefined) {
     if (element.hasAttribute(name) && !preserveHydrationAttributes) {
       reportRecoverable(
         options,
@@ -406,9 +417,7 @@ function applyAttribute(
     return;
   }
 
-  const stringValue = isDangerousHtmlOptIn(value)
-    ? (value as { __html: string }).__html
-    : String(value);
+  const stringValue = dangerousHtml ?? String(value);
 
   // Issue 075: URL attributes are scheme-validated against the same
   // block list used by SSR (packages/server/src/url-safety.ts). If the
@@ -456,7 +465,8 @@ function applyAttribute(
 }
 
 function applyInitialAttribute(element: Element, name: string, value: unknown): void {
-  if (isDangerousHtmlAttribute(name) && !isDangerousHtmlOptIn(value)) {
+  const dangerousHtml = isDangerousHtmlAttribute(name) ? readDangerousHtmlOptIn(value) : undefined;
+  if (isDangerousHtmlAttribute(name) && dangerousHtml === undefined) {
     return;
   }
 
@@ -464,9 +474,7 @@ function applyInitialAttribute(element: Element, name: string, value: unknown): 
     return;
   }
 
-  const stringValue = isDangerousHtmlOptIn(value)
-    ? (value as { __html: string }).__html
-    : String(value);
+  const stringValue = dangerousHtml ?? String(value);
 
   if (
     (isUrlAttribute(name) || isSrcsetAttribute(name)) &&
@@ -566,6 +574,25 @@ function applyFormValueProp(
   }
 
   return false;
+}
+
+function applyDangerousInnerHtml(
+  element: HostElement,
+  value: unknown,
+  path: string,
+  options: RenderOptions,
+): void {
+  const html = readDangerousHtmlOptIn(value) ?? "";
+  if (element.innerHTML === html) return;
+
+  if (options.preserveHydrationAttributes === true) {
+    reportRecoverable(options, "attribute", path, new Error("Hydration inner HTML mismatch."));
+  }
+  element.innerHTML = html;
+}
+
+export function hasDangerouslySetInnerHtmlProp(props: Record<string, unknown>): boolean {
+  return Object.prototype.hasOwnProperty.call(props, "dangerouslySetInnerHTML");
 }
 
 function isFormValuePropName(name: string): boolean {
@@ -669,6 +696,7 @@ function collectAttributeNames(props: Record<string, unknown>): string[] {
 
     if (
       name === "children" ||
+      name === "dangerouslySetInnerHTML" ||
       name === "ref" ||
       name === "key" ||
       isEventLikePropName(name) ||

@@ -103,6 +103,9 @@ export interface HtmlSink {
 }
 
 // @public
+export function isBooleanishStringAttribute(name: string): boolean;
+
+// @public
 export function isDangerousHtmlAttribute(name: string): boolean;
 
 // @public
@@ -166,6 +169,9 @@ export interface ModuleMetadata {
     // (undocumented)
     target: CompileTarget;
 }
+
+// @public
+export function readDangerousHtmlOptIn(value: unknown): string | undefined;
 
 // @public
 export interface RuntimeImport {

@@ -8,8 +8,7 @@ import {
 } from "./emit-server-shared.js";
 import { escapeHtmlAttribute } from "@reckona/mreact-shared/html-escape";
 
-export const oxcServerStringReactNodeRenderHelperPlaceholder =
-  "__mreactRenderReactNodeToString";
+export const oxcServerStringReactNodeRenderHelperPlaceholder = "__mreactRenderReactNodeToString";
 
 let currentOxcServerStringUrlSafeHelperName = "_urlAttrSafe";
 
@@ -131,7 +130,7 @@ function emitOxcServerAttribute(tagName: string, attr: AttributeIr): string {
 
   if (attr.kind === "dynamic-attr") {
     if (isDangerousHtmlAttribute(htmlName)) {
-      return `(() => { const _value = (${attr.code}); if (_value == null || _value === false) return ""; if (typeof _value === "object" && _value !== null && typeof _value.__html === "string") return ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_value.__html) + ${JSON.stringify('"')}; return ""; })()`;
+      return `(() => { const _value = (${attr.code}); if (typeof _value !== "object" || _value === null) return ""; try { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") return ${JSON.stringify(` ${htmlName}="`)} + _escapeHtml(_descriptor.value) + ${JSON.stringify('"')}; return ""; } catch { return ""; } })()`;
     }
 
     if (isUrlAttribute(htmlName)) {

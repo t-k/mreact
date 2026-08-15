@@ -94,9 +94,8 @@ describe("react-compat common API subset", () => {
   test("forwardRef passes ref as second argument", () => {
     const container = document.createElement("div");
     const ref = { current: null as HTMLButtonElement | null };
-    const Button = forwardRef<{ label: string }, HTMLButtonElement>(
-      (props, forwardedRef) =>
-        createElement("button", { ref: forwardedRef }, props.label),
+    const Button = forwardRef<{ label: string }, HTMLButtonElement>((props, forwardedRef) =>
+      createElement("button", { ref: forwardedRef }, props.label),
     );
 
     render(createElement(Button, { label: "Save", ref }), container);
@@ -146,12 +145,24 @@ describe("react-compat common API subset", () => {
     root.render(createElement("button", { ref: secondRef }, "B"));
     root.unmount();
 
-    expect(calls).toEqual([
-      "first:A",
-      "first:cleanup",
-      "second:B",
-      "second:cleanup",
-    ]);
+    expect(calls).toEqual(["first:A", "first:cleanup", "second:B", "second:cleanup"]);
+  });
+
+  test("cleans up a stable callback ref before attaching it to a replacement node", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+    const ref = (node: HTMLElement | null) => {
+      if (node === null) throw new Error("cleanup-returning refs must not receive null");
+      calls.push(`attach:${node.tagName}`);
+      return () => calls.push(`cleanup:${node.tagName}`);
+    };
+
+    root.render(createElement("button", { ref }, "Action"));
+    root.render(createElement("a", { ref }, "Action"));
+    root.unmount();
+
+    expect(calls).toEqual(["attach:BUTTON", "cleanup:BUTTON", "attach:A", "cleanup:A"]);
   });
 
   test("host callback refs attach after mounted nodes are connected", () => {
@@ -163,14 +174,18 @@ describe("react-compat common API subset", () => {
     try {
       root.render(
         createElement("div", null, [
-          createElement("button", {
-            key: "target",
-            ref: (node: HTMLButtonElement | null) => {
-              if (node !== null) {
-                connectedStates.push(node.isConnected);
-              }
+          createElement(
+            "button",
+            {
+              key: "target",
+              ref: (node: HTMLButtonElement | null) => {
+                if (node !== null) {
+                  connectedStates.push(node.isConnected);
+                }
+              },
             },
-          }, "Measure"),
+            "Measure",
+          ),
         ]),
       );
 
@@ -249,7 +264,9 @@ describe("react-compat common API subset", () => {
           },
           "Open",
         ),
-        open ? createPortal(createElement("div", { role: "listbox" }, "Options"), portalContainer) : null,
+        open
+          ? createPortal(createElement("div", { role: "listbox" }, "Options"), portalContainer)
+          : null,
       );
     }
 
@@ -317,10 +334,7 @@ describe("react-compat common API subset", () => {
           "Open",
         ),
         open
-          ? createPortal(
-              createElement("div", { role: "listbox" }, "Options"),
-              portalContainer,
-            )
+          ? createPortal(createElement("div", { role: "listbox" }, "Options"), portalContainer)
           : null,
       ];
     }
@@ -572,9 +586,7 @@ describe("react-compat common API subset", () => {
 
   test("memo renders the wrapped component", () => {
     const container = document.createElement("div");
-    const Label = memo((props: { value: string }) =>
-      createElement("span", null, props.value),
-    );
+    const Label = memo((props: { value: string }) => createElement("span", null, props.value));
 
     render(createElement(Label, { value: "memo" }), container);
 
@@ -650,10 +662,7 @@ describe("react-compat common API subset", () => {
     const root = createRoot(container);
     const calls: string[] = [];
 
-    class Counter extends PureComponent<
-      { label: string },
-      { count: number }
-    > {
+    class Counter extends PureComponent<{ label: string }, { count: number }> {
       state = { count: 0 };
 
       render() {
@@ -677,10 +686,7 @@ describe("react-compat common API subset", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
-    class AsyncCounter extends PureComponent<
-      Record<string, never>,
-      { count: number }
-    > {
+    class AsyncCounter extends PureComponent<Record<string, never>, { count: number }> {
       state = { count: 0 };
 
       componentDidMount() {
@@ -704,10 +710,7 @@ describe("react-compat common API subset", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
 
-    class AsyncCounter extends PureComponent<
-      Record<string, never>,
-      { count: number }
-    > {
+    class AsyncCounter extends PureComponent<Record<string, never>, { count: number }> {
       state = { count: 0 };
 
       componentDidMount() {
@@ -763,10 +766,7 @@ describe("react-compat common API subset", () => {
     const root = createRoot(container);
     let increment: (() => void) | undefined;
 
-    class Child extends PureComponent<
-      Record<string, never>,
-      { count: number }
-    > {
+    class Child extends PureComponent<Record<string, never>, { count: number }> {
       state = { count: 0 };
 
       render() {
@@ -804,10 +804,7 @@ describe("react-compat common API subset", () => {
       }
     }
 
-    class Series extends PureComponent<
-      Record<string, never>,
-      { isAnimationFinished: boolean }
-    > {
+    class Series extends PureComponent<Record<string, never>, { isAnimationFinished: boolean }> {
       state = { isAnimationFinished: true };
 
       render() {
@@ -840,10 +837,7 @@ describe("react-compat common API subset", () => {
     const calls: string[] = [];
     let mounted = false;
 
-    class AnimatedSeries extends Component<
-      Record<string, never>,
-      { mountCount: number }
-    > {
+    class AnimatedSeries extends Component<Record<string, never>, { mountCount: number }> {
       state = { mountCount: 0 };
 
       componentDidMount() {
@@ -881,15 +875,14 @@ describe("react-compat common API subset", () => {
   test("lazy renders fallback first and resolved component after promise resolves", async () => {
     const container = document.createElement("div");
     const root = createRoot(container);
-    let resolveModule: (module: { default: (props: { value: string }) => unknown }) => void =
-      () => {};
+    let resolveModule: (module: {
+      default: (props: { value: string }) => unknown;
+    }) => void = () => {};
     const LazyLabel = lazy(
       () =>
-        new Promise<{ default: (props: { value: string }) => unknown }>(
-          (resolve) => {
-            resolveModule = resolve;
-          },
-        ),
+        new Promise<{ default: (props: { value: string }) => unknown }>((resolve) => {
+          resolveModule = resolve;
+        }),
     );
 
     root.render(createElement(LazyLabel, { value: "ready" }));
@@ -913,9 +906,7 @@ describe("react-compat common API subset", () => {
       createElement(
         Theme.Provider,
         { value: "dark" },
-        createElement(Theme.Consumer, null, (value: string) =>
-          createElement("p", null, value),
-        ),
+        createElement(Theme.Consumer, null, (value: string) => createElement("p", null, value)),
       ),
       container,
     );
@@ -958,9 +949,7 @@ describe("react-compat common API subset", () => {
 
     expect(container.innerHTML).toBe("<p>strict</p>");
     expect(calls).toEqual(["render", "render", "effect", "cleanup", "effect"]);
-    expect(getFiberRootForContainer(container)?.current.child?.tag).toBe(
-      "strict-mode",
-    );
+    expect(getFiberRootForContainer(container)?.current.child?.tag).toBe("strict-mode");
   });
 
   test("StrictMode keeps the first useMemo value while double invoking the factory", () => {
@@ -977,11 +966,7 @@ describe("react-compat common API subset", () => {
         return { value: nextValue };
       }, []);
 
-      return createElement(
-        Context.Provider,
-        { value },
-        createElement(Consumer, null),
-      );
+      return createElement(Context.Provider, { value }, createElement(Consumer, null));
     }
 
     function Consumer() {
@@ -1072,7 +1057,11 @@ describe("react-compat common API subset", () => {
     function App() {
       const [count, setCount] = useState(0);
       const snapshot = useSyncExternalStore(subscribe, () => value);
-      return createElement("button", { onClick: () => setCount(count + 1) }, `${snapshot}:${count}`);
+      return createElement(
+        "button",
+        { onClick: () => setCount(count + 1) },
+        `${snapshot}:${count}`,
+      );
     }
 
     createRoot(container).render(createElement(App, null));
@@ -1161,13 +1150,19 @@ describe("react-compat common API subset", () => {
         "section",
         null,
         createElement("span", null, snapshot === null ? "missing" : "ready"),
-        createElement("button", { ref: (node: HTMLButtonElement | null) => store.set(node) }, "target"),
+        createElement(
+          "button",
+          { ref: (node: HTMLButtonElement | null) => store.set(node) },
+          "target",
+        ),
       );
     }
 
     createRoot(container).render(createElement(Probe, null));
 
-    expect(container.innerHTML).toBe("<section><span>ready</span><button>target</button></section>");
+    expect(container.innerHTML).toBe(
+      "<section><span>ready</span><button>target</button></section>",
+    );
   });
 
   test("useSyncExternalStore observes parent passive effect updates before child subscriptions mount", () => {
@@ -1319,7 +1314,11 @@ describe("react-compat common API subset", () => {
 
   test("pointer down handlers receive pointer metadata and can prevent default", () => {
     const container = document.createElement("div");
-    const events: Array<{ button: number | undefined; defaultPrevented: boolean; pointerType: string | undefined }> = [];
+    const events: Array<{
+      button: number | undefined;
+      defaultPrevented: boolean;
+      pointerType: string | undefined;
+    }> = [];
 
     function Probe() {
       return createElement(
@@ -1439,10 +1438,7 @@ describe("react-compat common API subset", () => {
     const root = createRoot(container);
     type Listener = () => void;
     const SelectorContext = createContext<{
-      addEventListener: (
-        callback: Listener,
-        options?: { deferred?: boolean },
-      ) => () => void;
+      addEventListener: (callback: Listener, options?: { deferred?: boolean }) => () => void;
       flushDeferred: () => void;
       publish: () => void;
     } | null>(null);
@@ -1464,7 +1460,7 @@ describe("react-compat common API subset", () => {
       if (selector !== latestSelector.current) {
         const next = selector();
         selected = Object.is(latestSelectedState.current, next)
-          ? latestSelectedState.current as boolean
+          ? (latestSelectedState.current as boolean)
           : next;
       } else {
         selected = latestSelectedState.current as boolean;
@@ -1521,32 +1517,30 @@ describe("react-compat common API subset", () => {
     function Provider() {
       const listeners = useRef(new Set<Listener>());
       const deferredListeners = useRef(new Set<Listener>());
-      const context = useMemo(() => ({
-        addEventListener(
-          callback: Listener,
-          { deferred = false }: { deferred?: boolean } = {},
-        ) {
-          const listener = deferred
-            ? () => deferredListeners.current.add(callback)
-            : callback;
-          listeners.current.add(listener);
+      const context = useMemo(
+        () => ({
+          addEventListener(callback: Listener, { deferred = false }: { deferred?: boolean } = {}) {
+            const listener = deferred ? () => deferredListeners.current.add(callback) : callback;
+            listeners.current.add(listener);
 
-          return () => {
-            listeners.current.delete(listener);
-          };
-        },
-        flushDeferred() {
-          for (const listener of deferredListeners.current) {
-            listener();
-          }
-          deferredListeners.current.clear();
-        },
-        publish() {
-          for (const listener of listeners.current) {
-            listener();
-          }
-        },
-      }), []);
+            return () => {
+              listeners.current.delete(listener);
+            };
+          },
+          flushDeferred() {
+            for (const listener of deferredListeners.current) {
+              listener();
+            }
+            deferredListeners.current.clear();
+          },
+          publish() {
+            for (const listener of listeners.current) {
+              listener();
+            }
+          },
+        }),
+        [],
+      );
 
       publish = context.publish;
 
@@ -1823,9 +1817,7 @@ describe("react-compat common API subset", () => {
       return createElement("p", null, snapshot);
     }
 
-    expect(() => render(createElement(App, null), container)).toThrow(
-      "Store unstable.",
-    );
+    expect(() => render(createElement(App, null), container)).toThrow("Store unstable.");
     expect(container.innerHTML).toBe("");
   });
 
@@ -1839,23 +1831,19 @@ describe("react-compat common API subset", () => {
     }
 
     root.render(
-      createElement(
-        StrictMode,
-        null,
-        [createElement(Field, { key: "a", label: "A" }), createElement(Field, { key: "b", label: "B" })],
-      ),
+      createElement(StrictMode, null, [
+        createElement(Field, { key: "a", label: "A" }),
+        createElement(Field, { key: "b", label: "B" }),
+      ]),
     );
     root.render(
-      createElement(
-        StrictMode,
-        null,
-        [createElement(Field, { key: "a", label: "A2" }), createElement(Field, { key: "b", label: "B2" })],
-      ),
+      createElement(StrictMode, null, [
+        createElement(Field, { key: "a", label: "A2" }),
+        createElement(Field, { key: "b", label: "B2" }),
+      ]),
     );
 
-    expect(container.innerHTML).toBe(
-      '<label for="_r_0_">A2</label><label for="_r_1_">B2</label>',
-    );
+    expect(container.innerHTML).toBe('<label for="_r_0_">A2</label><label for="_r_1_">B2</label>');
   });
 
   test("useId honors root identifierPrefix", () => {
@@ -1869,9 +1857,7 @@ describe("react-compat common API subset", () => {
 
     root.render(createElement(Field, null));
 
-    expect(container.innerHTML).toBe(
-      '<label for="_app-r_0_">_app-r_0_</label>',
-    );
+    expect(container.innerHTML).toBe('<label for="_app-r_0_">_app-r_0_</label>');
   });
 
   test("useId honors hydrateRoot identifierPrefix", () => {
@@ -1887,9 +1873,7 @@ describe("react-compat common API subset", () => {
       identifierPrefix: "app-",
     });
 
-    expect(container.innerHTML).toBe(
-      '<label for="_app-R_0_">_app-R_0_</label>',
-    );
+    expect(container.innerHTML).toBe('<label for="_app-R_0_">_app-R_0_</label>');
   });
 
   test("useId works during renderToString", () => {
@@ -1898,9 +1882,7 @@ describe("react-compat common API subset", () => {
       return `<label for="${id}">Name</label><input id="${id}">`;
     }
 
-    expect(renderToString(Field)).toBe(
-      '<label for="_R_0_">Name</label><input id="_R_0_">',
-    );
+    expect(renderToString(Field)).toBe('<label for="_R_0_">Name</label><input id="_R_0_">');
   });
 
   test("useId honors renderToString identifierPrefix", () => {
@@ -1937,9 +1919,7 @@ describe("react-compat common API subset", () => {
       ["text", 1],
     ]);
     expect(Children.only(child)).toBe(child);
-    expect(() => Children.only([child, "text"])).toThrow(
-      "Expected exactly one child.",
-    );
+    expect(() => Children.only([child, "text"])).toThrow("Expected exactly one child.");
   });
 
   test("cloneElement preserves explicit undefined props without reapplying defaultProps", () => {
@@ -2027,7 +2007,10 @@ describe("react-compat common API subset", () => {
       props: { step: number };
       state = { count: 0 };
       setState: (
-        partial: (state: { count: number }, props: { step: number }) => {
+        partial: (
+          state: { count: number },
+          props: { step: number },
+        ) => {
           count: number;
         },
         callback?: () => void,
@@ -2106,10 +2089,7 @@ describe("react-compat common API subset", () => {
     let force: (() => void) | undefined;
     let forceCallbackCount = 0;
 
-    class Counter extends Component<
-      { label: string },
-      { count: number; forced: number }
-    > {
+    class Counter extends Component<{ label: string }, { count: number; forced: number }> {
       state = { count: 0, forced: 0 };
 
       constructor(props: { label: string }) {
@@ -2154,16 +2134,16 @@ describe("react-compat common API subset", () => {
     let pureIncrement: (() => void) | undefined;
     const renders: string[] = [];
 
-    function Es5Counter(this: {
-      props: { label: string };
-      state: { count: number };
-      setState: (partial: { count: number }) => void;
-      render: () => unknown;
-    }, props: { label: string }) {
-      (Component as unknown as (this: unknown, props: unknown) => void).call(
-        this,
-        props,
-      );
+    function Es5Counter(
+      this: {
+        props: { label: string };
+        state: { count: number };
+        setState: (partial: { count: number }) => void;
+        render: () => unknown;
+      },
+      props: { label: string },
+    ) {
+      (Component as unknown as (this: unknown, props: unknown) => void).call(this, props);
       this.state = { count: 0 };
       increment = () => {
         this.setState({ count: this.state.count + 1 });
@@ -2181,16 +2161,16 @@ describe("react-compat common API subset", () => {
       return createElement("span", null, `${this.props.label}:${this.state.count}`);
     };
 
-    function Es5PureCounter(this: {
-      props: { label: string };
-      state: { count: number };
-      setState: (partial: { count: number }) => void;
-      render: () => unknown;
-    }, props: { label: string }) {
-      (PureComponent as unknown as (this: unknown, props: unknown) => void).call(
-        this,
-        props,
-      );
+    function Es5PureCounter(
+      this: {
+        props: { label: string };
+        state: { count: number };
+        setState: (partial: { count: number }) => void;
+        render: () => unknown;
+      },
+      props: { label: string },
+    ) {
+      (PureComponent as unknown as (this: unknown, props: unknown) => void).call(this, props);
       this.state = { count: 0 };
       pureIncrement = () => {
         this.setState({ count: this.state.count });
@@ -2220,9 +2200,7 @@ describe("react-compat common API subset", () => {
     pureIncrement?.();
 
     expect(container.textContent).toBe("count:1pure:0");
-    expect(renders.filter((entry) => entry.startsWith("pure:"))).toEqual([
-      "pure:0",
-    ]);
+    expect(renders.filter((entry) => entry.startsWith("pure:"))).toEqual(["pure:0"]);
     expect(renders).toContain("component:1");
   });
 
@@ -2240,10 +2218,7 @@ describe("react-compat common API subset", () => {
       }
     }
 
-    class ProviderContainer extends Component<
-      Record<string, never>,
-      { store: { value: number } }
-    > {
+    class ProviderContainer extends Component<Record<string, never>, { store: { value: number } }> {
       constructor(props: Record<string, never>) {
         super(props);
         this.state = { store: { value: 11 } };
@@ -2300,11 +2275,7 @@ describe("react-compat common API subset", () => {
         setLocale(nextLocale);
       };
 
-      return createElement(
-        LocaleContext.Provider,
-        { value: locale },
-        stableChildren,
-      );
+      return createElement(LocaleContext.Provider, { value: locale }, stableChildren);
     }
 
     render(createElement(Provider, null), container);
@@ -2347,11 +2318,7 @@ describe("react-compat common API subset", () => {
         setContext({ locale: nextLocale });
       };
 
-      return createElement(
-        LocaleContext.Provider,
-        { value: context },
-        stableChildren,
-      );
+      return createElement(LocaleContext.Provider, { value: context }, stableChildren);
     }
 
     render(createElement(Provider, null), container);
@@ -2399,10 +2366,7 @@ describe("react-compat common API subset", () => {
     }
 
     function Provider({ children }: { children?: unknown }) {
-      const makeContext = useCallback(
-        () => ({ i18n: new Proxy(i18n, {}) }),
-        [],
-      );
+      const makeContext = useCallback(() => ({ i18n: new Proxy(i18n, {}) }), []);
       const [context, setContext] = useState(makeContext);
 
       useEffect(() => {
@@ -2413,11 +2377,7 @@ describe("react-compat common API subset", () => {
         return i18n.on("change", updateContext);
       }, [makeContext]);
 
-      return createElement(
-        LocaleContext.Provider,
-        { value: context },
-        children,
-      );
+      return createElement(LocaleContext.Provider, { value: context }, children);
     }
 
     render(
@@ -2497,14 +2457,7 @@ describe("react-compat common API subset", () => {
       );
     }
 
-    render(
-      createElement(
-        Provider,
-        null,
-        createElement(LocaleLabel, null),
-      ),
-      container,
-    );
+    render(createElement(Provider, null, createElement(LocaleLabel, null)), container);
     expect(container.textContent).toBe("");
 
     act(() => {
@@ -2549,19 +2502,10 @@ describe("react-compat common API subset", () => {
     const root = createRoot(container);
     let switchStore: (() => void) | undefined;
 
-    function Provider(props: {
-      store: { value: number };
-      children: unknown;
-    }) {
-      const contextValue = useMemo(() => ({ store: props.store }), [
-        props.store,
-      ]);
+    function Provider(props: { store: { value: number }; children: unknown }) {
+      const contextValue = useMemo(() => ({ store: props.store }), [props.store]);
 
-      return createElement(
-        StoreContext.Provider,
-        { value: contextValue },
-        props.children,
-      );
+      return createElement(StoreContext.Provider, { value: contextValue }, props.children);
     }
 
     class Child extends Component {
@@ -2572,10 +2516,7 @@ describe("react-compat common API subset", () => {
       }
     }
 
-    class ProviderContainer extends Component<
-      Record<string, never>,
-      { store: { value: number } }
-    > {
+    class ProviderContainer extends Component<Record<string, never>, { store: { value: number } }> {
       constructor(props: Record<string, never>) {
         super(props);
         this.state = { store: { value: 11 } };
@@ -2583,11 +2524,7 @@ describe("react-compat common API subset", () => {
       }
 
       render() {
-        return createElement(
-          Provider,
-          { store: this.state.store },
-          createElement(Child, null),
-        );
+        return createElement(Provider, { store: this.state.store }, createElement(Child, null));
       }
     }
 
@@ -2616,12 +2553,8 @@ describe("react-compat common API subset", () => {
       store: { getState: () => number; subscribe: () => () => void };
       children: unknown;
     }) {
-      const contextValue = useMemo(() => ({ store: props.store }), [
-        props.store,
-      ]);
-      const previousState = useMemo(() => props.store.getState(), [
-        props.store,
-      ]);
+      const contextValue = useMemo(() => ({ store: props.store }), [props.store]);
+      const previousState = useMemo(() => props.store.getState(), [props.store]);
 
       useLayoutEffect(() => {
         const unsubscribe = props.store.subscribe();
@@ -2631,11 +2564,7 @@ describe("react-compat common API subset", () => {
         return unsubscribe;
       }, [contextValue, previousState]);
 
-      return createElement(
-        StoreContext.Provider,
-        { value: contextValue },
-        props.children,
-      );
+      return createElement(StoreContext.Provider, { value: contextValue }, props.children);
     }
 
     class Child extends Component {
@@ -2657,11 +2586,7 @@ describe("react-compat common API subset", () => {
       }
 
       render() {
-        return createElement(
-          Provider,
-          { store: this.state.store },
-          createElement(Child, null),
-        );
+        return createElement(Provider, { store: this.state.store }, createElement(Child, null));
       }
     }
 
@@ -2729,10 +2654,7 @@ describe("react-compat common API subset", () => {
         calls.push(`mount:${this.props.label}:${this.state.count}`);
       }
 
-      componentDidUpdate(
-        previousProps: { label: string },
-        previousState: { count: number },
-      ) {
+      componentDidUpdate(previousProps: { label: string }, previousState: { count: number }) {
         calls.push(
           `update:${previousProps.label}:${previousState.count}->${this.props.label}:${this.state.count}`,
         );
@@ -2760,12 +2682,7 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Counter, { label: "B" }));
     root.unmount();
 
-    expect(calls).toEqual([
-      "mount:A:0",
-      "update:A:0->A:1",
-      "update:A:1->B:1",
-      "unmount:B:1",
-    ]);
+    expect(calls).toEqual(["mount:A:0", "update:A:0->A:1", "update:A:1->B:1", "unmount:B:1"]);
   });
 
   test("class component shouldComponentUpdate can skip render and update lifecycle", () => {
@@ -2800,13 +2717,7 @@ describe("react-compat common API subset", () => {
     root.render(createElement(Label, { value: "C", version: 2 }));
 
     expect(container.innerHTML).toBe("<span>C</span>");
-    expect(calls).toEqual([
-      "render:A",
-      "should:1->1",
-      "should:1->2",
-      "render:C",
-      "update",
-    ]);
+    expect(calls).toEqual(["render:A", "should:1->1", "should:1->2", "render:C", "update"]);
   });
 
   test("class component forceUpdate bypasses shouldComponentUpdate", () => {
@@ -2846,12 +2757,7 @@ describe("react-compat common API subset", () => {
     force?.();
 
     expect(container.innerHTML).toBe("<span>B</span>");
-    expect(calls).toEqual([
-      "render:A",
-      "should",
-      "render:B",
-      "forced",
-    ]);
+    expect(calls).toEqual(["render:A", "should", "render:B", "forced"]);
   });
 
   test("class component passes getSnapshotBeforeUpdate result to componentDidUpdate", () => {
@@ -3105,10 +3011,12 @@ describe("react-compat common API subset", () => {
     await Promise.resolve();
     expect(container.textContent).toBe("A-B:false");
 
-    root.render(createErrorBoundary(
-      { fallback: (error) => createElement("strong", null, error.message) },
-      createElement(App, { reject: true }),
-    ));
+    root.render(
+      createErrorBoundary(
+        { fallback: (error) => createElement("strong", null, error.message) },
+        createElement(App, { reject: true }),
+      ),
+    );
     container.querySelector("button")?.click();
     rejectAction?.(new Error("action failed"));
     await Promise.resolve();
@@ -3127,20 +3035,24 @@ describe("react-compat common API subset", () => {
       return createElement(
         "section",
         null,
-        createElement("button", { id: "optimistic", onClick: () => setOptimistic("B") }, optimistic),
+        createElement(
+          "button",
+          { id: "optimistic", onClick: () => setOptimistic("B") },
+          optimistic,
+        ),
         createElement("button", { id: "base", onClick: () => setBase("C") }, base),
       );
     }
 
     render(createElement(App, null), container);
-    container.querySelector("#optimistic")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    container
+      .querySelector("#optimistic")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     expect(container.querySelector("#optimistic")?.textContent).toBe("B");
 
-    container.querySelector("#base")?.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
-    );
+    container
+      .querySelector("#base")
+      ?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(container.querySelector("#optimistic")?.textContent).toBe("C");
     expect(container.querySelector("#base")?.textContent).toBe("C");
@@ -3153,11 +3065,7 @@ describe("react-compat common API subset", () => {
       createElement(
         Profiler,
         { id: "profile", onRender: () => undefined },
-        createElement(
-          Activity,
-          { mode: "visible" },
-          createElement("span", null, "Visible"),
-        ),
+        createElement(Activity, { mode: "visible" }, createElement("span", null, "Visible")),
       ),
       container,
     );
@@ -3169,11 +3077,7 @@ describe("react-compat common API subset", () => {
     const container = document.createElement("div");
 
     render(
-      createElement(
-        Activity,
-        { mode: "hidden" },
-        createElement("span", null, "Hidden"),
-      ),
+      createElement(Activity, { mode: "hidden" }, createElement("span", null, "Hidden")),
       container,
     );
 
@@ -3194,11 +3098,7 @@ describe("react-compat common API subset", () => {
 
     function Counter() {
       const [count, setCount] = useState(0);
-      return createElement(
-        "button",
-        { onClick: () => setCount((value) => value + 1) },
-        count,
-      );
+      return createElement("button", { onClick: () => setCount((value) => value + 1) }, count);
     }
 
     render(

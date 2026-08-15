@@ -28,7 +28,7 @@ import {
 } from "./hooks.js";
 import {
   isDangerousHtmlAttribute,
-  isDangerousHtmlOptIn,
+  readDangerousHtmlOptIn,
   isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
@@ -149,6 +149,10 @@ function renderElementToString(
         : renderAttributesToString(element.props);
     if (isVoidHtmlElement(element.type)) {
       return `<${element.type}${attributes}/>`;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(element.props, "dangerouslySetInnerHTML")) {
+      return `<${element.type}${attributes}>${readDangerousHtmlOptIn(element.props.dangerouslySetInnerHTML) ?? ""}</${element.type}>`;
     }
 
     // Primitive children dominate real markup; serializing them inline skips
@@ -414,7 +418,8 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   }
 
   if (classification.dangerousHtml) {
-    return isDangerousHtmlOptIn(value) ? ` ${attributeName}="${escapeHtml(value.__html)}"` : "";
+    const html = readDangerousHtmlOptIn(value);
+    return html === undefined ? "" : ` ${attributeName}="${escapeHtml(html)}"`;
   }
 
   if (typeof value === "object") {
@@ -452,7 +457,13 @@ function classifyAttributeName(name: string): AttributeNameClassification {
 }
 
 function createAttributeNameClassification(name: string): AttributeNameClassification {
-  if (name === "children" || name === "key" || name === "ref" || isEventLikePropName(name)) {
+  if (
+    name === "children" ||
+    name === "dangerouslySetInnerHTML" ||
+    name === "key" ||
+    name === "ref" ||
+    isEventLikePropName(name)
+  ) {
     return { kind: "skip" };
   }
 

@@ -6,14 +6,23 @@ export function isDangerousHtmlAttribute(name: string): boolean {
   return name.toLowerCase() === "srcdoc";
 }
 
-/** Narrows a value to an explicit raw HTML opt-in payload. */
+/** Reads an own string data property without invoking the payload's getter. */
+export function readDangerousHtmlOptIn(value: unknown): string | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(value, "__html");
+    return descriptor !== undefined && "value" in descriptor && typeof descriptor.value === "string"
+      ? descriptor.value
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Returns whether a value carries an own string raw HTML data property. */
 export function isDangerousHtmlOptIn(value: unknown): value is { __html: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Reflect.ownKeys(value).length === 1 &&
-    typeof Object.getOwnPropertyDescriptor(value, "__html")?.value === "string"
-  );
+  return readDangerousHtmlOptIn(value) !== undefined;
 }
 
 /** Returns true when an attribute name normally carries a single URL value. */

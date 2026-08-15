@@ -25,6 +25,9 @@ export function isUnsafeUrlAttribute(name: string, value: string): boolean;
 export function isUrlAttribute(name: string): boolean;
 
 // @public
+export function readDangerousHtmlOptIn(value: unknown): string | undefined;
+
+// @public
 export function safeUrlAttributeValue(name: string, value: string): string | undefined;
 
 // (No @packageDocumentation comment for this package)

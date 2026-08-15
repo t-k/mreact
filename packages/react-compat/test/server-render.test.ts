@@ -12,6 +12,32 @@ import {
 import { __serverRenderAttributeCacheForTesting } from "../src/server-render.js";
 
 describe("react-compat server render", () => {
+  test("renders own data-property dangerouslySetInnerHTML payloads with extra keys", () => {
+    function App() {
+      return createElement("article", {
+        dangerouslySetInnerHTML: { __html: "<strong>trusted</strong>", revision: 2 },
+      });
+    }
+
+    expect(renderToString(App)).toBe("<article><strong>trusted</strong></article>");
+  });
+
+  test("rejects accessor and inherited dangerouslySetInnerHTML payloads", () => {
+    const getterPayload = Object.defineProperty({}, "__html", {
+      get: () => "<strong>getter</strong>",
+    });
+
+    expect(
+      renderToString(() => createElement("div", { dangerouslySetInnerHTML: getterPayload })),
+    ).toBe("<div></div>");
+    expect(
+      renderToString(() =>
+        createElement("div", {
+          dangerouslySetInnerHTML: Object.create({ __html: "<strong>inherited</strong>" }),
+        }),
+      ),
+    ).toBe("<div></div>");
+  });
   test("strips unsafe meta refresh content on meta and non-meta hosts alike", () => {
     function App() {
       return createElement(
@@ -222,11 +248,18 @@ describe("react-compat server render", () => {
     }
 
     function OptIn() {
-      return createElement("iframe", { srcDoc: { __html: "<p>safe</p>" } });
+      return createElement("iframe", { srcDoc: { __html: "<p>safe</p>", revision: 2 } });
+    }
+
+    function Getter() {
+      return createElement("iframe", {
+        srcDoc: Object.defineProperty({}, "__html", { get: () => "<p>getter</p>" }),
+      });
     }
 
     expect(renderToString(Dropped)).toBe("<iframe></iframe>");
     expect(renderToString(OptIn)).toBe('<iframe srcdoc="&lt;p&gt;safe&lt;/p&gt;"></iframe>');
+    expect(renderToString(Getter)).toBe("<iframe></iframe>");
   });
 
   test("does not emit string event handler attributes", () => {

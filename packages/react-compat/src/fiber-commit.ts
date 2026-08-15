@@ -11,21 +11,14 @@ interface RefRecord {
   node: unknown;
 }
 
-export function commitFiberRoot(
-  root: FiberRoot,
-  options: RenderOptions = {},
-): void {
+export function commitFiberRoot(root: FiberRoot, options: RenderOptions = {}): void {
   const finishedWork = root.finishedWork;
 
   if (finishedWork === undefined) {
     return;
   }
 
-  if (
-    root.refCleanupKnown !== true ||
-    root.current.hasRefSubtree ||
-    finishedWork.hasRefSubtree
-  ) {
+  if (root.refCleanupKnown !== true || root.current.hasRefSubtree || finishedWork.hasRefSubtree) {
     runWithHostCommit(() => {
       cleanupDeletedRefs(root.current, finishedWork);
     });
@@ -103,10 +96,7 @@ function detachUnretainedFiberSubtrees(
   }
 }
 
-function detachDeletedFiberSubtrees(
-  fiber: Fiber | undefined,
-  retained: ReadonlySet<Fiber>,
-): void {
+function detachDeletedFiberSubtrees(fiber: Fiber | undefined, retained: ReadonlySet<Fiber>): void {
   let cursor: Fiber | undefined = fiber;
 
   while (cursor !== undefined) {
@@ -160,21 +150,21 @@ function detachFiberSubtree(fiber: Fiber, retained: ReadonlySet<Fiber>): void {
 }
 
 function cleanupDeletedRefs(previous: Fiber, next: Fiber): void {
-  const nextRefs = new Set<unknown>();
-
-  collectRefRecords(next, nextRefs);
+  const nextRefNodes = new Map<unknown, Set<unknown>>();
+  for (const record of collectRefRecords(next)) {
+    const nodes = nextRefNodes.get(record.ref) ?? new Set<unknown>();
+    nodes.add(record.node);
+    nextRefNodes.set(record.ref, nodes);
+  }
 
   for (const record of collectRefRecords(previous)) {
-    if (!nextRefs.has(record.ref)) {
+    if (nextRefNodes.get(record.ref)?.has(record.node) !== true) {
       detachRef(record.ref, record.node);
     }
   }
 }
 
-function collectRefRecords(
-  fiber: Fiber | undefined,
-  refs: Set<unknown> = new Set(),
-): RefRecord[] {
+function collectRefRecords(fiber: Fiber | undefined): RefRecord[] {
   const records: RefRecord[] = [];
   let cursor = fiber;
 
@@ -182,11 +172,10 @@ function collectRefRecords(
     const ref = getFiberRef(cursor);
 
     if (ref !== undefined && ref !== null) {
-      refs.add(ref);
       records.push({ ref, node: cursor.stateNode });
     }
 
-    records.push(...collectRefRecords(cursor.child, refs));
+    records.push(...collectRefRecords(cursor.child));
     cursor = cursor.sibling;
   }
 
@@ -194,9 +183,7 @@ function collectRefRecords(
 }
 
 function getFiberRef(fiber: Fiber): unknown {
-  const props = (fiber.memoizedProps ?? fiber.pendingProps) as
-    | { ref?: unknown }
-    | undefined;
+  const props = (fiber.memoizedProps ?? fiber.pendingProps) as { ref?: unknown } | undefined;
 
   return props?.ref;
 }

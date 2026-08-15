@@ -15,7 +15,7 @@ import {
 } from "./boundary.js";
 import {
   isDangerousHtmlAttribute,
-  isDangerousHtmlOptIn,
+  readDangerousHtmlOptIn,
   isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
 } from "./url-safety.js";
@@ -265,16 +265,18 @@ function appendHostElement(
   state: HtmlRenderState,
 ): void | PromiseLike<void> {
   const tagName = element.type as string;
-  const innerHtml = (element.props as { dangerouslySetInnerHTML?: { __html?: unknown } })
-    .dangerouslySetInnerHTML;
+  const hasInnerHtml = Object.hasOwn(element.props, "dangerouslySetInnerHTML");
+  const innerHtml = hasInnerHtml
+    ? readDangerousHtmlOptIn(element.props.dangerouslySetInnerHTML)
+    : undefined;
   sink.append(`<${tagName}${renderHtmlAttributes(element.props)}>`);
 
   if (isVoidHtmlElement(tagName)) {
     return;
   }
 
-  if (innerHtml !== undefined) {
-    sink.append(String(innerHtml.__html ?? ""));
+  if (hasInnerHtml) {
+    sink.append(innerHtml ?? "");
     sink.append(`</${tagName}>`);
     return;
   }
@@ -499,10 +501,8 @@ function renderHtmlAttribute(name: string, value: unknown): string {
   // for the attribute syntax -- decodes back to executable HTML inside
   // the iframe document with the parent's origin.
   if (isDangerousHtmlAttribute(attributeName)) {
-    if (!isDangerousHtmlOptIn(value)) {
-      return "";
-    }
-    return ` ${attributeName}="${escapeAttribute(value.__html)}"`;
+    const html = readDangerousHtmlOptIn(value);
+    return html === undefined ? "" : ` ${attributeName}="${escapeAttribute(html)}"`;
   }
 
   if (value === true) {

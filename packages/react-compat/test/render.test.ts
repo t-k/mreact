@@ -87,6 +87,90 @@ function findFiberByKey(fiber: Fiber | undefined, key: string): Fiber | undefine
 }
 
 describe("react-compat render", () => {
+  test("renders and updates dangerouslySetInnerHTML without creating an attribute", () => {
+    const container = document.createElement("div");
+
+    render(
+      createElement("article", {
+        dangerouslySetInnerHTML: { __html: "<strong>first</strong>", revision: 1 },
+      }),
+      container,
+    );
+    const article = container.querySelector("article");
+    expect(article?.innerHTML).toBe("<strong>first</strong>");
+    expect(article?.hasAttribute("dangerouslysetinnerhtml")).toBe(false);
+
+    render(
+      createElement("article", {
+        dangerouslySetInnerHTML: { __html: "<em>second</em>" },
+      }),
+      container,
+    );
+    expect(container.querySelector("article")).toBe(article);
+    expect(article?.innerHTML).toBe("<em>second</em>");
+  });
+
+  test("rejects getter and inherited dangerouslySetInnerHTML payloads", () => {
+    const container = document.createElement("div");
+    const getterPayload = Object.defineProperty({}, "__html", {
+      get: () => "<strong>getter</strong>",
+    });
+
+    render(createElement("div", { dangerouslySetInnerHTML: getterPayload }), container);
+    expect(container.firstElementChild?.innerHTML).toBe("");
+
+    render(
+      createElement("div", {
+        dangerouslySetInnerHTML: Object.create({ __html: "<strong>inherited</strong>" }),
+      }),
+      container,
+    );
+    expect(container.firstElementChild?.innerHTML).toBe("");
+  });
+
+  test("lets dangerouslySetInnerHTML own content across child transitions", () => {
+    const container = document.createElement("div");
+    const cleanups: string[] = [];
+
+    render(
+      createElement(
+        "div",
+        null,
+        createElement(
+          "button",
+          {
+            ref: (node: HTMLButtonElement | null) => {
+              if (node === null) return;
+              return () => cleanups.push("button");
+            },
+          },
+          "child",
+        ),
+      ),
+      container,
+    );
+    render(
+      createElement("div", {
+        children: "ignored",
+        dangerouslySetInnerHTML: { __html: "<strong>raw</strong>" },
+      }),
+      container,
+    );
+    expect(container.firstElementChild?.innerHTML).toBe("<strong>raw</strong>");
+    expect(cleanups).toEqual(["button"]);
+
+    render(createElement("div", null, createElement("em", null, "child again")), container);
+    expect(container.firstElementChild?.innerHTML).toBe("<em>child again</em>");
+
+    render(
+      createElement("div", {
+        children: "ignored invalid",
+        dangerouslySetInnerHTML: undefined,
+      }),
+      container,
+    );
+    expect(container.firstElementChild?.innerHTML).toBe("");
+  });
   afterEach(() => {
     vi.restoreAllMocks();
   });

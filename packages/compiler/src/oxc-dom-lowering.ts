@@ -151,7 +151,7 @@ function lowerOxcDomAttributes(code: string, attributes: readonly unknown[]): st
       }
       if (isDangerousHtmlAttribute(domName)) {
         return [
-          `  { const _value = (${expression}); if (_value && typeof _value === "object" && typeof _value.__html === "string") _node.setAttribute(${JSON.stringify(domName)}, _value.__html); }`,
+          `  { const _value = (${expression}); try { if (_value && typeof _value === "object") { const _descriptor = Object.getOwnPropertyDescriptor(_value, "__html"); if (_descriptor !== undefined && "value" in _descriptor && typeof _descriptor.value === "string") _node.setAttribute(${JSON.stringify(domName)}, _descriptor.value); } } catch {} }`,
         ];
       }
       return [`  _node.setAttribute(${JSON.stringify(domName)}, String(${expression}));`];

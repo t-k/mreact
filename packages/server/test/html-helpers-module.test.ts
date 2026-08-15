@@ -37,9 +37,7 @@ describe("server HTML helpers module", () => {
     renderSsrState(stateSink, { text: "</script>", line: "\u2028" }, { nonce: "n1" });
     renderEventHydrationManifest(manifestSink, manifest);
 
-    expect(serializeSsrState({ text: "</script>" })).toBe(
-      `{"text":"\\u003c/script>"}`,
-    );
+    expect(serializeSsrState({ text: "</script>" })).toBe(`{"text":"\\u003c/script>"}`);
     expect(stateSink.toString()).toBe(
       `<script type="application/json" data-mreact-ssr-state nonce="n1">{"text":"\\u003c/script>","line":"\\u2028"}</script>`,
     );
@@ -216,5 +214,46 @@ describe("server HTML helpers module", () => {
     await expect(response.text()).resolves.toBe(
       '<main><script nonce="nonce-1">if (a < b) globalThis.ready = true;</script><style nonce="nonce-2">main > p { color: red; }</style></main>',
     );
+  });
+
+  test("html reads only own raw HTML data properties and ignores extra keys", async () => {
+    let getterCalls = 0;
+    const getterPayload = Object.defineProperty({}, "__html", {
+      get() {
+        getterCalls += 1;
+        return "<script>getter()</script>";
+      },
+    });
+    const inheritedPayload = Object.create({
+      __html: "<script>inherited()</script>",
+    });
+    const throwingDescriptor = new Proxy(
+      {},
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error("descriptor blocked");
+        },
+      },
+    );
+
+    await expect(
+      html(
+        createElement("main", null, [
+          createElement("div", {
+            key: "extra",
+            dangerouslySetInnerHTML: { __html: "<strong>trusted</strong>", revision: 2 },
+          }),
+          createElement("div", { key: "getter", dangerouslySetInnerHTML: getterPayload }),
+          createElement("div", { key: "inherited", dangerouslySetInnerHTML: inheritedPayload }),
+          createElement("div", {
+            key: "proxy",
+            dangerouslySetInnerHTML: throwingDescriptor,
+          }),
+        ]),
+      ).text(),
+    ).resolves.toBe(
+      "<main><div><strong>trusted</strong></div><div></div><div></div><div></div></main>",
+    );
+    expect(getterCalls).toBe(0);
   });
 });
