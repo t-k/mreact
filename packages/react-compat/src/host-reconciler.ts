@@ -39,6 +39,7 @@ import {
   applyPostChildFormProps,
   applyProps,
   hasDangerouslySetInnerHtmlProp,
+  hasTextAreaValueProp,
 } from "./dom-props.js";
 import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./host-event-binder.js";
@@ -2531,7 +2532,10 @@ function createHostComponentFiber(
     getHostChildFiberOptions(options, childNamespace, previousChildNodes),
   );
   fiber.child = childResult.fiber;
-  if (previousChildNodes !== undefined) {
+  if (
+    previousChildNodes !== undefined &&
+    !hasTextAreaValueProp(node.type, node.props)
+  ) {
     reportExtraHydrationNodes(options, `${path}.c`, previousChildNodes, childResult.consumed);
   }
   parent.child ??= fiber;
@@ -2895,7 +2899,7 @@ function commitHostDirtyFiber(
     }
 
     if (isDomElement && isFormHostType(fiber.type)) {
-      applyPostChildFormProps(element, props, previousProps);
+      applyPostChildFormProps(element, props, previousProps, fiber.hydrateExisting === true);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
     fiber.memoizedProps = props;
@@ -3409,7 +3413,7 @@ function commitHostFiber(
     }
 
     if (isDomElement && isFormHostType(fiber.type)) {
-      applyPostChildFormProps(element, props, previousProps);
+      applyPostChildFormProps(element, props, previousProps, fiber.hydrateExisting === true);
     }
     applyChangedRef(previousProps?.ref, props.ref, element);
     fiber.memoizedProps = props;

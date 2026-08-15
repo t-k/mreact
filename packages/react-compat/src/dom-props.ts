@@ -289,6 +289,7 @@ export function applyPostChildFormProps(
   element: Element,
   props: Record<string, unknown>,
   previousProps?: Record<string, unknown>,
+  preserveHydrationState = false,
 ): void {
   if (!isPostChildFormElement(element)) {
     return;
@@ -307,7 +308,7 @@ export function applyPostChildFormProps(
       }
     }
 
-    const value = postChildFormValue(props, previousProps);
+    const value = postChildFormValue(props, previousProps, preserveHydrationState);
     if (value !== undefined) {
       element.value = value;
       element.setAttribute("value", value);
@@ -315,7 +316,7 @@ export function applyPostChildFormProps(
     return;
   }
 
-  const value = postChildFormValue(props, previousProps);
+  const value = postChildFormValue(props, previousProps, preserveHydrationState);
 
   if (value === undefined) {
     return;
@@ -347,12 +348,17 @@ function isPostChildFormElement(
 function postChildFormValue(
   props: Record<string, unknown>,
   previousProps: Record<string, unknown> | undefined,
+  preserveHydrationState: boolean,
 ): string | undefined {
   if (hasOwnProp(props, "value")) {
     return props.value === null || props.value === undefined ? "" : String(props.value);
   }
 
-  if (previousProps === undefined && hasOwnProp(props, "defaultValue")) {
+  if (
+    !preserveHydrationState &&
+    previousProps === undefined &&
+    hasOwnProp(props, "defaultValue")
+  ) {
     return props.defaultValue === null || props.defaultValue === undefined
       ? ""
       : String(props.defaultValue);
@@ -512,6 +518,11 @@ function applyFormValueProp(
   if (element instanceof HTMLInputElement && (name === "value" || name === "defaultValue")) {
     const nextValue = value === null || value === undefined ? "" : String(value);
 
+    if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
+      element.defaultValue = nextValue;
+      return true;
+    }
+
     if (element.value !== nextValue) {
       reportRecoverable(
         options,
@@ -527,6 +538,11 @@ function applyFormValueProp(
 
   if (element instanceof HTMLInputElement && (name === "checked" || name === "defaultChecked")) {
     const nextChecked = value !== null && value !== undefined && value !== false;
+
+    if (name === "defaultChecked" && options.preserveHydrationAttributes === true) {
+      element.defaultChecked = nextChecked;
+      return true;
+    }
 
     if (element.checked !== nextChecked) {
       reportRecoverable(
@@ -550,6 +566,11 @@ function applyFormValueProp(
   if (element instanceof HTMLTextAreaElement && (name === "value" || name === "defaultValue")) {
     const nextValue = value === null || value === undefined ? "" : String(value);
 
+    if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
+      element.defaultValue = nextValue;
+      return true;
+    }
+
     if (element.value !== nextValue) {
       reportRecoverable(
         options,
@@ -565,6 +586,10 @@ function applyFormValueProp(
 
   if (element instanceof HTMLSelectElement && (name === "value" || name === "defaultValue")) {
     const nextValue = value === null || value === undefined ? undefined : String(value);
+
+    if (name === "defaultValue" && options.preserveHydrationAttributes === true) {
+      return true;
+    }
 
     for (const option of Array.from(element.options)) {
       option.selected = nextValue !== undefined && option.value === nextValue;
@@ -593,6 +618,13 @@ function applyDangerousInnerHtml(
 
 export function hasDangerouslySetInnerHtmlProp(props: Record<string, unknown>): boolean {
   return Object.prototype.hasOwnProperty.call(props, "dangerouslySetInnerHTML");
+}
+
+export function hasTextAreaValueProp(
+  type: unknown,
+  props: Record<string, unknown>,
+): boolean {
+  return type === "textarea" && (hasOwnProp(props, "value") || hasOwnProp(props, "defaultValue"));
 }
 
 function isFormValuePropName(name: string): boolean {

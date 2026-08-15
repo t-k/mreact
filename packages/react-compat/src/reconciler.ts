@@ -34,7 +34,7 @@ import {
   type RootRuntime,
 } from "./hooks.js";
 import { commitDevToolsRoot } from "./devtools.js";
-import { applyPostChildFormProps, applyProps } from "./dom-props.js";
+import { applyPostChildFormProps, applyProps, hasTextAreaValueProp } from "./dom-props.js";
 import { syncChildNodes, syncOwnedChildNodes, syncScopedChildNodes } from "./dom-children.js";
 import { setLogicalEventParent } from "./events.js";
 import { attachRef } from "./ref-lifecycle.js";
@@ -537,11 +537,18 @@ function reconcileElement(
     `${path}.c`,
     { ...options, namespace: childNamespace },
   );
-  reportExtraHydrationNodes(options, `${path}.c`, previousChildNodes, childResult.consumed);
+  if (!hasTextAreaValueProp(elementType, element.props)) {
+    reportExtraHydrationNodes(options, `${path}.c`, previousChildNodes, childResult.consumed);
+  }
   if (!shouldPreserveContentEditableChildren(domElement, element.props, childResult.nodes)) {
     syncChildNodes(domElement, childResult.nodes);
   }
-  applyPostChildFormProps(domElement, element.props);
+  applyPostChildFormProps(
+    domElement,
+    element.props,
+    undefined,
+    options.preserveHydrationAttributes === true,
+  );
   applyRef(element.ref, domElement);
   return { nodes: [domElement], consumed: existing === undefined ? 0 : 1 };
 }

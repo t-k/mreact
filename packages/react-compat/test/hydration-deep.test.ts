@@ -87,6 +87,88 @@ describe("react-compat deep hydration", () => {
     expect(recoveries).toEqual(["attribute:Hydration inner HTML mismatch."]);
   });
 
+  test("preserves user-edited uncontrolled form state during hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<form><input name="user" value="server"><input type="checkbox" checked><textarea>server bio</textarea><select><option value="admin" selected>Admin</option><option value="user">User</option></select></form>';
+    const input = container.querySelector<HTMLInputElement>('input[name="user"]')!;
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+    const recoveries: string[] = [];
+
+    input.value = "USER TYPED";
+    checkbox.checked = false;
+    textarea.value = "USER BIO";
+    select.value = "user";
+
+    hydrateRoot(
+      container,
+      createElement(
+        "form",
+        null,
+        createElement("input", { name: "user", defaultValue: "server" }),
+        createElement("input", { type: "checkbox", defaultChecked: true }),
+        createElement("textarea", { defaultValue: "server bio" }),
+        createElement(
+          "select",
+          { defaultValue: "admin" },
+          createElement("option", { value: "admin" }, "Admin"),
+          createElement("option", { value: "user" }, "User"),
+        ),
+      ),
+      {
+        onRecoverableError(error) {
+          recoveries.push(error.message);
+        },
+      },
+    );
+
+    expect(container.querySelector('input[name="user"]')).toBe(input);
+    expect(input.value).toBe("USER TYPED");
+    expect(checkbox.checked).toBe(false);
+    expect(textarea.value).toBe("USER BIO");
+    expect(select.value).toBe("user");
+    expect(recoveries).toEqual([]);
+  });
+
+  test("applies controlled form state during hydration", () => {
+    const container = document.createElement("div");
+    container.innerHTML =
+      '<form><input value="server"><input type="checkbox"><textarea>server</textarea><select><option value="server" selected>Server</option><option value="client">Client</option></select></form>';
+    const input = container.querySelector<HTMLInputElement>('input:not([type="checkbox"])')!;
+    const checkbox = container.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
+    const select = container.querySelector<HTMLSelectElement>("select")!;
+
+    input.value = "USER";
+    checkbox.checked = false;
+    textarea.value = "USER";
+    select.value = "server";
+
+    hydrateRoot(
+      container,
+      createElement(
+        "form",
+        null,
+        createElement("input", { value: "client" }),
+        createElement("input", { type: "checkbox", checked: true }),
+        createElement("textarea", { value: "client" }),
+        createElement(
+          "select",
+          { value: "client" },
+          createElement("option", { value: "server" }, "Server"),
+          createElement("option", { value: "client" }, "Client"),
+        ),
+      ),
+    );
+
+    expect(input.value).toBe("client");
+    expect(checkbox.checked).toBe(true);
+    expect(textarea.value).toBe("client");
+    expect(select.value).toBe("client");
+  });
+
   test("preserves useState across the first hydrated update", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>0</button>";
