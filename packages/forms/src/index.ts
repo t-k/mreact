@@ -219,7 +219,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     ReadonlyCell<Array<FieldArrayRow<ArrayFieldValue<TValues, FieldName<TValues>>>>>
   >();
   let nextFieldArrayKey = 0;
-  let activeSubmit: Promise<FormSubmitResult<TValues, unknown>> | undefined;
+  let activeSubmit: object | undefined;
 
   function commit(patch: Partial<FormState<TValues>>, dirty = dirtyFields.size > 0): void {
     const previous = state.get();
@@ -331,7 +331,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }
   }
 
-  async function validateForm(): Promise<FormValidationResult<TValues, TSubmitValues>> {
+  async function validateForm(
+    shouldCommit: () => boolean = () => true,
+  ): Promise<FormValidationResult<TValues, TSubmitValues>> {
     const values = state.get().values;
     const errors: FormErrors<TValues> = {};
     const fieldNames = Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>;
@@ -355,7 +357,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       if (!result.success) {
         mergeIssueErrors(errors, result.issues);
       } else if (Object.keys(errors).length === 0) {
-        setErrors({});
+        if (shouldCommit()) {
+          setErrors({});
+        }
         return {
           success: true,
           value: result.value as TSubmitValues,
@@ -364,14 +368,18 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     }
 
     if (Object.keys(errors).length > 0) {
-      setErrors(errors);
+      if (shouldCommit()) {
+        setErrors(errors);
+      }
       return {
         errors,
         success: false,
       };
     }
 
-    setErrors({});
+    if (shouldCommit()) {
+      setErrors({});
+    }
     return {
       success: true,
       value: values as TValues & TSubmitValues,
@@ -576,6 +584,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       }
 
       initialValues = cloneValues(values);
+      activeSubmit = undefined;
       dirtyFields.clear();
       fieldArrayKeys.clear();
       commit({
@@ -618,6 +627,8 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         return { status: "duplicate" };
       }
 
+      const submitToken = {};
+      activeSubmit = submitToken;
       const task = (async (): Promise<FormSubmitResult<TValues, TResult>> => {
         commit({
           submitCount: state.get().submitCount + 1,
@@ -625,7 +636,11 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
         });
 
         try {
-          const validation = await validateForm();
+          const validation = await validateForm(() => activeSubmit === submitToken);
+
+          if (activeSubmit !== submitToken) {
+            return { status: "duplicate" };
+          }
 
           if (!validation.success) {
             return {
@@ -647,12 +662,13 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
             };
           }
         } finally {
-          activeSubmit = undefined;
-          commit({ submitting: false });
+          if (activeSubmit === submitToken) {
+            activeSubmit = undefined;
+            commit({ submitting: false });
+          }
         }
       })();
 
-      activeSubmit = task as Promise<FormSubmitResult<TValues, unknown>>;
       return task;
     },
     validate: validateForm,

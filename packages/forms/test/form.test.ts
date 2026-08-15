@@ -720,6 +720,67 @@ describe("createForm", () => {
     });
   });
 
+  it("allows a new submit after reset without letting the old submit release its lock", async () => {
+    const form = createForm({
+      initialValues: { email: "ada@example.test" },
+    });
+    const firstDeferred = createDeferred<string>();
+    const secondDeferred = createDeferred<string>();
+    let calls = 0;
+
+    const first = form.submit(() => {
+      calls += 1;
+      return firstDeferred.promise;
+    });
+    await Promise.resolve();
+    form.reset();
+    const second = form.submit(() => {
+      calls += 1;
+      return secondDeferred.promise;
+    });
+    await Promise.resolve();
+
+    expect(calls).toBe(2);
+    firstDeferred.resolve("first");
+    await first;
+    expect(form.state.get().submitting).toBe(true);
+    await expect(form.submit(() => "third")).resolves.toEqual({ status: "duplicate" });
+
+    secondDeferred.resolve("second");
+    await second;
+    expect(form.state.get().submitting).toBe(false);
+  });
+
+  it("does not apply submit validation that settles after reset", async () => {
+    const validation = createDeferred<string[]>();
+    let validationCalls = 0;
+    const form = createForm({
+      initialValues: { email: "old@example.test" },
+      validate: {
+        email() {
+          validationCalls += 1;
+          return validationCalls === 1 ? validation.promise : [];
+        },
+      },
+    });
+
+    const staleSubmit = form.submit(() => "stale");
+    form.reset({ email: "fresh@example.test" });
+    await expect(form.submit(() => "fresh")).resolves.toEqual({
+      data: "fresh",
+      status: "success",
+    });
+
+    validation.resolve(["stale error"]);
+    await staleSubmit;
+
+    expect(form.state.get()).toMatchObject({
+      errors: {},
+      submitting: false,
+      values: { email: "fresh@example.test" },
+    });
+  });
+
   it("does not submit invalid values", async () => {
     const form = createForm({
       initialValues: { email: "" },
