@@ -25,7 +25,10 @@ const signupSchema = v.object({
     v.minValue(1, "Choose at least one seat."),
     v.maxValue(50, "Choose at most 50 seats."),
   ),
-  acceptTerms: v.literal(true, "Accept the terms to continue."),
+  acceptTerms: v.pipe(
+    v.boolean(),
+    v.check((value) => value, "Accept the terms to continue."),
+  ),
 });
 
 type SignupValues = v.InferInput<typeof signupSchema>;
@@ -89,9 +92,9 @@ export default function Page() {
       <h1>Valibot form</h1>
       <p>
         This route uses <code>valibot</code> as a Standard Schema validator for{" "}
-        <code>createForm</code>. Input values stay form-friendly strings and
-        booleans, then <code>submit()</code> receives the parsed output:{" "}
-        <code>seats</code> is a number after validation.
+        <code>createForm</code>. Input values stay form-friendly strings and booleans, then{" "}
+        <code>submit()</code> receives the parsed output: <code>seats</code> is a number after
+        validation.
       </p>
 
       <p class="counter-tone-hot">{firstError(signupFormState.get().errors.root)}</p>
@@ -109,15 +112,17 @@ export default function Page() {
       >
         <p>
           <label>
-            Name<br />
+            Name
+            <br />
             <input
               class="action-input"
               name="name"
               type="text"
               value={signupFormState.get().values.name}
               onInput={(event) =>
-                void signupForm.setValue("name", (event.target as HTMLInputElement).value)}
-              onBlur={(event) => {
+                void signupForm.setValue("name", (event.target as HTMLInputElement).value)
+              }
+              onBlur={(event: Event) => {
                 void signupForm.setValue("name", (event.target as HTMLInputElement).value);
                 void signupForm.field("name").blur();
               }}
@@ -128,15 +133,17 @@ export default function Page() {
 
         <p>
           <label>
-            Email<br />
+            Email
+            <br />
             <input
               class="action-input"
               name="email"
               type="email"
               value={signupFormState.get().values.email}
               onInput={(event) =>
-                void signupForm.setValue("email", (event.target as HTMLInputElement).value)}
-              onBlur={(event) => {
+                void signupForm.setValue("email", (event.target as HTMLInputElement).value)
+              }
+              onBlur={(event: Event) => {
                 void signupForm.setValue("email", (event.target as HTMLInputElement).value);
                 void signupForm.field("email").blur();
               }}
@@ -147,7 +154,8 @@ export default function Page() {
 
         <p>
           <label>
-            Plan<br />
+            Plan
+            <br />
             <select
               class="action-input"
               name="plan"
@@ -156,8 +164,9 @@ export default function Page() {
                 void signupForm.setValue(
                   "plan",
                   (event.target as HTMLSelectElement).value as SignupValues["plan"],
-                )}
-              onBlur={(event) => {
+                )
+              }
+              onBlur={(event: Event) => {
                 void signupForm.setValue(
                   "plan",
                   (event.target as HTMLSelectElement).value as SignupValues["plan"],
@@ -174,7 +183,8 @@ export default function Page() {
 
         <p>
           <label>
-            Seats<br />
+            Seats
+            <br />
             <input
               class="action-input"
               inputMode="numeric"
@@ -182,8 +192,9 @@ export default function Page() {
               type="text"
               value={signupFormState.get().values.seats}
               onInput={(event) =>
-                void signupForm.setValue("seats", (event.target as HTMLInputElement).value)}
-              onBlur={(event) => {
+                void signupForm.setValue("seats", (event.target as HTMLInputElement).value)
+              }
+              onBlur={(event: Event) => {
                 void signupForm.setValue("seats", (event.target as HTMLInputElement).value);
                 void signupForm.field("seats").blur();
               }}
@@ -199,20 +210,13 @@ export default function Page() {
               name="acceptTerms"
               type="checkbox"
               onInput={(event) =>
-                void signupForm.setValue(
-                  "acceptTerms",
-                  (event.target as HTMLInputElement).checked,
-                )}
+                void signupForm.setValue("acceptTerms", (event.target as HTMLInputElement).checked)
+              }
               onClick={(event) =>
-                void signupForm.setValue(
-                  "acceptTerms",
-                  (event.target as HTMLInputElement).checked,
-                )}
-              onBlur={(event) => {
-                void signupForm.setValue(
-                  "acceptTerms",
-                  (event.target as HTMLInputElement).checked,
-                );
+                void signupForm.setValue("acceptTerms", (event.target as HTMLInputElement).checked)
+              }
+              onBlur={(event: Event) => {
+                void signupForm.setValue("acceptTerms", (event.target as HTMLInputElement).checked);
                 void signupForm.field("acceptTerms").blur();
               }}
             />{" "}
@@ -225,7 +229,11 @@ export default function Page() {
         </p>
 
         <p>
-          <button type="button" disabled={signupFormState.get().submitting} onClick={() => void onSubmit()}>
+          <button
+            type="button"
+            disabled={signupFormState.get().submitting}
+            onClick={() => void onSubmit()}
+          >
             Submit
           </button>{" "}
           <span class="muted">

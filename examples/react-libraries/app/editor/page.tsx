@@ -15,13 +15,14 @@ export default function Page() {
     <main>
       <h1>Rich text editor</h1>
       <p>
-        <a href="https://lexical.dev" target="_blank" rel="noreferrer">Lexical</a>{" "}
-        is Meta's extensible rich-text framework. It runs unmodified here: the
-        router aliases <code>react</code> / <code>react-dom</code> to{" "}
-        <code>@reckona/mreact-compat</code>, and the editor lives in a{" "}
-        <code>.compat.tsx</code> client boundary.
+        <a href="https://lexical.dev" target="_blank" rel="noreferrer">
+          Lexical
+        </a>{" "}
+        is Meta's extensible rich-text framework. It runs unmodified here: the router aliases{" "}
+        <code>react</code> / <code>react-dom</code> to <code>@reckona/mreact-compat</code>, and the
+        editor lives in a <code>.compat.tsx</code> client boundary.
       </p>
-      <div class="card">
+      <div className="card">
         <h2>Editor</h2>
         <LexicalEditor />
       </div>

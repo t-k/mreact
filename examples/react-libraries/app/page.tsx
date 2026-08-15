@@ -55,20 +55,25 @@ export default function Page() {
     <main>
       <h1>React libraries on mreact</h1>
       <p>
-        Each demo imports a real React-ecosystem library inside a{" "}
-        <code>.compat.tsx</code> client boundary. The router aliases{" "}
-        <code>react</code>, <code>react-dom</code>, and{" "}
-        <code>react/jsx-runtime</code> to <code>@reckona/mreact-compat</code>{" "}
-        automatically, so the libraries run unmodified. The server renders a
-        placeholder and the client hydrates only the island.
+        Each demo imports a real React-ecosystem library inside a <code>.compat.tsx</code> client
+        boundary. The router aliases <code>react</code>, <code>react-dom</code>, and{" "}
+        <code>react/jsx-runtime</code> to <code>@reckona/mreact-compat</code> automatically, so the
+        libraries run unmodified. The server renders a placeholder and the client hydrates only the
+        island.
       </p>
-      <div class="kpi-grid">
+      <div className="kpi-grid">
         {demos.map((demo) => (
-          <a class="card" href={demo.href} key={demo.href} style="text-decoration: none; color: inherit;">
+          <a
+            className="card"
+            href={demo.href}
+            key={demo.href}
+            style={{ color: "inherit", textDecoration: "none" }}
+          >
             <h2>
-              {demo.title} <small style="color: #6b7280; font-weight: 400;">— {demo.library}</small>
+              {demo.title}{" "}
+              <small style={{ color: "#6b7280", fontWeight: 400 }}>— {demo.library}</small>
             </h2>
-            <p style="margin: 0; color: #4b5563; font-size: 0.9rem;">{demo.blurb}</p>
+            <p style={{ color: "#4b5563", fontSize: "0.9rem", margin: 0 }}>{demo.blurb}</p>
           </a>
         ))}
       </div>

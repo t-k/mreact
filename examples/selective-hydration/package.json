@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts"
+    "dev": "tsx server.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reckona/mreact": "workspace:*",
     "@reckona/mreact-compat": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*",
     "@reckona/mreact-reactive-dom": "workspace:*",

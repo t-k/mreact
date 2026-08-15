@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite --port 5174 --open /index.html",
     "build": "vite build",
-    "preview": "vite preview --port 5174"
+    "preview": "vite preview --port 5174",
+    "test": "vitest --root ../.. run examples/react-compat/package.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",
@@ -16,6 +18,8 @@
   },
   "devDependencies": {
     "@reckona/mreact-vite": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
     "vite": "^8.1.4"
   }
 }

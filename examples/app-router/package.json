@@ -12,9 +12,11 @@
     "start:node": "tsx scripts/serve-node.ts",
     "export:static": "tsx scripts/export-static.ts",
     "edge:demo": "tsx scripts/edge-handler.ts",
-    "test": "vitest --root ../.. run examples/app-router/package.test.ts"
+    "test": "vitest --root ../.. run examples/app-router/package.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reckona/mreact": "workspace:*",
     "@reckona/mreact-auth": "workspace:*",
     "@reckona/mreact-devtools": "workspace:*",
     "@reckona/mreact-forms": "workspace:*",

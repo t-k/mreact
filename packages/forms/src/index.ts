@@ -3,7 +3,7 @@ import { type StandardSchemaV1, validateStandardSchema } from "./standard-schema
 export type { StandardSchemaValidationResult } from "./standard-schema.js";
 
 /** Represents the object shape managed by a form instance. */
-export type FormValues = Record<string, unknown>;
+export type FormValues = object;
 
 /** Extracts string field names from a form value object. */
 export type FieldName<TValues extends FormValues> = Extract<keyof TValues, string>;
@@ -588,7 +588,9 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
     setServerErrors(errors): void {
       const next: FormErrors<TValues> = {};
 
-      for (const [name, messages] of Object.entries(errors.fieldErrors ?? {})) {
+      for (const [name, messages] of Object.entries(errors.fieldErrors ?? {}) as Array<
+        [string, readonly string[] | undefined]
+      >) {
         if (isDangerousObjectKey(name)) {
           continue;
         }

@@ -1,17 +1,9 @@
 {
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "jsx": "preserve",
-    "types": ["vite/client"],
-    "strict": false,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "esModuleInterop": true
+    // This compatibility example intentionally checks source code against React's public types;
+    // package.test.ts separately enforces that Vite redirects the runtime to mreact.
+    "jsxImportSource": "react"
   },
   "include": ["src", "vite.config.ts"]
 }

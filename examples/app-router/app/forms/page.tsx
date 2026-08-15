@@ -30,8 +30,7 @@ interface SuccessRecord {
 const contactForm = createForm<ContactValues>({
   initialValues: { name: "", email: "", message: "" },
   validate: {
-    name: (value) =>
-      value.trim().length < 2 ? "Name must be at least 2 characters." : undefined,
+    name: (value) => (value.trim().length < 2 ? "Name must be at least 2 characters." : undefined),
     email: (value) =>
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? undefined : "Enter a valid email.",
     message: (value) => {
@@ -97,13 +96,11 @@ export default function Page() {
     <main>
       <h1>Forms</h1>
       <p>
-        <code>createForm</code> from <code>@reckona/mreact-forms</code>{" "}
-        returns a reactive form state. Per-field validators run on
-        blur and on submit. The submit handler POSTs to{" "}
-        <code>/api/contact</code> — the server applies its own
-        validation, and any <code>fieldErrors</code> it returns are
-        mapped back into the form via <code>setServerErrors</code>.
-        Try the input <code>spam</code> in the message to trigger a
+        <code>createForm</code> from <code>@reckona/mreact-forms</code> returns a reactive form
+        state. Per-field validators run on blur and on submit. The submit handler POSTs to{" "}
+        <code>/api/contact</code> — the server applies its own validation, and any{" "}
+        <code>fieldErrors</code> it returns are mapped back into the form via{" "}
+        <code>setServerErrors</code>. Try the input <code>spam</code> in the message to trigger a
         server-only rejection.
       </p>
 
@@ -120,7 +117,8 @@ export default function Page() {
       >
         <p>
           <label>
-            Name<br />
+            Name
+            <br />
             <input
               class="action-input"
               name="name"
@@ -129,7 +127,7 @@ export default function Page() {
               onInput={(event) =>
                 contactForm.field("name").setValue((event.target as HTMLInputElement).value)
               }
-              onBlur={(event) => {
+              onBlur={(event: Event) => {
                 void contactForm.field("name").setValue((event.target as HTMLInputElement).value);
                 void contactForm.field("name").blur();
               }}
@@ -139,7 +137,8 @@ export default function Page() {
         </p>
         <p>
           <label>
-            Email<br />
+            Email
+            <br />
             <input
               class="action-input"
               name="email"
@@ -148,7 +147,7 @@ export default function Page() {
               onInput={(event) =>
                 contactForm.field("email").setValue((event.target as HTMLInputElement).value)
               }
-              onBlur={(event) => {
+              onBlur={(event: Event) => {
                 void contactForm.field("email").setValue((event.target as HTMLInputElement).value);
                 void contactForm.field("email").blur();
               }}
@@ -158,7 +157,8 @@ export default function Page() {
         </p>
         <p>
           <label>
-            Message<br />
+            Message
+            <br />
             <textarea
               class="action-input"
               cols={50}
@@ -168,10 +168,10 @@ export default function Page() {
               onInput={(event) =>
                 contactForm.field("message").setValue((event.target as HTMLTextAreaElement).value)
               }
-              onBlur={(event) => {
-                void contactForm.field("message").setValue(
-                  (event.target as HTMLTextAreaElement).value,
-                );
+              onBlur={(event: Event) => {
+                void contactForm
+                  .field("message")
+                  .setValue((event.target as HTMLTextAreaElement).value);
                 void contactForm.field("message").blur();
               }}
             />
@@ -180,7 +180,11 @@ export default function Page() {
         </p>
 
         <p>
-          <button type="button" disabled={contactFormState.get().submitting} onClick={() => void onSubmit()}>
+          <button
+            type="button"
+            disabled={contactFormState.get().submitting}
+            onClick={() => void onSubmit()}
+          >
             Send
           </button>{" "}
           <span class="muted">

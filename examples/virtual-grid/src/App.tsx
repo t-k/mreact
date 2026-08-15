@@ -1,9 +1,4 @@
-import {
-  createVirtualGallery,
-  PHOTO_COUNT,
-  PHOTO_COUNT_LABEL,
-  rangeLabel,
-} from "./gallery.ts";
+import { createVirtualGallery, PHOTO_COUNT, PHOTO_COUNT_LABEL, rangeLabel } from "./gallery.ts";
 
 const gallery = createVirtualGallery();
 
@@ -40,8 +35,8 @@ export function App() {
       <h1>virtual-grid</h1>
       <p>
         A standalone example for <code>@reckona/mreact-virtual</code>. It keeps a{" "}
-        <strong>{PHOTO_COUNT_LABEL} photos</strong> gallery in memory while rendering only the visible
-        rows plus overscan.
+        <strong>{PHOTO_COUNT_LABEL} photos</strong> gallery in memory while rendering only the
+        visible rows plus overscan.
       </p>
       <p class="toolbar">
         <button type="button" onClick={pageUp}>
@@ -87,7 +82,9 @@ export function App() {
         class="viewport"
         aria-label="Virtual photo grid"
         data-testid="photo-viewport"
-        onScroll={(event) => gallery.scrollToOffset(event.currentTarget.scrollTop)}
+        onScroll={(event: Event & { currentTarget: HTMLElement }) =>
+          gallery.scrollToOffset(event.currentTarget.scrollTop)
+        }
       >
         <div class="grid" data-total-size={gallery.totalSizePx.get()}>
           <div class="spacer" style={{ height: `${gallery.topSpacerPx.get()}px` }} />

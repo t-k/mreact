@@ -5,10 +5,13 @@
   "scripts": {
     "demo:string": "tsx scripts/string.ts",
     "demo:stream": "tsx scripts/stream.ts",
-    "demo:await": "tsx scripts/await-oob.ts"
+    "demo:await": "tsx scripts/await-oob.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reckona/mreact": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*",
+    "@reckona/mreact-router": "workspace:*",
     "@reckona/mreact-server": "workspace:*"
   },
   "devDependencies": {

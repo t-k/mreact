@@ -50,18 +50,14 @@ export function createReactiveDomBlock<P extends object = Record<string, unknown
 }
 
 /** DOM event type with a narrowed currentTarget. */
-export type JSXEvent<
-  TCurrentTarget extends EventTarget,
-  TEvent extends Event = Event,
-> = TEvent & {
+export type JSXEvent<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = TEvent & {
   readonly currentTarget: TCurrentTarget;
 };
 
 /** Event handler type used by JSX DOM attributes. */
-export type JSXEventHandler<
-  TCurrentTarget extends EventTarget,
-  TEvent extends Event = Event,
-> = (event: JSXEvent<TCurrentTarget, TEvent>) => unknown;
+export type JSXEventHandler<TCurrentTarget extends EventTarget, TEvent extends Event = Event> = (
+  event: JSXEvent<TCurrentTarget, TEvent>,
+) => unknown;
 
 /** Submit event type used by form-related JSX attributes. */
 export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<
@@ -70,8 +66,10 @@ export type FormEvent<TCurrentTarget extends EventTarget = Element> = JSXEvent<
 >;
 
 /** Submit event handler type used by form-related JSX attributes. */
-export type FormEventHandler<TCurrentTarget extends EventTarget = Element> =
-  JSXEventHandler<TCurrentTarget, SubmitEvent>;
+export type FormEventHandler<TCurrentTarget extends EventTarget = Element> = JSXEventHandler<
+  TCurrentTarget,
+  SubmitEvent
+>;
 
 /** Post-commit callback for a compiler-owned intrinsic DOM element. */
 export type DomRefCallback = (element: Element) => void | (() => void);
@@ -86,8 +84,9 @@ export interface JSXDOMAttributes<TElement extends EventTarget> {
 }
 
 /** HTML attributes accepted by JSX host elements. */
-export interface JSXHTMLAttributes<TElement extends HTMLElement>
-  extends JSXDOMAttributes<TElement> {
+export interface JSXHTMLAttributes<
+  TElement extends HTMLElement,
+> extends JSXDOMAttributes<TElement> {
   domRef?: DomRefCallback;
   [attributeName: string]: unknown;
 }
@@ -123,14 +122,6 @@ export namespace JSX {
   export interface IntrinsicAttributes extends JSXIntrinsicAttributes {}
 
   export interface IntrinsicElements extends JSXIntrinsicElements {}
-}
-
-declare global {
-  namespace JSX {
-    interface Element extends ReactCompatElement {}
-    interface IntrinsicAttributes extends JSXIntrinsicAttributes {}
-    interface IntrinsicElements extends JSXIntrinsicElements {}
-  }
 }
 
 /** Creates a single-child JSX element for the automatic JSX runtime. */

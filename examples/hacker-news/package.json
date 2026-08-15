@@ -13,7 +13,8 @@
     "test": "vitest run src/hn/*.test.ts --passWithNoTests",
     "worker:smoke": "node scripts/check-cloudflare-worker.mjs",
     "worker:check": "pnpm run build && pnpm run worker:smoke",
-    "pages:package": "pnpm run build && mreact-router package cloudflare-pages --from .mreact --out .mreact/pages"
+    "pages:package": "pnpm run build && mreact-router package cloudflare-pages --from .mreact --out .mreact/pages",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@reckona/mreact": "workspace:*",

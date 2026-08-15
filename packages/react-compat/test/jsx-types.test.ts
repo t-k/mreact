@@ -30,6 +30,34 @@ export function App() {
     }
   });
 
+  test("does not merge compat elements into React's global JSX namespace", () => {
+    const directory = mkdtempSync(join(tmpdir(), "mreact-react-jsx-types-"));
+    const filename = join(directory, "App.tsx");
+
+    writeFileSync(
+      filename,
+      `
+import { createElement } from "@reckona/mreact-compat";
+import type { FC } from "react";
+
+const ThirdParty: FC<{ label: string }> = ({ label }) => <span>{label}</span>;
+export const view = <ThirdParty label="compatible" />;
+export const compatNode = createElement("span", null, "compat");
+`,
+    );
+
+    try {
+      const diagnostics = collectTypeDiagnostics(filename, {
+        jsx: ts.JsxEmit.ReactJSX,
+        jsxImportSource: "react",
+      });
+
+      expect(diagnostics).toEqual([]);
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
+  });
+
   test("accepts nested createElement nodes with heterogeneous props", () => {
     const directory = mkdtempSync(join(tmpdir(), "mreact-create-element-types-"));
     const filename = join(directory, "App.ts");
@@ -140,15 +168,11 @@ function collectTypeDiagnostics(
       moduleResolution: ts.ModuleResolutionKind.Bundler,
       noEmit: true,
       paths: {
-        "@reckona/mreact-compat/jsx-runtime": [
-          "packages/react-compat/src/jsx-runtime.ts",
-        ],
-        "@reckona/mreact-compat/jsx-dev-runtime": [
-          "packages/react-compat/src/jsx-dev-runtime.ts",
-        ],
-        "@reckona/mreact-compat": [
-          "packages/react-compat/src/index.ts",
-        ],
+        react: ["node_modules/@types/react/index.d.ts"],
+        "react/jsx-runtime": ["node_modules/@types/react/jsx-runtime.d.ts"],
+        "@reckona/mreact-compat/jsx-runtime": ["packages/react-compat/src/jsx-runtime.ts"],
+        "@reckona/mreact-compat/jsx-dev-runtime": ["packages/react-compat/src/jsx-dev-runtime.ts"],
+        "@reckona/mreact-compat": ["packages/react-compat/src/index.ts"],
       },
       strict: true,
       target: ts.ScriptTarget.ES2022,
@@ -156,16 +180,11 @@ function collectTypeDiagnostics(
     },
   });
 
-  return ts
-    .getPreEmitDiagnostics(program)
-    .map((diagnostic) => flattenDiagnostic(diagnostic));
+  return ts.getPreEmitDiagnostics(program).map((diagnostic) => flattenDiagnostic(diagnostic));
 }
 
 function flattenDiagnostic(diagnostic: ts.Diagnostic): string {
-  const message = ts.flattenDiagnosticMessageText(
-    diagnostic.messageText,
-    "\n",
-  );
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n");
 
   return `${diagnostic.code}: ${message}`;
 }

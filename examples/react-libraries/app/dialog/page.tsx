@@ -15,13 +15,15 @@ export default function Page() {
     <main>
       <h1>Dialog</h1>
       <p>
-        <a href="https://www.radix-ui.com" target="_blank" rel="noreferrer">Radix UI</a>{" "}
-        provides an accessible modal dialog with a portal and focus trap. It runs
-        unmodified: the router aliases <code>react</code> / <code>react-dom</code>{" "}
-        to <code>@reckona/mreact-compat</code>, and the dialog lives in a{" "}
-        <code>.compat.tsx</code> client boundary.
+        <a href="https://www.radix-ui.com" target="_blank" rel="noreferrer">
+          Radix UI
+        </a>{" "}
+        provides an accessible modal dialog with a portal and focus trap. It runs unmodified: the
+        router aliases <code>react</code> / <code>react-dom</code> to{" "}
+        <code>@reckona/mreact-compat</code>, and the dialog lives in a <code>.compat.tsx</code>{" "}
+        client boundary.
       </p>
-      <div class="card">
+      <div className="card">
         <h2>Modal</h2>
         <DialogDemo />
       </div>

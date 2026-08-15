@@ -2,7 +2,7 @@ export default function Layout() {
   return (
     <html lang="en">
       <head>
-        <meta charset="utf-8" />
+        <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>React libraries on mreact</title>
         <style>{`
@@ -33,15 +33,14 @@ export default function Layout() {
         `}</style>
       </head>
       <body>
-        <header class="nav">
-          <strong>React libraries on mreact</strong>{" "}
-          <a href="/">Home</a>
+        <header className="nav">
+          <strong>React libraries on mreact</strong> <a href="/">Home</a>
           <a href="/charts">Recharts</a>
           <a href="/editor">Lexical</a>
           <a href="/forms">conform</a>
           <a href="/dialog">Radix UI</a>
         </header>
-        <div class="dashboard">
+        <div className="dashboard">
           <Slot />
         </div>
         <footer>mreact dogfood — real React libraries via @reckona/mreact-compat</footer>

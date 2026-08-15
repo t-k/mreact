@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "exactOptionalPropertyTypes": false,
+    "inlineSources": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "@reckona/mreact",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": false,
+    "sourceMap": false,
+    "strict": true,
+    "types": ["vite/client"]
+  }
+}

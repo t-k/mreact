@@ -5,9 +5,11 @@
   "scripts": {
     "dev": "vite --port 5173 --open /index.html",
     "build": "vite build",
-    "preview": "vite preview --port 5173"
+    "preview": "vite preview --port 5173",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@reckona/mreact": "workspace:*",
     "@reckona/mreact-reactive-core": "workspace:*",
     "@reckona/mreact-reactive-dom": "workspace:*"
   },

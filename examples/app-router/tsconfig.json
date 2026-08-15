@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node", "vite/client", "@reckona/mreact-router/app-router-globals"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["app", "scripts", "package.test.ts", "vite.config.ts"]
 }

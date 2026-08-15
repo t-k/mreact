@@ -49,54 +49,58 @@ export default function Page(props: { data: RechartsData }) {
       <h1>Recharts</h1>
       <p>
         SVG charts (bar, pie, line) from{" "}
-        <a href="https://recharts.org" target="_blank" rel="noreferrer">Recharts</a>, fed by
-        SQLite data loaded on the server. Each chart is a <code>.compat.tsx</code> client
+        <a href="https://recharts.org" target="_blank" rel="noreferrer">
+          Recharts
+        </a>
+        , fed by SQLite data loaded on the server. Each chart is a <code>.compat.tsx</code> client
         boundary that hydrates on its own.
       </p>
 
-      <div class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-value">${totalRevenue.toLocaleString()}</div>
-          <div class="kpi-label">Total Revenue</div>
+      <div className="kpi-grid">
+        <div className="kpi-card">
+          <div className="kpi-value">${totalRevenue.toLocaleString()}</div>
+          <div className="kpi-label">Total Revenue</div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-value">{totalUnits.toLocaleString()}</div>
-          <div class="kpi-label">Total Units Sold</div>
+        <div className="kpi-card">
+          <div className="kpi-value">{totalUnits.toLocaleString()}</div>
+          <div className="kpi-label">Total Units Sold</div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-value">{productSales.length}</div>
-          <div class="kpi-label">Products</div>
+        <div className="kpi-card">
+          <div className="kpi-value">{productSales.length}</div>
+          <div className="kpi-label">Products</div>
         </div>
-        <div class="kpi-card">
-          <div class="kpi-value">{monthlyRevenue.length}</div>
-          <div class="kpi-label">Months Tracked</div>
+        <div className="kpi-card">
+          <div className="kpi-value">{monthlyRevenue.length}</div>
+          <div className="kpi-label">Months Tracked</div>
         </div>
       </div>
 
-      <div class="card">
+      <div className="card">
         <h2>Monthly Revenue</h2>
-        <div class="chart-container">
+        <div className="chart-container">
           <RevenueChart data={monthlyRevenue} />
         </div>
       </div>
 
-      <div class="card">
+      <div className="card">
         <h2>Revenue by Product</h2>
-        <div class="chart-container">
-          <ProductPieChart data={productSales.map((p) => ({ name: p.product, value: p.total_revenue }))} />
+        <div className="chart-container">
+          <ProductPieChart
+            data={productSales.map((p) => ({ name: p.product, value: p.total_revenue }))}
+          />
         </div>
       </div>
 
-      <div class="card">
+      <div className="card">
         <h2>Page Views (30 days)</h2>
-        <div class="chart-container">
+        <div className="chart-container">
           <MetricsLineChart data={pageViews} color="#3b82f6" />
         </div>
       </div>
 
-      <div class="card">
+      <div className="card">
         <h2>Conversions (30 days)</h2>
-        <div class="chart-container">
+        <div className="chart-container">
           <MetricsLineChart data={conversions} color="#10b981" />
         </div>
       </div>

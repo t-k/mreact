@@ -15,13 +15,14 @@ export default function Page() {
     <main>
       <h1>Schema form</h1>
       <p>
-        <a href="https://conform.guide" target="_blank" rel="noreferrer">conform</a>{" "}
-        validates this form against a <code>zod</code> schema. It runs unmodified:
-        the router aliases <code>react</code> to{" "}
-        <code>@reckona/mreact-compat</code>, and the form lives in a{" "}
+        <a href="https://conform.guide" target="_blank" rel="noreferrer">
+          conform
+        </a>{" "}
+        validates this form against a <code>zod</code> schema. It runs unmodified: the router
+        aliases <code>react</code> to <code>@reckona/mreact-compat</code>, and the form lives in a{" "}
         <code>.compat.tsx</code> client boundary.
       </p>
-      <div class="card">
+      <div className="card">
         <h2>Sign up</h2>
         <SignupForm />
       </div>

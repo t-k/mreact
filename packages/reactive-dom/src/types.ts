@@ -27,6 +27,11 @@ export interface MemoRenderValue<P = unknown> {
   readonly compare: (previous: P, next: P) => boolean;
 }
 
+/** Compiler or registered-normalizer object accepted at a render boundary. */
+export interface CustomRenderValue {
+  readonly $$typeof: symbol;
+}
+
 /** Value that can be normalized into DOM nodes by the reactive DOM runtime. */
 export type RenderValue =
   | Node
@@ -35,5 +40,6 @@ export type RenderValue =
   | boolean
   | null
   | undefined
+  | CustomRenderValue
   | ListRenderValue
   | readonly RenderValue[];

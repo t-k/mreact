@@ -87,10 +87,9 @@ export default function Page() {
     <main>
       <h1>Zod v4 form</h1>
       <p>
-        This route passes a <code>zod/v4</code> schema directly to{" "}
-        <code>createForm</code>. The form keeps <code>seats</code> as a string,
-        but the submit handler receives a number after the Zod transform and
-        number checks run.
+        This route passes a <code>zod/v4</code> schema directly to <code>createForm</code>. The form
+        keeps <code>seats</code> as a string, but the submit handler receives a number after the Zod
+        transform and number checks run.
       </p>
 
       <p class="counter-tone-hot">{firstError(inviteFormState.get().errors.root)}</p>
@@ -108,15 +107,17 @@ export default function Page() {
       >
         <p>
           <label>
-            Email<br />
+            Email
+            <br />
             <input
               class="action-input"
               name="email"
               type="email"
               value={inviteFormState.get().values.email}
               onInput={(event) =>
-                void inviteForm.setValue("email", (event.target as HTMLInputElement).value)}
-              onBlur={(event) => {
+                void inviteForm.setValue("email", (event.target as HTMLInputElement).value)
+              }
+              onBlur={(event: Event) => {
                 void inviteForm.setValue("email", (event.target as HTMLInputElement).value);
                 void inviteForm.field("email").blur();
               }}
@@ -127,7 +128,8 @@ export default function Page() {
 
         <p>
           <label>
-            Role<br />
+            Role
+            <br />
             <select
               class="action-input"
               name="role"
@@ -136,8 +138,9 @@ export default function Page() {
                 void inviteForm.setValue(
                   "role",
                   (event.target as HTMLSelectElement).value as InviteValues["role"],
-                )}
-              onBlur={(event) => {
+                )
+              }
+              onBlur={(event: Event) => {
                 void inviteForm.setValue(
                   "role",
                   (event.target as HTMLSelectElement).value as InviteValues["role"],
@@ -155,7 +158,8 @@ export default function Page() {
 
         <p>
           <label>
-            Seats<br />
+            Seats
+            <br />
             <input
               class="action-input"
               inputMode="numeric"
@@ -163,8 +167,9 @@ export default function Page() {
               type="text"
               value={inviteFormState.get().values.seats}
               onInput={(event) =>
-                void inviteForm.setValue("seats", (event.target as HTMLInputElement).value)}
-              onBlur={(event) => {
+                void inviteForm.setValue("seats", (event.target as HTMLInputElement).value)
+              }
+              onBlur={(event: Event) => {
                 void inviteForm.setValue("seats", (event.target as HTMLInputElement).value);
                 void inviteForm.field("seats").blur();
               }}
@@ -183,13 +188,15 @@ export default function Page() {
                 void inviteForm.setValue(
                   "sendWelcomeEmail",
                   (event.target as HTMLInputElement).checked,
-                )}
+                )
+              }
               onClick={(event) =>
                 void inviteForm.setValue(
                   "sendWelcomeEmail",
                   (event.target as HTMLInputElement).checked,
-                )}
-              onBlur={(event) => {
+                )
+              }
+              onBlur={(event: Event) => {
                 void inviteForm.setValue(
                   "sendWelcomeEmail",
                   (event.target as HTMLInputElement).checked,
@@ -206,7 +213,11 @@ export default function Page() {
         </p>
 
         <p>
-          <button type="button" disabled={inviteFormState.get().submitting} onClick={() => void onSubmit()}>
+          <button
+            type="button"
+            disabled={inviteFormState.get().submitting}
+            onClick={() => void onSubmit()}
+          >
             Invite
           </button>{" "}
           <span class="muted">

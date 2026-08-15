@@ -302,6 +302,9 @@ importers:
 
   examples/app-router:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@reckona/mreact-auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -434,6 +437,12 @@ importers:
       '@reckona/mreact-vite':
         specifier: workspace:*
         version: link:../../packages/vite-plugin
+      react:
+        specifier: ^19.2.7
+        version: 19.2.7
+      react-dom:
+        specifier: ^19.2.7
+        version: 19.2.7(react@19.2.7)
       vite:
         specifier: ^8.1.4
         version: 8.1.4(@types/node@25.7.0)(esbuild@0.28.1)(jiti@2.7.0)(sass@1.99.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0)
@@ -494,9 +503,16 @@ importers:
       zod:
         specifier: ^3.24.1
         version: 3.25.76
+    devDependencies:
+      '@types/better-sqlite3':
+        specifier: ^9.6.0
+        version: 9.6.0
 
   examples/reactive-primitives:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
@@ -513,6 +529,9 @@ importers:
 
   examples/selective-hydration:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@reckona/mreact-compat':
         specifier: workspace:*
         version: link:../../packages/react-compat
@@ -538,9 +557,15 @@ importers:
 
   examples/ssr-streaming:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
+      '@reckona/mreact-router':
+        specifier: workspace:*
+        version: link:../../packages/router
       '@reckona/mreact-server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -557,6 +582,9 @@ importers:
 
   examples/store:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
@@ -576,6 +604,9 @@ importers:
 
   examples/virtual-grid:
     dependencies:
+      '@reckona/mreact':
+        specifier: workspace:*
+        version: link:../../packages/react
       '@reckona/mreact-reactive-core':
         specifier: workspace:*
         version: link:../../packages/reactive-core
@@ -5347,6 +5378,9 @@ packages:
 
   '@types/argparse@1.0.38':
     resolution: {integrity: sha512-ebDJ9b0e702Yr7pWgB0jzm+CX4Srzz8RcXtLJDJB+BSccqMa36uyH/zUsSYao5+BD1ytv3k3rPYCq4mAE1hsXA==}
+
+  '@types/better-sqlite3@9.6.0':
+    resolution: {integrity: sha512-ZEEwBSgMu7GYJOynoagg5X9JbxfL6dTJDsgViJIqh67jV44kyOr9RXfmFjLK5rzC4MWssP06t9hu/JwGDnUbCg==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -13746,6 +13780,10 @@ snapshots:
     optional: true
 
   '@types/argparse@1.0.38': {}
+
+  '@types/better-sqlite3@9.6.0':
+    dependencies:
+      '@types/node': 25.7.0
 
   '@types/chai@5.2.3':
     dependencies:
