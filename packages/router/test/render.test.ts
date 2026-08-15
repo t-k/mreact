@@ -2564,6 +2564,46 @@ export default function Page() { return <main>cache shape</main>; }`,
     },
   );
 
+  test.each([false, true])(
+    "ignores the build-only capture header on inbound navigation=%s requests",
+    async (navigation) => {
+      const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-capture-header-"));
+      await writeFile(
+        join(appDir, "page.mreact.tsx"),
+        `export const revalidate = 60;
+export default function Page() { return <main>cache shape</main>; }`,
+      );
+      const request = (capture: boolean) =>
+        new Request("http://local.test/", {
+          headers: {
+            ...(capture ? { "x-mreact-prerender-variant-capture": "1" } : {}),
+            ...(navigation ? { "x-mreact-navigation": "1" } : {}),
+          },
+        });
+
+      const inbound = await renderAppRequest({ appDir, request: request(true) });
+      const ordinary = await renderAppRequest({ appDir, request: request(false) });
+      const inboundHtml = await inbound.text();
+      const ordinaryHtml = await ordinary.text();
+
+      expect(inbound.headers.get("x-mreact-cache")).toBe("MISS");
+      expect(ordinary.headers.get("x-mreact-cache")).toBe("HIT");
+      if (navigation) {
+        expect(inboundHtml).toContain(
+          '<div data-mreact-route-id="index"><main>cache shape</main></div>',
+        );
+        expect(ordinaryHtml).toContain(
+          '<div data-mreact-route-id="index"><main>cache shape</main></div>',
+        );
+      } else {
+        expect(inboundHtml).toContain("<main>cache shape</main>");
+        expect(ordinaryHtml).toContain("<main>cache shape</main>");
+        expect(inboundHtml).not.toContain("mreact-route-variant-");
+        expect(ordinaryHtml).not.toContain("mreact-route-variant-");
+      }
+    },
+  );
+
   test("keeps cached client hydration props independent of host and query", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-hydration-url-"));
     await writeFile(

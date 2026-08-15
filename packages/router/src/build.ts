@@ -2635,12 +2635,8 @@ async function prerenderStaticRoutes(options: {
           define: options.define,
           importPolicy,
           navigationScripts,
-          request: new Request(
-            `http://mreact.local${pathname}`,
-            analysis.clientRoute
-              ? undefined
-              : { headers: { "x-mreact-prerender-variant-capture": "1" } },
-          ),
+          request: new Request(`http://mreact.local${pathname}`),
+          prerenderVariantCapture: !analysis.clientRoute,
           renderSignals,
           serverModuleCacheVersion,
           serverModules: serverModuleMap,

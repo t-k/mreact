@@ -236,6 +236,14 @@ export interface RenderAppRequestOptions {
 
 export interface RenderAppRequestRuntimeOptions extends RenderAppRequestOptions {
   /**
+   * Wraps a server-only page with build-time variant capture comments.
+   *
+   * This is an in-process render signal. It must not be derived from request
+   * headers because network clients are not allowed to change response shape
+   * outside the route-cache key.
+   */
+  prerenderVariantCapture?: boolean | undefined;
+  /**
    * Receives whether the render depended on the incoming request headers.
    *
    * Callers that store the rendered HTML under a key which ignores headers,
@@ -1283,7 +1291,12 @@ async function renderAppRequestInternal(
                 data,
               },
             })
-          : withServerOnlyRouteMarkers(pageHtml, matched.route.path, options.request);
+          : withServerOnlyRouteMarkers(
+              pageHtml,
+              matched.route.path,
+              options.request,
+              options.prerenderVariantCapture === true,
+            );
         let html = await runWithQueryClient(queryClient, () =>
           applyLayouts({
             appDir: options.appDir,
@@ -1423,6 +1436,7 @@ async function renderAppRequestInternal(
           define: options.define,
           loadingFile,
           markerRequest: options.request,
+          prerenderVariantCapture: options.prerenderVariantCapture,
           pageFile: matched.route.file,
           params: matched.params,
           queryClient,
@@ -1466,6 +1480,7 @@ async function renderAppRequestInternal(
         assetBaseUrl: options.assetBaseUrl,
         pageFile: matched.route.file,
         markerRequest: options.request,
+        prerenderVariantCapture: options.prerenderVariantCapture,
         props,
         requestUrl: url.pathname,
         routePath: matched.route.path,
@@ -1572,7 +1587,12 @@ async function renderAppRequestInternal(
             data,
           },
         })
-      : withServerOnlyRouteMarkers(pageHtml, matched.route.path, options.request);
+      : withServerOnlyRouteMarkers(
+          pageHtml,
+          matched.route.path,
+          options.request,
+          options.prerenderVariantCapture === true,
+        );
     phaseStartedAt = renderTimingPhaseStartedAt(timing);
     let html = await runWithQueryClient(queryClient, () =>
       applyLayouts({
@@ -1980,16 +2000,22 @@ function isNavigationRequest(request: Request): boolean {
   return request.headers.get("x-mreact-navigation") === "1";
 }
 
-function withServerOnlyRouteMarkers(html: string, routePath: string, request: Request): string {
-  const marker = serverOnlyRouteMarkerParts(routePath, request);
+function withServerOnlyRouteMarkers(
+  html: string,
+  routePath: string,
+  request: Request,
+  prerenderVariantCapture: boolean,
+): string {
+  const marker = serverOnlyRouteMarkerParts(routePath, request, prerenderVariantCapture);
   return marker === undefined ? html : `${marker.prefix}${html}${marker.suffix}`;
 }
 
 function serverOnlyRouteMarkerParts(
   routePath: string,
   request: Request,
+  prerenderVariantCapture: boolean,
 ): { prefix: string; suffix: string } | undefined {
-  if (request.headers.get("x-mreact-prerender-variant-capture") === "1") {
+  if (prerenderVariantCapture) {
     return prerenderVariantMarkerParts(routePath);
   }
   return isNavigationRequest(request) ? routeMarkerParts(routePath) : undefined;
@@ -3452,6 +3478,7 @@ function runServerStreamModule(
     assetBaseUrl?: string | undefined;
     clientRouteInferenceCache: ClientRouteInferenceCache;
     markerRequest: Request;
+    prerenderVariantCapture?: boolean | undefined;
     pageFile: string;
     props: ServerComponentProps;
     requestUrl: string;
@@ -3503,7 +3530,11 @@ function runServerStreamModule(
             data: options.props.data,
           },
         })
-      : serverOnlyRouteMarkerParts(options.routePath, options.markerRequest);
+      : serverOnlyRouteMarkerParts(
+          options.routePath,
+          options.markerRequest,
+          options.prerenderVariantCapture === true,
+        );
 
     sink.append("<!DOCTYPE html>");
     sink.append(
@@ -3722,6 +3753,7 @@ async function runServerStreamModuleWithLoading(
     define?: UserConfig["define"] | undefined;
     loadingFile: string;
     markerRequest: Request;
+    prerenderVariantCapture?: boolean | undefined;
     pageFile: string;
     params: RouteParams;
     queryClient: QueryClient;
@@ -3776,7 +3808,11 @@ async function runServerStreamModuleWithLoading(
           request: { url: options.requestUrl },
         },
       })
-    : serverOnlyRouteMarkerParts(options.routePath, options.markerRequest);
+    : serverOnlyRouteMarkerParts(
+        options.routePath,
+        options.markerRequest,
+        options.prerenderVariantCapture === true,
+      );
 
   return renderToReadableStream((sink) => {
     sink.append("<!DOCTYPE html>");
