@@ -2134,6 +2134,44 @@ describe("react-compat render", () => {
     document.body.replaceChildren();
   });
 
+  test("dispatches a native event once through each nested root", () => {
+    const outerContainer = document.createElement("div");
+    const calls: string[] = [];
+
+    render(
+      createElement(
+        "section",
+        {
+          onClick: () => {
+            calls.push("outer");
+          },
+        },
+        createElement("div", { id: "inner-root" }),
+      ),
+      outerContainer,
+    );
+
+    const innerContainer = outerContainer.querySelector<HTMLElement>("#inner-root")!;
+    const innerRoot = createRoot(innerContainer);
+    innerRoot.render(
+      createElement(
+        "button",
+        {
+          onClick: () => {
+            calls.push("inner");
+          },
+        },
+        "Click",
+      ),
+    );
+
+    innerContainer.querySelector("button")?.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+
+    expect(calls).toEqual(["inner", "outer"]);
+  });
+
   test("preserves foreign document.body children when rendering a portal", () => {
     const container = document.createElement("div");
     const foreign = document.createElement("div");

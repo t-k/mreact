@@ -7,8 +7,9 @@ import type { SyntheticEvent } from "./event-types.js";
 
 const delegatedRootListeners = new WeakMap<Element, Set<string>>();
 // A synthetic update can mount another delegated root before the native event
-// finishes bubbling. Process each native event once across delegated roots.
-const dispatchedDelegatedEvents = new WeakMap<Event, Set<string>>();
+// finishes bubbling. Track both the delegated root and handlers already visited.
+const dispatchedDelegatedEvents = new WeakMap<Event, Map<string, WeakSet<Element>>>();
+const dispatchedDelegatedHandlers = new WeakMap<Event, WeakMap<Element, Set<string>>>();
 const logicalEventParents = new WeakMap<Element, ParentNode>();
 
 const reactPropToNativeEvent = new Map<string, string[]>([
@@ -265,10 +266,10 @@ export function ensureDelegatedEventListener(root: Element, eventName: string): 
   listeners.add(eventName);
   delegatedRootListeners.set(root, listeners);
   root.addEventListener(eventName, (event) => {
-    if (hasDispatchedDelegatedEvent(event, eventName)) {
+    if (hasDispatchedDelegatedEvent(root, event, eventName)) {
       return;
     }
-    markDispatchedDelegatedEvent(event, eventName);
+    markDispatchedDelegatedEvent(root, event, eventName);
     const priority = getEventPriority(eventName);
     try {
       runWithEventPriority(priority, () => {
@@ -309,13 +310,15 @@ function deferFlushUntilNativeEventComplete(
   queueMicrotask(flushOnce);
 }
 
-function hasDispatchedDelegatedEvent(event: Event, eventName: string): boolean {
-  return dispatchedDelegatedEvents.get(event)?.has(eventName) ?? false;
+function hasDispatchedDelegatedEvent(root: Element, event: Event, eventName: string): boolean {
+  return dispatchedDelegatedEvents.get(event)?.get(eventName)?.has(root) ?? false;
 }
 
-function markDispatchedDelegatedEvent(event: Event, eventName: string): void {
-  const events = dispatchedDelegatedEvents.get(event) ?? new Set<string>();
-  events.add(eventName);
+function markDispatchedDelegatedEvent(root: Element, event: Event, eventName: string): void {
+  const events = dispatchedDelegatedEvents.get(event) ?? new Map<string, WeakSet<Element>>();
+  const roots = events.get(eventName) ?? new WeakSet<Element>();
+  roots.add(root);
+  events.set(eventName, roots);
   dispatchedDelegatedEvents.set(event, events);
 }
 
@@ -397,11 +400,7 @@ function dispatchPointerTransitionEvent(
     return;
   }
 
-  const handler = getAppliedEventHandler(target, propName);
-
-  if (handler !== undefined) {
-    handler(createSyntheticEvent(event, target, state, propName.slice(2).toLowerCase()));
-  }
+  dispatchEventHandlerOnce(propName, event, target, state, propName.slice(2).toLowerCase());
 }
 
 function dispatchEventPropNames(
@@ -421,11 +420,7 @@ function dispatchEventPropNames(
     }
 
     const listenerName = phase === "capture" ? `${propName}Capture` : propName;
-    const handler = getAppliedEventHandler(target, listenerName);
-
-    if (handler !== undefined) {
-      handler(createSyntheticEvent(event, target, state));
-    }
+    dispatchEventHandlerOnce(listenerName, event, target, state);
 
     if (state.propagationStopped) {
       return;
@@ -482,11 +477,35 @@ function dispatchMouseTransitionEvent(
     return;
   }
 
-  const handler = getAppliedEventHandler(target, propName);
+  dispatchEventHandlerOnce(propName, event, target, state);
+}
 
-  if (handler !== undefined) {
-    handler(createSyntheticEvent(event, target, state));
+function dispatchEventHandlerOnce(
+  propName: string,
+  event: Event,
+  target: Element,
+  state: { defaultPrevented: boolean; propagationStopped: boolean },
+  syntheticType = event.type,
+): void {
+  const handler = getAppliedEventHandler(target, propName);
+  if (handler === undefined || hasDispatchedDelegatedHandler(event, target, propName)) {
+    return;
   }
+
+  markDispatchedDelegatedHandler(event, target, propName);
+  handler(createSyntheticEvent(event, target, state, syntheticType));
+}
+
+function hasDispatchedDelegatedHandler(event: Event, target: Element, propName: string): boolean {
+  return dispatchedDelegatedHandlers.get(event)?.get(target)?.has(propName) ?? false;
+}
+
+function markDispatchedDelegatedHandler(event: Event, target: Element, propName: string): void {
+  const targets = dispatchedDelegatedHandlers.get(event) ?? new WeakMap<Element, Set<string>>();
+  const propNames = targets.get(target) ?? new Set<string>();
+  propNames.add(propName);
+  targets.set(target, propNames);
+  dispatchedDelegatedHandlers.set(event, targets);
 }
 
 function isInternalMouseTransition(event: Event, target: Element): boolean {
