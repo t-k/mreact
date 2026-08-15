@@ -64,7 +64,16 @@ if (parsed !== undefined) {
         const loaded =
           routeArg === undefined
             ? await loadMreactRouterViteConfigDetails({ command: "build", cwd: process.cwd() })
-            : { project: { appDir: resolve(routeArg) }, viteConfig: undefined };
+            : {
+                dehydrateOptions: undefined,
+                project: { appDir: resolve(routeArg) },
+                viteConfig: undefined,
+              };
+        if (loaded.dehydrateOptions !== undefined) {
+          throw new Error(
+            "Production builds must configure dehydratePolicyModule instead of an inline dehydrateOptions callback so generated runtimes use the same policy as prerendering.",
+          );
+        }
         try {
           const result = await buildApp({
             ...loaded.project,
@@ -151,12 +160,16 @@ if (parsed !== undefined) {
           routeArg === undefined
             ? await loadMreactRouterViteConfigDetails({ command: "serve", cwd: process.cwd() })
             : {
+                dehydrateOptions: undefined,
                 project: { appDir: resolve(routeArg) },
                 serverPort: undefined,
                 viteConfig: undefined,
               };
         const server = await startDevServer({
           ...loaded.project,
+          ...(loaded.dehydrateOptions === undefined
+            ? {}
+            : { dehydrateOptions: loaded.dehydrateOptions }),
           hostname: resolveCliHost(parsed.host, process.env),
           logger,
           port: resolveCliDevPort(parsed.port, process.env, loaded.serverPort),

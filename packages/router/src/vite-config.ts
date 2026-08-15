@@ -1,9 +1,11 @@
 import { loadConfigFromFile, type ConfigEnv, type PluginOption, type UserConfig } from "vite";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import type { ResolvedAppRouterProject } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import { mreactRouterConfigFromPlugins } from "./vite.js";
 
 export interface LoadedMreactRouterViteConfig {
+  dehydrateOptions?: DehydrateOptions | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   project: ResolvedAppRouterProject;
   serverPort?: number | undefined;
@@ -46,8 +48,12 @@ export async function loadMreactRouterViteConfigDetails(options: {
   const importPolicy = (config as ResolvedAppRouterProject & {
     importPolicy?: AppRouterImportPolicy | undefined;
   }).importPolicy;
+  const dehydrateOptions = (config as ResolvedAppRouterProject & {
+    dehydrateOptions?: DehydrateOptions | undefined;
+  }).dehydrateOptions;
 
   return {
+    ...(dehydrateOptions === undefined ? {} : { dehydrateOptions }),
     ...(importPolicy === undefined ? {} : { importPolicy }),
     project: config,
     ...(typeof serverPort === "number" ? { serverPort } : {}),

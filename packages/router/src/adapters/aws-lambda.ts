@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { access, lstat, mkdir, readFile, readlink, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import type { AppRouterServerActionOptions } from "../actions.js";
 import type { AppRouterCache } from "../cache.js";
 import type { AppRouterImportPolicy } from "../import-policy.js";
@@ -130,6 +131,7 @@ export interface AwsLambdaStreamingResponseStream {
  */
 export interface AwsLambdaRequestHandlerOptions {
   allowedHosts?: readonly string[] | undefined;
+  dehydrateOptions?: DehydrateOptions | undefined;
   errorHandler?:
     | ((error: unknown) => {
         body: string;
@@ -343,6 +345,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
         defaultPreloadMode,
       );
       const response = await builtRuntime.render(request, {
+        dehydrateOptions: options.dehydrateOptions,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,
@@ -667,6 +670,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         defaultPreloadMode,
       );
       const response = await builtRuntime.render(request, {
+        dehydrateOptions: options.dehydrateOptions,
         instrumentation: options.instrumentation,
         logger: awsLambdaRenderLogger(options),
         onResponse: options.onResponse,

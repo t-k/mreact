@@ -17,6 +17,36 @@ afterEach(async () => {
 });
 
 describe("startDevServer", () => {
+  test("applies query dehydration filtering in development", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-dehydrate-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export async function loader({ queryClient }) {
+  queryClient.setQueryData(["public"], "visible-value");
+  queryClient.setQueryData(["private"], "secret-value");
+}
+export default function Page() { return <main>Query state</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "dehydrate-policy.ts"),
+      `export const dehydrateOptions = {
+  shouldDehydrateQuery(entry) {
+    return entry.queryKey[0] === "public";
+  },
+};`,
+    );
+    const server = await startTrackedDevServer({
+      appDir,
+      dehydratePolicyModule: "dehydrate-policy.ts",
+      port: 0,
+    });
+
+    const html = await (await fetch(server.url)).text();
+
+    expect(html).toContain("visible-value");
+    expect(html).not.toContain("secret-value");
+  });
+
   test("serves client route modules", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-dev-"));
     await writeFile(

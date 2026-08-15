@@ -37,6 +37,8 @@ export interface AppRouterProjectOptions {
   buildConcurrency?: number | undefined;
   buildTargets?: readonly AppRouterBuildTarget[] | undefined;
   clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
+  /** Project-local server module exporting a named `dehydrateOptions` policy. */
+  dehydratePolicyModule?: string | undefined;
   /**
    * Legacy route root. When provided without routesDir/projectRoot, this keeps
    * the historical "appDir is the whole app boundary" behavior.
@@ -61,6 +63,7 @@ export interface ResolvedAppRouterProject {
   buildTargets: readonly AppRouterBuildTarget[];
   clientSourceMaps: AppRouterClientSourceMapMode;
   clientConsolePureFunctions?: readonly string[] | undefined;
+  dehydratePolicyModule?: string | undefined;
   projectRoot: string;
   publicAssetBaseUrl?: string | undefined;
   publicDir: string;
@@ -80,11 +83,12 @@ export function resolveAppRouterProjectOptions(
     options.routesDir === undefined
   ) {
     const appDir = resolve(options.appDir);
+    const allowedSourceDirs = (options.allowedSourceDirs ?? [appDir]).map((directory) =>
+      resolveProjectPath(appDir, directory, "allowedSourceDirs"),
+    );
 
     return {
-      allowedSourceDirs: (options.allowedSourceDirs ?? [appDir]).map((directory) =>
-        resolveProjectPath(appDir, directory, "allowedSourceDirs"),
-      ),
+      allowedSourceDirs,
       ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
       ...(options.buildConcurrency === undefined
         ? {}
@@ -92,6 +96,15 @@ export function resolveAppRouterProjectOptions(
       buildTargets: resolveBuildTargets(options.buildTargets),
       clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
       ...(clientConsolePureFunctions === undefined ? {} : { clientConsolePureFunctions }),
+      ...(options.dehydratePolicyModule === undefined
+        ? {}
+        : {
+            dehydratePolicyModule: resolvePolicyModule(
+              appDir,
+              options.dehydratePolicyModule,
+              allowedSourceDirs,
+            ),
+          }),
       projectRoot: appDir,
       ...(options.publicAssetBaseUrl === undefined
         ? {}
@@ -105,11 +118,12 @@ export function resolveAppRouterProjectOptions(
   const routesDir = resolveProjectPath(projectRoot, options.routesDir ?? "src/app", "routesDir");
   const defaultAllowedSourceDirs =
     options.routesDir === undefined ? ["src"] : [defaultAllowedSourceDir(projectRoot, routesDir)];
+  const allowedSourceDirs = (options.allowedSourceDirs ?? defaultAllowedSourceDirs).map(
+    (directory) => resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
+  );
 
   return {
-    allowedSourceDirs: (options.allowedSourceDirs ?? defaultAllowedSourceDirs).map((directory) =>
-      resolveProjectPath(projectRoot, directory, "allowedSourceDirs"),
-    ),
+    allowedSourceDirs,
     ...(options.assetBaseUrl === undefined ? {} : { assetBaseUrl: options.assetBaseUrl }),
     ...(options.buildConcurrency === undefined
       ? {}
@@ -117,6 +131,15 @@ export function resolveAppRouterProjectOptions(
     buildTargets: resolveBuildTargets(options.buildTargets),
     clientSourceMaps: resolveClientSourceMapMode(options.clientSourceMaps),
     ...(clientConsolePureFunctions === undefined ? {} : { clientConsolePureFunctions }),
+    ...(options.dehydratePolicyModule === undefined
+      ? {}
+      : {
+          dehydratePolicyModule: resolvePolicyModule(
+            projectRoot,
+            options.dehydratePolicyModule,
+            allowedSourceDirs,
+          ),
+        }),
     projectRoot,
     ...(options.publicAssetBaseUrl === undefined
       ? {}
@@ -124,6 +147,20 @@ export function resolveAppRouterProjectOptions(
     publicDir: resolveProjectPath(projectRoot, options.publicDir ?? "public", "publicDir"),
     routesDir,
   };
+}
+
+function resolvePolicyModule(
+  projectRoot: string,
+  modulePath: string,
+  allowedSourceDirs: readonly string[],
+): string {
+  const resolvedModule = resolveProjectPath(projectRoot, modulePath, "dehydratePolicyModule");
+  if (!allowedSourceDirs.some((directory) => isInsideDirectory(directory, resolvedModule))) {
+    throw new Error(
+      `mreactRouter dehydratePolicyModule must resolve inside allowedSourceDirs: ${resolvedModule}`,
+    );
+  }
+  return resolvedModule;
 }
 
 function defaultAllowedSourceDir(projectRoot: string, routesDir: string): string {

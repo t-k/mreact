@@ -84,6 +84,23 @@ describe("router project config", () => {
     ).toEqual([join(projectRoot, "src")]);
   });
 
+  test("resolves dehydration policy modules inside allowed source directories", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-dehydrate-policy-"));
+
+    expect(
+      resolveAppRouterProjectOptions({
+        dehydratePolicyModule: "src/dehydrate-policy.ts",
+        projectRoot,
+      }).dehydratePolicyModule,
+    ).toBe(join(projectRoot, "src", "dehydrate-policy.ts"));
+    expect(() =>
+      resolveAppRouterProjectOptions({
+        dehydratePolicyModule: "dehydrate-policy.ts",
+        projectRoot,
+      }),
+    ).toThrow(/dehydratePolicyModule.*allowedSourceDirs/);
+  });
+
   test("rejects project paths that resolve outside projectRoot", async () => {
     const projectRoot = await mkdtemp(join(tmpdir(), "mreact-router-config-root-"));
     const outside = await mkdtemp(join(tmpdir(), "mreact-router-config-outside-"));

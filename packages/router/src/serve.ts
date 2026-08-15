@@ -262,6 +262,7 @@ export async function createBuiltRequestRuntime(
       emitBuiltRequestStart(renderOptions.instrumentation, request);
       const response = await renderBuiltAppRequestWithRuntime({
         ...renderOptions,
+        dehydrateOptions: renderOptions.dehydrateOptions ?? runtime.dehydrateOptions,
         instrumentation: withoutBuiltRequestInstrumentation(renderOptions.instrumentation),
         importPolicy:
           renderOptions.importPolicy === undefined

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import type { AppRouterCache } from "../cache.js";
 import { nodeRequestToWebRequest, sendResponse } from "../http.js";
 import type { AppRouterServerActionOptions } from "../actions.js";
@@ -74,6 +75,7 @@ export type {
  */
 export interface NodeRequestHandlerOptions {
   allowedHosts?: readonly string[] | undefined;
+  dehydrateOptions?: DehydrateOptions | undefined;
   errorHandler?:
     | ((error: unknown) => {
         body: string;
@@ -146,6 +148,7 @@ export function createNodeRequestHandler(options: NodeRequestHandlerOptions): No
         type: "router:request:start",
       });
       const response = await renderBuiltAppRequest({
+        dehydrateOptions: options.dehydrateOptions,
         outDir: options.outDir,
         importPolicy: options.importPolicy,
         instrumentation: options.instrumentation,

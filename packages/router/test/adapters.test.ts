@@ -34,6 +34,34 @@ describe("mreact deployment adapters", () => {
     }
   });
 
+  test("applies query dehydration filtering through the Node request handler", async () => {
+    const { outDir } = await buildFixture("mreact-node-adapter-dehydrate-", {
+      "page.tsx": queryDehydrationPageSource(),
+    });
+    const handler = createNodeRequestHandler({
+      dehydrateOptions: {
+        shouldDehydrateQuery: (entry) => entry.queryKey[0] === "public",
+      },
+      outDir,
+    });
+    const server = createServer(handler);
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+
+    try {
+      const html = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+
+      expect(html).toContain("visible-value");
+      expect(html).not.toContain("secret-value");
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
+    }
+  });
+
   test("emits HSTS behind an explicitly trusted HTTPS proxy", async () => {
     const { outDir } = await buildFixture("mreact-node-adapter-forwarded-proto-", {
       "page.tsx": `export const metadata = {
@@ -226,4 +254,12 @@ async function buildFixture(
   await buildApp({ appDir, outDir });
 
   return { outDir };
+}
+
+function queryDehydrationPageSource(): string {
+  return `export async function loader({ queryClient }) {
+  queryClient.setQueryData(["public"], "visible-value");
+  queryClient.setQueryData(["private"], "secret-value");
+}
+export default function Page() { return <main>Query state</main>; }`;
 }

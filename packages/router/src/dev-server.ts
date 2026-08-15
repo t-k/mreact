@@ -2,6 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import { createServer as createViteServer, type UserConfig, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import { createMemoryRouteCache, type AppRouterCache } from "./cache.js";
@@ -25,6 +26,7 @@ import type { HttpUpgradeHandler } from "./upgrade.js";
  * Configures the Vite-powered app-router development server.
  */
 export interface StartDevServerOptions extends AppRouterProjectOptions {
+  dehydrateOptions?: DehydrateOptions | undefined;
   port?: number | undefined;
   hostname?: string;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -133,6 +135,8 @@ export async function startDevServer(
       ...(userViteConfig.plugins ?? []),
       createAppRouterVitePlugin({
         allowedSourceDirs: project.allowedSourceDirs,
+        dehydrateOptions: options.dehydrateOptions ?? resolved.dehydrateOptions,
+        dehydratePolicyModule: project.dehydratePolicyModule,
         projectRoot: project.projectRoot,
         publicDir: project.publicDir,
         routesDir: project.routesDir,
@@ -202,6 +206,7 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
 }
 
 async function resolveStartDevServerProject(options: StartDevServerOptions): Promise<{
+  dehydrateOptions?: LoadedMreactRouterViteConfig["dehydrateOptions"];
   project: ReturnType<typeof resolveAppRouterProjectOptions>;
   serverPort?: number | undefined;
   importPolicy?: LoadedMreactRouterViteConfig["importPolicy"];
@@ -216,6 +221,9 @@ async function resolveStartDevServerProject(options: StartDevServerOptions): Pro
   );
 
   return {
+    ...(config?.dehydrateOptions === undefined
+      ? {}
+      : { dehydrateOptions: config.dehydrateOptions }),
     ...(config?.importPolicy === undefined ? {} : { importPolicy: config.importPolicy }),
     project: resolveAppRouterProjectOptions({
       ...config?.project,

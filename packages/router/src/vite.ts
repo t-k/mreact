@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
 import { dirname } from "node:path";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import {
   createCompilerModuleContext,
   transformCompilerModuleContext,
@@ -22,6 +23,7 @@ import {
   type ResolvedAppRouterProject,
 } from "./config.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
+import { dehydrateOptionsFromModule } from "./dehydrate-policy.js";
 import {
   collectClientRouteReferences,
   createClientRouteInferenceCache,
@@ -85,6 +87,7 @@ export type { RequestHostPolicy } from "./serve.js";
  */
 export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions {
   allowedHosts?: readonly string[] | undefined;
+  dehydrateOptions?: DehydrateOptions | undefined;
   define?: UserConfig["define"] | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
@@ -106,6 +109,7 @@ type AppRouterViteRuntimeMiddlewareOptions = AppRouterViteMiddlewareOptions & {
  */
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
   allowedHosts?: readonly string[] | undefined;
+  dehydrateOptions?: DehydrateOptions | undefined;
   hostPolicy?: RequestHostPolicy | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
   logger?: AppRouterLogger | undefined;
@@ -123,6 +127,7 @@ const virtualReactiveDevtoolsId = "\0mreact-router-reactive-devtools";
 const mreactRouterConfigKey = "__mreactRouterConfig";
 
 type MreactRouterPluginConfig = ResolvedAppRouterProject & {
+  dehydrateOptions?: DehydrateOptions | undefined;
   importPolicy?: AppRouterImportPolicy | undefined;
 };
 
@@ -234,6 +239,9 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   const plugin: MreactRouterPlugin = {
     [mreactRouterConfigKey]: {
       ...project,
+      ...(options.dehydrateOptions === undefined
+        ? {}
+        : { dehydrateOptions: options.dehydrateOptions }),
       ...(options.importPolicy === undefined ? {} : { importPolicy: options.importPolicy }),
     },
     enforce: "pre",
@@ -638,6 +646,7 @@ async function handleAppRouterViteRequest(
     }
 
     const request = nodeRequestToWebRequest(incoming, origin);
+    const dehydrateOptions = await resolveDevDehydrateOptions(project, options);
     const routeTransformPlugins = options.navigationScanVitePlugins ?? options.vitePlugins;
     const routes = await scanAppRoutes({ appDir: project.routesDir });
     const routeMatcher = createRouteMatcher(routes);
@@ -658,6 +667,7 @@ async function handleAppRouterViteRequest(
       outgoing,
       await renderAppRequest({
         appDir: project.routesDir,
+        dehydrateOptions,
         define: options.define,
         dev: true,
         importPolicy: {
@@ -686,6 +696,29 @@ async function handleAppRouterViteRequest(
     sendViteErrorOverlay(options.viteDevServer, error);
     next(error);
   }
+}
+
+async function resolveDevDehydrateOptions(
+  project: ResolvedAppRouterProject,
+  options: AppRouterViteRuntimeMiddlewareOptions,
+): Promise<DehydrateOptions | undefined> {
+  if (options.dehydrateOptions !== undefined) {
+    return options.dehydrateOptions;
+  }
+  if (project.dehydratePolicyModule === undefined) {
+    return undefined;
+  }
+  if (options.viteDevServer === undefined) {
+    throw new Error("dehydratePolicyModule requires a Vite dev server module runner.");
+  }
+
+  const policyModule = await options.viteDevServer.ssrLoadModule(
+    normalizePath(project.dehydratePolicyModule),
+  );
+  return dehydrateOptionsFromModule(
+    policyModule,
+    `mreactRouter dehydratePolicyModule ${project.dehydratePolicyModule}`,
+  );
 }
 
 function sendViteErrorOverlay(server: ViteDevServer | undefined, error: unknown): void {

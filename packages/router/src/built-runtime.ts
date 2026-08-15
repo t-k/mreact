@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, normalize } from "node:path";
+import { pathToFileURL } from "node:url";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import type {
   BuiltPrerenderedRoute,
   BuiltServerManifest,
@@ -10,6 +12,7 @@ import { builtClientAssetPaths } from "./built-assets.js";
 import type { BuiltServerModuleArtifactRuntime } from "./built-server-module-artifacts.js";
 import type { ClientRouteManifestEntry } from "./client-route-inference.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
+import { dehydrateOptionsFromModule } from "./dehydrate-policy.js";
 import { createRouteMatcher, type AppRoute, type RouteMatcher } from "./routes.js";
 
 export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
@@ -19,6 +22,7 @@ export interface BuiltRuntime extends BuiltServerModuleArtifactRuntime {
   clientScripts: ReadonlyMap<string, string>;
   clientStylesByFile: ReadonlyMap<string, readonly string[]>;
   clientStyles: ReadonlyMap<string, readonly string[]>;
+  dehydrateOptions?: DehydrateOptions | undefined;
   generatedImportPolicy?: AppRouterImportPolicy | undefined;
   hasMiddleware: boolean;
   navigationScripts: ReadonlyMap<string, string>;
@@ -160,6 +164,13 @@ export async function materializeBuiltRuntime(options: {
     options.importPolicyText,
     options.importPolicyPath,
   );
+  const dehydrateOptions =
+    serverManifest.dehydratePolicyModule === undefined
+      ? undefined
+      : await loadBuiltDehydratePolicy(
+          join(options.outDir, "server", safeManifestFilePath(serverManifest.dehydratePolicyModule)),
+          serverManifest.dehydratePolicyModule,
+        );
 
   return {
     appDir: routesDir,
@@ -171,6 +182,7 @@ export async function materializeBuiltRuntime(options: {
     clientScripts,
     clientStylesByFile,
     clientStyles,
+    ...(dehydrateOptions === undefined ? {} : { dehydrateOptions }),
     ...(generatedImportPolicy === undefined ? {} : { generatedImportPolicy }),
     hasMiddleware,
     navigationScripts,
@@ -196,6 +208,22 @@ export async function materializeBuiltRuntime(options: {
     serverModuleCacheVersion,
     serverSourceFiles,
   };
+}
+
+async function loadBuiltDehydratePolicy(
+  policyPath: string,
+  manifestPath: string,
+): Promise<DehydrateOptions> {
+  let policyModule: unknown;
+  try {
+    policyModule = await import(pathToFileURL(policyPath).href);
+  } catch (error) {
+    throw builtArtifactReadError("built app dehydration policy", policyPath, error);
+  }
+  return dehydrateOptionsFromModule(
+    policyModule,
+    `Built dehydration policy ${manifestPath}`,
+  );
 }
 
 export async function readBuiltImportPolicyText(outDir: string): Promise<string | undefined> {

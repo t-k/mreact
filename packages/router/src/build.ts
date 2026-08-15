@@ -16,6 +16,7 @@ import { builtinModules } from "node:module";
 import { availableParallelism } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { DehydrateOptions } from "@reckona/mreact-query";
 import {
   collectStaticImportReferences,
   collectTopLevelValueExportNames,
@@ -57,6 +58,7 @@ import {
   resolveCompatVendorEntryFiles,
   sourceReferencesCompatVendorSpecifier,
 } from "./module-runner.js";
+import { dehydrateOptionsFromModule } from "./dehydrate-policy.js";
 import { compileRouteMatcherArtifact, scanAppRoutes } from "./routes.js";
 import type { AppRoute, CompiledRouteMatcherArtifact } from "./routes.js";
 import { appFileConventionForRootFilename } from "./file-conventions.js";
@@ -249,7 +251,7 @@ export interface BuildAppResult {
 
 interface IncrementalBuildCacheManifest {
   fingerprint: string;
-  version: 1;
+  version: 2;
 }
 
 interface IncrementalBuildServerManifestOutputs {
@@ -326,6 +328,7 @@ export interface PackageCloudflarePagesArtifactOptions {
 export interface BuiltServerManifest {
   allowedSourceDirs?: readonly string[];
   assetBaseUrl?: string;
+  dehydratePolicyModule?: string;
   version: 1;
   files: Record<string, string>;
   prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
@@ -456,6 +459,11 @@ async function buildAppWithResolvedProject(
   options: BuildAppOptions,
   project: ResolvedAppRouterProject,
 ): Promise<BuildAppResult> {
+  if ((options as BuildAppOptions & { dehydrateOptions?: unknown }).dehydrateOptions !== undefined) {
+    throw new Error(
+      "buildApp dehydration policies must use dehydratePolicyModule so the same executable policy is available to prerendering and built runtimes.",
+    );
+  }
   const timingSink = options.onBuildPhaseTiming;
   const progressSink = options.onBuildProgress;
   const shouldTrackBuildPhases = timingSink !== undefined || progressSink !== undefined;
@@ -571,6 +579,24 @@ async function buildAppWithResolvedProject(
       ]);
     });
   }
+
+  const builtDehydratePolicy =
+    project.dehydratePolicyModule === undefined
+      ? undefined
+      : await buildDehydratePolicyModule({
+          define: viteDefine,
+          file: project.dehydratePolicyModule,
+          projectRoot: project.projectRoot,
+          vitePlugins,
+        });
+  const dehydratePolicyArtifact =
+    builtDehydratePolicy === undefined
+      ? undefined
+      : `dehydrate-policy.${hashText(builtDehydratePolicy.code).slice(0, 16)}.mjs`;
+  if (builtDehydratePolicy !== undefined && dehydratePolicyArtifact !== undefined) {
+    await writeFile(join(serverDir, dehydratePolicyArtifact), builtDehydratePolicy.code);
+  }
+  const dehydrateOptions = builtDehydratePolicy?.dehydrateOptions;
 
   const publicAssets =
     shouldTrackBuildPhases === false
@@ -729,6 +755,7 @@ async function buildAppWithResolvedProject(
           assetBaseUrl: project.assetBaseUrl,
           clientRoutes: clientManifestRoutes,
           define: viteDefine,
+          dehydrateOptions,
           project,
           routes,
           serverModules,
@@ -741,6 +768,7 @@ async function buildAppWithResolvedProject(
             assetBaseUrl: project.assetBaseUrl,
             clientRoutes: clientManifestRoutes,
             define: viteDefine,
+            dehydrateOptions,
             project,
             routes,
             serverModules,
@@ -790,6 +818,9 @@ async function buildAppWithResolvedProject(
       relative(project.projectRoot, directory),
     ),
     ...(project.assetBaseUrl === undefined ? {} : { assetBaseUrl: project.assetBaseUrl }),
+    ...(dehydratePolicyArtifact === undefined
+      ? {}
+      : { dehydratePolicyModule: dehydratePolicyArtifact }),
     version: 1,
     routes: serverRoutes,
     routeMatcher: compileRouteMatcherArtifact(serverRoutes),
@@ -903,7 +934,7 @@ async function buildAppWithResolvedProject(
 }
 
 const incrementalBuildCacheFilename = "build-cache.json";
-const incrementalBuildCacheVersion = 1;
+const incrementalBuildCacheVersion = 2;
 
 async function createIncrementalBuildCacheFingerprint(options: {
   buildTargets: readonly AppRouterBuildTarget[];
@@ -949,6 +980,12 @@ async function createIncrementalBuildCacheFingerprint(options: {
     assetBaseUrl: options.project.assetBaseUrl ?? null,
     clientConsolePureFunctions: options.project.clientConsolePureFunctions ?? [],
     clientSourceMaps: options.project.clientSourceMaps,
+    dehydratePolicyModule:
+      options.project.dehydratePolicyModule === undefined
+        ? null
+        : normalizeBuildInputPath(
+            relative(options.project.projectRoot, options.project.dehydratePolicyModule),
+          ),
     define,
     nodeEnv: process.env.NODE_ENV ?? null,
     publicAssetBaseUrl: options.project.publicAssetBaseUrl ?? null,
@@ -2560,6 +2597,38 @@ function isReservedPublicAssetPath(pathname: string): boolean {
   return pathname === "/_mreact" || pathname.startsWith("/_mreact/");
 }
 
+async function buildDehydratePolicyModule(options: {
+  define?: UserConfig["define"] | undefined;
+  file: string;
+  projectRoot: string;
+  vitePlugins?: readonly PluginOption[] | undefined;
+}): Promise<{ code: string; dehydrateOptions: DehydrateOptions }> {
+  const source = await readFile(options.file, "utf8");
+  const code = await bundleAppRouterSourceModule({
+    code: source,
+    define: options.define,
+    label: `dehydrate-policy:${options.file}`,
+    plugins: [fileImportMetaUrlPlugin()],
+    resolveDir: dirname(options.file),
+    root: options.projectRoot,
+    sourcefile: options.file,
+    vitePlugins: options.vitePlugins,
+  });
+  const policyModule = await importAppRouterSourceModule<unknown>({
+    code,
+    label: `dehydrate-policy-runtime:${options.file}`,
+    sourcefile: options.file,
+  });
+
+  return {
+    code,
+    dehydrateOptions: dehydrateOptionsFromModule(
+      policyModule,
+      `mreactRouter dehydratePolicyModule ${options.file}`,
+    ),
+  };
+}
+
 function isNodeError(error: unknown): error is NodeJS.ErrnoException {
   return error instanceof Error && "code" in error;
 }
@@ -2568,6 +2637,7 @@ async function prerenderStaticRoutes(options: {
   appDir: string;
   assetBaseUrl?: string | undefined;
   clientRoutes: readonly ClientRouteManifestEntry[];
+  dehydrateOptions?: DehydrateOptions | undefined;
   define?: UserConfig["define"] | undefined;
   project: ResolvedAppRouterProject;
   routes: readonly AppRoute[];
@@ -2633,6 +2703,7 @@ async function prerenderStaticRoutes(options: {
           clientScripts,
           clientStyles,
           define: options.define,
+          dehydrateOptions: options.dehydrateOptions,
           importPolicy,
           navigationScripts,
           request: new Request(`http://mreact.local${pathname}`),

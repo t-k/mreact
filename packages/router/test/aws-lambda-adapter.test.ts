@@ -141,6 +141,46 @@ describe("mreact AWS Lambda adapter", () => {
     expect(result.body).toContain("<main>Hello Lambda</main>");
   });
 
+  test("applies query dehydration filtering in buffered and streaming handlers", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-dehydrate-");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export async function loader({ queryClient }) {
+  queryClient.setQueryData(["public"], "visible-value");
+  queryClient.setQueryData(["private"], "secret-value");
+}
+export default function Page() { return <main>Query state</main>; }`,
+    );
+    await writeFile(
+      join(appDir, "dehydrate-policy.ts"),
+      `export const dehydrateOptions = {
+  shouldDehydrateQuery(entry) {
+    return entry.queryKey[0] === "public";
+  },
+};`,
+    );
+    await buildApp({
+      appDir,
+      dehydratePolicyModule: "dehydrate-policy.ts",
+      outDir,
+      targets: ["aws-lambda"],
+    });
+    const options = { outDir };
+
+    const buffered = await createAwsLambdaRequestHandler(options)(lambdaEvent("/"));
+
+    expect(buffered.body).toContain("visible-value");
+    expect(buffered.body).not.toContain("secret-value");
+
+    installAwsLambdaStreamingMock();
+    const streaming = createAwsLambdaStreamingRequestHandler(options);
+    const stream = createTestLambdaResponseStream();
+    await streaming(lambdaEvent("/"), stream, {});
+
+    expect(stream.text()).toContain("visible-value");
+    expect(stream.text()).not.toContain("secret-value");
+  });
+
   test("propagates default security headers from built app responses", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-security-headers-");
     await writeFile(

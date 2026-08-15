@@ -8734,6 +8734,89 @@ export default function Page() { return <main>Prerendered route</main>; }`,
     expect(await response.text()).toContain("<main>Prerendered route</main>");
   });
 
+  test("rebuilds prerendered query state when its dehydration policy changes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerender-dehydrate-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export function loader({ queryClient }) {
+  queryClient.setQueryData(["public"], "visible-value");
+  queryClient.setQueryData(["private"], "secret-value");
+}
+export default function Page() { return <main>Prerendered query state</main>; }`,
+    );
+    const policyFile = join(appDir, "dehydrate-policy.ts");
+    await writeFile(
+      policyFile,
+      `export const dehydrateOptions = { shouldDehydrateQuery() { return true; } };`,
+    );
+
+    await buildApp({
+      appDir,
+      dehydratePolicyModule: "dehydrate-policy.ts",
+      outDir,
+    });
+    const firstManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+    expect(firstManifest.prerenderedRoutes?.["/"]?.html).toContain("secret-value");
+
+    await writeFile(
+      policyFile,
+      `export const dehydrateOptions = {
+  shouldDehydrateQuery(entry) { return entry.queryKey[0] === "public"; },
+};`,
+    );
+    await buildApp({ appDir, dehydratePolicyModule: "dehydrate-policy.ts", outDir });
+    const secondManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, { html?: string }> };
+    const html = secondManifest.prerenderedRoutes?.["/"]?.html ?? "";
+
+    expect(html).toContain("visible-value");
+    expect(html).not.toContain("secret-value");
+  });
+
+  test("fails closed when a configured dehydration policy module is malformed", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-invalid-dehydrate-policy-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>Ready</main>; }",
+    );
+    await writeFile(join(appDir, "dehydrate-policy.ts"), "export const unrelated = true;");
+
+    await expect(
+      buildApp({ appDir, dehydratePolicyModule: "dehydrate-policy.ts", outDir }),
+    ).rejects.toThrow(/must export a named dehydrateOptions object/);
+  });
+
+  test("rejects an inline dehydration policy that cannot persist into built runtimes", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-inline-dehydrate-policy-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>Ready</main>; }",
+    );
+
+    await expect(
+      buildApp({
+        appDir,
+        dehydrateOptions: { shouldDehydrateQuery: () => false },
+        outDir,
+      } as Parameters<typeof buildApp>[0] & {
+        dehydrateOptions: { shouldDehydrateQuery: () => boolean };
+      }),
+    ).rejects.toThrow(/dehydratePolicyModule/);
+  });
+
   test("applies prerendered HSTS by serving request scheme for GET and HEAD", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-prerendered-hsts-"));
     const appDir = join(rootDir, "app");
