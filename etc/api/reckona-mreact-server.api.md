@@ -444,6 +444,7 @@ export function renderToReadableStream(render: StreamRender, options?: RenderToR
 export interface RenderToReadableStreamOptions {
     // (undocumented)
     logAbortedDeferredErrors?: boolean;
+    maxQueuedBytes?: number;
 }
 
 // @public

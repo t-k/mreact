@@ -4,15 +4,19 @@ import type { StreamRender } from "./sink.js";
 /** Options controlling server render stream error logging behavior. */
 export interface RenderToReadableStreamOptions {
   logAbortedDeferredErrors?: boolean;
+  /** Maximum encoded bytes retained by the stream before consumption. Defaults to 16 MiB. */
+  maxQueuedBytes?: number;
 }
 
 const streamQueuedChunkSoftLimitBytes = 1024 * 1024;
+const defaultStreamQueuedChunkHardLimitBytes = 16 * 1024 * 1024;
 
 /** Renders HTML sink output to a WHATWG readable byte stream. */
 export function renderToReadableStream(
   render: StreamRender,
   options: RenderToReadableStreamOptions = {},
 ): ReadableStream<Uint8Array> {
+  const maxQueuedBytes = resolveMaxQueuedBytes(options.maxQueuedBytes);
   // Issue 084: append calls go into a coalescing Node Buffer sink. The
   // previous implementation called `controller.enqueue(encoder.encode(chunk))`
   // per `sink.append` - one TextEncoder allocation + one WHATWG queue trip
@@ -31,6 +35,7 @@ export function renderToReadableStream(
   let controllerRef: ReadableStreamDefaultController<Uint8Array> | undefined;
   let cancelled = false;
   let complete = false;
+  let controllerQueuedBytes = 0;
   let queuedBytes = 0;
   let warnedQueuedBytes = false;
   let backpressurePromise: Promise<void> | undefined;
@@ -38,6 +43,11 @@ export function renderToReadableStream(
 
   const enqueueOrQueue = (buffer: Uint8Array) => {
     if (cancelled || abortController.signal.aborted) {
+      return;
+    }
+
+    if (wouldExceedQueueLimit(buffer.byteLength)) {
+      abortForQueueOverflow(buffer.byteLength);
       return;
     }
 
@@ -49,6 +59,7 @@ export function renderToReadableStream(
 
     if (queuedChunks.length === 0 && (controller.desiredSize ?? 0) > 0) {
       controller.enqueue(buffer);
+      controllerQueuedBytes = (controller.desiredSize ?? 0) <= 0 ? buffer.byteLength : 0;
       resolveBackpressureIfReady();
       return;
     }
@@ -61,6 +72,7 @@ export function renderToReadableStream(
       if (chunk !== undefined) {
         queuedBytes -= chunk.byteLength;
         controller.enqueue(chunk);
+        controllerQueuedBytes = (controller.desiredSize ?? 0) <= 0 ? chunk.byteLength : 0;
       }
     }
 
@@ -149,12 +161,14 @@ export function renderToReadableStream(
       }
     },
     pull(controller) {
+      controllerQueuedBytes = 0;
       drainQueuedChunks(controller);
       resolveBackpressureAfterPull();
     },
     cancel(reason) {
       cancelled = true;
       queuedChunks.length = 0;
+      controllerQueuedBytes = 0;
       queuedBytes = 0;
       abortController.abort(reason);
       resolveBackpressureIfReady();
@@ -235,6 +249,32 @@ export function renderToReadableStream(
       );
     }
   }
+
+  function wouldExceedQueueLimit(nextChunkBytes: number): boolean {
+    return controllerQueuedBytes + queuedBytes + nextChunkBytes > maxQueuedBytes;
+  }
+
+  function abortForQueueOverflow(nextChunkBytes: number): void {
+    const attemptedBytes = controllerQueuedBytes + queuedBytes + nextChunkBytes;
+    const error = new RangeError(
+      `renderToReadableStream exceeded its maximum queued byte limit of ${maxQueuedBytes} bytes (attempted ${attemptedBytes} bytes).`,
+    );
+    cancelled = true;
+    queuedChunks.length = 0;
+    controllerQueuedBytes = 0;
+    queuedBytes = 0;
+    abortController.abort(error);
+    controllerRef?.error(error);
+    resolveBackpressureIfReady();
+  }
+}
+
+function resolveMaxQueuedBytes(value: number | undefined): number {
+  const resolved = value ?? defaultStreamQueuedChunkHardLimitBytes;
+  if (!Number.isSafeInteger(resolved) || resolved <= 0) {
+    throw new RangeError("renderToReadableStream maxQueuedBytes must be a positive safe integer.");
+  }
+  return resolved;
 }
 
 function shouldWarnAboutQueuedStreamBytes(): boolean {

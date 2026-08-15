@@ -228,14 +228,15 @@ function serializeAwaitHydrationValue(value: unknown, awaitId: string): string |
   }
 }
 
-function inheritBackpressure(childSink: StringHtmlSink, parentSink: HtmlSink): StringHtmlSink {
-  if (parentSink.backpressure === undefined) {
+function inheritStreamControls(childSink: StringHtmlSink, parentSink: HtmlSink): StringHtmlSink {
+  if (parentSink.backpressure === undefined && parentSink.signal === undefined) {
     return childSink;
   }
 
   return {
     ...childSink,
-    backpressure: parentSink.backpressure,
+    ...(parentSink.backpressure === undefined ? {} : { backpressure: parentSink.backpressure }),
+    ...(parentSink.signal === undefined ? {} : { signal: parentSink.signal }),
   };
 }
 
@@ -299,7 +300,7 @@ async function renderOutOfOrderFragment<T>(
   render: AsyncBoundaryRender<T>,
   options: OutOfOrderBoundaryOptions,
 ): Promise<void> {
-  const fragmentSink = inheritBackpressure(createStringSink(), sink);
+  const fragmentSink = inheritStreamControls(createStringSink(), sink);
   let resolvedValue: unknown;
   let hasResolvedValue = false;
 
@@ -450,7 +451,7 @@ async function renderReactSuspenseSegment<T>(
   render: AsyncBoundaryRender<T>,
   options: ReactSuspenseBoundaryOptions,
 ): Promise<void> {
-  const segmentSink = inheritBackpressure(createStringSink(), sink);
+  const segmentSink = inheritStreamControls(createStringSink(), sink);
 
   await renderAsyncBoundary(
     segmentSink,

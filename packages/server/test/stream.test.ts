@@ -85,6 +85,84 @@ describe("server streaming runtime", () => {
     expect(aborted).toBe(true);
   });
 
+  test("renderToReadableStream aborts when one emitted chunk exceeds the hard queue limit", async () => {
+    let signal: AbortSignal | undefined;
+    const stream = renderToReadableStream(
+      (sink) => {
+        signal = sink.signal;
+        sink.append("123456789");
+      },
+      { maxQueuedBytes: 8 },
+    );
+
+    await expect(stream.getReader().read()).rejects.toThrow(/maximum queued byte limit/i);
+    expect(signal?.aborted).toBe(true);
+  });
+
+  test("renderToReadableStream counts the controller-held chunk toward the hard queue limit", async () => {
+    let backpressure: Promise<void> | undefined;
+    let signal: AbortSignal | undefined;
+    const stream = renderToReadableStream(
+      (sink) => {
+        signal = sink.signal;
+        sink.append("12345678");
+        sink.defer?.(
+          Promise.resolve().then(() => {
+            backpressure = sink.backpressure?.();
+            sink.append("abcdefgh");
+          }),
+        );
+      },
+      { maxQueuedBytes: 12 },
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(stream.getReader().read()).rejects.toThrow(/maximum queued byte limit/i);
+    await expect(backpressure).resolves.toBeUndefined();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  test("renderToReadableStream permits queued output at the exact hard limit", async () => {
+    const stream = renderToReadableStream(
+      (sink) => {
+        sink.append("12345678");
+        sink.defer?.(Promise.resolve().then(() => sink.append("abcdefgh")));
+      },
+      { maxQueuedBytes: 16 },
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    await expect(readStream(stream)).resolves.toBe("12345678abcdefgh");
+  });
+
+  test("renderOutOfOrderBoundary inherits the parent abort signal while rendering a fragment", async () => {
+    let childSignal: AbortSignal | undefined;
+    let parentSignal: AbortSignal | undefined;
+    const stream = renderToReadableStream((sink) => {
+      parentSignal = sink.signal;
+      sink.append("SHELL");
+      renderOutOfOrderBoundary(
+        sink,
+        "abortable",
+        Promise.resolve("BODY"),
+        async (boundarySink) => {
+          childSignal = boundarySink.signal;
+          await new Promise(() => undefined);
+        },
+      );
+    });
+    const reader = stream.getReader();
+
+    await reader.read();
+    await waitFor(() => childSignal !== undefined);
+    await reader.cancel("client disconnected");
+
+    expect(childSignal).toBe(parentSignal);
+    expect(childSignal?.aborted).toBe(true);
+  });
+
   test("renderToReadableStream can warn about deferred errors ignored after abort in dev", async () => {
     const originalEnv = process.env["NODE_ENV"];
     process.env["NODE_ENV"] = "development";
@@ -887,6 +965,17 @@ describe("server streaming runtime", () => {
     expect(errors.some((message) => /1\s*MB/i.test(message))).toBe(true);
   });
 });
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  throw new Error("Timed out waiting for server stream lifecycle state.");
+}
 
 async function readStream(stream: ReadableStream<Uint8Array>): Promise<string> {
   const reader = stream.getReader();
