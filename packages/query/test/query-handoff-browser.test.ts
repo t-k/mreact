@@ -157,6 +157,26 @@ describe("browser query client hand-off", () => {
       status: "success",
     });
   });
+
+  it("finds hydrated built-in query-key values after JSON hand-off", () => {
+    __resetQueryClientForTesting();
+    const keys = [
+      ["typed", new Date("2026-08-15T00:00:00.000Z")],
+      ["typed", new Set([1, 2])],
+      ["typed", new Map([["page", 1]])],
+      ["typed", new URL("https://example.com/report")],
+      ["typed", /report/gi],
+    ] as const;
+    const serverClient = createQueryClient();
+    keys.forEach((queryKey, index) => serverClient.setQueryData(queryKey, `server-${index}`));
+    injectQueryState(dehydrate(serverClient));
+
+    const client = getQueryClient();
+
+    keys.forEach((queryKey, index) => {
+      expect(client.getQueryData(queryKey)).toBe(`server-${index}`);
+    });
+  });
 });
 
 function injectQueryState(state: unknown): void {

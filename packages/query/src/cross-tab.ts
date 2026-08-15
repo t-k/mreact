@@ -422,6 +422,7 @@ function applyRemoteSuccess(
   const hydratableClient = client as QueryClient & Partial<HydratableQueryClient>;
   if (hydratableClient[hydrateQueryDataSymbol] !== undefined) {
     hydratableClient[hydrateQueryDataSymbol](message.queryKey, message.data, {
+      queryHash: message.queryHash,
       updatedAt: message.updatedAt,
     });
     return;

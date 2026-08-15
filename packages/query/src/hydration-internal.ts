@@ -5,6 +5,7 @@ export const hydrateQueryDataSymbol: unique symbol = Symbol.for(
 );
 
 export interface HydrateQueryDataOptions {
+  queryHash: string;
   updatedAt: number;
 }
 

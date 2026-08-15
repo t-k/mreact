@@ -442,6 +442,68 @@ describe("createQueryClient", () => {
     );
   });
 
+  it.each([
+    ["Date", new Date("2026-08-15T00:00:00.000Z"), new Date("2026-08-16T00:00:00.000Z")],
+    ["Set", new Set([1, 2]), new Set([1, 3])],
+    ["Map", new Map([["page", 1]]), new Map([["page", 2]])],
+    ["URL", new URL("https://example.com/a"), new URL("https://example.com/b")],
+    ["RegExp", /first/gi, /second/gi],
+  ])("keeps %s query-key values in separate cache entries", (_name, first, second) => {
+    const client = createQueryClient();
+    client.setQueryData(["typed", first], "first");
+    client.setQueryData(["typed", second], "second");
+
+    expect(hashQueryKey(["typed", first])).not.toBe(hashQueryKey(["typed", second]));
+    expect(client.getQueryData(["typed", first])).toBe("first");
+    expect(client.getQueryData(["typed", second])).toBe("second");
+  });
+
+  it("hashes Set and Map values independently of insertion order", () => {
+    expect(hashQueryKey([new Set([3, 1, 2])])).toBe(hashQueryKey([new Set([1, 2, 3])]));
+    expect(
+      hashQueryKey([
+        new Map<unknown, unknown>([
+          ["b", 2],
+          ["a", 1],
+        ]),
+      ]),
+    ).toBe(
+      hashQueryKey([
+        new Map<unknown, unknown>([
+          ["a", 1],
+          ["b", 2],
+        ]),
+      ]),
+    );
+  });
+
+  it("supports BigInt query-key values", () => {
+    expect(() => hashQueryKey(["record", 9_007_199_254_740_993n])).not.toThrow();
+    expect(hashQueryKey(["record", 1n])).not.toBe(hashQueryKey(["record", 2n]));
+  });
+
+  it("rejects unsupported query-key values instead of silently colliding", () => {
+    class UnsupportedKey {
+      readonly value = 1;
+    }
+
+    expect(() => hashQueryKey(["unsupported", new UnsupportedKey()])).toThrow(
+      /unsupported query key value.*UnsupportedKey/i,
+    );
+    expect(() => hashQueryKey(["unsupported", () => 1])).toThrow(
+      /unsupported query key value.*function/i,
+    );
+  });
+
+  it("preserves plain query-key order and undefined-property behavior", () => {
+    expect(hashQueryKey(["plain", { a: 1, b: undefined }])).toBe(
+      hashQueryKey(["plain", { a: 1 }]),
+    );
+    expect(hashQueryKey(["plain", { a: 1, b: 2 }])).toBe(
+      hashQueryKey(["plain", { b: 2, a: 1 }]),
+    );
+  });
+
   it("memoizes query-key hashes for repeated reads of the same key array", () => {
     const queryKey = ["search", { page: 1, q: "mreact" }] as const;
     const originalStringify = JSON.stringify;

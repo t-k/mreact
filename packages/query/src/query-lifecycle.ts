@@ -27,6 +27,7 @@ interface InternalQueryEntry<TData = unknown> extends QueryEntry<TData> {
 }
 
 interface SetSuccessOptions {
+  queryHash?: string | undefined;
   stale?: boolean | undefined;
   updatedAt?: number | undefined;
 }
@@ -48,8 +49,10 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
   const pendingInvalidationNotifications = new Set<InternalQueryEntry>();
   let invalidationNotifyScheduled = false;
 
-  function getOrCreateEntry<TData>(queryKey: QueryKey): InternalQueryEntry<TData> {
-    const queryHash = hashQueryKey(queryKey);
+  function getOrCreateEntry<TData>(
+    queryKey: QueryKey,
+    queryHash = hashQueryKey(queryKey),
+  ): InternalQueryEntry<TData> {
     const existing = cache.get(queryHash) as InternalQueryEntry<TData> | undefined;
 
     if (existing !== undefined) {
@@ -130,7 +133,7 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     data: TData | ((previous: TData | undefined) => TData),
     options: SetSuccessOptions = {},
   ): void {
-    const entry = getOrCreateEntry<TData>(queryKey);
+    const entry = getOrCreateEntry<TData>(queryKey, options.queryHash);
     const resolvedData =
       typeof data === "function"
         ? (data as (previous: TData | undefined) => TData)(entry.data)
@@ -159,7 +162,10 @@ export function createQueryLifecycle(): QueryClient & HydratableQueryClient {
     data: TData,
     options: HydrateQueryDataOptions,
   ): void {
-    setSuccess(queryKey, data, { updatedAt: options.updatedAt });
+    setSuccess(queryKey, data, {
+      queryHash: options.queryHash,
+      updatedAt: options.updatedAt,
+    });
   }
 
   function retainSubscription(queryKey: QueryKey): void {
@@ -581,19 +587,82 @@ function queryKeyStartsWith(
 }
 
 function stableStringify(value: unknown): string {
+  return stableStringifyValue(value, []);
+}
+
+function stableStringifyValue(value: unknown, ancestors: object[]): string {
+  if (typeof value === "bigint") {
+    return `@BigInt:${value.toString()}`;
+  }
+  if (typeof value === "function" || typeof value === "symbol") {
+    throw unsupportedQueryKeyValue(value);
+  }
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
   }
-
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
+  if (ancestors.includes(value)) {
+    throw new TypeError("Cyclic query key value is not supported");
   }
 
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, entryValue]) => entryValue !== undefined)
-    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+  ancestors.push(value);
+  try {
+    if (Array.isArray(value)) {
+      return `[${value.map((entry) => stableStringifyValue(entry, ancestors)).join(",")}]`;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype === Object.prototype || prototype === null) {
+      const entries = Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
-  return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringify(entryValue)}`).join(",")}}`;
+      return `{${entries.map(([key, entryValue]) => `${JSON.stringify(key)}:${stableStringifyValue(entryValue, ancestors)}`).join(",")}}`;
+    }
+    if (value instanceof Date) {
+      return `@Date:${JSON.stringify(Date.prototype.toJSON.call(value))}`;
+    }
+    if (value instanceof URL) {
+      return `@URL:${JSON.stringify(value.href)}`;
+    }
+    if (value instanceof RegExp) {
+      return `@RegExp:${JSON.stringify([value.source, value.flags])}`;
+    }
+    if (value instanceof Set) {
+      const entries = Array.from(value, (entry) => stableStringifyValue(entry, ancestors)).sort();
+      return `@Set:${JSON.stringify(entries)}`;
+    }
+    if (value instanceof Map) {
+      const entries = Array.from(value, ([key, entryValue]) => [
+        stableStringifyValue(key, ancestors),
+        stableStringifyValue(entryValue, ancestors),
+      ]).sort(compareSerializedMapEntries);
+      return `@Map:${JSON.stringify(entries)}`;
+    }
+
+    throw unsupportedQueryKeyValue(value);
+  } finally {
+    ancestors.pop();
+  }
+}
+
+function compareSerializedMapEntries(left: string[], right: string[]): number {
+  if (left[0] !== right[0]) {
+    return (left[0] ?? "") < (right[0] ?? "") ? -1 : 1;
+  }
+  if (left[1] === right[1]) {
+    return 0;
+  }
+  return (left[1] ?? "") < (right[1] ?? "") ? -1 : 1;
+}
+
+function unsupportedQueryKeyValue(value: unknown): TypeError {
+  const description =
+    typeof value === "function"
+      ? `function ${value.name || "<anonymous>"}`
+      : typeof value === "symbol"
+        ? value.toString()
+        : ((Object.getPrototypeOf(value)?.constructor as { name?: string } | undefined)?.name ??
+          Object.prototype.toString.call(value));
+  return new TypeError(`Unsupported query key value: ${description}`);
 }
 
 function replaceEqualDeep(previous: unknown, next: unknown): unknown {

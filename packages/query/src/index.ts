@@ -815,6 +815,7 @@ export function hydrate(client: QueryClient, dehydrated: DehydratedQueryClient):
   for (const query of dehydrated.queries) {
     if (hydratableClient[hydrateQueryDataSymbol] !== undefined) {
       hydratableClient[hydrateQueryDataSymbol](query.queryKey, query.data, {
+        queryHash: query.queryHash,
         updatedAt: query.updatedAt,
       });
       continue;
