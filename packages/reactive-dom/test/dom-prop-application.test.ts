@@ -42,8 +42,8 @@ describe("DOM prop application policy", () => {
     const label = document.createElement("label");
     const meta = document.createElement("meta");
 
-    applyDomProp(label, "htmlFor", "name", { preferProperty: true });
-    applyDomProp(meta, "httpEquiv", "refresh", { preferProperty: false });
+    applyDomProp(label, "htmlFor", "name", true);
+    applyDomProp(meta, "httpEquiv", "refresh", false);
 
     expect(label.getAttribute("for")).toBe("name");
     expect(meta.getAttribute("http-equiv")).toBe("refresh");
@@ -54,7 +54,7 @@ describe("DOM prop application policy", () => {
   test("normalizes camel-cased JSX aliases on SVG elements", () => {
     const image = document.createElementNS("http://www.w3.org/2000/svg", "image");
 
-    applyDomProp(image, "crossOrigin", "anonymous", { preferProperty: false });
+    applyDomProp(image, "crossOrigin", "anonymous", false);
 
     expect(image.getAttribute("crossorigin")).toBe("anonymous");
     expect(image.hasAttribute("crossOrigin")).toBe(false);
@@ -63,11 +63,11 @@ describe("DOM prop application policy", () => {
   test("removes falsey values and clears reflected boolean DOM properties", () => {
     const button = document.createElement("button");
 
-    applyDomProp(button, "disabled", true, { preferProperty: true });
+    applyDomProp(button, "disabled", true, true);
     expect(button.disabled).toBe(true);
     expect(button.hasAttribute("disabled")).toBe(true);
 
-    applyDomProp(button, "disabled", false, { preferProperty: true });
+    applyDomProp(button, "disabled", false, true);
     expect(button.disabled).toBe(false);
     expect(button.hasAttribute("disabled")).toBe(false);
   });
@@ -75,10 +75,10 @@ describe("DOM prop application policy", () => {
   test("filters unsafe URL values while keeping safe URL attributes", () => {
     const link = document.createElement("a");
 
-    applyDomProp(link, "href", "https://safe.example/", { preferProperty: true });
+    applyDomProp(link, "href", "https://safe.example/", true);
     expect(link.getAttribute("href")).toBe("https://safe.example/");
 
-    applyDomProp(link, "href", "javascript:alert(1)", { preferProperty: true });
+    applyDomProp(link, "href", "javascript:alert(1)", true);
     expect(link.getAttribute("href")).toBeNull();
     expect(link.href).toBe("");
   });
@@ -86,25 +86,17 @@ describe("DOM prop application policy", () => {
   test("filters unsafe srcset values while keeping safe candidates", () => {
     const image = document.createElement("img");
 
-    applyDomProp(image, "srcSet", "/safe.png 1x, https://safe.example/safe.png 2x", {
-      preferProperty: false,
-    });
-    expect(image.getAttribute("srcset")).toBe(
-      "/safe.png 1x, https://safe.example/safe.png 2x",
-    );
+    applyDomProp(image, "srcSet", "/safe.png 1x, https://safe.example/safe.png 2x", false);
+    expect(image.getAttribute("srcset")).toBe("/safe.png 1x, https://safe.example/safe.png 2x");
 
-    applyDomProp(image, "srcSet", "javascript:alert(1) 1x, /safe.png 2x", {
-      preferProperty: false,
-    });
+    applyDomProp(image, "srcSet", "javascript:alert(1) 1x, /safe.png 2x", false);
     expect(image.getAttribute("srcset")).toBeNull();
   });
 
   test("filters unsafe imagesrcset values", () => {
     const link = document.createElement("link");
 
-    applyDomProp(link, "imagesrcset", "javascript:alert(1) 1x, /safe.png 2x", {
-      preferProperty: false,
-    });
+    applyDomProp(link, "imagesrcset", "javascript:alert(1) 1x, /safe.png 2x", false);
 
     expect(link.getAttribute("imagesrcset")).toBeNull();
   });
@@ -112,17 +104,17 @@ describe("DOM prop application policy", () => {
   test("requires explicit dangerous HTML opt-in for srcDoc", () => {
     const iframe = document.createElement("iframe");
 
-    applyDomProp(iframe, "srcDoc", "<script>1</script>", { preferProperty: false });
+    applyDomProp(iframe, "srcDoc", "<script>1</script>", false);
     expect(iframe.hasAttribute("srcdoc")).toBe(false);
 
-    applyDomProp(iframe, "srcDoc", { __html: "<p>safe</p>" }, { preferProperty: false });
+    applyDomProp(iframe, "srcDoc", { __html: "<p>safe</p>" }, false);
     expect(iframe.getAttribute("srcdoc")).toBe("<p>safe</p>");
   });
 
   test("applies style objects through the style declaration and removes attributes consistently", () => {
     const div = document.createElement("div");
 
-    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, { preferProperty: true });
+    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, true);
     expect(div.style.color).toBe("red");
     expect(div.style.backgroundColor).toBe("blue");
 
@@ -133,8 +125,8 @@ describe("DOM prop application policy", () => {
   test("clears style object properties omitted by the next object", () => {
     const div = document.createElement("div");
 
-    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, { preferProperty: true });
-    applyDomProp(div, "style", { color: "red" }, { preferProperty: true });
+    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, true);
+    applyDomProp(div, "style", { color: "red" }, true);
 
     expect(div.style.color).toBe("red");
     expect(div.style.backgroundColor).toBe("");
@@ -143,8 +135,8 @@ describe("DOM prop application policy", () => {
   test("clears custom style properties omitted by the next object", () => {
     const div = document.createElement("div");
 
-    applyDomProp(div, "style", { "--accent": "red" }, { preferProperty: true });
-    applyDomProp(div, "style", {}, { preferProperty: true });
+    applyDomProp(div, "style", { "--accent": "red" }, true);
+    applyDomProp(div, "style", {}, true);
 
     expect(div.style.getPropertyValue("--accent")).toBe("");
   });
@@ -152,8 +144,8 @@ describe("DOM prop application policy", () => {
   test("clears falsey style object values", () => {
     const div = document.createElement("div");
 
-    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, { preferProperty: true });
-    applyDomProp(div, "style", { color: null, backgroundColor: false }, { preferProperty: true });
+    applyDomProp(div, "style", { color: "red", backgroundColor: "blue" }, true);
+    applyDomProp(div, "style", { color: null, backgroundColor: false }, true);
 
     expect(div.style.color).toBe("");
     expect(div.style.backgroundColor).toBe("");
