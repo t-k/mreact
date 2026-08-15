@@ -12,6 +12,8 @@ import {
   isValidElement,
   render,
   StrictMode,
+  startTransition,
+  useActionState,
   useReducer,
   useCallback,
   useEffect,
@@ -59,6 +61,70 @@ afterEach(() => {
 });
 
 describe("react-compat useState", () => {
+  test("preserves an action-state update scheduled by an attached ref", () => {
+    const container = document.createElement("div");
+    let reveal: (() => void) | undefined;
+
+    function App() {
+      const [visible, setVisible] = useState(false);
+      const [actionState, dispatch] = useActionState(
+        (previous: number, increment: number) => previous + increment,
+        0,
+      );
+      const hasDispatched = useRef(false);
+      reveal = () => setVisible(true);
+
+      return createElement(
+        "div",
+        null,
+        createElement("span", null, actionState),
+        visible
+          ? createElement("button", {
+              ref: (node: HTMLButtonElement | null) => {
+                if (node !== null && !hasDispatched.current) {
+                  hasDispatched.current = true;
+                  dispatch(1);
+                }
+              },
+            })
+          : null,
+      );
+    }
+
+    createRoot(container).render(createElement(App, null));
+    reveal?.();
+
+    expect(container.querySelector("span")?.textContent).toBe("1");
+    expect(container.querySelector("button")).not.toBeNull();
+  });
+
+  test("settles a functional no-op update scheduled by an attached ref", () => {
+    const container = document.createElement("div");
+    let setCount: ((value: number) => void) | undefined;
+    let renders = 0;
+
+    function App() {
+      renders += 1;
+      const [count, updateCount] = useState(0);
+      setCount = updateCount;
+      return createElement("button", {
+        ref: (node: HTMLButtonElement | null) => {
+          if (node !== null) {
+            updateCount((previous) => previous);
+          }
+        },
+      }, count);
+    }
+
+    createRoot(container).render(createElement(App, null));
+    expect(renders).toBe(1);
+
+    setCount?.(1);
+
+    expect(container.querySelector("button")?.textContent).toBe("1");
+    expect(renders).toBe(2);
+  });
+
   test("updates state and re-renders synchronously", () => {
     const container = document.createElement("div");
 
@@ -211,7 +277,6 @@ describe("react-compat useState", () => {
       const [, setCount] = state;
       const stateBinding = state[reactiveStateBindingMeta] as { get(): unknown };
       update = setCount;
-
       return createReactiveDomBlock(() => {
         const node = document.createTextNode(String(stateBinding.get()));
         const dispose = bindText(node, () => stateBinding.get(), {
@@ -235,6 +300,85 @@ describe("react-compat useState", () => {
     } finally {
       process.env.NODE_ENV = previousNodeEnv;
     }
+  });
+
+  test("publishes transition commits to compiler-owned reactive DOM blocks", () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const reactiveStateBindingMeta = Symbol.for("modular.react.reactive_state_binding_meta");
+    let renders = 0;
+    let update: (value: number) => void = () => {};
+    const layoutObservations: string[] = [];
+
+    function Counter() {
+      renders += 1;
+      const state = useState(0) as unknown as [
+        number,
+        (value: number) => void,
+      ] & Record<PropertyKey, unknown>;
+      const [, setCount] = state;
+      const stateBinding = state[reactiveStateBindingMeta] as { get(): unknown };
+      update = setCount;
+      useLayoutEffect(() => {
+        layoutObservations.push(`${state[0]}:${container.textContent}`);
+      }, [state[0]]);
+
+      return createReactiveDomBlock(() => {
+        const node = document.createTextNode(String(stateBinding.get()));
+        const dispose = bindText(node, () => stateBinding.get(), {
+          preserveInitial: true,
+        });
+        return { node, dispose };
+      });
+    }
+
+    try {
+      createRoot(container).render(createElement(Counter, null));
+
+      startTransition(() => update(1));
+      expect(container.textContent).toBe("0");
+      expect(renders).toBe(1);
+      expect(layoutObservations).toEqual(["0:0"]);
+
+      host.flushOneHostCallback();
+
+      expect(container.textContent).toBe("1");
+      expect(renders).toBe(2);
+      expect(layoutObservations).toEqual(["0:0", "1:1"]);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  test("reports a ref-scheduled updater error after completing the commit", () => {
+    const container = document.createElement("div");
+    const effects: string[] = [];
+
+    function App() {
+      const [, setCount] = useState(0);
+      useEffect(() => {
+        effects.push("mounted");
+      }, []);
+
+      return createElement("button", {
+        ref: (node: HTMLButtonElement | null) => {
+          if (node !== null) {
+            setCount(() => {
+              throw new Error("updater boom");
+            });
+          }
+        },
+      }, 0);
+    }
+
+    const root = createRoot(container);
+
+    expect(() => root.render(createElement(App, null))).toThrow("updater boom");
+    expect(container.innerHTML).toBe("<button>0</button>");
+    expect(effects).toEqual(["mounted"]);
   });
 
   test("exposes compiler reactive state bindings from useReducer tuples", () => {
@@ -638,6 +782,38 @@ describe("react-compat useState", () => {
     dispatch({ type: "add", value: 1 });
 
     expect(container.innerHTML).toBe("<span>1</span>");
+  });
+
+  test("useReducer dispatch does not flush a deferred update in another root", async () => {
+    const stateContainer = document.createElement("div");
+    const reducerContainer = document.createElement("div");
+    let deferStateUpdate: (() => void) | undefined;
+    let dispatchReducer: (() => void) | undefined;
+
+    function StateApp() {
+      const [count, setCount] = useState(0);
+      deferStateUpdate = () => setCount((previous) => previous + 1);
+      return createElement("span", null, count);
+    }
+
+    function ReducerApp() {
+      const [count, dispatch] = useReducer((previous: number) => previous + 1, 0);
+      dispatchReducer = dispatch;
+      return createElement("span", null, count);
+    }
+
+    createRoot(stateContainer).render(createElement(StateApp, null));
+    createRoot(reducerContainer).render(createElement(ReducerApp, null));
+
+    deferStateUpdate?.();
+    expect(stateContainer.textContent).toBe("0");
+
+    dispatchReducer?.();
+
+    expect(stateContainer.textContent).toBe("0");
+    expect(reducerContainer.textContent).toBe("1");
+    await Promise.resolve();
+    expect(stateContainer.textContent).toBe("1");
   });
 
   test("evaluates lazy initializer once", () => {

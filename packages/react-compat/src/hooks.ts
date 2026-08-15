@@ -57,7 +57,7 @@ export interface RootRuntime {
   externalStoreUpdate: boolean;
   renderPhaseUpdate: boolean;
   rerender(priority?: RenderPriority): void;
-  beginRender(): void;
+  beginRender(priority?: RenderPriority): void;
   prepareInactiveMutationEffectCleanups(): void;
   reportMutationEffectErrors(errors: readonly unknown[]): void;
   endRender(committed?: boolean): void;
@@ -71,6 +71,7 @@ interface ComponentInstance {
   hooks: HookSlot[];
   hookIndex: number;
   dirty: boolean;
+  nonStateDirty: boolean;
   disposed?: boolean;
   contextDependencies?: Map<ReactCompatContextLike<unknown>, unknown>;
   devToolsHooks?: DevToolsHookValue[];
@@ -121,6 +122,20 @@ interface PreparedMutationEffectState {
   }>;
 }
 
+interface StateUpdate {
+  action: unknown;
+  lane: "sync" | "transition" | "replay";
+}
+
+interface StateRenderDraft {
+  instance: ComponentInstance;
+  slot: Extract<HookSlot, { kind: "state" }>;
+  value: unknown;
+  baseState: unknown;
+  remainingUpdates: StateUpdate[];
+  processedUpdateCount: number;
+}
+
 /** Cache scope that stores memoized cache() results and cancellation state. */
 export interface CacheScope {
   functionCaches: WeakMap<(...args: never[]) => unknown, CacheTrieNode>;
@@ -159,6 +174,8 @@ type HookSlot =
   | {
       kind: "state";
       value: unknown;
+      baseState?: unknown;
+      updates?: StateUpdate[];
       dispatch?: (value: unknown) => void;
       hostCommitValue?: unknown;
       textBinding?: ReactiveTextBinding;
@@ -253,6 +270,15 @@ let strictMemoOwnerId = 0;
 const strictMemoObjectOwnerIds = new WeakMap<object, number>();
 const queuedTransitionRerenders = new Map<RootRuntime, TransitionContext>();
 const queuedEventRerenders = new Set<RootRuntime>();
+const SYNC_STATE_DISPATCH = Symbol("mreact.sync-state-dispatch");
+type InternalStateDispatch = ((value: unknown) => void) & {
+  [SYNC_STATE_DISPATCH]: (value: unknown) => void;
+};
+const renderPriorities = new WeakMap<RootRuntime, RenderPriority>();
+const stateRenderDrafts = new WeakMap<
+  RootRuntime,
+  Map<Extract<HookSlot, { kind: "state" }>, StateRenderDraft>
+>();
 /** React version string matched by the compatibility layer. */
 export const version = "19.2.6";
 
@@ -408,7 +434,9 @@ export function createRootRuntime(
     externalStoreUpdate: false,
     renderPhaseUpdate: false,
     rerender,
-    beginRender() {
+    beginRender(priority = "sync") {
+      renderPriorities.set(this, priority);
+      stateRenderDrafts.set(this, new Map());
       this.activeInstanceKeys = new Set();
       this.activeProfilerPaths = new Set();
       this.pendingProfilerCommits = [];
@@ -463,6 +491,7 @@ export function createRootRuntime(
       pendingMutationEffectErrors.push(...errors);
     },
     endRender(committed = true) {
+      const shouldFlushStateBindings = finishStateRender(this, committed);
       const profilerCommits = committed ? this.pendingProfilerCommits.splice(0) : [];
       const activeProfilerPaths = this.activeProfilerPaths;
       if (committed) {
@@ -486,6 +515,15 @@ export function createRootRuntime(
       this.activeProfilerPaths = undefined;
       hookRenderState.currentRuntime = undefined;
       hookRenderState.currentInstance = undefined;
+      renderPriorities.delete(this);
+      stateRenderDrafts.delete(this);
+      if (committed && shouldFlushStateBindings) {
+        try {
+          flushQueuedComputations();
+        } catch (error) {
+          pendingMutationEffectErrors.push(error);
+        }
+      }
       if (committed) {
         flushProfilerCommits(this, profilerCommits);
       }
@@ -724,6 +762,7 @@ function materializeInstance(): ComponentInstance {
       hooks: [],
       hookIndex: 0,
       dirty: false,
+      nonStateDirty: false,
       devToolsHookSuppressionDepth: 0,
     };
     runtime.instances.set(path, instance);
@@ -734,6 +773,7 @@ function materializeInstance(): ComponentInstance {
   runtime.activeInstanceKeys?.add(path);
   instance.hookIndex = 0;
   instance.dirty = false;
+  instance.nonStateDirty = false;
   instance.disposed = false;
   delete instance.contextDependencies;
   if (hasInstalledDevToolsHook()) {
@@ -1002,68 +1042,204 @@ export function useState<T>(
     throw new Error("Hook order changed between renders.");
   }
 
-  slot.dispatch ??= (value: unknown): void => {
-    const previousValue = slot.value;
-    const nextValue =
-      typeof value === "function"
-        ? (value as (previous: unknown) => unknown)(slot.value)
-        : value;
-
-    if (Object.is(slot.value, nextValue)) {
-      return;
-    }
-
-    if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
-      slot.hostCommitValue = previousValue;
-    }
-
-    slot.value = nextValue;
-    const canUseDirectTextBinding =
-      hookRenderState.hostCommitDepth === 0 &&
-      hookRenderState.currentRuntime !== runtime &&
-      hookRenderState.currentInstance !== instance &&
-      runtime.effectFlushPhase === undefined &&
-      eventBatchDepth === 0 &&
-      transitionDepth === 0 &&
-      optionsAllowDirectTextBinding(value) &&
-      updateDirectTextBinding(slot.textBinding, nextValue);
-
-    const canUseDirectStateBinding =
-      hookRenderState.hostCommitDepth === 0 &&
-      hookRenderState.currentRuntime !== runtime &&
-      hookRenderState.currentInstance !== instance &&
-      runtime.effectFlushPhase === undefined &&
-      eventBatchDepth === 0 &&
-      transitionDepth === 0 &&
-      optionsAllowDirectTextBinding(value) &&
-      updateDirectStateBinding(slot.stateBinding, nextValue);
-
-    if (canUseDirectTextBinding || canUseDirectStateBinding) {
-      return;
-    }
-
-    if (hookRenderState.hostCommitDepth > 0) {
-      updateHostCommitDirtyState(instance);
-      hookRenderState.queuedHostCommitRerenders.add(runtime);
-      return;
-    }
-
-    scheduleInstanceUpdate(runtime, instance, { deferSync: typeof value === "function" });
-  };
+  if (slot.dispatch === undefined) {
+    const dispatch = ((value: unknown): void => {
+      enqueueStateUpdate(runtime, instance, slot, value, typeof value === "function");
+    }) as InternalStateDispatch;
+    dispatch[SYNC_STATE_DISPATCH] = (value: unknown): void => {
+      enqueueStateUpdate(runtime, instance, slot, value, false);
+    };
+    slot.dispatch = dispatch;
+  }
   const setState = slot.dispatch as (value: T | ((previous: T) => T)) => void;
+  const state = readStateForRender(runtime, instance, slot);
 
   recordDevToolsHook("useState", {
     kind: "state",
-    value: slot.value,
+    value: state,
   });
 
-  const result = [slot.value as T, setState] as [
+  const result = [state as T, setState] as [
     T,
     (value: T | ((previous: T) => T)) => void,
   ] & Record<PropertyKey, unknown>;
-  result[REACTIVE_TEXT_BINDING_META] = getStateTextBinding(slot);
+  result[REACTIVE_TEXT_BINDING_META] = getStateTextBinding(slot, state);
   result[REACTIVE_STATE_BINDING_META] = getStateBinding(slot);
   return result;
+}
+
+function enqueueStateUpdate(
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+  slot: Extract<HookSlot, { kind: "state" }>,
+  dispatchedValue: unknown,
+  deferSync: boolean,
+): void {
+  const updates = slot.updates ?? [];
+  let value = dispatchedValue;
+  if (updates.length === 0 && typeof value !== "function" && Object.is(slot.value, value)) {
+    return;
+  }
+  const lane = currentTransitionContext === undefined ? "sync" : "transition";
+  const renderDraft = hookRenderState.hostCommitDepth > 0
+    ? stateRenderDrafts.get(runtime)?.get(slot)
+    : undefined;
+  if (
+    lane === "sync" &&
+    typeof value === "function" &&
+    hookRenderState.hostCommitDepth > 0 &&
+    renderDraft !== undefined &&
+    renderDraft.remainingUpdates.length === 0 &&
+    updates.length === renderDraft.processedUpdateCount
+  ) {
+    const previousValue = renderDraft.value;
+    value = (value as (previous: unknown) => unknown)(previousValue);
+    if (Object.is(previousValue, value)) {
+      return;
+    }
+  }
+  if (
+    lane === "sync" &&
+    updates.length === 0 &&
+    typeof value !== "function" &&
+    hookRenderState.hostCommitDepth === 0 &&
+    hookRenderState.currentRuntime !== runtime &&
+    hookRenderState.currentInstance !== instance &&
+    runtime.effectFlushPhase === undefined &&
+    eventBatchDepth === 0 &&
+    optionsAllowDirectTextBinding(value)
+  ) {
+    const updatedText = updateDirectTextBinding(slot.textBinding, value);
+    const updatedState = updateDirectStateBinding(slot.stateBinding, value);
+    if (updatedText || updatedState) {
+      slot.value = value;
+      slot.baseState = value;
+      return;
+    }
+  }
+  if (hookRenderState.hostCommitDepth > 0 && !Object.hasOwn(slot, "hostCommitValue")) {
+    slot.hostCommitValue = renderDraft?.value ?? slot.value;
+  }
+  updates.push({
+    action: value,
+    lane,
+  });
+  slot.updates = updates;
+  scheduleInstanceUpdate(runtime, instance, { deferSync, stateUpdate: true });
+}
+
+function readStateForRender(
+  runtime: RootRuntime,
+  instance: ComponentInstance,
+  slot: Extract<HookSlot, { kind: "state" }>,
+): unknown {
+  const drafts = stateRenderDrafts.get(runtime);
+  const existing = drafts?.get(slot);
+  if (existing !== undefined) {
+    return existing.value;
+  }
+
+  const priority = renderPriorities.get(runtime) ?? "sync";
+  const updates = slot.updates ?? [];
+  let state = Object.hasOwn(slot, "baseState") ? slot.baseState : slot.value;
+  let baseState = state;
+  let skipped = false;
+  const remainingUpdates: StateUpdate[] = [];
+
+  for (const update of updates) {
+    const shouldSkip = priority !== "transition" && update.lane === "transition";
+    if (shouldSkip) {
+      if (!skipped) {
+        baseState = state;
+        skipped = true;
+      }
+      remainingUpdates.push(update);
+      continue;
+    }
+
+    state =
+      typeof update.action === "function"
+        ? (update.action as (previous: unknown) => unknown)(state)
+        : update.action;
+    if (skipped) {
+      remainingUpdates.push({ action: update.action, lane: "replay" });
+    }
+  }
+
+  if (!skipped) {
+    baseState = state;
+  }
+
+  drafts?.set(slot, {
+    instance,
+    slot,
+    value: state,
+    baseState,
+    remainingUpdates,
+    processedUpdateCount: updates.length,
+  });
+  return state;
+}
+
+function finishStateRender(runtime: RootRuntime, committed: boolean): boolean {
+  const drafts = stateRenderDrafts.get(runtime);
+  if (drafts === undefined || drafts.size === 0) {
+    return false;
+  }
+
+  const touchedInstances = new Set<ComponentInstance>();
+  let publishedStateBinding = false;
+  for (const draft of drafts.values()) {
+    touchedInstances.add(draft.instance);
+    if (!committed) {
+      draft.instance.dirty = true;
+      continue;
+    }
+
+    const appendedUpdates = (draft.slot.updates ?? []).slice(draft.processedUpdateCount);
+    const compactedAppendedUpdates = draft.remainingUpdates.length === 0
+      ? compactLiteralNoopUpdates(draft.value, appendedUpdates)
+      : appendedUpdates;
+    const remainingUpdates = [...draft.remainingUpdates, ...compactedAppendedUpdates];
+    draft.slot.value = draft.value;
+    draft.slot.baseState = draft.baseState;
+    const stateBinding = draft.slot.stateBinding;
+    if (stateBinding !== undefined && !Object.is(stateBinding.value, draft.value)) {
+      stateBinding.value = draft.value;
+      notifySubscribers(stateBinding.source);
+      publishedStateBinding = true;
+    }
+    if (remainingUpdates.length === 0) {
+      delete draft.slot.updates;
+    } else {
+      draft.slot.updates = remainingUpdates;
+    }
+  }
+
+  if (committed) {
+    for (const instance of touchedInstances) {
+      updateHostCommitDirtyState(instance);
+    }
+  }
+  return committed && publishedStateBinding;
+}
+
+function compactLiteralNoopUpdates(
+  state: unknown,
+  updates: readonly StateUpdate[],
+): StateUpdate[] {
+  const lane = updates[0]?.lane;
+  if (
+    updates.length === 0 ||
+    updates.some(
+      (update) => typeof update.action === "function" || update.lane !== lane,
+    )
+  ) {
+    return [...updates];
+  }
+
+  const finalState = updates.at(-1)?.action;
+  return Object.is(state, finalState) ? [] : [...updates];
 }
 
 export function subscribeReactiveTextBinding(binding: unknown, node: Text): void {
@@ -1102,16 +1278,21 @@ function clearReactiveTextBindingSubscribers(binding: ReactiveTextBinding): void
   binding.subscribers.clear();
 }
 
-function getStateTextBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveTextBinding {
+function getStateTextBinding(
+  slot: Extract<HookSlot, { kind: "state" }>,
+  value: unknown,
+): ReactiveTextBinding {
   slot.textBinding ??= {
-    value: slot.value,
+    value,
     subscribers: new Set(),
   };
-  slot.textBinding.value = slot.value;
+  slot.textBinding.value = value;
   return slot.textBinding;
 }
 
-function getStateBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveStateBinding {
+function getStateBinding(
+  slot: Extract<HookSlot, { kind: "state" }>,
+): ReactiveStateBinding {
   slot.stateBinding ??= {
     value: slot.value,
     source: { subscribers: null },
@@ -1120,7 +1301,6 @@ function getStateBinding(slot: Extract<HookSlot, { kind: "state" }>): ReactiveSt
       return this.value;
     },
   };
-  slot.stateBinding.value = slot.value;
   return slot.stateBinding;
 }
 
@@ -1200,9 +1380,12 @@ export function useReducer<TState, TAction, TInitial = TState>(
 
   if (dispatchRef.current === undefined) {
     dispatchRef.current = (action: TAction): void => {
-      const nextState = reducerRef.current(stateRef.current, action);
-      stateRef.current = nextState;
-      setState(nextState);
+      const update = (previous: TState) => reducerRef.current(previous, action);
+      if (currentTransitionContext === undefined && eventBatchDepth === 0) {
+        (setState as unknown as InternalStateDispatch)[SYNC_STATE_DISPATCH](update);
+      } else {
+        setState(update);
+      }
     };
   }
 
@@ -1924,24 +2107,13 @@ export function useTransition(): [boolean, StartTransition] {
       syncVersion,
       transitionVersion: ++transitionVersion,
     };
-    scheduleCallback("low", () => {
+    runTransitionScope(() => {
+      scope();
       if (instance.disposed === true) {
         return;
       }
-
-      if (!isTransitionContextCurrent(context)) {
-        setPending(false);
-        return;
-      }
-
-      runTransitionScope(() => {
-        scope();
-        if (instance.disposed === true) {
-          return;
-        }
-        setPending(false);
-      }, context);
-    });
+      setPending(false);
+    }, context);
   };
 
   recordDevToolsHook("useTransition", {
@@ -2064,18 +2236,9 @@ function flushQueuedTransitionRerenders(): void {
   const entries = Array.from(queuedTransitionRerenders.entries());
   queuedTransitionRerenders.clear();
 
-  for (const [runtime, context] of entries) {
-    if (isTransitionContextCurrent(context)) {
-      runtime.rerender("transition");
-    }
+  for (const [runtime] of entries) {
+    runtime.rerender("transition");
   }
-}
-
-function isTransitionContextCurrent(context: TransitionContext): boolean {
-  return (
-    context.syncVersion === syncVersion &&
-    context.transitionVersion === transitionVersion
-  );
 }
 
 function useEffectImpl(
@@ -2334,13 +2497,16 @@ export function scheduleRuntimeRerender(
 function scheduleInstanceUpdate(
   runtime: RootRuntime,
   instance: ComponentInstance,
-  options: { deferSync?: boolean } = {},
+  options: { deferSync?: boolean; stateUpdate?: boolean } = {},
 ): void {
   if (instance.disposed === true) {
     return;
   }
 
   instance.dirty = true;
+  if (options.stateUpdate !== true) {
+    instance.nonStateDirty = true;
+  }
   if (
     hookRenderState.currentRuntime === runtime &&
     hookRenderState.currentInstance === instance
@@ -2439,11 +2605,12 @@ function flushEffectFlushRerenders(): void {
 function updateHostCommitDirtyState(
   instance: ComponentInstance,
 ): void {
-  instance.dirty = instance.hooks.some(
+  instance.dirty = instance.nonStateDirty || instance.hooks.some(
     (slot) =>
-      (slot.kind === "state" || slot.kind === "store") &&
-      Object.hasOwn(slot, "hostCommitValue") &&
-      !Object.is(slot.hostCommitValue, slot.value),
+      (slot.kind === "state" && (slot.updates?.length ?? 0) > 0) ||
+      ((slot.kind === "state" || slot.kind === "store") &&
+        Object.hasOwn(slot, "hostCommitValue") &&
+        !Object.is(slot.hostCommitValue, slot.value)),
   );
 }
 

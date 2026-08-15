@@ -128,6 +128,8 @@ export function createRoot(
             fiberRoot,
             runtime,
             runtime.currentElement as ReactCompatNode,
+            undefined,
+            priority,
           );
         }
 
@@ -168,10 +170,11 @@ function renderHostFiberIntoContainer(
   runtime: RootRuntime,
   element: ReactCompatNode,
   scope?: HydrationScope,
+  priority: RenderPriority = "sync",
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const portalSnapshot = beginPortalRender(runtime);
-    runtime.beginRender();
+    runtime.beginRender(priority);
     let committed = false;
 
     try {
@@ -226,10 +229,11 @@ function renderHydratingHostFiberIntoContainer(
     resumeId?: string;
     consumeResumeMarkers?: boolean;
   },
+  priority: RenderPriority = "sync",
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const portalSnapshot = beginPortalRender(runtime);
-    runtime.beginRender();
+    runtime.beginRender(priority);
     let committed = false;
 
     try {
@@ -343,6 +347,7 @@ export function hydrateRoot(
                 runtime.currentElement as ReactCompatNode,
                 hydrationScope,
                 renderOptions,
+                priority,
               )
             : renderHostFiberIntoContainer(
                 container,
@@ -350,6 +355,7 @@ export function hydrateRoot(
                 runtime,
                 runtime.currentElement as ReactCompatNode,
                 selectiveScope,
+                priority,
               );
         }
 

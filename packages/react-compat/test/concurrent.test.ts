@@ -5,6 +5,7 @@ import {
   createElement,
   createErrorBoundary,
   createRoot,
+  flushSync,
   hydrateRoot,
   startTransition,
   Suspense,
@@ -12,6 +13,7 @@ import {
   useDeferredValue,
   useEffect,
   useState,
+  useSyncExternalStore,
   useTransition,
 } from "../src/index.js";
 import {
@@ -108,15 +110,19 @@ describe("react-compat concurrent subset", () => {
     setSchedulerHostForTesting(host);
     const container = document.createElement("div");
     const root = createRoot(container);
+    const calls: string[] = [];
     let trigger: () => void = () => {};
 
     function App() {
       const [value, setValue] = useState("idle");
       const [pending, start] = useTransition();
       trigger = () => {
+        calls.push("before");
         start(() => {
+          calls.push("scope");
           setValue("done");
         });
+        calls.push("after");
       };
 
       return createElement(
@@ -130,6 +136,7 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<p>settled:idle</p>");
 
     trigger();
+    expect(calls).toEqual(["before", "scope", "after"]);
     expect(container.innerHTML).toBe("<p>pending:idle</p>");
 
     await Promise.resolve();
@@ -139,7 +146,7 @@ describe("react-compat concurrent subset", () => {
     expect(container.innerHTML).toBe("<p>settled:done</p>");
   });
 
-  test("useTransition drops scheduled work after the owning component unmounts", async () => {
+  test("useTransition does not commit pending work after the owning component unmounts", async () => {
     const host = createTestSchedulerHost();
     setSchedulerHostForTesting(host);
     const container = document.createElement("div");
@@ -165,8 +172,242 @@ describe("react-compat concurrent subset", () => {
     root.unmount();
     host.flushOneHostCallback();
 
-    expect(calls).toEqual([]);
+    expect(calls).toEqual(["transition"]);
     expect(container.innerHTML).toBe("");
+  });
+
+  test("an unrelated sync root does not drop useTransition work", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const transitionContainer = document.createElement("div");
+    const syncContainer = document.createElement("div");
+    const transitionRoot = createRoot(transitionContainer);
+    const syncRoot = createRoot(syncContainer);
+    let beginTransition = () => undefined;
+    let updateSyncRoot = () => undefined;
+
+    function TransitionApp() {
+      const [value, setValue] = useState("idle");
+      const [pending, start] = useTransition();
+      beginTransition = () => start(() => setValue("done"));
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${value}`);
+    }
+
+    function SyncApp() {
+      const [count, setCount] = useState(0);
+      updateSyncRoot = () => setCount((value) => value + 1);
+      return createElement("p", null, count);
+    }
+
+    transitionRoot.render(createElement(TransitionApp, null));
+    syncRoot.render(createElement(SyncApp, null));
+    beginTransition();
+    flushSync(updateSyncRoot);
+
+    expect(transitionContainer.innerHTML).toBe("<p>pending:idle</p>");
+    expect(syncContainer.innerHTML).toBe("<p>1</p>");
+    host.flushOneHostCallback();
+    expect(transitionContainer.innerHTML).toBe("<p>settled:done</p>");
+  });
+
+  test("a same-root sync update does not commit transition state early", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let beginTransition = () => undefined;
+    let increment = () => undefined;
+
+    function App() {
+      const [count, setCount] = useState(0);
+      const [query, setQuery] = useState("A");
+      const [pending, start] = useTransition();
+      beginTransition = () => start(() => setQuery("B"));
+      increment = () => setCount((value) => value + 1);
+      return createElement(
+        "p",
+        null,
+        `${count}/${query}/${pending ? "pending" : "ready"}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    beginTransition();
+    expect(container.innerHTML).toBe("<p>0/A/pending</p>");
+
+    flushSync(increment);
+    expect(container.innerHTML).toBe("<p>1/A/pending</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>1/B/ready</p>");
+  });
+
+  test("transition functional updates rebase over an intervening sync update", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let update = () => undefined;
+
+    function App() {
+      const [count, setCount] = useState(0);
+      const [pending, start] = useTransition();
+      update = () => {
+        start(() => setCount((value) => value + 1));
+        flushSync(() => setCount((value) => value + 1));
+      };
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${count}`);
+    }
+
+    root.render(createElement(App, null));
+    update();
+    expect(container.innerHTML).toBe("<p>pending:1</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:2</p>");
+  });
+
+  test("two useTransition scopes on one root commit together without dropping work", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let update = () => undefined;
+
+    function App() {
+      const [left, setLeft] = useState("A");
+      const [right, setRight] = useState("X");
+      const [pending, start] = useTransition();
+      update = () => {
+        start(() => setLeft("B"));
+        start(() => setRight("Y"));
+      };
+      return createElement(
+        "p",
+        null,
+        `${pending ? "pending" : "settled"}:${left}/${right}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    update();
+    expect(container.innerHTML).toBe("<p>pending:A/X</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:B/Y</p>");
+  });
+
+  test("a later transition assignment wins over an earlier sync assignment", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let update = () => undefined;
+
+    function App() {
+      const [value, setValue] = useState("idle");
+      const [pending, start] = useTransition();
+      update = () => {
+        flushSync(() => setValue("fast"));
+        start(() => setValue("slow"));
+      };
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${value}`);
+    }
+
+    root.render(createElement(App, null));
+    update();
+    expect(container.innerHTML).toBe("<p>pending:fast</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:slow</p>");
+  });
+
+  test("a ref-scheduled sync assignment commits before a later transition assignment", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let scheduled = false;
+
+    function App() {
+      const [count, setCount] = useState(0);
+      return createElement("button", {
+        ref: (node: HTMLButtonElement | null) => {
+          if (node === null || scheduled) {
+            return;
+          }
+          scheduled = true;
+          setCount(1);
+          startTransition(() => setCount(0));
+        },
+      }, count);
+    }
+
+    root.render(createElement(App, null));
+    expect(container.innerHTML).toBe("<button>1</button>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<button>0</button>");
+  });
+
+  test("a torn transition render retries a functional update exactly once", () => {
+    const host = createTestSchedulerHost();
+    setSchedulerHostForTesting(host);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let tear = false;
+    let reads = 0;
+    let update = () => undefined;
+    let binding: { get(): unknown } | undefined;
+    const bindingValuesDuringRender: unknown[] = [];
+    const reactiveStateBindingMeta = Symbol.for("modular.react.reactive_state_binding_meta");
+
+    function getSnapshot() {
+      if (!tear) {
+        return 0;
+      }
+      reads += 1;
+      if (reads === 2) {
+        return 1;
+      }
+      if (reads > 2) {
+        tear = false;
+      }
+      return 0;
+    }
+
+    function App() {
+      const state = useState(0) as unknown as [
+        number,
+        (value: number | ((previous: number) => number)) => void,
+      ] & Record<PropertyKey, unknown>;
+      const [count, setCount] = state;
+      binding = state[reactiveStateBindingMeta] as { get(): unknown };
+      bindingValuesDuringRender.push(binding.get());
+      const snapshot = useSyncExternalStore(() => () => undefined, getSnapshot);
+      const [pending, start] = useTransition();
+      update = () =>
+        start(() => {
+          tear = true;
+          reads = 0;
+          setCount((value) => value + 1);
+        });
+      return createElement(
+        "p",
+        null,
+        `${pending ? "pending" : "settled"}:${count}:${snapshot}`,
+      );
+    }
+
+    root.render(createElement(App, null));
+    update();
+    expect(container.innerHTML).toBe("<p>pending:0:0</p>");
+
+    host.flushOneHostCallback();
+    expect(container.innerHTML).toBe("<p>settled:1:0</p>");
+    expect(reads).toBeGreaterThan(2);
+    expect(bindingValuesDuringRender.every((value) => value === 0)).toBe(true);
+    expect(binding?.get()).toBe(1);
   });
 
   test("useDeferredValue keeps the previous value until the transition lane commits", async () => {
@@ -495,7 +736,7 @@ describe("react-compat concurrent subset", () => {
 
     function App() {
       const [value, setValue] = useState("idle");
-      const [, start] = useTransition();
+      const [pending, start] = useTransition();
       transitionToSlow = () => {
         start(() => {
           setValue("slow");
@@ -505,17 +746,19 @@ describe("react-compat concurrent subset", () => {
         setValue("fast");
       };
 
-      return createElement("p", null, value);
+      return createElement("p", null, `${pending ? "pending" : "settled"}:${value}`);
     }
 
     root.render(createElement(App, null));
     transitionToSlow();
+    expect(container.innerHTML).toBe("<p>pending:idle</p>");
     syncToFast();
+    expect(container.innerHTML).toBe("<p>pending:fast</p>");
     await Promise.resolve();
     host.flushOneHostCallback();
     host.flushOneHostCallback();
 
-    expect(container.innerHTML).toBe("<p>fast</p>");
+    expect(container.innerHTML).toBe("<p>settled:fast</p>");
   });
 
   test("startTransition scopes run synchronously even when newer transitions are scheduled", async () => {
