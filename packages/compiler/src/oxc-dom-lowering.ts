@@ -182,7 +182,7 @@ function safeDomAttributeHelperLines(): string[] {
     "    if (_match === null) return value;",
     "    const _scheme = _match[1].toLowerCase();",
     '    if (_scheme !== "javascript" && _scheme !== "vbscript" && _scheme !== "livescript" && _scheme !== "mhtml" && _scheme !== "file" && _scheme !== "data") return value;',
-    '    if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\/(?!svg\\+xml(?:[;,]|$))/i.test(_canonical)) return value;',
+    '    if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\/(?!svg\\+xml\\s*(?:[;,]|$))/i.test(_canonical)) return value;',
     "    return undefined;",
     "  };",
   ];
@@ -225,7 +225,7 @@ function safeDomUrlAttributeValue(name: string, value: string): string | undefin
   if (
     scheme === "data" &&
     (name === "src" || name === "poster") &&
-    /^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)
+    /^data:image\/(?!svg\+xml\s*(?:[;,]|$))/i.test(canonical)
   ) {
     return value;
   }

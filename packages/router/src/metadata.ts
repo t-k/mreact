@@ -4,6 +4,7 @@ import {
 } from "@reckona/mreact-shared/html-escape";
 import {
   isDangerousHtmlAttribute,
+  isUnsafeMetaRefreshContent,
   isUnsafeUrlAttribute,
 } from "@reckona/mreact-shared/url-safety";
 import { contentSecurityPolicy } from "./csp.js";
@@ -277,12 +278,12 @@ function fileConventionMetadataRoutePath(
   const pageRoute = routes.find((route) => route.kind === "page" && route.file === filename);
   const candidateRoutes = routes.filter(
     (route) =>
-      (route.kind === "asset" || route.kind === "metadata") &&
-      route.convention === convention,
+      (route.kind === "asset" || route.kind === "metadata") && route.convention === convention,
   );
 
   if (pageRoute !== undefined) {
-    const expectedPath = pageRoute.path === "/" ? `/${convention}` : `${pageRoute.path}/${convention}`;
+    const expectedPath =
+      pageRoute.path === "/" ? `/${convention}` : `${pageRoute.path}/${convention}`;
     const routeLocal = candidateRoutes.find((route) => route.path === expectedPath);
     const routeLocalPath =
       routeLocal === undefined ? undefined : concreteRoutePath(routeLocal.path, params);
@@ -695,7 +696,9 @@ function validateOptionalHeadMetadata(value: unknown, path: string): void {
       typeof head.nonce !== "boolean" &&
       typeof head.nonce !== "string"
     ) {
-      throw new Error(`Invalid metadata field ${descriptorPath}.nonce: expected string or boolean.`);
+      throw new Error(
+        `Invalid metadata field ${descriptorPath}.nonce: expected string or boolean.`,
+      );
     }
     if (head.attrs !== undefined) {
       assertPlainMetadataObject(head.attrs, `${descriptorPath}.attrs`);
@@ -713,12 +716,43 @@ function validateOptionalHeadMetadata(value: unknown, path: string): void {
         }
       }
     }
+    validateMetaRefreshHeadDescriptor(head, descriptorPath);
     validateUnknownJsonMetadataFields(
       descriptor as Record<string, unknown>,
       descriptorPath,
       new Set(["attrs", "content", "nonce", "tag"]),
     );
   });
+}
+
+function validateMetaRefreshHeadDescriptor(head: RouteHeadDescriptor, path: string): void {
+  if (head.tag !== "meta" || head.attrs === undefined) {
+    return;
+  }
+
+  const attrs = Object.entries(head.attrs);
+  const hasRefresh = attrs.some(([name, value]) => {
+    const canonicalName = name.toLowerCase();
+    return (
+      (canonicalName === "http-equiv" || canonicalName === "httpequiv") &&
+      typeof value === "string" &&
+      value.toLowerCase() === "refresh"
+    );
+  });
+
+  if (!hasRefresh) {
+    return;
+  }
+
+  for (const [name, value] of attrs) {
+    if (
+      name.toLowerCase() === "content" &&
+      typeof value === "string" &&
+      isUnsafeMetaRefreshContent("refresh", value)
+    ) {
+      throw new Error(`Invalid metadata field ${path}.attrs.${name}: unsafe refresh URL value.`);
+    }
+  }
 }
 
 function validateHeadAttribute(name: string, value: unknown, path: string): void {
@@ -728,7 +762,9 @@ function validateHeadAttribute(name: string, value: unknown, path: string): void
 
   const canonicalName = name.toLowerCase();
   if (canonicalName.startsWith("on") || isDangerousHtmlAttribute(canonicalName)) {
-    throw new Error(`Invalid metadata field ${path}: event and dangerous attributes are not allowed.`);
+    throw new Error(
+      `Invalid metadata field ${path}: event and dangerous attributes are not allowed.`,
+    );
   }
 
   if (typeof value === "string" && isUnsafeUrlAttribute(canonicalName, value)) {
@@ -866,20 +902,24 @@ function validateOptionalViewportMetadata(value: unknown, path: string): void {
 }
 
 function validateUnknownMetadataFields(metadata: RouteMetadata, path: string): void {
-  validateUnknownJsonMetadataFields(metadata as Record<string, unknown>, path, new Set([
-    "alternates",
-    "csp",
-    "description",
-    "head",
-    "icons",
-    "lang",
-    "openGraph",
-    "robots",
-    "security",
-    "themeColor",
-    "title",
-    "viewport",
-  ]));
+  validateUnknownJsonMetadataFields(
+    metadata as Record<string, unknown>,
+    path,
+    new Set([
+      "alternates",
+      "csp",
+      "description",
+      "head",
+      "icons",
+      "lang",
+      "openGraph",
+      "robots",
+      "security",
+      "themeColor",
+      "title",
+      "viewport",
+    ]),
+  );
 }
 
 function validateUnknownJsonMetadataFields(
@@ -911,12 +951,13 @@ function validateJsonSerializableMetadata(value: unknown, path: string): void {
     return;
   }
 
-  throw new Error(
-    `Invalid metadata field ${path}: expected a JSON-serializable value.`,
-  );
+  throw new Error(`Invalid metadata field ${path}: expected a JSON-serializable value.`);
 }
 
-function assertPlainMetadataObject(value: unknown, path: string): asserts value is Record<string, unknown> {
+function assertPlainMetadataObject(
+  value: unknown,
+  path: string,
+): asserts value is Record<string, unknown> {
   if (!isPlainMetadataObject(value)) {
     throw new Error(`Invalid metadata field ${path}: expected object.`);
   }
@@ -938,7 +979,9 @@ function openGraphImages(openGraph: RouteMetadata["openGraph"]): readonly string
     );
   }
 
-  return openGraph?.image === undefined ? [] : [metadataImageUrl(openGraph.image, "openGraph.image")];
+  return openGraph?.image === undefined
+    ? []
+    : [metadataImageUrl(openGraph.image, "openGraph.image")];
 }
 
 function metadataImageUrl(value: MetadataImage | MetadataScalar, path: string): string {
@@ -950,7 +993,9 @@ function metadataImageUrl(value: MetadataImage | MetadataScalar, path: string): 
     return metadataString(value.url, `${path}.url`);
   }
 
-  throw new Error(`Invalid metadata field ${path}: expected string, number, boolean, or object with url.`);
+  throw new Error(
+    `Invalid metadata field ${path}: expected string, number, boolean, or object with url.`,
+  );
 }
 
 function robotsContent(robots: NonNullable<RouteMetadata["robots"]>): string {

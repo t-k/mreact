@@ -93,7 +93,7 @@ export function emitServer(ir: ModuleIr, options: EmitServerOptions = {}): EmitR
     `  if (_match === null) return value;`,
     `  const _scheme = _match[1].toLowerCase();`,
     `  if (_scheme !== "javascript" && _scheme !== "vbscript" && _scheme !== "livescript" && _scheme !== "mhtml" && _scheme !== "file" && _scheme !== "data") return value;`,
-    `  if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\/(?!svg\\+xml(?:[;,]|$))/i.test(_canonical)) return value;`,
+    `  if (_scheme === "data" && (name === "src" || name === "poster") && /^data:image\\/(?!svg\\+xml\\s*(?:[;,]|$))/i.test(_canonical)) return value;`,
     `  return undefined;`,
     `}`,
   ].join("\n");

@@ -1440,7 +1440,7 @@ export default function Page() {
 
   test("lowers DOM URL and srcdoc attributes through safety guards", () => {
     const code =
-      '<a href={url} formAction="javascript:alert(1)"><img srcSet="javascript:alert(1) 1x" imageSrcSet="javascript:alert(2) 1x" /><iframe srcDoc={html} /></a>';
+      '<a href={url} formAction="javascript:alert(1)"><img src={url} srcSet="javascript:alert(1) 1x" imageSrcSet="javascript:alert(2) 1x" /><iframe srcDoc={html} /></a>';
     const urlStart = code.indexOf("url");
     const htmlStart = code.indexOf("html");
     const lowered = lowerOxcDomNodeExpression(code, {
@@ -1479,6 +1479,14 @@ export default function Page() {
           openingElement: {
             name: { type: "JSXIdentifier", name: "img" },
             attributes: [
+              {
+                type: "JSXAttribute",
+                name: { name: "src" },
+                value: {
+                  type: "JSXExpressionContainer",
+                  expression: { start: urlStart, end: urlStart + "url".length },
+                },
+              },
               {
                 type: "JSXAttribute",
                 name: { name: "srcSet" },
@@ -1548,9 +1556,23 @@ export default function Page() {
 
     expect(node.attributes.has("href")).toBe(false);
     expect(node.attributes.has("formaction")).toBe(false);
+    expect(node.children[0]?.attributes.has("src")).toBe(false);
     expect(node.children[0]?.attributes.has("srcset")).toBe(false);
     expect(node.children[0]?.attributes.has("imagesrcset")).toBe(false);
     expect(node.children[1]?.attributes.has("srcdoc")).toBe(false);
+
+    const svgNode = Function(
+      "document",
+      "url",
+      "html",
+      `return ${lowered};`,
+    )(documentStub, "data:image/SVG+XML ,<svg></svg>", {
+      __html: "<p>trusted</p>",
+    }) as {
+      children: Array<{ attributes: Map<string, string> }>;
+    };
+
+    expect(svgNode.children[0]?.attributes.has("src")).toBe(false);
 
     const safeNode = Function(
       "document",
@@ -1563,6 +1585,7 @@ export default function Page() {
     };
 
     expect(safeNode.attributes.get("href")).toBe("https://example.test/");
+    expect(safeNode.children[0]?.attributes.get("src")).toBe("https://example.test/");
     expect(safeNode.children[1]?.attributes.get("srcdoc")).toBe("<p>trusted</p>");
   });
 

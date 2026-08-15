@@ -55,7 +55,7 @@ describe("server emit shared behavior", () => {
   return (
     <main>
       <a href="javascript:alert(1)">link</a>
-      <img src="data:image/svg+xml,<svg><script>alert(1)</script></svg>" alt="bad" />
+      <img src="data:image/SVG+XML ,<svg><script>alert(1)</script></svg>" alt="bad" />
       <img src="data:image/png;base64,abc" alt="ok" />
     </main>
   );

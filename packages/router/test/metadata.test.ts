@@ -74,6 +74,41 @@ describe("router metadata contract", () => {
         "metadata",
       ),
     ).toThrow("Invalid metadata field metadata.head.0.attrs.srcset");
+
+    expect(() =>
+      validateRouteMetadata(
+        {
+          head: [
+            {
+              attrs: {
+                httpEquiv: "not-refresh",
+                "HTTP-EQUIV": "refresh",
+                content: "0; url=javascript:alert(1)",
+              },
+              tag: "meta",
+            },
+          ],
+        },
+        "metadata",
+      ),
+    ).toThrow("Invalid metadata field metadata.head.0.attrs.content");
+  });
+
+  test("accepts safe meta refresh route metadata", () => {
+    const metadata = {
+      head: [
+        { attrs: { "http-equiv": "refresh", content: "5; url=/next" }, tag: "meta" as const },
+        {
+          attrs: { httpEquiv: "refresh", content: "10; url=https://example.test/next" },
+          tag: "meta" as const,
+        },
+      ],
+    };
+
+    expect(validateRouteMetadata(metadata)).toBe(metadata);
+    expect(injectHeadMetadata("<html><head></head><body></body></html>", metadata)).toContain(
+      'content="5; url=/next"',
+    );
   });
 
   test("merges inherited metadata without dropping additive head or open graph images", () => {
@@ -115,10 +150,12 @@ describe("router metadata contract", () => {
   });
 
   test("injects escaped head metadata and html lang without replacing the body", () => {
-    const html = injectHeadMetadata("<html lang=\"en\"><head></head><body>Body</body></html>", {
+    const html = injectHeadMetadata('<html lang="en"><head></head><body>Body</body></html>', {
       csp: { nonce: "abc123" },
       description: "A <B>",
-      head: [{ attrs: { async: true, src: "/client.js" }, content: "x < y", nonce: true, tag: "script" }],
+      head: [
+        { attrs: { async: true, src: "/client.js" }, content: "x < y", nonce: true, tag: "script" },
+      ],
       lang: "ja",
       robots: { follow: false, index: false },
       themeColor: { color: "#101820", media: "(prefers-color-scheme: dark)" },
@@ -133,9 +170,7 @@ describe("router metadata contract", () => {
     expect(html).toContain(
       '<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#101820">',
     );
-    expect(html).toContain(
-      '<meta name="viewport" content="initial-scale=1, width=device-width">',
-    );
+    expect(html).toContain('<meta name="viewport" content="initial-scale=1, width=device-width">');
     expect(html).toContain('<script async src="/client.js" nonce="abc123">x \\u003c y</script>');
     expect(html).toContain("<body>Body</body>");
   });
@@ -143,8 +178,16 @@ describe("router metadata contract", () => {
   test("injects metadata head void descriptors without closing tags", () => {
     const html = injectHeadMetadata("<html><head></head><body>Body</body></html>", {
       head: [
-        { attrs: { name: "viewport", content: "width=device-width" }, content: "ignored", tag: "meta" },
-        { attrs: { rel: "preload", href: "/font.woff2", as: "font" }, content: "ignored", tag: "link" },
+        {
+          attrs: { name: "viewport", content: "width=device-width" },
+          content: "ignored",
+          tag: "meta",
+        },
+        {
+          attrs: { rel: "preload", href: "/font.woff2", as: "font" },
+          content: "ignored",
+          tag: "link",
+        },
         { attrs: { href: "https://example.com/" }, content: "ignored", tag: "base" },
       ],
     });

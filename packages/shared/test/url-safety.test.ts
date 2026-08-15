@@ -139,15 +139,29 @@ describe("URL safety helpers", () => {
   });
 
   test("allows non-SVG data images only for image-like src and poster sinks", () => {
-    const png = "data:image/png;base64,AAA";
+    const safeImages = [
+      "data:image/png;base64,AAA",
+      "data:image/jpeg ,AAA",
+      "data:image/gif ;base64,AAA",
+      "data:image/webp,AAA",
+    ];
 
-    expect(isUnsafeUrlAttribute("src", png)).toBe(false);
-    expect(isUnsafeUrlAttribute("poster", png)).toBe(false);
-    expect(isUnsafeUrlAttribute("href", png)).toBe(true);
-    expect(isUnsafeUrlAttribute("src", "data:image/svg+xml,<svg></svg>")).toBe(true);
-    expect(isUnsafeUrlAttribute("poster", "data:image/svg+xml;charset=utf-8,<svg></svg>")).toBe(
-      true,
-    );
+    for (const image of safeImages) {
+      expect(isUnsafeUrlAttribute("src", image), image).toBe(false);
+      expect(isUnsafeUrlAttribute("poster", image), image).toBe(false);
+      expect(isUnsafeUrlAttribute("href", image), image).toBe(true);
+    }
+
+    for (const svg of [
+      "data:image/svg+xml,<svg></svg>",
+      "data:image/svg+xml;charset=utf-8,<svg></svg>",
+      "data:image/svg+xml ,<svg></svg>",
+      "data:image/SVG+XML ;base64,PHN2Zy8+",
+      "data:image/svg+xml\f,<svg></svg>",
+    ]) {
+      expect(isUnsafeUrlAttribute("src", svg), svg).toBe(true);
+      expect(isUnsafeUrlAttribute("poster", svg), svg).toBe(true);
+    }
   });
 
   test("taints srcset and imagesrcset when any candidate URL is unsafe", () => {

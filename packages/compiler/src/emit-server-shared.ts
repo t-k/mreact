@@ -116,7 +116,7 @@ export function isStaticUrlValueUnsafe(name: string, value: string): boolean {
   if (scheme === "data") {
     if (
       (attributeName === "src" || attributeName === "poster") &&
-      /^data:image\/(?!svg\+xml(?:[;,]|$))/i.test(canonical)
+      /^data:image\/(?!svg\+xml\s*(?:[;,]|$))/i.test(canonical)
     )
       return false;
     return true;

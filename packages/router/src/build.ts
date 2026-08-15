@@ -460,7 +460,9 @@ async function buildAppWithResolvedProject(
   options: BuildAppOptions,
   project: ResolvedAppRouterProject,
 ): Promise<BuildAppResult> {
-  if ((options as BuildAppOptions & { dehydrateOptions?: unknown }).dehydrateOptions !== undefined) {
+  if (
+    (options as BuildAppOptions & { dehydrateOptions?: unknown }).dehydrateOptions !== undefined
+  ) {
     throw new Error(
       "buildApp dehydration policies must use dehydratePolicyModule so the same executable policy is available to prerendering and built runtimes.",
     );
@@ -1507,7 +1509,7 @@ async function buildRouteUsesRequestInput(options: {
       files: options.files,
       projectRoot: options.projectRoot,
       source: entry.source,
-    })
+    }),
   );
 }
 
@@ -5077,7 +5079,41 @@ function validateOptionalHeadMetadata(value, path) {
         }
       }
     }
+    validateMetaRefreshHeadDescriptor(descriptor, descriptorPath);
   });
+}
+
+function validateMetaRefreshHeadDescriptor(descriptor, path) {
+  if (descriptor.tag !== "meta" || descriptor.attrs === undefined) {
+    return;
+  }
+  const attrs = Object.entries(descriptor.attrs);
+  const hasRefresh = attrs.some(([name, value]) => {
+    const canonicalName = name.toLowerCase();
+    return (canonicalName === "http-equiv" || canonicalName === "httpequiv")
+      && typeof value === "string"
+      && value.toLowerCase() === "refresh";
+  });
+  if (!hasRefresh) {
+    return;
+  }
+  for (const [name, value] of attrs) {
+    if (name.toLowerCase() !== "content" || typeof value !== "string") {
+      continue;
+    }
+    const match = /^[^;]*;\\s*url\\s*=\\s*([\\s\\S]+)$/iu.exec(value);
+    if (match === null || match[1] === undefined) {
+      continue;
+    }
+    let target = match[1].trim();
+    const quote = target[0];
+    if ((quote === String.fromCharCode(34) || quote === "'") && target[target.length - 1] === quote) {
+      target = target.slice(1, -1).trim();
+    }
+    if (isUnsafeUrlValueForName("href", target)) {
+      throw new Error(\`Invalid metadata field \${path}.attrs.\${name}: unsafe refresh URL value.\`);
+    }
+  }
 }
 
 function validateHeadAttribute(name, value, path) {
@@ -5141,7 +5177,7 @@ function isUnsafeUrlValueForName(name, value) {
   }
   const scheme = match[1].toLowerCase();
   if (scheme === "data" && (name === "src" || name === "poster")) {
-    return !/^data:image\\/(?!svg\\+xml(?:[;,]|$))/i.test(canonical);
+    return !/^data:image\\/(?!svg\\+xml\\s*(?:[;,]|$))/i.test(canonical);
   }
   return scheme === "javascript" || scheme === "data" || scheme === "vbscript" || scheme === "livescript" || scheme === "mhtml" || scheme === "file";
 }

@@ -2391,8 +2391,36 @@ export default function Page() {
     const outDir = join(rootDir, ".mreact");
     await mkdir(appDir, { recursive: true });
     await writeFile(
+      join(appDir, "layout.tsx"),
+      `export default function Layout() {
+  return <html><head></head><body><Slot /></body></html>;
+}`,
+    );
+    await writeFile(
       join(appDir, "page.tsx"),
-      `export const metadata = { title: { text: "Invalid" } };
+      `export const metadata = {
+  head: [{
+    tag: "meta",
+    attrs: { "http-equiv": "refresh", content: "5; url=/next" },
+  }],
+};
+export default function Page() {
+  return <main>Safe metadata</main>;
+}`,
+    );
+    await mkdir(join(appDir, "invalid"), { recursive: true });
+    await writeFile(
+      join(appDir, "invalid", "page.tsx"),
+      `export const metadata = {
+  head: [{
+    tag: "meta",
+    attrs: {
+      httpEquiv: "not-refresh",
+      "HTTP-EQUIV": "refresh",
+      content: "0; url=javascript:alert(1)",
+    },
+  }],
+};
 export default function Page() {
   return <main>Invalid metadata</main>;
 }`,
@@ -2420,12 +2448,20 @@ export default function Page() {
     });
 
     const response = await handler.fetch(
+      new Request("https://app.example/invalid"),
+      {},
+      createExecutionContext(),
+    );
+    const safeResponse = await handler.fetch(
       new Request("https://app.example/"),
       {},
       createExecutionContext(),
     );
+    const safeHtml = await safeResponse.text();
 
     expect(response.status).toBe(500);
+    expect(safeResponse.status).toBe(200);
+    expect(safeHtml).toContain('<meta http-equiv="refresh" content="5; url=/next">');
   });
 
   test("built string route modules emit metadata head void elements without closing tags", async () => {
