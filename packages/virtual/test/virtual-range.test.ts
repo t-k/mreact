@@ -164,6 +164,50 @@ describe("createVirtualList", () => {
     expect(virtual.scrollToKey("appended")).toBe(140);
   });
 
+  it("refreshes measured geometry after items mutate in place", () => {
+    const items = Array.from({ length: 10 }, (_unused, index) => ({ id: `item-${index}` }));
+    const virtual = createVirtualList({
+      estimateItemSize: () => 100,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 300,
+    });
+
+    virtual.measureItem("item-0", 100);
+    expect(virtual.totalSizePx.get()).toBe(1_000);
+
+    items.push(...Array.from({ length: 10 }, (_unused, index) => ({ id: `added-${index}` })));
+    virtual.refresh();
+
+    expect(virtual.range.get().itemCount).toBe(20);
+    expect(virtual.totalSizePx.get()).toBe(2_000);
+    expect(virtual.bottomSpacerPx.get()).toBe(1_700);
+    expect(virtual.scrollToIndex(19)).toBe(1_900);
+  });
+
+  it("rebuilds measured offsets after items reorder in place", () => {
+    const items = [{ id: "measured" }, { id: "middle" }, { id: "tail" }];
+    const virtual = createVirtualList({
+      estimateItemSize: () => 100,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 100,
+    });
+
+    virtual.measureItem("measured", 200);
+    expect(virtual.scrollToKey("measured")).toBe(0);
+
+    items.push(items.shift() as { id: string });
+    virtual.refresh();
+
+    expect(virtual.scrollToKey("measured")).toBe(200);
+    expect(virtual.totalSizePx.get()).toBe(400);
+  });
+
   it("keeps fixed-size refresh cost independent of item count", () => {
     const items = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `row-${index}` }));
     let estimateCalls = 0;
@@ -210,6 +254,47 @@ describe("createVirtualList", () => {
     expect(virtual.scrollToKey("row-50000")).toBe(1_200_000);
 
     expect(keyCalls).toBeLessThanOrEqual(100_003);
+  });
+
+  it("keeps the key index across measurement-only geometry updates", () => {
+    const items = Array.from({ length: 100_000 }, (_unused, index) => ({ id: `row-${index}` }));
+    let keyCalls = 0;
+    const virtual = createVirtualList({
+      estimateItemSize: () => 24,
+      getKey: (item) => {
+        keyCalls += 1;
+        return item.id;
+      },
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 240,
+    });
+
+    expect(virtual.scrollToKey("row-50000")).toBe(1_200_000);
+    virtual.measureItem("row-0", 32);
+    virtual.entries.get();
+    keyCalls = 0;
+
+    expect(virtual.scrollToKey("row-50000")).toBe(1_200_008);
+    expect(keyCalls).toBeLessThanOrEqual(1);
+  });
+
+  it("repairs a cached key index after an in-place reorder", () => {
+    const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const virtual = createVirtualList({
+      estimateItemSize: () => 20,
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 20,
+    });
+
+    expect(virtual.scrollToKey("a")).toBe(0);
+    items.push(items.shift() as { id: string });
+
+    expect(virtual.scrollToKey("a")).toBe(40);
   });
 
   it("refreshes the key index after replacement and filtering", () => {
@@ -469,6 +554,58 @@ describe("createVirtualGrid", () => {
     expect(virtual.topSpacerPx.get()).toBe(160);
     expect(virtual.totalSizePx.get()).toBe(340);
     expect(virtual.scrollToKey("photo-6")).toBe(240);
+  });
+
+  it("lets measured span rows shrink below their estimate", () => {
+    const items = Array.from({ length: 4 }, (_unused, index) => ({ id: `tile-${index}` }));
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 200,
+      getColumnCount: () => 2,
+      getItemSpan: () => ({ colSpan: 2 }),
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 40,
+      viewportSize: () => 40,
+    });
+
+    for (const item of items) {
+      virtual.measureItem(item.id, 40);
+    }
+
+    expect(virtual.totalSizePx.get()).toBe(160);
+    expect(virtual.scrollToIndex(3)).toBe(120);
+    expect(virtual.topSpacerPx.get()).toBe(40);
+    expect(virtual.bottomSpacerPx.get()).toBe(80);
+  });
+
+  it("uses measured tracks for partially measured span rows", () => {
+    const items = [{ id: "small" }, { id: "unmeasured" }, { id: "large" }];
+    const createVirtual = (withSpans: boolean) =>
+      createVirtualGrid({
+        estimateItemSize: () => 100,
+        getColumnCount: () => 2,
+        ...(withSpans ? { getItemSpan: () => ({ colSpan: 1 }) } : {}),
+        getKey: (item) => item.id,
+        items: () => items,
+        overscan: 0,
+        scrollOffset: () => 0,
+        viewportSize: () => 300,
+      });
+    const spanVirtual = createVirtual(true);
+    const regularVirtual = createVirtual(false);
+
+    for (const virtual of [spanVirtual, regularVirtual]) {
+      virtual.measureItem("small", 40);
+      expect(virtual.totalSizePx.get()).toBe(140);
+      expect(virtual.scrollToIndex(2)).toBe(40);
+
+      virtual.measureItem("unmeasured", 60);
+      expect(virtual.totalSizePx.get()).toBe(160);
+
+      virtual.measureItem("large", 140);
+      expect(virtual.totalSizePx.get()).toBe(200);
+    }
   });
 
   it("refreshes measured item geometry immediately", () => {

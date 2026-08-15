@@ -162,8 +162,12 @@ describe("reactive item sources", () => {
     const scrollTop = cell(0);
     const items = Array.from({ length: 100 }, (_unused, index) => ({ id: `item-${index}` }));
     let spanCalls = 0;
+    let estimateCalls = 0;
     const virtual = createVirtualGrid({
-      estimateItemSize: () => 40,
+      estimateItemSize: () => {
+        estimateCalls += 1;
+        return 40;
+      },
       getColumnCount: () => 4,
       getItemSpan: (_item, index) => {
         spanCalls += 1;
@@ -178,10 +182,114 @@ describe("reactive item sources", () => {
 
     virtual.entries.get();
     const callsAfterInitialLayout = spanCalls;
+    const estimateCallsAfterInitialLayout = estimateCalls;
 
     scrollTop.set(160);
     virtual.entries.get();
 
     expect(spanCalls).toBe(callsAfterInitialLayout);
+    expect(estimateCalls).toBe(estimateCallsAfterInitialLayout);
+  });
+
+  it("recomputes span placement when a cell-backed span changes", () => {
+    const featured = cell(false);
+    const items = Array.from({ length: 4 }, (_unused, index) => ({ id: `item-${index}` }));
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => 100,
+      getColumnCount: () => 2,
+      getItemSpan: (_item, index) =>
+        index === 0 && featured.get() ? { colSpan: 2, rowSpan: 2 } : { colSpan: 1, rowSpan: 1 },
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 500,
+    });
+
+    expect(virtual.range.get().rowCount).toBe(2);
+
+    featured.set(true);
+
+    expect(virtual.range.get().rowCount).toBe(4);
+    expect(virtual.entries.get()[0]).toMatchObject({ colSpan: 2, rowSpan: 2 });
+  });
+
+  it("refreshes measurements and key lookups when cell-backed keys change", () => {
+    const prefix = cell("old-");
+    const items = [{ id: "a" }, { id: "b" }];
+    const virtual = createVirtualList({
+      estimateItemSize: () => 100,
+      getKey: (item) => `${prefix.get()}${item.id}`,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 100,
+    });
+
+    virtual.measureItem("old-a", 200);
+    expect(virtual.totalSizePx.get()).toBe(300);
+    expect(virtual.scrollToKey("old-b")).toBe(200);
+
+    prefix.set("new-");
+
+    expect(virtual.totalSizePx.get()).toBe(200);
+    expect(virtual.scrollToKey("old-b")).toBeUndefined();
+    expect(virtual.scrollToKey("new-b")).toBe(100);
+
+    virtual.measureItem("new-a", 50);
+    expect(virtual.totalSizePx.get()).toBe(150);
+  });
+
+  it("recomputes measured list geometry when a cell-backed estimate changes", () => {
+    const estimate = cell(50);
+    const items = Array.from({ length: 10 }, (_unused, index) => ({ id: `item-${index}` }));
+    const virtual = createVirtualList({
+      estimateItemSize: () => estimate.get(),
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 100,
+    });
+
+    expect(virtual.totalSizePx.get()).toBe(500);
+    estimate.set(60);
+    expect(virtual.totalSizePx.get()).toBe(600);
+
+    virtual.measureItem("item-0", 30);
+    expect(virtual.totalSizePx.get()).toBe(570);
+
+    estimate.set(70);
+
+    expect(virtual.totalSizePx.get()).toBe(660);
+    expect(virtual.scrollToIndex(9)).toBe(590);
+  });
+
+  it("recomputes span geometry when a cell-backed estimate changes", () => {
+    const estimate = cell(100);
+    const items = Array.from({ length: 4 }, (_unused, index) => ({ id: `item-${index}` }));
+    const virtual = createVirtualGrid({
+      estimateItemSize: () => estimate.get(),
+      getColumnCount: () => 2,
+      getItemSpan: () => ({ colSpan: 2 }),
+      getKey: (item) => item.id,
+      items: () => items,
+      overscan: 0,
+      scrollOffset: () => 0,
+      viewportSize: () => 100,
+    });
+
+    expect(virtual.totalSizePx.get()).toBe(400);
+
+    estimate.set(125);
+    expect(virtual.totalSizePx.get()).toBe(500);
+
+    virtual.measureItem("item-0", 80);
+    expect(virtual.totalSizePx.get()).toBe(455);
+
+    estimate.set(150);
+
+    expect(virtual.totalSizePx.get()).toBe(530);
+    expect(virtual.scrollToIndex(3)).toBe(380);
   });
 });

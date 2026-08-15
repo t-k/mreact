@@ -111,6 +111,15 @@ interface SpanRowLayout<TItem> extends MeasuredRowLayout<TItem> {
   rowCount: number;
 }
 
+interface VirtualGeometry<TItem> {
+  columnCount: number;
+  fixedItemSize?: number;
+  items: readonly TItem[];
+  measuredRowLayout?: MeasuredRowLayout<TItem>;
+  measuredVersion: number;
+  spanRowLayout?: SpanRowLayout<TItem>;
+}
+
 /**
  * Calculates the visible and overscanned range for a fixed-size virtual list or grid.
  *
@@ -179,36 +188,77 @@ export function createVirtualGrid<TItem>(options: VirtualGridOptions<TItem>): Vi
 function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualizer<TItem> {
   const measuredSizes = new Map<VirtualKey, number>();
   const refreshVersion = cell(0);
+  const keyLookupVersion = cell(0);
   let measuredVersion = 0;
-  let measuredRowLayout: MeasuredRowLayout<TItem> | undefined;
-  let spanRowLayout: SpanRowLayout<TItem> | undefined;
-  let lastItems: readonly TItem[] | undefined;
-  let keyIndex: Map<VirtualKey, number> | undefined;
-  let keyIndexItems: readonly TItem[] | undefined;
-  let keyIndexLength = -1;
 
-  // The snapshot recomputes when refresh()/measureItem() bump the version or
-  // when any cell read inside the items/scrollOffset/viewportSize/
-  // getColumnCount thunks (or the per-item callbacks) changes, so cell-backed
-  // sources stay reactive without explicit refresh() calls.
-  const snapshot = computed(() => {
+  // Geometry owns every callback that can change placement or row sizes.
+  // Viewport-only updates can then reuse this computed value without calling
+  // estimateItemSize() or getItemSpan() again.
+  const geometry = computed<VirtualGeometry<TItem>>(() => {
     refreshVersion.get();
     const items = options.items();
-    const next = createSnapshot(options, measuredSizes, {
+    const columnCount = clampInteger(options.getColumnCount(), 1);
+
+    if (options.getItemSpan !== undefined) {
+      if (measuredSizes.size > 0) {
+        pruneMeasuredSizes(items, options.getKey, measuredSizes);
+      }
+
+      return {
+        columnCount,
+        items,
+        measuredVersion,
+        spanRowLayout: getSpanRowLayout(items, columnCount, options, measuredSizes, {
+          measuredVersion,
+        }),
+      };
+    }
+
+    if (measuredSizes.size > 0) {
+      pruneMeasuredSizes(items, options.getKey, measuredSizes);
+    }
+
+    if (measuredSizes.size > 0) {
+      return {
+        columnCount,
+        items,
+        measuredRowLayout: getMeasuredRowLayout(items, columnCount, options, measuredSizes, {
+          measuredVersion,
+        }),
+        measuredVersion,
+      };
+    }
+
+    return {
+      columnCount,
+      fixedItemSize: clampPositiveSize(options.estimateItemSize(0, items[0])),
       items,
-      measuredRowLayout,
       measuredVersion,
-      pruneStaleMeasuredSizes: items !== lastItems,
-      spanRowLayout,
-      updateMeasuredRowLayout(nextLayout) {
-        measuredRowLayout = nextLayout;
-      },
-      updateSpanRowLayout(nextLayout) {
-        spanRowLayout = nextLayout;
-      },
+    };
+  });
+  const keyLookup = computed(() => {
+    keyLookupVersion.get();
+    const items = options.items();
+    return {
+      index: createKeyIndex(items, options.getKey),
+      items,
+      length: items.length,
+    };
+  });
+
+  // Geometry and viewport inputs invalidate this independently. Cell-backed
+  // layout callbacks are tracked by geometry, while scroll-only changes stop
+  // at this outer computed.
+  const snapshot = computed(() => {
+    const currentGeometry = geometry.get();
+    return createSnapshot(options, measuredSizes, {
+      columnCount: currentGeometry.columnCount,
+      fixedItemSize: currentGeometry.fixedItemSize,
+      items: currentGeometry.items,
+      measuredRowLayout: currentGeometry.measuredRowLayout,
+      measuredVersion: currentGeometry.measuredVersion,
+      spanRowLayout: currentGeometry.spanRowLayout,
     });
-    lastItems = items;
-    return next;
   });
   const range = computed(() => snapshot.get().range, { equals: virtualRangeEquals });
   const visibleRange = computed(() => snapshot.get().visibleRange, {
@@ -220,11 +270,8 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
   const totalSizePx = computed(() => snapshot.get().range.totalSizePx);
 
   const refresh = () => {
-    keyIndex = undefined;
-    keyIndexItems = undefined;
-    keyIndexLength = -1;
-    spanRowLayout = undefined;
     refreshVersion.set((version) => version + 1);
+    keyLookupVersion.set((version) => version + 1);
   };
   // Scroll helpers are imperative reads: they must observe the latest inputs
   // even for plain non-reactive thunks, but never subscribe their caller.
@@ -233,9 +280,10 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
       let current = snapshot.get();
       const items = options.items();
       const columnCount = clampInteger(options.getColumnCount(), 1);
+      const currentGeometry = geometry.get();
 
       if (
-        items !== lastItems ||
+        items !== currentGeometry.items ||
         items.length !== current.range.itemCount ||
         columnCount !== current.range.columnCount
       ) {
@@ -276,16 +324,23 @@ function createVirtualizer<TItem>(options: VirtualGridOptions<TItem>): Virtualiz
     scrollToIndex,
     scrollToKey(key) {
       return untrack(() => {
-        const index = resolveKeyIndex(key, options, {
-          keyIndex,
-          keyIndexItems,
-          keyIndexLength,
-          update(nextKeyIndex, nextKeyIndexItems) {
-            keyIndex = nextKeyIndex;
-            keyIndexItems = nextKeyIndexItems;
-            keyIndexLength = nextKeyIndexItems.length;
-          },
-        });
+        let currentLookup = keyLookup.get();
+        const items = options.items();
+        if (items !== currentLookup.items || items.length !== currentLookup.length) {
+          keyLookupVersion.set((version) => version + 1);
+          currentLookup = keyLookup.get();
+        }
+
+        let index = currentLookup.index.get(key);
+        if (index !== undefined) {
+          const item = items[index];
+          if (item !== undefined && options.getKey(item, index) !== key) {
+            keyLookupVersion.set((version) => version + 1);
+            currentLookup = keyLookup.get();
+            index = currentLookup.index.get(key);
+          }
+        }
+
         if (index === undefined) {
           return undefined;
         }
@@ -355,44 +410,6 @@ function virtualEntriesEqual<TItem>(
   return true;
 }
 
-function resolveKeyIndex<TItem>(
-  key: VirtualKey,
-  options: VirtualGridOptions<TItem>,
-  cache: {
-    keyIndex: Map<VirtualKey, number> | undefined;
-    keyIndexItems: readonly TItem[] | undefined;
-    keyIndexLength: number;
-    update: (keyIndex: Map<VirtualKey, number>, items: readonly TItem[]) => void;
-  },
-): number | undefined {
-  const items = options.items();
-  let keyIndex = cache.keyIndex;
-
-  if (
-    keyIndex === undefined ||
-    cache.keyIndexItems !== items ||
-    cache.keyIndexLength !== items.length
-  ) {
-    keyIndex = createKeyIndex(items, options.getKey);
-    cache.update(keyIndex, items);
-  }
-
-  const index = keyIndex.get(key);
-  if (index === undefined) {
-    return undefined;
-  }
-
-  const item = items[index];
-  if (item !== undefined && options.getKey(item, index) === key) {
-    return index;
-  }
-
-  keyIndex = createKeyIndex(items, options.getKey);
-  cache.update(keyIndex, items);
-
-  return keyIndex.get(key);
-}
-
 function createKeyIndex<TItem>(
   items: readonly TItem[],
   getKey: (item: TItem, index: number) => VirtualKey,
@@ -417,6 +434,8 @@ function createSnapshot<TItem>(
   options: VirtualGridOptions<TItem>,
   measuredSizes: Map<VirtualKey, number>,
   snapshotOptions?: {
+    columnCount?: number | undefined;
+    fixedItemSize?: number | undefined;
     items?: readonly TItem[] | undefined;
     measuredRowLayout?: MeasuredRowLayout<TItem> | undefined;
     measuredVersion?: number | undefined;
@@ -428,7 +447,7 @@ function createSnapshot<TItem>(
 ): VirtualSnapshot<TItem> {
   const items = snapshotOptions?.items ?? options.items();
   const itemCount = items.length;
-  const columnCount = clampInteger(options.getColumnCount(), 1);
+  const columnCount = snapshotOptions?.columnCount ?? clampInteger(options.getColumnCount(), 1);
   const overscan = clampInteger(options.overscan ?? 0, 0);
   const rowCount = Math.ceil(itemCount / columnCount);
 
@@ -442,7 +461,15 @@ function createSnapshot<TItem>(
   }
 
   if (measuredSizes.size === 0) {
-    return createFixedSnapshot(options, items, itemCount, columnCount, rowCount, overscan);
+    return createFixedSnapshot(
+      options,
+      items,
+      itemCount,
+      columnCount,
+      rowCount,
+      overscan,
+      snapshotOptions?.fixedItemSize,
+    );
   }
 
   if (snapshotOptions?.pruneStaleMeasuredSizes === true) {
@@ -450,16 +477,18 @@ function createSnapshot<TItem>(
   }
 
   if (measuredSizes.size === 0) {
-    return createFixedSnapshot(options, items, itemCount, columnCount, rowCount, overscan);
+    return createFixedSnapshot(
+      options,
+      items,
+      itemCount,
+      columnCount,
+      rowCount,
+      overscan,
+      snapshotOptions?.fixedItemSize,
+    );
   }
 
-  const layout = getMeasuredRowLayout(
-    items,
-    columnCount,
-    options,
-    measuredSizes,
-    snapshotOptions,
-  );
+  const layout = getMeasuredRowLayout(items, columnCount, options, measuredSizes, snapshotOptions);
   const rowSizes = layout.rowSizes;
   const rowOffsets = layout.rowOffsets;
   const totalSizePx = layout.totalSizePx;
@@ -512,11 +541,13 @@ function getMeasuredRowLayout<TItem>(
   columnCount: number,
   options: VirtualGridOptions<TItem>,
   measuredSizes: ReadonlyMap<VirtualKey, number>,
-  snapshotOptions: {
-    measuredRowLayout?: MeasuredRowLayout<TItem> | undefined;
-    measuredVersion?: number | undefined;
-    updateMeasuredRowLayout?: (layout: MeasuredRowLayout<TItem>) => void;
-  } | undefined,
+  snapshotOptions:
+    | {
+        measuredRowLayout?: MeasuredRowLayout<TItem> | undefined;
+        measuredVersion?: number | undefined;
+        updateMeasuredRowLayout?: (layout: MeasuredRowLayout<TItem>) => void;
+      }
+    | undefined,
 ): MeasuredRowLayout<TItem> {
   const measuredVersion = snapshotOptions?.measuredVersion ?? 0;
   const cached = snapshotOptions?.measuredRowLayout;
@@ -550,11 +581,13 @@ function getSpanRowLayout<TItem>(
   columnCount: number,
   options: VirtualGridOptions<TItem>,
   measuredSizes: ReadonlyMap<VirtualKey, number>,
-  snapshotOptions: {
-    measuredVersion?: number | undefined;
-    spanRowLayout?: SpanRowLayout<TItem> | undefined;
-    updateSpanRowLayout?: (layout: SpanRowLayout<TItem>) => void;
-  } | undefined,
+  snapshotOptions:
+    | {
+        measuredVersion?: number | undefined;
+        spanRowLayout?: SpanRowLayout<TItem> | undefined;
+        updateSpanRowLayout?: (layout: SpanRowLayout<TItem>) => void;
+      }
+    | undefined,
 ): SpanRowLayout<TItem> {
   const measuredVersion = snapshotOptions?.measuredVersion ?? 0;
   const cached = snapshotOptions?.spanRowLayout;
@@ -570,7 +603,13 @@ function getSpanRowLayout<TItem>(
   }
 
   const placements = computeSpanPlacements(items, columnCount, options.getItemSpan);
-  const rowSizes = computeSpanRowSizes(items, placements.entries, options, measuredSizes, placements.rowCount);
+  const rowSizes = computeSpanRowSizes(
+    items,
+    placements.entries,
+    options,
+    measuredSizes,
+    placements.rowCount,
+  );
   const rowOffsets = computeRowOffsets(rowSizes);
   const layout: SpanRowLayout<TItem> = {
     columnCount,
@@ -595,8 +634,9 @@ function createFixedSnapshot<TItem>(
   columnCount: number,
   rowCount: number,
   overscan: number,
+  fixedItemSize?: number,
 ): VirtualSnapshot<TItem> {
-  const itemSize = clampPositiveSize(options.estimateItemSize(0, items[0]));
+  const itemSize = fixedItemSize ?? clampPositiveSize(options.estimateItemSize(0, items[0]));
   const range = calculateVirtualRange({
     columnCount,
     itemCount,
@@ -793,7 +833,11 @@ function computeSpanRowSizes<TItem>(
   rowCount: number,
 ): number[] {
   const baseItemSize = clampPositiveSize(options.estimateItemSize(0, items[0]));
-  const rowSizes = Array.from({ length: rowCount }, () => baseItemSize);
+  const estimatedRowSizes = Array.from({ length: rowCount }, () => baseItemSize);
+  const measuredRowSizes: Array<number | undefined> = Array.from(
+    { length: rowCount },
+    () => undefined,
+  );
 
   for (const placement of placements) {
     if (placement === undefined) {
@@ -811,11 +855,15 @@ function computeSpanRowSizes<TItem>(
     const trackSize = itemSize / placement.rowSpan;
     for (let rowOffset = 0; rowOffset < placement.rowSpan; rowOffset += 1) {
       const row = placement.row + rowOffset;
-      rowSizes[row] = Math.max(rowSizes[row] ?? baseItemSize, trackSize);
+      if (measuredSize === undefined) {
+        estimatedRowSizes[row] = Math.max(estimatedRowSizes[row] ?? baseItemSize, trackSize);
+      } else {
+        measuredRowSizes[row] = Math.max(measuredRowSizes[row] ?? 0, trackSize);
+      }
     }
   }
 
-  return rowSizes;
+  return estimatedRowSizes.map((estimatedSize, row) => measuredRowSizes[row] ?? estimatedSize);
 }
 
 function computeRowSizes<TItem>(
