@@ -4,6 +4,7 @@
 
 ```ts
 
+import type { DehydrateOptions } from '@reckona/mreact-query';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
 import { ServerActionRequestReference } from '@reckona/mreact-server';
@@ -258,6 +259,8 @@ export type AwsLambdaRequestHandler = (event: AwsLambdaHttpEventV2) => Promise<A
 export interface AwsLambdaRequestHandlerOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     errorHandler?: ((error: unknown) => {
         body: string;

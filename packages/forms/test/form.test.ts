@@ -384,6 +384,58 @@ describe("createForm", () => {
     });
   });
 
+  it.each([
+    [
+      "synchronous",
+      () => {
+        throw new Error("username service unavailable");
+      },
+    ],
+    ["asynchronous", async () => Promise.reject(new Error("username service unavailable"))],
+  ])(
+    "captures %s field validator failures without leaving validating set",
+    async (_label, fail) => {
+      const form = createForm({
+        initialValues: { username: "" },
+        validate: {
+          username() {
+            return fail();
+          },
+        },
+        validateOn: "change",
+      });
+
+      await expect(
+        form
+          .field("username")
+          .bind()
+          .onInput({ currentTarget: { value: "ada" } } as unknown as Event),
+      ).resolves.toBeUndefined();
+
+      expect(form.field("username").state.get()).toMatchObject({
+        errors: ["username service unavailable"],
+        validating: false,
+      });
+    },
+  );
+
+  it("returns validation and submit errors when a schema rejects", async () => {
+    const failure = new Error("schema service unavailable");
+    const schema = {
+      "~standard": {
+        version: 1 as const,
+        vendor: "test",
+        validate: async () => Promise.reject(failure),
+        types: undefined as unknown as { input: { email: string }; output: { email: string } },
+      },
+    };
+    const form = createForm({ initialValues: { email: "" }, schema });
+
+    await expect(form.validate()).resolves.toEqual({ error: failure, success: false });
+    await expect(form.submit(() => "saved")).resolves.toEqual({ error: failure, status: "error" });
+    expect(form.state.get().errors).toEqual({ root: ["schema service unavailable"] });
+  });
+
   it("reset restores initial values and clears touched, errors, and submit state", async () => {
     const form = createForm({
       initialValues: { email: "", name: "" },

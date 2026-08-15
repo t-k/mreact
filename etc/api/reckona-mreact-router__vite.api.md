@@ -5,6 +5,7 @@
 ```ts
 
 import { Connect } from 'vite';
+import type { DehydrateOptions } from '@reckona/mreact-query';
 import { Plugin as Plugin_2 } from 'vite';
 import { PluginOption } from 'vite';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
@@ -122,6 +123,7 @@ export interface AppRouterProjectOptions {
     buildTargets?: readonly AppRouterBuildTarget[] | undefined;
     // (undocumented)
     clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
+    dehydratePolicyModule?: string | undefined;
     // (undocumented)
     production?: AppRouterProductionOptions | undefined;
     // (undocumented)
@@ -234,6 +236,8 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
     // (undocumented)
     define?: UserConfig["define"] | undefined;
     // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
+    // (undocumented)
     hostPolicy?: RequestHostPolicy | undefined;
     // (undocumented)
     importPolicy?: AppRouterImportPolicy | undefined;
@@ -251,6 +255,8 @@ export interface AppRouterViteMiddlewareOptions extends AppRouterProjectOptions 
 export interface AppRouterVitePluginOptions extends AppRouterProjectOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     hostPolicy?: RequestHostPolicy | undefined;
     // (undocumented)
@@ -298,6 +304,8 @@ export interface ResolvedAppRouterProject {
     clientConsolePureFunctions?: readonly string[] | undefined;
     // (undocumented)
     clientSourceMaps: AppRouterClientSourceMapMode;
+    // (undocumented)
+    dehydratePolicyModule?: string | undefined;
     // (undocumented)
     projectRoot: string;
     // (undocumented)

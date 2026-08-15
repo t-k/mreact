@@ -14,7 +14,7 @@ export type StartTransition = (scope: TransitionScope) => void;
 export function startTransition(scope: TransitionScope): void;
 
 // @public
-export type TransitionScope = () => void;
+export type TransitionScope = () => void | PromiseLike<void>;
 
 // @public
 export function unstable_useCacheRefresh(): () => void;
@@ -23,7 +23,7 @@ export function unstable_useCacheRefresh(): () => void;
 export function use<T>(usable: PromiseLike<T> | unknown): T;
 
 // @public
-export function useActionState<TState, TPayload>(action: (previousState: TState, payload: TPayload) => TState | Promise<TState>, initialState: TState): [TState, (payload: TPayload) => void, boolean];
+export function useActionState<TState, TPayload>(action: (previousState: TState, payload: TPayload) => TState | PromiseLike<TState>, initialState: TState): [TState, (payload: TPayload) => void, boolean];
 
 // @public
 export function useCallback<T extends (...args: never[]) => unknown>(callback: T, deps?: readonly unknown[]): T;

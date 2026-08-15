@@ -15,7 +15,7 @@ export function modularReact(options?: ModularReactViteOptions): Plugin_2;
 // @public
 export interface ModularReactViteOptions {
     // (undocumented)
-    include?: RegExp;
+    include?: RegExp | readonly RegExp[];
     // (undocumented)
     mode?: "reactive" | "compat";
     // (undocumented)

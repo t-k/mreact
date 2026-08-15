@@ -33,25 +33,24 @@ export interface ForwardRefType<P = Record<string, unknown>> {
 export const Fragment: unique symbol;
 
 // @public
+export namespace JSX {
+    // (undocumented)
+    export interface Element extends ReactCompatElement {
+    }
+    // (undocumented)
+    export interface IntrinsicAttributes extends JSXIntrinsicAttributes {
+    }
+    // (undocumented)
+    export interface IntrinsicElements extends JSXIntrinsicElements {
+    }
+}
+
+// @public
 export function jsx<P extends object>(type: ElementType<P>, props: (P & {
     children?: ReactCompatNode;
     key?: unknown;
     ref?: unknown;
 }) | null, key?: unknown): ReactCompatElement<P>;
-
-// @public
-namespace JSX_2 {
-    // (undocumented)
-    interface Element extends ReactCompatElement {
-    }
-    // (undocumented)
-    interface IntrinsicAttributes extends JSXIntrinsicAttributes {
-    }
-    // (undocumented)
-    interface IntrinsicElements extends JSXIntrinsicElements {
-    }
-}
-export { JSX_2 as JSX }
 
 // @public
 export interface JSXDOMAttributes<TElement extends EventTarget> {

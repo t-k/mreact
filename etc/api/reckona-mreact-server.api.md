@@ -53,6 +53,9 @@ export function createServerReference(moduleId: string, exportName?: string, bou
 export function createStringSink(options?: StringSinkOptions): StringHtmlSink;
 
 // @public
+export function ensureServerActionReplayStoreContract(store: unknown): store is ServerActionReplayStore;
+
+// @public
 export interface EventHydrationEntry {
     // (undocumented)
     event: string;

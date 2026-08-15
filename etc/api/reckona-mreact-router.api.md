@@ -229,6 +229,7 @@ export interface AppRouterProjectOptions {
     buildTargets?: readonly AppRouterBuildTarget[] | undefined;
     // (undocumented)
     clientSourceMaps?: AppRouterClientSourceMapOption | undefined;
+    dehydratePolicyModule?: string | undefined;
     // (undocumented)
     production?: AppRouterProductionOptions | undefined;
     // (undocumented)
@@ -1818,6 +1819,8 @@ export function startDevServer(options: StartDevServerOptions): Promise<{
 
 // @public
 export interface StartDevServerOptions extends AppRouterProjectOptions {
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     hostname?: string;
     // (undocumented)

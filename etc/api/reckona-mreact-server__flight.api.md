@@ -32,6 +32,9 @@ export function createServerActionHandler(actions: ServerActionRegistry, options
 export function createServerReference(moduleId: string, exportName?: string, bound?: unknown[]): ServerReference;
 
 // @public
+export function ensureServerActionReplayStoreContract(store: unknown): store is ServerActionReplayStore;
+
+// @public
 export interface FlightArrayBufferModel {
     // (undocumented)
     bytes: number[];

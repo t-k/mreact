@@ -33,18 +33,17 @@ export interface ForwardRefType<P = Record<string, unknown>> {
 export const Fragment: unique symbol;
 
 // @public
-namespace JSX_2 {
+export namespace JSX {
     // (undocumented)
-    interface Element extends ReactCompatElement {
+    export interface Element extends ReactCompatElement {
     }
     // (undocumented)
-    interface IntrinsicAttributes extends JSXIntrinsicAttributes {
+    export interface IntrinsicAttributes extends JSXIntrinsicAttributes {
     }
     // (undocumented)
-    interface IntrinsicElements extends JSXIntrinsicElements {
+    export interface IntrinsicElements extends JSXIntrinsicElements {
     }
 }
-export { JSX_2 as JSX }
 
 // @public
 export function jsxDEV<P extends object>(type: ElementType<P>, props: (P & {

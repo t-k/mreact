@@ -27,7 +27,6 @@ export function bindList<T>(parent: ParentNode, marker: ChildNode, items: () => 
 export interface BindListOptions<T> {
     // (undocumented)
     itemMode?: "reactive" | "static";
-    // (undocumented)
     key?: (item: T, index: number, items: readonly T[]) => unknown;
     // (undocumented)
     nestedObjectFallback?: boolean;
@@ -54,7 +53,6 @@ export function bindStaticKeyedSingleNodeList<T, TNode extends ChildNode>(parent
 // @public (undocumented)
 export interface BindStaticKeyedSingleNodeListOptions<T, TNode extends ChildNode = ChildNode> {
     deferEventPromotion?: boolean;
-    // (undocumented)
     key: (item: T, index: number, items: readonly T[]) => unknown;
     // (undocumented)
     selectedClass?: BindStaticKeyedSingleNodeListSelectedClassOptions<T, TNode>;
@@ -103,6 +101,12 @@ export function createTemplate(html: string): () => DocumentFragment;
 export function createTemplateElement<TElement extends Element = Element>(html: string): () => TElement;
 
 // @public
+export interface CustomRenderValue {
+    // (undocumented)
+    readonly $$typeof: symbol;
+}
+
+// @public
 export type Dispose = () => void;
 
 // @public (undocumented)
@@ -145,7 +149,7 @@ export interface ListRenderValue<T = unknown> {
 }
 
 // @public
-export type RenderValue = Node | string | number | boolean | null | undefined | ListRenderValue | readonly RenderValue[];
+export type RenderValue = Node | string | number | boolean | null | undefined | CustomRenderValue | ListRenderValue | readonly RenderValue[];
 
 // @public (undocumented)
 export type SingleNodeRenderer<T, TNode extends ChildNode> = (item: T, index: number, items: readonly T[]) => TNode;

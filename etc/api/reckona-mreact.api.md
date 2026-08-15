@@ -5,7 +5,7 @@
 ```ts
 
 import type { ElementType } from '@reckona/mreact-compat';
-import type { JSX as JSX_3 } from '@reckona/mreact-compat/jsx-runtime';
+import type { JSX as JSX_2 } from '@reckona/mreact-compat/jsx-runtime';
 import * as ReactCompat from '@reckona/mreact-compat';
 import type { ReactCompatElement } from '@reckona/mreact-compat';
 import type { ReactCompatNode } from '@reckona/mreact-compat';
@@ -20,14 +20,13 @@ export type FC<P = object> = FunctionComponent<P>;
 export type FunctionComponent<P = object> = (props: P) => ReactElement | null;
 
 // @public
-namespace JSX_2 {
-    type Element = JSX_3.Element;
-    interface IntrinsicAttributes extends JSX_3.IntrinsicAttributes {
+export namespace JSX {
+    export type Element = JSX_2.Element;
+    export interface IntrinsicAttributes extends JSX_2.IntrinsicAttributes {
     }
-    interface IntrinsicElements extends JSX_3.IntrinsicElements {
+    export interface IntrinsicElements extends JSX_2.IntrinsicElements {
     }
 }
-export { JSX_2 as JSX }
 
 export default ReactCompat;
 

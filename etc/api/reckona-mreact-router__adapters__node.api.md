@@ -4,6 +4,7 @@
 
 ```ts
 
+import type { DehydrateOptions } from '@reckona/mreact-query';
 import type { IncomingMessage } from 'node:http';
 import { ServerActionHandlerOptions } from '@reckona/mreact-server';
 import { ServerActionReplayStore } from '@reckona/mreact-server';
@@ -227,6 +228,8 @@ export type NodeRequestHandler = (incoming: IncomingMessage, outgoing: ServerRes
 export interface NodeRequestHandlerOptions {
     // (undocumented)
     allowedHosts?: readonly string[] | undefined;
+    // (undocumented)
+    dehydrateOptions?: DehydrateOptions | undefined;
     // (undocumented)
     errorHandler?: ((error: unknown) => {
         body: string;

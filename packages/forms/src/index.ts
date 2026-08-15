@@ -139,6 +139,10 @@ export type FormValidationResult<TValues extends FormValues, TSubmitValues> =
   | {
       errors: FormErrors<TValues>;
       success: false;
+    }
+  | {
+      error: unknown;
+      success: false;
     };
 
 /** Reports the result of a form submit handler after validation and error capture. */
@@ -262,14 +266,20 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
 
     const values = state.get().values;
     setFieldValidating(name, true);
-    const errors = await validator(values[name], values);
-
-    if (validationGenerations.get(name) !== generation) {
-      return;
+    try {
+      const errors = await validator(values[name], values);
+      if (validationGenerations.get(name) === generation) {
+        setFieldErrors(name, normalizeFieldErrors(errors));
+      }
+    } catch (error) {
+      if (validationGenerations.get(name) === generation) {
+        setFieldErrors(name, [validationErrorMessage(error)]);
+      }
+    } finally {
+      if (validationGenerations.get(name) === generation) {
+        setFieldValidating(name, false);
+      }
     }
-
-    setFieldErrors(name, normalizeFieldErrors(errors));
-    setFieldValidating(name, false);
   }
 
   function setFieldErrors<Name extends FieldName<TValues>>(
@@ -336,6 +346,7 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
   ): Promise<FormValidationResult<TValues, TSubmitValues>> {
     const values = state.get().values;
     const errors: FormErrors<TValues> = {};
+    let validationError: unknown;
     const fieldNames = Object.keys(options.validate ?? {}) as Array<FieldName<TValues>>;
     invalidateFieldValidations(fieldNames);
 
@@ -345,26 +356,43 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
       if (validate === undefined) {
         continue;
       }
-      const fieldErrors = normalizeFieldErrors(await validate(values[name], values));
-      if (fieldErrors.length > 0) {
-        errors[name] = fieldErrors;
+      try {
+        const fieldErrors = normalizeFieldErrors(await validate(values[name], values));
+        if (fieldErrors.length > 0) {
+          errors[name] = fieldErrors;
+        }
+      } catch (error) {
+        validationError ??= error;
+        errors[name] = [validationErrorMessage(error)];
       }
     }
 
     if (options.schema !== undefined) {
-      const result = await validateStandardSchema(options.schema, values);
+      try {
+        const result = await validateStandardSchema(options.schema, values);
 
-      if (!result.success) {
-        mergeIssueErrors(errors, result.issues);
-      } else if (Object.keys(errors).length === 0) {
-        if (shouldCommit()) {
-          setErrors({});
+        if (!result.success) {
+          mergeIssueErrors(errors, result.issues);
+        } else if (Object.keys(errors).length === 0) {
+          if (shouldCommit()) {
+            setErrors({});
+          }
+          return {
+            success: true,
+            value: result.value as TSubmitValues,
+          };
         }
-        return {
-          success: true,
-          value: result.value as TSubmitValues,
-        };
+      } catch (error) {
+        validationError ??= error;
+        errors.root = [validationErrorMessage(error)];
       }
+    }
+
+    if (validationError !== undefined) {
+      if (shouldCommit()) {
+        setErrors(errors);
+      }
+      return { error: validationError, success: false };
     }
 
     if (Object.keys(errors).length > 0) {
@@ -643,6 +671,12 @@ export function createForm<TValues extends FormValues, TSubmitValues = TValues>(
           }
 
           if (!validation.success) {
+            if ("error" in validation) {
+              return {
+                error: validation.error,
+                status: "error",
+              };
+            }
             return {
               errors: validation.errors,
               status: "invalid",
@@ -820,6 +854,10 @@ function normalizeFieldErrors(errors: readonly string[] | string | undefined): s
   }
 
   return typeof errors === "string" ? [errors] : [...errors];
+}
+
+function validationErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message !== "" ? error.message : "Validation failed";
 }
 
 function clampIndex(index: number, min: number, max: number): number {

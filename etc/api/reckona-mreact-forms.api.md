@@ -202,10 +202,13 @@ export type FormValidationResult<TValues extends FormValues, TSubmitValues> = {
 } | {
     errors: FormErrors<TValues>;
     success: false;
+} | {
+    error: unknown;
+    success: false;
 };
 
 // @public
-export type FormValues = Record<string, unknown>;
+export type FormValues = object;
 
 // @public
 export type InferStandardSchemaInput<Schema> = Schema extends {

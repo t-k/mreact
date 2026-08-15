@@ -263,6 +263,8 @@ export interface BuiltServerManifest {
     // (undocumented)
     assetBaseUrl?: string;
     // (undocumented)
+    dehydratePolicyModule?: string;
+    // (undocumented)
     files: Record<string, string>;
     // (undocumented)
     prerenderedRoutes?: Record<string, BuiltPrerenderedRoute>;
