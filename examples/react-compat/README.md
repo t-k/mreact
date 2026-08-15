@@ -32,11 +32,7 @@ src/
 index.html
 ```
 
-The `.compat.tsx` extension tells the Vite plugin to lower this file
-with the compat target (JSX → `createElement` + hook calls). The
-`react` and `react-dom/client` specifiers are resolved through pnpm
-workspace links — both packages re-export from
-`@reckona/mreact-compat`, so no Vite `resolve.alias` is needed.
+The `.compat.tsx` extension tells the Vite plugin to lower this file with the compat target (JSX → `createElement` + hook calls). The required `resolve.alias` entries in `vite.config.ts` route `react`, `react-dom`, and `react-dom/client` to mreact's compatibility packages; without those aliases a workspace may resolve the real React runtime instead.
 
 ## Related code in the framework
 

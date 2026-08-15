@@ -41,6 +41,32 @@ describe("modularReact vite plugin transform", () => {
     expect(result).toBeNull();
   });
 
+  test("accepts include arrays and reuses stateful patterns without skipping matches", async () => {
+    const plugin = modularReact({ include: [/\.mreact\.tsx$/, /\.compat\.tsx$/g] });
+    const transform = plugin.transform;
+
+    if (typeof transform !== "function") {
+      throw new Error("transform hook is not a function");
+    }
+
+    const context = {
+      error(error: string | Error): never {
+        throw typeof error === "string" ? new Error(error) : error;
+      },
+      warn() {},
+    } as never;
+    const code = 'export function App() { return <div id="app">Hello</div>; }';
+
+    expect(await transform.call(context, code, "/src/App.mreact.tsx")).not.toBeNull();
+    expect(await transform.call(context, code, "/src/App.compat.tsx")).not.toBeNull();
+    expect(await transform.call(context, code, "/src/App.compat.tsx")).not.toBeNull();
+    expect(await transform.call(context, code, "/src/App.tsx")).toBeNull();
+  });
+
+  test("rejects invalid include values at plugin construction", () => {
+    expect(() => modularReact({ include: "*.tsx" } as never)).toThrow(/include/);
+  });
+
   test("forwards server stream output mode for ssr transforms", async () => {
     const plugin = modularReact({ serverOutput: "stream" });
     const transform = plugin.transform;

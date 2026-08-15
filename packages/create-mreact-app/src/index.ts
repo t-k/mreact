@@ -89,10 +89,10 @@ const nodeTypesVersion = "^25.7.0";
 const oxlintVersion = "^1.69.0";
 const playwrightVersion = "^1.60.0";
 const tsxVersion = "^4.21.0";
-const viteVersion = "^8.0.11";
+const viteVersion = "^8.1.4";
 const vitestVersion = "^4.1.8";
-const wranglerVersion = "^4.100.0";
-const cloudflareWorkersTypesVersion = "^4.20260522.1";
+const wranglerVersion = "^4.123.0";
+const cloudflareWorkersTypesVersion = "^5.20260811.1";
 const appRouterGlobalsType = "@reckona/mreact-router/app-router-globals";
 const pnpmOnlyBuiltDependencies = ["@parcel/watcher", "esbuild", "sharp", "workerd"] as const;
 
@@ -393,6 +393,7 @@ function appRouterTemplate(
           types: [
             "node",
             "@reckona/mreact-router/app-router-globals",
+            "vite/client",
             ...(options.cloudflare ? ["@cloudflare/workers-types"] : []),
           ],
           skipLibCheck: true,
@@ -418,7 +419,7 @@ function appRouterTemplate(
     },
     {
       path: ".gitignore",
-      content: "node_modules\n.mreact\ndist\n.env\n.env.local\n.env.*.local\n.dev.vars\n.dev.vars.*\n",
+      content: gitignoreSource(options),
     },
     {
       path: "README.md",
@@ -502,7 +503,7 @@ function appRouterTemplate(
       },
       {
         path: "docs/deploy/container.md",
-        content: containerDeployReadmeSource(packageManager),
+        content: containerDeployReadmeSource(packageManager, paths),
       },
     );
   }
@@ -515,7 +516,7 @@ function appRouterTemplate(
       },
       {
         path: "docs/deploy/aws-lambda.md",
-        content: awsLambdaDeployReadmeSource(packageManager),
+        content: awsLambdaDeployReadmeSource(packageManager, paths),
       },
     );
   }
@@ -553,6 +554,27 @@ function templatePaths(srcDir: boolean): { routesDir: string; sourceDir: string 
   return srcDir
     ? { routesDir: "src/app", sourceDir: "src" }
     : { routesDir: "app", sourceDir: "app" };
+}
+
+function gitignoreSource(options: {
+  cloudflare: boolean;
+  deploy: CreateMreactAppDeployTarget | undefined;
+  tailwind: boolean;
+}): string {
+  return [
+    "node_modules",
+    ".mreact",
+    "dist",
+    ...(options.deploy === "aws-lambda" ? [".lambda"] : []),
+    ...(options.cloudflare ? [".wrangler"] : []),
+    ...(options.tailwind ? ["public/styles.css"] : []),
+    ".env",
+    ".env.local",
+    ".env.*.local",
+    ".dev.vars",
+    ".dev.vars.*",
+    "",
+  ].join("\n");
 }
 
 function viteConfigSource(paths: { routesDir: string; sourceDir: string }): string {
@@ -1307,10 +1329,11 @@ export function DashboardDevtools() {
 const tailwindCssSource = `@import "tailwindcss";
 `;
 
-const awsLambdaHandlerSource = `import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
+const awsLambdaHandlerSource = `import { fileURLToPath } from "node:url";
+import { createPreloadedAwsLambdaRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
 export const handler = await createPreloadedAwsLambdaRequestHandler({
-  outDir: new URL("../.mreact", import.meta.url).pathname,
+  outDir: fileURLToPath(new URL("../.mreact", import.meta.url)),
   importPolicy: "generated",
 });
 `;
@@ -1391,7 +1414,10 @@ yarn-debug.log*
 yarn-error.log*
 `;
 
-function containerDeployReadmeSource(packageManager: CreateMreactAppPackageManager): string {
+function containerDeployReadmeSource(
+  packageManager: CreateMreactAppPackageManager,
+  paths: { routesDir: string; sourceDir: string },
+): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
 
   return `# Container deployment
@@ -1444,9 +1470,9 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 mreactRouter({
   projectRoot,
-  routesDir: "src/app",
+  routesDir: "${paths.routesDir}",
   publicDir: "public",
-  allowedSourceDirs: ["src"],
+  allowedSourceDirs: ["${paths.sourceDir}"],
   assetBaseUrl: "https://cdn.example.com/_mreact/client/",
   publicAssetBaseUrl: "https://cdn.example.com/",
 });
@@ -1457,7 +1483,10 @@ non-fingerprinted public assets should use a shorter cache or revalidation.
 `;
 }
 
-function awsLambdaDeployReadmeSource(packageManager: CreateMreactAppPackageManager): string {
+function awsLambdaDeployReadmeSource(
+  packageManager: CreateMreactAppPackageManager,
+  paths: { routesDir: string; sourceDir: string },
+): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const installProd =
     packageManager === "pnpm"
@@ -1569,8 +1598,10 @@ find .lambda -type f -printf '%s\\n' | awk '{ total += $1 } END { printf "actual
 Production adapters enforce the app-router import policy when bundling loaders, middleware, route handlers, metadata, and server actions. The build writes \`.mreact/server/import-policy.json\` from server-side static imports, and generated Lambda handlers use \`importPolicy: "generated"\` by default. AWS Lambda request/control artifacts bundle the generated import-policy packages they use for loaders, middleware, route handlers, and metadata, reducing first-hit package resolution on sparse Lambda traffic. Packages listed in the generated import policy may still be needed by render-only modules, inferred server actions, custom handlers, or adapter code, so keep them installed in the production \`node_modules\` copied into the Lambda artifact.
 
 \`\`\`ts
+import { fileURLToPath } from "node:url";
+
 export const handler = await createPreloadedAwsLambdaRequestHandler({
-  outDir: new URL("../.mreact", import.meta.url).pathname,
+  outDir: fileURLToPath(new URL("../.mreact", import.meta.url)),
   importPolicy: "generated",
 });
 \`\`\`
@@ -1586,10 +1617,11 @@ one Lambda response body.
 For Lambda Function URL response streaming, use the generated \`mreact-streaming-handler.handler\` entry recorded as \`streamingHandler\` in \`mreact-lambda-artifact.json\`. A custom handler can use the same adapter explicitly:
 
 \`\`\`ts
+import { fileURLToPath } from "node:url";
 import { createAwsLambdaStreamingRequestHandler } from "@reckona/mreact-router/adapters/aws-lambda";
 
 export const handler = createAwsLambdaStreamingRequestHandler({
-  outDir: new URL("../.mreact", import.meta.url).pathname,
+  outDir: fileURLToPath(new URL("../.mreact", import.meta.url)),
 });
 \`\`\`
 
@@ -1611,9 +1643,9 @@ const projectRoot = dirname(fileURLToPath(import.meta.url));
 
 mreactRouter({
   projectRoot,
-  routesDir: "src/app",
+  routesDir: "${paths.routesDir}",
   publicDir: "public",
-  allowedSourceDirs: ["src"],
+  allowedSourceDirs: ["${paths.sourceDir}"],
   assetBaseUrl: "https://cdn.example.com/_mreact/client/",
   publicAssetBaseUrl: "https://cdn.example.com/",
 });
@@ -1636,7 +1668,7 @@ function readmeSource(
 ): string {
   const run = packageManager === "npm" ? "npm run" : `${packageManager} run`;
   const tailwindNote = options.tailwind
-    ? "\nTailwind CSS v4 is configured in `app/globals.css`.\n"
+    ? "\nTailwind CSS v4 is configured in the generated route `globals.css`. The build writes `public/styles.css`; this generated file is ignored so source CSS remains the project source of truth.\n"
     : "";
   const starterNote =
     options.dashboard

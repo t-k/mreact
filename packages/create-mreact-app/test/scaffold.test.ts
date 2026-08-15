@@ -37,6 +37,14 @@ describe("create-mreact-app scaffolder", () => {
     expect(packageJson.scripts?.test).toBe("vitest run --passWithNoTests");
     expect(packageJson.dependencies?.["@reckona/mreact-router"]).toBeDefined();
     expect(tsconfig.compilerOptions?.types).toContain("@reckona/mreact-router/app-router-globals");
+    expect(tsconfig.compilerOptions?.types).toContain("vite/client");
+    expect(packageJson.devDependencies?.vite).toBe("^8.1.4");
+    const routerPackage = JSON.parse(
+      await readFile(new URL("../../router/package.json", import.meta.url), "utf8"),
+    ) as { peerDependencies?: Record<string, string> };
+    expect(routerPackage.peerDependencies?.vite).toBe(
+      `>=${packageJson.devDependencies?.vite?.slice(1)} <9`,
+    );
     expect(viteConfig).toContain('routesDir: "app"');
     expect(layout).not.toContain("<title>");
     expect(page).toContain('import { cell } from "@reckona/mreact-reactive-core";');
@@ -157,6 +165,7 @@ describe("create-mreact-app scaffolder", () => {
     };
     const layout = await readFile(join(directory, "app", "layout.tsx"), "utf8");
     const css = await readFile(join(directory, "app", "globals.css"), "utf8");
+    const gitignore = await readFile(join(directory, ".gitignore"), "utf8");
     expect(packageJson.devDependencies?.tailwindcss).toMatch(/^\^4\./);
     expect(packageJson.devDependencies?.["@tailwindcss/cli"]).toMatch(/^\^4\./);
     expect(packageJson.devDependencies?.postcss).toBeUndefined();
@@ -171,6 +180,7 @@ describe("create-mreact-app scaffolder", () => {
     expect(layout).toContain('href="/styles.css"');
     expect(layout).not.toContain("<title>");
     expect(css).toContain('@import "tailwindcss";');
+    expect(gitignore.split("\n")).toContain("public/styles.css");
     await expect(access(join(directory, "tailwind.config.ts"))).rejects.toThrow();
     await expect(access(join(directory, "postcss.config.cjs"))).rejects.toThrow();
   });
@@ -199,12 +209,14 @@ describe("create-mreact-app scaffolder", () => {
     const page = await readFile(join(directory, "app", "page.tsx"), "utf8");
     const workerEnv = await readFile(join(directory, "worker-env.d.ts"), "utf8");
     const readme = await readFile(join(directory, "README.md"), "utf8");
+    const gitignore = await readFile(join(directory, ".gitignore"), "utf8");
 
     expect(packageJson.scripts?.deploy).toBe("wrangler deploy");
     expect(packageJson.scripts?.build).toBe("mreact-router build --target=cloudflare");
     expect(packageJson.scripts?.dev).toBe("pnpm run build && wrangler dev");
-    expect(packageJson.devDependencies?.wrangler).toBe("^4.100.0");
-    expect(packageJson.devDependencies?.["@cloudflare/workers-types"]).toBeDefined();
+    expect(packageJson.devDependencies?.wrangler).toBe("^4.123.0");
+    expect(packageJson.devDependencies?.["@cloudflare/workers-types"]).toBe("^5.20260811.1");
+    expect(gitignore.split("\n")).toContain(".wrangler");
     expect(tsconfig.compilerOptions?.types).toContain("@cloudflare/workers-types");
     expect(tsconfig.include).toContain("worker-env.d.ts");
     expect(page).toContain('import { cell } from "@reckona/mreact-reactive-core";');
@@ -638,6 +650,8 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("const projectRoot = dirname(fileURLToPath(import.meta.url));");
     expect(deployDocs).toContain("projectRoot,");
     expect(deployDocs).not.toContain("__dirname");
+    expect(deployDocs).toContain('routesDir: "src/app"');
+    expect(deployDocs).toContain('allowedSourceDirs: ["src"]');
     expect(deployDocs).toContain("assetBaseUrl");
   });
 
@@ -657,11 +671,13 @@ describe("create-mreact-app scaffolder", () => {
     const handler = await readFile(join(directory, "src", "lambda.ts"), "utf8");
     const deployDocs = await readFile(join(directory, "docs", "deploy", "aws-lambda.md"), "utf8");
     const readme = await readFile(join(directory, "README.md"), "utf8");
+    const gitignore = await readFile(join(directory, ".gitignore"), "utf8");
 
     expect(result.files).toContain("src/lambda.ts");
     expect(result.files).toContain("docs/deploy/aws-lambda.md");
     expect(handler).toContain("createPreloadedAwsLambdaRequestHandler");
-    expect(handler).toContain('outDir: new URL("../.mreact", import.meta.url).pathname');
+    expect(handler).toContain('import { fileURLToPath } from "node:url"');
+    expect(handler).toContain('outDir: fileURLToPath(new URL("../.mreact", import.meta.url))');
     expect(handler).toContain('importPolicy: "generated"');
     expect(handler).toContain("@reckona/mreact-router/adapters/aws-lambda");
     expect(deployDocs).toContain("API Gateway HTTP API v2");
@@ -691,6 +707,10 @@ describe("create-mreact-app scaffolder", () => {
     expect(deployDocs).toContain("projectRoot,");
     expect(deployDocs).not.toContain("__dirname");
     expect(deployDocs).toContain("assetBaseUrl");
+    expect(deployDocs).toContain('routesDir: "src/app"');
+    expect(deployDocs).toContain('allowedSourceDirs: ["src"]');
+    expect(deployDocs.match(/fileURLToPath\(new URL\("\.\.\/\.mreact", import\.meta\.url\)\)/g)).toHaveLength(2);
+    expect(gitignore.split("\n")).toContain(".lambda");
     expect(readme).toContain("AWS Lambda deploy files are included.");
     const packageJson = JSON.parse(await readFile(join(directory, "package.json"), "utf8")) as {
       devDependencies?: Record<string, string>;
@@ -702,6 +722,27 @@ describe("create-mreact-app scaffolder", () => {
     );
     expect(packageJson.scripts?.["build:lambda"]).toBeUndefined();
     expect(packageJson.devDependencies?.esbuild).toBeUndefined();
+  });
+
+  test("matches generated deploy documentation to the default route layout", async () => {
+    const root = await mkdtemp(join(tmpdir(), "mreact-create-default-deploy-docs-"));
+
+    for (const deploy of ["container", "aws-lambda"] as const) {
+      const directory = join(root, deploy);
+      await createMreactApp({
+        deploy,
+        directory,
+        name: `demo-${deploy}`,
+        packageManager: "pnpm",
+        template: "basic",
+      });
+      const filename = deploy === "container" ? "container.md" : "aws-lambda.md";
+      const docs = await readFile(join(directory, "docs", "deploy", filename), "utf8");
+
+      expect(docs).toContain('routesDir: "app"');
+      expect(docs).toContain('allowedSourceDirs: ["app"]');
+      expect(docs).not.toContain('routesDir: "src/app"');
+    }
   });
 
   test("does not generate deploy files unless a deploy target is selected", async () => {

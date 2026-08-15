@@ -10,7 +10,7 @@ import { formatDiagnostic } from "./diagnostics.js";
 
 /** Configures mreact compilation behavior for the Vite transform plugin. */
 export interface ModularReactViteOptions {
-  include?: RegExp;
+  include?: RegExp | readonly RegExp[];
   mode?: "reactive" | "compat";
   serverOutput?: ServerOutputMode;
   serverBootstrap?: ServerBootstrapMode;
@@ -23,7 +23,7 @@ export interface ModularReactViteOptions {
 
 /** Creates a Vite plugin that compiles mreact modules for client and server builds. */
 export function modularReact(options: ModularReactViteOptions = {}): Plugin {
-  const include = options.include ?? /\.[cm]?[jt]sx$/;
+  const include = normalizeInclude(options.include ?? /\.[cm]?[jt]sx$/);
   const serverBootstrapNonce =
     typeof options.serverBootstrapNonce === "function"
       ? options.serverBootstrapNonce()
@@ -35,7 +35,7 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
     transform(code, id, transformOptions) {
       const filename = stripQuery(id);
 
-      if (!include.test(filename)) {
+      if (!include.some((pattern) => matchesPattern(pattern, filename))) {
         return null;
       }
 
@@ -103,6 +103,22 @@ export function modularReact(options: ModularReactViteOptions = {}): Plugin {
       };
     },
   };
+}
+
+function normalizeInclude(include: RegExp | readonly RegExp[]): RegExp[] {
+  const patterns = include instanceof RegExp ? [include] : Array.isArray(include) ? include : [];
+  if (
+    (include instanceof RegExp || Array.isArray(include)) &&
+    patterns.every((pattern) => pattern instanceof RegExp)
+  ) {
+    return patterns.map((pattern) => new RegExp(pattern.source, pattern.flags));
+  }
+  throw new TypeError("modularReact include must be a RegExp or an array of RegExp values.");
+}
+
+function matchesPattern(pattern: RegExp, filename: string): boolean {
+  pattern.lastIndex = 0;
+  return pattern.test(filename);
 }
 
 function stripQuery(id: string): string {

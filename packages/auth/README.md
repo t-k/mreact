@@ -30,7 +30,7 @@ configureAuth({
 export async function loader({ request }) {
   const session = await getCurrentSession(request, sessionStore);
   await requireRole(request, sessionStore, ["admin", "editor"]);
-  return { user: session?.claims };
+  return { user: session?.data };
 }
 ```
 

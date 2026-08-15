@@ -27,9 +27,10 @@ export default defineConfig({
 ```ts
 modularReact({
   include: [/\.mreact\.tsx$/],
-  target: "client",
 });
 ```
+
+`include` accepts one regular expression or an array and matches a module when any pattern matches. The transform target is selected from Vite's `ssr` transform flag; it is not a separate plugin option.
 
 ## Notes
 

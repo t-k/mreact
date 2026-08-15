@@ -12,4 +12,12 @@ describe("@reckona/mreact-vite package contract", () => {
 
     expect(packageJson.peerDependencies?.vite).toBe(">=8.1.4 <9");
   });
+
+  test("keeps the README include example aligned with the plugin API", async () => {
+    const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+
+    expect(readme).toContain("include: [/\\.mreact\\.tsx$/]");
+    expect(readme).not.toContain('target: "client"');
+    expect(readme).toContain("Vite's `ssr` transform flag");
+  });
 });
