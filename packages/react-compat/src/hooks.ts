@@ -289,6 +289,7 @@ let fallbackAsyncCacheScopeActive = false;
 const emptyCacheOwnerStack: string[] = [];
 let syncVersion = 0;
 let transitionVersion = 0;
+let globalClientIdCounter = 0;
 let transitionDepth = 0;
 let currentTransitionContext: TransitionContext | undefined;
 let currentCommitTransitionContext: TransitionContext | undefined;
@@ -1526,11 +1527,17 @@ export function useId(): string {
     if (hydratedId !== undefined) {
       idRef.current = hydratedId;
     } else {
-      const mode = runtime.idMode === "server" ? "R" : "r";
-      idRef.current = `_${runtime.identifierPrefix}${mode}_${runtime.idCounter}_`;
-      runtime.idCounter += 1;
+      const serverMode = runtime.idMode === "server";
+      const mode = serverMode ? "R" : "r";
+      const id = serverMode ? runtime.idCounter : globalClientIdCounter;
+      idRef.current = `_${runtime.identifierPrefix}${mode}_${id}_`;
+      if (serverMode) {
+        runtime.idCounter += 1;
+      } else {
+        globalClientIdCounter += 1;
+      }
 
-      if (runtime.idMode === "server") {
+      if (serverMode) {
         const hydratedIds = hydratedIdsByRuntime.get(runtime) ?? new Map<string, string>();
         hydratedIds.set(idSlotKey, idRef.current);
         hydratedIdsByRuntime.set(runtime, hydratedIds);

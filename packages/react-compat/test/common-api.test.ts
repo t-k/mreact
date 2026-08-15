@@ -1993,21 +1993,26 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  test("useId returns stable root-local ids across rerenders", () => {
+  test("useId returns stable ids across rerenders", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
+    const renderedIds: string[][] = [];
 
     function Field(props: { label: string }) {
       const id = useId();
+      const currentRender = renderedIds.at(-1);
+      currentRender?.push(id);
       return createElement("label", { htmlFor: id }, props.label);
     }
 
+    renderedIds.push([]);
     root.render(
       createElement(StrictMode, null, [
         createElement(Field, { key: "a", label: "A" }),
         createElement(Field, { key: "b", label: "B" }),
       ]),
     );
+    renderedIds.push([]);
     root.render(
       createElement(StrictMode, null, [
         createElement(Field, { key: "a", label: "A2" }),
@@ -2015,7 +2020,34 @@ describe("react-compat common API subset", () => {
       ]),
     );
 
-    expect(container.innerHTML).toBe('<label for="_r_0_">A2</label><label for="_r_1_">B2</label>');
+    expect(renderedIds[0]).toHaveLength(4);
+    expect(renderedIds[1]).toHaveLength(4);
+    expect(new Set(renderedIds[0])).toEqual(new Set(renderedIds[1]));
+    expect(new Set(renderedIds[0]).size).toBe(2);
+    expect(renderedIds[0]?.every((id) => /^_r_\d+_$/.test(id))).toBe(true);
+  });
+
+  test("useId produces distinct ids across client roots mounted at different times", () => {
+    const containers = [
+      document.createElement("div"),
+      document.createElement("div"),
+      document.createElement("div"),
+    ];
+    const ids: string[] = [];
+
+    function Field(props: { index: number }) {
+      const id = useId();
+      ids[props.index] = id;
+      return createElement("input", { id });
+    }
+
+    createRoot(containers[0] as HTMLDivElement).render(createElement(Field, { index: 0 }));
+    createRoot(containers[1] as HTMLDivElement).render(createElement(Field, { index: 1 }));
+    expect(new Set(ids.slice(0, 2)).size).toBe(2);
+
+    createRoot(containers[2] as HTMLDivElement).render(createElement(Field, { index: 2 }));
+    expect(new Set(ids).size).toBe(3);
+    expect(ids.every((id) => /^_r_\d+_$/.test(id))).toBe(true);
   });
 
   test("useId honors root identifierPrefix", () => {
@@ -2029,7 +2061,9 @@ describe("react-compat common API subset", () => {
 
     root.render(createElement(Field, null));
 
-    expect(container.innerHTML).toBe('<label for="_app-r_0_">_app-r_0_</label>');
+    const label = container.querySelector("label");
+    expect(label?.htmlFor).toMatch(/^_app-r_\d+_$/);
+    expect(label?.textContent).toBe(label?.htmlFor);
   });
 
   test("useId honors hydrateRoot identifierPrefix", () => {
