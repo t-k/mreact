@@ -6,6 +6,6 @@
   "expected": {
     "diagnostics": [],
     "imports": [],
-    "serverStreamHtml": "<p>Hello &amp;&quot;&lt;Ada&gt;</p>"
+    "serverStreamHtml": "<p>Hello <!-- -->&amp;&quot;&lt;Ada&gt;</p>"
   }
 }

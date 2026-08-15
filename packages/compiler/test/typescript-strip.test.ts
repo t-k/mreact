@@ -33,7 +33,9 @@ export default function Page() {
     expect(output.code).not.toContain(": Promise<Article[]>");
     expect(output.code).not.toContain("<Mode>");
     expect(output.code).not.toContain(" as string");
-    expect(runServerComponent(output.code, "default")).toBe("<main>hot:1</main>");
+    expect(runServerComponent(output.code, "default")).toBe(
+      "<main>hot<!-- -->:<!-- -->1</main>",
+    );
   });
 
   test("strips TypeScript syntax from server stream preserved helpers", async () => {

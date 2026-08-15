@@ -1822,8 +1822,13 @@ function createHostFiberImpl(
     return { fiber: undefined, consumed: 0 };
   }
 
+  if (node === "") {
+    return { fiber: undefined, consumed: 0 };
+  }
+
   if (typeof node === "string" || typeof node === "number") {
-    const existing = options.previousNodes?.[0];
+    const textHydration = findHydrationTextNode(options.previousNodes);
+    const existing = textHydration.node;
     const fiber =
       current?.tag === "host-text"
         ? createWorkInProgress(current, String(node))
@@ -1844,7 +1849,7 @@ function createHostFiberImpl(
       reportRecoverable(options, "text", path, new Error("Hydration text mismatch."));
     }
 
-    return { fiber, consumed: existing instanceof Text ? 1 : 0 };
+    return { fiber, consumed: existing instanceof Text ? textHydration.consumed : 0 };
   }
 
   if (Array.isArray(node)) {
@@ -2408,6 +2413,18 @@ function createHostFiberImpl(
   }
 
   return { fiber: undefined, consumed: 0 };
+}
+
+function findHydrationTextNode(previousNodes: readonly Node[] | undefined): {
+  node: Node | undefined;
+  consumed: number;
+} {
+  const first = previousNodes?.[0];
+  if (first instanceof Comment && first.data === " " && previousNodes?.[1] instanceof Text) {
+    return { node: previousNodes[1], consumed: 2 };
+  }
+
+  return { node: first, consumed: first instanceof Text ? 1 : 0 };
 }
 
 // The host-component reconcile, split out of createHostFiberImpl so host

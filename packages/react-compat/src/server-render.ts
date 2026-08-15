@@ -116,8 +116,19 @@ function renderNodeToString(node: ReactCompatNode, runtime: RootRuntime, path: s
 
   if (Array.isArray(node)) {
     let html = "";
+    let previousWasText = false;
     for (let index = 0; index < node.length; index += 1) {
-      html += renderNodeToString(node[index], runtime, `${path}.${index}`);
+      const child = node[index];
+      if (child === "" || child === null || child === undefined || typeof child === "boolean") {
+        continue;
+      }
+
+      const childIsText = typeof child === "string" || typeof child === "number";
+      if (previousWasText && childIsText) {
+        html += "<!-- -->";
+      }
+      html += renderNodeToString(child, runtime, `${path}.${index}`);
+      previousWasText = childIsText;
     }
     return html;
   }

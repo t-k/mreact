@@ -729,8 +729,9 @@ function collectHtmlStatements(
     return statements;
   }
 
-  const childrenExpression = emitBatchedSimpleChildrenExpression(
+  const childrenExpression = emitTextSeparatedSimpleChildrenExpression(
     node.children,
+    escapeHelperName,
     escapeBatchHelperName,
   );
   const childSelectedValueCode =
@@ -1040,8 +1041,9 @@ function collectHtmlParts(
     ];
   }
 
-  const childrenExpression = emitBatchedSimpleChildrenExpression(
+  const childrenExpression = emitTextSeparatedSimpleChildrenExpression(
     node.children,
+    escapeHelperName,
     escapeBatchHelperName,
   );
   const attributeScan = scanElementAttributes(node.tagName, node.attributes);
@@ -1578,11 +1580,12 @@ function rawHtmlExpression(code: string): string {
   return `(() => { const _value = (${code}); return Array.isArray(_value) ? _value.join("") : String(_value ?? ""); })()`;
 }
 
-function emitBatchedSimpleChildrenExpression(
+function emitTextSeparatedSimpleChildrenExpression(
   children: readonly JsxNodeIr[],
+  escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
 ): string | undefined {
-  if (escapeBatchHelperName === undefined) {
+  if (children.length < 2) {
     return undefined;
   }
 
@@ -1593,10 +1596,6 @@ function emitBatchedSimpleChildrenExpression(
       child.renderMode !== "react-node" &&
       child.renderMode !== "compat-child",
   ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
-
-  if (dynamicChildren.length < 2) {
-    return undefined;
-  }
 
   if (
     children.some(
@@ -1613,6 +1612,7 @@ function emitBatchedSimpleChildrenExpression(
     return undefined;
   }
 
+  const useBatch = escapeBatchHelperName !== undefined && dynamicChildren.length >= 2;
   const values = dynamicChildren.map((child) => child.code);
   let dynamicIndex = 0;
   const pieces = children.map((child) => {
@@ -1623,10 +1623,19 @@ function emitBatchedSimpleChildrenExpression(
     const index = dynamicIndex;
     dynamicIndex += 1;
 
-    return `_escaped[${index}]`;
+    return useBatch
+      ? `_escaped[${index}]`
+      : `${escapeHelperName}(${(child as Extract<JsxNodeIr, { kind: "expr" }>).code})`;
   });
+  const appendStatements = pieces.map(
+    (piece) =>
+      `{ const _text = ${piece}; if (_text !== "") { if (_hasText) _textOut += "<!-- -->"; _textOut += _text; _hasText = true; } }`,
+  );
+  const batchStatement = useBatch
+    ? `const _escaped = ${escapeBatchHelperName}([${values.join(", ")}]); `
+    : "";
 
-  return `(() => { const _escaped = ${escapeBatchHelperName}([${values.join(", ")}]); return ${pieces.join(" + ")}; })()`;
+  return `(() => { ${batchStatement}let _textOut = ""; let _hasText = false; ${appendStatements.join(" ")} return _textOut; })()`;
 }
 
 function emitHtmlExpressionFromChildren(

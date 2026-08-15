@@ -1703,7 +1703,11 @@ function collectHtmlParts(
   ) {
     const fallbackParts =
       (childState.selectedValueCode === undefined
-        ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
+        ? collectTextSeparatedSimpleChildrenParts(
+            node.children,
+            escapeHelperName,
+            state.escapeBatchHelperName,
+          )
         : undefined) ??
       node.children.flatMap((child) =>
         collectHtmlParts(
@@ -1737,7 +1741,11 @@ function collectHtmlParts(
     : dangerousInnerHtml !== undefined
       ? [dangerousInnerHtml]
       : ((childState.selectedValueCode === undefined
-          ? collectBatchedSimpleChildrenParts(node.children, state.escapeBatchHelperName)
+          ? collectTextSeparatedSimpleChildrenParts(
+              node.children,
+              escapeHelperName,
+              state.escapeBatchHelperName,
+            )
           : undefined) ??
         node.children.flatMap((child) =>
           collectHtmlParts(
@@ -2460,22 +2468,22 @@ function looksLikeRawJsxExpression(code: string): boolean {
   return /<\s*(?:[A-Za-z]|>)/.test(code);
 }
 
-function collectBatchedSimpleChildrenParts(
+function collectTextSeparatedSimpleChildrenParts(
   children: readonly JsxNodeIr[],
+  escapeHelperName: string,
   escapeBatchHelperName: string | undefined,
 ): HtmlSyncPart[] | undefined {
-  if (escapeBatchHelperName === undefined) {
+  if (children.length < 2) {
     return undefined;
   }
 
   const dynamicChildren = children.filter(
     (child) =>
-      child.kind === "expr" && child.renderMode !== "html" && child.renderMode !== "react-node",
+      child.kind === "expr" &&
+      child.renderMode !== "html" &&
+      child.renderMode !== "react-node" &&
+      child.renderMode !== "compat-child",
   ) as Array<Extract<JsxNodeIr, { kind: "expr" }>>;
-
-  if (dynamicChildren.length < 2) {
-    return undefined;
-  }
 
   if (
     children.some(
@@ -2484,13 +2492,15 @@ function collectBatchedSimpleChildrenParts(
         !(
           child.kind === "expr" &&
           child.renderMode !== "html" &&
-          child.renderMode !== "react-node"
+          child.renderMode !== "react-node" &&
+          child.renderMode !== "compat-child"
         ),
     )
   ) {
     return undefined;
   }
 
+  const useBatch = escapeBatchHelperName !== undefined && dynamicChildren.length >= 2;
   const values = dynamicChildren.map((child) => child.code);
   let dynamicIndex = 0;
   const pieces = children.map((child) => {
@@ -2501,13 +2511,22 @@ function collectBatchedSimpleChildrenParts(
     const index = dynamicIndex;
     dynamicIndex += 1;
 
-    return `_escaped[${index}]`;
+    return useBatch
+      ? `_escaped[${index}]`
+      : `${escapeHelperName}(${(child as Extract<JsxNodeIr, { kind: "expr" }>).code})`;
   });
+  const appendStatements = pieces.map(
+    (piece) =>
+      `{ const _text = ${piece}; if (_text !== "") { if (_hasText) _textOut += "<!-- -->"; _textOut += _text; _hasText = true; } }`,
+  );
+  const batchStatement = useBatch
+    ? `const _escaped = ${escapeBatchHelperName}([${values.join(", ")}]); `
+    : "";
 
   return [
     {
       kind: "raw-dynamic",
-      code: `(() => { const _escaped = ${escapeBatchHelperName}([${values.join(", ")}]); return ${pieces.join(" + ")}; })()`,
+      code: `(() => { ${batchStatement}let _textOut = ""; let _hasText = false; ${appendStatements.join(" ")} return _textOut; })()`,
     },
   ];
 }

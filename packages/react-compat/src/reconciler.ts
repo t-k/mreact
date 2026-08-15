@@ -155,8 +155,14 @@ function reconcileNode(
     return { nodes: [], consumed: 0 };
   }
 
+  if (node === "") {
+    return { nodes: [], consumed: 0 };
+  }
+
   if (typeof node === "string" || typeof node === "number") {
-    const existing = previousNodes[0];
+    const first = previousNodes[0];
+    const hasSeparator = first instanceof Comment && first.data === " ";
+    const existing = hasSeparator ? previousNodes[1] : first;
     const text = existing instanceof Text ? existing : document.createTextNode("");
     if (existing === undefined) {
       reportMissingHydrationNode(options, path);
@@ -167,7 +173,7 @@ function reconcileNode(
       reportRecoverable(options, "text", path, new Error("Hydration text mismatch."));
     }
     text.data = String(node);
-    return { nodes: [text], consumed: existing instanceof Text ? 1 : 0 };
+    return { nodes: [text], consumed: existing instanceof Text ? (hasSeparator ? 2 : 1) : 0 };
   }
 
   if (Array.isArray(node)) {

@@ -196,8 +196,19 @@ function appendReactNodeList(
   state: HtmlRenderState,
 ): void | PromiseLike<void> {
   let chain: PromiseLike<void> | undefined;
+  let previousWasText = false;
 
   for (const node of nodes) {
+    if (node === "" || node === null || node === undefined || typeof node === "boolean") {
+      continue;
+    }
+
+    const nodeIsText = typeof node === "string" || typeof node === "number";
+    if (previousWasText && nodeIsText) {
+      sink.append("<!-- -->");
+    }
+    previousWasText = nodeIsText;
+
     if (chain !== undefined) {
       const buffered = renderReactNodeToBufferedString(node, state);
       chain = chain.then(() => appendBufferedSinkAfterResult(sink, buffered));

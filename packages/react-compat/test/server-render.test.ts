@@ -123,6 +123,18 @@ describe("react-compat server render", () => {
     expect(renderToString(App)).toBe('Hello <strong id="name">ADA</strong>2');
   });
 
+  test("separates adjacent text nodes without changing visible text", () => {
+    function App() {
+      return createElement("p", null, "Hello, ", "Ada", 0);
+    }
+
+    expect(renderToString(App)).toBe("<p>Hello, <!-- -->Ada<!-- -->0</p>");
+  });
+
+  test("omits an empty string child", () => {
+    expect(renderToString(() => createElement("p", null, ""))).toBe("<p></p>");
+  });
+
   test("isolates hook state for nested function components during server render", () => {
     function Child() {
       const ref = useRef("child");

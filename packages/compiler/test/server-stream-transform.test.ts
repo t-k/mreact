@@ -378,7 +378,7 @@ describe("compiler server stream JSX transform", () => {
     expect(output.code).not.toContain("_escapeHtmlBatch([_value0 === true");
     expect(output.code).toContain("[first, second]");
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<main title="&lt;Ada&gt;" data-name="&amp; Grace" aria-label="&lt;Ada&gt;">&lt;Ada&gt;&amp; Grace</main>',
+      '<main title="&lt;Ada&gt;" data-name="&amp; Grace" aria-label="&lt;Ada&gt;">&lt;Ada&gt;<!-- -->&amp; Grace</main>',
     );
   });
 
@@ -755,7 +755,7 @@ describe("compiler server stream JSX transform", () => {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      "<p>Hello &amp;&quot;&lt;Ada&gt;</p>",
+      "<p>Hello <!-- -->&amp;&quot;&lt;Ada&gt;</p>",
     );
   });
 
@@ -928,7 +928,7 @@ export function App() {
     expect(output.code).toContain("props)");
 
     await expect(runServerStreamComponent(output.code, "App", { name: "Ada" })).resolves.toBe(
-      "<p>Hello Ada</p>",
+      "<p>Hello <!-- -->Ada</p>",
     );
   });
 
@@ -1156,7 +1156,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      '<main><div data-mreact-oob-placeholder="mreact-0"><ol start="1"><li>Loading 0</li></ol></div><div data-mreact-oob-placeholder="mreact-0-1"><ol start="3"><li>Loading 1</li></ol></div></main><template data-mreact-oob-fragment="mreact-0"><ol start="1"><li>story-1</li><li>story-2</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete><template data-mreact-oob-fragment="mreact-0-1"><ol start="3"><li>story-3</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0-1"></mreact-oob-complete>',
+      '<main><div data-mreact-oob-placeholder="mreact-0"><ol start="1"><li>Loading <!-- -->0</li></ol></div><div data-mreact-oob-placeholder="mreact-0-1"><ol start="3"><li>Loading <!-- -->1</li></ol></div></main><template data-mreact-oob-fragment="mreact-0"><ol start="1"><li>story-1</li><li>story-2</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0"></mreact-oob-complete><template data-mreact-oob-fragment="mreact-0-1"><ol start="3"><li>story-3</li></ol></template><mreact-oob-complete hidden data-mreact-oob-complete="mreact-0-1"></mreact-oob-complete>',
     );
   });
 
@@ -1840,7 +1840,7 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
 
     await expect(runServerStreamComponent(output.code)).resolves.toBe(
-      "<section><span>Hello Ada</span></section>",
+      "<section><span>Hello <!-- -->Ada</span></section>",
     );
   });
 });

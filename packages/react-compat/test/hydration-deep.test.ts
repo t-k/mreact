@@ -169,6 +169,27 @@ describe("react-compat deep hydration", () => {
     expect(select.value).toBe("client");
   });
 
+  test("hydrates adjacent and empty text children from compat SSR without recoveries", () => {
+    const container = document.createElement("div");
+    const element = createElement(
+      "section",
+      null,
+      createElement("p", null, "Hello, ", "Ada"),
+      createElement("p", null, ""),
+    );
+    container.innerHTML = '<section><p>Hello, <!-- -->Ada</p><p></p></section>';
+    const recoveries: string[] = [];
+
+    hydrateRoot(container, element, {
+      onRecoverableError(error) {
+        recoveries.push(error.message);
+      },
+    });
+
+    expect(container.textContent).toBe("Hello, Ada");
+    expect(recoveries).toEqual([]);
+  });
+
   test("preserves useState across the first hydrated update", () => {
     const container = document.createElement("div");
     container.innerHTML = "<button>0</button>";

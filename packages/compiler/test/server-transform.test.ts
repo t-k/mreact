@@ -83,7 +83,9 @@ export function App() {
 
     expect(output.diagnostics).toEqual([]);
 
-    expect(runServerComponent(output.code)).toBe("<p>Hello &amp;&quot;&lt;Ada&gt;</p>");
+    expect(runServerComponent(output.code)).toBe(
+      "<p>Hello <!-- -->&amp;&quot;&lt;Ada&gt;</p>",
+    );
   });
 
   test("passes JSX children through server components without stringifying or escaping the rendered HTML", () => {
@@ -849,7 +851,7 @@ export function App() {
     expect(output.code).toMatch(/return\s+_out\s*;/);
     // Semantics preserved
     expect(runServerComponent(output.code, "App", { name: "Ada" })).toBe(
-      "<main><p>Hello Ada</p></main>",
+      "<main><p>Hello <!-- -->Ada</p></main>",
     );
   });
 
@@ -1071,7 +1073,9 @@ export function App() {
     });
 
     expect(output.diagnostics).toEqual([]);
-    expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
+    expect(runServerComponent(output.code)).toBe(
+      "<section><span>Hello <!-- -->Ada</span></section>",
+    );
   });
 
   test("emitted server component renders body-local runtime component aliases", () => {
@@ -1118,7 +1122,7 @@ export function App() {
     expect(output.code).toContain("await Promise.resolve();");
     expect(output.code).toContain("await Child(");
     await expect(runAsyncServerComponent(output.code)).resolves.toBe(
-      "<section><span>Hello Ada</span></section>",
+      "<section><span>Hello <!-- -->Ada</span></section>",
     );
   });
 
@@ -1137,7 +1141,9 @@ export function App() {
     expect(output.diagnostics).toEqual([]);
     expect(output.code).toContain("export function Child(");
     expect(output.code).not.toContain("const Child =");
-    expect(runServerComponent(output.code)).toBe("<section><span>Hello Ada</span></section>");
+    expect(runServerComponent(output.code)).toBe(
+      "<section><span>Hello <!-- -->Ada</span></section>",
+    );
   });
 
   test("emitted server component renders router Link imports as native server components", () => {

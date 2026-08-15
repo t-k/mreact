@@ -207,7 +207,7 @@ export function SunIcon(props: { class?: string }) {
   const large = 1e21;
   return <p>{0}:{NaN}:{negativeZero}:{large}</p>;
 }`,
-      "<p>0:NaN:0:1e+21</p>",
+      "<p>0<!-- -->:<!-- -->NaN<!-- -->:<!-- -->0<!-- -->:<!-- -->1e+21</p>",
     );
   });
 

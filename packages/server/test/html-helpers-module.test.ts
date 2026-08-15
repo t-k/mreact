@@ -83,6 +83,12 @@ describe("server HTML helpers module", () => {
     await expect(renderReactNodeToString(null)).resolves.toBe("");
   });
 
+  test("renderReactNodeToString separates adjacent text nodes", async () => {
+    await expect(
+      renderReactNodeToString(createElement("p", null, "Hello, ", "Ada", 0)),
+    ).resolves.toBe("<p>Hello, <!-- -->Ada<!-- -->0</p>");
+  });
+
   test("starts sibling async server components before awaiting earlier siblings", async () => {
     const started: string[] = [];
     let resolveFirst: (() => void) | undefined;

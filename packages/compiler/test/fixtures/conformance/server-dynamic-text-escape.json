@@ -5,6 +5,6 @@
   "expected": {
     "diagnostics": [],
     "imports": [],
-    "serverHtml": "<p>Hello &amp;&quot;&lt;Ada&gt;</p>"
+    "serverHtml": "<p>Hello <!-- -->&amp;&quot;&lt;Ada&gt;</p>"
   }
 }
