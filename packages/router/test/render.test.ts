@@ -5,6 +5,7 @@ import { join } from "node:path";
 import mdx from "@mdx-js/rollup";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import { parseFragment } from "parse5";
 import { describe, expect, test, vi } from "vitest";
 import { createQueryClient } from "@reckona/mreact-query";
 import { createAppFixture, readQueryState, responseText } from "@reckona/mreact-test-utils";
@@ -2121,7 +2122,10 @@ export function middleware() {
 }
 `;
     await writeFile(file, code);
-    await writeFile(join(appDir, "page.mreact.tsx"), "export default function Page() { return null; }");
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      "export default function Page() { return null; }",
+    );
 
     const bundled = await bundleMiddlewareModuleCode({
       appDir,
@@ -5433,6 +5437,37 @@ export default function Page() {
     expect(html).not.toContain("[object Object]");
   });
 
+  test("escapes raw-text children returned by an unrecognized createElement alias", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-runtime-raw-text-escape-"));
+    await mkdir(join(appDir, "$payload"), { recursive: true });
+    await writeFile(
+      join(appDir, "$payload", "page.mreact.tsx"),
+      `import { createElement } from "@reckona/mreact-compat";
+
+const make = createElement;
+
+export default function Page(props) {
+  return make(
+    "main",
+    null,
+    make("style", null, props.params.payload),
+    make("script", null, props.params.payload),
+  );
+}`,
+    );
+    const payload = `</style><svg onload='styleBreakout()'></script><svg onload='scriptBreakout()'>`;
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request(`http://local.test/${encodeURIComponent(payload)}`),
+    });
+    const html = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(html).toContain(`</\\73 tyle><svg onload='styleBreakout()'>`);
+    expect(html).toContain(`</\\u0073cript><svg onload='scriptBreakout()'>`);
+    expect(countParsedElementsByName(parseFragment(html), "svg")).toBe(0);
+  });
+
   test("renders Await boundaries inside imported local server components on stream routes", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-imported-await-"));
     const appDir = join(rootDir, "src", "app");
@@ -5946,7 +5981,9 @@ export default function Page() {
       expect(html).toContain("Docs error:");
       expect(html).toContain("database unavailable</main>");
       expect(onRenderError).toHaveBeenCalledOnce();
-      expect(onRenderError).toHaveBeenCalledWith(expect.objectContaining({ message: "database unavailable" }));
+      expect(onRenderError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "database unavailable" }),
+      );
     } finally {
       state.__mreactRejectLoadingRoute?.(new Error("test cleanup"));
       delete state.__mreactRejectLoadingRoute;
@@ -6564,6 +6601,23 @@ async function expectResolvesWithin<T>(
       clearTimeout(timeout);
     }
   }
+}
+
+function countParsedElementsByName(node: unknown, name: string): number {
+  if (typeof node !== "object" || node === null) {
+    return 0;
+  }
+
+  const candidate = node as { childNodes?: readonly unknown[]; nodeName?: string };
+  const ownCount = candidate.nodeName === name ? 1 : 0;
+
+  return (
+    ownCount +
+    (candidate.childNodes ?? []).reduce(
+      (count: number, child) => count + countParsedElementsByName(child, name),
+      0,
+    )
+  );
 }
 
 async function writePackageFixture(appDir: string): Promise<void> {

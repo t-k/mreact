@@ -161,6 +161,11 @@ interface HtmlRenderState {
   suspenseId: number;
 }
 
+type RawTextElementName = "script" | "style";
+
+const scriptRawTextTokenPattern = /(<!---?>|<!--|-->)|(<\/?)(s)(cript)(?=[\t\n\f\r />])/gi;
+const styleRawTextPattern = /<\/(s)(tyle)(?=[\t\n\f\r />])/gi;
+
 function appendReactNode(
   sink: HtmlSink,
   node: unknown,
@@ -292,20 +297,26 @@ function appendHostElement(
     return;
   }
 
-  const result = isRawTextElement(tagName)
-    ? appendRawTextNode(sink, element.props.children)
-    : appendReactNode(sink, element.props.children, state);
+  const rawTextEscaper = isRawTextElement(tagName)
+    ? createRawTextEscapingSink(sink, tagName)
+    : undefined;
+  const result =
+    rawTextEscaper === undefined
+      ? appendReactNode(sink, element.props.children, state)
+      : appendRawTextNode(rawTextEscaper.sink, element.props.children);
 
   if (isPromiseLike(result)) {
     return result.then(() => {
+      rawTextEscaper?.flush();
       sink.append(`</${tagName}>`);
     });
   }
 
+  rawTextEscaper?.flush();
   sink.append(`</${tagName}>`);
 }
 
-function isRawTextElement(tagName: string): boolean {
+function isRawTextElement(tagName: string): tagName is RawTextElementName {
   return tagName === "script" || tagName === "style";
 }
 
@@ -360,6 +371,93 @@ function renderRawTextNodeToBufferedString(node: unknown): {
     result: appendRawTextNode(sink, node),
     sink,
   };
+}
+
+function createRawTextEscapingSink(
+  sink: HtmlSink,
+  tagName: RawTextElementName,
+): { flush(): void; sink: HtmlSink } {
+  let pending = "";
+  const encode = createRawTextElementEncoder(tagName);
+
+  const flushSafePrefix = (final: boolean) => {
+    if (pending === "") {
+      return;
+    }
+
+    let safeEnd = pending.length;
+
+    if (!final) {
+      const lastOpeningBracket = pending.lastIndexOf("<");
+
+      if (lastOpeningBracket >= 0 && pending.length - lastOpeningBracket <= 8) {
+        safeEnd = lastOpeningBracket;
+      }
+
+      let trailingHyphenStart = pending.length;
+
+      while (
+        trailingHyphenStart > Math.max(0, pending.length - 2) &&
+        pending.charCodeAt(trailingHyphenStart - 1) === 45
+      ) {
+        trailingHyphenStart -= 1;
+      }
+
+      safeEnd = Math.min(safeEnd, trailingHyphenStart);
+    }
+
+    if (safeEnd === 0) {
+      return;
+    }
+
+    sink.append(encode(pending.slice(0, safeEnd)));
+    pending = pending.slice(safeEnd);
+  };
+
+  return {
+    flush() {
+      flushSafePrefix(true);
+    },
+    sink: {
+      append(chunk) {
+        pending += chunk;
+        flushSafePrefix(false);
+      },
+    },
+  };
+}
+
+function createRawTextElementEncoder(tagName: RawTextElementName): (value: string) => string {
+  if (tagName === "style") {
+    return (value) => value.replace(styleRawTextPattern, replaceStyleRawTextMatch);
+  }
+
+  // An opening script token only changes HTML parsing while script data is escaped.
+  // Encoding it there prevents entry into the double-escaped state without changing ordinary raw text.
+  let isScriptEscaped = false;
+
+  return (value) =>
+    value.replace(scriptRawTextTokenPattern, (match, marker, opening, firstLetter, suffix) => {
+      if (marker?.startsWith("<!--")) {
+        isScriptEscaped = marker === "<!--";
+        return marker;
+      }
+
+      if (marker === "-->") {
+        isScriptEscaped = false;
+        return marker;
+      }
+
+      if (opening !== "</" && !isScriptEscaped) {
+        return match;
+      }
+
+      return `${opening}${firstLetter === "s" ? "\\u0073" : "\\u0053"}${suffix}`;
+    });
+}
+
+function replaceStyleRawTextMatch(_match: string, firstLetter: string, suffix: string): string {
+  return `</${firstLetter === "s" ? "\\73 " : "\\53 "}${suffix}`;
 }
 
 async function appendBufferedSinkAfterResult(

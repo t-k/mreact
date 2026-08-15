@@ -1,5 +1,6 @@
 import { createElement } from "@reckona/mreact-compat";
 import { describe, expect, test } from "vitest";
+import { parseFragment } from "parse5";
 import { createStringSink } from "../src/index.js";
 import {
   createEventHydrationManifest,
@@ -201,6 +202,144 @@ describe("server HTML helpers module", () => {
     await expect(escaped.text()).resolves.toBe("<div>&lt;img&gt;</div>");
   });
 
+  test("html prevents runtime script and style children from closing raw-text elements", async () => {
+    const script = html(
+      createElement("script", null, `return "</ScRiPt \t><svg onload='alert(1)'><script>";`),
+    );
+    const style = html(
+      createElement(
+        "style",
+        null,
+        `.target::after { content: "</StYlE \n><svg onload='alert(1)'><style>"; }`,
+      ),
+    );
+    const scriptHtml = await script.text();
+    const styleHtml = await style.text();
+
+    expect(scriptHtml).toContain(`</\\u0053cRiPt \t><svg onload='alert(1)'><script>`);
+    expect(styleHtml).toContain(`</\\53 tYlE \n><svg onload='alert(1)'><style>`);
+    expect(countElementsByName(parseFragment(scriptHtml), "svg")).toBe(0);
+    expect(countElementsByName(parseFragment(styleHtml), "svg")).toBe(0);
+    expect(Function(scriptHtml.slice("<script>".length, -"</script>".length))()).toBe(
+      "</ScRiPt \t><svg onload='alert(1)'><script>",
+    );
+  });
+
+  test("html escapes async and sibling raw-text children with their element context", async () => {
+    const response = html(
+      createElement(
+        "script",
+        null,
+        Promise.resolve(`const first = "</script>";`),
+        `const second = "</SCRIPT>";`,
+      ),
+    );
+
+    await expect(response.text()).resolves.toBe(
+      `<script>const first = "</\\u0073cript>";const second = "</\\u0053CRIPT>";</script>`,
+    );
+  });
+
+  test("html escapes raw-text closing tags split across child boundaries", async () => {
+    const script = html(
+      createElement("script", null, "</scr", `ipt><svg onload='splitScriptBreakout()'>`),
+    );
+    const style = html(
+      createElement(
+        "style",
+        null,
+        Promise.resolve("</sty"),
+        `le><svg onload='splitStyleBreakout()'>`,
+      ),
+    );
+    const scriptHtml = await script.text();
+    const styleHtml = await style.text();
+
+    expect(scriptHtml).toContain(`</\\u0073cript><svg onload='splitScriptBreakout()'>`);
+    expect(styleHtml).toContain(`</\\73 tyle><svg onload='splitStyleBreakout()'>`);
+    expect(countElementsByName(parseFragment(scriptHtml), "svg")).toBe(0);
+    expect(countElementsByName(parseFragment(styleHtml), "svg")).toBe(0);
+  });
+
+  test("html escapes every raw-text closing-tag delimiter", async () => {
+    const endings = [">", " >", "\t>", "\n>", "\r>", "\f>", "/>"];
+
+    for (const [tagName, closingName] of [
+      ["script", "ScRiPt"],
+      ["style", "StYlE"],
+    ] as const) {
+      for (const ending of endings) {
+        const closingTag = `</${closingName}${ending}`;
+        const content = `/* ${closingTag}<svg onload='delimiterBreakout()'> */`;
+        const responseHtml = await html(createElement(tagName, null, content)).text();
+
+        expect(countElementsByName(parseFragment(responseHtml), "svg")).toBe(0);
+      }
+    }
+  });
+
+  test("html leaves safe raw-text tag-name prefixes unchanged", async () => {
+    const scriptSource = `return String.raw\`</scripture><script>\`;`;
+    const styleSource = `.target::after { content: "</stylesheet><style>"; }`;
+    const scriptHtml = await html(createElement("script", null, scriptSource)).text();
+    const styleHtml = await html(createElement("style", null, styleSource)).text();
+
+    expect(scriptHtml).toBe(`<script>${scriptSource}</script>`);
+    expect(styleHtml).toBe(`<style>${styleSource}</style>`);
+    expect(Function(scriptSource)()).toBe("</scripture><script>");
+  });
+
+  test("html keeps following siblings outside script double-escaped text", async () => {
+    const response = html(
+      createElement(
+        "main",
+        null,
+        createElement("script", null, "<!--<script></script>"),
+        createElement("p", { id: "after" }, "after"),
+      ),
+    );
+    const document = parseFragment(await response.text());
+
+    expect(countElementsByName(document, "script")).toBe(1);
+    expect(countElementsByName(document, "p")).toBe(1);
+  });
+
+  test("html tracks script escaped-state markers across child boundaries", async () => {
+    const scriptSource = `return String.raw\`<script>\`;`;
+    const response = html(
+      createElement(
+        "main",
+        null,
+        createElement("script", null, "<!--", Promise.resolve("--"), ">", scriptSource),
+        createElement("p", { id: "after" }, "after"),
+      ),
+    );
+    const responseHtml = await response.text();
+    const document = parseFragment(responseHtml);
+
+    expect(responseHtml).toContain(`<!---->${scriptSource}`);
+    expect(countElementsByName(document, "p")).toBe(1);
+  });
+
+  test("html preserves script text after an immediately closed escape opener", async () => {
+    for (const marker of ["<!-->", "<!--->"]) {
+      const scriptSource = `return String.raw\`${marker}<script>\`;`;
+      const response = html(
+        createElement(
+          "main",
+          null,
+          createElement("script", null, scriptSource),
+          createElement("p", { id: "after" }, "after"),
+        ),
+      );
+      const responseHtml = await response.text();
+
+      expect(responseHtml).toContain(`<script>${scriptSource}</script>`);
+      expect(Function(scriptSource)()).toBe(`${marker}<script>`);
+      expect(countElementsByName(parseFragment(responseHtml), "p")).toBe(1);
+    }
+  });
+
   test("html preserves raw script and style opt-in content with CSP nonces", async () => {
     const response = html(
       createElement(
@@ -263,3 +402,20 @@ describe("server HTML helpers module", () => {
     expect(getterCalls).toBe(0);
   });
 });
+
+function countElementsByName(node: unknown, name: string): number {
+  if (typeof node !== "object" || node === null) {
+    return 0;
+  }
+
+  const candidate = node as { childNodes?: readonly unknown[]; nodeName?: string };
+  const ownCount = candidate.nodeName === name ? 1 : 0;
+
+  return (
+    ownCount +
+    (candidate.childNodes ?? []).reduce(
+      (count: number, child) => count + countElementsByName(child, name),
+      0,
+    )
+  );
+}
