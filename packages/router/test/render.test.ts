@@ -5750,10 +5750,15 @@ export default function Page() {
 
   test("returns stream route responses before an async layout shell resolves", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-stream-lazy-layout-"));
+    const state = globalThis as { __mreactLazyLayout?: Promise<void> };
+    let resolveLazyLayout = () => {};
+    state.__mreactLazyLayout = new Promise<void>((resolve) => {
+      resolveLazyLayout = resolve;
+    });
     await writeFile(
       join(appDir, "layout.mreact.tsx"),
       `export default async function Layout() {
-  await new Promise((resolve) => setTimeout(resolve, 80));
+  await globalThis.__mreactLazyLayout;
   return <html><body><Slot /></body></html>;
 }`,
     );
@@ -5767,16 +5772,23 @@ export default function Page() {
 }`,
     );
 
-    const startedAt = Date.now();
-    const response = await renderAppRequest({
-      appDir,
-      request: new Request("http://local.test/"),
-    });
-    const responseDelay = Date.now() - startedAt;
+    try {
+      const response = await expectResolvesWithin(
+        renderAppRequest({
+          appDir,
+          request: new Request("http://local.test/"),
+        }),
+        1000,
+        "stream response before async layout shell",
+      );
 
-    expect(responseDelay).toBeLessThan(70);
-    expect(response.headers.get("x-mreact-stream")).toBe("1");
-    await expect(response.text()).resolves.toContain("<strong>Ada</strong>");
+      expect(response.headers.get("x-mreact-stream")).toBe("1");
+      resolveLazyLayout();
+      await expect(response.text()).resolves.toContain("<strong>Ada</strong>");
+    } finally {
+      resolveLazyLayout();
+      delete state.__mreactLazyLayout;
+    }
   });
 
   test("streams nearest loading boundary while async loader is pending", async () => {
