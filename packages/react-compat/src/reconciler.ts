@@ -598,7 +598,14 @@ function collectKeyedNodes(nodes: readonly Node[]): Map<string, Node> {
 
 function getNodePathSegment(node: ReactCompatNode, index: number): string {
   const key = getNodeKey(node);
-  return key === undefined ? String(index) : `k:${key}`;
+  return key === undefined ? String(index) : `k:${escapePathKey(key)}`;
+}
+
+function escapePathKey(key: string): string {
+  if (!key.includes(".") && !key.includes("%")) {
+    return key;
+  }
+  return key.replaceAll("%", "%25").replaceAll(".", "%2E");
 }
 
 function getNodeKey(node: ReactCompatNode): string | undefined {

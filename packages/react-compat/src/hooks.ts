@@ -47,7 +47,13 @@ export interface RootRuntime {
   strictMemoReplay: { values: readonly unknown[]; index: number } | undefined;
   strictMemoReplayByHook: ReadonlyMap<string, unknown> | undefined;
   profilerFlushDepth: number;
-  effectFlushPhase: "insertion" | "imperative-handle" | "layout" | "normal" | undefined;
+  effectFlushPhase:
+    | "insertion"
+    | "imperative-handle"
+    | "layout"
+    | "normal"
+    | "strict-replay"
+    | undefined;
   externalStoreUpdate: boolean;
   renderPhaseUpdate: boolean;
   rerender(priority?: RenderPriority): void;
@@ -86,6 +92,8 @@ type ProfilerOnRender = (
 
 interface PendingEffect {
   slot: Extract<HookSlot, { kind: "effect" }>;
+  instancePath: string;
+  order: number;
 }
 
 interface PendingProfilerCommit {
@@ -416,23 +424,38 @@ export function createRootRuntime(
       }
     },
     flushEffects() {
+      const effectErrors: unknown[] = [];
+      const reportEffectError = (error: unknown): void => {
+        effectErrors.push(error);
+      };
       this.profilerFlushDepth += 1;
       try {
         this.effectFlushPhase = "insertion";
-        flushPendingEffects(this.pendingInsertionEffects);
+        flushPendingEffects(this.pendingInsertionEffects, reportEffectError);
         this.effectFlushPhase = "imperative-handle";
-        flushPendingEffects(this.pendingImperativeHandleEffects);
+        flushPendingEffects(this.pendingImperativeHandleEffects, reportEffectError);
         this.effectFlushPhase = "layout";
-        const strictLayoutEffects = flushPendingEffects(this.pendingLayoutEffects);
+        const strictLayoutEffects = flushPendingEffects(
+          this.pendingLayoutEffects,
+          reportEffectError,
+        );
         if (flushHostCommitRerenders()) {
           dedupePendingEffects(this.pendingEffects);
         }
         this.effectFlushPhase = "normal";
-        const strictEffects = flushPendingEffects(this.pendingEffects);
-        this.effectFlushPhase = undefined;
+        const strictEffects = flushPendingEffects(this.pendingEffects, reportEffectError);
+        this.effectFlushPhase = "strict-replay";
         const strictReplayEffects = [...strictLayoutEffects, ...strictEffects];
-        cleanupStrictEffects(strictReplayEffects);
-        replayStrictEffects(strictReplayEffects);
+        cleanupStrictEffects(strictReplayEffects, reportEffectError);
+        replayStrictEffects(strictReplayEffects, reportEffectError);
+        this.effectFlushPhase = undefined;
+
+        if (effectErrors.length === 1) {
+          throw effectErrors[0];
+        }
+        if (effectErrors.length > 1) {
+          throw new AggregateError(effectErrors, "Multiple errors occurred while flushing effects.");
+        }
       } finally {
         this.effectFlushPhase = undefined;
         this.profilerFlushDepth -= 1;
@@ -1522,10 +1545,13 @@ export function useSyncExternalStore<T>(
       }
     };
 
-    if (slot.hasMounted !== true) {
-      checkForUpdates();
-    }
     const unsubscribe = subscribe(checkForUpdates);
+    try {
+      checkForUpdates();
+    } catch (error) {
+      unsubscribe();
+      throw error;
+    }
     slot.hasMounted = true;
     return () => {
       unsubscribe();
@@ -2040,7 +2066,7 @@ function useEffectImpl(
         : effectKind === "layout"
         ? runtime.pendingLayoutEffects
         : runtime.pendingEffects;
-    queue.push({ slot });
+    queue.push({ slot, instancePath: instance.path, order: queue.length });
   }
 }
 
@@ -2051,57 +2077,95 @@ function recordExternalStoreCheck<T>(
   hookRenderState.currentRuntime?.externalStoreChecks.push({ getSnapshot, value });
 }
 
-function flushPendingEffects(queue: PendingEffect[]): PendingEffect[] {
-  const pending = queue.splice(0);
+function flushPendingEffects(
+  queue: PendingEffect[],
+  reportEffectError: (error: unknown) => void,
+): PendingEffect[] {
+  const pending = queue.splice(0).sort(comparePendingEffectTreeOrder);
   const strictReplay: PendingEffect[] = [];
-  const runnable: { slot: Extract<HookSlot, { kind: "effect" }>; shouldReplay: boolean }[] = [];
+  const runnable: Array<PendingEffect & { shouldReplay: boolean }> = [];
 
-  for (const { slot } of pending) {
+  for (const effect of pending) {
+    const { slot } = effect;
     if (slot.disposed === true) {
       continue;
     }
 
     const shouldReplay = slot.strictReplay === true && slot.cleanup === undefined;
-    slot.cleanup?.();
-    runnable.push({ slot, shouldReplay });
+    const cleanup = slot.cleanup;
+    delete slot.cleanup;
+    slot.mounted = false;
+    cleanup?.();
+    runnable.push({ ...effect, shouldReplay });
   }
 
-  for (const { slot, shouldReplay } of runnable) {
+  for (const effect of runnable) {
+    const { slot, shouldReplay } = effect;
     if (slot.disposed === true) {
       continue;
     }
 
-    const cleanup = slot.callback();
+    try {
+      const cleanup = slot.callback();
 
-    if (typeof cleanup === "function") {
-      slot.cleanup = cleanup;
-    } else {
-      delete slot.cleanup;
-    }
-    slot.mounted = true;
+      if (typeof cleanup === "function") {
+        slot.cleanup = cleanup;
+      } else {
+        delete slot.cleanup;
+      }
+      slot.mounted = true;
 
-    if (shouldReplay) {
-      strictReplay.push({ slot });
+      if (shouldReplay) {
+        strictReplay.push(effect);
+      }
+    } catch (error) {
+      reportEffectError(error);
     }
   }
 
   return strictReplay;
 }
 
-function replayStrictEffects(effects: PendingEffect[]): void {
+function replayStrictEffects(
+  effects: PendingEffect[],
+  reportEffectError: (error: unknown) => void,
+): void {
   for (const { slot } of effects) {
     if (slot.disposed === true) {
       continue;
     }
 
-    const cleanup = slot.callback();
+    try {
+      const cleanup = slot.callback();
 
-    if (typeof cleanup === "function") {
-      slot.cleanup = cleanup;
-    } else {
-      delete slot.cleanup;
+      if (typeof cleanup === "function") {
+        slot.cleanup = cleanup;
+      } else {
+        delete slot.cleanup;
+      }
+      slot.mounted = true;
+    } catch (error) {
+      slot.mounted = false;
+      reportEffectError(error);
     }
   }
+}
+
+function comparePendingEffectTreeOrder(left: PendingEffect, right: PendingEffect): number {
+  if (isStrictAncestorPath(left.instancePath, right.instancePath)) {
+    return 1;
+  }
+  if (isStrictAncestorPath(right.instancePath, left.instancePath)) {
+    return -1;
+  }
+  return left.order - right.order;
+}
+
+function isStrictAncestorPath(ancestor: string, descendant: string): boolean {
+  if (ancestor === descendant) {
+    return false;
+  }
+  return ancestor === "" || descendant.startsWith(`${ancestor}.`);
 }
 
 function flushProfilerCommits(
@@ -2424,10 +2488,20 @@ export function __setCacheScopeStorageForTesting(
   fallbackAsyncCacheScopeActive = false;
 }
 
-function cleanupStrictEffects(effects: PendingEffect[]): void {
+function cleanupStrictEffects(
+  effects: PendingEffect[],
+  reportEffectError: (error: unknown) => void,
+): void {
   for (const { slot } of effects) {
     if (slot.disposed !== true) {
-      slot.cleanup?.();
+      const cleanup = slot.cleanup;
+      delete slot.cleanup;
+      slot.mounted = false;
+      try {
+        cleanup?.();
+      } catch (error) {
+        reportEffectError(error);
+      }
     }
   }
 }

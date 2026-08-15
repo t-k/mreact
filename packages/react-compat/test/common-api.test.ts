@@ -1202,6 +1202,125 @@ describe("react-compat common API subset", () => {
     expect(container.innerHTML).toBe("<section><span>ready</span></section>");
   });
 
+  test("useSyncExternalStore checks for mutations made while subscribing", () => {
+    const container = document.createElement("div");
+    let value = 0;
+
+    function subscribe() {
+      value = 1;
+      return () => undefined;
+    }
+
+    function Probe() {
+      const snapshot = useSyncExternalStore(subscribe, () => value);
+      return createElement("span", null, snapshot);
+    }
+
+    createRoot(container).render(createElement(Probe, null));
+
+    expect(container.innerHTML).toBe("<span>1</span>");
+  });
+
+  test("useSyncExternalStore unsubscribes when the post-subscribe snapshot throws", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const listeners = new Set<() => void>();
+    let subscribed = false;
+
+    function subscribe(listener: () => void) {
+      subscribed = true;
+      listeners.add(listener);
+      return () => {
+        subscribed = false;
+        listeners.delete(listener);
+      };
+    }
+
+    function Probe() {
+      const snapshot = useSyncExternalStore(subscribe, () => {
+        if (subscribed) {
+          throw new Error("snapshot boom");
+        }
+        return 0;
+      });
+      return createElement("span", null, snapshot);
+    }
+
+    expect(() => root.render(createElement(Probe, null))).toThrow("snapshot boom");
+    expect(listeners.size).toBe(0);
+    root.unmount();
+    expect(listeners.size).toBe(0);
+  });
+
+  test("useSyncExternalStore checks for mutations missed by an inline resubscribe", () => {
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    let value = 0;
+    let advance = () => undefined;
+
+    function Writer(props: { revision: number }) {
+      useEffect(() => {
+        if (props.revision === 1) {
+          value = 42;
+        }
+      }, [props.revision]);
+      return null;
+    }
+
+    function Reader() {
+      const snapshot = useSyncExternalStore((listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      }, () => value);
+      return createElement("span", null, snapshot);
+    }
+
+    function App() {
+      const [revision, setRevision] = useState(0);
+      advance = () => setRevision(1);
+      return createElement(
+        "section",
+        null,
+        createElement(Writer, { revision }),
+        createElement(Reader, null),
+      );
+    }
+
+    createRoot(container).render(createElement(App, null));
+    advance();
+
+    expect(container.innerHTML).toBe("<section><span>42</span></section>");
+  });
+
+  test("useSyncExternalStore does not add a render for an unchanged inline subscription", () => {
+    const container = document.createElement("div");
+    const listeners = new Set<() => void>();
+    let renders = 0;
+    let rerender = () => undefined;
+
+    function Reader() {
+      renders += 1;
+      const snapshot = useSyncExternalStore((listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      }, () => 7);
+      return createElement("span", null, snapshot);
+    }
+
+    function App() {
+      const [revision, setRevision] = useState(0);
+      rerender = () => setRevision(1);
+      return createElement("section", { "data-revision": revision }, createElement(Reader, null));
+    }
+
+    createRoot(container).render(createElement(App, null));
+    rerender();
+
+    expect(renders).toBe(2);
+    expect(listeners.size).toBe(1);
+    expect(container.innerHTML).toBe('<section data-revision="1"><span>7</span></section>');
+  });
+
   test("useSyncExternalStore host ref updates do not duplicate portal children", () => {
     const container = document.createElement("div");
     const portalContainer = document.createElement("div");
