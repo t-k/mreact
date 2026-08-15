@@ -73,6 +73,7 @@ const actionTokenSecret = configuredActionTokenSecret(process.env.MREACT_SERVER_
 // traffic does not trip false-positive 409s.
 const DEFAULT_REPLAY_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_REPLAY_MAX_ENTRIES = 50_000;
+const DEFAULT_REPLAY_MINIMUM_RETENTION_MS = 60_000;
 const DEFAULT_ACTION_BODY_MAX_BYTES = 10 * 1024 * 1024;
 const DEFAULT_ACTION_FORM_MAX_FIELDS = 1_000;
 let warnedUnrestrictedServerActions = false;
@@ -117,15 +118,18 @@ class BoundedReplayStore {
   private readonly entries = new Map<
     string,
     | { state: "in-flight"; leaseExpiresAt: number }
-    | { state: "completed"; expiresAt: number }
+    | { state: "completed"; expiresAt: number; protectedUntil: number }
   >();
   private capacityWarningActive = false;
   private warnedLeaseReclamation = false;
+  private readonly minimumRetentionMs: number;
 
   constructor(
     private readonly ttlMs: number,
     private readonly maxEntries: number,
-  ) {}
+  ) {
+    this.minimumRetentionMs = Math.min(ttlMs, DEFAULT_REPLAY_MINIMUM_RETENTION_MS);
+  }
 
   claim(value: string): ServerActionReplayClaim {
     const now = Date.now();
@@ -144,21 +148,23 @@ class BoundedReplayStore {
     if (this.entries.has(value)) return { status: "replay" };
     if (this.entries.size >= this.maxEntries) {
       this.warnCapacity();
+      let reclaimableCompletedKey: string | undefined;
       for (const [key, entry] of this.entries) {
         if (
           (entry.state === "completed" && entry.expiresAt <= now) ||
           (entry.state === "in-flight" && entry.leaseExpiresAt <= now)
         ) {
           this.entries.delete(key);
+        } else if (
+          reclaimableCompletedKey === undefined &&
+          entry.state === "completed" &&
+          entry.protectedUntil <= now
+        ) {
+          reclaimableCompletedKey = key;
         }
       }
-      if (this.entries.size >= this.maxEntries) {
-        const oldestCompleted = Array.from(this.entries).find(
-          ([, entry]) => entry.state === "completed",
-        );
-        if (oldestCompleted !== undefined) {
-          this.entries.delete(oldestCompleted[0]);
-        }
+      if (this.entries.size >= this.maxEntries && reclaimableCompletedKey !== undefined) {
+        this.entries.delete(reclaimableCompletedKey);
       }
       if (this.entries.size >= this.maxEntries) return { status: "capacity-exceeded" };
     }
@@ -172,8 +178,13 @@ class BoundedReplayStore {
         if (finalized) return;
         finalized = true;
         if (this.entries.get(value) === entry) {
+          const completedAt = Date.now();
           this.entries.delete(value);
-          this.entries.set(value, { state: "completed", expiresAt: Date.now() + this.ttlMs });
+          this.entries.set(value, {
+            state: "completed",
+            expiresAt: completedAt + this.ttlMs,
+            protectedUntil: completedAt + this.minimumRetentionMs,
+          });
         }
       },
     };
@@ -201,7 +212,7 @@ class BoundedReplayStore {
       else inFlight += 1;
     }
     console.error(
-      `mreact-router: default server action replay store reached capacity (size=${this.entries.size}, maxEntries=${this.maxEntries}, completed=${completed}, inFlight=${inFlight}). Expired in-flight leases may be reclaimed; exact duplicate-execution protection no longer applies after the lease boundary.`,
+      `mreact-router: default server action replay store reached capacity (size=${this.entries.size}, maxEntries=${this.maxEntries}, completed=${completed}, inFlight=${inFlight}, minimumRetentionMs=${this.minimumRetentionMs}). Completed claims remain exact through minimumRetentionMs and may be reclaimed under pressure afterward; expired in-flight leases may also be reclaimed. Applications requiring exact protection for the full action lifetime and retention window must use a shared replay store.`,
     );
   }
 

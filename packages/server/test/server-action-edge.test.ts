@@ -132,19 +132,24 @@ describe("createServerActionHandler edge branches (issues 069 / 076 / 078)", () 
 
   test("diagnoses a legacy replay store once without changing the external 503", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const legacyStore = {
-      add() {},
-      has() {
-        return false;
-      },
-    } as unknown as ServerActionReplayStore;
+    const legacyStore = () =>
+      ({
+        add() {},
+        has() {
+          return false;
+        },
+      }) as unknown as ServerActionReplayStore;
     const handle = createServerActionHandler(actions, {
       csrf: false,
-      replayProtection: { store: legacyStore },
+      replayProtection: { store: legacyStore() },
+    });
+    const secondHandle = createServerActionHandler(actions, {
+      csrf: false,
+      replayProtection: { store: legacyStore() },
     });
 
     const first = await handle(replayRequest("legacy-one"));
-    const second = await handle(replayRequest("legacy-two"));
+    const second = await secondHandle(replayRequest("legacy-two"));
 
     expect(first.status).toBe(503);
     expect(second.status).toBe(503);
@@ -157,6 +162,26 @@ describe("createServerActionHandler edge branches (issues 069 / 076 / 078)", () 
       expect.stringMatching(/claim\(\).*0\.0\.203/i),
     );
     error.mockRestore();
+  });
+
+  test("contains replay-store contract accessors that throw", async () => {
+    const store = Object.defineProperty({}, "claim", {
+      get() {
+        throw new Error("redis password=top-secret");
+      },
+    }) as ServerActionReplayStore;
+    const handle = createServerActionHandler(actions, {
+      csrf: false,
+      replayProtection: { store },
+    });
+
+    const response = await handle(replayRequest("throwing-contract"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: "Server action replay protection is unavailable.",
+    });
   });
 
   test("does not log or expose a replay backend error", async () => {

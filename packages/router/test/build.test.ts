@@ -8780,6 +8780,33 @@ export default function Page() { return <main>Prerendered query state</main>; }`
     expect(html).not.toContain("secret-value");
   });
 
+  test("rebuilds a missing dehydration policy artifact on an incremental cache hit", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-missing-dehydrate-policy-"));
+    const appDir = join(rootDir, "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>Policy artifact</main>; }",
+    );
+    await writeFile(
+      join(appDir, "dehydrate-policy.ts"),
+      "export const dehydrateOptions = { shouldDehydrateQuery() { return false; } };",
+    );
+
+    await buildApp({ appDir, dehydratePolicyModule: "dehydrate-policy.ts", outDir });
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { dehydratePolicyModule?: string };
+    expect(manifest.dehydratePolicyModule).toBeDefined();
+    const artifactPath = join(outDir, "server", manifest.dehydratePolicyModule as string);
+    await rm(artifactPath);
+
+    await buildApp({ appDir, dehydratePolicyModule: "dehydrate-policy.ts", outDir });
+
+    await expect(access(artifactPath)).resolves.toBeUndefined();
+  });
+
   test("fails closed when a configured dehydration policy module is malformed", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-app-invalid-dehydrate-policy-"));
     const appDir = join(rootDir, "app");

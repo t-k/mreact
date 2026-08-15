@@ -55,43 +55,38 @@ export interface ServerActionReplayStore {
   /**
    * Atomically reserves a nonce. Shared production stores should return `replay` until `finalize()` records its completed retention period.
    *
-   * A bounded local implementation may document an in-flight lease for abandoned actions. Once that lease expires, exact duplicate-execution protection no longer applies, so applications requiring strict guarantees must use a shared store whose reservation lifetime covers action execution.
+   * A bounded local implementation may document a minimum completed-claim retention and an in-flight lease for abandoned actions. Under capacity pressure it may reclaim completed claims after that minimum retention, and once an in-flight lease expires exact duplicate-execution protection no longer applies. Applications requiring strict guarantees for the full retention and action lifetime must use a shared store.
    */
   claim(value: string): ServerActionReplayClaim | Promise<ServerActionReplayClaim>;
 }
 
-const diagnosedLegacyReplayStores = new WeakSet<object>();
-let diagnosedPrimitiveReplayStore = false;
+let diagnosedReplayStoreContract = false;
 
 /** Checks the atomic replay-store contract and emits one fixed migration diagnostic for legacy stores. */
 export function ensureServerActionReplayStoreContract(
   store: unknown,
 ): store is ServerActionReplayStore {
-  if (
-    store !== null &&
-    (typeof store === "object" || typeof store === "function") &&
-    typeof (store as { claim?: unknown }).claim === "function"
-  ) {
-    return true;
+  if (store !== null && (typeof store === "object" || typeof store === "function")) {
+    try {
+      if (typeof (store as { claim?: unknown }).claim === "function") {
+        return true;
+      }
+    } catch {
+      diagnoseReplayStoreContract();
+      return false;
+    }
   }
 
-  const objectStore =
-    store !== null && (typeof store === "object" || typeof store === "function")
-      ? (store as object)
-      : undefined;
-  if (
-    (objectStore !== undefined && diagnosedLegacyReplayStores.has(objectStore)) ||
-    (objectStore === undefined && diagnosedPrimitiveReplayStore)
-  ) {
-    return false;
-  }
+  diagnoseReplayStoreContract();
+  return false;
+}
 
-  if (objectStore === undefined) diagnosedPrimitiveReplayStore = true;
-  else diagnosedLegacyReplayStores.add(objectStore);
+function diagnoseReplayStoreContract(): void {
+  if (diagnosedReplayStoreContract) return;
+  diagnosedReplayStoreContract = true;
   console.error(
     "mreact-server: ServerActionReplayStore must implement claim(). The atomic claim() contract was introduced in mreact 0.0.203; update the configured replay store.",
   );
-  return false;
 }
 
 /** Module export reference requested by a server action request. */

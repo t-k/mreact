@@ -255,6 +255,7 @@ interface IncrementalBuildCacheManifest {
 }
 
 interface IncrementalBuildServerManifestOutputs {
+  dehydratePolicyModule?: string;
   serverModuleFiles?: Record<string, string>;
   serverModuleRenderFiles?: Record<string, string>;
   serverModuleRequestFiles?: Record<string, string>;
@@ -1052,6 +1053,9 @@ async function hasRequiredIncrementalBuildOutputs(
   }
 
   for (const file of [
+    ...(serverManifest.dehydratePolicyModule === undefined
+      ? []
+      : [serverManifest.dehydratePolicyModule]),
     ...Object.values(serverManifest.serverModuleFiles ?? {}),
     ...Object.values(serverManifest.serverModuleRenderFiles ?? {}),
     ...Object.values(serverManifest.serverModuleRequestFiles ?? {}),

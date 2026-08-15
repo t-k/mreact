@@ -51,19 +51,42 @@ describe("BoundedReplayStore (Issue 069)", () => {
     error.mockRestore();
   });
 
-  test("evicts the oldest completed claim instead of rejecting sustained traffic", () => {
+  test("keeps completed claims exact during the minimum recent-replay window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-15T00:00:00Z"));
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const store = __readDefaultReplayStore();
 
-    for (let i = 0; i < 50_001; i += 1) {
+    for (let i = 0; i < 50_000; i += 1) {
       const claim = store.claim(`completed-${i}`);
       expect(claim.status).toBe("claimed");
       if (claim.status === "claimed") claim.finalize();
     }
 
     expect(store.size()).toBe(50_000);
+    expect(store.claim("completed-next")).toEqual({ status: "capacity-exceeded" });
+    expect(store.claim("completed-0")).toEqual({ status: "replay" });
     expect(error).toHaveBeenCalledTimes(1);
-    expect(store.claim("completed-0").status).toBe("claimed");
+    error.mockRestore();
+  });
+
+  test("reclaims older completed claims instead of rejecting sustained traffic", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-15T00:00:00Z"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const store = __readDefaultReplayStore();
+
+    for (let i = 0; i < 50_001; i += 1) {
+      const claim = store.claim(`sustained-${i}`);
+      expect(claim.status).toBe("claimed");
+      if (claim.status === "claimed") claim.finalize();
+      vi.advanceTimersByTime(2);
+    }
+
+    expect(store.size()).toBe(50_000);
+    expect(store.claim("sustained-50000")).toEqual({ status: "replay" });
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(expect.stringMatching(/minimumRetentionMs=60000/));
     error.mockRestore();
   });
 
