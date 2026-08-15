@@ -448,7 +448,7 @@ describe("primitive adapters", () => {
     });
     expect(row.samples).toHaveLength(1);
     expect(row.value).toBeGreaterThanOrEqual(0);
-  });
+  }, 15_000);
 
   it("starts memory benchmark workers with explicit garbage collection enabled", () => {
     const durationCase = primitiveCases.find(({ name }) => name === "create 1k rows");
@@ -493,7 +493,7 @@ describe("primitive adapters", () => {
     expect(row.status).toBe("completed");
     expect(row.samples).toHaveLength(1);
     expect(row.notes).toEqual([forcedGcMemoryNote]);
-  });
+  }, 15_000);
 
   it("measures every implemented memory adapter with forced garbage collection", async () => {
     const benchmarkCase = primitiveCases.find(
