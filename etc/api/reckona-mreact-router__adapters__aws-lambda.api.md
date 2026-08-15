@@ -316,10 +316,13 @@ export interface AwsLambdaStreamingResponseMetadata {
 export interface AwsLambdaStreamingResponseStream {
     // (undocumented)
     destroy?: ((error?: unknown) => void) | undefined;
+    destroyed?: boolean | undefined;
     // (undocumented)
     end(): void;
-    // (undocumented)
-    once?: ((event: "drain", listener: () => void) => unknown) | undefined;
+    off?: ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown) | undefined;
+    once?: ((event: "drain", listener: () => void) => unknown) | ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown) | undefined;
+    removeListener?: ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown) | undefined;
+    writableEnded?: boolean | undefined;
     // (undocumented)
     write(chunk: string | Uint8Array): boolean;
 }

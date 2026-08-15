@@ -121,9 +121,31 @@ export interface AwsLambdaStreamingResponseMetadata {
  */
 export interface AwsLambdaStreamingResponseStream {
   destroy?: ((error?: unknown) => void) | undefined;
+  /** Reports whether the runtime output stream has already been destroyed. */
+  destroyed?: boolean | undefined;
   end(): void;
-  once?: ((event: "drain", listener: () => void) => unknown) | undefined;
+  /** Removes a lifecycle listener when the runtime stream implements Node EventEmitter semantics. */
+  off?:
+    | ((
+        event: "close" | "drain" | "error",
+        listener: (error?: unknown) => void,
+      ) => unknown)
+    | undefined;
+  /** Registers drain-only or full Node-compatible lifecycle listeners. */
+  once?:
+    | ((event: "drain", listener: () => void) => unknown)
+    | ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown)
+    | undefined;
+  /** Removes a lifecycle listener on runtimes that expose the legacy EventEmitter API. */
+  removeListener?:
+    | ((
+        event: "close" | "drain" | "error",
+        listener: (error?: unknown) => void,
+      ) => unknown)
+    | undefined;
   write(chunk: string | Uint8Array): boolean;
+  /** Reports whether the runtime output stream ended normally. */
+  writableEnded?: boolean | undefined;
 }
 
 /**
@@ -638,7 +660,9 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
     const eventToRequestStartedAt = phaseStartedAt(phases);
-    const request = eventToRequest(event, options);
+    const requestAbortController = new AbortController();
+    const request = eventToRequest(event, options, requestAbortController.signal);
+    const requestLifecycle = observeLambdaStreamFailure(responseStream, requestAbortController);
     finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
     const logFields = requestLogFields(request, "aws-lambda");
     emitRouterLog(options.logger, "info", {
@@ -682,7 +706,13 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
       });
       finishPhase(phases, renderStartedAt, "renderMs");
       const responseStreamingStartedAt = phaseStartedAt(phases);
-      await streamResponseToLambda(response, responseStream, runtime, phases);
+      await streamResponseToLambda(
+        response,
+        responseStream,
+        runtime,
+        phases,
+        requestAbortController,
+      );
       finishPhase(phases, responseStreamingStartedAt, "responseStreamingMs");
       emitRouterLog(options.logger, "info", {
         ...logFields,
@@ -699,6 +729,10 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         type: "router:request:error",
       });
 
+      if (requestAbortController.signal.aborted) {
+        return;
+      }
+
       const payload = options.errorHandler
         ? options.errorHandler(error)
         : { body: "Internal Server Error", status: 500 };
@@ -714,7 +748,15 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         request,
       );
 
-      await streamResponseToLambda(response, responseStream, runtime, phases);
+      await streamResponseToLambda(
+        response,
+        responseStream,
+        runtime,
+        phases,
+        requestAbortController,
+      );
+    } finally {
+      requestLifecycle.dispose();
     }
   });
 }
@@ -802,6 +844,7 @@ function isNodeErrorCode(error: unknown, code: string): boolean {
 function eventToRequest(
   event: AwsLambdaHttpEventV2,
   options: AwsLambdaRequestHandlerOptions,
+  signal?: AbortSignal,
 ): Request {
   validateAwsLambdaHttpEventV2(event);
   const headers = eventHeaders(event);
@@ -819,6 +862,7 @@ function eventToRequest(
   const init: RequestInit = {
     headers,
     method,
+    ...(signal === undefined ? {} : { signal }),
   };
 
   if (method !== "GET" && method !== "HEAD" && event.body !== undefined) {
@@ -1059,11 +1103,20 @@ async function streamResponseToLambda(
   responseStream: AwsLambdaStreamingResponseStream,
   runtime: AwsLambdaRuntime,
   phases?: Record<string, number> | undefined,
+  requestAbortController?: AbortController,
 ): Promise<void> {
+  if (isLambdaStreamingAborted(requestAbortController)) {
+    return;
+  }
+
   const stream = runtime.HttpResponseStream.from(
     responseStream,
     responseStreamingMetadata(response),
   );
+
+  if (isLambdaStreamingAborted(requestAbortController)) {
+    return;
+  }
 
   try {
     if (response.body === null) {
@@ -1072,22 +1125,46 @@ async function streamResponseToLambda(
     }
 
     const reader = response.body.getReader();
+    const lifecycle = observeLambdaStreamFailure(stream, requestAbortController);
 
-    while (true) {
-      const streamWaitStartedAt = phaseStartedAt(phases);
-      const result = await reader.read();
-      addPhaseDuration(phases, streamWaitStartedAt, "streamWaitMs");
+    try {
+      while (true) {
+        const streamWaitStartedAt = phaseStartedAt(phases);
+        const result = await readLambdaBodyWithAbort(reader, lifecycle.signal);
+        addPhaseDuration(phases, streamWaitStartedAt, "streamWaitMs");
 
-      if (result.done) {
-        break;
+        if (lifecycle.signal.aborted) {
+          throw lambdaAbortReason(lifecycle.signal);
+        }
+
+        if (result.done) {
+          break;
+        }
+
+        const streamWriteStartedAt = phaseStartedAt(phases);
+        await writeStreamingChunk(stream, result.value, lifecycle.signal);
+        addPhaseDuration(phases, streamWriteStartedAt, "streamWriteMs");
       }
 
-      const streamWriteStartedAt = phaseStartedAt(phases);
-      await writeStreamingChunk(stream, result.value);
-      addPhaseDuration(phases, streamWriteStartedAt, "streamWriteMs");
+      if (lifecycle.signal.aborted) {
+        throw lambdaAbortReason(lifecycle.signal);
+      }
+      stream.end();
+    } catch (error) {
+      const reason = error instanceof Error ? error : new Error(String(error));
+      requestAbortController?.abort(reason);
+      try {
+        await reader.cancel(reason);
+      } catch {
+        // The response body may already be errored or cancelled.
+      }
+      if (stream.destroyed !== true) {
+        stream.destroy?.(reason);
+      }
+    } finally {
+      lifecycle.dispose();
+      reader.releaseLock();
     }
-
-    stream.end();
   } catch (error) {
     if (typeof stream.destroy === "function") {
       stream.destroy(error);
@@ -1096,6 +1173,10 @@ async function streamResponseToLambda(
 
     throw error;
   }
+}
+
+function isLambdaStreamingAborted(controller: AbortController | undefined): boolean {
+  return controller?.signal.aborted === true;
 }
 
 function responseStreamingMetadata(
@@ -1120,8 +1201,18 @@ function responseStreamingMetadata(
 async function writeStreamingChunk(
   stream: AwsLambdaStreamingResponseStream,
   chunk: Uint8Array,
+  signal: AbortSignal,
 ): Promise<void> {
-  if (stream.write(chunk) !== false) {
+  if (signal.aborted) {
+    throw lambdaAbortReason(signal);
+  }
+
+  const accepted = stream.write(chunk);
+  if (signal.aborted) {
+    throw lambdaAbortReason(signal);
+  }
+
+  if (accepted !== false) {
     return;
   }
 
@@ -1129,9 +1220,129 @@ async function writeStreamingChunk(
     return;
   }
 
-  await new Promise<void>((resolve) => {
-    stream.once?.("drain", resolve);
+  await new Promise<void>((resolve, reject) => {
+    const dispose = (): void => {
+      removeLambdaStreamListener(stream, "drain", onDrain);
+      signal.removeEventListener("abort", onAbort);
+    };
+    const onDrain = (): void => {
+      dispose();
+      resolve();
+    };
+    const onAbort = (): void => {
+      dispose();
+      reject(lambdaAbortReason(signal));
+    };
+    addLambdaStreamListener(stream, "drain", onDrain);
+    signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+function observeLambdaStreamFailure(
+  stream: AwsLambdaStreamingResponseStream,
+  abortController: AbortController = new AbortController(),
+): {
+  dispose(): void;
+  signal: AbortSignal;
+} {
+  let disposed = false;
+
+  const dispose = (): void => {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    removeLambdaStreamListener(stream, "close", onClose);
+    removeLambdaStreamListener(stream, "error", onError);
+  };
+  const abort = (reason: Error): void => {
+    abortController.abort(reason);
+    dispose();
+  };
+  const onClose = (): void => {
+    if (stream.writableEnded === true) {
+      dispose();
+      return;
+    }
+    abort(new Error("The AWS Lambda response stream closed during streaming."));
+  };
+  const onError = (error?: unknown): void => {
+    abort(error instanceof Error ? error : new Error(String(error ?? "AWS Lambda stream error")));
+  };
+
+  const canRemoveListeners =
+    typeof stream.off === "function" || typeof stream.removeListener === "function";
+  if (canRemoveListeners) {
+    addLambdaStreamListener(stream, "close", onClose);
+    addLambdaStreamListener(stream, "error", onError);
+  }
+  if (abortController.signal.aborted) {
+    dispose();
+  } else if (stream.destroyed === true && stream.writableEnded !== true) {
+    onClose();
+  }
+
+  return { dispose, signal: abortController.signal };
+}
+
+function readLambdaBodyWithAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) {
+    return Promise.reject(lambdaAbortReason(signal));
+  }
+
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      signal.removeEventListener("abort", onAbort);
+      reject(lambdaAbortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    void reader.read().then(
+      (result) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function removeLambdaStreamListener(
+  stream: AwsLambdaStreamingResponseStream,
+  event: "close" | "drain" | "error",
+  listener: (error?: unknown) => void,
+): void {
+  if (typeof stream.off === "function") {
+    stream.off(event, listener);
+    return;
+  }
+  stream.removeListener?.(event, listener);
+}
+
+function addLambdaStreamListener(
+  stream: AwsLambdaStreamingResponseStream,
+  event: "close" | "drain" | "error",
+  listener: (error?: unknown) => void,
+): void {
+  const once = stream.once as
+    | ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown)
+    | undefined;
+  try {
+    once?.call(stream, event, listener);
+  } catch {
+    // A structurally compatible drain-only stream may reject lifecycle event names.
+  }
+}
+
+function lambdaAbortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("AWS Lambda response streaming was aborted.");
 }
 
 interface AwsLambdaRuntime {

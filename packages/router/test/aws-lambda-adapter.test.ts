@@ -1192,6 +1192,180 @@ export default function Hot({ data }) {
     expect(stream.ended).toBe(true);
   });
 
+  test.each([
+    ["drain", "close"],
+    ["read", "close"],
+    ["read", "error"],
+  ] as const)(
+    "settles and cancels the Lambda response body on %s-phase output stream %s",
+    async (phase, event) => {
+      installAwsLambdaStreamingMock();
+      const state = globalThis as { __mreactLambdaStreamCancels?: number };
+      state.__mreactLambdaStreamCancels = 0;
+      const { outDir, appDir } = await createBuiltApp(`mreact-lambda-disconnect-${phase}-`);
+      await mkdir(join(appDir, "api", "stream"), { recursive: true });
+      await writeFile(
+        join(appDir, "api", "stream", "route.ts"),
+        `export function GET() {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("shell"));
+    },
+    cancel() {
+      globalThis.__mreactLambdaStreamCancels += 1;
+    },
+  }));
+}`,
+      );
+      await buildApp({ appDir, outDir });
+      const handler = createAwsLambdaStreamingRequestHandler({ outDir });
+      const stream = createTestLambdaResponseStream({
+        writeResults: [phase === "drain" ? false : true],
+      });
+      const handling = handler(lambdaEvent("/api/stream"), stream, {});
+
+      await eventually(() => {
+        expect(stream.chunks).toHaveLength(1);
+        expect(stream.listenerCount("close")).toBeGreaterThan(0);
+        if (phase === "drain") {
+          expect(stream.listenerCount("drain")).toBe(1);
+        }
+      });
+      stream.emit(event, event === "error" ? new Error("client disconnected") : undefined);
+      await expectResolvesWithin(handling, 1000, `Lambda ${phase} ${event}`);
+
+      expect(state.__mreactLambdaStreamCancels).toBe(1);
+      expect(stream.destroyed).toBe(true);
+      expect(stream.ended).toBe(false);
+      expect(stream.listenerCount("close")).toBe(0);
+      expect(stream.listenerCount("drain")).toBe(0);
+      expect(stream.listenerCount("error")).toBe(0);
+      delete state.__mreactLambdaStreamCancels;
+    },
+  );
+
+  test("resumes a normally drained Lambda response without cancelling its body", async () => {
+    installAwsLambdaStreamingMock();
+    const state = globalThis as { __mreactLambdaStreamCancels?: number };
+    state.__mreactLambdaStreamCancels = 0;
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-normal-drain-");
+    await mkdir(join(appDir, "api", "stream"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "stream", "route.ts"),
+      `export function GET() {
+  const encoder = new TextEncoder();
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode("shell"));
+      controller.enqueue(encoder.encode("tail"));
+      controller.close();
+    },
+    cancel() {
+      globalThis.__mreactLambdaStreamCancels += 1;
+    },
+  }));
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaStreamingRequestHandler({ outDir });
+    const stream = createTestLambdaResponseStream({ writeResults: [false, true] });
+    const handling = handler(lambdaEvent("/api/stream"), stream, {});
+
+    await eventually(() => expect(stream.listenerCount("drain")).toBe(1));
+    stream.emit("drain");
+    await handling;
+
+    expect(stream.text()).toBe("shelltail");
+    expect(stream.ended).toBe(true);
+    expect(state.__mreactLambdaStreamCancels).toBe(0);
+    expect(stream.listenerCount("close")).toBe(0);
+    expect(stream.listenerCount("drain")).toBe(0);
+    expect(stream.listenerCount("error")).toBe(0);
+    delete state.__mreactLambdaStreamCancels;
+  });
+
+  test("aborts a Lambda streaming loader request signal when the output stream closes", async () => {
+    installAwsLambdaStreamingMock();
+    const state = globalThis as {
+      __mreactLambdaLoaderAborts?: number;
+      __mreactLambdaLoaderStarted?: boolean;
+    };
+    state.__mreactLambdaLoaderAborts = 0;
+    state.__mreactLambdaLoaderStarted = false;
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-loader-disconnect-");
+    await writeFile(
+      join(appDir, "loading.tsx"),
+      "export default function Loading() { return <p>Loading...</p>; }",
+    );
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const stream = true;
+
+export async function loader({ request }) {
+  globalThis.__mreactLambdaLoaderStarted = true;
+  return await new Promise((_resolve, reject) => {
+    const abort = () => {
+      globalThis.__mreactLambdaLoaderAborts += 1;
+      reject(request.signal.reason);
+    };
+    if (request.signal.aborted) {
+      abort();
+      return;
+    }
+    request.signal.addEventListener("abort", abort, { once: true });
+  });
+}
+
+export default function Page() {
+  return <main>Page</main>;
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaStreamingRequestHandler({ outDir });
+    const stream = createTestLambdaResponseStream();
+    const handling = handler(lambdaEvent("/"), stream, {});
+
+    await eventually(() => {
+      expect(state.__mreactLambdaLoaderStarted).toBe(true);
+      expect(stream.chunks.length).toBeGreaterThan(0);
+      expect(stream.listenerCount("close")).toBeGreaterThan(0);
+    });
+    stream.emit("close");
+    await expectResolvesWithin(handling, 1000, "Lambda loader disconnect");
+
+    expect(state.__mreactLambdaLoaderAborts).toBe(1);
+    delete state.__mreactLambdaLoaderAborts;
+    delete state.__mreactLambdaLoaderStarted;
+  });
+
+  test("does not wrap or end a bodyless Lambda response after the stream is already closed", async () => {
+    installAwsLambdaStreamingMock();
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-bodyless-disconnect-");
+    await mkdir(join(appDir, "api", "empty"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "empty", "route.ts"),
+      `export function GET() {
+  return new Response(null, { status: 204 });
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaStreamingRequestHandler({ outDir });
+    const stream = createTestLambdaResponseStream();
+    stream.emit("close");
+
+    await expectResolvesWithin(
+      handler(lambdaEvent("/api/empty"), stream, {}),
+      1000,
+      "pre-closed bodyless Lambda response",
+    );
+
+    expect(stream.metadata).toBeUndefined();
+    expect(stream.ended).toBe(false);
+    expect(stream.listenerCount("close")).toBe(0);
+    expect(stream.listenerCount("error")).toBe(0);
+  });
+
   test("splits streaming response timing into stream wait and write phases", async () => {
     installAwsLambdaStreamingMock();
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-stream-timings-");
@@ -1365,24 +1539,57 @@ function lambdaEvent(rawPath: string): AwsLambdaHttpEventV2 {
 
 interface TestLambdaResponseStream {
   chunks: Buffer[];
+  destroyed: boolean;
   ended: boolean;
   metadata?: {
     cookies?: string[] | undefined;
     headers: Record<string, string>;
     statusCode: number;
   };
+  destroy(error?: unknown): void;
+  emit(event: "close" | "drain" | "error", error?: unknown): void;
+  listenerCount(event: "close" | "drain" | "error"): number;
+  off(event: "close" | "drain" | "error", listener: (error?: unknown) => void): unknown;
+  once(event: "close" | "drain" | "error", listener: (error?: unknown) => void): unknown;
   write(chunk: string | Uint8Array): boolean;
   end(): void;
   text(): string;
 }
 
-function createTestLambdaResponseStream(): TestLambdaResponseStream {
+function createTestLambdaResponseStream(
+  options: { writeResults?: readonly boolean[] } = {},
+): TestLambdaResponseStream {
+  const listeners: Record<string, Array<(error?: unknown) => void>> = {};
+  const writeResults = [...(options.writeResults ?? [])];
   return {
     chunks: [],
+    destroyed: false,
     ended: false,
+    destroy() {
+      this.destroyed = true;
+    },
+    emit(event, error) {
+      if (event === "close") {
+        this.destroyed = true;
+      }
+      const current = listeners[event]?.splice(0) ?? [];
+      current.forEach((listener) => listener(error));
+    },
+    listenerCount(event) {
+      return listeners[event]?.length ?? 0;
+    },
+    off(event, listener) {
+      listeners[event] = (listeners[event] ?? []).filter((candidate) => candidate !== listener);
+      return this;
+    },
+    once(event, listener) {
+      listeners[event] ??= [];
+      listeners[event].push(listener);
+      return this;
+    },
     write(chunk) {
       this.chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
-      return true;
+      return writeResults.shift() ?? true;
     },
     end() {
       this.ended = true;
@@ -1439,4 +1646,26 @@ async function eventually(assertion: () => void): Promise<void> {
   }
 
   throw lastError;
+}
+
+async function expectResolvesWithin<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  description: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(
+      () => reject(new Error(`${description} did not resolve within ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
