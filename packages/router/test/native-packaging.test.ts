@@ -73,4 +73,16 @@ describe("router native package distribution metadata", () => {
     expect(script).toContain("router-native-linux-x64-gnu");
     expect(script).toContain("NativeRouteMatcher");
   });
+
+  test("native artifact jobs skip unrelated dependency lifecycle scripts", async () => {
+    for (const workflowName of ["ci.yml", "publish.yml"]) {
+      const workflow = await readFile(
+        join(process.cwd(), ".github/workflows", workflowName),
+        "utf8",
+      );
+      const nativeJob = workflow.slice(workflow.indexOf("  native-artifacts:"));
+
+      expect(nativeJob).toContain("pnpm install --frozen-lockfile --ignore-scripts");
+    }
+  });
 });
