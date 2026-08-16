@@ -46,7 +46,7 @@ function containsControlCharacter(value: string): boolean {
 // Allowed: path-absolute (`/foo`), query-only (`?x=1`), hash-only (`#x`),
 // relative (`foo`). Rejected: protocol-relative (`//evil`), backslash variants
 // (`/\evil`, `\\evil`), and anything with a scheme like `javascript:`.
-function isSafeInternalRedirect(location: string): boolean {
+export function isSafeInternalRedirect(location: string): boolean {
   if (containsControlCharacter(location)) return false;
   const trimmed = stripLeadingControlOrWhitespace(location);
   if (trimmed === "") return false;

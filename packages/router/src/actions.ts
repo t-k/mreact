@@ -20,7 +20,7 @@ import { bundleRouterModule, type RouterCompatBuildApi } from "./bundle-pipeline
 import { type AppRouterCache, withRouteCacheContext } from "./cache.js";
 import { fileImportMetaUrlPlugin, importAppRouterSourceModule } from "./module-runner.js";
 import { createAppRouterImportPolicyPlugin, type AppRouterImportPolicy } from "./import-policy.js";
-import { cookies, type RequestCookies } from "./navigation.js";
+import { cookies, isSafeInternalRedirect, type RequestCookies } from "./navigation.js";
 export {
   createFormCsrfToken,
   formCsrfCookie,
@@ -861,8 +861,9 @@ function sameOriginRefererPath(request: Request): string | undefined {
     const requestUrl = new URL(request.url);
     const refererUrl = new URL(referer, requestUrl);
 
-    return refererUrl.origin === requestUrl.origin
-      ? `${refererUrl.pathname}${refererUrl.search}`
+    const location = `${refererUrl.pathname}${refererUrl.search}`;
+    return refererUrl.origin === requestUrl.origin && isSafeInternalRedirect(location)
+      ? location
       : undefined;
   } catch {
     return undefined;

@@ -1691,6 +1691,45 @@ export async function save() {
     }
   });
 
+  test.each([
+    ["missing", undefined],
+    ["protocol-relative path", "http://local.test//evil.example/page"],
+    ["backslash-normalized path", "http://local.test/\\/evil.example/page"],
+    ["userinfo-shaped path", "http://local.test//user@evil.example/"],
+  ])("does not redirect void form actions to a %s referer", async (_label, referer) => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-form-void-path-"));
+    await writeActionFixture(appDir);
+    const pageResponse = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/"),
+    });
+    const html = await pageResponse.text();
+    const csrf = extractInputValue(html, "__mreact_csrf");
+    const nonce = extractInputValue(html, "__mreact_action_nonce");
+    const cookie = pageResponse.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const response = await renderAppRequest({
+      appDir,
+      request: new Request("http://local.test/_mreact/actions", {
+        body: new URLSearchParams({
+          __mreact_action_nonce: nonce,
+          __mreact_csrf: csrf,
+          __mreact_export_name: "saveVoid",
+          __mreact_module_id: "actions.ts",
+          title: "unsafe referer path",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          cookie,
+          ...(referer === undefined ? {} : { referer }),
+        },
+        method: "POST",
+      }),
+    });
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/");
+  });
+
   test("does not redirect void form actions to a cross-origin referer", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-actions-form-void-origin-"));
     await writeActionFixture(appDir);
