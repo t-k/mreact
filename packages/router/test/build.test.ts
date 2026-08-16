@@ -3159,6 +3159,43 @@ export default function Page() { return <main>Private build response</main>; }
     await expect(response.text()).resolves.toContain("<main>Private build response</main>");
   });
 
+  test("does not publish nonce-bearing build responses as shared prerenders", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-csp-nonce-"));
+    const appDir = join(rootDir, "src", "app");
+    const outDir = join(rootDir, ".mreact");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export const prerender = true;
+export const metadata = {
+  csp: { directives: { "script-src": ["'self'"] }, nonce: "buildNonce123" },
+  head: [{ tag: "script", nonce: true, content: "safe()" }],
+};
+export default function Page() { return <main>Nonce build response</main>; }
+`,
+    );
+
+    await buildApp({
+      outDir,
+      projectRoot: rootDir,
+      routesDir: "src/app",
+      targets: ["cloudflare"],
+    });
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as { prerenderedRoutes?: Record<string, unknown> };
+    expect(serverManifest.prerenderedRoutes?.["/"]).toBeUndefined();
+
+    const response = await renderBuiltAppRequest({
+      outDir,
+      request: new Request("http://local.test/"),
+    });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(response.headers.get("content-security-policy")).toContain("'nonce-buildNonce123'");
+    await expect(response.text()).resolves.toContain('nonce="buildNonce123"');
+  });
+
   test("does not publish prerenders when the response hook reads Request", async () => {
     const rootDir = await mkdtemp(join(tmpdir(), "mreact-prerender-response-hook-request-"));
     const appDir = join(rootDir, "src", "app");

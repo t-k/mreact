@@ -72,6 +72,7 @@ import {
   hasInvalidConfiguredHsts,
 } from "./security-headers.js";
 import { resolveRouterCacheLimit } from "./cache-config.js";
+import { protectNonceBearingResponse } from "./prerender-entry.js";
 import {
   importAppRouterBuiltFileModule,
   importAppRouterFileModule,
@@ -710,7 +711,9 @@ export async function renderAppRequest(options: RenderAppRequestOptions): Promis
   };
   invokeRouterInstrumentation(options.instrumentation?.onRequestStart, requestEvent);
   const response = await renderAppRequestInternal({ ...options, requestUrl: url });
-  const finalResponse = await applyAppRouterResponseHook(response, options);
+  const finalResponse = protectNonceBearingResponse(
+    await applyAppRouterResponseHook(response, options),
+  );
   invokeRouterInstrumentation(options.instrumentation?.onRequestEnd, {
     ...requestEvent,
     status: finalResponse.status,

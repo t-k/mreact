@@ -1,4 +1,5 @@
 import type { BuiltPrerenderedRoute } from "./build.js";
+import { responseHeadersContainCspNonce } from "./csp.js";
 import { hasNavigationRouteMarker } from "./navigation-marker.js";
 
 export const PRERENDERED_ROUTE_SCHEMA_VERSION = 4;
@@ -79,6 +80,21 @@ export function isVisitorDependentResponse(response: Response): boolean {
   return isVisitorDependentHeaders(response.headers);
 }
 
+export function protectNonceBearingResponse(response: Response): Response {
+  if (!responseHeadersContainCspNonce(response.headers)) {
+    return response;
+  }
+
+  const headers = new Headers(response.headers);
+  headers.set("cache-control", "private, no-store");
+  headers.set("x-mreact-cache", "DYNAMIC");
+  return new Response(response.body, {
+    headers,
+    status: response.status,
+    statusText: response.statusText,
+  });
+}
+
 export function storedPrerenderedRouteHeaders(headers: Headers): Record<string, string> {
   const stored: Record<string, string> = {};
 
@@ -146,6 +162,7 @@ function isVisitorDependentHeaders(headers: Headers): boolean {
   return (
     headers.get("x-mreact-cache")?.toUpperCase() === "DYNAMIC" ||
     headers.has("set-cookie") ||
+    responseHeadersContainCspNonce(headers) ||
     hasVisitorDependentVary ||
     forbidsSharedStorage
   );

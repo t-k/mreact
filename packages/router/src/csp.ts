@@ -18,6 +18,17 @@ export interface ContentSecurityPolicyInput {
   replace?: Record<string, readonly string[] | string>;
 }
 
+export function responseHeadersContainCspNonce(headers: Headers): boolean {
+  for (const name of ["content-security-policy", "content-security-policy-report-only"]) {
+    const value = headers.get(name);
+    if (value !== null && /(?:^|[\s;,])'nonce-[^']+'(?=$|[\s;,])/i.test(value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 const VALID_NONCE = /^[A-Za-z0-9+/=_-]+$/;
 const VALID_DIRECTIVE_NAME = /^[a-z][a-z0-9-]*$/i;
 // One CSP "source expression". Reject anything containing `;`, quote,

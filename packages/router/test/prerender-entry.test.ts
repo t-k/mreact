@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   isCurrentPrerenderedRoute,
+  isVisitorDependentResponse,
   mergePrerenderedNavigationHtml,
   validatedPrerenderedNavigationHtml,
 } from "../src/prerender-entry.js";
@@ -62,6 +63,28 @@ describe("prerender entry validation", () => {
         status: 200,
       }),
     ).toBe(true);
+  });
+
+  test("rejects persisted and newly rendered nonce-bearing CSP while allowing hashes", () => {
+    const entry = (contentSecurityPolicy: string) => ({
+      headers: {
+        "content-security-policy": contentSecurityPolicy,
+        vary: "x-mreact-navigation",
+      },
+      html: "<main>shared</main>",
+      schemaVersion: 4 as const,
+      status: 200,
+    });
+
+    expect(isCurrentPrerenderedRoute(entry("script-src 'nonce-persisted123'"))).toBe(false);
+    expect(
+      isVisitorDependentResponse(
+        new Response("rendered", {
+          headers: { "content-security-policy": "script-src 'nonce-request123'" },
+        }),
+      ),
+    ).toBe(true);
+    expect(isCurrentPrerenderedRoute(entry("script-src 'sha256-AbCdEf123='"))).toBe(true);
   });
 
   test("rejects current entries without the required Vary header", () => {

@@ -453,6 +453,52 @@ describe("router cache helpers", () => {
     expect(result.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
+  test("does not store or replay nonce-bearing CSP responses", async () => {
+    const cache = createMemoryRouteCache();
+    const nonceHeader = "script-src 'self' 'nonce-request123'";
+    const response = await cacheRouteResponse({
+      cache,
+      key: "nonce-new",
+      path: "/nonce",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response('<script nonce="request123">safe()</script>', {
+        headers: { "content-security-policy": nonceHeader },
+      }),
+    });
+
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await cachedRouteResponse({ cache, key: "nonce-new" })).toBeUndefined();
+
+    cache.set("nonce-persisted", {
+      body: '<script nonce="persisted123">old()</script>',
+      cacheControl: "s-maxage=60",
+      expiresAt: Date.now() + 60_000,
+      headers: { "content-security-policy": "script-src 'nonce-persisted123'" },
+      path: "/nonce",
+      schemaVersion: 2,
+      status: 200,
+    });
+    expect(await cachedRouteResponse({ cache, key: "nonce-persisted" })).toBeUndefined();
+  });
+
+  test("continues to share CSP responses that use hashes instead of nonces", async () => {
+    const cache = createMemoryRouteCache();
+    await cacheRouteResponse({
+      cache,
+      key: "csp-hash",
+      path: "/csp-hash",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("hashed script", {
+        headers: { "content-security-policy": "script-src 'self' 'sha256-AbCdEf123='" },
+      }),
+    });
+
+    const cached = await cachedRouteResponse({ cache, key: "csp-hash" });
+    expect(cached?.headers.get("x-mreact-cache")).toBe("HIT");
+    expect(await cached?.text()).toBe("hashed script");
+  });
+
   test("revalidatePath normalizes a path without a leading slash and an all-slashes path", async () => {
     const cache = createMemoryRouteCache();
     await cacheRouteResponse({

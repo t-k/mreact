@@ -62,6 +62,7 @@ import {
   isCurrentPrerenderedRoute,
   isVisitorDependentResponse,
   mergePrerenderedNavigationHtml,
+  protectNonceBearingResponse,
   PRERENDERED_ROUTE_SCHEMA_VERSION,
   replayedPrerenderedRouteHeaders,
   storedPrerenderedRouteHeaders,
@@ -676,7 +677,7 @@ async function applyBuiltAppResponseHook(
     request: options.request,
   });
 
-  return hooked instanceof Response ? hooked : response;
+  return protectNonceBearingResponse(hooked instanceof Response ? hooked : response);
 }
 
 async function materializeResponseAsBuffer(response: Response): Promise<Response> {

@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { responseHeadersContainCspNonce } from "./csp.js";
 
 /**
  * Describes the cache lifetime assigned to a rendered route response.
@@ -326,6 +327,9 @@ export function cachedRouteResponse(options: {
     }
 
     const headers = new Headers(cached.headers ?? {});
+    if (responseHeadersContainCspNonce(headers)) {
+      return undefined;
+    }
     headers.set("cache-control", cached.cacheControl);
     if (!headers.has("content-type")) {
       headers.set("content-type", "text/html; charset=utf-8");
@@ -391,14 +395,18 @@ export async function cacheRouteResponse(options: {
   if (
     options.headerDependent === true ||
     requestCarriesCredentials(options.request) ||
-    options.response.headers.has("set-cookie")
+    options.response.headers.has("set-cookie") ||
+    responseHeadersContainCspNonce(options.response.headers)
   ) {
     const headers = new Headers(options.response.headers);
     headers.set("cache-control", "private, no-store");
     if (!headers.has("content-type")) {
       headers.set("content-type", contentType);
     }
-    if (options.headerDependent === true) {
+    if (
+      options.headerDependent === true ||
+      responseHeadersContainCspNonce(options.response.headers)
+    ) {
       headers.set("x-mreact-cache", "DYNAMIC");
     }
 

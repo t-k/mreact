@@ -136,6 +136,43 @@ describe("mreact app request rendering", () => {
     expect(completedStatuses).toEqual([403]);
   });
 
+  test("keeps CSP nonces added by the final response hook request-local", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-response-hook-nonce-"));
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+export default function Page() { return <main>Hook nonce</main>; }`,
+    );
+    let requestNumber = 0;
+    const render = async () =>
+      await renderAppRequest({
+        appDir,
+        async onResponse(response) {
+          requestNumber += 1;
+          const nonce = `hook${requestNumber}`;
+          const headers = new Headers(response.headers);
+          headers.set("content-security-policy", `script-src 'nonce-${nonce}'`);
+          return new Response(`${await response.text()}<script nonce="${nonce}">safe()</script>`, {
+            headers,
+            status: response.status,
+          });
+        },
+        request: new Request("https://local.test/"),
+      });
+
+    const first = await render();
+    const second = await render();
+
+    expect(first.headers.get("cache-control")).toBe("private, no-store");
+    expect(second.headers.get("cache-control")).toBe("private, no-store");
+    expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(first.headers.get("content-security-policy")).toContain("'nonce-hook1'");
+    expect(second.headers.get("content-security-policy")).toContain("'nonce-hook2'");
+    expect(await first.text()).toContain('nonce="hook1"');
+    expect(await second.text()).toContain('nonce="hook2"');
+  });
+
   test("rejects an invalid response hook convention export", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-invalid-response-hook-"));
     await writeFile(
@@ -2571,6 +2608,53 @@ export default function Page(props) {
     expect(first.headers.get("cache-control")).toBe("s-maxage=60, stale-while-revalidate");
     expect(await first.text()).toContain("<main>calls: 1</main>");
     expect(await second.text()).toContain("<main>calls: 1</main>");
+  });
+
+  test("keeps generated CSP nonces request-local instead of sharing them in route cache", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-app-route-cache-nonce-"));
+    const state = globalThis as { __mreactRouteCacheNonce?: number };
+    state.__mreactRouteCacheNonce = 0;
+    await writeFile(
+      join(appDir, "page.mreact.tsx"),
+      `export const revalidate = 60;
+
+export function generateMetadata() {
+  globalThis.__mreactRouteCacheNonce = (globalThis.__mreactRouteCacheNonce ?? 0) + 1;
+  return {
+    csp: {
+      directives: { "script-src": ["'self'"] },
+      nonce: "request" + globalThis.__mreactRouteCacheNonce,
+    },
+    head: [{ tag: "script", nonce: true, content: "safe()" }],
+  };
+}
+
+export default function Page() { return <main>nonce route</main>; }`,
+    );
+
+    try {
+      const first = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const second = await renderAppRequest({
+        appDir,
+        request: new Request("https://local.test/"),
+      });
+      const firstHtml = await first.text();
+      const secondHtml = await second.text();
+
+      expect(first.headers.get("cache-control")).toBe("private, no-store");
+      expect(second.headers.get("cache-control")).toBe("private, no-store");
+      expect(first.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+      expect(second.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+      expect(first.headers.get("content-security-policy")).toContain("'nonce-request1'");
+      expect(second.headers.get("content-security-policy")).toContain("'nonce-request2'");
+      expect(firstHtml).toContain('nonce="request1"');
+      expect(secondHtml).toContain('nonce="request2"');
+    } finally {
+      delete state.__mreactRouteCacheNonce;
+    }
   });
 
   test.each([false, true])(
