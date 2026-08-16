@@ -102,6 +102,87 @@ describe("server Flight runtime", () => {
     }
   });
 
+  test("serializes every TypedArray using its visible byte range", async () => {
+    const cases: Array<{ name: string; value: ArrayBufferView }> = [
+      { name: "Int8Array", value: new Int8Array([-1, 2]) },
+      { name: "Uint8Array", value: new Uint8Array([1, 2]) },
+      { name: "Uint8ClampedArray", value: new Uint8ClampedArray([1, 255]) },
+      { name: "Int16Array", value: new Int16Array([-1, 2]) },
+      { name: "Uint16Array", value: new Uint16Array([1, 2]) },
+      { name: "Int32Array", value: new Int32Array([-1, 2]) },
+      { name: "Uint32Array", value: new Uint32Array([1, 2]) },
+      { name: "Float32Array", value: new Float32Array([1.5, -2.25]) },
+      { name: "Float64Array", value: new Float64Array([1.5, -2.25]) },
+      { name: "BigInt64Array", value: new BigInt64Array([-1n, 2n]) },
+      { name: "BigUint64Array", value: new BigUint64Array([1n, 2n]) },
+    ];
+
+    for (const { name, value } of cases) {
+      const response = await renderToFlightResponse(value);
+      const bytes = Array.from(
+        new Uint8Array(value.buffer as ArrayBuffer, value.byteOffset, value.byteLength),
+      );
+
+      expect(response.root, name).toEqual({
+        kind: "typed-array",
+        arrayType: name,
+        bytes,
+      });
+    }
+  });
+
+  test("serializes ArrayBuffer and offset views without adjacent backing bytes", async () => {
+    const backing = new Uint8Array([99, 1, 2, 3, 4, 88]);
+    const response = await renderToFlightResponse({
+      buffer: backing.buffer.slice(1, 5),
+      bytes: new Uint8Array(backing.buffer, 1, 4),
+      view: new DataView(backing.buffer, 1, 4),
+    });
+
+    expect(response.root).toEqual({
+      buffer: { kind: "array-buffer", bytes: [1, 2, 3, 4] },
+      bytes: { kind: "typed-array", arrayType: "Uint8Array", bytes: [1, 2, 3, 4] },
+      view: { kind: "data-view", bytes: [1, 2, 3, 4] },
+    });
+  });
+
+  test("serializes RegExp and URL extension models with shared identity", async () => {
+    const pattern = /\$F1/giu;
+    pattern.lastIndex = 3;
+    const url = new URL("https://example.test/a?b=1");
+    const response = await renderToFlightResponse({ pattern, patternAgain: pattern, url, urlAgain: url });
+
+    expect(response.objectReferences).toEqual([
+      { kind: "regexp", source: "\\$F1", flags: "giu", lastIndex: 3 },
+      { kind: "url", href: "https://example.test/a?b=1" },
+    ]);
+    expect(response.root).toEqual({
+      pattern: { kind: "object-reference", id: 0 },
+      patternAgain: { kind: "object-reference", id: 0 },
+      url: { kind: "object-reference", id: 1 },
+      urlAgain: { kind: "object-reference", id: 1 },
+    });
+  });
+
+  test("rejects unsupported Flight objects instead of flattening them", async () => {
+    class UnsupportedValue {}
+
+    await expect(renderToFlightResponse(new WeakMap())).rejects.toThrow(
+      /Unsupported Flight object/,
+    );
+    await expect(renderToFlightResponse(new WeakSet())).rejects.toThrow(
+      /Unsupported Flight object/,
+    );
+    await expect(renderToFlightResponse(new UnsupportedValue())).rejects.toThrow(
+      /Unsupported Flight object/,
+    );
+    if (typeof SharedArrayBuffer !== "undefined") {
+      await expect(renderToFlightResponse(new SharedArrayBuffer(4))).rejects.toThrow(
+        /Unsupported Flight object/,
+      );
+    }
+  });
+
   test("serializes primitive arrays without one promise hop per leaf", async () => {
     const values = Array.from({ length: 100 }, (_unused, index) => index);
     let promiseInits = 0;

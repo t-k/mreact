@@ -199,6 +199,8 @@ export type FlightModel =
   | FlightArrayBufferModel
   | FlightTypedArrayModel
   | FlightDataViewModel
+  | FlightRegExpModel
+  | FlightUrlModel
   | { kind: "undefined" };
 
 /** Plain object shape inside a Flight model. */
@@ -312,6 +314,20 @@ export interface FlightTypedArrayModel {
 export interface FlightDataViewModel {
   kind: "data-view";
   bytes: number[];
+}
+
+/** Flight model record for a RegExp value. This is an mreact extension to React Flight. */
+export interface FlightRegExpModel {
+  kind: "regexp";
+  source: string;
+  flags: string;
+  lastIndex: number;
+}
+
+/** Flight model record for a URL value. This is an mreact extension to React Flight. */
+export interface FlightUrlModel {
+  kind: "url";
+  href: string;
 }
 
 /** Typed array constructor names supported by the Flight serializer. */
@@ -1207,6 +1223,22 @@ function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingSt
     ];
   }
 
+  if (model.kind === "regexp") {
+    return {
+      kind: "regexp",
+      source: encodeReactFlightModel(model.source, state),
+      flags: encodeReactFlightModel(model.flags, state),
+      lastIndex: model.lastIndex,
+    };
+  }
+
+  if (model.kind === "url") {
+    return {
+      kind: "url",
+      href: encodeReactFlightModel(model.href, state),
+    };
+  }
+
   if (isReactFlightBinaryModel(model)) {
     return model;
   }
@@ -2006,6 +2038,34 @@ function serializeFlightObjectValue(
     result = serializeElement(value, state, depth + 1);
   } else if (value instanceof Date) {
     result = { kind: "date", value: value.toJSON() };
+  } else if (value instanceof ArrayBuffer) {
+    result = {
+      kind: "array-buffer",
+      bytes: Array.from(new Uint8Array(value)),
+    };
+  } else if (value instanceof DataView) {
+    result = {
+      kind: "data-view",
+      bytes: snapshotArrayBufferView(value),
+    };
+  } else if (ArrayBuffer.isView(value)) {
+    result = {
+      kind: "typed-array",
+      arrayType: getFlightTypedArrayName(value),
+      bytes: snapshotArrayBufferView(value),
+    };
+  } else if (value instanceof RegExp) {
+    result = {
+      kind: "regexp",
+      source: value.source,
+      flags: value.flags,
+      lastIndex: value.lastIndex,
+    };
+  } else if (value instanceof URL) {
+    result = {
+      kind: "url",
+      href: value.href,
+    };
   } else if (value instanceof Map) {
     const entries = resolveFlightArray(
       Array.from(value.entries()).map(([key, entryValue]) =>
@@ -2059,6 +2119,10 @@ function serializeFlightObjectValue(
       message: value.message,
     };
   } else {
+    if (!isPlainFlightObject(value)) {
+      const name = value.constructor?.name ?? "unknown";
+      throw new TypeError(`Unsupported Flight object: ${name}.`);
+    }
     result = serializeObject(value as Record<string, unknown>, state, depth + 1);
   }
 
@@ -2305,6 +2369,37 @@ function isFormDataLike(value: unknown): value is FormData {
 
 function isIterableObject(value: unknown): value is Iterable<unknown> {
   return typeof value === "object" && value !== null && Symbol.iterator in value;
+}
+
+function snapshotArrayBufferView(view: ArrayBufferView): number[] {
+  if (!(view.buffer instanceof ArrayBuffer)) {
+    throw new TypeError("Unsupported Flight object: SharedArrayBuffer view.");
+  }
+  return Array.from(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
+}
+
+function getFlightTypedArrayName(value: ArrayBufferView): FlightTypedArrayName {
+  if (value instanceof Int8Array) return "Int8Array";
+  if (value instanceof Uint8Array) return "Uint8Array";
+  if (value instanceof Uint8ClampedArray) return "Uint8ClampedArray";
+  if (value instanceof Int16Array) return "Int16Array";
+  if (value instanceof Uint16Array) return "Uint16Array";
+  if (value instanceof Int32Array) return "Int32Array";
+  if (value instanceof Uint32Array) return "Uint32Array";
+  if (value instanceof Float32Array) return "Float32Array";
+  if (value instanceof Float64Array) return "Float64Array";
+  if (typeof BigInt64Array !== "undefined" && value instanceof BigInt64Array) {
+    return "BigInt64Array";
+  }
+  if (typeof BigUint64Array !== "undefined" && value instanceof BigUint64Array) {
+    return "BigUint64Array";
+  }
+  throw new TypeError("Unsupported Flight typed array.");
+}
+
+function isPlainFlightObject(value: object): boolean {
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 function serverActionKey(moduleId: string, exportName: string): string {
