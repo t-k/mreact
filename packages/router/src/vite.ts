@@ -1,6 +1,6 @@
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, relative, sep } from "node:path";
 import { formatDiagnostic } from "@reckona/mreact-compiler";
 import type { DehydrateOptions } from "@reckona/mreact-query";
 import {
@@ -8,10 +8,12 @@ import {
   transformCompilerModuleContext,
 } from "@reckona/mreact-compiler/internal";
 import {
+  isFileLoadingAllowed,
   normalizePath,
   type Connect,
   type Plugin,
   type PluginOption,
+  type ResolvedConfig,
   type UserConfig,
   type ViteDevServer,
 } from "vite";
@@ -143,6 +145,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   const normalizedSourceDirs = project.allowedSourceDirs.map((directory) =>
     normalizePath(directory),
   );
+  const canonicalDevCssSourceRoot = resolveCanonicalDevCssSourceRoot(project.projectRoot);
   const packageFile = (monorepoDir: string, packageName: string, entry: string): string =>
     workspacePackageFile({
       currentFileUrl: import.meta.url,
@@ -234,6 +237,7 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
   // built-in CSS plugin) whose `transform` requires a dev-server environment the
   // lightweight navigation scan cannot provide. Mirrors what the build forwards.
   let userVitePlugins: readonly PluginOption[] | undefined;
+  let resolvedViteConfig: Promise<ResolvedConfig> | undefined;
   let devServerModuleCacheVersion = 0;
 
   const plugin: MreactRouterPlugin = {
@@ -282,6 +286,9 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
           ],
         },
       };
+    },
+    configResolved(config) {
+      resolvedViteConfig = resolveCanonicalViteFileSystemConfig(config);
     },
     configureServer(server) {
       server.middlewares.use(createDevCssProxyMiddleware());
@@ -335,8 +342,10 @@ export function createAppRouterVitePlugin(options: AppRouterVitePluginOptions): 
     load(id) {
       if (isDevCssSourceModuleId(id)) {
         return loadDevCssSourceModule({
+          allowedRoot: canonicalDevCssSourceRoot,
           cssFile: clientRequestPath(id),
           sourceDirs: project.allowedSourceDirs,
+          viteConfig: resolvedViteConfig,
         });
       }
 
@@ -937,16 +946,93 @@ function isDevCssSourceModuleId(id: string): boolean {
 }
 
 async function loadDevCssSourceModule(options: {
+  allowedRoot: Promise<string | undefined>;
   cssFile: string;
   sourceDirs: readonly string[];
+  viteConfig: Promise<ResolvedConfig> | undefined;
 }): Promise<string | undefined> {
-  const code = await readFile(options.cssFile, "utf8");
+  const refusal = () => new Error("Dev CSS source is outside the configured project roots.");
+
+  if (options.cssFile.includes("\0")) {
+    throw refusal();
+  }
+
+  let allowedRoot: string | undefined;
+  let cssFile: string;
+  let viteConfig: ResolvedConfig | undefined;
+  try {
+    [allowedRoot, cssFile, viteConfig] = await Promise.all([
+      options.allowedRoot,
+      realpath(options.cssFile),
+      options.viteConfig,
+    ]);
+  } catch {
+    throw refusal();
+  }
+
+  if (
+    allowedRoot === undefined ||
+    !isPathInsideDirectory(allowedRoot, cssFile) ||
+    (viteConfig !== undefined && !isFileLoadingAllowed(viteConfig, normalizePath(cssFile)))
+  ) {
+    throw refusal();
+  }
+
+  let code: string;
+  try {
+    code = await readFile(cssFile, "utf8");
+  } catch {
+    throw refusal();
+  }
 
   return prependTailwindSourceDirectives({
     code,
-    cssFile: options.cssFile,
+    cssFile,
     sourceDirs: options.sourceDirs,
   });
+}
+
+async function resolveCanonicalDevCssSourceRoot(directory: string): Promise<string | undefined> {
+  try {
+    return await realpath(directory);
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveCanonicalViteFileSystemConfig(
+  config: ResolvedConfig,
+): Promise<ResolvedConfig> {
+  const allow = await Promise.all(
+    config.server.fs.allow.map(async (directory) => {
+      try {
+        return normalizePath(await realpath(directory));
+      } catch {
+        return normalizePath(directory);
+      }
+    }),
+  );
+
+  return {
+    ...config,
+    server: {
+      ...config.server,
+      fs: {
+        ...config.server.fs,
+        allow,
+      },
+    },
+  };
+}
+
+function isPathInsideDirectory(directory: string, candidate: string): boolean {
+  const relativePath = relative(directory, candidate);
+  return (
+    relativePath === "" ||
+    (relativePath !== ".." &&
+      !relativePath.startsWith(`..${sep}`) &&
+      !isAbsolute(relativePath))
+  );
 }
 
 function importerInRuntimePackage(

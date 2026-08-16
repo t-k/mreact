@@ -211,6 +211,162 @@ describe("router Vite middleware", () => {
     expect(source).toContain("return undefined");
   });
 
+  test("contains dev CSS source loads to the canonical project root and Vite allow rules", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-containment-project-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-containment-outside-"));
+    const sourceDir = join(projectRoot, "src");
+    const insideCss = join(sourceDir, "inside.css");
+    const dotDotNamedCss = join(sourceDir, "..safe.css");
+    const deniedCss = join(sourceDir, "denied.css");
+    const outsideCss = join(outsideRoot, "secret.css");
+    const symlinkCss = join(sourceDir, "linked-secret.css");
+    await mkdir(sourceDir, { recursive: true });
+    await writeFile(insideCss, "body { color: green; }");
+    await writeFile(dotDotNamedCss, "body { color: blue; }");
+    await writeFile(deniedCss, "SECRET_CUSTOM_VITE_DENY");
+    await writeFile(outsideCss, "SECRET_OUTSIDE_PROJECT");
+    await symlink(outsideCss, symlinkCss, "file");
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["src"],
+      projectRoot,
+      routesDir: "src/app",
+    });
+    const load = typeof plugin.load === "function" ? plugin.load : plugin.load?.handler;
+    const configResolved =
+      typeof plugin.configResolved === "function"
+        ? plugin.configResolved
+        : plugin.configResolved?.handler;
+    expect(load).toBeDefined();
+    expect(configResolved).toBeDefined();
+    const viteConfig = await resolveConfig(
+      {
+        configFile: false,
+        root: projectRoot,
+        server: { fs: { deny: ["**/denied.css"] } },
+      },
+      "serve",
+      "development",
+    );
+    await configResolved?.call({} as never, viteConfig);
+    const loadCss = async (file: string) =>
+      await load?.call(
+        {} as never,
+        `${file}?mreact-router-dev-css-source=`,
+        {},
+      );
+
+    await expect(loadCss(insideCss)).resolves.toContain("body { color: green; }");
+    await expect(loadCss(dotDotNamedCss)).resolves.toContain("body { color: blue; }");
+    await expect(loadCss(deniedCss)).rejects.toThrow("outside the configured project roots");
+    await expect(loadCss(outsideCss)).rejects.toThrow("outside the configured project roots");
+    await expect(
+      loadCss(`${sourceDir}/../../${outsideRoot.slice(outsideRoot.lastIndexOf("/") + 1)}/secret.css`),
+    ).rejects.toThrow("outside the configured project roots");
+    await expect(loadCss(symlinkCss)).rejects.toThrow("outside the configured project roots");
+    await expect(loadCss(`${insideCss}\0suffix`)).rejects.toThrow(
+      "outside the configured project roots",
+    );
+    await expect(loadCss(join(sourceDir, "missing.css"))).rejects.toThrow(
+      new Error("Dev CSS source is outside the configured project roots."),
+    );
+  });
+
+  test("does not trust a configured source directory symlink outside the project", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-root-symlink-project-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-root-symlink-outside-"));
+    const linkedSourceDir = join(projectRoot, "linked-src");
+    const outsideCss = join(outsideRoot, "secret.css");
+    await writeFile(outsideCss, "SECRET_FROM_LINKED_SOURCE_ROOT");
+    await symlink(outsideRoot, linkedSourceDir, "dir");
+    const plugin = mreactRouter({
+      allowedSourceDirs: ["linked-src"],
+      projectRoot,
+      routesDir: "linked-src/app",
+    });
+    const load = typeof plugin.load === "function" ? plugin.load : plugin.load?.handler;
+
+    await expect(
+      load?.call(
+        {} as never,
+        `${outsideCss}?mreact-router-dev-css-source=`,
+        {},
+      ),
+    ).rejects.toThrow("outside the configured project roots");
+  });
+
+  test("loads legitimate dev CSS when the project root is a symlink", async () => {
+    const physicalProjectRoot = await mkdtemp(
+      join(tmpdir(), "mreact-vite-css-project-root-physical-"),
+    );
+    const linkedProjectRoot = `${physicalProjectRoot}-link`;
+    const appDir = join(physicalProjectRoot, "src", "app");
+    const cssFile = join(physicalProjectRoot, "src", "style.css");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(cssFile, "body { color: rebeccapurple; }");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>Linked root</main>; }`,
+    );
+    await symlink(physicalProjectRoot, linkedProjectRoot, "dir");
+    const server = await startDevServer({ port: 0, projectRoot: linkedProjectRoot });
+    devServers.push(server);
+
+    const response = await fetch(
+      `${server.url}/@fs${join(linkedProjectRoot, "src", "style.css")}?mreact-router-dev-css-source=`,
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.text()).resolves.toContain("body { color: rebeccapurple; }");
+  });
+
+  test("does not let the dev CSS query bypass Vite filesystem containment", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-http-project-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "mreact-vite-css-http-outside-"));
+    const appDir = join(projectRoot, "src", "app");
+    const sourceDir = join(projectRoot, "src");
+    const deniedEnv = join(projectRoot, ".env");
+    const outsideCss = join(outsideRoot, "secret.css");
+    const symlinkCss = join(sourceDir, "linked-secret.css");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(deniedEnv, "SECRET_VITE_DENIED_FILE");
+    await writeFile(outsideCss, "SECRET_DEV_CSS_QUERY");
+    await symlink(outsideCss, symlinkCss, "file");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      `export default function Page() { return <main>CSS containment</main>; }`,
+    );
+    const server = await startDevServer({ port: 0, projectRoot });
+    devServers.push(server);
+    const query = "mreact-router-dev-css-source=";
+
+    const ordinaryOutside = await fetch(`${server.url}/@fs${outsideCss}`);
+    const queriedOutside = await fetch(`${server.url}/@fs${outsideCss}?${query}`);
+    const queriedSymlink = await fetch(`${server.url}/@fs${symlinkCss}?${query}`);
+    const ordinaryDeniedEnv = await fetch(`${server.url}/@fs${deniedEnv}`);
+    const queriedDeniedEnv = await fetch(`${server.url}/@fs${deniedEnv}?${query}`);
+    const encodedTraversal = await fetch(
+      `${server.url}/@fs${sourceDir}/%2e%2e/%2e%2e/${outsideRoot.slice(outsideRoot.lastIndexOf("/") + 1)}/secret.css?${query}`,
+    );
+    const responseBodies = await Promise.all([
+      ordinaryOutside.text(),
+      queriedOutside.text(),
+      queriedSymlink.text(),
+      ordinaryDeniedEnv.text(),
+      queriedDeniedEnv.text(),
+      encodedTraversal.text(),
+    ]);
+
+    expect(ordinaryOutside.status).toBe(403);
+    expect(queriedOutside.status).not.toBe(200);
+    expect(queriedSymlink.status).not.toBe(200);
+    expect(ordinaryDeniedEnv.status).toBe(403);
+    expect(queriedDeniedEnv.status).not.toBe(200);
+    expect(encodedTraversal.status).not.toBe(200);
+    expect(responseBodies.join("\n")).not.toMatch(
+      /SECRET_DEV_CSS_QUERY|SECRET_VITE_DENIED_FILE/,
+    );
+  });
+
   test("invalidates only Vite hot update modules for mreact client dev modules", () => {
     const projectRoot = process.cwd();
     const plugin = mreactRouter({
