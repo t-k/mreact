@@ -2743,7 +2743,7 @@ export default function Page() {
         `  headers: { host: "lambda.test", "x-forwarded-proto": "https" },`,
         `  rawPath: "/",`,
         `  rawQueryString: "",`,
-        `  requestContext: { http: { method: "GET" } },`,
+        `  requestContext: { http: { method: "GET", protocol: "HTTP/1.1" } },`,
         `  version: "2.0",`,
         `});`,
         `console.log(JSON.stringify(result));`,

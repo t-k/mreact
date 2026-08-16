@@ -63,7 +63,10 @@ describe("mreact AWS Lambda adapter", () => {
 
   test("returns the payload format diagnostic from preloaded buffered and streaming handlers", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-preloaded-invalid-event-");
-    await writeFile(join(appDir, "page.tsx"), "export default function Page() { return <main>ok</main>; }");
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>ok</main>; }",
+    );
     await buildApp({ appDir, outDir });
     const invalidEvent = {
       rawPath: "/",
@@ -101,7 +104,9 @@ describe("mreact AWS Lambda adapter", () => {
     await expect(buffered(invalidEvent)).resolves.toMatchObject({ statusCode: 400 });
 
     installAwsLambdaStreamingMock();
-    const streaming = await createPreloadedAwsLambdaStreamingRequestHandler({ outDir: missingOutDir });
+    const streaming = await createPreloadedAwsLambdaStreamingRequestHandler({
+      outDir: missingOutDir,
+    });
     const stream = createTestLambdaResponseStream();
     await streaming(invalidEvent, stream, {});
 
@@ -197,12 +202,10 @@ export default function Page() { return <main>Query state</main>; }`,
     expect(result.statusCode).toBe(200);
     expect(result.headers?.["x-content-type-options"]).toBe("nosniff");
     expect(result.headers?.["referrer-policy"]).toBe("strict-origin-when-cross-origin");
-    expect(result.headers?.["permissions-policy"]).toBe(
-      "camera=(), microphone=(), geolocation=()",
-    );
+    expect(result.headers?.["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
   });
 
-  test("applies prerendered HSTS from the Lambda event scheme", async () => {
+  test("treats the API Gateway HTTP version as HTTPS for prerendered HSTS", async () => {
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-prerender-hsts-");
     await writeFile(
       join(appDir, "page.tsx"),
@@ -213,13 +216,13 @@ export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
     await buildApp({ appDir, outDir });
     const handler = createAwsLambdaRequestHandler({ outDir });
     const secure = await handler(lambdaEvent("/"));
-    const plain = await handler({
+    const realistic = await handler({
       ...lambdaEvent("/"),
       requestContext: { http: { method: "GET", protocol: "HTTP/1.1" } },
     });
 
     expect(secure.headers?.["strict-transport-security"]).toBe("max-age=31536000");
-    expect(plain.headers?.["strict-transport-security"]).toBeUndefined();
+    expect(realistic.headers?.["strict-transport-security"]).toBe("max-age=31536000");
   });
 
   test("does not trust forwarded host by default in production", async () => {
@@ -243,7 +246,7 @@ export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
         expect(result.statusCode).toBe(200);
         expect(JSON.parse(result.body)).toEqual({ url: "https://lambda.local/" });
       });
-      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Host header trust is implicit"));
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("defaults to strict"));
     } finally {
       errorSpy.mockRestore();
     }
@@ -278,7 +281,7 @@ export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
       ...lambdaEvent("/"),
       headers: {
         host: "api.example",
-        "x-forwarded-proto": "https",
+        "x-forwarded-proto": "http",
       },
       requestContext: {
         http: {
@@ -289,7 +292,125 @@ export default function Page() { return <main>Lambda prerender HSTS</main>; }`,
     });
 
     expect(result.statusCode).toBe(200);
-    expect(JSON.parse(result.body)).toEqual({ url: "http://api.example/" });
+    expect(JSON.parse(result.body)).toEqual({ url: "https://api.example/" });
+
+    const trustedHandler = createAwsLambdaRequestHandler({
+      allowedHosts: ["api.example"],
+      outDir,
+      trustForwardedProto: true,
+    });
+    const trusted = await trustedHandler({
+      ...lambdaEvent("/"),
+      headers: { host: "api.example", "x-forwarded-proto": "http" },
+    });
+
+    expect(JSON.parse(trusted.body)).toEqual({ url: "http://api.example/" });
+  });
+
+  test("builds absolute redirects with HTTPS for realistic API Gateway events", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-https-redirect-");
+    await mkdir(join(appDir, "api", "redirect"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "redirect", "route.ts"),
+      `export function GET(request) {
+  return Response.redirect(new URL("/destination", request.url), 302);
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const handler = createAwsLambdaRequestHandler({
+      allowedHosts: ["api.example"],
+      outDir,
+    });
+
+    const result = await handler({
+      ...lambdaEvent("/api/redirect"),
+      headers: { host: "api.example" },
+    });
+
+    expect(result.statusCode).toBe(302);
+    expect(result.headers?.location).toBe("https://api.example/destination");
+  });
+
+  test("rejects trusted-proxy authority delimiters without changing the requested path", async () => {
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-host-authority-");
+    await writeUrlEchoRoute(appDir);
+    await buildApp({ appDir, outDir });
+    const events: AppRouterLogEvent[] = [];
+    const handler = createAwsLambdaRequestHandler({
+      hostPolicy: "trusted-proxy",
+      logger: { error: (event) => events.push(event) },
+      outDir,
+    });
+
+    for (const forwardedHost of [
+      "evil.example#",
+      "evil.example?q=1",
+      "evil.example/path",
+      "evil.example\\attacker",
+      "user@evil.example",
+    ]) {
+      const result = await handler({
+        ...lambdaEvent("/"),
+        headers: { host: "proxy.internal", "x-forwarded-host": forwardedHost },
+      });
+      expect(result.statusCode, forwardedHost).toBe(500);
+      expect(result.body, forwardedHost).toBe("Internal Server Error");
+    }
+
+    const valid = await handler({
+      ...lambdaEvent("/"),
+      headers: { host: "proxy.internal", "x-forwarded-host": "api.example:8443" },
+    });
+    expect(JSON.parse(valid.body)).toEqual({ url: "https://api.example:8443/" });
+    await eventually(() => {
+      expect(events.filter((event) => event.type === "router:request:error")).toHaveLength(5);
+    });
+  });
+
+  test("contains unsupported Fetch methods in buffered and streaming handlers", async () => {
+    installAwsLambdaStreamingMock();
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-unsupported-method-");
+    await mkdir(join(appDir, "api", "method"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "method", "route.ts"),
+      `export function GET() {
+  return new Response("ok");
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const events: AppRouterLogEvent[] = [];
+    const options = {
+      logger: { error: (event: AppRouterLogEvent) => events.push(event) },
+      outDir,
+    };
+    const traceEvent = {
+      ...lambdaEvent("/api/method"),
+      requestContext: { http: { method: "TRACE", protocol: "HTTP/1.1" } },
+    };
+
+    const buffered = await createAwsLambdaRequestHandler(options)(traceEvent);
+    expect(buffered).toMatchObject({
+      body: "Internal Server Error",
+      statusCode: 500,
+    });
+
+    const stream = createTestLambdaResponseStream();
+    await createAwsLambdaStreamingRequestHandler(options)(traceEvent, stream, {});
+    expect(stream.metadata?.statusCode).toBe(500);
+    expect(stream.text()).toBe("Internal Server Error");
+
+    const ordinaryUnknownMethod = await createAwsLambdaRequestHandler({ outDir })({
+      ...lambdaEvent("/api/method"),
+      requestContext: { http: { method: "BREW", protocol: "HTTP/1.1" } },
+    });
+    expect(ordinaryUnknownMethod.statusCode).toBe(405);
+
+    await eventually(() => {
+      expect(events.filter((event) => event.type === "router:request:error")).toEqual([
+        expect.objectContaining({ method: "TRACE", path: "/api/method" }),
+        expect.objectContaining({ method: "TRACE", path: "/api/method" }),
+      ]);
+    });
   });
 
   test("emits opt-in AWS Lambda phase timings", async () => {
@@ -851,7 +972,9 @@ export default function Hot({ data }) {
       outDir,
       preload: { mode: "hot-route-requests", routes: ["/hot"] },
     });
-    const manifest = JSON.parse(await readFile(join(outDir, "server", "manifest.json"), "utf8")) as {
+    const manifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    ) as {
       serverModuleRequestFiles?: Record<string, string>;
     };
     const requestArtifact = manifest.serverModuleRequestFiles?.["hot/page.tsx"];
@@ -1531,6 +1654,7 @@ function lambdaEvent(rawPath: string): AwsLambdaHttpEventV2 {
     requestContext: {
       http: {
         method: "GET",
+        protocol: "HTTP/1.1",
       },
     },
     version: "2.0",
@@ -1603,10 +1727,7 @@ function createTestLambdaResponseStream(
 function installAwsLambdaStreamingMock(): void {
   (globalThis as { awslambda?: unknown }).awslambda = {
     HttpResponseStream: {
-      from(
-        stream: TestLambdaResponseStream,
-        metadata: TestLambdaResponseStream["metadata"],
-      ) {
+      from(stream: TestLambdaResponseStream, metadata: TestLambdaResponseStream["metadata"]) {
         stream.metadata = metadata;
         return stream;
       },
@@ -1617,9 +1738,7 @@ function installAwsLambdaStreamingMock(): void {
   };
 }
 
-function openPreloadGate(
-  gate: { open: boolean; waiters: Array<() => void> } | undefined,
-): void {
+function openPreloadGate(gate: { open: boolean; waiters: Array<() => void> } | undefined): void {
   if (gate === undefined) {
     return;
   }

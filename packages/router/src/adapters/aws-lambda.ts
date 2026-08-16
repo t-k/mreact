@@ -26,10 +26,7 @@ import type { RouterInstrumentation } from "../trace.js";
 /** Re-exports cache contracts used by AWS Lambda handlers. */
 export type { AppRouterCache, AppRouterCacheEntry } from "../cache.js";
 /** Re-exports server action contracts used by AWS Lambda handlers. */
-export type {
-  AppRouterAllowedServerAction,
-  AppRouterServerActionOptions,
-} from "../actions.js";
+export type { AppRouterAllowedServerAction, AppRouterServerActionOptions } from "../actions.js";
 /** Re-exports logger contracts used by AWS Lambda handlers. */
 export type {
   AppRouterCspInlineNonceWarningLogEvent,
@@ -64,18 +61,15 @@ import {
   createBuiltRequestRuntime,
   preloadBuiltAppRuntime,
   resolveRequestHost,
-  warnIfImplicitHostTrust,
   type AppRouterPrerenderStore,
   type RequestHostPolicy,
   type ResponseSinkStrategy,
 } from "../serve.js";
 
+let warnedImplicitAwsLambdaHostPolicy = false;
+
 /** Re-exports request and rendering contracts used by AWS Lambda handlers. */
-export type {
-  AppRouterPrerenderStore,
-  RequestHostPolicy,
-  ResponseSinkStrategy,
-} from "../serve.js";
+export type { AppRouterPrerenderStore, RequestHostPolicy, ResponseSinkStrategy } from "../serve.js";
 
 /**
  * Represents the AWS API Gateway HTTP API v2 event consumed by buffered handlers.
@@ -126,10 +120,7 @@ export interface AwsLambdaStreamingResponseStream {
   end(): void;
   /** Removes a lifecycle listener when the runtime stream implements Node EventEmitter semantics. */
   off?:
-    | ((
-        event: "close" | "drain" | "error",
-        listener: (error?: unknown) => void,
-      ) => unknown)
+    | ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown)
     | undefined;
   /** Registers drain-only or full Node-compatible lifecycle listeners. */
   once?:
@@ -138,10 +129,7 @@ export interface AwsLambdaStreamingResponseStream {
     | undefined;
   /** Removes a lifecycle listener on runtimes that expose the legacy EventEmitter API. */
   removeListener?:
-    | ((
-        event: "close" | "drain" | "error",
-        listener: (error?: unknown) => void,
-      ) => unknown)
+    | ((event: "close" | "drain" | "error", listener: (error?: unknown) => void) => unknown)
     | undefined;
   write(chunk: string | Uint8Array): boolean;
   /** Reports whether the runtime output stream ended normally. */
@@ -181,10 +169,7 @@ export interface AwsLambdaRequestHandlerOptions {
 /**
  * Selects how an AWS Lambda handler resolves its app-router import policy.
  */
-export type AwsLambdaImportPolicy =
-  | AppRouterImportPolicy
-  | "generated"
-  | { fromManifest: true };
+export type AwsLambdaImportPolicy = AppRouterImportPolicy | "generated" | { fromManifest: true };
 
 /**
  * Configures preload behavior for built app-router modules in AWS Lambda.
@@ -221,7 +206,7 @@ export type AwsLambdaStreamingRequestHandler<TContext = unknown> = (
 ) => Promise<void>;
 
 const invalidAwsLambdaHttpEventV2Diagnostic =
-  'Expected an AWS Lambda HTTP API payload format 2.0 event with rawPath and requestContext.http.method.';
+  "Expected an AWS Lambda HTTP API payload format 2.0 event with rawPath and requestContext.http.method.";
 
 function invalidAwsLambdaHttpEventV2Result(): AwsLambdaHttpResultV2 {
   return {
@@ -247,7 +232,7 @@ function invalidAwsLambdaHttpEventV2Response(): Response {
 export function createAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaRequestHandler {
-  warnIfImplicitHostTrust(options);
+  warnIfImplicitAwsLambdaHostPolicy(options);
   let handler: AwsLambdaRequestHandler | undefined;
 
   return async (event) => {
@@ -259,7 +244,11 @@ export function createAwsLambdaRequestHandler(
 
     handler ??= (() => {
       const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-      const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise, "middleware");
+      const runtimePreloadPromise = startAwsLambdaRuntimePreload(
+        options,
+        runtimeDirPromise,
+        "middleware",
+      );
       void runtimePreloadPromise?.catch(() => {});
       return createAwsLambdaRequestHandlerFromRuntime(
         options,
@@ -281,7 +270,7 @@ export function createAwsLambdaRequestHandler(
 export async function createPreloadedAwsLambdaRequestHandler(
   options: AwsLambdaRequestHandlerOptions,
 ): Promise<AwsLambdaRequestHandler> {
-  warnIfImplicitHostTrust(options);
+  warnIfImplicitAwsLambdaHostPolicy(options);
   let handler: AwsLambdaRequestHandler | undefined;
 
   return async (event) => {
@@ -311,10 +300,8 @@ export async function createPreloadedAwsLambdaRequestHandler(
  *
  * Call this during controlled Lambda initialization only when the extra startup work is preferable to first-valid-request latency. Request handlers always validate events before they start runtime work.
  */
-export async function warmAwsLambdaRuntime(
-  options: AwsLambdaRequestHandlerOptions,
-): Promise<void> {
-  warnIfImplicitHostTrust(options);
+export async function warmAwsLambdaRuntime(options: AwsLambdaRequestHandlerOptions): Promise<void> {
+  warnIfImplicitAwsLambdaHostPolicy(options);
   const runtimeDir = await prepareAwsLambdaRuntimeDir(options);
   await preloadAwsLambdaRuntime(options, runtimeDir);
 }
@@ -334,16 +321,18 @@ function createAwsLambdaRequestHandlerFromRuntime(
 
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
-    const eventToRequestStartedAt = phaseStartedAt(phases);
-    const request = eventToRequest(event, options);
-    finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
-    const logFields = requestLogFields(request, "aws-lambda");
-    emitRouterLog(options.logger, "info", {
-      ...logFields,
-      type: "router:request:start",
-    });
+    let request: Request | undefined;
+    let logFields = awsLambdaEventLogFields(event);
 
     try {
+      const eventToRequestStartedAt = phaseStartedAt(phases);
+      request = eventToRequest(event, options);
+      finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
+      logFields = requestLogFields(request, "aws-lambda");
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        type: "router:request:start",
+      });
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
@@ -361,11 +350,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
         outDir: options.outDir,
         runtimeDir,
       });
-      const preload = awsLambdaRenderPreload(
-        options,
-        runtimePreloadPromise,
-        defaultPreloadMode,
-      );
+      const preload = awsLambdaRenderPreload(options, runtimePreloadPromise, defaultPreloadMode);
       const response = await builtRuntime.render(request, {
         dehydrateOptions: options.dehydrateOptions,
         instrumentation: options.instrumentation,
@@ -426,7 +411,7 @@ function createAwsLambdaRequestHandlerFromRuntime(
 export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
 ): AwsLambdaStreamingRequestHandler<TContext> {
-  warnIfImplicitHostTrust(options);
+  warnIfImplicitAwsLambdaHostPolicy(options);
   const runtime = awsLambdaRuntime();
   let handler: AwsLambdaStreamingRequestHandler<TContext> | undefined;
 
@@ -434,17 +419,17 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
     try {
       validateAwsLambdaHttpEventV2(event);
     } catch {
-      await streamResponseToLambda(
-        invalidAwsLambdaHttpEventV2Response(),
-        responseStream,
-        runtime,
-      );
+      await streamResponseToLambda(invalidAwsLambdaHttpEventV2Response(), responseStream, runtime);
       return;
     }
 
     handler ??= (() => {
       const runtimeDirPromise = prepareAwsLambdaRuntimeDir(options);
-      const runtimePreloadPromise = startAwsLambdaRuntimePreload(options, runtimeDirPromise, "middleware");
+      const runtimePreloadPromise = startAwsLambdaRuntimePreload(
+        options,
+        runtimeDirPromise,
+        "middleware",
+      );
       void runtimePreloadPromise?.catch(() => {});
       return createAwsLambdaStreamingRequestHandlerFromRuntime(
         options,
@@ -467,7 +452,7 @@ export function createAwsLambdaStreamingRequestHandler<TContext = unknown>(
 export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext = unknown>(
   options: AwsLambdaRequestHandlerOptions,
 ): Promise<AwsLambdaStreamingRequestHandler<TContext>> {
-  warnIfImplicitHostTrust(options);
+  warnIfImplicitAwsLambdaHostPolicy(options);
   const runtime = awsLambdaRuntime();
   let handler: AwsLambdaStreamingRequestHandler<TContext> | undefined;
 
@@ -475,11 +460,7 @@ export async function createPreloadedAwsLambdaStreamingRequestHandler<TContext =
     try {
       validateAwsLambdaHttpEventV2(event);
     } catch {
-      await streamResponseToLambda(
-        invalidAwsLambdaHttpEventV2Response(),
-        responseStream,
-        runtime,
-      );
+      await streamResponseToLambda(invalidAwsLambdaHttpEventV2Response(), responseStream, runtime);
       return;
     }
 
@@ -621,8 +602,12 @@ async function readGeneratedAwsLambdaImportPolicy(outDir: string): Promise<AppRo
   return await promise;
 }
 
-async function readGeneratedAwsLambdaImportPolicyInner(outDir: string): Promise<AppRouterImportPolicy> {
-  const policy = JSON.parse(await readFile(join(outDir, "server", "import-policy.json"), "utf8")) as {
+async function readGeneratedAwsLambdaImportPolicyInner(
+  outDir: string,
+): Promise<AppRouterImportPolicy> {
+  const policy = JSON.parse(
+    await readFile(join(outDir, "server", "import-policy.json"), "utf8"),
+  ) as {
     runtimePackages?: readonly string[] | undefined;
   };
 
@@ -649,28 +634,27 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
     try {
       validateAwsLambdaHttpEventV2(event);
     } catch {
-      await streamResponseToLambda(
-        invalidAwsLambdaHttpEventV2Response(),
-        responseStream,
-        runtime,
-      );
+      await streamResponseToLambda(invalidAwsLambdaHttpEventV2Response(), responseStream, runtime);
       return;
     }
 
     const startedAt = logNow();
     const phases = createAwsLambdaTimingPhases(options);
-    const eventToRequestStartedAt = phaseStartedAt(phases);
     const requestAbortController = new AbortController();
-    const request = eventToRequest(event, options, requestAbortController.signal);
-    const requestLifecycle = observeLambdaStreamFailure(responseStream, requestAbortController);
-    finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
-    const logFields = requestLogFields(request, "aws-lambda");
-    emitRouterLog(options.logger, "info", {
-      ...logFields,
-      type: "router:request:start",
-    });
+    let request: Request | undefined;
+    let requestLifecycle: ReturnType<typeof observeLambdaStreamFailure> | undefined;
+    let logFields = awsLambdaEventLogFields(event);
 
     try {
+      const eventToRequestStartedAt = phaseStartedAt(phases);
+      request = eventToRequest(event, options, requestAbortController.signal);
+      requestLifecycle = observeLambdaStreamFailure(responseStream, requestAbortController);
+      finishPhase(phases, eventToRequestStartedAt, "eventToRequestMs");
+      logFields = requestLogFields(request, "aws-lambda");
+      emitRouterLog(options.logger, "info", {
+        ...logFields,
+        type: "router:request:start",
+      });
       const runtimeDirStartedAt = phaseStartedAt(phases);
       const runtimeDir = await runtimeDirPromise;
       finishPhase(phases, runtimeDirStartedAt, "runtimeDirMs");
@@ -688,11 +672,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         outDir: options.outDir,
         runtimeDir,
       });
-      const preload = awsLambdaRenderPreload(
-        options,
-        runtimePreloadPromise,
-        defaultPreloadMode,
-      );
+      const preload = awsLambdaRenderPreload(options, runtimePreloadPromise, defaultPreloadMode);
       const response = await builtRuntime.render(request, {
         dehydrateOptions: options.dehydrateOptions,
         instrumentation: options.instrumentation,
@@ -756,7 +736,7 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
         requestAbortController,
       );
     } finally {
-      requestLifecycle.dispose();
+      requestLifecycle?.dispose();
     }
   });
 }
@@ -764,8 +744,12 @@ function createAwsLambdaStreamingRequestHandlerFromRuntime<TContext = unknown>(
 async function applyAwsLambdaResponseHook(
   response: Response,
   options: Pick<AwsLambdaRequestHandlerOptions, "onResponse">,
-  request: Request,
+  request: Request | undefined,
 ): Promise<Response> {
+  if (request === undefined) {
+    return response;
+  }
+
   const hooked = await options.onResponse?.(response, { request });
 
   return hooked instanceof Response ? hooked : response;
@@ -855,9 +839,7 @@ function eventToRequest(
     hostPolicy: lambdaHostPolicy(options),
     rawHost: rawHost ?? undefined,
   });
-  const protocol = lambdaRequestProtocol(event, headers, options);
-  const rawPath = event.rawPath;
-  const rawQueryString = event.rawQueryString === "" ? "" : `?${event.rawQueryString}`;
+  const protocol = lambdaRequestProtocol(headers, options);
   const method = event.requestContext.http.method;
   const init: RequestInit = {
     headers,
@@ -866,11 +848,58 @@ function eventToRequest(
   };
 
   if (method !== "GET" && method !== "HEAD" && event.body !== undefined) {
-    init.body =
-      event.isBase64Encoded === true ? Buffer.from(event.body, "base64") : event.body;
+    init.body = event.isBase64Encoded === true ? Buffer.from(event.body, "base64") : event.body;
   }
 
-  return new Request(`${protocol}://${host}${rawPath}${rawQueryString}`, init);
+  return new Request(lambdaRequestUrl(protocol, host, event.rawPath, event.rawQueryString), init);
+}
+
+function lambdaRequestUrl(
+  protocol: "http" | "https",
+  host: string,
+  rawPath: string,
+  rawQueryString: string,
+): URL {
+  if (hasInvalidLambdaRequestAuthorityCharacter(host)) {
+    throw new TypeError("AWS Lambda request Host is not a valid URL authority");
+  }
+
+  const url = new URL(`${protocol}://${host}`);
+  if (
+    url.protocol !== `${protocol}:` ||
+    url.host === "" ||
+    url.username !== "" ||
+    url.password !== "" ||
+    url.pathname !== "/" ||
+    url.search !== "" ||
+    url.hash !== ""
+  ) {
+    throw new TypeError("AWS Lambda request Host is not a valid URL authority");
+  }
+
+  url.pathname = rawPath;
+  url.search = rawQueryString;
+  return url;
+}
+
+function hasInvalidLambdaRequestAuthorityCharacter(host: string): boolean {
+  for (const character of host) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (
+      character === "/" ||
+      character === "?" ||
+      character === "#" ||
+      character === "\\" ||
+      character === "@" ||
+      character.trim() === "" ||
+      codePoint < 0x20 ||
+      codePoint === 0x7f
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function validateAwsLambdaHttpEventV2(event: AwsLambdaHttpEventV2): void {
@@ -885,10 +914,12 @@ function validateAwsLambdaHttpEventV2(event: AwsLambdaHttpEventV2): void {
     typeof (candidate as { rawQueryString?: unknown }).rawQueryString !== "string" ||
     typeof (candidate as { requestContext?: unknown }).requestContext !== "object" ||
     (candidate as { requestContext?: unknown }).requestContext === null ||
-    typeof ((candidate as { requestContext: { http?: unknown } }).requestContext.http) !== "object" ||
+    typeof (candidate as { requestContext: { http?: unknown } }).requestContext.http !== "object" ||
     (candidate as { requestContext: { http?: unknown } }).requestContext.http === null ||
-    typeof ((candidate as { requestContext: { http: { method?: unknown } } }).requestContext.http.method) !== "string" ||
-    (candidate as { requestContext: { http: { method: string } } }).requestContext.http.method === ""
+    typeof (candidate as { requestContext: { http: { method?: unknown } } }).requestContext.http
+      .method !== "string" ||
+    (candidate as { requestContext: { http: { method: string } } }).requestContext.http.method ===
+      ""
   ) {
     throw new Error(invalidAwsLambdaHttpEventV2Diagnostic);
   }
@@ -905,14 +936,27 @@ function lambdaRequestHost(
   return headers.get("host");
 }
 
-function lambdaHostPolicy(
-  options: AwsLambdaRequestHandlerOptions,
-): RequestHostPolicy | undefined {
+function lambdaHostPolicy(options: AwsLambdaRequestHandlerOptions): RequestHostPolicy | undefined {
   return options.hostPolicy ?? (process.env.NODE_ENV === "production" ? "strict" : undefined);
 }
 
+function warnIfImplicitAwsLambdaHostPolicy(options: AwsLambdaRequestHandlerOptions): void {
+  if (
+    process.env.NODE_ENV !== "production" ||
+    options.allowedHosts !== undefined ||
+    options.hostPolicy !== undefined ||
+    warnedImplicitAwsLambdaHostPolicy
+  ) {
+    return;
+  }
+
+  warnedImplicitAwsLambdaHostPolicy = true;
+  console.error(
+    '[mreact] AWS Lambda Host handling defaults to strict because neither allowedHosts nor hostPolicy is configured. Unlisted Host headers use the configured hostname or lambda.local. Set allowedHosts for public deployments or hostPolicy: "trusted-proxy" when a trusted reverse proxy normalizes Host.',
+  );
+}
+
 function lambdaRequestProtocol(
-  event: AwsLambdaHttpEventV2,
   headers: Headers,
   options: AwsLambdaRequestHandlerOptions,
 ): "http" | "https" {
@@ -920,7 +964,7 @@ function lambdaRequestProtocol(
     return normalizeRequestProtocol(firstForwardedValue(headers.get("x-forwarded-proto")));
   }
 
-  return normalizeRequestProtocol(event.requestContext?.http?.protocol);
+  return "https";
 }
 
 function normalizeRequestProtocol(value: string | undefined): "http" | "https" {
@@ -928,8 +972,15 @@ function normalizeRequestProtocol(value: string | undefined): "http" | "https" {
     return "https";
   }
 
-  const normalized = value.toLowerCase();
-  return normalized === "http" || normalized.startsWith("http/") ? "http" : "https";
+  return value.toLowerCase() === "http" ? "http" : "https";
+}
+
+function awsLambdaEventLogFields(event: AwsLambdaHttpEventV2): RouterRequestLogFields {
+  return {
+    method: event.requestContext.http.method,
+    path: event.rawPath,
+    runtime: "aws-lambda",
+  };
 }
 
 function eventHeaders(event: AwsLambdaHttpEventV2): Headers {
@@ -1179,9 +1230,7 @@ function isLambdaStreamingAborted(controller: AbortController | undefined): bool
   return controller?.signal.aborted === true;
 }
 
-function responseStreamingMetadata(
-  response: Response,
-): AwsLambdaStreamingResponseMetadata {
+function responseStreamingMetadata(response: Response): AwsLambdaStreamingResponseMetadata {
   const headers: Record<string, string> = {};
   response.headers.forEach((value, key) => {
     if (key !== "set-cookie") {
@@ -1358,8 +1407,7 @@ interface AwsLambdaRuntime {
 }
 
 function awsLambdaRuntime(): AwsLambdaRuntime {
-  const runtime = (globalThis as { awslambda?: Partial<AwsLambdaRuntime> | undefined })
-    .awslambda;
+  const runtime = (globalThis as { awslambda?: Partial<AwsLambdaRuntime> | undefined }).awslambda;
 
   if (
     typeof runtime?.streamifyResponse !== "function" ||
