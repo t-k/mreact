@@ -387,6 +387,41 @@ describe("router cache helpers", () => {
     expect(await cachedRouteResponse({ cache, key: "k-a" })).toBeUndefined();
   });
 
+  test("revalidatePath outside a request invalidates every live route cache", async () => {
+    const firstCache = createMemoryRouteCache();
+    const secondCache = createMemoryRouteCache();
+    const policy = { cacheControl: "s-maxage=60", revalidateSeconds: 60 };
+    await Promise.all([
+      cacheRouteResponse({
+        cache: firstCache,
+        key: "broadcast-first",
+        path: "/broadcast",
+        policy,
+        response: new Response("first"),
+      }),
+      cacheRouteResponse({
+        cache: secondCache,
+        key: "broadcast-second",
+        path: "/broadcast",
+        policy,
+        response: new Response("second"),
+      }),
+      cacheRouteResponse({
+        key: "broadcast-default",
+        path: "/broadcast",
+        policy,
+        response: new Response("default"),
+      }),
+    ]);
+
+    revalidatePath("/broadcast");
+
+    const first = await cachedRouteResponse({ cache: firstCache, key: "broadcast-first" });
+    const second = await cachedRouteResponse({ cache: secondCache, key: "broadcast-second" });
+    const defaultEntry = await cachedRouteResponse({ key: "broadcast-default" });
+    expect([first, second, defaultEntry]).toEqual([undefined, undefined, undefined]);
+  });
+
   test("revalidatePath leaves an unrelated cache entry intact when the path doesn't match", async () => {
     const cache = createMemoryRouteCache();
     await cacheRouteResponse({
