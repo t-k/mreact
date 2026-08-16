@@ -190,6 +190,47 @@ describe("Flight round-trip corpus (issue 081)", () => {
     expect(decoded.serverReferences).toEqual(baseResponse.serverReferences);
   });
 
+  test.each([
+    ["array-buffer", { kind: "array-buffer", bytes: [1, 2, 3, 4] }, "A"],
+    ["Int8Array", { kind: "typed-array", arrayType: "Int8Array", bytes: [1, 2, 3, 4] }, "O"],
+    ["Uint8Array", { kind: "typed-array", arrayType: "Uint8Array", bytes: [1, 2, 3, 4] }, "o"],
+    [
+      "Uint8ClampedArray",
+      { kind: "typed-array", arrayType: "Uint8ClampedArray", bytes: [1, 2, 3, 4] },
+      "U",
+    ],
+    ["Int16Array", { kind: "typed-array", arrayType: "Int16Array", bytes: [1, 2, 3, 4] }, "S"],
+    ["Uint16Array", { kind: "typed-array", arrayType: "Uint16Array", bytes: [1, 2, 3, 4] }, "s"],
+    ["Int32Array", { kind: "typed-array", arrayType: "Int32Array", bytes: [1, 2, 3, 4] }, "L"],
+    ["Uint32Array", { kind: "typed-array", arrayType: "Uint32Array", bytes: [1, 2, 3, 4] }, "l"],
+    ["Float32Array", { kind: "typed-array", arrayType: "Float32Array", bytes: [1, 2, 3, 4] }, "G"],
+    ["Float64Array", { kind: "typed-array", arrayType: "Float64Array", bytes: [1, 2, 3, 4] }, "g"],
+    ["BigInt64Array", { kind: "typed-array", arrayType: "BigInt64Array", bytes: [1, 2, 3, 4] }, "M"],
+    [
+      "BigUint64Array",
+      { kind: "typed-array", arrayType: "BigUint64Array", bytes: [1, 2, 3, 4] },
+      "m",
+    ],
+    ["data-view", { kind: "data-view", bytes: [1, 2, 3, 4] }, "V"],
+  ] as const)("emits the %s model with binary row tag %s", (_label, root, tag) => {
+    const rows = toReactFlightRows({ ...baseResponse, root });
+
+    expect(rows).toContain(`1:${tag}4,AQIDBA==`);
+    expect(rows).toContain('0:"$1"');
+    expect(fromReactFlightRows(rows).root).toEqual(root);
+  });
+
+  test("encodes a large binary model without argument-list overflow", () => {
+    const bytes = Array.from({ length: 128 * 1024 }, (_unused, index) => index & 0xff);
+    const rows = toReactFlightRows({
+      ...baseResponse,
+      root: { kind: "array-buffer", bytes },
+    });
+
+    expect(rows).toContain(`1:A${bytes.length.toString(16)},`);
+    expect(fromReactFlightRows(rows).root).toEqual({ kind: "array-buffer", bytes });
+  });
+
   test("element with a client-reference type carries the reference id", () => {
     const response: FlightResponse = {
       version: 1,

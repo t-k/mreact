@@ -1240,7 +1240,7 @@ function encodeReactFlightModel(model: FlightModel, state: ReactFlightEncodingSt
   }
 
   if (isReactFlightBinaryModel(model)) {
-    return model;
+    return encodeReactFlightBinaryModel(model, state);
   }
 
   return encodeReactFlightProps(model, state);
@@ -1251,6 +1251,76 @@ function allocateReactFlightOutlineRow(state: ReactFlightEncodingState, payload:
   state.nextWireId += 1;
   state.outlineRows.push(`${formatReactFlightId(id)}:${JSON.stringify(payload)}`);
   return id;
+}
+
+function encodeReactFlightBinaryModel(
+  model: FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel,
+  state: ReactFlightEncodingState,
+): string {
+  const id = state.nextWireId;
+  state.nextWireId += 1;
+  const tag = getReactFlightBinaryRowTag(model);
+  state.outlineRows.push(
+    `${formatReactFlightId(id)}:${tag}${formatReactFlightId(model.bytes.length)},${encodeBase64Bytes(model.bytes)}`,
+  );
+  return `$${formatReactFlightId(id)}`;
+}
+
+function getReactFlightBinaryRowTag(
+  model: FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel,
+): ReactFlightBinaryRowTag {
+  if (model.kind === "array-buffer") return "A";
+  if (model.kind === "data-view") return "V";
+  switch (model.arrayType) {
+    case "Int8Array":
+      return "O";
+    case "Uint8Array":
+      return "o";
+    case "Uint8ClampedArray":
+      return "U";
+    case "Int16Array":
+      return "S";
+    case "Uint16Array":
+      return "s";
+    case "Int32Array":
+      return "L";
+    case "Uint32Array":
+      return "l";
+    case "Float32Array":
+      return "G";
+    case "Float64Array":
+      return "g";
+    case "BigInt64Array":
+      return "M";
+    case "BigUint64Array":
+      return "m";
+  }
+}
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function encodeBase64Bytes(bytes: readonly number[]): string {
+  let encoded = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = assertFlightByte(bytes[index]);
+    const secondValue = bytes[index + 1];
+    const thirdValue = bytes[index + 2];
+    const second = secondValue === undefined ? 0 : assertFlightByte(secondValue);
+    const third = thirdValue === undefined ? 0 : assertFlightByte(thirdValue);
+    const block = (first << 16) | (second << 8) | third;
+    encoded += BASE64_ALPHABET[(block >> 18) & 63];
+    encoded += BASE64_ALPHABET[(block >> 12) & 63];
+    encoded += secondValue === undefined ? "=" : BASE64_ALPHABET[(block >> 6) & 63];
+    encoded += thirdValue === undefined ? "=" : BASE64_ALPHABET[block & 63];
+  }
+  return encoded;
+}
+
+function assertFlightByte(value: number | undefined): number {
+  if (value === undefined || !Number.isInteger(value) || value < 0 || value > 255) {
+    throw new TypeError("Invalid Flight binary byte.");
+  }
+  return value;
 }
 
 function encodeReactFlightElementType(

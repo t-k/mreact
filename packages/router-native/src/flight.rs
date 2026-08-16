@@ -87,6 +87,30 @@ fn decode_base64_char(byte: u8) -> Result<u8, String> {
   }
 }
 
+fn encode_base64_bytes(bytes: &[u8]) -> String {
+  const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let mut output = String::with_capacity(bytes.len().div_ceil(3) * 4);
+  for chunk in bytes.chunks(3) {
+    let first = chunk[0];
+    let second = chunk.get(1).copied().unwrap_or(0);
+    let third = chunk.get(2).copied().unwrap_or(0);
+    let block = ((first as u32) << 16) | ((second as u32) << 8) | third as u32;
+    output.push(ALPHABET[((block >> 18) & 63) as usize] as char);
+    output.push(ALPHABET[((block >> 12) & 63) as usize] as char);
+    output.push(if chunk.len() > 1 {
+      ALPHABET[((block >> 6) & 63) as usize] as char
+    } else {
+      '='
+    });
+    output.push(if chunk.len() > 2 {
+      ALPHABET[(block & 63) as usize] as char
+    } else {
+      '='
+    });
+  }
+  output
+}
+
 #[cfg(not(test))]
 #[napi(js_name = "decodeFlightBase64")]
 pub fn napi_decode_flight_base64(value: String) -> napi::Result<Vec<u8>> {
@@ -383,10 +407,7 @@ fn encode_model(
           Ok(json!(["$", encoded_type, key, encoded_props]))
         }
         Some("array-buffer") | Some("typed-array") | Some("data-view") => {
-          // Binary models embed inline; the JS encoder returns them
-          // as-is (flight.ts:891-893) and JSON.stringify serializes
-          // the object literally.
-          Ok(model.clone())
+          encode_binary_model(map, state)
         }
         Some(_) => {
           // Unknown `kind` — pass through unchanged (the JS encoder
@@ -400,6 +421,53 @@ fn encode_model(
       }
     }
   }
+}
+
+fn encode_binary_model(
+  model: &serde_json::Map<String, Value>,
+  state: &mut EncodeState,
+) -> Result<Value, String> {
+  let kind = model.get("kind").and_then(Value::as_str).unwrap_or("");
+  let tag = match kind {
+    "array-buffer" => "A",
+    "data-view" => "V",
+    "typed-array" => match model.get("arrayType").and_then(Value::as_str).unwrap_or("") {
+      "Int8Array" => "O",
+      "Uint8Array" => "o",
+      "Uint8ClampedArray" => "U",
+      "Int16Array" => "S",
+      "Uint16Array" => "s",
+      "Int32Array" => "L",
+      "Uint32Array" => "l",
+      "Float32Array" => "G",
+      "Float64Array" => "g",
+      "BigInt64Array" => "M",
+      "BigUint64Array" => "m",
+      other => return Err(format!("Unsupported Flight typed array: {other}.")),
+    },
+    _ => return Err(format!("Unsupported Flight binary model: {kind}.")),
+  };
+  let byte_values = model
+    .get("bytes")
+    .and_then(Value::as_array)
+    .ok_or_else(|| "Invalid Flight binary bytes.".to_string())?;
+  let mut bytes = Vec::with_capacity(byte_values.len());
+  for value in byte_values {
+    let byte = value
+      .as_u64()
+      .filter(|value| *value <= u8::MAX as u64)
+      .ok_or_else(|| "Invalid Flight binary byte.".to_string())?;
+    bytes.push(byte as u8);
+  }
+  let id = state.next_wire_id;
+  state.next_wire_id += 1;
+  state.rows.push(format!(
+    "{}:{tag}{},{}",
+    format_flight_id(id),
+    format_flight_id(bytes.len() as u64),
+    encode_base64_bytes(&bytes),
+  ));
+  Ok(Value::String(format!("${}", format_flight_id(id))))
 }
 
 fn encode_props(
@@ -1386,6 +1454,28 @@ mod tests {
       ),
       "$Lff",
     );
+  }
+
+  #[test]
+  fn encodes_binary_models_as_outline_rows() {
+    let cases = [
+      (json!({ "kind": "array-buffer", "bytes": [1, 2, 3, 4] }), "A"),
+      (
+        json!({ "kind": "typed-array", "arrayType": "Uint8Array", "bytes": [1, 2, 3, 4] }),
+        "o",
+      ),
+      (
+        json!({ "kind": "typed-array", "arrayType": "Int16Array", "bytes": [1, 2, 3, 4] }),
+        "S",
+      ),
+      (json!({ "kind": "data-view", "bytes": [1, 2, 3, 4] }), "V"),
+    ];
+
+    for (model, tag) in cases {
+      let rows = encode_flight_response(&flight_response(model)).unwrap();
+      assert!(rows.contains(&format!("1:{tag}4,AQIDBA==")), "{rows}");
+      assert!(rows.contains("0:\"$1\""), "{rows}");
+    }
   }
 
   #[test]
