@@ -338,7 +338,7 @@ export default function Page() {
     expect(page.status).toBe(200);
     expect(page.headers.get("content-type")).toContain("text/html");
     expect(html).toContain("<!DOCTYPE html>");
-    expect(html).toContain("count: 0");
+    expect(html).toContain("count: <!-- -->0");
     expect(html).toContain("/_mreact/client/routes/dashboard.js");
     expect(asset.status).toBe(200);
     expect(asset.headers.get("content-type")).toContain("text/javascript");
