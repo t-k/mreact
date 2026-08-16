@@ -422,6 +422,298 @@ describe("router cache helpers", () => {
     expect([first, second, defaultEntry]).toEqual([undefined, undefined, undefined]);
   });
 
+  test("revalidatePath prevents a blocked older cache write from restoring stale HTML", async () => {
+    const memoryCache = createMemoryRouteCache();
+    let releaseSet: (() => void) | undefined;
+    let reportSetStarted: (() => void) | undefined;
+    const setReleased = new Promise<void>((resolve) => {
+      releaseSet = resolve;
+    });
+    const setStarted = new Promise<void>((resolve) => {
+      reportSetStarted = resolve;
+    });
+    const cache = {
+      deleteByPath: memoryCache.deleteByPath.bind(memoryCache),
+      get: memoryCache.get.bind(memoryCache),
+      async set(key: string, entry: AppRouterCacheEntry) {
+        reportSetStarted?.();
+        await setReleased;
+        memoryCache.set(key, entry);
+      },
+    };
+    const rendering = withRouteCacheContext(cache, async () =>
+      await cacheRouteResponse({
+        cache,
+        key: "blocked-stale-write",
+        path: "/blocked-stale-write",
+        policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+        response: new Response("old render"),
+      }),
+    );
+
+    await setStarted;
+    revalidatePath("/blocked-stale-write");
+    await consumeInvalidations(cache);
+    releaseSet?.();
+    const { value } = await rendering;
+
+    expect(value.headers.get("cache-control")).toBe("private, no-store");
+    expect(value.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await cachedRouteResponse({ cache, key: "blocked-stale-write" })).toBeUndefined();
+  });
+
+  test("writes an expired tombstone when deleting a late stale write fails", async () => {
+    const persistentBackend = createMemoryRouteCache();
+    let deleteCalls = 0;
+    let releaseSet: (() => void) | undefined;
+    let reportSetStarted: (() => void) | undefined;
+    const setReleased = new Promise<void>((resolve) => {
+      releaseSet = resolve;
+    });
+    const setStarted = new Promise<void>((resolve) => {
+      reportSetStarted = resolve;
+    });
+    let setCalls = 0;
+    const cache = {
+      deleteByPath(path: string) {
+        deleteCalls += 1;
+        if (deleteCalls === 2) {
+          throw new Error("persistent delete failed");
+        }
+        return persistentBackend.deleteByPath(path);
+      },
+      get: persistentBackend.get.bind(persistentBackend),
+      async set(key: string, entry: AppRouterCacheEntry) {
+        setCalls += 1;
+        if (setCalls === 1) {
+          reportSetStarted?.();
+          await setReleased;
+        }
+        persistentBackend.set(key, entry);
+      },
+    };
+    const rendering = withRouteCacheContext(cache, async () =>
+      await cacheRouteResponse({
+        cache,
+        key: "failed-late-delete",
+        path: "/failed-late-delete",
+        policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+        response: new Response("stale"),
+      }),
+    );
+
+    await setStarted;
+    revalidatePath("/failed-late-delete");
+    await consumeInvalidations(cache);
+    releaseSet?.();
+    await expect(rendering).rejects.toThrow("persistent delete failed");
+
+    const secondAdapterObject = {
+      deleteByPath: persistentBackend.deleteByPath.bind(persistentBackend),
+      get: persistentBackend.get.bind(persistentBackend),
+      set: persistentBackend.set.bind(persistentBackend),
+    };
+    expect(
+      await cachedRouteResponse({ cache: secondAdapterObject, key: "failed-late-delete" }),
+    ).toBeUndefined();
+  });
+
+  test("revalidatePath prevents an older in-flight render from repopulating stale HTML", async () => {
+    const cache = createMemoryRouteCache();
+    let releaseRender: (() => void) | undefined;
+    let reportMiss: (() => void) | undefined;
+    const renderReleased = new Promise<void>((resolve) => {
+      releaseRender = resolve;
+    });
+    const missReported = new Promise<void>((resolve) => {
+      reportMiss = resolve;
+    });
+    const rendering = withRouteCacheContext(cache, async () => {
+      expect(await cachedRouteResponse({ cache, key: "stale-write" })).toBeUndefined();
+      reportMiss?.();
+      await renderReleased;
+      return await cacheRouteResponse({
+        cache,
+        key: "stale-write",
+        path: "/stale-write",
+        policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+        response: new Response("old render"),
+      });
+    });
+
+    await missReported;
+    revalidatePath("/stale-write");
+    await consumeInvalidations(cache);
+    releaseRender?.();
+    const { value } = await rendering;
+
+    expect(value.headers.get("cache-control")).toBe("private, no-store");
+    expect(value.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(await cachedRouteResponse({ cache, key: "stale-write" })).toBeUndefined();
+  });
+
+  test("revalidatePath does not suppress an unrelated in-flight cache write", async () => {
+    const cache = createMemoryRouteCache();
+    let releaseRender: (() => void) | undefined;
+    let reportStarted: (() => void) | undefined;
+    const renderReleased = new Promise<void>((resolve) => {
+      releaseRender = resolve;
+    });
+    const renderStarted = new Promise<void>((resolve) => {
+      reportStarted = resolve;
+    });
+    const rendering = withRouteCacheContext(cache, async () => {
+      reportStarted?.();
+      await renderReleased;
+      return await cacheRouteResponse({
+        cache,
+        key: "unrelated-write",
+        path: "/unrelated",
+        policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+        response: new Response("fresh unrelated render"),
+      });
+    });
+
+    await renderStarted;
+    revalidatePath("/target");
+    await consumeInvalidations(cache);
+    releaseRender?.();
+    const { value } = await rendering;
+
+    expect(value.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(await cachedRouteResponse({ cache, key: "unrelated-write" })).toBeDefined();
+  });
+
+  test("retries a failed external invalidation before serving from that cache", async () => {
+    const memoryCache = createMemoryRouteCache();
+    let attempts = 0;
+    let rejectFirstAttempt: ((reason: Error) => void) | undefined;
+    let reportFirstAttempt: (() => void) | undefined;
+    const firstAttemptStarted = new Promise<void>((resolve) => {
+      reportFirstAttempt = resolve;
+    });
+    const cache = {
+      deleteByPath(path: string) {
+        attempts += 1;
+        if (attempts === 1) {
+          reportFirstAttempt?.();
+          return new Promise<void>((_resolve, reject) => {
+            rejectFirstAttempt = reject;
+          });
+        }
+        return memoryCache.deleteByPath(path);
+      },
+      get: memoryCache.get.bind(memoryCache),
+      set: memoryCache.set.bind(memoryCache),
+    };
+    await cacheRouteResponse({
+      cache,
+      key: "retry-invalidation",
+      path: "/retry-invalidation",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("stale"),
+    });
+
+    revalidatePath("/retry-invalidation");
+    await firstAttemptStarted;
+    const failedConsumption = consumeInvalidations(cache);
+    rejectFirstAttempt?.(new Error("temporary cache failure"));
+    await expect(failedConsumption).rejects.toThrow("temporary cache failure");
+
+    await consumeInvalidations(cache);
+    expect(attempts).toBe(2);
+    expect(await cachedRouteResponse({ cache, key: "retry-invalidation" })).toBeUndefined();
+  });
+
+  test("bounds invalidations and fails a cache closed when its deletion hangs", async () => {
+    const memoryCache = createMemoryRouteCache();
+    let releaseDeletion: (() => void) | undefined;
+    let reportDeletionStarted: (() => void) | undefined;
+    const deletionReleased = new Promise<void>((resolve) => {
+      releaseDeletion = resolve;
+    });
+    const deletionStarted = new Promise<void>((resolve) => {
+      reportDeletionStarted = resolve;
+    });
+    const cache = {
+      async deleteByPath(path: string) {
+        reportDeletionStarted?.();
+        await deletionReleased;
+        memoryCache.deleteByPath(path);
+      },
+      get: memoryCache.get.bind(memoryCache),
+      set: memoryCache.set.bind(memoryCache),
+    };
+    await cacheRouteResponse({
+      cache,
+      key: "stuck-cache",
+      path: "/stuck-cache",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("stale"),
+    });
+
+    revalidatePath("/stuck-0");
+    await deletionStarted;
+    for (let index = 1; index <= 1_100; index += 1) {
+      revalidatePath(`/stuck-${index}`);
+    }
+
+    expect(await cachedRouteResponse({ cache, key: "stuck-cache" })).toBeUndefined();
+    const disabledResponse = await cacheRouteResponse({
+      cache,
+      key: "disabled-cache-write",
+      path: "/disabled-cache-write",
+      policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+      response: new Response("fresh"),
+    });
+    expect(disabledResponse.headers.get("cache-control")).toBe("private, no-store");
+    expect(disabledResponse.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+    expect(memoryCache.get("disabled-cache-write")).toBeUndefined();
+
+    releaseDeletion?.();
+    await consumeInvalidations(cache);
+  });
+
+  test("limits active-context overflow to that request when cache deletion stays healthy", async () => {
+    const cache = createMemoryRouteCache();
+    let beginExternalInvalidations: (() => void) | undefined;
+    const externalInvalidationsStarted = new Promise<void>((resolve) => {
+      beginExternalInvalidations = resolve;
+    });
+    const externalInvalidations = externalInvalidationsStarted.then(async () => {
+      for (let index = 0; index <= 1_024; index += 1) {
+        revalidatePath(`/healthy-${index}`);
+        await consumeInvalidations(cache);
+      }
+    });
+    const { value } = await withRouteCacheContext(cache, async () => {
+      beginExternalInvalidations?.();
+      await externalInvalidations;
+
+      return await cacheRouteResponse({
+        cache,
+        key: "overflowed-request",
+        path: "/overflowed-request",
+        policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+        response: new Response("request-local"),
+      });
+    });
+    expect(value.headers.get("cache-control")).toBe("private, no-store");
+    expect(value.headers.get("x-mreact-cache")).toBe("DYNAMIC");
+
+    const healthyResponse = await withRouteCacheContext(cache, async () =>
+      await cacheRouteResponse({
+        cache,
+        key: "healthy-after-context",
+        path: "/healthy-after-context",
+        policy: { cacheControl: "s-maxage=60", revalidateSeconds: 60 },
+        response: new Response("shared"),
+      }),
+    );
+    expect(healthyResponse.value.headers.get("x-mreact-cache")).toBe("MISS");
+    expect(await cachedRouteResponse({ cache, key: "healthy-after-context" })).toBeDefined();
+  });
+
   test("revalidatePath leaves an unrelated cache entry intact when the path doesn't match", async () => {
     const cache = createMemoryRouteCache();
     await cacheRouteResponse({

@@ -82,22 +82,32 @@ interface RouteCacheContext {
   cache: AppRouterCache;
   cachePolicy?: RouteCachePolicy | undefined;
   closed?: boolean | undefined;
+  externalInvalidationOverflowed: boolean;
+  externallyInvalidatedPaths: Set<string>;
   revalidatedPaths: Set<string>;
 }
 
 interface AppRouterCacheInvalidationState {
+  activeContexts: WeakMap<AppRouterCache, Set<RouteCacheContext>>;
+  disabledCaches: WeakSet<AppRouterCache>;
   finalizer: FinalizationRegistry<WeakRef<AppRouterCache>>;
   liveReferences: Set<WeakRef<AppRouterCache>>;
   pendingPaths: WeakMap<AppRouterCache, Set<string>>;
   registeredCaches: WeakSet<AppRouterCache>;
   running: WeakMap<AppRouterCache, Promise<void>>;
+  storesBeingInvalidated: WeakMap<AppRouterCache, number>;
 }
+
+const MAX_PENDING_ROUTE_INVALIDATIONS = 1024;
 
 const cacheInvalidationState = ((
   globalThis as {
     __mreactAppRouterCacheInvalidation?: AppRouterCacheInvalidationState;
   }
 ).__mreactAppRouterCacheInvalidation ??= createCacheInvalidationState());
+cacheInvalidationState.activeContexts ??= new WeakMap();
+cacheInvalidationState.disabledCaches ??= new WeakSet();
+cacheInvalidationState.storesBeingInvalidated ??= new WeakMap();
 
 const cacheState = ((
   globalThis as { __mreactAppRouterCache?: AppRouterCacheState }
@@ -313,6 +323,9 @@ export function cachedRouteResponse(options: {
     const cache = options.cache ?? cacheState.memoryCache;
 
     registerRouteCache(cache);
+    if (routeCacheIsUnavailable(cache)) {
+      return undefined;
+    }
     await consumeInvalidations(cache);
     const now = options.now ?? Date.now();
     const cached = await cache.get(options.key, now);
@@ -387,6 +400,10 @@ export async function cacheRouteResponse(options: {
   const cacheControl = options.policy.cacheControl;
   const status = options.response.status;
   const contentType = options.response.headers.get("content-type") ?? "text/html; charset=utf-8";
+  const cache = options.cache ?? cacheState.memoryCache;
+  const normalizedPath = normalizeRevalidationPath(options.path);
+  registerRouteCache(cache);
+  const invalidatedBeforeStore = routeCachePathWasInvalidatedDuringActiveContext(normalizedPath);
 
   // A render that read a request header only produced HTML that is correct for
   // that header value. The cache key covers the path and query alone, so the
@@ -394,6 +411,8 @@ export async function cacheRouteResponse(options: {
   // shared caches too, which are keyed the same way.
   if (
     options.headerDependent === true ||
+    invalidatedBeforeStore ||
+    routeCacheIsUnavailable(cache) ||
     requestCarriesCredentials(options.request) ||
     options.response.headers.has("set-cookie") ||
     responseHeadersContainCspNonce(options.response.headers)
@@ -405,6 +424,8 @@ export async function cacheRouteResponse(options: {
     }
     if (
       options.headerDependent === true ||
+      invalidatedBeforeStore ||
+      routeCacheIsUnavailable(cache) ||
       responseHeadersContainCspNonce(options.response.headers)
     ) {
       headers.set("x-mreact-cache", "DYNAMIC");
@@ -434,18 +455,56 @@ export async function cacheRouteResponse(options: {
   // from every later secure visitor.
   const hsts = options.strictTransportSecurity;
 
-  const cache = options.cache ?? cacheState.memoryCache;
-  registerRouteCache(cache);
   await cache.set(options.key, {
     body,
     cacheControl,
     expiresAt: (options.now ?? Date.now()) + options.policy.revalidateSeconds * 1000,
     headers: storedHeaders,
     ...(hsts === undefined ? {} : { strictTransportSecurity: hsts }),
-    path: normalizeRevalidationPath(options.path),
+    path: normalizedPath,
     schemaVersion: ROUTE_CACHE_ENTRY_SCHEMA_VERSION,
     status,
   });
+
+  if (
+    routeCachePathWasInvalidatedDuringActiveContext(normalizedPath) ||
+    routeCacheIsUnavailable(cache)
+  ) {
+    beginRouteCacheStoreInvalidation(cache);
+    try {
+      await cache.deleteByPath(normalizedPath);
+      endRouteCacheStoreInvalidation(cache);
+    } catch (error) {
+      // The invalidation may have completed before this asynchronous set did.
+      // If deleting the late write now fails, replace its exact key with an
+      // expired entry so another adapter object backed by the same persistent
+      // store cannot replay the stale current-schema value.
+      try {
+        await cache.set(options.key, {
+          body: "",
+          cacheControl: "no-store",
+          expiresAt: 0,
+          headers: {},
+          path: normalizedPath,
+          schemaVersion: ROUTE_CACHE_ENTRY_SCHEMA_VERSION,
+          status: 500,
+        });
+      } catch {
+        // The originating cache object still fails closed below even when the
+        // persistent backend rejects both deletion and the tombstone write.
+      }
+      cacheInvalidationState.disabledCaches.add(cache);
+      endRouteCacheStoreInvalidation(cache);
+      throw error;
+    }
+    const headers = new Headers(storedHeaders);
+    headers.set("cache-control", "private, no-store");
+    headers.set("x-mreact-cache", "DYNAMIC");
+    if (!headers.has("content-type")) {
+      headers.set("content-type", contentType);
+    }
+    return new Response(body, { headers, status });
+  }
 
   const headers = new Headers(storedHeaders);
   headers.set("cache-control", cacheControl);
@@ -567,7 +626,7 @@ const PUBLIC_ROUTE_CACHE_REQUEST_HEADERS = new Set([
 /**
  * Invalidates cached route responses for a normalized app-router path.
  *
- * During a request the invalidation is scoped to that route cache context; outside a request it is queued for the next cache access.
+ * During a request the invalidation is scoped to that route cache context. Outside a request it is broadcast to every live route cache registered in this process, and later reads wait for their cache's invalidation to finish.
  */
 export function revalidatePath(path: string): void {
   const normalizedPath = normalizeRevalidationPath(path);
@@ -585,7 +644,20 @@ export function revalidatePath(path: string): void {
       continue;
     }
 
-    cacheInvalidationState.pendingPaths.get(cache)?.add(normalizedPath);
+    const pendingPaths = cacheInvalidationState.pendingPaths.get(cache);
+    if (
+      pendingPaths !== undefined &&
+      !cacheInvalidationState.disabledCaches.has(cache) &&
+      !pendingPaths.has(normalizedPath)
+    ) {
+      if (pendingPaths.size >= MAX_PENDING_ROUTE_INVALIDATIONS) {
+        pendingPaths.clear();
+        cacheInvalidationState.disabledCaches.add(cache);
+      } else {
+        pendingPaths.add(normalizedPath);
+      }
+    }
+    markActiveRouteCacheContextsInvalidated(cache, normalizedPath);
     void startPendingInvalidations(cache).catch(() => {});
   }
 }
@@ -635,6 +707,8 @@ function startPendingInvalidations(cache: AppRouterCache): Promise<void> {
 function createCacheInvalidationState(): AppRouterCacheInvalidationState {
   const liveReferences = new Set<WeakRef<AppRouterCache>>();
   return {
+    activeContexts: new WeakMap(),
+    disabledCaches: new WeakSet(),
     finalizer: new FinalizationRegistry((reference) => {
       liveReferences.delete(reference);
     }),
@@ -642,7 +716,77 @@ function createCacheInvalidationState(): AppRouterCacheInvalidationState {
     pendingPaths: new WeakMap(),
     registeredCaches: new WeakSet(),
     running: new WeakMap(),
+    storesBeingInvalidated: new WeakMap(),
   };
+}
+
+function routeCacheIsUnavailable(cache: AppRouterCache): boolean {
+  return (
+    cacheInvalidationState.disabledCaches.has(cache) ||
+    (cacheInvalidationState.storesBeingInvalidated.get(cache) ?? 0) > 0
+  );
+}
+
+function beginRouteCacheStoreInvalidation(cache: AppRouterCache): void {
+  cacheInvalidationState.storesBeingInvalidated.set(
+    cache,
+    (cacheInvalidationState.storesBeingInvalidated.get(cache) ?? 0) + 1,
+  );
+}
+
+function endRouteCacheStoreInvalidation(cache: AppRouterCache): void {
+  const remaining = (cacheInvalidationState.storesBeingInvalidated.get(cache) ?? 1) - 1;
+  if (remaining <= 0) {
+    cacheInvalidationState.storesBeingInvalidated.delete(cache);
+  } else {
+    cacheInvalidationState.storesBeingInvalidated.set(cache, remaining);
+  }
+}
+
+function routeCachePathWasInvalidatedDuringActiveContext(path: string): boolean {
+  const context = activeRouteCacheContext();
+  return (
+    context !== undefined &&
+    (context.externalInvalidationOverflowed || context.externallyInvalidatedPaths.has(path))
+  );
+}
+
+function markActiveRouteCacheContextsInvalidated(
+  cache: AppRouterCache,
+  normalizedPath: string,
+): void {
+  for (const context of cacheInvalidationState.activeContexts.get(cache) ?? []) {
+    if (cacheInvalidationState.disabledCaches.has(cache)) {
+      context.externalInvalidationOverflowed = true;
+      context.externallyInvalidatedPaths.clear();
+    } else if (
+      !context.externallyInvalidatedPaths.has(normalizedPath) &&
+      context.externallyInvalidatedPaths.size >= MAX_PENDING_ROUTE_INVALIDATIONS
+    ) {
+      context.externalInvalidationOverflowed = true;
+      context.externallyInvalidatedPaths.clear();
+    } else {
+      context.externallyInvalidatedPaths.add(normalizedPath);
+    }
+  }
+}
+
+function registerActiveRouteCacheContext(context: RouteCacheContext): void {
+  const contexts = cacheInvalidationState.activeContexts.get(context.cache);
+  if (contexts === undefined) {
+    cacheInvalidationState.activeContexts.set(context.cache, new Set([context]));
+    return;
+  }
+
+  contexts.add(context);
+}
+
+function unregisterActiveRouteCacheContext(context: RouteCacheContext): void {
+  const contexts = cacheInvalidationState.activeContexts.get(context.cache);
+  contexts?.delete(context);
+  if (contexts?.size === 0) {
+    cacheInvalidationState.activeContexts.delete(context.cache);
+  }
 }
 
 async function drainPendingInvalidations(
@@ -668,8 +812,11 @@ export async function withRouteCacheContext<T>(
   registerRouteCache(routeCache);
   const context: RouteCacheContext = {
     cache: routeCache,
+    externalInvalidationOverflowed: false,
+    externallyInvalidatedPaths: new Set(),
     revalidatedPaths: new Set(),
   };
+  registerActiveRouteCacheContext(context);
 
   return cacheState.storage.run(context, async () => {
     try {
@@ -685,6 +832,7 @@ export async function withRouteCacheContext<T>(
       return { cachePolicy, revalidatedPaths, value };
     } finally {
       context.closed = true;
+      unregisterActiveRouteCacheContext(context);
     }
   });
 }
@@ -697,10 +845,13 @@ export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
   registerRouteCache(routeCache);
   const context: RouteCacheContext = {
     cache: routeCache,
+    externalInvalidationOverflowed: false,
+    externallyInvalidatedPaths: new Set(),
     revalidatedPaths: new Set(),
   };
 
   cacheState.activeContexts.push(context);
+  registerActiveRouteCacheContext(context);
 
   return {
     get cachePolicy() {
@@ -718,6 +869,7 @@ export function beginRouteCacheContext(cache: AppRouterCache | undefined): {
         if (index !== -1) {
           cacheState.activeContexts.splice(index, 1);
         }
+        unregisterActiveRouteCacheContext(context);
       }
 
       return { revalidatedPaths };
