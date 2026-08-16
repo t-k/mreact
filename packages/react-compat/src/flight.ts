@@ -23,6 +23,7 @@ import type {
   FlightObjectModel,
   FlightObjectReferenceModel,
   FlightPromiseModel,
+  FlightRegExpModel,
   FlightResponse,
   FlightServerReference,
   FlightServerReferenceModel,
@@ -30,6 +31,7 @@ import type {
   FlightSymbolModel,
   FlightTypedArrayModel,
   FlightTypedArrayName,
+  FlightUrlModel,
 } from "./flight-types.js";
 
 export { getReactFlightProtocolCoverage };
@@ -51,6 +53,7 @@ export type {
   FlightObjectModel,
   FlightObjectReferenceModel,
   FlightPromiseModel,
+  FlightRegExpModel,
   FlightResponse,
   FlightServerReference,
   FlightServerReferenceModel,
@@ -58,6 +61,7 @@ export type {
   FlightSymbolModel,
   FlightTypedArrayModel,
   FlightTypedArrayName,
+  FlightUrlModel,
 };
 export type { ReactFlightProtocolCoverage };
 export type {
@@ -103,14 +107,9 @@ export function decodeFlightResponse(
 }
 
 /** Reads and parses a Flight response script from a document or parent node. */
-export function readFlightResponse(
-  root: Document | ParentNode,
-  id?: string,
-): FlightResponse {
+export function readFlightResponse(root: Document | ParentNode, id?: string): FlightResponse {
   const selector =
-    id === undefined
-      ? "script[data-mreact-flight]"
-      : `script[data-mreact-flight]#${cssEscape(id)}`;
+    id === undefined ? "script[data-mreact-flight]" : `script[data-mreact-flight]#${cssEscape(id)}`;
   const script = root.querySelector(selector);
 
   if (script === null || script.textContent === null) {
@@ -167,12 +166,8 @@ function createServerReferenceHeaders(
   return {
     "content-type": "application/json",
     ...options.headers,
-    ...(csrfToken === undefined
-      ? {}
-      : { [options.csrfHeaderName ?? "x-mreact-csrf"]: csrfToken }),
-    ...(nonce === undefined
-      ? {}
-      : { [options.nonceHeaderName ?? "x-mreact-action-nonce"]: nonce }),
+    ...(csrfToken === undefined ? {} : { [options.csrfHeaderName ?? "x-mreact-csrf"]: csrfToken }),
+    ...(nonce === undefined ? {} : { [options.nonceHeaderName ?? "x-mreact-action-nonce"]: nonce }),
   };
 }
 

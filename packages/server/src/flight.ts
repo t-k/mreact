@@ -685,8 +685,44 @@ export function createServerActionHandler(
   };
 }
 
-/** Encodes a structured Flight response into React Flight row text. */
+/** Encodes a structured Flight response into mreact's Base64-safe text row representation. */
 export function toReactFlightRows(response: FlightResponse): string {
+  return encodeReactFlightResponseRows(response)
+    .map((row) =>
+      typeof row === "string" ? row : `${row.prefix}${encodeBase64Bytes(row.bytes)}`,
+    )
+    .join("\n");
+}
+
+/** Encodes a structured Flight response into an official byte-framed Flight payload. */
+export function toReactFlightPayload(response: FlightResponse): Uint8Array {
+  const encoder = new TextEncoder();
+  const newline = Uint8Array.of(10);
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+
+  for (const row of encodeReactFlightResponseRows(response)) {
+    if (typeof row === "string") {
+      const bytes = encoder.encode(row);
+      chunks.push(bytes, newline);
+      byteLength += bytes.byteLength + 1;
+    } else {
+      const prefix = encoder.encode(row.prefix);
+      chunks.push(prefix, row.bytes);
+      byteLength += prefix.byteLength + row.bytes.byteLength;
+    }
+  }
+
+  const payload = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    payload.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return payload;
+}
+
+function encodeReactFlightResponseRows(response: FlightResponse): ReactFlightEncodedRow[] {
   // Issue 081 note: a native encoder exists in
   // `packages/router-native/src/flight.rs::encode_flight_response`
   // but is intentionally *not* wired here. Microbenchmarking on
@@ -695,7 +731,7 @@ export function toReactFlightRows(response: FlightResponse): string {
   // regression vs. the pure JS path. Re-wiring it requires
   // accepting a `napi::JsObject` directly to avoid the double JSON
   // pass; tracked as a follow-up.
-  const rows: string[] = [];
+  const rows: ReactFlightEncodedRow[] = [];
   const clientWireIds = new Map<number, number>();
   const serverWireIds = new Map<number, number>();
   const objectWireIds = new Map<number, number>();
@@ -760,7 +796,7 @@ export function toReactFlightRows(response: FlightResponse): string {
   } else {
     rows.push(`0:${JSON.stringify(encodeReactFlightModel(response.root, state))}`);
   }
-  return rows.join("\n");
+  return rows;
 }
 
 /** Decodes React Flight row text into a structured Flight response. */
@@ -844,13 +880,7 @@ export function fromReactFlightRows(rows: string): FlightResponse {
 
   for (const row of serverReferenceRows) {
     serverReferences.push(
-      parseReactFlightServerReference(
-        row.id,
-        row.payload,
-        modelChunks,
-        errorChunks,
-        decodeContext,
-      ),
+      parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks, decodeContext),
     );
   }
 
@@ -920,13 +950,7 @@ export function mergeReactFlightRows(response: FlightResponse, rows: string): Fl
 
   for (const row of serverReferenceRows) {
     serverReferences.push(
-      parseReactFlightServerReference(
-        row.id,
-        row.payload,
-        modelChunks,
-        errorChunks,
-        decodeContext,
-      ),
+      parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks, decodeContext),
     );
   }
 
@@ -999,9 +1023,7 @@ function resolveFlightPromiseChunks(
     const resolved: FlightModel[] = [];
     context.resolvedModels.set(model, resolved);
     for (const item of model) {
-      resolved.push(
-        resolveFlightPromiseChunks(item, modelChunks, errorChunks, depth + 1, context),
-      );
+      resolved.push(resolveFlightPromiseChunks(item, modelChunks, errorChunks, depth + 1, context));
     }
     return resolved;
   }
@@ -1105,11 +1127,18 @@ function resolveFlightPromiseChunks(
   return resolved;
 }
 
+interface ReactFlightBinaryRow {
+  prefix: string;
+  bytes: Uint8Array;
+}
+
+type ReactFlightEncodedRow = string | ReactFlightBinaryRow;
+
 interface ReactFlightEncodingState {
   clientWireIds: ReadonlyMap<number, number>;
   serverWireIds: ReadonlyMap<number, number>;
   objectWireIds: ReadonlyMap<number, number>;
-  outlineRows: string[];
+  outlineRows: ReactFlightEncodedRow[];
   nextWireId: number;
 }
 
@@ -1260,9 +1289,14 @@ function encodeReactFlightBinaryModel(
   const id = state.nextWireId;
   state.nextWireId += 1;
   const tag = getReactFlightBinaryRowTag(model);
-  state.outlineRows.push(
-    `${formatReactFlightId(id)}:${tag}${formatReactFlightId(model.bytes.length)},${encodeBase64Bytes(model.bytes)}`,
-  );
+  for (let index = 0; index < model.bytes.length; index += 1) {
+    assertFlightByte(model.bytes[index]);
+  }
+  const bytes = Uint8Array.from(model.bytes);
+  state.outlineRows.push({
+    prefix: `${formatReactFlightId(id)}:${tag}${formatReactFlightId(bytes.byteLength)},`,
+    bytes,
+  });
   return `$${formatReactFlightId(id)}`;
 }
 
@@ -1297,30 +1331,54 @@ function getReactFlightBinaryRowTag(
   }
 }
 
-const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-function encodeBase64Bytes(bytes: readonly number[]): string {
-  let encoded = "";
-  for (let index = 0; index < bytes.length; index += 3) {
-    const first = assertFlightByte(bytes[index]);
-    const secondValue = bytes[index + 1];
-    const thirdValue = bytes[index + 2];
-    const second = secondValue === undefined ? 0 : assertFlightByte(secondValue);
-    const third = thirdValue === undefined ? 0 : assertFlightByte(thirdValue);
-    const block = (first << 16) | (second << 8) | third;
-    encoded += BASE64_ALPHABET[(block >> 18) & 63];
-    encoded += BASE64_ALPHABET[(block >> 12) & 63];
-    encoded += secondValue === undefined ? "=" : BASE64_ALPHABET[(block >> 6) & 63];
-    encoded += thirdValue === undefined ? "=" : BASE64_ALPHABET[block & 63];
-  }
-  return encoded;
-}
-
 function assertFlightByte(value: number | undefined): number {
   if (value === undefined || !Number.isInteger(value) || value < 0 || value > 255) {
     throw new TypeError("Invalid Flight binary byte.");
   }
   return value;
+}
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const BASE64_STRING_CHUNK_LENGTH = 8_192;
+
+function encodeBase64Bytes(bytes: Uint8Array): string {
+  const nodeBuffer = (
+    globalThis as typeof globalThis & {
+      Buffer?: {
+        from?: (value: Uint8Array) => { toString(encoding: "base64"): string };
+      };
+    }
+  ).Buffer;
+  if (typeof nodeBuffer?.from === "function") {
+    return nodeBuffer.from(bytes).toString("base64");
+  }
+
+  const chunks: string[] = [];
+  let encoded = "";
+  const completeLength = bytes.length - (bytes.length % 3);
+  for (let index = 0; index < completeLength; index += 3) {
+    const block =
+      ((bytes[index] ?? 0) << 16) | ((bytes[index + 1] ?? 0) << 8) | (bytes[index + 2] ?? 0);
+    encoded += BASE64_ALPHABET[(block >> 18) & 63];
+    encoded += BASE64_ALPHABET[(block >> 12) & 63];
+    encoded += BASE64_ALPHABET[(block >> 6) & 63];
+    encoded += BASE64_ALPHABET[block & 63];
+    if (encoded.length >= BASE64_STRING_CHUNK_LENGTH) {
+      chunks.push(encoded);
+      encoded = "";
+    }
+  }
+
+  const remaining = bytes.length - completeLength;
+  if (remaining > 0) {
+    const block = ((bytes[completeLength] ?? 0) << 16) | ((bytes[completeLength + 1] ?? 0) << 8);
+    encoded += BASE64_ALPHABET[(block >> 18) & 63];
+    encoded += BASE64_ALPHABET[(block >> 12) & 63];
+    encoded += remaining === 2 ? BASE64_ALPHABET[(block >> 6) & 63] : "=";
+    encoded += "=";
+  }
+  chunks.push(encoded);
+  return chunks.join("");
 }
 
 function encodeReactFlightElementType(
@@ -2101,9 +2159,7 @@ function serializeFlightObjectValue(
   let result: FlightSerializationResult;
 
   if (Array.isArray(value)) {
-    result = resolveFlightArray(
-      value.map((item) => serializeFlightValue(item, state, depth + 1)),
-    );
+    result = resolveFlightArray(value.map((item) => serializeFlightValue(item, state, depth + 1)));
   } else if (isReactCompatElement(value)) {
     result = serializeElement(value, state, depth + 1);
   } else if (value instanceof Date) {
@@ -2174,9 +2230,7 @@ function serializeFlightObjectValue(
     }));
   } else if (isIterableObject(value)) {
     const values = resolveFlightArray(
-      Array.from(value).map((entryValue) =>
-        serializeFlightValue(entryValue, state, depth + 1),
-      ),
+      Array.from(value).map((entryValue) => serializeFlightValue(entryValue, state, depth + 1)),
     );
     result = resolveFlightResult(values, (resolvedValues) => ({
       kind: "iterable",
@@ -2254,10 +2308,10 @@ function serializeProps(
 ): FlightSerializationResult<Record<string, FlightModel>> {
   const entries = resolveFlightArray(
     Object.entries(props).map(([key, value]) =>
-      resolveFlightResult(
-        serializeFlightValue(value, state, depth + 1),
-        (resolvedValue) => [key, resolvedValue],
-      ),
+      resolveFlightResult(serializeFlightValue(value, state, depth + 1), (resolvedValue) => [
+        key,
+        resolvedValue,
+      ]),
     ),
   );
 

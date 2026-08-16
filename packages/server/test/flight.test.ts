@@ -150,7 +150,12 @@ describe("server Flight runtime", () => {
     const pattern = /\$F1/giu;
     pattern.lastIndex = 3;
     const url = new URL("https://example.test/a?b=1");
-    const response = await renderToFlightResponse({ pattern, patternAgain: pattern, url, urlAgain: url });
+    const response = await renderToFlightResponse({
+      pattern,
+      patternAgain: pattern,
+      url,
+      urlAgain: url,
+    });
 
     expect(response.objectReferences).toEqual([
       { kind: "regexp", source: "\\$F1", flags: "giu", lastIndex: 3 },
@@ -1087,7 +1092,7 @@ describe("server Flight runtime", () => {
   test("keeps uppercase control tags distinct from lowercase high row references", () => {
     const highReference = fromReactFlightRows(['f0:"row-240"', '0:{"value":"$f0"}'].join("\n"));
     const symbol = fromReactFlightRows('0:"$Scafe"');
-    const binary = fromReactFlightRows(['1:S2,AQI=', '0:"$1"'].join("\n"));
+    const binary = fromReactFlightRows(["1:S2,AQI=", '0:"$1"'].join("\n"));
 
     expect(highReference.root).toEqual({ value: "row-240" });
     expect(symbol.root).toEqual({ kind: "symbol", name: "cafe" });

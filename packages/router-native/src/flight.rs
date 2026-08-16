@@ -14,7 +14,7 @@
 use serde_json::{json, Value};
 
 #[cfg(not(test))]
-use napi::Error;
+use napi::{bindgen_prelude::Buffer, Error};
 #[cfg(not(test))]
 use napi_derive::napi;
 
@@ -129,14 +129,57 @@ struct EncodeState {
   // outline rows produced while encoding a child value land in front
   // of the parent row in iteration order, which matters for the JS
   // decoder's single-pass cross-reference resolution.
-  rows: Vec<String>,
+  rows: Vec<EncodedRow>,
   next_wire_id: u64,
+}
+
+enum EncodedRow {
+  Text(String),
+  Binary { prefix: String, bytes: Vec<u8> },
+}
+
+impl From<String> for EncodedRow {
+  fn from(value: String) -> Self {
+    Self::Text(value)
+  }
 }
 
 /// Encode a serialized `FlightResponse` (the JSON shape JS passes us)
 /// to the React Flight wire row format. Mirrors `toReactFlightRows`
 /// at flight.ts:486 + `encodeReactFlightModel` at flight.ts:783.
 pub fn encode_flight_response(response_json: &str) -> Result<String, String> {
+  let rows = encode_flight_rows(response_json)?;
+  let mut text_rows = Vec::with_capacity(rows.len());
+  for row in rows {
+    match row {
+      EncodedRow::Text(text) => text_rows.push(text),
+      EncodedRow::Binary { prefix, bytes } => {
+        text_rows.push(format!("{prefix}{}", encode_base64_bytes(&bytes)))
+      }
+    }
+  }
+  Ok(text_rows.join("\n"))
+}
+
+pub fn encode_flight_payload(response_json: &str) -> Result<Vec<u8>, String> {
+  let rows = encode_flight_rows(response_json)?;
+  let mut payload = Vec::new();
+  for row in rows {
+    match row {
+      EncodedRow::Text(text) => {
+        payload.extend_from_slice(text.as_bytes());
+        payload.push(b'\n');
+      }
+      EncodedRow::Binary { prefix, bytes } => {
+        payload.extend_from_slice(prefix.as_bytes());
+        payload.extend_from_slice(&bytes);
+      }
+    }
+  }
+  Ok(payload)
+}
+
+fn encode_flight_rows(response_json: &str) -> Result<Vec<EncodedRow>, String> {
   let response = parse_json_without_recursion_limit(response_json)
     .map_err(|e| format!("Invalid Flight response JSON: {e}"))?;
   let root = response
@@ -184,7 +227,7 @@ pub fn encode_flight_response(response_json: &str) -> Result<String, String> {
       "{}:I{}",
       format_flight_id(wire_id),
       serde_json::to_string(&payload).expect("payload is serializable")
-    ));
+    ).into());
   }
 
   for reference in &server_refs {
@@ -228,7 +271,7 @@ pub fn encode_flight_response(response_json: &str) -> Result<String, String> {
       "{}:F{}",
       format_flight_id(wire_id),
       serde_json::to_string(&payload).expect("payload is serializable")
-    ));
+    ).into());
   }
 
   let is_error_root = root
@@ -242,16 +285,16 @@ pub fn encode_flight_response(response_json: &str) -> Result<String, String> {
     state.rows.push(format!(
       "0:E{}",
       serde_json::to_string(&error_payload).expect("error payload is serializable")
-    ));
+    ).into());
   } else {
     let encoded = encode_model(&root, &mut state, 0)?;
     state.rows.push(format!(
       "0:{}",
       serde_json::to_string(&encoded).expect("model is serializable")
-    ));
+    ).into());
   }
 
-  Ok(state.rows.join("\n"))
+  Ok(state.rows)
 }
 
 fn encode_model(
@@ -378,7 +421,7 @@ fn encode_model(
             "{}:E{}",
             format_flight_id(id),
             serde_json::to_string(&payload).expect("error payload is serializable")
-          ));
+          ).into());
           Ok(Value::String(format!("$Z{}", format_flight_id(id))))
         }
         Some("promise") => {
@@ -409,6 +452,13 @@ fn encode_model(
         Some("array-buffer") | Some("typed-array") | Some("data-view") => {
           encode_binary_model(map, state)
         }
+        Some("regexp") => encode_extension_model(
+          map,
+          &["source", "flags", "lastIndex"],
+          state,
+          depth + 1,
+        ),
+        Some("url") => encode_extension_model(map, &["href"], state, depth + 1),
         Some(_) => {
           // Unknown `kind` — pass through unchanged (the JS encoder
           // does the same via the trailing `return model`).
@@ -421,6 +471,27 @@ fn encode_model(
       }
     }
   }
+}
+
+fn encode_extension_model(
+  model: &serde_json::Map<String, Value>,
+  fields: &[&str],
+  state: &mut EncodeState,
+  depth: usize,
+) -> Result<Value, String> {
+  let mut encoded = serde_json::Map::new();
+  encoded.insert(
+    "kind".to_string(),
+    model.get("kind").cloned().unwrap_or(Value::Null),
+  );
+  for field in fields {
+    let value = model.get(*field).cloned().unwrap_or(Value::Null);
+    encoded.insert(
+      (*field).to_string(),
+      encode_model(&value, state, depth)?,
+    );
+  }
+  Ok(Value::Object(encoded))
 }
 
 fn encode_binary_model(
@@ -461,12 +532,14 @@ fn encode_binary_model(
   }
   let id = state.next_wire_id;
   state.next_wire_id += 1;
-  state.rows.push(format!(
-    "{}:{tag}{},{}",
-    format_flight_id(id),
-    format_flight_id(bytes.len() as u64),
-    encode_base64_bytes(&bytes),
-  ));
+  state.rows.push(EncodedRow::Binary {
+    prefix: format!(
+      "{}:{tag}{},",
+      format_flight_id(id),
+      format_flight_id(bytes.len() as u64),
+    ),
+    bytes,
+  });
   Ok(Value::String(format!("${}", format_flight_id(id))))
 }
 
@@ -542,7 +615,7 @@ fn allocate_outline_row(state: &mut EncodeState, payload: Value) -> u64 {
     "{}:{}",
     format_flight_id(id),
     serde_json::to_string(&payload).expect("outline payload is serializable")
-  ));
+  ).into());
   id
 }
 
@@ -566,6 +639,14 @@ fn parse_json_without_recursion_limit(input: &str) -> Result<Value, serde_json::
 #[napi(js_name = "encodeFlightResponse")]
 pub fn napi_encode_flight_response(response_json: String) -> napi::Result<String> {
   encode_flight_response(&response_json).map_err(Error::from_reason)
+}
+
+#[cfg(not(test))]
+#[napi(js_name = "encodeFlightPayload")]
+pub fn napi_encode_flight_payload(response_json: String) -> napi::Result<Buffer> {
+  encode_flight_payload(&response_json)
+    .map(Buffer::from)
+    .map_err(Error::from_reason)
 }
 
 // ---------------------------------------------------------------------
@@ -1472,9 +1553,16 @@ mod tests {
     ];
 
     for (model, tag) in cases {
-      let rows = encode_flight_response(&flight_response(model)).unwrap();
-      assert!(rows.contains(&format!("1:{tag}4,AQIDBA==")), "{rows}");
-      assert!(rows.contains("0:\"$1\""), "{rows}");
+      let response = flight_response(model);
+      let payload = encode_flight_payload(&response).unwrap();
+      let prefix = format!("1:{tag}4,").into_bytes();
+      assert_eq!(&payload[..prefix.len()], prefix);
+      assert_eq!(&payload[prefix.len()..prefix.len() + 4], &[1, 2, 3, 4]);
+      assert_eq!(&payload[prefix.len() + 4..], b"0:\"$1\"\n");
+      assert_eq!(
+        encode_flight_response(&response).unwrap(),
+        format!("1:{tag}4,AQIDBA==\n0:\"$1\"")
+      );
     }
   }
 
@@ -1558,21 +1646,20 @@ mod tests {
   }
 
   #[test]
-  fn round_trips_typed_array() {
+  fn round_trips_regexp_extension_with_control_shaped_source() {
     let model = json!({
-      "kind": "typed-array",
-      "arrayType": "Uint8Array",
-      "bytes": [1, 2, 3, 4],
+      "kind": "regexp",
+      "source": "$F1",
+      "flags": "giu",
+      "lastIndex": 3,
     });
     assert_eq!(decode_root(model.clone()), model);
   }
 
   #[test]
   fn parses_react_native_binary_row_format() {
-    // The wire format from React's reference encoder uses
-    // "<id>:<tag><len>,<base64>" binary rows. We accept and decode
-    // these as typed arrays even though our own encoder embeds binary
-    // models inline.
+    // Keep accepting the legacy mreact Base64 text representation.
+    // Official raw binary rows use `encode_flight_payload` instead.
     let rows = ["1:o4,AQIDBA==", "0:[\"$\",\"div\",null,{\"bytes\":\"$1\"}]"]
       .join("\n");
     let decoded_json = decode_flight_rows(&rows).unwrap();

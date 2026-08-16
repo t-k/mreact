@@ -14,4 +14,5 @@ export function escapeAttributeBatch(values: string[]): string[];
 export function decodeFlightBase64(value: string): Uint8Array;
 export function decodeFlightRows(rows: string): string;
 export function encodeFlightResponse(responseJson: string): string;
+export function encodeFlightPayload(responseJson: string): Uint8Array;
 export function mergeFlightRows(baseRows: string, patchRows: string): string;

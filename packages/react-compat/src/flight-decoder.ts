@@ -163,6 +163,26 @@ export function decodeFlightModel(
     return finish(new DataView(createArrayBuffer(model.bytes)));
   }
 
+  if (model.kind === "regexp") {
+    if (typeof model.source !== "string" || typeof model.flags !== "string") {
+      throw new TypeError("Invalid Flight RegExp model.");
+    }
+    if (!Number.isSafeInteger(model.lastIndex) || model.lastIndex < 0) {
+      throw new TypeError("Invalid Flight RegExp lastIndex.");
+    }
+
+    const value = new RegExp(model.source, model.flags);
+    value.lastIndex = model.lastIndex;
+    return finish(value);
+  }
+
+  if (model.kind === "url") {
+    if (typeof model.href !== "string") {
+      throw new TypeError("Invalid Flight URL model.");
+    }
+    return finish(new URL(model.href));
+  }
+
   if (model.kind === "error") {
     const error = new Error(model.message);
     error.name = model.name;

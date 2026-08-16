@@ -49,6 +49,8 @@ export type FlightModel =
   | FlightArrayBufferModel
   | FlightTypedArrayModel
   | FlightDataViewModel
+  | FlightRegExpModel
+  | FlightUrlModel
   | { kind: "undefined" };
 
 export interface FlightObjectModel {
@@ -161,6 +163,20 @@ export interface FlightTypedArrayModel {
 export interface FlightDataViewModel {
   kind: "data-view";
   bytes: number[];
+}
+
+/** Flight model record for a RegExp value. */
+export interface FlightRegExpModel {
+  kind: "regexp";
+  source: string;
+  flags: string;
+  lastIndex: number;
+}
+
+/** Flight model record for a URL value. */
+export interface FlightUrlModel {
+  kind: "url";
+  href: string;
 }
 
 /** Typed array constructor names supported by the Flight decoder. */

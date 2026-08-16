@@ -192,7 +192,7 @@ export interface FlightMapModel {
 }
 
 // @public
-export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightObjectReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | {
+export type FlightModel = null | string | number | boolean | FlightModel[] | FlightObjectModel | FlightElementModel | FlightClientReferenceModel | FlightServerReferenceModel | FlightObjectReferenceModel | FlightDateModel | FlightBigIntModel | FlightNumberModel | FlightSymbolModel | FlightMapModel | FlightSetModel | FlightFormDataModel | FlightIterableModel | FlightErrorModel | FlightPromiseModel | FlightArrayBufferModel | FlightTypedArrayModel | FlightDataViewModel | FlightRegExpModel | FlightUrlModel | {
     kind: "undefined";
 };
 
@@ -226,6 +226,18 @@ export interface FlightPromiseModel {
     id: number;
     // (undocumented)
     kind: "promise";
+}
+
+// @public
+export interface FlightRegExpModel {
+    // (undocumented)
+    flags: string;
+    // (undocumented)
+    kind: "regexp";
+    // (undocumented)
+    lastIndex: number;
+    // (undocumented)
+    source: string;
 }
 
 // @public
@@ -297,6 +309,14 @@ export interface FlightTypedArrayModel {
 
 // @public
 export type FlightTypedArrayName = "Int8Array" | "Uint8Array" | "Uint8ClampedArray" | "Int16Array" | "Uint16Array" | "Int32Array" | "Uint32Array" | "Float32Array" | "Float64Array" | "BigInt64Array" | "BigUint64Array";
+
+// @public
+export interface FlightUrlModel {
+    // (undocumented)
+    href: string;
+    // (undocumented)
+    kind: "url";
+}
 
 export { Fragment }
 
@@ -580,6 +600,9 @@ export interface SuspenseProps extends Record<string, unknown> {
     // (undocumented)
     fallback?: unknown;
 }
+
+// @public
+export function toReactFlightPayload(response: FlightResponse): Uint8Array;
 
 // @public
 export function toReactFlightRows(response: FlightResponse): string;

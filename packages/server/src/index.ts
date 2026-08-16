@@ -28,6 +28,7 @@ export {
   renderFlightResponseScript,
   renderToFlightResponse,
   stringifyFlightResponse,
+  toReactFlightPayload,
   toReactFlightRows,
 } from "./flight.js";
 export type {
@@ -51,6 +52,7 @@ export type {
   FlightSetModel,
   FlightErrorModel,
   FlightPromiseModel,
+  FlightRegExpModel,
   FlightResponse,
   FlightScriptOptions,
   FlightServerReference,
@@ -58,6 +60,7 @@ export type {
   FlightArrayBufferModel,
   FlightTypedArrayModel,
   FlightTypedArrayName,
+  FlightUrlModel,
   ReactFlightProtocolCoverage,
   ServerAction,
   ServerActionDescriptor,
@@ -70,9 +73,7 @@ export type {
   ServerReference,
 } from "./flight.js";
 
-export {
-  createStringSink,
-} from "./sink.js";
+export { createStringSink } from "./sink.js";
 export type {
   StreamRender,
   StringHtmlSink,
@@ -80,12 +81,8 @@ export type {
   StringSinkOptions,
 } from "./sink.js";
 
-export {
-  renderToReadableStream,
-} from "./stream.js";
-export type {
-  RenderToReadableStreamOptions,
-} from "./stream.js";
+export { renderToReadableStream } from "./stream.js";
+export type { RenderToReadableStreamOptions } from "./stream.js";
 
 export {
   reactSuspenseRevealExternalScript,

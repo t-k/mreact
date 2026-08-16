@@ -38,9 +38,7 @@ describe("react-compat Flight internals", () => {
         version: 1,
         root: { kind: "server-reference", id: 1 },
         clientReferences: [],
-        serverReferences: [
-          { id: 1, moduleId: "/actions.js", exportName: "save", bound: ["Ada"] },
-        ],
+        serverReferences: [{ id: 1, moduleId: "/actions.js", exportName: "save", bound: ["Ada"] }],
       },
       {
         loadClientReference() {
@@ -80,6 +78,32 @@ describe("react-compat Flight internals", () => {
     expect((decoded as { isAdmin?: boolean }).isAdmin).toBeUndefined();
   });
 
+  test.each([
+    [{ kind: "regexp", source: "(", flags: "", lastIndex: 0 }, /regular expression/i],
+    [{ kind: "regexp", source: "Ada", flags: "gg", lastIndex: 0 }, /flags/i],
+    [{ kind: "regexp", source: "Ada", flags: "", lastIndex: -1 }, /lastIndex/i],
+    [{ kind: "regexp", source: "Ada", flags: "", lastIndex: 1.5 }, /lastIndex/i],
+    [{ kind: "regexp", source: "Ada", flags: "", lastIndex: Infinity }, /lastIndex/i],
+    [{ kind: "regexp", source: "Ada", flags: "", lastIndex: "1" }, /lastIndex/i],
+    [{ kind: "regexp", source: 1, flags: "", lastIndex: 0 }, /regexp/i],
+    [{ kind: "regexp", source: "Ada", flags: 1, lastIndex: 0 }, /regexp/i],
+    [{ kind: "url", href: "https://[" }, /url/i],
+    [{ kind: "url", href: 1 }, /url/i],
+  ] as const)("rejects malformed extension model %#", (model, expected) => {
+    expect(() =>
+      decodeFlightModel(
+        model as never,
+        {
+          version: 1,
+          root: model as never,
+          clientReferences: [],
+          serverReferences: [],
+        },
+        { loadClientReference: () => "div" },
+      ),
+    ).toThrow(expected);
+  });
+
   test("element builder resolves client references and decodes props", () => {
     const Button = () => null;
     const node = decodeFlightElementModel(
@@ -92,9 +116,7 @@ describe("react-compat Flight internals", () => {
       {
         version: 1,
         root: { kind: "undefined" },
-        clientReferences: [
-          { id: 1, moduleId: "/client.js", chunks: [], exportName: "Button" },
-        ],
+        clientReferences: [{ id: 1, moduleId: "/client.js", chunks: [], exportName: "Button" }],
         serverReferences: [],
       },
       {

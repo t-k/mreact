@@ -11,6 +11,9 @@ export function decodeFlightBase64(value: string): Uint8Array;
 export function decodeFlightRows(rows: string): string;
 
 // @public (undocumented)
+export function encodeFlightPayload(responseJson: string): Uint8Array;
+
+// @public (undocumented)
 export function encodeFlightResponse(responseJson: string): string;
 
 // @public (undocumented)

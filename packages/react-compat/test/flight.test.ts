@@ -10,6 +10,10 @@ import {
   parseFlightResponse,
   readFlightResponse,
 } from "../src/flight.js";
+import {
+  renderToFlightResponse,
+  toReactFlightPayload,
+} from "../../server/src/flight.js";
 
 describe("react-compat Flight client", () => {
   test("preserves own __proto__ data without changing the decoded object prototype", () => {
@@ -39,10 +43,9 @@ describe("react-compat Flight client", () => {
     const symbol = decodeFlightResponse(parseFlightResponse('0:"$Scafe"'), {
       loadClientReference: () => "div",
     });
-    const binary = decodeFlightResponse(
-      parseFlightResponse(['1:S2,AQI=', '0:"$1"'].join("\n")),
-      { loadClientReference: () => "div" },
-    );
+    const binary = decodeFlightResponse(parseFlightResponse(["1:S2,AQI=", '0:"$1"'].join("\n")), {
+      loadClientReference: () => "div",
+    });
 
     expect(highReference.value).toEqual({ name: "row-240" });
     expect(symbol).toBe(Symbol.for("cafe"));
@@ -69,11 +72,7 @@ describe("react-compat Flight client", () => {
 
     const clientRows = Array.from({ length: 255 }, (_, index) => {
       const id = index + 1;
-      return `${id.toString(16)}:I${JSON.stringify([
-        `components/C${id}`,
-        [],
-        "default",
-      ])}`;
+      return `${id.toString(16)}:I${JSON.stringify([`components/C${id}`, [], "default"])}`;
     });
     clientRows.push('0:["$","$Lff",null,{}]');
     let loadedClientReference = "";
@@ -112,6 +111,38 @@ describe("react-compat Flight client", () => {
     ) as { first: unknown; second: unknown };
 
     expect(decoded.first).toBe(decoded.second);
+  });
+
+  test("reconstructs RegExp and URL extension models", () => {
+    const decoded = decodeFlightResponse(
+      parseFlightResponse(
+        '0:{"pattern":{"kind":"regexp","source":"$$F1","flags":"giu","lastIndex":3},"url":{"kind":"url","href":"https://example.test/a?b=1"}}',
+      ),
+      { loadClientReference: () => "div" },
+    ) as { pattern: RegExp; url: URL };
+
+    expect(decoded.pattern).toBeInstanceOf(RegExp);
+    expect(decoded.pattern.source).toBe("$F1");
+    expect(decoded.pattern.flags).toBe("giu");
+    expect(decoded.pattern.lastIndex).toBe(3);
+    expect(decoded.url).toBeInstanceOf(URL);
+    expect(decoded.url.href).toBe("https://example.test/a?b=1");
+  });
+
+  test("preserves shared RegExp and URL extension identity", () => {
+    const decoded = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '1:{"kind":"regexp","source":"Ada","flags":"i","lastIndex":0}',
+          '2:{"kind":"url","href":"https://example.test/shared"}',
+          '0:{"pattern":"$1","patternAgain":"$1","url":"$2","urlAgain":"$2"}',
+        ].join("\n"),
+      ),
+      { loadClientReference: () => "div" },
+    ) as { pattern: RegExp; patternAgain: RegExp; url: URL; urlAgain: URL };
+
+    expect(decoded.patternAgain).toBe(decoded.pattern);
+    expect(decoded.urlAgain).toBe(decoded.url);
   });
 
   test("restores repeated Map and FormData outline references to shared runtime values", () => {
@@ -189,23 +220,7 @@ describe("react-compat Flight client", () => {
         "$u",
         "$undefined",
       ],
-      rowTags: [
-        "C",
-        "D",
-        "E",
-        "F",
-        "H",
-        "I",
-        "J",
-        "N",
-        "P",
-        "R",
-        "T",
-        "W",
-        "X",
-        "x",
-        "r",
-      ],
+      rowTags: ["C", "D", "E", "F", "H", "I", "J", "N", "P", "R", "T", "W", "X", "x", "r"],
     });
   });
 
@@ -214,34 +229,37 @@ describe("react-compat Flight client", () => {
       return createElement("p", null, props.name);
     }
 
-    const node = decodeFlightResponse({
-      version: 1,
-      clientReferences: [
-        {
-          id: 0,
-          moduleId: "./Card.client.tsx",
-          exportName: "Card",
-        },
-      ],
-      serverReferences: [],
-      root: {
-        kind: "element",
-        type: {
-          kind: "client-reference",
-          id: 0,
-        },
-        key: null,
-        props: {
-          name: "Ada",
+    const node = decodeFlightResponse(
+      {
+        version: 1,
+        clientReferences: [
+          {
+            id: 0,
+            moduleId: "./Card.client.tsx",
+            exportName: "Card",
+          },
+        ],
+        serverReferences: [],
+        root: {
+          kind: "element",
+          type: {
+            kind: "client-reference",
+            id: 0,
+          },
+          key: null,
+          props: {
+            name: "Ada",
+          },
         },
       },
-    }, {
-      loadClientReference(reference) {
-        expect(reference.moduleId).toBe("./Card.client.tsx");
-        expect(reference.exportName).toBe("Card");
-        return Card;
+      {
+        loadClientReference(reference) {
+          expect(reference.moduleId).toBe("./Card.client.tsx");
+          expect(reference.exportName).toBe("Card");
+          return Card;
+        },
       },
-    });
+    );
     const container = document.createElement("div");
 
     createRoot(container).render(node);
@@ -430,7 +448,6 @@ describe("react-compat Flight client", () => {
     expect(() => parseFlightResponse("1:Z{}")).toThrow("Unsupported React Flight row tag: Z");
   });
 
-
   test("decodes React Flight textual binary chunks into ArrayBuffer and typed arrays", () => {
     const seen: Record<string, unknown> = {};
     function Card(props: Record<string, unknown>) {
@@ -495,6 +512,46 @@ describe("react-compat Flight client", () => {
 
     expect(container.innerHTML).toBe("<p>4</p>");
     expect(seen.bytes).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  test("round-trips every binary built-in through official raw rows with shared identity", async () => {
+    const shared = new Uint8Array([9, 8, 7]);
+    const input = {
+      arrayBuffer: new Uint8Array([1, 2, 3]).buffer,
+      dataView: new DataView(new Uint8Array([4, 5, 6]).buffer),
+      int8: new Int8Array([-1, 2]),
+      uint8: shared,
+      uint8Again: shared,
+      clamped: new Uint8ClampedArray([1, 255]),
+      int16: new Int16Array([-1, 2]),
+      uint16: new Uint16Array([1, 2]),
+      int32: new Int32Array([-1, 2]),
+      uint32: new Uint32Array([1, 2]),
+      float32: new Float32Array([1.5, -2.25]),
+      float64: new Float64Array([1.5, -2.25]),
+      bigint64: new BigInt64Array([-1n, 2n]),
+      biguint64: new BigUint64Array([1n, 2n]),
+    };
+    const payload = toReactFlightPayload(await renderToFlightResponse(input));
+    const decoded = decodeFlightResponse(parseFlightResponse(payload), {
+      loadClientReference: () => "div",
+    }) as typeof input;
+
+    for (const key of Object.keys(input) as Array<keyof typeof input>) {
+      const expected = input[key];
+      const actual = decoded[key];
+      expect(actual.constructor, key).toBe(expected.constructor);
+      const expectedBytes =
+        expected instanceof ArrayBuffer
+          ? new Uint8Array(expected)
+          : new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
+      const actualBytes =
+        actual instanceof ArrayBuffer
+          ? new Uint8Array(actual)
+          : new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
+      expect(actualBytes, key).toEqual(expectedBytes);
+    }
+    expect(decoded.uint8Again).toBe(decoded.uint8);
   });
 
   test("throws decoded React Flight root errors", () => {
@@ -678,9 +735,7 @@ describe("react-compat Flight client", () => {
     container.querySelector("button")?.click();
     expect(container.querySelector("button")?.textContent).toBe("Ada 2");
     expect(container.querySelector("span")).toBe(outside);
-    expect(container.innerHTML).toBe(
-      "<span>outside</span><button>Ada 2</button>",
-    );
+    expect(container.innerHTML).toBe("<span>outside</span><button>Ada 2</button>");
   });
 
   test("creates fetch-backed server reference caller", async () => {

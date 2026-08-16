@@ -1,11 +1,13 @@
 import { describe, expect, test } from "vitest";
 import {
   fromReactFlightRows,
+  toReactFlightPayload,
   toReactFlightRows,
   type FlightModel,
   type FlightResponse,
   type FlightTypedArrayName,
 } from "../src/index.js";
+import { parseFlightResponse } from "../../react-compat/src/flight.js";
 
 // Conformance corpus for issue 081 (Flight Rust port).
 //
@@ -131,12 +133,22 @@ const corpus: CorpusCase[] = [
   },
 
   // Binary models — exhaust every TypedArray kind.
-  ...typedArrayKinds.map((arrayType): CorpusCase => ({
-    label: `typed-array model (${arrayType})`,
-    root: { kind: "typed-array", arrayType, bytes: [1, 2, 3, 4, 5, 6, 7, 8] },
-  })),
+  ...typedArrayKinds.map(
+    (arrayType): CorpusCase => ({
+      label: `typed-array model (${arrayType})`,
+      root: { kind: "typed-array", arrayType, bytes: [1, 2, 3, 4, 5, 6, 7, 8] },
+    }),
+  ),
   { label: "array-buffer model", root: { kind: "array-buffer", bytes: [9, 8, 7, 6] } },
   { label: "data-view model", root: { kind: "data-view", bytes: [4, 3, 2, 1] } },
+  {
+    label: "regexp extension model",
+    root: { kind: "regexp", source: "$F1", flags: "giu", lastIndex: 3 },
+  },
+  {
+    label: "url extension model",
+    root: { kind: "url", href: "https://example.test/a?b=1" },
+  },
 
   // Element shapes.
   {
@@ -182,8 +194,7 @@ const corpus: CorpusCase[] = [
 describe("Flight round-trip corpus (issue 081)", () => {
   test.each(corpus)("$label round-trips losslessly", ({ root }) => {
     const response: FlightResponse = { ...baseResponse, root };
-    const rows = toReactFlightRows(response);
-    const decoded = fromReactFlightRows(rows);
+    const decoded = parseFlightResponse(toReactFlightPayload(response));
 
     expect(decoded.root).toEqual(root);
     expect(decoded.clientReferences).toEqual(baseResponse.clientReferences);
@@ -205,7 +216,11 @@ describe("Flight round-trip corpus (issue 081)", () => {
     ["Uint32Array", { kind: "typed-array", arrayType: "Uint32Array", bytes: [1, 2, 3, 4] }, "l"],
     ["Float32Array", { kind: "typed-array", arrayType: "Float32Array", bytes: [1, 2, 3, 4] }, "G"],
     ["Float64Array", { kind: "typed-array", arrayType: "Float64Array", bytes: [1, 2, 3, 4] }, "g"],
-    ["BigInt64Array", { kind: "typed-array", arrayType: "BigInt64Array", bytes: [1, 2, 3, 4] }, "M"],
+    [
+      "BigInt64Array",
+      { kind: "typed-array", arrayType: "BigInt64Array", bytes: [1, 2, 3, 4] },
+      "M",
+    ],
     [
       "BigUint64Array",
       { kind: "typed-array", arrayType: "BigUint64Array", bytes: [1, 2, 3, 4] },
@@ -213,22 +228,74 @@ describe("Flight round-trip corpus (issue 081)", () => {
     ],
     ["data-view", { kind: "data-view", bytes: [1, 2, 3, 4] }, "V"],
   ] as const)("emits the %s model with binary row tag %s", (_label, root, tag) => {
-    const rows = toReactFlightRows({ ...baseResponse, root });
+    const payload = toReactFlightPayload({ ...baseResponse, root });
+    const prefix = new TextEncoder().encode(`1:${tag}4,`);
 
-    expect(rows).toContain(`1:${tag}4,AQIDBA==`);
-    expect(rows).toContain('0:"$1"');
-    expect(fromReactFlightRows(rows).root).toEqual(root);
+    expect(payload.slice(0, prefix.length)).toEqual(prefix);
+    expect(payload.slice(prefix.length, prefix.length + 4)).toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+    expect(parseFlightResponse(payload).root).toEqual(root);
   });
 
   test("encodes a large binary model without argument-list overflow", () => {
     const bytes = Array.from({ length: 128 * 1024 }, (_unused, index) => index & 0xff);
-    const rows = toReactFlightRows({
+    const payload = toReactFlightPayload({
       ...baseResponse,
       root: { kind: "array-buffer", bytes },
     });
 
-    expect(rows).toContain(`1:A${bytes.length.toString(16)},`);
-    expect(fromReactFlightRows(rows).root).toEqual({ kind: "array-buffer", bytes });
+    const prefix = `1:A${bytes.length.toString(16)},`;
+    expect(new TextDecoder().decode(payload.slice(0, prefix.length))).toBe(prefix);
+    expect(parseFlightResponse(payload).root).toEqual({ kind: "array-buffer", bytes });
+  });
+
+  test("preserves the legacy Base64 binary representation in the text row encoder", () => {
+    const root = { kind: "array-buffer", bytes: [1, 2, 3, 4] } as const;
+    const rows = toReactFlightRows({ ...baseResponse, root });
+
+    expect(rows).toBe('1:A4,AQIDBA==\n0:"$1"');
+    expect(fromReactFlightRows(rows).root).toEqual(root);
+  });
+
+  test("preserves the Base64 text representation without Node Buffer", () => {
+    const globalWithBuffer = globalThis as typeof globalThis & { Buffer?: unknown };
+    const previousBuffer = globalWithBuffer.Buffer;
+    const bytes = Array.from({ length: 64 * 1024 }, (_unused, index) => index & 0xff);
+
+    try {
+      globalWithBuffer.Buffer = undefined;
+      const rows = toReactFlightRows({
+        ...baseResponse,
+        root: { kind: "array-buffer", bytes },
+      });
+      expect(fromReactFlightRows(rows).root).toEqual({ kind: "array-buffer", bytes });
+    } finally {
+      globalWithBuffer.Buffer = previousBuffer;
+    }
+  });
+
+  test("emits official raw binary payload bytes", () => {
+    const payload = toReactFlightPayload({
+      ...baseResponse,
+      root: { kind: "typed-array", arrayType: "Uint8Array", bytes: [0, 10, 13, 255] },
+    });
+    const prefix = new TextEncoder().encode("1:o4,");
+
+    expect(payload.slice(0, prefix.length)).toEqual(prefix);
+    expect(payload.slice(prefix.length, prefix.length + 4)).toEqual(
+      new Uint8Array([0, 10, 13, 255]),
+    );
+    expect(new TextDecoder().decode(payload.slice(prefix.length + 4))).toBe('0:"$1"\n');
+  });
+
+  test.each([-1, 256, 1.5, Number.NaN])("rejects invalid binary byte %s", (byte) => {
+    expect(() =>
+      toReactFlightPayload({
+        ...baseResponse,
+        root: { kind: "array-buffer", bytes: [byte] },
+      }),
+    ).toThrow("Invalid Flight binary byte.");
   });
 
   test("element with a client-reference type carries the reference id", () => {
@@ -277,9 +344,7 @@ describe("Flight round-trip corpus (issue 081)", () => {
     const root: FlightModel = { kind: "client-reference", id: 1 };
     const response: FlightResponse = {
       ...baseResponse,
-      clientReferences: [
-        { id: 1, moduleId: "components/Card", exportName: "default", chunks: [] },
-      ],
+      clientReferences: [{ id: 1, moduleId: "components/Card", exportName: "default", chunks: [] }],
       root,
     };
 
