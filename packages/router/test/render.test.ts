@@ -12,6 +12,7 @@ import { createAppFixture, readQueryState, responseText } from "@reckona/mreact-
 import type { AppRouterCache } from "../src/cache.js";
 import type { AppRouterLogEvent } from "../src/logger.js";
 import { bundleMiddlewareModuleCode, renderAppRequest } from "../src/render.js";
+import { getRouterRuntimeCacheStats } from "../src/runtime-cache.js";
 
 describe("mreact app request rendering", () => {
   test("renders a .mreact.tsx page route to HTML", async () => {
@@ -885,6 +886,54 @@ export default function Page(props) {
     expect(page.status).toBe(200);
     expect(html).toContain('<meta property="og:image" content="/posts/hello/opengraph-image">');
   });
+
+  test.each(["development", "production"] as const)(
+    "keeps params-derived metadata request-local with the %s metadata cache",
+    async (mode) => {
+      const appDir = await mkdtemp(join(tmpdir(), `mreact-app-metadata-params-${mode}-`));
+      await mkdir(join(appDir, "posts", "$slug"), { recursive: true });
+      await writeFile(
+        join(appDir, "posts", "$slug", "page.tsx"),
+        `export const metadata = { title: "Post" };
+export default function Page(props) { return <main>{props.params.slug}</main>; }`,
+      );
+      await writeFile(
+        join(appDir, "posts", "$slug", "opengraph-image.tsx"),
+        `export default function Image() { return new Response("image"); }`,
+      );
+      const cacheOptions =
+        mode === "development"
+          ? { dev: true, devServerModuleCacheVersion: "metadata-params-v1" }
+          : { serverModuleCacheVersion: "metadata-params-v1" };
+      const render = async (slug: string) =>
+        await renderAppRequest({
+          appDir,
+          ...cacheOptions,
+          request: new Request(`http://local.test/posts/${slug}`),
+        });
+      const statsBefore = getRouterRuntimeCacheStats().find(
+        (entry) => entry.name === "composed-route-metadata",
+      );
+
+      const alpha = await render("alpha");
+      const beta = await render("beta");
+      const alphaHtml = await alpha.text();
+      const betaHtml = await beta.text();
+      const statsAfter = getRouterRuntimeCacheStats().find(
+        (entry) => entry.name === "composed-route-metadata",
+      );
+
+      expect(alphaHtml).toContain(
+        '<meta property="og:image" content="/posts/alpha/opengraph-image">',
+      );
+      expect(betaHtml).toContain(
+        '<meta property="og:image" content="/posts/beta/opengraph-image">',
+      );
+      expect(betaHtml).not.toContain("/posts/alpha/opengraph-image");
+      expect((statsAfter?.hits ?? 0) - (statsBefore?.hits ?? 0)).toBe(1);
+      expect((statsAfter?.misses ?? 0) - (statsBefore?.misses ?? 0)).toBe(1);
+    },
+  );
 
   test("serves static file conventions and injects icon metadata fallbacks", async () => {
     const appDir = await mkdtemp(join(tmpdir(), "mreact-app-static-file-conventions-"));

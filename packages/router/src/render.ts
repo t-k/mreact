@@ -130,13 +130,15 @@ import {
   type RouteMiddlewareControl,
 } from "./middleware.js";
 import {
-  applyFileConventionMetadata,
+  applyFileConventionMetadataTemplate,
+  fileConventionMetadataTemplate,
   injectHeadMetadata,
   mergeRouteMetadata,
   responseHeadersForMetadata,
   serializeRobots,
   serializeSitemap,
   validateRouteMetadata,
+  type FileConventionMetadataTemplate,
 } from "./metadata.js";
 import {
   createSlotRenderContext,
@@ -580,7 +582,12 @@ const middlewareModuleCache = new Map<string, Promise<MiddlewareModule>>();
 const middlewareModuleCacheCounters = createRouterRuntimeCacheCounters();
 const serverRouteModuleCache = new Map<string, Promise<Record<string, unknown>>>();
 const serverRouteModuleCacheCounters = createRouterRuntimeCacheCounters();
-const composedRouteMetadataCache = new Map<string, Promise<RouteMetadata | undefined>>();
+interface ComposedRouteMetadataCacheEntry {
+  metadata: RouteMetadata | undefined;
+  template: FileConventionMetadataTemplate;
+}
+
+const composedRouteMetadataCache = new Map<string, Promise<ComposedRouteMetadataCacheEntry>>();
 const composedRouteMetadataCacheCounters = createRouterRuntimeCacheCounters();
 const maxServerTransformCacheEntries = resolveRouterCacheLimit("SERVER_TRANSFORM", 512);
 const maxServerSourceFileCacheEntries = resolveRouterCacheLimit("SERVER_SOURCE_FILE", 512);
@@ -5168,7 +5175,12 @@ async function loadComposedRouteMetadata(options: {
       composedRouteMetadataCacheCounters,
     );
     if (cached !== undefined) {
-      return cached;
+      const entry = await cached;
+      return applyFileConventionMetadataTemplate(
+        entry.metadata,
+        entry.template,
+        options.context.params,
+      );
     }
   }
 
@@ -5178,13 +5190,17 @@ async function loadComposedRouteMetadata(options: {
       setBoundedCacheEntry(
         composedRouteMetadataCache,
         cacheKey,
-        Promise.resolve(loaded.metadata),
+        Promise.resolve({ metadata: loaded.metadata, template: loaded.template }),
         maxComposedRouteMetadataCacheEntries,
         composedRouteMetadataCacheCounters,
       );
     }
 
-    return loaded.metadata;
+    return applyFileConventionMetadataTemplate(
+      loaded.metadata,
+      loaded.template,
+      options.context.params,
+    );
   } catch (error) {
     if (cacheKey !== undefined) {
       composedRouteMetadataCache.delete(cacheKey);
@@ -5226,7 +5242,11 @@ async function loadComposedRouteMetadataUncached(options: {
   serverModuleCacheVersion?: string | undefined;
   serverSourceFiles?: ReadonlyMap<string, string> | undefined;
   vitePlugins?: readonly PluginOption[] | undefined;
-}): Promise<{ dynamic: boolean; metadata: RouteMetadata | undefined }> {
+}): Promise<{
+  dynamic: boolean;
+  metadata: RouteMetadata | undefined;
+  template: FileConventionMetadataTemplate;
+}> {
   const layoutFiles = await shellFilesForPage(
     options.appDir,
     options.filename,
@@ -5289,12 +5309,8 @@ async function loadComposedRouteMetadataUncached(options: {
 
   return {
     dynamic,
-    metadata: applyFileConventionMetadata(
-      mergeRouteMetadata(metadata),
-      options.routes,
-      options.filename,
-      options.context.params,
-    ),
+    metadata: mergeRouteMetadata(metadata),
+    template: fileConventionMetadataTemplate(options.routes, options.filename),
   };
 }
 

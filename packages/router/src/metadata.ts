@@ -8,7 +8,6 @@ import {
   isUnsafeUrlAttribute,
 } from "@reckona/mreact-shared/url-safety";
 import { contentSecurityPolicy } from "./csp.js";
-import type { AppFileConvention } from "./file-conventions.js";
 import type { AppRoute } from "./routes.js";
 import { routeSecurityHeaders } from "./security-headers.js";
 import type {
@@ -28,6 +27,13 @@ type CspDirectiveMap = Record<string, readonly string[] | string>;
 const DEFAULT_HTML_RESPONSE_HEADERS = Object.freeze({
   "content-type": "text/html; charset=utf-8",
 });
+
+export interface FileConventionMetadataTemplate {
+  appleIconPath?: string | undefined;
+  iconPath?: string | undefined;
+  openGraphImageFallbackPath?: string | undefined;
+  openGraphImageRoutePath?: string | undefined;
+}
 
 export function mergeRouteMetadata(metadata: readonly RouteMetadata[]): RouteMetadata | undefined {
   if (metadata.length === 0) {
@@ -68,23 +74,64 @@ export function applyFileConventionMetadata(
   filename: string,
   params: RouteParams,
 ): RouteMetadata | undefined {
-  const next: RouteMetadata = metadata === undefined ? {} : { ...metadata };
+  return applyFileConventionMetadataTemplate(
+    metadata,
+    fileConventionMetadataTemplate(routes, filename),
+    params,
+  );
+}
+
+export function fileConventionMetadataTemplate(
+  routes: readonly AppRoute[],
+  filename: string,
+): FileConventionMetadataTemplate {
+  const pageRoute = routes.find((route) => route.kind === "page" && route.file === filename);
   const iconRoute = routes.find((route) => route.kind === "asset" && route.convention === "icon");
   const appleIconRoute = routes.find(
     (route) => route.kind === "asset" && route.convention === "apple-icon",
   );
-  const openGraphImagePath = fileConventionMetadataRoutePath(
-    routes,
-    filename,
-    params,
-    "opengraph-image",
+  const openGraphImageRoutes = routes.filter(
+    (route) =>
+      (route.kind === "asset" || route.kind === "metadata") &&
+      route.convention === "opengraph-image",
   );
+  const expectedOpenGraphImagePath =
+    pageRoute === undefined
+      ? undefined
+      : pageRoute.path === "/"
+        ? "/opengraph-image"
+        : `${pageRoute.path}/opengraph-image`;
 
-  if (iconRoute !== undefined && next.icons?.icon === undefined) {
-    next.icons = { ...next.icons, icon: iconRoute.path };
+  return {
+    ...(appleIconRoute === undefined ? {} : { appleIconPath: appleIconRoute.path }),
+    ...(iconRoute === undefined ? {} : { iconPath: iconRoute.path }),
+    ...(openGraphImageRoutes.find((route) => route.path === "/opengraph-image") === undefined
+      ? {}
+      : { openGraphImageFallbackPath: "/opengraph-image" }),
+    ...(expectedOpenGraphImagePath === undefined ||
+    openGraphImageRoutes.find((route) => route.path === expectedOpenGraphImagePath) === undefined
+      ? {}
+      : { openGraphImageRoutePath: expectedOpenGraphImagePath }),
+  };
+}
+
+export function applyFileConventionMetadataTemplate(
+  metadata: RouteMetadata | undefined,
+  template: FileConventionMetadataTemplate,
+  params: RouteParams,
+): RouteMetadata | undefined {
+  const next: RouteMetadata = metadata === undefined ? {} : { ...metadata };
+  const openGraphImagePath =
+    (template.openGraphImageRoutePath === undefined
+      ? undefined
+      : concreteRoutePath(template.openGraphImageRoutePath, params)) ??
+    template.openGraphImageFallbackPath;
+
+  if (template.iconPath !== undefined && next.icons?.icon === undefined) {
+    next.icons = { ...next.icons, icon: template.iconPath };
   }
-  if (appleIconRoute !== undefined && next.icons?.apple === undefined) {
-    next.icons = { ...next.icons, apple: appleIconRoute.path };
+  if (template.appleIconPath !== undefined && next.icons?.apple === undefined) {
+    next.icons = { ...next.icons, apple: template.appleIconPath };
   }
   if (
     openGraphImagePath !== undefined &&
@@ -267,33 +314,6 @@ export function serializeSitemap(entries: readonly SitemapEntry[]): string {
     .join("");
 
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
-}
-
-function fileConventionMetadataRoutePath(
-  routes: readonly AppRoute[],
-  filename: string,
-  params: RouteParams,
-  convention: AppFileConvention,
-): string | undefined {
-  const pageRoute = routes.find((route) => route.kind === "page" && route.file === filename);
-  const candidateRoutes = routes.filter(
-    (route) =>
-      (route.kind === "asset" || route.kind === "metadata") && route.convention === convention,
-  );
-
-  if (pageRoute !== undefined) {
-    const expectedPath =
-      pageRoute.path === "/" ? `/${convention}` : `${pageRoute.path}/${convention}`;
-    const routeLocal = candidateRoutes.find((route) => route.path === expectedPath);
-    const routeLocalPath =
-      routeLocal === undefined ? undefined : concreteRoutePath(routeLocal.path, params);
-
-    if (routeLocalPath !== undefined) {
-      return routeLocalPath;
-    }
-  }
-
-  return candidateRoutes.find((route) => route.path === `/${convention}`)?.path;
 }
 
 function concreteRoutePath(path: string, params: RouteParams): string | undefined {
