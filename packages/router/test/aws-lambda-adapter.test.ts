@@ -1278,6 +1278,107 @@ export default function Hot({ data }) {
     expect(result.body).toBe("AAEC");
   });
 
+  test("preserves ambiguous response bytes in buffered and streaming handlers", async () => {
+    installAwsLambdaStreamingMock();
+    const { outDir, appDir } = await createBuiltApp("mreact-lambda-response-bytes-");
+    await mkdir(join(appDir, "api", "body"), { recursive: true });
+    await writeFile(
+      join(appDir, "api", "body", "route.ts"),
+      `export function GET(request) {
+  switch (new URL(request.url).searchParams.get("kind")) {
+    case "untyped":
+      return new Response(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x01]));
+    case "shift-jis":
+      return new Response(new Uint8Array([0x82, 0xa0, 0x82, 0xa2]), {
+        headers: { "content-type": "text/plain; charset=shift_jis" },
+      });
+    case "quoted-utf8":
+      return new Response(new TextEncoder().encode("日本語"), {
+        headers: { "content-type": 'Text/Plain; Charset="UTF-8"' },
+      });
+    case "invalid-utf8":
+      return new Response(new Uint8Array([0xff, 0xfe]), {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    case "conflicting-charset":
+      return new Response(new TextEncoder().encode("text"), {
+        headers: { "content-type": "text/plain; charset=utf-8; charset=shift_jis" },
+      });
+    case "xml-without-charset":
+      return new Response(new Uint8Array([0xff, 0xfe, 0x3c, 0x00]), {
+        headers: { "content-type": "application/xml" },
+      });
+    case "json":
+      return Response.json({ message: "日本語" });
+    default:
+      return new Response("日本語");
+  }
+}`,
+    );
+    await buildApp({ appDir, outDir });
+    const cases = [
+      {
+        bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x01]),
+        isBase64Encoded: true,
+        kind: "untyped",
+      },
+      {
+        bytes: Buffer.from([0x82, 0xa0, 0x82, 0xa2]),
+        isBase64Encoded: true,
+        kind: "shift-jis",
+      },
+      {
+        bytes: Buffer.from("日本語"),
+        isBase64Encoded: false,
+        kind: "quoted-utf8",
+      },
+      {
+        bytes: Buffer.from([0xff, 0xfe]),
+        isBase64Encoded: true,
+        kind: "invalid-utf8",
+      },
+      {
+        bytes: Buffer.from("text"),
+        isBase64Encoded: true,
+        kind: "conflicting-charset",
+      },
+      {
+        bytes: Buffer.from([0xff, 0xfe, 0x3c, 0x00]),
+        isBase64Encoded: true,
+        kind: "xml-without-charset",
+      },
+      {
+        bytes: Buffer.from(JSON.stringify({ message: "日本語" })),
+        isBase64Encoded: false,
+        kind: "json",
+      },
+      {
+        bytes: Buffer.from("日本語"),
+        isBase64Encoded: false,
+        kind: "default-text",
+      },
+    ] as const;
+    const buffered = createAwsLambdaRequestHandler({ outDir });
+    const streaming = createAwsLambdaStreamingRequestHandler({ outDir });
+
+    for (const fixture of cases) {
+      const event = {
+        ...lambdaEvent("/api/body"),
+        rawQueryString: `kind=${fixture.kind}`,
+      };
+      const bufferedResult = await buffered(event);
+      expect(bufferedResult.isBase64Encoded, fixture.kind).toBe(fixture.isBase64Encoded);
+      expect(
+        Buffer.from(bufferedResult.body, fixture.isBase64Encoded ? "base64" : "utf8"),
+        fixture.kind,
+      ).toEqual(fixture.bytes);
+
+      const stream = createTestLambdaResponseStream();
+      await streaming(event, stream, {});
+      expect(Buffer.concat(stream.chunks), fixture.kind).toEqual(fixture.bytes);
+    }
+  });
+
   test("streams text response chunks with status, headers, and cookies", async () => {
     installAwsLambdaStreamingMock();
     const { outDir, appDir } = await createBuiltApp("mreact-lambda-stream-");

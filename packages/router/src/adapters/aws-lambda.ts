@@ -1,4 +1,4 @@
-import { Buffer } from "node:buffer";
+import { Buffer, isUtf8 } from "node:buffer";
 import { createHash } from "node:crypto";
 import { access, lstat, mkdir, readFile, readlink, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1028,7 +1028,7 @@ async function responseToLambdaResult(
 
   const bodyEncodeStartedAt = phaseStartedAt(phases);
   const contentType = response.headers.get("content-type");
-  const text = isTextContentType(contentType);
+  const text = isUtf8TextContentType(contentType) && isUtf8(bytes);
   const result = {
     body: text ? bytes.toString("utf8") : bytes.toString("base64"),
     ...(cookies.length === 0 ? {} : { cookies }),
@@ -1465,13 +1465,14 @@ function splitSetCookieHeader(header: string): string[] {
   return cookies.filter((cookie) => cookie.length > 0);
 }
 
-function isTextContentType(contentType: string | null): boolean {
+function isUtf8TextContentType(contentType: string | null): boolean {
   if (contentType === null) {
-    return true;
+    return false;
   }
 
-  const type = contentType.toLowerCase().split(";")[0]?.trim() ?? "";
-  return (
+  const [rawType = "", ...parameters] = contentType.split(";");
+  const type = rawType.trim().toLowerCase();
+  const textual =
     type.startsWith("text/") ||
     type === "application/json" ||
     type === "application/javascript" ||
@@ -1479,6 +1480,51 @@ function isTextContentType(contentType: string | null): boolean {
     type === "application/xml" ||
     type === "application/x-www-form-urlencoded" ||
     type.endsWith("+json") ||
-    type.endsWith("+xml")
+    type.endsWith("+xml");
+  if (!textual) {
+    return false;
+  }
+
+  let hasCharset = false;
+  for (const parameter of parameters) {
+    const equals = parameter.indexOf("=");
+    const name = (equals === -1 ? parameter : parameter.slice(0, equals)).trim().toLowerCase();
+    if (name !== "charset") {
+      continue;
+    }
+
+    hasCharset = true;
+    if (equals === -1) {
+      return false;
+    }
+
+    const value = unquoteContentTypeParameter(parameter.slice(equals + 1).trim()).toLowerCase();
+    if (value !== "utf-8" && value !== "utf8") {
+      return false;
+    }
+  }
+
+  if (hasCharset) {
+    return true;
+  }
+
+  return (
+    type === "application/json" ||
+    type === "application/javascript" ||
+    type === "application/x-javascript" ||
+    type === "text/javascript" ||
+    type.endsWith("+json")
   );
+}
+
+function unquoteContentTypeParameter(value: string): string {
+  if (value.length < 2) {
+    return value;
+  }
+
+  const first = value[0];
+  const last = value.at(-1);
+  return (first === '"' && last === '"') || (first === "'" && last === "'")
+    ? value.slice(1, -1)
+    : value;
 }
