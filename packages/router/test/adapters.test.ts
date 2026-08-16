@@ -7,8 +7,10 @@ import { installDevtools } from "@reckona/mreact-devtools";
 import { buildApp } from "../src/build.js";
 import { createEdgeRequestHandler } from "../src/adapters/edge.js";
 import { createNodeRequestHandler } from "../src/adapters/node.js";
+import { createAwsLambdaRequestHandler } from "../src/adapters/aws-lambda.js";
+import { createCloudflareRequestHandler } from "../src/adapters/cloudflare.js";
 import { exportStaticApp } from "../src/adapters/static.js";
-import { startServer } from "../src/serve.js";
+import { createBuiltRequestRuntime, startServer } from "../src/serve.js";
 
 describe("mreact deployment adapters", () => {
   test("serves built output through the Node request handler", async () => {
@@ -338,6 +340,63 @@ export default function Page() { return <main>Static adapter</main>; }`,
       ]),
     );
     devtools.dispose();
+  });
+
+  test("returns 405 for legal extension methods across request adapters", async () => {
+    const { outDir } = await buildFixture("mreact-adapter-method-conformance-", {
+      "route.ts": `export function GET() {
+  return new Response("ok");
+}`,
+    });
+    const runtime = await createBuiltRequestRuntime({ outDir });
+    const render = (request: Request) => runtime.render(request);
+    const edge = createEdgeRequestHandler({ render });
+    const clientManifest = JSON.parse(
+      await readFile(join(outDir, "client", "manifest.json"), "utf8"),
+    );
+    const serverManifest = JSON.parse(
+      await readFile(join(outDir, "server", "manifest.json"), "utf8"),
+    );
+    const cloudflare = createCloudflareRequestHandler({
+      clientManifest,
+      render,
+      serverManifest,
+    });
+    const lambda = createAwsLambdaRequestHandler({ outDir });
+    const nodeServer = createServer(createNodeRequestHandler({ outDir }));
+    await new Promise<void>((resolve) => nodeServer.listen(0, "127.0.0.1", resolve));
+    const address = nodeServer.address();
+    const port = typeof address === "object" && address !== null ? address.port : 0;
+
+    try {
+      const [node, lambdaResult, edgeResult, cloudflareResult] = await Promise.all([
+        fetch(`http://127.0.0.1:${port}/`, { method: "PROPFIND" }),
+        lambda({
+          headers: { host: "lambda.test" },
+          rawPath: "/",
+          rawQueryString: "",
+          requestContext: { http: { method: "PROPFIND", protocol: "HTTP/1.1" } },
+          version: "2.0",
+        }),
+        edge(new Request("https://edge.test/", { method: "PROPFIND" })),
+        cloudflare.fetch(
+          new Request("https://cloudflare.test/", { method: "PROPFIND" }),
+          {},
+          { passThroughOnException() {}, waitUntil() {} },
+        ),
+      ]);
+
+      expect([
+        node.status,
+        lambdaResult.statusCode,
+        edgeResult.status,
+        cloudflareResult.status,
+      ]).toEqual([405, 405, 405, 405]);
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        nodeServer.close((error) => (error === undefined ? resolve() : reject(error))),
+      );
+    }
   });
 });
 
