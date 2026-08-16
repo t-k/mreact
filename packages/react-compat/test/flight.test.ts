@@ -114,6 +114,57 @@ describe("react-compat Flight client", () => {
     expect(decoded.first).toBe(decoded.second);
   });
 
+  test("restores repeated Map and FormData outline references to shared runtime values", () => {
+    const repeatedCount = 256;
+    const decoded = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '1:[["key","value"]]',
+          '2:[["field","value"]]',
+          `0:${JSON.stringify({
+            maps: Array.from({ length: repeatedCount }, () => "$Q1"),
+            forms: Array.from({ length: repeatedCount }, () => "$K2"),
+          })}`,
+        ].join("\n"),
+      ),
+      { loadClientReference: () => "div" },
+    ) as { maps: Map<string, string>[]; forms: FormData[] };
+
+    expect(decoded.maps).toHaveLength(repeatedCount);
+    expect(decoded.forms).toHaveLength(repeatedCount);
+    expect(new Set(decoded.maps).size).toBe(1);
+    expect(new Set(decoded.forms).size).toBe(1);
+    expect(decoded.maps[0]?.get("key")).toBe("value");
+    expect(decoded.forms[0]?.get("field")).toBe("value");
+  });
+
+  test("shares collection identity between server-reference bounds and root models", () => {
+    const calls: unknown[][] = [];
+    const decoded = decodeFlightResponse(
+      parseFlightResponse(
+        [
+          '2:F{"id":"actions/first#first","bound":["$Q1"],"name":"first"}',
+          '3:F{"id":"actions/second#second","bound":["$Q1"],"name":"second"}',
+          '1:[["key","value"]]',
+          '0:{"map":"$Q1","first":"$F2","second":"$F3"}',
+        ].join("\n"),
+      ),
+      {
+        loadClientReference: () => "div",
+        callServerReference(reference, args) {
+          calls.push([reference.moduleId, reference.exportName, ...args]);
+        },
+      },
+    ) as { map: Map<string, string>; first: () => void; second: () => void };
+
+    decoded.first();
+    decoded.second();
+
+    expect(decoded.map.get("key")).toBe("value");
+    expect(calls[0]?.[2]).toBe(decoded.map);
+    expect(calls[1]?.[2]).toBe(decoded.map);
+  });
+
   test("covers every declared React Flight row tag and model token", () => {
     expect(getReactFlightProtocolCoverage()).toEqual({
       binaryRowTags: ["A", "O", "o", "U", "S", "s", "L", "l", "G", "g", "M", "m", "V"],
@@ -275,7 +326,7 @@ describe("react-compat Flight client", () => {
         [
           '1:I["./Card.client.tsx",[],"Card"]',
           '3:[["workspace","workspace-1"]]',
-          '2:F{"id":"actions/save#save","bound":["$Q3"],"name":"save"}',
+          '2:F{"id":"actions/save#save","bound":["$Q3","$Q3"],"name":"save"}',
           '0:["$","$L1",null,{"onSave":"$F2"}]',
         ].join("\n"),
       ),
@@ -299,7 +350,8 @@ describe("react-compat Flight client", () => {
     expect(call?.[1]).toBe("save");
     expect(call?.[2]).toBeInstanceOf(Map);
     expect((call?.[2] as Map<string, string> | undefined)?.get("workspace")).toBe("workspace-1");
-    expect(call?.[3]).toBe("Ada");
+    expect(call?.[2]).toBe(call?.[3]);
+    expect(call?.[4]).toBe("Ada");
   });
 
   test("parses React 19 Flight outlined text chunks and scalar props", () => {

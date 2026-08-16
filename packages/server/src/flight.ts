@@ -778,8 +778,10 @@ export function fromReactFlightRows(rows: string): FlightResponse {
 
   const clientReferences: FlightClientReference[] = [];
   const serverReferences: FlightServerReference[] = [];
+  const serverReferenceRows: ReactFlightRow[] = [];
   const modelChunks = new Map<number, unknown>();
   const errorChunks = new Map<number, FlightErrorModel>();
+  const decodeContext = createFlightDecodeContext();
   let root: FlightModel | undefined;
 
   for (const line of lines) {
@@ -791,9 +793,7 @@ export function fromReactFlightRows(rows: string): FlightResponse {
     }
 
     if (row.tag === "F") {
-      serverReferences.push(
-        parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks),
-      );
+      serverReferenceRows.push(row);
       continue;
     }
 
@@ -826,8 +826,20 @@ export function fromReactFlightRows(rows: string): FlightResponse {
     }
   }
 
+  for (const row of serverReferenceRows) {
+    serverReferences.push(
+      parseReactFlightServerReference(
+        row.id,
+        row.payload,
+        modelChunks,
+        errorChunks,
+        decodeContext,
+      ),
+    );
+  }
+
   if (root === undefined && modelChunks.has(0)) {
-    root = decodeReactFlightModel(modelChunks.get(0), modelChunks, errorChunks);
+    root = decodeReactFlightModel(modelChunks.get(0), modelChunks, errorChunks, 0, decodeContext);
   }
 
   if (root === undefined) {
@@ -850,6 +862,8 @@ export function mergeReactFlightRows(response: FlightResponse, rows: string): Fl
   const errorChunks = new Map<number, FlightErrorModel>();
   const clientReferences = [...response.clientReferences];
   const serverReferences = [...response.serverReferences];
+  const serverReferenceRows: ReactFlightRow[] = [];
+  const decodeContext = createFlightDecodeContext();
 
   for (const line of rows.split(/\r?\n/).filter(Boolean)) {
     const row = parseReactFlightRow(line);
@@ -860,9 +874,7 @@ export function mergeReactFlightRows(response: FlightResponse, rows: string): Fl
     }
 
     if (row.tag === "F") {
-      serverReferences.push(
-        parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks),
-      );
+      serverReferenceRows.push(row);
       continue;
     }
 
@@ -890,11 +902,23 @@ export function mergeReactFlightRows(response: FlightResponse, rows: string): Fl
     }
   }
 
+  for (const row of serverReferenceRows) {
+    serverReferences.push(
+      parseReactFlightServerReference(
+        row.id,
+        row.payload,
+        modelChunks,
+        errorChunks,
+        decodeContext,
+      ),
+    );
+  }
+
   return {
     ...response,
     clientReferences,
     serverReferences,
-    root: resolveFlightPromiseChunks(response.root, modelChunks, errorChunks),
+    root: resolveFlightPromiseChunks(response.root, modelChunks, errorChunks, 0, decodeContext),
   };
 }
 
@@ -950,16 +974,27 @@ function resolveFlightPromiseChunks(
     return model;
   }
 
+  const completed = context.resolvedModels.get(model);
+  if (completed !== undefined) {
+    return completed;
+  }
+
   if (Array.isArray(model)) {
-    return model.map((item) =>
-      resolveFlightPromiseChunks(item, modelChunks, errorChunks, depth + 1, context),
-    );
+    const resolved: FlightModel[] = [];
+    context.resolvedModels.set(model, resolved);
+    for (const item of model) {
+      resolved.push(
+        resolveFlightPromiseChunks(item, modelChunks, errorChunks, depth + 1, context),
+      );
+    }
+    return resolved;
   }
 
   if (model.kind === "promise") {
     const error = errorChunks.get(model.id);
 
     if (error !== undefined) {
+      context.resolvedModels.set(model, error);
       return error;
     }
 
@@ -970,64 +1005,88 @@ function resolveFlightPromiseChunks(
 
       context.inProgressChunkIds.add(model.id);
       try {
-        return decodeReactFlightModel(
+        const resolved = decodeReactFlightModel(
           modelChunks.get(model.id),
           modelChunks,
           errorChunks,
           depth + 1,
           context,
         );
+        context.resolvedModels.set(model, resolved);
+        return resolved;
       } finally {
         context.inProgressChunkIds.delete(model.id);
       }
     }
 
+    context.resolvedModels.set(model, model);
     return model;
   }
 
   if (model.kind === "element") {
-    return {
+    const resolved: FlightElementModel = {
       ...model,
-      props: Object.fromEntries(
-        Object.entries(model.props).map(([key, value]) => [
-          key,
-          resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
-        ]),
-      ),
+      props: {},
     };
+    context.resolvedModels.set(model, resolved);
+    resolved.props = Object.fromEntries(
+      Object.entries(model.props).map(([key, value]) => [
+        key,
+        resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
+      ]),
+    );
+    return resolved;
   }
 
   if (model.kind === "map") {
-    return {
+    const resolved: FlightMapModel = {
       ...model,
-      entries: model.entries.map(([key, value]): [FlightModel, FlightModel] => [
-        resolveFlightPromiseChunks(key, modelChunks, errorChunks, depth + 1, context),
-        resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
-      ]),
+      entries: [],
     };
+    context.resolvedModels.set(model, resolved);
+    resolved.entries = model.entries.map(([key, value]): [FlightModel, FlightModel] => [
+      resolveFlightPromiseChunks(key, modelChunks, errorChunks, depth + 1, context),
+      resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
+    ]);
+    return resolved;
   }
 
   if (model.kind === "set") {
-    return {
+    const resolved: FlightSetModel = {
       ...model,
-      values: model.values.map((value) =>
-        resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
-      ),
+      values: [],
     };
+    context.resolvedModels.set(model, resolved);
+    resolved.values = model.values.map((value) =>
+      resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
+    );
+    return resolved;
   }
 
   if ("kind" in model) {
+    context.resolvedModels.set(model, model);
     return model;
   }
 
-  return Object.fromEntries(
-    Object.entries(model).map(([key, value]) => [
-      key,
+  const resolved: FlightObjectModel = {};
+  context.resolvedModels.set(model, resolved);
+  for (const [key, value] of Object.entries(model)) {
+    const resolvedValue =
       value === undefined
         ? undefined
-        : resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context),
-    ]),
-  );
+        : resolveFlightPromiseChunks(value, modelChunks, errorChunks, depth + 1, context);
+    if (key === "__proto__") {
+      Object.defineProperty(resolved, key, {
+        configurable: true,
+        enumerable: true,
+        value: resolvedValue,
+        writable: true,
+      });
+    } else {
+      resolved[key] = resolvedValue;
+    }
+  }
+  return resolved;
 }
 
 interface ReactFlightEncodingState {
@@ -1434,14 +1493,18 @@ function parseReactFlightServerReference(
   payload: string,
   modelChunks: ReadonlyMap<number, unknown> = new Map(),
   errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): FlightServerReference {
   const value = JSON.parse(payload) as unknown;
   const object = valueIsObject(value) ? value : {};
   const actionId = String(object.id ?? "");
   const separator = actionId.lastIndexOf("#");
-  const bound = Array.isArray(object.bound)
-    ? object.bound.map((entry) => decodeReactFlightModel(entry, modelChunks, errorChunks))
-    : undefined;
+  let bound: FlightModel[] | undefined;
+  if (Array.isArray(object.bound)) {
+    bound = object.bound.map((entry) =>
+      decodeReactFlightModel(entry, modelChunks, errorChunks, 0, context),
+    );
+  }
 
   return {
     id,
@@ -1481,12 +1544,18 @@ function flightCycle(id: number): never {
 interface FlightDecodeContext {
   inProgressChunkIds: Set<number>;
   completedChunkModels: Map<number, FlightModel>;
+  completedMapModels: Map<number, FlightMapModel>;
+  completedFormDataModels: Map<number, FlightFormDataModel>;
+  resolvedModels: WeakMap<object, FlightModel>;
 }
 
 function createFlightDecodeContext(): FlightDecodeContext {
   return {
     inProgressChunkIds: new Set(),
     completedChunkModels: new Map(),
+    completedMapModels: new Map(),
+    completedFormDataModels: new Map(),
+    resolvedModels: new WeakMap(),
   };
 }
 
@@ -1603,6 +1672,11 @@ function decodeReactFlightString(
   }
 
   if (/^\$Q[0-9a-fA-F]+$/.test(value)) {
+    const id = parseReactFlightId(value.slice(2));
+    const completed = context.completedMapModels.get(id);
+    if (completed !== undefined) {
+      return completed;
+    }
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -1618,10 +1692,12 @@ function decodeReactFlightString(
         )
       : [];
 
-    return {
+    const model: FlightMapModel = {
       kind: "map",
       entries,
     };
+    context.completedMapModels.set(id, model);
+    return model;
   }
 
   if (/^\$W[0-9a-fA-F]+$/.test(value)) {
@@ -1640,6 +1716,11 @@ function decodeReactFlightString(
   }
 
   if (/^\$K[0-9a-fA-F]+$/.test(value)) {
+    const id = parseReactFlightId(value.slice(2));
+    const completed = context.completedFormDataModels.get(id);
+    if (completed !== undefined) {
+      return completed;
+    }
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -1655,10 +1736,12 @@ function decodeReactFlightString(
         )
       : [];
 
-    return {
+    const model: FlightFormDataModel = {
       kind: "form-data",
       entries,
     };
+    context.completedFormDataModels.set(id, model);
+    return model;
   }
 
   if (/^\$i[0-9a-fA-F]+$/.test(value)) {

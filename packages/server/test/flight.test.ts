@@ -885,6 +885,95 @@ describe("server Flight runtime", () => {
     });
   });
 
+  test("memoizes repeated Map and FormData outline wrappers", () => {
+    const repeatedCount = 256;
+    const response = fromReactFlightRows(
+      [
+        '1:[["key","value"]]',
+        '2:[["field","value"]]',
+        `0:${JSON.stringify({
+          maps: Array.from({ length: repeatedCount }, () => "$Q1"),
+          forms: Array.from({ length: repeatedCount }, () => "$K2"),
+        })}`,
+      ].join("\n"),
+    );
+    const root = response.root as { maps: object[]; forms: object[] };
+
+    expect(root.maps).toHaveLength(repeatedCount);
+    expect(root.forms).toHaveLength(repeatedCount);
+    expect(new Set(root.maps).size).toBe(1);
+    expect(new Set(root.forms).size).toBe(1);
+  });
+
+  test("keeps nested repeated Map references proportional to distinct rows", () => {
+    const width = 24;
+    const response = fromReactFlightRows(
+      [
+        `1:${JSON.stringify(
+          Array.from({ length: width }, (_, index) => [`level-1-${index}`, "$Q2"]),
+        )}`,
+        `2:${JSON.stringify(
+          Array.from({ length: width }, (_, index) => [`level-2-${index}`, "$Q3"]),
+        )}`,
+        '3:[["leaf","value"]]',
+        '0:"$Q1"',
+      ].join("\n"),
+    );
+    const root = response.root;
+    if (typeof root !== "object" || root === null || Array.isArray(root) || root.kind !== "map") {
+      throw new Error("expected root Map model");
+    }
+    const levelTwoModels = root.entries.map(([, value]) => value);
+    const levelTwo = levelTwoModels[0];
+    if (
+      typeof levelTwo !== "object" ||
+      levelTwo === null ||
+      Array.isArray(levelTwo) ||
+      levelTwo.kind !== "map"
+    ) {
+      throw new Error("expected nested Map model");
+    }
+
+    expect(new Set(levelTwoModels).size).toBe(1);
+    expect(new Set(levelTwo.entries.map(([, value]) => value)).size).toBe(1);
+  });
+
+  test("preserves collection identity across server-reference rows and the root", () => {
+    const response = fromReactFlightRows(
+      [
+        '2:F{"id":"actions/first#first","bound":["$Q1"],"name":"first"}',
+        '3:F{"id":"actions/second#second","bound":["$Q1"],"name":"second"}',
+        '1:[["key","value"]]',
+        '0:{"map":"$Q1"}',
+      ].join("\n"),
+    );
+    const root = response.root as { map: object };
+
+    expect(response.serverReferences[0]?.bound?.[0]).toEqual({
+      kind: "map",
+      entries: [["key", "value"]],
+    });
+    expect(response.serverReferences[0]?.bound?.[0]).toBe(root.map);
+    expect(response.serverReferences[1]?.bound?.[0]).toBe(root.map);
+  });
+
+  test("preserves repeated collection identity while merging later chunks", () => {
+    const repeatedCount = 256;
+    const initial = fromReactFlightRows(
+      [
+        '1:[["key","value"]]',
+        `0:${JSON.stringify({
+          maps: Array.from({ length: repeatedCount }, () => "$Q1"),
+        })}`,
+      ].join("\n"),
+    );
+    const merged = mergeReactFlightRows(initial, '2:"unrelated"');
+    const root = merged.root as { maps: object[] };
+
+    expect(root.maps).toHaveLength(repeatedCount);
+    expect(new Set(root.maps).size).toBe(1);
+  });
+
   test("throws on unsupported React Flight row tags on the server adapter", () => {
     expect(() => fromReactFlightRows("1:Z{}")).toThrow("Unsupported React Flight row tag: Z");
   });

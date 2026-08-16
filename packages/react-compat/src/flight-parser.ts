@@ -5,6 +5,8 @@ import type {
   FlightDataViewModel,
   FlightElementModel,
   FlightErrorModel,
+  FlightFormDataModel,
+  FlightMapModel,
   FlightModel,
   FlightResponse,
   FlightServerReference,
@@ -31,12 +33,16 @@ class FlightDecodeError extends Error {
 interface FlightDecodeContext {
   inProgressChunkIds: Set<number>;
   completedChunkModels: Map<number, FlightModel>;
+  completedMapModels: Map<number, FlightMapModel>;
+  completedFormDataModels: Map<number, FlightFormDataModel>;
 }
 
 function createFlightDecodeContext(): FlightDecodeContext {
   return {
     inProgressChunkIds: new Set(),
     completedChunkModels: new Map(),
+    completedMapModels: new Map(),
+    completedFormDataModels: new Map(),
   };
 }
 
@@ -165,8 +171,10 @@ function parseReactFlightBinaryRows(payload: ArrayBuffer | Uint8Array): FlightRe
 function parseReactFlightRowObjects(rows: ReactFlightRow[]): FlightResponse {
   const clientReferences: FlightClientReference[] = [];
   const serverReferences: FlightServerReference[] = [];
+  const serverReferenceRows: ReactFlightRow[] = [];
   const modelChunks = new Map<number, unknown>();
   const errorChunks = new Map<number, FlightErrorModel>();
+  const decodeContext = createFlightDecodeContext();
   let root: FlightModel | undefined;
 
   for (const row of rows) {
@@ -176,9 +184,7 @@ function parseReactFlightRowObjects(rows: ReactFlightRow[]): FlightResponse {
     }
 
     if (row.tag === "F") {
-      serverReferences.push(
-        parseReactFlightServerReference(row.id, row.payload, modelChunks, errorChunks),
-      );
+      serverReferenceRows.push(row);
       continue;
     }
 
@@ -211,8 +217,20 @@ function parseReactFlightRowObjects(rows: ReactFlightRow[]): FlightResponse {
     }
   }
 
+  for (const row of serverReferenceRows) {
+    serverReferences.push(
+      parseReactFlightServerReference(
+        row.id,
+        row.payload,
+        modelChunks,
+        errorChunks,
+        decodeContext,
+      ),
+    );
+  }
+
   if (root === undefined && modelChunks.has(0)) {
-    root = decodeReactFlightModel(modelChunks.get(0), modelChunks, errorChunks);
+    root = decodeReactFlightModel(modelChunks.get(0), modelChunks, errorChunks, 0, decodeContext);
   }
 
   if (root === undefined) {
@@ -455,16 +473,18 @@ function parseReactFlightServerReference(
   payload: string,
   modelChunks: ReadonlyMap<number, unknown> = new Map(),
   errorChunks: ReadonlyMap<number, FlightErrorModel> = new Map(),
+  context: FlightDecodeContext = createFlightDecodeContext(),
 ): FlightServerReference {
   const value = JSON.parse(payload) as unknown;
   const object = valueIsObject(value) ? value : {};
   const actionId = String(object.id ?? "");
   const separator = actionId.lastIndexOf("#");
-  const bound = Array.isArray(object.bound)
-    ? object.bound.map((entry) =>
-        decodeReactFlightModel(entry, modelChunks, errorChunks, 0, createFlightDecodeContext()),
-      )
-    : undefined;
+  let bound: FlightModel[] | undefined;
+  if (Array.isArray(object.bound)) {
+    bound = object.bound.map((entry) =>
+      decodeReactFlightModel(entry, modelChunks, errorChunks, 0, context),
+    );
+  }
 
   return {
     id,
@@ -593,6 +613,11 @@ function decodeReactFlightString(
   }
 
   if (/^\$Q[0-9a-fA-F]+$/.test(value)) {
+    const id = parseReactFlightId(value.slice(2));
+    const completed = context.completedMapModels.get(id);
+    if (completed !== undefined) {
+      return completed;
+    }
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -608,10 +633,12 @@ function decodeReactFlightString(
         )
       : [];
 
-    return {
+    const model: FlightMapModel = {
       kind: "map",
       entries,
     };
+    context.completedMapModels.set(id, model);
+    return model;
   }
 
   if (/^\$W[0-9a-fA-F]+$/.test(value)) {
@@ -630,6 +657,11 @@ function decodeReactFlightString(
   }
 
   if (/^\$K[0-9a-fA-F]+$/.test(value)) {
+    const id = parseReactFlightId(value.slice(2));
+    const completed = context.completedFormDataModels.get(id);
+    if (completed !== undefined) {
+      return completed;
+    }
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -645,10 +677,12 @@ function decodeReactFlightString(
         )
       : [];
 
-    return {
+    const model: FlightFormDataModel = {
       kind: "form-data",
       entries,
     };
+    context.completedFormDataModels.set(id, model);
+    return model;
   }
 
   if (/^\$i[0-9a-fA-F]+$/.test(value)) {
