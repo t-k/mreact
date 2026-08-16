@@ -12,6 +12,81 @@ import {
 } from "../src/flight.js";
 
 describe("react-compat Flight client", () => {
+  test("preserves own __proto__ data without changing the decoded object prototype", () => {
+    const response = parseFlightResponse(
+      '0:{"name":"Ada","__proto__":{"isAdmin":true},"constructor":"own-constructor","prototype":"own-prototype"}',
+    );
+    const decoded = decodeFlightResponse(response, {
+      loadClientReference: () => "div",
+    }) as Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(decoded)).toBe(Object.prototype);
+    expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
+    expect(decoded["__proto__"]).toEqual({ isAdmin: true });
+    expect(Object.hasOwn(decoded, "constructor")).toBe(true);
+    expect(Object.hasOwn(decoded, "prototype")).toBe(true);
+    expect(decoded["constructor"]).toBe("own-constructor");
+    expect(decoded["prototype"]).toBe("own-prototype");
+    expect((decoded as { isAdmin?: boolean }).isAdmin).toBeUndefined();
+    expect((Object.prototype as { isAdmin?: boolean }).isAdmin).toBeUndefined();
+  });
+
+  test("keeps high row references, symbols, and binary tags distinct", () => {
+    const highReference = decodeFlightResponse(
+      parseFlightResponse(['f0:{"name":"row-240"}', '0:{"value":"$f0"}'].join("\n")),
+      { loadClientReference: () => "div" },
+    ) as { value: unknown };
+    const symbol = decodeFlightResponse(parseFlightResponse('0:"$Scafe"'), {
+      loadClientReference: () => "div",
+    });
+    const binary = decodeFlightResponse(
+      parseFlightResponse(['1:S2,AQI=', '0:"$1"'].join("\n")),
+      { loadClientReference: () => "div" },
+    );
+
+    expect(highReference.value).toEqual({ name: "row-240" });
+    expect(symbol).toBe(Symbol.for("cafe"));
+    expect(binary).toBeInstanceOf(Int16Array);
+    expect(Array.from(new Uint8Array((binary as Int16Array).buffer))).toEqual([1, 2]);
+  });
+
+  test("resolves hexadecimal boundary reference ids through runtime callbacks", () => {
+    const serverRows = Array.from({ length: 255 }, (_, index) => {
+      const id = index + 1;
+      return `${id.toString(16)}:F${JSON.stringify({
+        id: `actions/${id}#action${id}`,
+        bound: null,
+        name: `action${id}`,
+      })}`;
+    });
+    serverRows.push('0:"$Fff"');
+    const action = decodeFlightResponse(parseFlightResponse(serverRows.join("\n")), {
+      loadClientReference: () => "div",
+      callServerReference(reference) {
+        return `${reference.moduleId}#${reference.exportName}`;
+      },
+    }) as () => unknown;
+
+    const clientRows = Array.from({ length: 255 }, (_, index) => {
+      const id = index + 1;
+      return `${id.toString(16)}:I${JSON.stringify([
+        `components/C${id}`,
+        [],
+        "default",
+      ])}`;
+    });
+    clientRows.push('0:["$","$Lff",null,{}]');
+    let loadedClientReference = "";
+    decodeFlightResponse(parseFlightResponse(clientRows.join("\n")), {
+      loadClientReference(reference) {
+        loadedClientReference = `${reference.moduleId}#${reference.exportName}`;
+        return () => null;
+      },
+    });
+
+    expect(action()).toBe("actions/255#action255");
+    expect(loadedClientReference).toBe("components/C255#default");
+  });
   test("restores shared object identity from structured reference tables", () => {
     const decoded = decodeFlightResponse(
       {
@@ -320,7 +395,7 @@ describe("react-compat Flight client", () => {
           "6:S4,AQACAA==",
           "7:L4,AQAAAA==",
           '5:I["./Card.client.tsx",[],"Card"]',
-          '0:["$","$L5",null,{"bytes":"$o1","buffer":"$A2","words":"$s3","view":"$V4","signedWords":"$6","signedLongs":"$7"}]',
+          '0:["$","$L5",null,{"bytes":"$1","buffer":"$2","words":"$3","view":"$4","signedWords":"$6","signedLongs":"$7"}]',
         ].join("\n"),
       ),
       {
@@ -355,7 +430,7 @@ describe("react-compat Flight client", () => {
       encoder.encode("1:o4,"),
       new Uint8Array([1, 2, 3, 4]),
       encoder.encode('\n2:I["./Card.client.tsx",[],"Card"]\n'),
-      encoder.encode('0:["$","$L2",null,{"bytes":"$o1"}]\n'),
+      encoder.encode('0:["$","$L2",null,{"bytes":"$1"}]\n'),
     );
     const node = decodeFlightResponse(parseFlightResponse(payload), {
       loadClientReference() {

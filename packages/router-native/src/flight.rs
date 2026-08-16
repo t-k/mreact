@@ -364,12 +364,12 @@ fn encode_model(
         Some("server-reference") => {
           let id = map.get("id").and_then(Value::as_u64).unwrap_or(0);
           let wire = state.server_wire_ids.get(&id).copied().unwrap_or(id);
-          Ok(Value::String(format!("$F{wire}")))
+          Ok(Value::String(format!("$F{}", format_flight_id(wire))))
         }
         Some("client-reference") => {
           let id = map.get("id").and_then(Value::as_u64).unwrap_or(0);
           let wire = state.client_wire_ids.get(&id).copied().unwrap_or(id);
-          Ok(Value::String(format!("$L{wire}")))
+          Ok(Value::String(format!("$L{}", format_flight_id(wire))))
         }
         Some("element") => {
           let elem_type = map.get("type").cloned().unwrap_or(Value::Null);
@@ -440,7 +440,7 @@ fn encode_element_type(
     if obj.get("kind").and_then(Value::as_str) == Some("client-reference") {
       let id = obj.get("id").and_then(Value::as_u64).unwrap_or(0);
       let wire = client_wire_ids.get(&id).copied().unwrap_or(id);
-      return format!("$L{wire}");
+      return format!("$L{}", format_flight_id(wire));
     }
   }
   // Fallback — stringify whatever it is.
@@ -932,13 +932,6 @@ fn decode_string(
   if let Some(rest) = value.strip_prefix("$n") {
     return Ok(json!({ "kind": "bigint", "value": rest }));
   }
-  // The order of these guards matches `decodeReactFlightString`
-  // exactly so we preserve the existing decoder's observable
-  // behavior — including the binary-chunk regex shadowing the
-  // `$L<hex>` client-reference handler that issue 081 documents.
-  if matches_flight_chunk_ref(value) {
-    return decode_chunk_ref(&value[2..], model_chunks, error_chunks);
-  }
   if let Some(rest) = value.strip_prefix("$S") {
     return Ok(json!({ "kind": "symbol", "name": rest }));
   }
@@ -1024,26 +1017,6 @@ fn decode_string(
     }
   }
   Ok(Value::String(value.to_string()))
-}
-
-fn matches_flight_chunk_ref(value: &str) -> bool {
-  // Matches `^\$[AOoUSsLlGgMmV][0-9a-f]+$` (case-sensitive).
-  let bytes = value.as_bytes();
-  if bytes.len() < 3 {
-    return false;
-  }
-  if bytes[0] != b'$' {
-    return false;
-  }
-  if !matches!(
-    bytes[1],
-    b'A' | b'O' | b'o' | b'U' | b'S' | b's' | b'L' | b'l' | b'G' | b'g' | b'M' | b'm' | b'V'
-  ) {
-    return false;
-  }
-  bytes[2..]
-    .iter()
-    .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 fn decode_chunk_ref(
@@ -1388,6 +1361,34 @@ mod tests {
   }
 
   #[test]
+  fn encodes_reference_ids_in_hexadecimal() {
+    let mut state = EncodeState {
+      client_wire_ids: std::collections::HashMap::from([(255, 255)]),
+      server_wire_ids: std::collections::HashMap::from([(255, 255)]),
+      rows: Vec::new(),
+      next_wire_id: 1,
+    };
+
+    assert_eq!(
+      encode_model(&json!({ "kind": "server-reference", "id": 255 }), &mut state, 0)
+        .unwrap(),
+      json!("$Fff"),
+    );
+    assert_eq!(
+      encode_model(&json!({ "kind": "client-reference", "id": 255 }), &mut state, 0)
+        .unwrap(),
+      json!("$Lff"),
+    );
+    assert_eq!(
+      encode_element_type(
+        &json!({ "kind": "client-reference", "id": 255 }),
+        &state.client_wire_ids,
+      ),
+      "$Lff",
+    );
+  }
+
+  #[test]
   fn encodes_map_via_outline_row() {
     let map_model = json!({
       "kind": "map",
@@ -1482,7 +1483,7 @@ mod tests {
     // "<id>:<tag><len>,<base64>" binary rows. We accept and decode
     // these as typed arrays even though our own encoder embeds binary
     // models inline.
-    let rows = ["1:o4,AQIDBA==", "0:[\"$\",\"div\",null,{\"bytes\":\"$o1\"}]"]
+    let rows = ["1:o4,AQIDBA==", "0:[\"$\",\"div\",null,{\"bytes\":\"$1\"}]"]
       .join("\n");
     let decoded_json = decode_flight_rows(&rows).unwrap();
     let decoded: Value = serde_json::from_str(&decoded_json).unwrap();
@@ -1491,6 +1492,20 @@ mod tests {
     assert_eq!(
       bytes.get("bytes").unwrap(),
       &json!([1, 2, 3, 4]),
+    );
+  }
+
+  #[test]
+  fn keeps_symbols_and_high_row_references_distinct() {
+    let rows = ["f0:\"row-240\"", "0:{\"value\":\"$f0\",\"symbol\":\"$S1\"}"]
+      .join("\n");
+    let decoded_json = decode_flight_rows(&rows).unwrap();
+    let decoded: Value = serde_json::from_str(&decoded_json).unwrap();
+
+    assert_eq!(decoded.pointer("/root/value"), Some(&json!("row-240")));
+    assert_eq!(
+      decoded.pointer("/root/symbol"),
+      Some(&json!({ "kind": "symbol", "name": "1" })),
     );
   }
 

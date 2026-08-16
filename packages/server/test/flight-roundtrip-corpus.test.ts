@@ -71,6 +71,10 @@ const corpus: CorpusCase[] = [
   { label: "empty array root", root: [] },
   { label: "shallow object root", root: { a: 1, b: "two" } },
   {
+    label: "object with an own __proto__ data property",
+    root: JSON.parse('{"__proto__":{"isAdmin":true}}') as FlightModel,
+  },
+  {
     label: "deeply nested array (within depth cap)",
     root: buildNestedArray(50),
   },
@@ -228,15 +232,18 @@ describe("Flight round-trip corpus (issue 081)", () => {
     });
   });
 
-  // Note: a bare `{ kind: "client-reference", id }` *root* model does
-  // not round-trip in the current JS decoder — the binary-chunk regex
-  // at flight.ts:1296 (`[AOoUSsLlGgMmV]`) shadows the dedicated
-  // `$L<hex>` handler at flight.ts:1311, so the value is treated as a
-  // typed-array outline reference and resolves to a promise stub.
-  // This is a pre-existing decoder bug, out of scope for issue 081
-  // (the Rust port preserves observable behavior, not fixes unrelated
-  // bugs). File a follow-up if/when bare client-reference roots become
-  // a real wire shape.
+  test("bare client references round-trip without colliding with binary row tags", () => {
+    const root: FlightModel = { kind: "client-reference", id: 1 };
+    const response: FlightResponse = {
+      ...baseResponse,
+      clientReferences: [
+        { id: 1, moduleId: "components/Card", exportName: "default", chunks: [] },
+      ],
+      root,
+    };
+
+    expect(fromReactFlightRows(toReactFlightRows(response)).root).toEqual(root);
+  });
 });
 
 function buildNestedArray(depth: number): FlightModel {

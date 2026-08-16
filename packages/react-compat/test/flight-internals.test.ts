@@ -57,6 +57,29 @@ describe("react-compat Flight internals", () => {
     expect(callArgs).toEqual([["/actions.js", "save", "Ada", "Lovelace"]]);
   });
 
+  test("decoder materializes __proto__ as an own data property", () => {
+    const model = JSON.parse('{"__proto__":{"isAdmin":true}}') as Record<string, unknown>;
+    const decoded = decodeFlightModel(
+      model,
+      {
+        version: 1,
+        root: model,
+        clientReferences: [],
+        serverReferences: [],
+      },
+      {
+        loadClientReference() {
+          throw new Error("unexpected client reference");
+        },
+      },
+    ) as Record<string, unknown>;
+
+    expect(Object.getPrototypeOf(decoded)).toBe(Object.prototype);
+    expect(Object.hasOwn(decoded, "__proto__")).toBe(true);
+    expect(decoded["__proto__"]).toEqual({ isAdmin: true });
+    expect((decoded as { isAdmin?: boolean }).isAdmin).toBeUndefined();
+  });
+
   test("element builder resolves client references and decodes props", () => {
     const Button = () => null;
     const node = decodeFlightElementModel(

@@ -567,36 +567,32 @@ function decodeReactFlightString(
     return { kind: "bigint", value: value.slice(2) };
   }
 
-  if (/^\$F[0-9a-f]+$/i.test(value)) {
+  if (/^\$F[0-9a-fA-F]+$/.test(value)) {
     return {
       kind: "server-reference",
       id: parseReactFlightId(value.slice(2)),
     };
   }
 
-  if (/^\$L[0-9a-f]+$/i.test(value)) {
+  if (/^\$L[0-9a-fA-F]+$/.test(value)) {
     return {
       kind: "client-reference",
       id: parseReactFlightId(value.slice(2)),
     };
   }
 
-  if (/^\$[AOoUSsLlGgMmV][0-9a-f]+$/.test(value)) {
-    return decodeReactFlightChunk(value.slice(2), modelChunks, errorChunks, depth + 1, context);
-  }
-
   if (value.startsWith("$S")) {
     return { kind: "symbol", name: value.slice(2) };
   }
 
-  if (/^\$@[0-9a-f]*$/i.test(value)) {
+  if (/^\$@[0-9a-fA-F]*$/.test(value)) {
     return {
       kind: "promise",
       id: value.length === 2 ? 0 : parseReactFlightId(value.slice(2)),
     };
   }
 
-  if (/^\$Q[0-9a-f]+$/i.test(value)) {
+  if (/^\$Q[0-9a-fA-F]+$/.test(value)) {
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -618,7 +614,7 @@ function decodeReactFlightString(
     };
   }
 
-  if (/^\$W[0-9a-f]+$/i.test(value)) {
+  if (/^\$W[0-9a-fA-F]+$/.test(value)) {
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -633,7 +629,7 @@ function decodeReactFlightString(
     };
   }
 
-  if (/^\$K[0-9a-f]+$/i.test(value)) {
+  if (/^\$K[0-9a-fA-F]+$/.test(value)) {
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -655,7 +651,7 @@ function decodeReactFlightString(
     };
   }
 
-  if (/^\$i[0-9a-f]+$/i.test(value)) {
+  if (/^\$i[0-9a-fA-F]+$/.test(value)) {
     const decoded = decodeReactFlightChunk(
       value.slice(2),
       modelChunks,
@@ -670,7 +666,7 @@ function decodeReactFlightString(
     };
   }
 
-  if (/^\$Z[0-9a-f]+$/i.test(value)) {
+  if (/^\$Z[0-9a-fA-F]+$/.test(value)) {
     return (
       errorChunks.get(parseReactFlightId(value.slice(2))) ?? {
         kind: "error",
@@ -743,7 +739,7 @@ function decodeReactFlightElementType(value: unknown): FlightElementModel["type"
     return { kind: "fragment" };
   }
 
-  if (typeof value === "string" && /^\$L[0-9a-f]+$/i.test(value)) {
+  if (typeof value === "string" && /^\$L[0-9a-fA-F]+$/.test(value)) {
     return {
       kind: "client-reference",
       id: parseReactFlightId(value.slice(2)),

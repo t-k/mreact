@@ -14,6 +14,7 @@ import {
   stringifyFlightResponse,
   toReactFlightRows,
   fromReactFlightRows,
+  type FlightResponse,
 } from "../src/index.js";
 
 describe("server Flight runtime", () => {
@@ -890,7 +891,7 @@ describe("server Flight runtime", () => {
 
   test("parses React Flight binary typed array rows on the server adapter", () => {
     const response = fromReactFlightRows(
-      ["1:o4,AQIDBA==", "2:A4,AQIDBA==", '0:["$","div",null,{"bytes":"$o1","buffer":"$A2"}]'].join(
+      ["1:o4,AQIDBA==", "2:A4,AQIDBA==", '0:["$","div",null,{"bytes":"$1","buffer":"$2"}]'].join(
         "\n",
       ),
     );
@@ -911,6 +912,61 @@ describe("server Flight runtime", () => {
         },
       },
     });
+  });
+
+  test("keeps uppercase control tags distinct from lowercase high row references", () => {
+    const highReference = fromReactFlightRows(['f0:"row-240"', '0:{"value":"$f0"}'].join("\n"));
+    const symbol = fromReactFlightRows('0:"$Scafe"');
+    const binary = fromReactFlightRows(['1:S2,AQI=', '0:"$1"'].join("\n"));
+
+    expect(highReference.root).toEqual({ value: "row-240" });
+    expect(symbol.root).toEqual({ kind: "symbol", name: "cafe" });
+    expect(binary.root).toEqual({
+      arrayType: "Int16Array",
+      bytes: [1, 2],
+      kind: "typed-array",
+    });
+  });
+
+  test("emits server and client reference wire ids in hexadecimal at protocol boundaries", () => {
+    const ids = Array.from({ length: 255 }, (_, index) => index + 1);
+    const boundaryIds = [9, 10, 15, 16, 255];
+    const serverResponse: FlightResponse = {
+      version: 1,
+      clientReferences: [],
+      serverReferences: ids.map((id) => ({
+        exportName: `action${id}`,
+        id,
+        moduleId: `actions/${id}`,
+      })),
+      root: Object.fromEntries(
+        boundaryIds.map((id) => [`ref${id}`, { id, kind: "server-reference" }]),
+      ),
+    };
+    const clientResponse: FlightResponse = {
+      version: 1,
+      clientReferences: ids.map((id) => ({
+        chunks: [],
+        exportName: "default",
+        id,
+        moduleId: `components/C${id}`,
+      })),
+      serverReferences: [],
+      root: Object.fromEntries(
+        boundaryIds.map((id) => [`ref${id}`, { id, kind: "client-reference" }]),
+      ),
+    };
+
+    const serverRows = toReactFlightRows(serverResponse);
+    const clientRows = toReactFlightRows(clientResponse);
+
+    for (const id of boundaryIds) {
+      const hex = id.toString(16);
+      expect(serverRows).toContain(`"ref${id}":"$F${hex}"`);
+      expect(clientRows).toContain(`"ref${id}":"$L${hex}"`);
+    }
+    expect(fromReactFlightRows(serverRows).root).toEqual(serverResponse.root);
+    expect(fromReactFlightRows(clientRows).root).toEqual(clientResponse.root);
   });
 
   test("merges incremental React Flight rows into an existing response", () => {

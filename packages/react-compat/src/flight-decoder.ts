@@ -224,10 +224,20 @@ export function decodeFlightModel(
     const decoded: Record<string, unknown> = {};
     context.decodedModels.set(model, decoded);
     for (const [key, value] of Object.entries(model)) {
-      decoded[key] =
+      const decodedValue =
         value === undefined
           ? undefined
           : decodeFlightModel(value, response, options, depth + 1, context);
+      if (key === "__proto__") {
+        Object.defineProperty(decoded, key, {
+          configurable: true,
+          enumerable: true,
+          value: decodedValue,
+          writable: true,
+        });
+      } else {
+        decoded[key] = decodedValue;
+      }
     }
     return decoded;
   }
