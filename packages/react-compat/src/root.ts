@@ -1,8 +1,13 @@
 import type { ReactCompatNode } from "./element.js";
 import {
+  beginClassRenderAttempt,
+  finishClassRenderAttempt,
+} from "./class-component.js";
+import {
   createRootRuntime,
   flushSyncUpdates,
   hasStableExternalStores,
+  runWithHostCommit,
   type RenderPriority,
   type RootRuntime,
 } from "./hooks.js";
@@ -174,6 +179,7 @@ function renderHostFiberIntoContainer(
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const portalSnapshot = beginPortalRender(runtime);
+    beginClassRenderAttempt(runtime);
     runtime.beginRender(priority);
     let committed = false;
 
@@ -193,9 +199,11 @@ function renderHostFiberIntoContainer(
       }
 
       fiberRoot.finishedWork = finishedWork;
-      runtime.prepareInactiveMutationEffectCleanups();
-      const mutationEffectErrors = withBatchedDelegatedRootReleases(() =>
-        commitFiberRoot(fiberRoot, {}, scope)
+      const mutationEffectErrors = runWithHostCommit(() =>
+        withBatchedDelegatedRootReleases(() => {
+          runtime.prepareInactiveMutationEffectCleanups();
+          return commitFiberRoot(fiberRoot, {}, scope);
+        }),
       );
       runtime.reportMutationEffectErrors(mutationEffectErrors);
       collectPortalNodes(fiberRoot.current, runtime, portalSnapshot);
@@ -209,7 +217,11 @@ function renderHostFiberIntoContainer(
       if (!committed) {
         restorePortalRender(runtime, portalSnapshot);
       }
-      runtime.endRender(committed);
+      try {
+        runtime.endRender(committed);
+      } finally {
+        finishClassRenderAttempt(runtime, committed);
+      }
       if (committed) {
         runtime.flushEffects();
       }
@@ -233,6 +245,7 @@ function renderHydratingHostFiberIntoContainer(
 ): Fiber {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const portalSnapshot = beginPortalRender(runtime);
+    beginClassRenderAttempt(runtime);
     runtime.beginRender(priority);
     let committed = false;
 
@@ -263,9 +276,11 @@ function renderHydratingHostFiberIntoContainer(
         recoverStructurallyMismatchedHostFiberRoot(finishedWork);
       }
 
-      runtime.prepareInactiveMutationEffectCleanups();
-      const mutationEffectErrors = withBatchedDelegatedRootReleases(() =>
-        commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options)
+      const mutationEffectErrors = runWithHostCommit(() =>
+        withBatchedDelegatedRootReleases(() => {
+          runtime.prepareInactiveMutationEffectCleanups();
+          return commitHydratingHostFiberRoot(fiberRoot, finishedWork, scope, options);
+        }),
       );
       runtime.reportMutationEffectErrors(mutationEffectErrors);
       if (structuralMismatch) {
@@ -291,7 +306,11 @@ function renderHydratingHostFiberIntoContainer(
       if (!committed) {
         restorePortalRender(runtime, portalSnapshot);
       }
-      runtime.endRender(committed);
+      try {
+        runtime.endRender(committed);
+      } finally {
+        finishClassRenderAttempt(runtime, committed);
+      }
       if (committed) {
         runtime.flushEffects();
       }

@@ -2,6 +2,7 @@
 
 import { describe, expect, test, vi } from "vitest";
 import {
+  Component,
   StrictMode,
   createElement,
   createPortal,
@@ -623,6 +624,166 @@ describe("react-compat effect hooks", () => {
       expect(calls).toEqual(["layout:true:true", "ref:detach", "passive:true:false"]);
       expect(captured?.isConnected).toBe(false);
       expect(container.innerHTML).toBe("<section></section>");
+    } finally {
+      root.unmount();
+      container.remove();
+    }
+  });
+
+  test("defers an active update from deleted layout cleanup until mutation commit", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let renderError: unknown;
+    let incrementRevision: (label?: string) => void = () => undefined;
+
+    class Revision extends Component<Record<string, never>, { value: number }> {
+      state = { value: 0 };
+
+      componentDidMount() {
+        incrementRevision = (label) => this.increment(label);
+      }
+
+      increment(label = "cleanup") {
+        this.setState(
+          ({ value }) => ({ value: value + 1 }),
+          () => calls.push(`callback:${label}:${this.state.value}`),
+        );
+      }
+
+      componentDidUpdate() {
+        calls.push(`update:${this.state.value}`);
+      }
+
+      render() {
+        return createElement("output", { "data-revision": this.state.value });
+      }
+    }
+
+    function Child(props: { label: string; onCleanup?: () => void }) {
+      useLayoutEffect(() => {
+        return () => {
+          calls.push(`cleanup:${props.label}`);
+          props.onCleanup?.();
+        };
+      }, []);
+      return createElement("span", null, props.label);
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      useEffect(() => {
+        setVisible(false);
+      }, []);
+      return createElement(
+        "main",
+        null,
+        createElement(Revision, {}),
+        visible
+          ? [
+              createElement(Child, {
+                key: "first",
+                label: "first",
+                onCleanup: () => incrementRevision(),
+              }),
+              createElement(Child, { key: "second", label: "second" }),
+            ]
+          : null,
+      );
+    }
+
+    try {
+      root.render(createElement(App, null));
+    } catch (error) {
+      renderError = error;
+    }
+
+    const committedHtml = container.innerHTML;
+    const committedCalls = [...calls];
+    if (renderError === undefined) {
+      root.unmount();
+    }
+    container.remove();
+
+    expect(renderError).toBeUndefined();
+    expect(committedCalls).toEqual([
+      "cleanup:first",
+      "cleanup:second",
+      "update:0",
+      "update:1",
+      "callback:cleanup:1",
+    ]);
+    expect(committedHtml).toBe('<main><output data-revision="1"></output></main>');
+  });
+
+  test("keeps cleanup updates separate from a class snapshot already rendered for commit", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    const calls: string[] = [];
+    let incrementRevision: (label: string) => void = () => undefined;
+
+    class Revision extends Component<Record<string, never>, { value: number }> {
+      state = { value: 0 };
+
+      componentDidMount() {
+        incrementRevision = (label) => this.increment(label);
+      }
+
+      increment(label: string) {
+        this.setState(
+          ({ value }) => ({ value: value + 1 }),
+          () => calls.push(`callback:${label}:${this.state.value}`),
+        );
+      }
+
+      componentDidUpdate() {
+        calls.push(`update:${this.state.value}`);
+      }
+
+      render() {
+        return createElement("output", { "data-revision": this.state.value });
+      }
+    }
+
+    function Child() {
+      useLayoutEffect(() => {
+        return () => {
+          calls.push("cleanup");
+          incrementRevision("cleanup");
+        };
+      }, []);
+      return createElement("span", null, "child");
+    }
+
+    function App() {
+      const [visible, setVisible] = useState(true);
+      useEffect(() => {
+        incrementRevision("before-cleanup");
+        setVisible(false);
+      }, []);
+      return createElement(
+        "main",
+        null,
+        createElement(Revision, {}),
+        visible ? createElement(Child, null) : null,
+      );
+    }
+
+    try {
+      root.render(createElement(App, null));
+
+      expect(container.innerHTML).toBe(
+        '<main><output data-revision="2"></output></main>',
+      );
+      expect(calls).toEqual([
+        "cleanup",
+        "update:1",
+        "callback:before-cleanup:1",
+        "update:2",
+        "callback:cleanup:2",
+      ]);
     } finally {
       root.unmount();
       container.remove();

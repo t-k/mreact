@@ -25,6 +25,7 @@ import {
   render,
   renderToString,
   StrictMode,
+  startTransition,
   useEffect,
   useEffectEvent,
   useCallback,
@@ -766,6 +767,39 @@ describe("react-compat common API subset", () => {
     expect(container.textContent).toBe("count:1");
   });
 
+  test("PureComponent still traverses child context updates", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const LocaleContext = createContext("en");
+    let setLocale: (value: string) => void = () => undefined;
+
+    function Label() {
+      return createElement("span", null, useContext(LocaleContext));
+    }
+
+    class Boundary extends PureComponent<Record<string, never>> {
+      render() {
+        return createElement(Label, null);
+      }
+    }
+
+    function App() {
+      const [locale, updateLocale] = useState("en");
+      setLocale = updateLocale;
+      return createElement(
+        LocaleContext.Provider,
+        { value: locale },
+        createElement(Boundary, {}),
+      );
+    }
+
+    root.render(createElement(App, null));
+    expect(container.textContent).toBe("en");
+
+    setLocale("ja");
+    expect(container.textContent).toBe("ja");
+  });
+
   test("PureComponent still traverses dirty child class updates", () => {
     const container = document.createElement("div");
     const root = createRoot(container);
@@ -834,6 +868,48 @@ describe("react-compat common API subset", () => {
 
     expect(container.querySelector(".series")).not.toBeNull();
     expect(container.querySelector(".series-curve")).not.toBeNull();
+  });
+
+  test("PureComponent bailout keeps committed class descendants mounted", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let childUnmounts = 0;
+
+    class Child extends Component<{ onMount: () => void }> {
+      componentDidMount() {
+        this.props.onMount();
+      }
+
+      componentWillUnmount() {
+        childUnmounts += 1;
+      }
+
+      render() {
+        return createElement("path", { className: "animated-path", d: "M0 0L10 10" });
+      }
+    }
+
+    class Series extends PureComponent<Record<string, never>, { active: boolean }> {
+      state = { active: false };
+
+      render() {
+        return createElement(
+          "g",
+          null,
+          createElement(Child, {
+            onMount: () => this.setState({ active: false }),
+          }),
+        );
+      }
+    }
+
+    root.render(createElement("svg", null, createElement(Series, {})));
+
+    expect(container.querySelector(".animated-path")).not.toBeNull();
+    expect(childUnmounts).toBe(0);
+
+    root.unmount();
+    expect(childUnmounts).toBe(1);
   });
 
   test("StrictMode effect replay remounts class component lifecycles", () => {
@@ -1884,6 +1960,197 @@ describe("react-compat common API subset", () => {
 
     expect(container.innerHTML).toBe("<div><span>B</span><span>B</span></div>");
     expect(committedHtml).toEqual(["<div><span>B</span><span>B</span></div>"]);
+  });
+
+  test("a torn render retries a pending class update before committing its callback", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let storeValue = 0;
+    let armTear = false;
+    let increment = () => undefined;
+    const callbacks: Array<{ state: number; html: string }> = [];
+
+    function getSnapshot() {
+      const current = storeValue;
+      if (armTear) {
+        armTear = false;
+        storeValue = 1;
+      }
+      return current;
+    }
+
+    function Reader() {
+      const value = useSyncExternalStore(() => () => undefined, getSnapshot);
+      return createElement("i", null, value);
+    }
+
+    class Counter extends PureComponent<Record<string, never>, { count: number }> {
+      state = { count: 0 };
+
+      componentDidMount() {
+        increment = () => {
+          this.setState({ count: 1 }, () => {
+            callbacks.push({ state: this.state.count, html: container.innerHTML });
+          });
+        };
+      }
+
+      render() {
+        return createElement("div", null, this.state.count, createElement(Reader, null));
+      }
+    }
+
+    try {
+      root.render(createElement(Counter, null));
+      armTear = true;
+      increment();
+
+      expect(container.innerHTML).toBe("<div>1<i>1</i></div>");
+      expect(callbacks).toEqual([{ state: 1, html: "<div>1<i>1</i></div>" }]);
+    } finally {
+      root.unmount();
+    }
+  });
+
+  test("an aborted class replacement preserves the replaced instance transition", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    let increment = () => undefined;
+    const callbacks: number[] = [];
+
+    class Old extends Component<Record<string, never>, { count: number }> {
+      state = { count: 0 };
+
+      componentDidMount() {
+        increment = () => {
+          startTransition(() => {
+            this.setState({ count: 1 }, () => callbacks.push(this.state.count));
+          });
+        };
+      }
+
+      render() {
+        return createElement("button", null, this.state.count);
+      }
+    }
+
+    class Broken extends Component {
+      render(): ReactCompatNode {
+        throw new Error("replacement failed");
+      }
+    }
+
+    try {
+      root.render(createElement(Old, null));
+      increment();
+
+      expect(() => root.render(createElement(Broken, null))).toThrow(
+        "replacement failed",
+      );
+      root.render(createElement(Old, null));
+
+      expect(container.innerHTML).toBe("<button>1</button>");
+      expect(callbacks).toEqual([1]);
+    } finally {
+      root.unmount();
+    }
+  });
+
+  test("class replacement transfers unmount ownership to the committed instance", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class A extends Component {
+      componentDidMount() {
+        calls.push("A mount");
+      }
+
+      componentWillUnmount() {
+        calls.push("A unmount");
+      }
+
+      render() {
+        return createElement("p", null, "A");
+      }
+    }
+
+    class B extends Component {
+      componentDidMount() {
+        calls.push("B mount");
+      }
+
+      componentWillUnmount() {
+        calls.push("B unmount");
+      }
+
+      render() {
+        return createElement("p", null, "B");
+      }
+    }
+
+    root.render(createElement(A, null));
+    root.render(createElement(B, null));
+    root.unmount();
+
+    expect(calls).toEqual(["A mount", "A unmount", "B mount", "B unmount"]);
+  });
+
+  test("StrictMode class replacement replays mount ownership for the replacement", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const calls: string[] = [];
+
+    class A extends Component {
+      componentDidMount() {
+        calls.push("A mount");
+      }
+
+      componentDidUpdate() {
+        calls.push("A update");
+      }
+
+      componentWillUnmount() {
+        calls.push("A unmount");
+      }
+
+      render() {
+        return createElement("p", null, "A");
+      }
+    }
+
+    class B extends Component {
+      componentDidMount() {
+        calls.push("B mount");
+      }
+
+      componentDidUpdate() {
+        calls.push("B update");
+      }
+
+      componentWillUnmount() {
+        calls.push("B unmount");
+      }
+
+      render() {
+        return createElement("p", null, "B");
+      }
+    }
+
+    root.render(createElement(StrictMode, null, createElement(A, null)));
+    root.render(createElement(StrictMode, null, createElement(B, null)));
+    root.unmount();
+
+    expect(calls).toEqual([
+      "A mount",
+      "A unmount",
+      "A mount",
+      "A unmount",
+      "B mount",
+      "B unmount",
+      "B mount",
+      "B unmount",
+    ]);
   });
 
   test("an aborted torn render does not clean a retained layout effect", () => {
@@ -3361,6 +3628,33 @@ describe("react-compat common API subset", () => {
       expect(call.baseDuration).toBeGreaterThanOrEqual(call.actualDuration);
       expect(call.commitTime).toBeGreaterThanOrEqual(call.startTime);
     }
+  });
+
+  test("class bailout retains nested Profiler mount ownership", () => {
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const phases: string[] = [];
+
+    class Boundary extends PureComponent<{ value: string }> {
+      render() {
+        return createElement(
+          Profiler,
+          {
+            id: "nested",
+            onRender(_id: string, phase: string) {
+              phases.push(phase);
+            },
+          },
+          createElement("span", null, this.props.value),
+        );
+      }
+    }
+
+    root.render(createElement(Boundary, { value: "A" }));
+    root.render(createElement(Boundary, { value: "A" }));
+    root.render(createElement(Boundary, { value: "B" }));
+
+    expect(phases).toEqual(["mount", "update"]);
   });
 
   test("Profiler reports nested-update for updates scheduled during layout effects", () => {

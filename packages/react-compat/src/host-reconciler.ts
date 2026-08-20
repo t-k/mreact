@@ -59,6 +59,7 @@ import { createFiber, createWorkInProgress, type Fiber, type FiberRoot } from ".
 import {
   renderWithRootRuntime,
   renderWithProfiler,
+  retainMountedProfilerPaths,
   renderWithStrictModeMemoCapture,
   renderStrictModeReplay,
   runWithHostCommit,
@@ -2334,12 +2335,16 @@ function createHostFiberImpl(
     const hasCurrentClassFiber = current?.tag === "class-component" && current.type === classType;
     const rendered = renderClassComponentWithRuntime(classType, node.props, runtime, runtimePath, {
       ...(currentClassInstance === undefined ? {} : { currentInstance: currentClassInstance }),
-      hasDirtyDescendant: hasDirtyInstance(runtime, previousClassChildKeys, classRuntimePath),
+      hasDirtyDescendant:
+        hasDirtyInstance(runtime, previousClassChildKeys, classRuntimePath) ||
+        hasChangedContextDependency(runtime, previousClassChildKeys),
       allowSkip: hasCurrentClassFiber,
     });
     applyRef(node.ref, rendered.kind === "skip" ? current?.stateNode : rendered.instance);
 
     if (rendered.kind === "skip") {
+      markActiveInstanceKeys(runtime, previousClassChildKeys);
+      retainMountedProfilerPaths(runtime, classRuntimePath);
       fiber.child = getSkippedChild(current);
       return { fiber, consumed: options.previousNodes?.length ?? 0 };
     }

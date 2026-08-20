@@ -741,6 +741,14 @@ export function renderWithProfiler<T>(
   }
 }
 
+export function retainMountedProfilerPaths(runtime: RootRuntime, prefix: string): void {
+  for (const path of runtime.mountedProfilerPaths) {
+    if (path === prefix || path.startsWith(`${prefix}.`)) {
+      runtime.activeProfilerPaths?.add(path);
+    }
+  }
+}
+
 export function renderWithRootRuntime<T>(
   runtime: RootRuntime,
   path: string,

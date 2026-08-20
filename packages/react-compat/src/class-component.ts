@@ -178,6 +178,7 @@ interface ClassUpdateContext {
 
 interface ClassComponentGlobalState {
   lifecycleSnapshots: WeakMap<ClassComponentInstance, ClassLifecycleSnapshot>;
+  renderedLifecycleSnapshots?: WeakSet<ClassLifecycleSnapshot>;
   updateContexts: WeakMap<ClassComponentInstance, ClassUpdateContext>;
   pendingInstancesByRuntime: WeakMap<RootRuntime, Map<string, ClassComponentInstance>>;
   dirtyPathsByRuntime: WeakMap<RootRuntime, Set<string>>;
@@ -189,14 +190,44 @@ const classComponentGlobalState =
     CLASS_COMPONENT_STATE_KEY
   ] ??= {
     lifecycleSnapshots: new WeakMap(),
+    renderedLifecycleSnapshots: new WeakSet(),
     updateContexts: new WeakMap(),
     pendingInstancesByRuntime: new WeakMap(),
     dirtyPathsByRuntime: new WeakMap(),
   });
 const classLifecycleSnapshots = classComponentGlobalState.lifecycleSnapshots;
+const classRenderedLifecycleSnapshots =
+  (classComponentGlobalState.renderedLifecycleSnapshots ??= new WeakSet());
 const classUpdateContexts = classComponentGlobalState.updateContexts;
 const classPendingInstancesByRuntime = classComponentGlobalState.pendingInstancesByRuntime;
 const classDirtyPathsByRuntime = classComponentGlobalState.dirtyPathsByRuntime;
+
+interface ClassRenderAttempt {
+  instances: WeakSet<ClassComponentInstance>;
+  restores: (() => void)[];
+}
+
+const classRenderAttempts = new WeakMap<RootRuntime, ClassRenderAttempt>();
+
+export function beginClassRenderAttempt(runtime: RootRuntime): void {
+  classRenderAttempts.set(runtime, {
+    instances: new WeakSet(),
+    restores: [],
+  });
+}
+
+export function finishClassRenderAttempt(runtime: RootRuntime, committed: boolean): void {
+  const attempt = classRenderAttempts.get(runtime);
+  classRenderAttempts.delete(runtime);
+
+  if (committed || attempt === undefined) {
+    return;
+  }
+
+  for (let index = attempt.restores.length - 1; index >= 0; index -= 1) {
+    attempt.restores[index]?.();
+  }
+}
 
 export type ClassComponentRenderResult =
   | {
@@ -275,7 +306,10 @@ export function renderClassComponentWithRuntime(
 ): ClassComponentRenderResult {
   return renderWithRootRuntime(runtime, path, () => {
     const instanceRef = useRef<ClassComponentInstance | undefined>(undefined);
+    const committedInstanceRef = useRef<ClassComponentInstance | undefined>(undefined);
     const didCommitRef = useRef(false);
+    const previousInstanceRef = instanceRef.current;
+    const previousDidCommit = didCommitRef.current;
     const currentInstance =
       options.currentInstance instanceof type
         ? options.currentInstance
@@ -292,11 +326,13 @@ export function renderClassComponentWithRuntime(
     const previousInstance = instanceRef.current;
     const hasDifferentType =
       previousInstance !== undefined && !(previousInstance instanceof type);
-    const replacedInstance = hasDifferentType ? previousInstance : undefined;
+    const committedInstance = committedInstanceRef.current;
+    const replacedInstance =
+      committedInstance !== undefined && !(committedInstance instanceof type)
+        ? committedInstance
+        : undefined;
 
     if (hasDifferentType) {
-      classLifecycleSnapshots.delete(previousInstance);
-      classUpdateContexts.delete(previousInstance);
       didCommitRef.current = false;
       instanceRef.current = undefined;
     }
@@ -305,8 +341,13 @@ export function renderClassComponentWithRuntime(
       instanceRef.current !== undefined && instanceRef.current instanceof type
         ? instanceRef.current
         : new type(props);
+    recordClassRenderAttempt(runtime, path, instance, () => {
+      instanceRef.current = previousInstanceRef;
+      didCommitRef.current = previousDidCommit;
+    });
     const previousProps = instance.props;
     const snapshot = classLifecycleSnapshots.get(instance);
+    const renderedSnapshot = { current: snapshot };
     const previousState = snapshot?.previousState ?? instance.state ?? {};
 
     instanceRef.current = instance;
@@ -328,16 +369,21 @@ export function renderClassComponentWithRuntime(
     instance.state = nextState;
     installClassLifecycleEffects(
       instance,
+      instanceRef,
+      committedInstanceRef,
       didCommitRef,
       previousProps,
       previousState,
       shouldSkipUpdate,
       runtime,
       path,
+      renderedSnapshot,
+      runtime.strictModeDepth > 0 || runtime.strictReplayDepth > 0,
       replacedInstance,
     );
 
     if (shouldSkipUpdate) {
+      markClassLifecycleSnapshotRendered(snapshot);
       return { kind: "skip" };
     }
 
@@ -345,13 +391,16 @@ export function renderClassComponentWithRuntime(
       const node = instance.render();
 
       if (didCommitRef.current) {
-        classLifecycleSnapshots.set(instance, {
+        const nextRenderedSnapshot = {
           ...classLifecycleSnapshots.get(instance),
           snapshot: instance.getSnapshotBeforeUpdate?.(
             previousProps ?? {},
             previousState,
           ),
-        });
+        };
+        classLifecycleSnapshots.set(instance, nextRenderedSnapshot);
+        renderedSnapshot.current = nextRenderedSnapshot;
+        markClassLifecycleSnapshotRendered(nextRenderedSnapshot);
       }
 
       return { kind: "render", node, instance, type };
@@ -519,6 +568,83 @@ function installClassUpdateMethods(
   instance.forceUpdate = Component.prototype.forceUpdate;
 }
 
+function recordClassRenderAttempt(
+  runtime: RootRuntime,
+  path: string,
+  instance: ClassComponentInstance,
+  restoreRefs: () => void,
+): void {
+  const attempt = classRenderAttempts.get(runtime);
+  if (attempt === undefined || attempt.instances.has(instance)) {
+    return;
+  }
+
+  attempt.instances.add(instance);
+  const props = instance.props;
+  const state = instance.state;
+  const hadLifecycleSnapshot = classLifecycleSnapshots.has(instance);
+  const lifecycleSnapshot = classLifecycleSnapshots.get(instance);
+  const lifecycleSnapshotWasRendered = isRenderedClassLifecycleSnapshot(lifecycleSnapshot);
+  const hadUpdateContext = classUpdateContexts.has(instance);
+  const updateContext = classUpdateContexts.get(instance);
+  const dirtyPaths = classDirtyPathsByRuntime.get(runtime);
+  const wasDirty = dirtyPaths?.has(path) === true;
+  const pendingInstances = classPendingInstancesByRuntime.get(runtime);
+  const hadPendingInstance = pendingInstances?.has(path) === true;
+  const pendingInstance = pendingInstances?.get(path);
+
+  attempt.restores.push(() => {
+    instance.props = props;
+    if (state === undefined) {
+      delete instance.state;
+    } else {
+      instance.state = state;
+    }
+    restoreRefs();
+
+    const currentSnapshot = classLifecycleSnapshots.get(instance);
+    if (currentSnapshot !== undefined) {
+      classRenderedLifecycleSnapshots.delete(currentSnapshot);
+    }
+    if (hadLifecycleSnapshot && lifecycleSnapshot !== undefined) {
+      classLifecycleSnapshots.set(instance, lifecycleSnapshot);
+      if (lifecycleSnapshotWasRendered) {
+        classRenderedLifecycleSnapshots.add(lifecycleSnapshot);
+      }
+    } else {
+      classLifecycleSnapshots.delete(instance);
+    }
+
+    if (hadUpdateContext && updateContext !== undefined) {
+      classUpdateContexts.set(instance, updateContext);
+    } else {
+      classUpdateContexts.delete(instance);
+    }
+
+    if (wasDirty) {
+      let restoredDirtyPaths = classDirtyPathsByRuntime.get(runtime);
+      if (restoredDirtyPaths === undefined) {
+        restoredDirtyPaths = new Set();
+        classDirtyPathsByRuntime.set(runtime, restoredDirtyPaths);
+      }
+      restoredDirtyPaths.add(path);
+    } else {
+      classDirtyPathsByRuntime.get(runtime)?.delete(path);
+    }
+
+    if (hadPendingInstance && pendingInstance !== undefined) {
+      let restoredPendingInstances = classPendingInstancesByRuntime.get(runtime);
+      if (restoredPendingInstances === undefined) {
+        restoredPendingInstances = new Map();
+        classPendingInstancesByRuntime.set(runtime, restoredPendingInstances);
+      }
+      restoredPendingInstances.set(path, pendingInstance);
+    } else {
+      classPendingInstancesByRuntime.get(runtime)?.delete(path);
+    }
+  });
+}
+
 function enqueueClassSetState(
   instance: ClassComponentInstance,
   partial: Parameters<NonNullable<ClassComponentInstance["setState"]>>[0],
@@ -532,7 +658,10 @@ function enqueueClassSetState(
   }
 
   const snapshot = classLifecycleSnapshots.get(instance);
-  const previousState = snapshot?.previousState ?? instance.state ?? {};
+  const snapshotWasRendered = isRenderedClassLifecycleSnapshot(snapshot);
+  const previousState = snapshotWasRendered
+    ? (snapshot?.nextState ?? instance.state ?? {})
+    : (snapshot?.previousState ?? instance.state ?? {});
   const baseState = snapshot?.nextState ?? instance.state ?? {};
   const nextPartial =
     typeof partial === "function"
@@ -548,12 +677,15 @@ function enqueueClassSetState(
         };
 
   const nextSnapshot: ClassLifecycleSnapshot = {
-    ...snapshot,
+    ...(snapshotWasRendered ? undefined : snapshot),
     previousState,
     nextState,
   };
   if (callback !== undefined) {
-    nextSnapshot.callbacks = [...(snapshot?.callbacks ?? []), callback.bind(instance)];
+    nextSnapshot.callbacks = [
+      ...(snapshotWasRendered ? [] : (snapshot?.callbacks ?? [])),
+      callback.bind(instance),
+    ];
   }
   classLifecycleSnapshots.set(instance, nextSnapshot);
 
@@ -572,13 +704,23 @@ function enqueueClassForceUpdate(
   }
 
   const snapshot = classLifecycleSnapshots.get(instance);
-  const nextSnapshot: ClassLifecycleSnapshot = {
-    ...snapshot,
-    previousState: instance.state ?? {},
-    force: true,
-  };
+  const snapshotWasRendered = isRenderedClassLifecycleSnapshot(snapshot);
+  const nextSnapshot: ClassLifecycleSnapshot = snapshotWasRendered
+    ? {
+        previousState: snapshot?.nextState ?? instance.state ?? {},
+        nextState: snapshot?.nextState ?? instance.state ?? {},
+        force: true,
+      }
+    : {
+        ...snapshot,
+        previousState: instance.state ?? {},
+        force: true,
+      };
   if (callback !== undefined) {
-    nextSnapshot.callbacks = [...(snapshot?.callbacks ?? []), callback.bind(instance)];
+    nextSnapshot.callbacks = [
+      ...(snapshotWasRendered ? [] : (snapshot?.callbacks ?? [])),
+      callback.bind(instance),
+    ];
   }
   classLifecycleSnapshots.set(instance, nextSnapshot);
   markClassInstanceDirty(instance, updateContext);
@@ -670,28 +812,68 @@ function clearPendingClassUpdate(runtime: RootRuntime, path: string): void {
 
 function installClassLifecycleEffects(
   instance: ClassComponentInstance,
+  instanceRef: { current: ClassComponentInstance | undefined },
+  committedInstanceRef: { current: ClassComponentInstance | undefined },
   didCommitRef: { current: boolean },
   previousProps: Record<string, unknown> | undefined,
   previousState: Record<string, unknown>,
   skipUpdate: boolean,
   runtime: RootRuntime,
   path: string,
+  renderedSnapshot: { current: ClassLifecycleSnapshot | undefined },
+  strictEffectsEnabled: boolean,
   replacedInstance?: ClassComponentInstance,
 ): void {
   const replaySnapshotRef = useRef<ClassLifecycleSnapshot | undefined>(undefined);
+  const strictReplacementReplayRef = useRef<ClassComponentInstance | undefined>(
+    undefined,
+  );
 
   useLayoutEffect(() => {
-    if (replaySnapshotRef.current !== undefined) {
-      classLifecycleSnapshots.set(instance, replaySnapshotRef.current);
+    const replaySnapshot = replaySnapshotRef.current;
+    if (replaySnapshot !== undefined) {
+      classLifecycleSnapshots.set(instance, replaySnapshot);
       replaySnapshotRef.current = undefined;
     }
-    installClassUpdateMethods(instance, runtime, path);
-    const lifecycleSnapshot = classLifecycleSnapshots.get(instance);
+    let lifecycleSnapshot = replaySnapshot ?? renderedSnapshot.current;
 
-    if (replacedInstance !== undefined) {
-      replacedInstance.componentWillUnmount?.();
-      classUpdateContexts.delete(replacedInstance);
+    if (
+      runtime.effectFlushPhase === "strict-replay" &&
+      strictReplacementReplayRef.current === instance
+    ) {
+      const strictReplaySnapshot = classLifecycleSnapshots.get(instance);
+      try {
+        instance.componentWillUnmount?.();
+      } finally {
+        classLifecycleSnapshots.delete(instance);
+        classUpdateContexts.delete(instance);
+        didCommitRef.current = false;
+        strictReplacementReplayRef.current = undefined;
+      }
+      if (strictReplaySnapshot !== undefined) {
+        classLifecycleSnapshots.set(instance, strictReplaySnapshot);
+      }
+      lifecycleSnapshot = strictReplaySnapshot;
     }
+
+    if (
+      replacedInstance !== undefined &&
+      committedInstanceRef.current === replacedInstance
+    ) {
+      try {
+        replacedInstance.componentWillUnmount?.();
+      } finally {
+        classLifecycleSnapshots.delete(replacedInstance);
+        classUpdateContexts.delete(replacedInstance);
+        committedInstanceRef.current = instance;
+        if (strictEffectsEnabled) {
+          strictReplacementReplayRef.current = instance;
+        }
+      }
+    } else if (committedInstanceRef.current === undefined) {
+      committedInstanceRef.current = instance;
+    }
+    installClassUpdateMethods(instance, runtime, path);
 
     if (skipUpdate) {
       runClassUpdateCallbacks(lifecycleSnapshot);
@@ -716,11 +898,17 @@ function installClassLifecycleEffects(
 
   useLayoutEffect(() => {
     return () => {
-      replaySnapshotRef.current = classLifecycleSnapshots.get(instance);
+      const committedInstance =
+        committedInstanceRef.current ?? instanceRef.current ?? instance;
+      replaySnapshotRef.current = classLifecycleSnapshots.get(committedInstance);
       didCommitRef.current = false;
-      instance.componentWillUnmount?.();
-      classLifecycleSnapshots.delete(instance);
-      classUpdateContexts.delete(instance);
+      try {
+        committedInstance.componentWillUnmount?.();
+      } finally {
+        classLifecycleSnapshots.delete(committedInstance);
+        classUpdateContexts.delete(committedInstance);
+        committedInstanceRef.current = undefined;
+      }
     };
   }, []);
 }
@@ -737,8 +925,25 @@ function deleteClassLifecycleSnapshotIfCurrent(
   instance: ClassComponentInstance,
   snapshot: ClassLifecycleSnapshot | undefined,
 ): void {
+  if (snapshot !== undefined) {
+    classRenderedLifecycleSnapshots.delete(snapshot);
+  }
   if (classLifecycleSnapshots.get(instance) === snapshot) {
     classLifecycleSnapshots.delete(instance);
+  }
+}
+
+function isRenderedClassLifecycleSnapshot(
+  snapshot: ClassLifecycleSnapshot | undefined,
+): boolean {
+  return snapshot !== undefined && classRenderedLifecycleSnapshots.has(snapshot);
+}
+
+function markClassLifecycleSnapshotRendered(
+  snapshot: ClassLifecycleSnapshot | undefined,
+): void {
+  if (snapshot !== undefined) {
+    classRenderedLifecycleSnapshots.add(snapshot);
   }
 }
 
