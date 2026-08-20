@@ -36,7 +36,7 @@ describe("mreact deployment adapters", () => {
     }
   });
 
-  test("closes a Node streaming response after a loading route loader rejects", async () => {
+  test("closes a Node streaming response after a deferred loader field rejects", async () => {
     const state = globalThis as {
       __mreactRejectNodeLoadingRoute?: (error: Error) => void;
     };
@@ -44,16 +44,20 @@ describe("mreact deployment adapters", () => {
       "error.tsx":
         "export default function ErrorPage(props) { return <main>Stream error: {props.error.message}</main>; }",
       "loading.tsx": "export default function Loading() { return <p>Loading...</p>; }",
-      "page.tsx": `export const stream = true;
+      "page.tsx": `import { defer } from "@reckona/mreact-router";
 
-export async function loader() {
-  return await new Promise((_resolve, reject) => {
-    globalThis.__mreactRejectNodeLoadingRoute = reject;
+export const stream = true;
+
+export function loader() {
+  return defer({
+    result: new Promise((_resolve, reject) => {
+      globalThis.__mreactRejectNodeLoadingRoute = reject;
+    }),
   });
 }
 
-export default function Page() {
-  return <main>Page</main>;
+export default function Page(props) {
+  return <main><Await value={props.data.result}>{() => "Page"}</Await></main>;
 }`,
     });
     const handler = createNodeRequestHandler({ outDir });
@@ -95,25 +99,29 @@ export default function Page() {
       state.__mreactDisconnectedLoaderStarted = false;
       const { outDir } = await buildFixture("mreact-node-disconnect-adapter-", {
         "loading.tsx": "export default function Loading() { return <p>Loading...</p>; }",
-        "page.tsx": `export const stream = true;
+        "page.tsx": `import { defer } from "@reckona/mreact-router";
 
-export async function loader({ request }) {
+export const stream = true;
+
+export function loader({ request }) {
   globalThis.__mreactDisconnectedLoaderStarted = true;
-  return await new Promise((_resolve, reject) => {
-    const abort = () => {
-      globalThis.__mreactDisconnectedLoaderAborts += 1;
-      reject(request.signal.reason);
-    };
-    if (request.signal.aborted) {
-      abort();
-      return;
-    }
-    request.signal.addEventListener("abort", abort, { once: true });
+  return defer({
+    result: new Promise((_resolve, reject) => {
+      const abort = () => {
+        globalThis.__mreactDisconnectedLoaderAborts += 1;
+        reject(request.signal.reason);
+      };
+      if (request.signal.aborted) {
+        abort();
+        return;
+      }
+      request.signal.addEventListener("abort", abort, { once: true });
+    }),
   });
 }
 
-export default function Page() {
-  return <main>Page</main>;
+export default function Page(props) {
+  return <main><Await value={props.data.result}>{() => "Page"}</Await></main>;
 }`,
       });
       const server =

@@ -1532,25 +1532,29 @@ export default function Hot({ data }) {
     );
     await writeFile(
       join(appDir, "page.tsx"),
-      `export const stream = true;
+      `import { defer } from "@reckona/mreact-router";
 
-export async function loader({ request }) {
+export const stream = true;
+
+export function loader({ request }) {
   globalThis.__mreactLambdaLoaderStarted = true;
-  return await new Promise((_resolve, reject) => {
-    const abort = () => {
-      globalThis.__mreactLambdaLoaderAborts += 1;
-      reject(request.signal.reason);
-    };
-    if (request.signal.aborted) {
-      abort();
-      return;
-    }
-    request.signal.addEventListener("abort", abort, { once: true });
+  return defer({
+    result: new Promise((_resolve, reject) => {
+      const abort = () => {
+        globalThis.__mreactLambdaLoaderAborts += 1;
+        reject(request.signal.reason);
+      };
+      if (request.signal.aborted) {
+        abort();
+        return;
+      }
+      request.signal.addEventListener("abort", abort, { once: true });
+    }),
   });
 }
 
-export default function Page() {
-  return <main>Page</main>;
+export default function Page(props) {
+  return <main><Await value={props.data.result}>{() => "Page"}</Await></main>;
 }`,
     );
     await buildApp({ appDir, outDir });

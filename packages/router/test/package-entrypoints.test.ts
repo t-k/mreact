@@ -104,6 +104,7 @@ export async function load(url, context, nextLoad) {
       expect(routerModules).toEqual([
         "cache.js",
         "cookies.js",
+        "csp.js",
         "deferred.js",
         "navigation.js",
         "request.js",
