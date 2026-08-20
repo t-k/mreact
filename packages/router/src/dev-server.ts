@@ -1,7 +1,8 @@
 import { createServer, type Server } from "node:http";
 import type { ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { isIP } from "node:net";
+import { posix, resolve } from "node:path";
 import type { DehydrateOptions } from "@reckona/mreact-query";
 import { createServer as createViteServer, type UserConfig, type ViteDevServer } from "vite";
 import type { AppRouterServerActionOptions } from "./actions.js";
@@ -20,7 +21,15 @@ import {
   nodeRequestPath,
   type AppRouterLogger,
 } from "./logger.js";
-import type { HttpUpgradeHandler } from "./upgrade.js";
+import {
+  assertValidHttpUpgradeOriginPolicy,
+  closeServerWithUpgrades,
+  createManagedHttpUpgradeLifecycle,
+  validateHttpUpgradeOrigin,
+  type HttpUpgradeOriginPolicy,
+  type HttpUpgradeOriginValidation,
+  type ManagedHttpUpgradeHandler,
+} from "./upgrade.js";
 
 /**
  * Configures the Vite-powered app-router development server.
@@ -35,7 +44,10 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
   serverActions?: AppRouterServerActionOptions | undefined;
   verboseErrors?: boolean | undefined;
   viteConfig?: UserConfig | undefined;
-  onUpgrade?: HttpUpgradeHandler | undefined;
+  onUpgrade?: ManagedHttpUpgradeHandler | undefined;
+  upgradeCloseTimeoutMs?: number | undefined;
+  upgradeDecisionTimeoutMs?: number | undefined;
+  upgradeOriginPolicy?: HttpUpgradeOriginPolicy | undefined;
 }
 
 /**
@@ -55,6 +67,17 @@ export async function startDevServer(
   const userHmrConfig =
     typeof userViteServerConfig.hmr === "object" ? userViteServerConfig.hmr : {};
   const port = options.port ?? resolved.serverPort ?? 3001;
+  const upgradeCloseTimeoutMs = finiteNonNegativeTimeout(
+    options.upgradeCloseTimeoutMs,
+    1_000,
+    "upgradeCloseTimeoutMs",
+  );
+  const upgradeDecisionTimeoutMs = finiteNonNegativeTimeout(
+    options.upgradeDecisionTimeoutMs,
+    1_000,
+    "upgradeDecisionTimeoutMs",
+  );
+  assertValidHttpUpgradeOriginPolicy(options.upgradeOriginPolicy);
   const routeCache = options.routeCache ?? createMemoryRouteCache();
   const declaredPackages = await readDeclaredProjectPackages(project.projectRoot);
   const configImportPolicy = resolved.importPolicy;
@@ -70,6 +93,7 @@ export async function startDevServer(
     ],
   };
   let vite: ViteDevServer | undefined;
+  let actualPort = port;
   const server = createServer((incoming, outgoing) => {
     const logger = options.logger;
     const startedAt = logger === undefined ? undefined : logNow();
@@ -117,8 +141,25 @@ export async function startDevServer(
     });
   });
 
-  if (options.onUpgrade !== undefined) {
-    server.on("upgrade", options.onUpgrade);
+  const upgradeLifecycle =
+    options.onUpgrade === undefined
+      ? undefined
+      : createManagedHttpUpgradeLifecycle({
+          decisionTimeoutMs: upgradeDecisionTimeoutMs,
+          handler: options.onUpgrade,
+          isOriginAllowed: (request) =>
+            validateDevUpgradeOrigin(
+              request,
+              options.upgradeOriginPolicy,
+              hostname,
+              actualPort,
+              vite,
+            ),
+          logger: options.logger,
+          shouldBypass: (request) => isViteHmrUpgradeRequest(request, vite),
+        });
+  if (upgradeLifecycle !== undefined) {
+    server.on("upgrade", upgradeLifecycle.handle);
   }
 
   vite = await createViteServer({
@@ -155,18 +196,138 @@ export async function startDevServer(
     throw error;
   }
   const address = server.address();
-  const actualPort = typeof address === "object" && address !== null ? address.port : port;
+  actualPort = typeof address === "object" && address !== null ? address.port : port;
+  let closePromise: Promise<void> | undefined;
 
   return {
     server,
-    url: `http://${hostname}:${actualPort}`,
-    close: async () => {
-      await vite?.close();
-      await new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      });
+    url: `http://${formatNodeAuthority(hostname, actualPort)}`,
+    close: () => {
+      closePromise ??= (async () => {
+        upgradeLifecycle?.beginClose();
+        const httpClose =
+          upgradeLifecycle === undefined
+            ? new Promise<void>((resolve, reject) => {
+                server.close((error) => (error ? reject(error) : resolve()));
+              })
+            : closeServerWithUpgrades({
+                lifecycle: upgradeLifecycle,
+                server,
+                timeoutMs: upgradeCloseTimeoutMs,
+              });
+        const results = await Promise.allSettled([vite?.close(), httpClose]);
+        const errors = results.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
+        );
+        if (errors.length > 0) {
+          throw new AggregateError(errors, "Failed to close the mreact development server.");
+        }
+      })();
+      return closePromise;
     },
   };
+}
+
+function validateDevUpgradeOrigin(
+  request: import("node:http").IncomingMessage,
+  policy: HttpUpgradeOriginPolicy | undefined,
+  hostname: string,
+  port: number,
+  vite: ViteDevServer | undefined,
+): HttpUpgradeOriginValidation {
+  if (!isDevUpgradeHostAllowed(request.headers.host, vite?.config.server.allowedHosts)) {
+    return { ok: false, reason: "disallowed-origin" };
+  }
+  if (policy === "unchecked") {
+    return { ok: true, origin: request.headers.origin };
+  }
+  if (typeof policy === "object") {
+    return validateHttpUpgradeOrigin(request, policy);
+  }
+  try {
+    return validateHttpUpgradeOrigin(request, {
+      allowedOrigins: [`http://${request.headers.host ?? formatNodeAuthority(hostname, port)}`],
+    });
+  } catch {
+    return { ok: false, reason: "malformed-origin" };
+  }
+}
+
+function isDevUpgradeHostAllowed(
+  hostHeader: string | undefined,
+  allowedHosts: true | string[] | undefined,
+): boolean {
+  if (allowedHosts === true || hostHeader === undefined) {
+    return true;
+  }
+
+  const host = hostHeader.trim();
+  if (host.startsWith("[")) {
+    const closingBracket = host.indexOf("]");
+    return closingBracket > 0 && isIP(host.slice(1, closingBracket)) === 6;
+  }
+  const colon = host.indexOf(":");
+  const hostname = colon === -1 ? host : host.slice(0, colon);
+  if (isIP(hostname) === 4 || hostname === "localhost" || hostname.endsWith(".localhost")) {
+    return true;
+  }
+
+  return (allowedHosts ?? []).some(
+    (allowedHost) =>
+      allowedHost === hostname ||
+      (allowedHost.startsWith(".") &&
+        (allowedHost.slice(1) === hostname || hostname.endsWith(allowedHost))),
+  );
+}
+
+function formatNodeAuthority(hostname: string, port: number): string {
+  const host = hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname;
+  return `${host}:${port}`;
+}
+
+function isViteHmrUpgradeRequest(
+  request: import("node:http").IncomingMessage,
+  vite: ViteDevServer | undefined,
+): boolean {
+  if (vite === undefined) {
+    return false;
+  }
+  const protocol = request.headers["sec-websocket-protocol"];
+  if (protocol !== "vite-hmr" && protocol !== "vite-ping") {
+    return false;
+  }
+  const hmr = vite.config.server.hmr;
+  if (hmr === false) {
+    return false;
+  }
+  const hmrPath = typeof hmr === "object" ? hmr.path : undefined;
+  const expectedPath =
+    hmrPath === undefined ? vite.config.base : posix.join(vite.config.base, hmrPath);
+
+  try {
+    return new URL(request.url ?? "/", "http://mreact.local").pathname === expectedPath;
+  } catch {
+    return false;
+  }
+}
+
+function finiteNonNegativeTimeout(
+  value: number | undefined,
+  fallback: number,
+  name: string,
+): number {
+  const timeout = value ?? fallback;
+  if (
+    !Number.isFinite(timeout) ||
+    timeout < 0 ||
+    !Number.isSafeInteger(timeout) ||
+    timeout > 2_147_483_647
+  ) {
+    throw new TypeError(
+      `${name} must be a finite non-negative safe integer no greater than 2147483647.`,
+    );
+  }
+  return timeout;
 }
 
 function listenDevHttpServer(server: Server, port: number, hostname: string): Promise<void> {
@@ -288,7 +449,11 @@ function sendDevServerError(
 ): void {
   outgoing.statusCode = 500;
   outgoing.setHeader("content-type", "text/plain; charset=utf-8");
-  outgoing.end(options.verboseErrors === true
-    ? error instanceof Error ? error.stack : String(error)
-    : "Internal Server Error");
+  outgoing.end(
+    options.verboseErrors === true
+      ? error instanceof Error
+        ? error.stack
+        : String(error)
+      : "Internal Server Error",
+  );
 }

@@ -9,28 +9,43 @@ import {
   requestLogFields,
   type AppRouterLogger,
 } from "./logger.js";
-import type { HttpUpgradeHandler } from "./upgrade.js";
+import {
+  assertValidHttpUpgradeOriginPolicy,
+  closeServerWithUpgrades,
+  createManagedHttpUpgradeLifecycle,
+  validateHttpUpgradeOrigin,
+  type HttpUpgradeOriginPolicy,
+  type HttpUpgradeOriginValidation,
+  type ManagedHttpUpgradeHandler,
+} from "./upgrade.js";
 
 export interface StartNodeRequestServerOptions {
   allowedHosts?: readonly string[] | undefined;
-  errorHandler?: ((error: unknown) => {
-    body: string;
-    status: number;
-    headers?: Record<string, string>;
-  }) | undefined;
+  errorHandler?:
+    | ((error: unknown) => {
+        body: string;
+        status: number;
+        headers?: Record<string, string>;
+      })
+    | undefined;
   hostname?: string | undefined;
   hostPolicy?: "strict" | "trusted-proxy" | undefined;
   logger?: AppRouterLogger | undefined;
-  onUpgrade?: HttpUpgradeHandler | undefined;
+  onUpgrade?: ManagedHttpUpgradeHandler | undefined;
   port: number;
   render(request: Request): Promise<Response>;
-  resolveHost?: ((options: {
-    allowedHosts?: readonly string[] | undefined;
-    fallbackHost: string;
-    hostPolicy?: "strict" | "trusted-proxy" | undefined;
-    rawHost: string | undefined;
-  }) => string) | undefined;
+  resolveHost?:
+    | ((options: {
+        allowedHosts?: readonly string[] | undefined;
+        fallbackHost: string;
+        hostPolicy?: "strict" | "trusted-proxy" | undefined;
+        rawHost: string | undefined;
+      }) => string)
+    | undefined;
   trustForwardedProto?: boolean | undefined;
+  upgradeCloseTimeoutMs?: number | undefined;
+  upgradeDecisionTimeoutMs?: number | undefined;
+  upgradeOriginPolicy?: HttpUpgradeOriginPolicy | undefined;
 }
 
 export function resolveNodeRequestProtocol(options: {
@@ -56,6 +71,18 @@ export function resolveNodeRequestProtocol(options: {
 export async function startNodeRequestServer(
   options: StartNodeRequestServerOptions,
 ): Promise<{ close(): Promise<void>; server: Server; url: string }> {
+  const upgradeCloseTimeoutMs = finiteNonNegativeTimeout(
+    options.upgradeCloseTimeoutMs,
+    1_000,
+    "upgradeCloseTimeoutMs",
+  );
+  const upgradeDecisionTimeoutMs = finiteNonNegativeTimeout(
+    options.upgradeDecisionTimeoutMs,
+    1_000,
+    "upgradeDecisionTimeoutMs",
+  );
+  assertValidHttpUpgradeOriginPolicy(options.upgradeOriginPolicy);
+  let listeningPort = options.port;
   const server = createServer(async (incoming, outgoing) => {
     const startedAt = logNow();
     const fallbackRequestFields = {
@@ -65,7 +92,7 @@ export async function startNodeRequestServer(
     };
 
     try {
-      const fallbackHost = `${options.hostname ?? "127.0.0.1"}:${options.port}`;
+      const fallbackHost = formatNodeAuthority(options.hostname ?? "127.0.0.1", options.port);
       const host = (options.resolveHost ?? defaultResolveRequestHost)({
         allowedHosts: options.allowedHosts,
         fallbackHost,
@@ -120,8 +147,21 @@ export async function startNodeRequestServer(
     }
   });
 
-  if (options.onUpgrade !== undefined) {
-    server.on("upgrade", options.onUpgrade);
+  const upgradeLifecycle =
+    options.onUpgrade === undefined
+      ? undefined
+      : createManagedHttpUpgradeLifecycle({
+          decisionTimeoutMs: upgradeDecisionTimeoutMs,
+          handler: options.onUpgrade,
+          isOriginAllowed: (request) =>
+            validateNodeUpgradeOrigin(request, {
+              ...options,
+              listeningPort,
+            }),
+          logger: options.logger,
+        });
+  if (upgradeLifecycle !== undefined) {
+    server.on("upgrade", upgradeLifecycle.handle);
   }
 
   await new Promise<void>((resolve) =>
@@ -129,15 +169,81 @@ export async function startNodeRequestServer(
   );
   const address = server.address();
   const port = typeof address === "object" && address !== null ? address.port : options.port;
+  listeningPort = port;
+  let closePromise: Promise<void> | undefined;
 
   return {
     server,
-    url: `http://${options.hostname ?? "127.0.0.1"}:${port}`,
-    close: () =>
-      new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      ),
+    url: `http://${formatNodeAuthority(options.hostname ?? "127.0.0.1", port)}`,
+    close: () => {
+      closePromise ??=
+        upgradeLifecycle === undefined
+          ? new Promise<void>((resolve, reject) =>
+              server.close((error) => (error ? reject(error) : resolve())),
+            )
+          : closeServerWithUpgrades({
+              lifecycle: upgradeLifecycle,
+              server,
+              timeoutMs: upgradeCloseTimeoutMs,
+            });
+      return closePromise;
+    },
   };
+}
+
+function validateNodeUpgradeOrigin(
+  request: import("node:http").IncomingMessage,
+  options: StartNodeRequestServerOptions & { listeningPort: number },
+): HttpUpgradeOriginValidation {
+  const policy = options.upgradeOriginPolicy ?? "same-origin";
+  if (policy === "unchecked") {
+    return { ok: true, origin: request.headers.origin };
+  }
+  if (typeof policy === "object") {
+    return validateHttpUpgradeOrigin(request, policy);
+  }
+
+  const fallbackHost = formatNodeAuthority(options.hostname ?? "127.0.0.1", options.listeningPort);
+  const host = (options.resolveHost ?? defaultResolveRequestHost)({
+    allowedHosts: options.allowedHosts,
+    fallbackHost,
+    hostPolicy: options.hostPolicy,
+    rawHost: request.headers.host,
+  });
+  const protocol = resolveNodeRequestProtocol({
+    encrypted: (request.socket as { encrypted?: boolean }).encrypted === true,
+    forwardedProto: request.headers["x-forwarded-proto"],
+    trustForwardedProto: options.trustForwardedProto,
+  });
+  try {
+    return validateHttpUpgradeOrigin(request, { allowedOrigins: [`${protocol}://${host}`] });
+  } catch {
+    return { ok: false, reason: "malformed-origin" };
+  }
+}
+
+function formatNodeAuthority(hostname: string, port: number): string {
+  const host = hostname.includes(":") && !hostname.startsWith("[") ? `[${hostname}]` : hostname;
+  return `${host}:${port}`;
+}
+
+function finiteNonNegativeTimeout(
+  value: number | undefined,
+  fallback: number,
+  name: string,
+): number {
+  const timeout = value ?? fallback;
+  if (
+    !Number.isFinite(timeout) ||
+    timeout < 0 ||
+    !Number.isSafeInteger(timeout) ||
+    timeout > 2_147_483_647
+  ) {
+    throw new TypeError(
+      `${name} must be a finite non-negative safe integer no greater than 2147483647.`,
+    );
+  }
+  return timeout;
 }
 
 function defaultResolveRequestHost(options: {

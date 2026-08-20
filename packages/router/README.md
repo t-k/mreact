@@ -136,7 +136,35 @@ Inferred form actions are bound to the rendered form with a hidden token derived
 
 Plain `multipart/form-data` route handlers do not automatically run the server-action CSRF guard. For cookie-authenticated upload forms that post directly to `route.ts`, render a hidden field named `formCsrfFieldName`, set `formCsrfCookie(token)` for the same token, and either call `validateFormCsrf(request, formData)` for small buffered forms or read the CSRF field with `parseMultipartStream()` before consuming a large file part. `request.formData()` buffers multipart file parts in memory; `parseMultipartStream(request, { fields })` keeps file parts as `ReadableStream<Uint8Array>` values with per-part and total byte limits, enforces bounded defaults, and exposes both the raw `filename` and a storage-oriented `safeFilename`. Workers APIs such as R2 require known-length streams, so `part.fixedLengthStream(length).readable` is only valid when the multipart part carries a `Content-Length` header or the handler can pass the exact byte length; otherwise use a bounded `arrayBuffer()` fallback for R2. Put the CSRF field before the file field when you want early rejection without reading the file body.
 
-Use `startDevServer()` and `startServer()` when an app needs to attach HTTP upgrade handling to the same Node server as mreact routes. Both APIs accept `onUpgrade(request, socket, head)`, and `startDevServer()` keeps Vite middleware/HMR wired to the underlying server. Production route artifacts are bundled independently, so mutable custom-server state should live in `getServerRuntimeState(key, create)` rather than in a module-scoped `let` singleton.
+Use `startDevServer()` and `startServer()` when an app needs to attach HTTP upgrade handling to the same Node server as mreact routes. Both APIs accept `onUpgrade(request, socket, head, context)`, and `startDevServer()` keeps Vite middleware/HMR wired to the underlying server. WebSocket handshakes are not protected by the browser same-origin policy or CORS, and browsers send matching cookies with the handshake. mreact therefore rejects missing, opaque, malformed, and cross-origin browser upgrades by default before invoking the application handler. Validate `Origin` before reading a session or other credentials, then explicitly accept or decline every upgrade:
+
+```ts
+import { startServer, validateHttpUpgradeOrigin } from "@reckona/mreact-router";
+import { WebSocketServer } from "ws";
+
+const allowedOrigins = ["https://app.example.com"];
+const wss = new WebSocketServer({ noServer: true });
+
+await startServer({
+  outDir: ".mreact",
+  port: 3000,
+  upgradeOriginPolicy: { allowedOrigins },
+  onUpgrade(request, socket, head, context) {
+    const origin = validateHttpUpgradeOrigin(request, { allowedOrigins });
+    if (!origin.ok || request.url !== "/ws") {
+      return context.decline();
+    }
+
+    context.accept();
+    // Authenticate only after Origin validation, then transfer the socket.
+    wss.handleUpgrade(request, socket, head, (websocket) => {
+      wss.emit("connection", websocket, request);
+    });
+  },
+});
+```
+
+The first three handler arguments remain compatible with synchronous handlers that write a handshake immediately. A handler that delays verification, including `ws` with asynchronous `verifyClient`, must call `context.accept()` synchronously before starting that work; a return with no synchronous socket action is treated as a decline. Thrown errors, rejected handlers, and undecided asynchronous handlers close the socket. Framework-generated structured fields omit request headers and query data, but an application error message is preserved, so handlers must not copy secrets into thrown errors. The default policy compares `Origin` with the validated request authority, so wildcard binds and trusted reverse proxies work when their Host and forwarded-protocol policies are configured correctly. `close()` waits for accepted upgrade sockets up to `upgradeCloseTimeoutMs` and then destroys only those sockets, while ordinary HTTP responses keep their normal drain behavior. Non-browser clients that omit `Origin` require an explicit `{ allowedOrigins, allowMissingOrigin: true }` policy and an alternate authentication boundary; `"unchecked"` is available only as an explicit compatibility escape hatch. Production route artifacts are bundled independently, so mutable custom-server state should live in `getServerRuntimeState(key, create)` rather than in a module-scoped `let` singleton.
 
 Client boundary markers have the same SSR behavior. A plain `Foo.tsx` component runs on the server and does not hydrate by itself. Marking a component boundary with either `Foo.client.tsx` or a top-level `"use client";` directive makes that boundary hydrate on the client; SSR emits a `<template data-mreact-client-boundary="...">` placeholder plus serialized props, and the component JSX appears after hydration. When a client boundary wrapper receives server-renderable JSX children, those children remain visible as SSR DOM between the boundary marker and its props payload so the initial response stays paintable and indexable before hydration. Inferred boundaries from plain imported components can also keep an SSR fallback when every browser-global read is guarded by a `typeof window !== "undefined"` style check: a guarded if/ternary branch, a short-circuited logical expression, or statements after a guarded early exit such as `if (typeof window === "undefined") return;`. A guard on one of `window`, `document`, or `localStorage` covers the others. Unguarded reads, and guards the analyzer cannot follow such as an aliased `const isBrowser = typeof window !== "undefined"` condition, still disable fallback eligibility and produce a placeholder-only boundary. Combining `.client.tsx` with `"use client";` is redundant and does not change the boundary behavior. Route-level `"use client";` is separate: when it appears in a page, layout, or template route module, the whole route is emitted as a hydrated client route. In development, app-local client boundary dependencies are transformed through the mreact client compiler before Vite serves them, and generated mreact runtime imports are resolved by the router plugin, so server-rendered layouts and app shells can import hydrated client controls without adding React or mreact compat runtime aliases.
 
@@ -213,7 +241,11 @@ export async function loader(context: LoaderContext<{ id: string }>): Promise<Us
 }
 
 export default definePage<typeof loader>(function UserPage(props) {
-  return <h1>{props.params.id}: {props.data.name}</h1>;
+  return (
+    <h1>
+      {props.params.id}: {props.data.name}
+    </h1>
+  );
 });
 ```
 
@@ -264,7 +296,13 @@ Routes that render route-local `<Await>` directly or through app-local server co
 
 ```tsx
 function FeedList(props) {
-  return <ul>{props.items.map((item) => <li>{item}</li>)}</ul>;
+  return (
+    <ul>
+      {props.items.map((item) => (
+        <li>{item}</li>
+      ))}
+    </ul>
+  );
 }
 
 export default function Page() {
@@ -309,9 +347,7 @@ export default function Page() {
           placeholderAs="div"
           placeholder={<StorySkeleton count={batch.size} start={batch.start + 1} />}
         >
-          {(resolved) => (
-            <StoryRows stories={resolved.items} start={resolved.start + 1} />
-          )}
+          {(resolved) => <StoryRows stories={resolved.items} start={resolved.start + 1} />}
         </Await>
       ))}
     </ol>
@@ -351,7 +387,11 @@ Server-only pages get the lightweight navigation runtime automatically — witho
 import { Link } from "@reckona/mreact-router/link";
 
 export default function Page() {
-  return <Link href="/docs" prefetch="viewport">Docs</Link>;
+  return (
+    <Link href="/docs" prefetch="viewport">
+      Docs
+    </Link>
+  );
 }
 ```
 

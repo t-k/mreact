@@ -33,7 +33,17 @@ export type {
 } from "./multipart.js";
 export { getNavigationState, subscribeNavigationState } from "./navigation-state.js";
 export { getRouterRuntimeCacheStats } from "./runtime-cache.js";
-export type { HttpUpgradeHandler } from "./upgrade.js";
+export { validateHttpUpgradeOrigin } from "./upgrade.js";
+export type {
+  HttpUpgradeContext,
+  HttpUpgradeDisposition,
+  HttpUpgradeHandler,
+  HttpUpgradeOriginFailureReason,
+  HttpUpgradeOriginPolicy,
+  HttpUpgradeOriginValidation,
+  ManagedHttpUpgradeHandler,
+  ValidateHttpUpgradeOriginOptions,
+} from "./upgrade.js";
 export {
   cookies,
   headers,
@@ -250,6 +260,8 @@ export type {
   AppRouterRenderTimingLogEvent,
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
+  AppRouterUpgradeErrorLogEvent,
+  AppRouterUpgradeRejectedLogEvent,
 } from "./logger.js";
 export type { DetectedLocale, LocaleRoutingOptions, MessageTree } from "./i18n.js";
 export {

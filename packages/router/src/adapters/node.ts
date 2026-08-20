@@ -20,10 +20,7 @@ import { resolveNodeRequestProtocol } from "../node-server.js";
 /** Re-exports cache contracts used by Node handlers. */
 export type { AppRouterCache, AppRouterCacheEntry } from "../cache.js";
 /** Re-exports server action contracts used by Node handlers. */
-export type {
-  AppRouterAllowedServerAction,
-  AppRouterServerActionOptions,
-} from "../actions.js";
+export type { AppRouterAllowedServerAction, AppRouterServerActionOptions } from "../actions.js";
 /** Re-exports import policy contracts used by Node handlers. */
 export type { AppRouterImportPolicy } from "../import-policy.js";
 /** Re-exports logger contracts used by Node handlers. */
@@ -38,6 +35,8 @@ export type {
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
   AppRouterRuntime,
+  AppRouterUpgradeErrorLogEvent,
+  AppRouterUpgradeRejectedLogEvent,
 } from "../logger.js";
 /** Re-exports response hook contracts used by Node handlers. */
 export type { AppRouterResponseHook, AppRouterResponseHookContext } from "../render.js";
@@ -64,11 +63,7 @@ import {
 } from "../serve.js";
 
 /** Re-exports request and rendering contracts used by Node handlers. */
-export type {
-  AppRouterPrerenderStore,
-  RequestHostPolicy,
-  ResponseSinkStrategy,
-} from "../serve.js";
+export type { AppRouterPrerenderStore, RequestHostPolicy, ResponseSinkStrategy } from "../serve.js";
 
 /**
  * Configures a Node request handler for built app-router output.

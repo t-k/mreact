@@ -97,9 +97,7 @@ describe("startServer error handling (Issue 071)", () => {
     });
 
     try {
-      await expect(readUpgradeResponse(server.url)).resolves.toContain(
-        "101 Switching Protocols",
-      );
+      await expect(readUpgradeResponse(server.url)).resolves.toContain("101 Switching Protocols");
     } finally {
       await server.close();
     }
@@ -107,7 +105,7 @@ describe("startServer error handling (Issue 071)", () => {
 });
 
 function readUpgradeResponse(url: string): Promise<string> {
-  const { hostname, port } = new URL(url);
+  const { host, hostname, origin, port } = new URL(url);
 
   return new Promise((resolve, reject) => {
     const socket = connect(Number(port), hostname);
@@ -116,7 +114,7 @@ function readUpgradeResponse(url: string): Promise<string> {
     socket.setEncoding("utf8");
     socket.on("connect", () => {
       socket.write(
-        "GET /ws HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
+        `GET /ws HTTP/1.1\r\nHost: ${host}\r\nOrigin: ${origin}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`,
       );
     });
     socket.on("data", (chunk) => {

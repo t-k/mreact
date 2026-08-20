@@ -71,6 +71,8 @@ export type {
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
   AppRouterRuntime,
+  AppRouterUpgradeErrorLogEvent,
+  AppRouterUpgradeRejectedLogEvent,
 } from "../logger.js";
 /** Re-exports response hook contracts used by Cloudflare handlers. */
 export type { AppRouterResponseHook, AppRouterResponseHookContext } from "../render.js";

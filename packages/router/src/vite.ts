@@ -81,6 +81,8 @@ export type {
   AppRouterRequestErrorLogEvent,
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
+  AppRouterUpgradeErrorLogEvent,
+  AppRouterUpgradeRejectedLogEvent,
 } from "./logger.js";
 export type { RequestHostPolicy } from "./serve.js";
 
@@ -1062,9 +1064,7 @@ function isPathInsideDirectory(directory: string, candidate: string): boolean {
   const relativePath = relative(directory, candidate);
   return (
     relativePath === "" ||
-    (relativePath !== ".." &&
-      !relativePath.startsWith(`..${sep}`) &&
-      !isAbsolute(relativePath))
+    (relativePath !== ".." && !relativePath.startsWith(`..${sep}`) && !isAbsolute(relativePath))
   );
 }
 

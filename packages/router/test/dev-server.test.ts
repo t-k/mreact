@@ -1,9 +1,10 @@
 import { createServer, get, request as nodeRequest } from "node:http";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { connect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { buildApp } from "../src/build.js";
 import { startDevServer, type StartDevServerOptions } from "../src/dev-server.js";
 import type { AppRouterLogEvent, AppRouterLogger } from "../src/logger.js";
@@ -1281,12 +1282,195 @@ export default function Page() {
     expect(sessionResponse.headers.get("vary")).toBe("Cookie");
     expect(sessionResponse.headers.get("cache-control")).toBe("private, no-store");
   });
+
+  test.each([
+    [
+      "synchronous",
+      () => {
+        throw new Error("dev sync upgrade failure");
+      },
+    ],
+    [
+      "asynchronous",
+      async () => {
+        await Promise.resolve();
+        throw new Error("dev async upgrade failure");
+      },
+    ],
+  ])("contains %s upgrade handler failures", async (_name, onUpgrade) => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-upgrade-error-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>dev survives</main>; }",
+    );
+    const events: AppRouterLogEvent[] = [];
+    const server = await startTrackedDevServer({
+      appDir,
+      logger: {
+        error(event) {
+          events.push(event);
+        },
+      },
+      onUpgrade,
+      port: 0,
+      upgradeOriginPolicy: "unchecked",
+    });
+
+    await expect(readRawUpgrade(server.url, "/ws")).resolves.toBe("");
+    await expect((await fetch(server.url)).text()).resolves.toContain("dev survives");
+    await eventually(() => {
+      expect(events.filter((event) => event.type === "router:upgrade:error")).toHaveLength(1);
+    });
+  });
+
+  test("keeps Vite HMR upgrades separate from the custom handler", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-upgrade-hmr-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>hmr</main>; }",
+    );
+    const onUpgrade = vi.fn();
+    const server = await startTrackedDevServer({ appDir, onUpgrade, port: 0 });
+
+    const response = await readRawUpgrade(
+      server.url,
+      "/",
+      {
+        "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+        "Sec-WebSocket-Protocol": "vite-ping",
+        "Sec-WebSocket-Version": "13",
+      },
+      true,
+    );
+
+    expect(response).toContain("101 Switching Protocols");
+    expect(onUpgrade).not.toHaveBeenCalled();
+  });
+
+  test("serves a custom dev upgrade without Vite double-handling it", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-upgrade-custom-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>custom</main>; }",
+    );
+    const server = await startTrackedDevServer({
+      appDir,
+      onUpgrade(_request, socket) {
+        socket.write(
+          "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n",
+        );
+        socket.end();
+      },
+      port: 0,
+    });
+
+    await expect(
+      readRawUpgrade(server.url, "/app-ws", { Origin: new URL(server.url).origin }),
+    ).resolves.toContain("101 Switching Protocols");
+  });
+
+  test("applies Vite allowed-host validation to custom dev upgrades", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-upgrade-host-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>host</main>; }",
+    );
+    const onUpgrade = vi.fn();
+    const server = await startTrackedDevServer({
+      appDir,
+      onUpgrade,
+      port: 0,
+      upgradeOriginPolicy: "unchecked",
+      viteConfig: { server: { allowedHosts: [] } },
+    });
+
+    await expect(
+      readRawUpgrade(server.url, "/app-ws", {
+        Host: "rebound.example",
+        Origin: "http://rebound.example",
+      }),
+    ).resolves.toBe("");
+    expect(onUpgrade).not.toHaveBeenCalled();
+  });
+
+  test("bounds dev shutdown with an accepted custom upgrade socket", async () => {
+    const appDir = await mkdtemp(join(tmpdir(), "mreact-dev-upgrade-close-"));
+    await writeFile(
+      join(appDir, "page.tsx"),
+      "export default function Page() { return <main>close</main>; }",
+    );
+    let accepted = false;
+    const server = await startTrackedDevServer({
+      appDir,
+      onUpgrade(_request, _socket, _head, context) {
+        accepted = true;
+        return context.accept();
+      },
+      port: 0,
+      upgradeCloseTimeoutMs: 20,
+      upgradeOriginPolicy: "unchecked",
+    });
+    const upgrade = readRawUpgrade(server.url, "/held");
+    await eventually(() => expect(accepted).toBe(true));
+
+    await expect(server.close()).resolves.toBeUndefined();
+    await expect(upgrade).resolves.toBe("");
+  });
 });
 
 async function startTrackedDevServer(options: StartDevServerOptions) {
   const server = await startDevServer(options);
   servers.push(server);
   return server;
+}
+
+function readRawUpgrade(
+  url: string,
+  path: string,
+  headers: Record<string, string> = {},
+  resolveOnData = false,
+): Promise<string> {
+  const parsed = new URL(url);
+
+  return new Promise((resolve, reject) => {
+    const socket = connect(Number(parsed.port), parsed.hostname);
+    let response = "";
+    const timeout = setTimeout(() => {
+      socket.destroy();
+      reject(new Error("Timed out waiting for dev upgrade response."));
+    }, 1_000);
+
+    socket.setEncoding("utf8");
+    socket.on("connect", () => {
+      const host = headers.Host ?? parsed.host;
+      const extraHeaders = Object.entries(headers)
+        .filter(([name]) => name.toLowerCase() !== "host")
+        .map(([name, value]) => `${name}: ${value}\r\n`)
+        .join("");
+      socket.write(
+        `GET ${path} HTTP/1.1\r\nHost: ${host}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n${extraHeaders}\r\n`,
+      );
+    });
+    socket.on("data", (chunk) => {
+      response += chunk;
+      if (resolveOnData) {
+        clearTimeout(timeout);
+        socket.destroy();
+        resolve(response);
+      }
+    });
+    socket.on("close", () => {
+      clearTimeout(timeout);
+      resolve(response);
+    });
+    socket.on("error", (error) => {
+      if ((error as NodeJS.ErrnoException).code === "ECONNRESET") {
+        return;
+      }
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
 }
 
 async function eventually(assertion: () => void): Promise<void> {

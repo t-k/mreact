@@ -75,7 +75,7 @@ export interface AppRouterLogError {
 }
 
 // @public
-export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent | AppRouterUpgradeErrorLogEvent | AppRouterUpgradeRejectedLogEvent;
 
 // @public
 export interface AppRouterLogger {
@@ -201,6 +201,36 @@ export interface AppRouterServerActionOptions {
     maxFormFields?: number | undefined;
     // (undocumented)
     replayStore?: ServerActionReplayStore | undefined;
+}
+
+// @public
+export interface AppRouterUpgradeErrorLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    error: AppRouterLogError;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: "node";
+    // (undocumented)
+    type: "router:upgrade:error";
+}
+
+// @public
+export interface AppRouterUpgradeRejectedLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    reason: "disallowed-origin" | "malformed-origin" | "missing-origin" | "opaque-origin";
+    // (undocumented)
+    runtime: "node";
+    // (undocumented)
+    type: "router:upgrade:rejected";
 }
 
 // @public (undocumented)

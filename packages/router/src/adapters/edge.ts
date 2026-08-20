@@ -20,6 +20,8 @@ export type {
   AppRouterRequestStartLogEvent,
   AppRouterRequestTimingLogEvent,
   AppRouterRuntime,
+  AppRouterUpgradeErrorLogEvent,
+  AppRouterUpgradeRejectedLogEvent,
 } from "../logger.js";
 
 /**

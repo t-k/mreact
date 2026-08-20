@@ -27,7 +27,9 @@ export type AppRouterLogEvent =
   | AppRouterRequestErrorLogEvent
   | AppRouterRequestTimingLogEvent
   | AppRouterRenderTimingLogEvent
-  | AppRouterCspInlineNonceWarningLogEvent;
+  | AppRouterCspInlineNonceWarningLogEvent
+  | AppRouterUpgradeErrorLogEvent
+  | AppRouterUpgradeRejectedLogEvent;
 
 /**
  * Logs the start of an app-router request.
@@ -61,6 +63,29 @@ export interface AppRouterRequestErrorLogEvent {
   path: string;
   runtime: AppRouterRuntime;
   type: "router:request:error";
+}
+
+/**
+ * Logs a failed or timed-out HTTP upgrade handler.
+ */
+export interface AppRouterUpgradeErrorLogEvent {
+  durationMs: number;
+  error: AppRouterLogError;
+  method: string;
+  path: string;
+  runtime: "node";
+  type: "router:upgrade:error";
+}
+
+/**
+ * Logs an HTTP upgrade rejected before application ownership.
+ */
+export interface AppRouterUpgradeRejectedLogEvent {
+  method: string;
+  path: string;
+  reason: "disallowed-origin" | "malformed-origin" | "missing-origin" | "opaque-origin";
+  runtime: "node";
+  type: "router:upgrade:rejected";
 }
 
 /**
@@ -116,7 +141,12 @@ export function emitRouterLog(
   level: AppRouterLogLevel,
   event: AppRouterLogEvent,
 ): void {
-  const sink = logger?.[level];
+  let sink: AppRouterLogger[AppRouterLogLevel];
+  try {
+    sink = logger?.[level];
+  } catch {
+    return;
+  }
 
   if (sink === undefined) {
     return;
@@ -176,15 +206,22 @@ export function logDurationMs(startedAt: number): number {
 }
 
 export function logError(error: unknown): AppRouterLogError {
-  if (error instanceof Error) {
+  try {
+    if (error instanceof Error) {
+      return {
+        message: String(error.message),
+        name: String(error.name),
+      };
+    }
+
     return {
-      message: error.message,
-      name: error.name,
+      message: String(error),
+      name: "Error",
+    };
+  } catch {
+    return {
+      message: "Unknown non-coercible error",
+      name: "Error",
     };
   }
-
-  return {
-    message: String(error),
-    name: "Error",
-  };
 }

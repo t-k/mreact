@@ -23,10 +23,7 @@ import {
   loadBuiltServerModuleArtifacts,
   loadBuiltServerModuleArtifactsForRequest,
 } from "./built-server-module-artifacts.js";
-import {
-  type AppRoute,
-  type MatchedRoute,
-} from "./routes.js";
+import { type AppRoute, type MatchedRoute } from "./routes.js";
 import type { AppRouterServerActionOptions } from "./actions.js";
 import type { AppRouterImportPolicy } from "./import-policy.js";
 import {
@@ -44,20 +41,12 @@ import {
   traceContextFromRequest,
   type RouterInstrumentation,
 } from "./trace.js";
-import {
-  bytesResponse,
-  htmlResponse,
-} from "./http.js";
-import {
-  emitRouterLog,
-  logDurationMs,
-  logNow,
-  type AppRouterLogger,
-} from "./logger.js";
+import { bytesResponse, htmlResponse } from "./http.js";
+import { emitRouterLog, logDurationMs, logNow, type AppRouterLogger } from "./logger.js";
 import { startNodeRequestServer } from "./node-server.js";
 import { builtAppRuntimePreloadPlan } from "./preload-policy.js";
 import { normalizeRoutePath } from "./route-path.js";
-import type { HttpUpgradeHandler } from "./upgrade.js";
+import type { HttpUpgradeOriginPolicy, ManagedHttpUpgradeHandler } from "./upgrade.js";
 import {
   isCurrentPrerenderedRoute,
   isVisitorDependentResponse,
@@ -171,7 +160,11 @@ export interface StartServerOptions {
   // a generic "Internal Server Error" body and logs the stack to stderr
   // via console.error. Issue 071: stack traces must never end up in
   // production responses.
-  errorHandler?: (error: unknown) => { body: string; status: number; headers?: Record<string, string> };
+  errorHandler?: (error: unknown) => {
+    body: string;
+    status: number;
+    headers?: Record<string, string>;
+  };
   // When set, an incoming Host header that does not exactly match one of
   // the listed values is replaced with the configured hostname/port for
   // origin reconstruction. Use this in front of public deployments to
@@ -188,7 +181,13 @@ export interface StartServerOptions {
   routeCache?: AppRouterCache | undefined;
   serverActions?: AppRouterServerActionOptions | undefined;
   sinkStrategy?: ResponseSinkStrategy;
-  onUpgrade?: HttpUpgradeHandler | undefined;
+  onUpgrade?: ManagedHttpUpgradeHandler | undefined;
+  /** Maximum time to wait for application-owned upgrade sockets during shutdown. */
+  upgradeCloseTimeoutMs?: number | undefined;
+  /** Maximum time an asynchronous upgrade handler may leave ownership undecided. */
+  upgradeDecisionTimeoutMs?: number | undefined;
+  /** Origin policy for application HTTP upgrades. Defaults to exact same-origin validation. */
+  upgradeOriginPolicy?: HttpUpgradeOriginPolicy | undefined;
   /**
    * Trusts the first `X-Forwarded-Proto` value when the socket is not TLS.
    *
@@ -227,7 +226,7 @@ export function warnIfImplicitHostTrust(options: {
 
   warnedImplicitHostTrust = true;
   console.error(
-    "[mreact] Host header trust is implicit because neither allowedHosts nor hostPolicy is configured. Set allowedHosts for public deployments, hostPolicy: \"strict\" to reject unlisted Host headers, or hostPolicy: \"trusted-proxy\" when a trusted reverse proxy normalizes Host.",
+    '[mreact] Host header trust is implicit because neither allowedHosts nor hostPolicy is configured. Set allowedHosts for public deployments, hostPolicy: "strict" to reject unlisted Host headers, or hostPolicy: "trusted-proxy" when a trusted reverse proxy normalizes Host.',
   );
 }
 
@@ -409,8 +408,11 @@ function withoutBuiltRequestInstrumentation(
     return undefined;
   }
 
-  const { onRequestEnd: _onRequestEnd, onRequestStart: _onRequestStart, ...remaining } =
-    instrumentation;
+  const {
+    onRequestEnd: _onRequestEnd,
+    onRequestStart: _onRequestStart,
+    ...remaining
+  } = instrumentation;
   return remaining;
 }
 
@@ -474,21 +476,14 @@ async function renderBuiltAppRequestWithRuntime(
   // no middleware at all. Otherwise a middleware that gates access (auth,
   // geo blocking, maintenance mode) would be bypassed for exactly the routes
   // it is most often used to protect.
-  if (
-    !options.runtime.hasMiddleware &&
-    (request.method === "GET" || request.method === "HEAD")
-  ) {
+  if (!options.runtime.hasMiddleware && (request.method === "GET" || request.method === "HEAD")) {
     // Sync fast path when no external prerender store is configured (the
     // common case): skip the Promise wrap that `readPrerenderedRoute`
     // would otherwise introduce just to satisfy the async signature.
     const prerendered =
       options.prerenderStore === undefined
         ? options.runtime.prerenderedRoutes.get(normalizedPath)
-        : await readPrerenderedRoute(
-            options.runtime,
-            normalizedPath,
-            options.prerenderStore,
-          );
+        : await readPrerenderedRoute(options.runtime, normalizedPath, options.prerenderStore);
     const prerenderedResponse = prerenderedRouteResponse(prerendered, request);
 
     if (prerenderedResponse !== undefined) {
@@ -512,18 +507,11 @@ async function renderBuiltAppRequestWithRuntime(
   // Middleware apps resolve prerendered HTML here instead, so that a
   // middleware response or rewrite is honoured before the stored HTML is
   // served. The lookup uses the post-middleware path.
-  if (
-    options.runtime.hasMiddleware &&
-    (request.method === "GET" || request.method === "HEAD")
-  ) {
+  if (options.runtime.hasMiddleware && (request.method === "GET" || request.method === "HEAD")) {
     const prerendered =
       options.prerenderStore === undefined
         ? options.runtime.prerenderedRoutes.get(normalizedPath)
-        : await readPrerenderedRoute(
-            options.runtime,
-            normalizedPath,
-            options.prerenderStore,
-          );
+        : await readPrerenderedRoute(options.runtime, normalizedPath, options.prerenderStore);
     const prerenderedResponse = prerenderedRouteResponse(prerendered, request);
 
     if (prerenderedResponse !== undefined) {
@@ -549,15 +537,9 @@ async function renderBuiltAppRequestWithRuntime(
     requestUrl: new URL(request.url),
   });
 
-  await applyBuiltPrerenderInvalidations(
-    options.runtime,
-    response,
-    options.prerenderStore,
-  );
+  await applyBuiltPrerenderInvalidations(options.runtime, response, options.prerenderStore);
 
-  return options.sinkStrategy === "buffer"
-    ? await materializeResponseAsBuffer(response)
-    : response;
+  return options.sinkStrategy === "buffer" ? await materializeResponseAsBuffer(response) : response;
 }
 
 function prerenderedRouteResponse(
@@ -722,6 +704,9 @@ export async function startServer(
     port: options.port,
     resolveHost: resolveRequestHost,
     trustForwardedProto: options.trustForwardedProto,
+    upgradeCloseTimeoutMs: options.upgradeCloseTimeoutMs,
+    upgradeDecisionTimeoutMs: options.upgradeDecisionTimeoutMs,
+    upgradeOriginPolicy: options.upgradeOriginPolicy,
     render: (request) =>
       runtime.render(request, {
         dehydrateOptions: options.dehydrateOptions,
@@ -977,7 +962,9 @@ function builtRenderAppRequestOptions(
 
 function mergeBuiltServerActionOptions(
   options: AppRouterServerActionOptions | undefined,
-  allowedActions: readonly { moduleId: string; exportName: string; inferred?: boolean }[] | undefined,
+  allowedActions:
+    | readonly { moduleId: string; exportName: string; inferred?: boolean }[]
+    | undefined,
 ): AppRouterServerActionOptions | undefined {
   if (allowedActions === undefined) {
     return options;
@@ -994,9 +981,7 @@ async function renderAndCachePrerenderWithLock(
   path: string,
 ): Promise<Response> {
   const lockKey =
-    options.request.headers.get("x-mreact-navigation") === "1"
-      ? `${path}\0navigation`
-      : path;
+    options.request.headers.get("x-mreact-navigation") === "1" ? `${path}\0navigation` : path;
   const existing = options.runtime.prerenderLocks.get(lockKey);
 
   if (existing !== undefined) {
@@ -1023,9 +1008,7 @@ async function runPrerenderRegeneration(
   path: string,
 ): Promise<{ response: Response; shareable: boolean }> {
   const lockKey =
-    options.request.headers.get("x-mreact-navigation") === "1"
-      ? `${path}\0navigation`
-      : path;
+    options.request.headers.get("x-mreact-navigation") === "1" ? `${path}\0navigation` : path;
   const regenerate = async () => {
     const stored = await readPrerenderedRoute(options.runtime, path, options.prerenderStore);
     const storedResponse = prerenderedRouteResponse(stored, options.request);

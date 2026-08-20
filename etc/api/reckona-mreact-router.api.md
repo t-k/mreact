@@ -162,7 +162,7 @@ export interface AppRouterLogError {
 }
 
 // @public
-export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent;
+export type AppRouterLogEvent = AppRouterRequestStartLogEvent | AppRouterRequestEndLogEvent | AppRouterRequestErrorLogEvent | AppRouterRequestTimingLogEvent | AppRouterRenderTimingLogEvent | AppRouterCspInlineNonceWarningLogEvent | AppRouterUpgradeErrorLogEvent | AppRouterUpgradeRejectedLogEvent;
 
 // @public
 export interface AppRouterLogger {
@@ -356,6 +356,36 @@ export interface AppRouterServerActionOptions {
 export interface AppRouterServerRenderArtifactLoader {
     // (undocumented)
     load(routeFile: string): Promise<void>;
+}
+
+// @public
+export interface AppRouterUpgradeErrorLogEvent {
+    // (undocumented)
+    durationMs: number;
+    // (undocumented)
+    error: AppRouterLogError;
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    runtime: "node";
+    // (undocumented)
+    type: "router:upgrade:error";
+}
+
+// @public
+export interface AppRouterUpgradeRejectedLogEvent {
+    // (undocumented)
+    method: string;
+    // (undocumented)
+    path: string;
+    // (undocumented)
+    reason: "disallowed-origin" | "malformed-origin" | "missing-origin" | "opaque-origin";
+    // (undocumented)
+    runtime: "node";
+    // (undocumented)
+    type: "router:upgrade:rejected";
 }
 
 // @public
@@ -874,7 +904,36 @@ export function href<const Path extends `/${string}`>(path: Path, ...args: HasRo
 export function html(value: string, init?: ResponseInit): Response;
 
 // @public
+export interface HttpUpgradeContext {
+    // (undocumented)
+    accept(): HttpUpgradeDisposition;
+    // (undocumented)
+    decline(): HttpUpgradeDisposition;
+}
+
+// @public (undocumented)
+export type HttpUpgradeDisposition = "declined" | "handled";
+
+// @public
 export type HttpUpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
+
+// @public (undocumented)
+export type HttpUpgradeOriginFailureReason = "disallowed-origin" | "malformed-origin" | "missing-origin" | "opaque-origin";
+
+// @public (undocumented)
+export type HttpUpgradeOriginPolicy = "same-origin" | "unchecked" | {
+    allowedOrigins: readonly string[];
+    allowMissingOrigin?: boolean | undefined;
+};
+
+// @public (undocumented)
+export type HttpUpgradeOriginValidation = {
+    ok: true;
+    origin: string | undefined;
+} | {
+    ok: false;
+    reason: HttpUpgradeOriginFailureReason;
+};
 
 // @public
 export type InferLoaderData<TLoader extends RouteLoader> = Awaited<ReturnType<TLoader>>;
@@ -1036,6 +1095,9 @@ export interface LocaleRoutingOptions<Locale extends string = string> {
     // (undocumented)
     locales: readonly Locale[];
 }
+
+// @public
+export type ManagedHttpUpgradeHandler = (request: IncomingMessage, socket: Duplex, head: Buffer, context: HttpUpgradeContext) => void;
 
 // @public
 export interface ManifestContext {
@@ -1836,13 +1898,19 @@ export interface StartDevServerOptions extends AppRouterProjectOptions {
     // (undocumented)
     logger?: AppRouterLogger | undefined;
     // (undocumented)
-    onUpgrade?: HttpUpgradeHandler | undefined;
+    onUpgrade?: ManagedHttpUpgradeHandler | undefined;
     // (undocumented)
     port?: number | undefined;
     // (undocumented)
     routeCache?: AppRouterCache | undefined;
     // (undocumented)
     serverActions?: AppRouterServerActionOptions | undefined;
+    // (undocumented)
+    upgradeCloseTimeoutMs?: number | undefined;
+    // (undocumented)
+    upgradeDecisionTimeoutMs?: number | undefined;
+    // (undocumented)
+    upgradeOriginPolicy?: HttpUpgradeOriginPolicy | undefined;
     // (undocumented)
     verboseErrors?: boolean | undefined;
     // (undocumented)
@@ -1881,7 +1949,7 @@ export interface StartServerOptions {
     // (undocumented)
     onResponse?: AppRouterResponseHook | undefined;
     // (undocumented)
-    onUpgrade?: HttpUpgradeHandler | undefined;
+    onUpgrade?: ManagedHttpUpgradeHandler | undefined;
     // (undocumented)
     outDir: string;
     // (undocumented)
@@ -1895,6 +1963,9 @@ export interface StartServerOptions {
     // (undocumented)
     sinkStrategy?: ResponseSinkStrategy;
     trustForwardedProto?: boolean | undefined;
+    upgradeCloseTimeoutMs?: number | undefined;
+    upgradeDecisionTimeoutMs?: number | undefined;
+    upgradeOriginPolicy?: HttpUpgradeOriginPolicy | undefined;
 }
 
 // @public
@@ -1924,6 +1995,17 @@ export type TrustedLinkHtml = {
 
 // @public
 export function validateFormCsrf(request: Request, formData: FormData): Response | undefined;
+
+// @public
+export function validateHttpUpgradeOrigin(request: IncomingMessage, options: ValidateHttpUpgradeOriginOptions): HttpUpgradeOriginValidation;
+
+// @public (undocumented)
+export interface ValidateHttpUpgradeOriginOptions {
+    // (undocumented)
+    allowedOrigins: readonly string[];
+    // (undocumented)
+    allowMissingOrigin?: boolean | undefined;
+}
 
 // (No @packageDocumentation comment for this package)
 
